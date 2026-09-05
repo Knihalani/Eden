@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PUBLIC_CLAIMS, claimById, claimsOf, customerStudies, fixtureStudies } from "./claims";
 
@@ -19,13 +19,32 @@ describe("public claims", () => {
     expect(row?.kind).toBe("limit");
     expect(claimsOf("win").some((c) => c.id === "oblivious-long")).toBe(false);
     expect(row?.printed).toMatch(/\+/);
+    expect(row?.file).toBe("benchmarks/campaign/OBLIVIOUS-LONG.md");
+    expect(row?.file).not.toMatch(/ROADMAP/);
+    expect(existsSync(join(ROOT, row!.file))).toBe(true);
   });
 
-  test("jit-soak FAIL is a limit, never a win", () => {
+  test("no PUBLIC_CLAIMS file is the roadmap", () => {
+    for (const c of PUBLIC_CLAIMS) {
+      expect(c.file, c.id).not.toMatch(/ROADMAP/);
+      if (c.kind !== "retired" && c.source !== "retired" && c.source !== "host-limit") {
+        expect(existsSync(join(ROOT, c.file)), c.file).toBe(true);
+      }
+    }
+    expect(claimById("cert-bounds")?.file).toBe("benchmarks/campaign/WITNESS-ECON.md");
+  });
+
+  test("header is current, not Wave 8", () => {
+    const src = readFileSync(join(ROOT, "packages/measure/src/claims.ts"), "utf8");
+    expect(src).not.toMatch(/Frozen public claims for Wave 8/);
+    expect(src).toMatch(/Wave 21 honesty files/);
+  });
+
+  test("jit-soak PASS is a win; default is jit", () => {
     const row = claimById("jit-soak");
-    expect(row?.kind).toBe("limit");
-    expect(row?.printed).toBe("FAIL precision=0.789 n=38");
-    expect(claimsOf("win").some((c) => c.id === "jit-soak")).toBe(false);
+    expect(row?.kind).toBe("win");
+    expect(row?.printed).toBe("PASS precision=1.000 n=38");
+    expect(claimsOf("limit").some((c) => c.id === "jit-soak")).toBe(false);
     expect(existsSync(join(ROOT, row!.file))).toBe(true);
   });
 

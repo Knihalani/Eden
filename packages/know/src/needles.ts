@@ -676,6 +676,7 @@ export function needleRank(q: string): number {
     const rest = t.slice(4);
     if (rest.length >= 3 && rest.length <= 5 && rest === String(+rest)) return 0;
   }
+  if (n >= 10 && t.slice(0, 9).toLowerCase() === "used for ") return 1;
   if (t.includes("/") && isMediaNeedle(t)) return 1;
   if (n === 4 && (t === "json" || t === "JSON")) return 1;
   if (n >= 12 && t.slice(0, 11).toLowerCase() === "capital of ") return 2;
@@ -767,6 +768,7 @@ function likelyNeedles(slice: string): boolean {
     if (c === 82 || c === 114) {
       if (eqFoldAt(slice, i, "rfc") && boundWord(slice, i, 3)) return true;
       if (eqFoldAt(slice, i, "record") && boundWord(slice, i, 6)) return true;
+      if (eqFoldAt(slice, i, "recommend") && boundWord(slice, i, 9)) return true;
     } else if (c === 71 || c === 103) {
       if (eqFoldAt(slice, i, "get") && boundWord(slice, i, 3)) return true;
     } else if (c === 80 || c === 112) {
@@ -779,14 +781,23 @@ function likelyNeedles(slice: string): boolean {
     } else if (c === 87 || c === 119) {
       if (eqFoldAt(slice, i, "w3c") && boundWord(slice, i, 3)) return true;
       if (eqFoldAt(slice, i, "whatwg") && boundWord(slice, i, 6)) return true;
+      if (eqFoldAt(slice, i, "want") && boundWord(slice, i, 4)) return true;
+    } else if (c === 66 || c === 98) {
+      if (eqFoldAt(slice, i, "best") && boundWord(slice, i, 4)) return true;
     } else if (c === 83 || c === 115) {
       if (eqFoldAt(slice, i, "spdx") && boundWord(slice, i, 4)) return true;
       if (eqFoldAt(slice, i, "script") && boundWord(slice, i, 6)) return true;
       if (eqFoldAt(slice, i, "scheme") && boundWord(slice, i, 6)) return true;
+      if (eqFoldAt(slice, i, "should") && boundWord(slice, i, 6)) return true;
+    } else if (c === 78 || c === 110) {
+      if (eqFoldAt(slice, i, "need") && boundWord(slice, i, 4)) return true;
+      if (eqFoldAt(slice, i, "ndjson") && boundWord(slice, i, 6)) return true;
     } else if (c === 77 || c === 109) {
       if (eqFoldAt(slice, i, "mit") && boundWord(slice, i, 3)) return true;
     } else if (c === 84 || c === 116) {
       if (eqFoldAt(slice, i, "tcp") && boundWord(slice, i, 3)) return true;
+      if (eqFoldAt(slice, i, "trying") && boundWord(slice, i, 6)) return true;
+      if (eqFoldAt(slice, i, "tool") && boundWord(slice, i, 4)) return true;
     } else if (c === 85 || c === 117) {
       if (eqFoldAt(slice, i, "udp") && boundWord(slice, i, 3)) return true;
       if (eqFoldAt(slice, i, "uri") && boundWord(slice, i, 3)) return true;
@@ -812,6 +823,260 @@ function likelyNeedles(slice: string): boolean {
     }
   }
   return false;
+}
+
+const TECHNIQUE_CUE =
+  /\b(?:(?:what(?:'s| is) the |the )?(?:best|right|usual|standard|recommended|good|proper|correct) (?:way|tool|thing)(?: to use)? (?:to|for)|what(?: should i)?(?: to)? use (?:to|for)|which (?:tool|thing) (?:should i use |to use )?(?:to|for)|is there a (?:way|tool) to|looking for a (?:way|tool) to|anyone know how to|how(?:\s+do(?:es)?(?:\s+(?:i|you|one|we))?|\s+can(?:\s+i)?|\s+would(?:\s+i)?|\s+should(?:\s+i)?|\s+to))\s+([^?!.]+)/i;
+const INTENT_CUE =
+  /\b(?:(?:need(?:s)?|trying|want(?:ing)?|looking) to|(?:can|could) (?:i|you|we|one)|help me|any(?: good)? (?:way|tool) to|recommend(?:ed)? (?:a )?(?:tool|way|something) (?:to|for)|(?:alternative|replacement) to \S+ for|tool for)\s+([^?!.]+)/i;
+const LEAD_VERB =
+  /^(?:(use|do|get|make)(?:ing|es|ne)?)\s+/i;
+
+const TASK_OBJ =
+  "jsonl?|ndjson|yaml|toml|xml|html|markdown|typescript|javascript|rustc|rust|python|sql|bash|csv|regex|protobuf|graphql|docker|kubernetes|sqlite|postgres|golang|ruby|php|css|terraform|nix|redis|parquet|avro|repo|codebase";
+const TASK_VERB =
+  "filter|parse|query|run|execute|build|compile|lint|format|bundle|deploy|extract|search|replace|convert|encode|decode|serialize|stream|pretty-?print|minify|validate|print|pull|pluck|slice";
+const TASK_OBJ_RE = new RegExp(`^(?:${TASK_OBJ})$`, "i");
+const TASK_OBJ_HIT = new RegExp(`\\b(?:${TASK_OBJ})\\b`, "i");
+const GREP_LINE = /\b(?:grep|ripgrep|rg|sed|awk|cat|perl|cut)\b/i;
+const PIP_LIKE = /\b(?:pip3?|easy_install|python\s+-m\s+pip)\b/i;
+const JS_PKG = /\b(?:npm|yarn|pnpm|bun)\b/i;
+const JSON_STRUCT = /\b(?:ids?|keys?|nested|fields?|items?|jsonpath|ndjson|jsonl|values?)\b/i;
+
+export function configJsonPath(s: string): boolean {
+  return /\b(?:package|tsconfig|jsconfig|composer|deno)\.json\b/i.test(s);
+}
+
+/** JSON as a parse/query task, not a Content-Type / IANA media-type mention. */
+export function jsonTaskToken(text: string): boolean {
+  if (/\bndjson\b|\bjsonl\b/i.test(text)) return true;
+  if (configJsonPath(text) && !JSON_STRUCT.test(text)) return false;
+  const mediaCtx =
+    /\b(?:content-type|media type|iana)\b/i.test(text) || /application\/json/i.test(text);
+  if (mediaCtx && !/\.(jsonl?|ndjson)\b/i.test(text)) return false;
+  const stripped = text.replace(/application\/(?:ld\+)?json/gi, " ");
+  return /\bjson\b|\.jsonl?\b/i.test(stripped);
+}
+
+export function jsonWrongWay(text: string): boolean {
+  if (!GREP_LINE.test(text) || !jsonTaskToken(text)) return false;
+  if (/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text)) return false;
+  return true;
+}
+
+export function jsonCliNeed(text: string): boolean {
+  if (!jsonTaskToken(text)) return false;
+  if (/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text) && !/\bndjson\b|\bjsonl\b/i.test(text)) {
+    return false;
+  }
+  if (GREP_LINE.test(text)) return true;
+  if (
+    /\.(jsonl?|ndjson)\b/i.test(text) &&
+    JSON_STRUCT.test(text) &&
+    /\b(?:pull|pluck|grep|cat|sed|awk|extract|parse|get|read|print)\b/i.test(text)
+  ) {
+    return true;
+  }
+  const stripped = text.replace(/application\/json/gi, " ");
+  if (/\bjson\b/i.test(stripped) && /\bcli\b/i.test(text)) return true;
+  if (
+    /\bjson\b/i.test(stripped) &&
+    /\bnested\b/i.test(text) &&
+    /\b(?:keys?|ids?|fields?)\b/i.test(text) &&
+    /\b(?:pipeline|cli|command[ -]?line|bash|shell|\.jsonl?\b)/i.test(text)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Tool-call args: a JSON *file* or JSONPath, not `.items[]` on a TypeScript path. */
+export function jsonToolArgs(args: string): boolean {
+  if (configJsonPath(args) && !/\b(?:jsonpath|ndjson|jsonl)\b/i.test(args) && !JSON_STRUCT.test(args)) {
+    return false;
+  }
+  if (/\.(jsonl?|ndjson)\b/i.test(args)) return true;
+  if (/\bjsonpath\b|\bndjson\b|\bjsonl\b/i.test(args)) return true;
+  return false;
+}
+
+export function pythonInstallNeed(text: string): boolean {
+  if (PIP_LIKE.test(text)) return !/\b(?:freeze|list|show|uninstall|outdated)\b/i.test(text);
+  if (/\binstall(?:ing)?\b/i.test(text) && /\bpython\b/i.test(text) && !JS_PKG.test(text)) return true;
+  return false;
+}
+
+export function typescriptRunNeed(text: string): boolean {
+  return /\b(?:tsc|ts-node|(?:npx\s+)?tsx)\b/i.test(text);
+}
+
+export function findFilesNeed(text: string): boolean {
+  if (/\bfind\b/i.test(text) && /\s-i?name\b/.test(text)) return true;
+  if (!/\b(?:find|locate)\b/i.test(text)) return false;
+  if (/\b(?:file named|files named|files? by name|by filename|filenames?)\b/i.test(text)) return true;
+  return /\bfiles?\b/i.test(text) && /\bglob\b/i.test(text);
+}
+
+export function repoSearchNeed(text: string): boolean {
+  if (!/\b(?:search|grep|ripgrep|rg)\b/i.test(text)) return false;
+  if (!/\b(?:repo|codebase|source tree)\b/i.test(text)) return false;
+  if (/\.(jsonl?|ndjson)\b/i.test(text) || /\bndjson\b|\bjsonl\b/i.test(text)) return false;
+  return true;
+}
+
+function jsonTechniqueBlockedByRfc(text: string): boolean {
+  if (!/\bRFC[\s#:-]*\d{1,5}\b/i.test(text)) return false;
+  if (GREP_LINE.test(text)) return false;
+  if (/\b(?:cli|command[ -]?line|bash|shell)\b/i.test(text)) return false;
+  if (/\.(jsonl?|ndjson)\b/i.test(text)) return false;
+  return true;
+}
+
+function canonTaskObj(obj: string): string {
+  if (/^(jsonl|ndjson)$/i.test(obj)) return "JSON";
+  if (/^rustc$/i.test(obj)) return "Rust";
+  return obj;
+}
+
+function cleanTask(raw: string): string | undefined {
+  let task = raw.replace(/\s+/g, " ").trim().replace(/^(to|for|a|an|the)\s+/i, "").replace(/[?!.]+$/, "").trim();
+  task = task.replace(LEAD_VERB, "").trim();
+  if (task.length < 2 || task.length > 60) return undefined;
+  return task;
+}
+
+/** Task remainder from “best way to …” / “need to …” / “what to use for …”. */
+export function techniqueTaskFromText(text: string): string | undefined {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length < 12) return undefined;
+  if (!TASK_OBJ_HIT.test(t)) return undefined;
+  const m = TECHNIQUE_CUE.exec(t) || INTENT_CUE.exec(t);
+  if (!m) return undefined;
+  return cleanTask(m[1]!);
+}
+const TECH_FILLER = new Set([
+  "on",
+  "the",
+  "a",
+  "an",
+  "of",
+  "to",
+  "for",
+  "and",
+  "in",
+  "at",
+  "by",
+  "command",
+  "line",
+  "cli",
+  "tool",
+  "using",
+  "with",
+  "from",
+  "into",
+  "this",
+  "that",
+  "nested",
+  "output",
+  "records",
+  "please",
+  "just",
+]);
+const TASK_FWD = new RegExp(
+  `\\b(?:${TASK_VERB})(?:ing|es|s|e|ed)?\\b[\\s\\S]{0,48}?\\b(${TASK_OBJ})\\b`,
+  "i",
+);
+const TASK_REV = new RegExp(
+  `\\b(${TASK_OBJ})\\b[\\s\\S]{0,48}\\b(?:${TASK_VERB})(?:ing|es|s|e|ed)?\\b`,
+  "i",
+);
+
+/** Verb+object without “best way”: “parse this CLI JSON”, “run TypeScript”. */
+export function implicitTechniqueTask(text: string): string | undefined {
+  const t = text.replace(/\s+/g, " ");
+  if (t.length < 8) return undefined;
+  if (jsonCliNeed(t) && !jsonTechniqueBlockedByRfc(t)) return "JSON";
+  if (pythonInstallNeed(t)) return "Python";
+  if (typescriptRunNeed(t)) return "TypeScript";
+  if (findFilesNeed(t)) return "files";
+  if (repoSearchNeed(t)) return "search";
+  const m = TASK_FWD.exec(t) || TASK_REV.exec(t);
+  if (!m) return undefined;
+  const obj = m[1]!.trim();
+  const canon = canonTaskObj(obj);
+  if (/^JSON$/i.test(canon) && jsonTechniqueBlockedByRfc(t)) return undefined;
+  if (/^JSON$/i.test(canon) && !jsonTaskToken(t) && !jsonCliNeed(t)) return undefined;
+  if (/^Python$/i.test(canon) && !pythonInstallNeed(t)) return undefined;
+  if (
+    /^TypeScript$/i.test(canon) &&
+    !typescriptRunNeed(t) &&
+    !/\b(?:run|execute|running|executing)s?\b/i.test(t)
+  ) {
+    return undefined;
+  }
+  return canon.length >= 2 && canon.length <= 24 ? canon : undefined;
+}
+
+function bitsNeedle(task: string): string | undefined {
+  const bits = task
+    .split(/[^a-zA-Z0-9.+-]+/)
+    .filter((w) => w.length > 1 && !/^(on|the|a|an|of|to|for|and|in|at|by)$/i.test(w))
+    .map((w) => canonTaskObj(w));
+  if (!bits.length) return undefined;
+  const q = `used for ${bits.join(" ")}`;
+  return q.length >= 10 && q.length <= 80 ? q : undefined;
+}
+
+/**
+ * Shorter `used for` queries when AND-postings of every leftover token miss.
+ * “used for JSON command line” → “used for JSON”.
+ */
+export function techniqueQueryFallbacks(q: string): string[] {
+  const t = q.trim();
+  if (t.length < 12 || !/^used for /i.test(t)) return [];
+  const rest = t.slice(9).trim();
+  const bits = rest.split(/[^a-zA-Z0-9.+-]+/).filter((w) => w.length > 1 && !TECH_FILLER.has(w.toLowerCase()));
+  const objs = bits.filter((b) => TASK_OBJ_RE.test(b));
+  const out: string[] = [];
+  const add = (s: string) => {
+    if (s.length >= 10 && s.length <= 80 && s.toLowerCase() !== t.toLowerCase() && !out.some((x) => x.toLowerCase() === s.toLowerCase())) {
+      out.push(s);
+    }
+  };
+  for (const o of objs) {
+    const c = canonTaskObj(o);
+    if (bits.some((b) => /^install/i.test(b)) && /python/i.test(c)) {
+      add("used for installing Python");
+      add("used for installing Python packages");
+      continue;
+    }
+    if (c.toLowerCase() !== o.toLowerCase()) add(`used for ${c}`);
+    add(`used for ${o}`);
+  }
+  if (objs.length > 1) add(`used for ${objs.map(canonTaskObj).join(" ")}`);
+  if (bits.some((b) => /^search/i.test(b))) {
+    add("used for searching");
+    add("used for repo");
+  }
+  if (bits.length) add(`used for ${bits.map(canonTaskObj).join(" ")}`);
+  return out;
+}
+
+/** Pack search needle: `used for JSON` so media `json` does not steal the card. */
+export function techniqueNeedleFromText(text: string): string | undefined {
+  const cued = techniqueTaskFromText(text);
+  if (cued) {
+    const skipJson =
+      (jsonTechniqueBlockedByRfc(text) && /\bjson/i.test(cued)) ||
+      (repoSearchNeed(text) && /\bjson/i.test(cued));
+    const skipPy = JS_PKG.test(text) && /python/i.test(cued) && !PIP_LIKE.test(text);
+    if (!skipJson && !skipPy) {
+      const q = bitsNeedle(cued);
+      if (q) return q;
+    }
+  }
+  const implicit = implicitTechniqueTask(text);
+  return implicit ? bitsNeedle(implicit) : undefined;
 }
 
 export function needlesFromText(text: string): string[] {
@@ -842,6 +1107,8 @@ export function needlesFromText(text: string): string[] {
   };
   const slice = text.length > 6_000 ? text.slice(0, 6_000) : text;
   if (slice.length < 2) return [];
+  const tech = techniqueNeedleFromText(slice);
+  if (tech) add(tech);
   if (!likelyNeedles(slice)) {
     scanPhrases(slice, add);
     if (!out.length) return [];

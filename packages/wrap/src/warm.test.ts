@@ -185,6 +185,37 @@ describe("watch-time warming", () => {
     expect(firstWaveReads(current, { id: "T-100" }).map((w) => w.tool)).toEqual(["getIssue"]);
   });
 
+  test("n-way branch cases ids are owned — first-wave does not warm arm tools", () => {
+    const prog: StretchProgram = {
+      id: "nary-warm",
+      version: "1",
+      name: "nary_warm",
+      description: "Prefix read plus n-way branch of input-bound reads.",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      sequence: ["getStatus", "branch_sev"],
+      steps: [
+        { id: "check", kind: "tool", tool: "getStatus", args: { id: { kind: "input", path: "id" } }, readOnly: true },
+        { id: "arm_a", kind: "tool", tool: "getPage", args: { id: { kind: "input", path: "id" } }, readOnly: true },
+        { id: "arm_b", kind: "tool", tool: "getTicket", args: { id: { kind: "input", path: "id" } }, readOnly: true },
+        { id: "arm_c", kind: "tool", tool: "getLog", args: { id: { kind: "input", path: "id" } }, readOnly: true },
+        {
+          id: "br",
+          kind: "branch",
+          expr: 'sev == "p0"',
+          then: ["arm_a"],
+          cases: [{ expr: 'sev == "p1"', steps: ["arm_b"] }],
+          else: ["arm_c"],
+        },
+      ],
+      returns: { kind: "from", step: "br", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: { inputs: { id: ["T-100"] } } },
+      manifest: liveManifest,
+    };
+    const wave = firstWaveReads(prog, { id: "T-100" });
+    expect(wave.map((w) => w.tool)).toEqual(["getStatus"]);
+    expect(wave.some((w) => w.tool === "getTicket" || w.tool === "getPage" || w.tool === "getLog")).toBe(false);
+  });
+
   test("next program's first-wave reads start while the current stretch is still running", async () => {
     const log: string[] = [];
     const current = currentProgram();

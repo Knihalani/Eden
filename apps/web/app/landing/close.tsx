@@ -4,7 +4,8 @@ import { MarketingCta } from "./links";
 export function LandingClose() {
   return (
     <section className="close" aria-labelledby="close-title">
-      <h2 id="close-title">Making your agents more deterministic.</h2>
+      <h2 id="close-title">Start here.</h2>
+      <p>Keep, Know, and whatever comes next.</p>
       <MarketingCta />
     </section>
   );
@@ -15,9 +16,8 @@ export function LandingFooter() {
     <footer className="site-foot">
       <p>Eden</p>
       <nav aria-label="Footer">
-        <Link href="/#story" prefetch={false}>
-          How it works
-        </Link>
+        <a href="#keep">Keep</a>
+        <a href="#know">Know</a>
         <Link href="/sign-in" prefetch={false}>
           Sign in
         </Link>

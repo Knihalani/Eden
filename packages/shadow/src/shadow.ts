@@ -111,6 +111,44 @@ function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 }
 
+/** Independent held-out replays. Result order matches `items`. */
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]!, i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  return out;
+}
+
+const SHADOW_CONCURRENCY = 8;
+
+type HeldReplay = {
+  unvalidatable: boolean;
+  extraMisses: number;
+  compiledComplete: number;
+  compiledSkips: number;
+  naiveSkips: number;
+  validated: boolean;
+  reasons: string[];
+  naiveLlm?: number;
+  naiveCents?: number;
+  compiledLlm?: number;
+  compiledCents?: number;
+  naiveTok?: number;
+  compiledTok?: number;
+  naiveTime?: number;
+  compiledTime?: number;
+  tokensMeasured: boolean;
+  timeMeasured: boolean;
+  tokensEstimated: boolean;
+};
+
 function reductionRatio(naive: number, compiled: number): number {
   if (!(naive > 0)) return 1;
   if (!(compiled > 0)) return Math.min(99, Math.max(naive, 2));
@@ -224,8 +262,21 @@ export async function shadowProgram(
   // step decides only *how* outputs are compared, never whether they are.
   const islandDerivedOutput = outputDerivesFromIsland(program);
 
-  for (const t of held) {
-    if (t.complete === true) naiveComplete++;
+  const emptyReplay = (): HeldReplay => ({
+    unvalidatable: false,
+    extraMisses: 0,
+    compiledComplete: 0,
+    compiledSkips: 0,
+    naiveSkips: 0,
+    validated: false,
+    reasons: [],
+    tokensMeasured: true,
+    timeMeasured: true,
+    tokensEstimated: false,
+  });
+
+  const replays = await mapPool(held, SHADOW_CONCURRENCY, async (t): Promise<HeldReplay> => {
+    const row = emptyReplay();
     try {
       const run = await runProgram(program, t.input ?? {}, {
         registry: opts.registryFor?.(t) ?? opts.registry,
@@ -233,91 +284,113 @@ export async function shadowProgram(
         checkEnvelope: true,
         timeoutMs: 60_000,
       });
-      // Paired with the compiled pushes below, deliberately: the naive
-      // numbers used to be pushed for EVERY held trace while their compiled
-      // counterparts were pushed only on successful replay, so a PASS verdict
-      // (which can coexist with unvalidatable traces) compared means over
-      // DIFFERENT sample sets — llmReduction/costReduction biased by exactly
-      // the traces that could not answer. Every ratio must be computed over
-      // the same paired sample set: one push per side, or neither.
-      naiveLlm.push(t.llmCalls);
-      naiveCents.push(t.cost_cents);
-      compiledLlm.push(run.stats.llmCalls);
-      compiledCents.push(run.stats.cents);
+      row.naiveLlm = t.llmCalls;
+      row.naiveCents = t.cost_cents;
+      row.compiledLlm = run.stats.llmCalls;
+      row.compiledCents = run.stats.cents;
       const naiveT = traceTokens(t);
       const islandUsage = islandUsageFromStats(run.stats);
       const compiledT = compiledTokens(t, run.stats.llmCalls, hasIsland, islandUsage);
-      if (naiveT == null || compiledT == null) tokensMeasured = false;
+      if (naiveT == null || compiledT == null) row.tokensMeasured = false;
       else {
-        naiveTok.push(naiveT);
-        compiledTok.push(compiledT);
-        if (tokensExtrapolated(run.stats.llmCalls, hasIsland, islandUsage)) tokensEstimated = true;
+        row.naiveTok = naiveT;
+        row.compiledTok = compiledT;
+        if (tokensExtrapolated(run.stats.llmCalls, hasIsland, islandUsage)) row.tokensEstimated = true;
       }
       const toolsMs = compiledToolMs(t, run.stats.toolCalls);
       const naiveTools = naiveToolMs(t);
-      if (isSyntheticDuration(t) || naiveTools == null || toolsMs == null) timeMeasured = false;
+      if (isSyntheticDuration(t) || naiveTools == null || toolsMs == null) row.timeMeasured = false;
       else {
-        naiveTime.push(naiveTools);
-        compiledTime.push(toolsMs + (hasIsland && run.stats.llmCalls >= 1 ? run.stats.islandMs : 0));
+        row.naiveTime = naiveTools;
+        row.compiledTime = toolsMs + (hasIsland && run.stats.llmCalls >= 1 ? run.stats.islandMs : 0);
       }
-      validated++;
-      // Counted here, not at the top of the loop: naiveSkips and compiledSkips
-      // must share one denominator, and only traces that reach validation
-      // success are in it.
-      naiveSkips += t.skipped?.length ?? 0;
+      row.validated = true;
+      row.naiveSkips = t.skipped?.length ?? 0;
       const usable = isUsableOutput(run.value);
       if (!usable) {
-        extraMisses++;
-        if (reasons.length < 8) reasons.push("succeeded with nothing");
+        row.extraMisses++;
+        row.reasons.push("succeeded with nothing");
       }
       const match = outputMatches(run.value, t.output, islandDerivedOutput);
       if (match === "vacuous") {
-        extraMisses++;
-        if (reasons.length < 8) reasons.push("trace has no recorded output — quality cannot be scored");
+        row.extraMisses++;
+        row.reasons.push("trace has no recorded output — quality cannot be scored");
       } else if (match === "prose-divergent") {
-        compiledComplete++;
-        if (reasons.length < 8) reasons.push("prose-divergent: output derives from the island and was compared structurally, not byte-for-byte");
-      } else if (match) compiledComplete++;
+        row.compiledComplete++;
+        row.reasons.push("prose-divergent: output derives from the island and was compared structurally, not byte-for-byte");
+      } else if (match) row.compiledComplete++;
       else {
-        extraMisses++;
-        if (reasons.length < 8) reasons.push("compiled output differs from the recorded trace");
+        row.extraMisses++;
+        row.reasons.push("compiled output differs from the recorded trace");
       }
       for (const req of required) {
         if (!run.stats.toolCalls.includes(req)) {
-          compiledSkips++;
-          extraMisses++;
+          row.compiledSkips++;
+          row.extraMisses++;
         }
       }
       if (hasIsland && run.stats.llmCalls < 1) {
-        extraMisses++;
-        if (reasons.length < 8) reasons.push("island program produced 0 LLM calls");
+        row.extraMisses++;
+        row.reasons.push("island program produced 0 LLM calls");
       }
     } catch (err) {
       if (isUnrecordedCall(err)) {
-        unvalidatable++;
-        if (reasons.length < 8) {
-          reasons.push(`compiled program ran ${(err as { tool?: string }).tool ?? "a step"} that this trace never recorded`);
-        }
-        continue;
+        row.unvalidatable = true;
+        row.reasons.push(`compiled program ran ${(err as { tool?: string }).tool ?? "a step"} that this trace never recorded`);
+        return row;
       }
       if (isDeopt(err)) {
-        // A replay that dies on a tool error the RECORDING ALSO CONTAINS is
-        // measuring the environment, not the program: the naive agent hit the
-        // same transient failure and retried around it. Set the trace aside
-        // (like an unrecorded call) instead of charging the program a miss.
         const flaked = envFlakedTool(err, t, program);
         if (flaked) {
-          unvalidatable++;
-          if (reasons.length < 8) reasons.push(`replay hit a ${flaked} failure the recording also contains`);
-          continue;
+          row.unvalidatable = true;
+          row.reasons.push(`replay hit a ${flaked} failure the recording also contains`);
+          return row;
         }
-        extraMisses++;
-        if (reasons.length < 8) reasons.push(`deopt on in-distribution input: ${(err as Error).message}`);
-        continue;
+        row.extraMisses++;
+        row.reasons.push(`deopt on in-distribution input: ${(err as Error).message}`);
+        return row;
       }
-      extraMisses++;
-      if (reasons.length < 8) reasons.push(`compiled error: ${(err as Error).message}`);
+      row.extraMisses++;
+      row.reasons.push(`compiled error: ${(err as Error).message}`);
     }
+    return row;
+  });
+
+  for (let i = 0; i < held.length; i++) {
+    const t = held[i]!;
+    const row = replays[i]!;
+    if (t.complete === true) naiveComplete++;
+    if (row.unvalidatable) {
+      unvalidatable++;
+      for (const r of row.reasons) if (reasons.length < 8) reasons.push(r);
+      continue;
+    }
+    if (row.validated) {
+      naiveLlm.push(row.naiveLlm!);
+      naiveCents.push(row.naiveCents!);
+      compiledLlm.push(row.compiledLlm!);
+      compiledCents.push(row.compiledCents!);
+      if (!row.tokensMeasured) tokensMeasured = false;
+      else if (row.naiveTok != null && row.compiledTok != null) {
+        naiveTok.push(row.naiveTok);
+        compiledTok.push(row.compiledTok);
+        if (row.tokensEstimated) tokensEstimated = true;
+      }
+      if (!row.timeMeasured) timeMeasured = false;
+      else if (row.naiveTime != null && row.compiledTime != null) {
+        naiveTime.push(row.naiveTime);
+        compiledTime.push(row.compiledTime);
+      }
+      validated++;
+      naiveSkips += row.naiveSkips;
+      compiledSkips += row.compiledSkips;
+      compiledComplete += row.compiledComplete;
+      extraMisses += row.extraMisses;
+      for (const r of row.reasons) if (reasons.length < 8) reasons.push(r);
+      continue;
+    }
+    extraMisses += row.extraMisses;
+    for (const r of row.reasons) if (reasons.length < 8) reasons.push(r);
   }
 
   const n = held.length;

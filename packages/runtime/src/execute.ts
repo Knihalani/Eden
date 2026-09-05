@@ -79,7 +79,14 @@ function isBarrier(step: Step): boolean {
   // Islands are not barriers: independent island misses in one program wave
   // may run together so wrap can coalesce them onto the batch transport.
   if (step.kind === "assert" || step.kind === "loop" || step.kind === "branch") return true;
-  if (step.kind === "tool") return isBarrierName(step.tool);
+  if (step.kind === "tool") {
+    // The program (or registry) asserted this call has no side effects.
+    // A mutating-looking name must not override that and serialize the wave —
+    // that is the whole point of `readOnly`. `charge` is a mutating verb;
+    // without this pin the mark was dead at top level.
+    if (step.readOnly === true) return false;
+    return isBarrierName(step.tool);
+  }
   return false;
 }
 
@@ -113,6 +120,7 @@ export function loopConcurrency(
   itemCount: number,
   opts: Pick<RunOpts, "loopConcurrency">,
 ): number {
+  if (loop.until) return 1;
   const limit = opts.loopConcurrency ?? DEFAULT_LOOP_CONCURRENCY;
   if (limit <= 1 || itemCount < 2) return 1;
   if (loop.parallel === false) return 1;
@@ -207,6 +215,7 @@ export async function runProgram(
     if (s.kind === "branch") {
       for (const id of s.then) bodyOwned.add(id);
       for (const id of s.else ?? []) bodyOwned.add(id);
+      for (const c of s.cases ?? []) for (const id of c.steps) bodyOwned.add(id);
     }
   }
   /**
@@ -304,9 +313,20 @@ export async function runProgram(
       return true;
     }
     if (step.kind === "branch") {
-      // Same expression grammar asserts use; truthy selects the then-arm.
+      // Same expression grammar asserts use. First matching expr wins: `expr`
+      // then `cases` in order, then `else`. Nested branch-in-else (old binary
+      // programs) still runs because the inner step id is just an else arm.
       const cond = evalAssert(step.expr, last.value, input, scope.results);
-      const armIds: string[] = cond ? step.then : step.else ?? [];
+      let armIds: string[] = step.then;
+      if (!cond) {
+        armIds = step.else ?? [];
+        for (const c of step.cases ?? []) {
+          if (evalAssert(c.expr, last.value, input, scope.results)) {
+            armIds = c.steps;
+            break;
+          }
+        }
+      }
       // Arms execute sequentially against their own last-box so an assert
       // inside an arm reads the arm's own previous step, not whatever raced
       // by outside.
@@ -330,12 +350,57 @@ export async function runProgram(
       stats.toolCalls.push(...armTools);
       return armValue;
     }
-    const items = asArray(evalBinding(step.over, scope));
+    if (step.kind !== "loop") throw new Error(`unexpected step kind ${(step as Step).kind}`);
     const body = step.body.map((id) => {
       const s = byId.get(id);
       if (!s) throw new Error(`loop body missing ${id}`);
       return s;
     });
+
+    if (step.until) {
+      const maxIters = step.maxIters ?? 32;
+      const collected: unknown[] = [];
+      // Retry-until: a single-tool body that throws (429) is one failed
+      // iteration with `{ ok: false }`, not a deopt. Poll loops (k8s) call
+      // ok:true with ready:false and never take this catch.
+      const retryOnThrow = body.length === 1 && body[0]!.kind === "tool";
+      try {
+        for (let i = 0; i < maxIters; i++) {
+          if (signal.aborted) throw new DeoptError("aborted");
+          scope.results.set(step.item, i);
+          const iterLast: { value: unknown } = { value: undefined };
+          const calls: string[] = [];
+          try {
+            for (const s of body) {
+              await execStep(s, signal, scope, true, iterLast);
+              if (s.kind === "tool") calls.push(s.tool);
+            }
+          } catch (err) {
+            if (!retryOnThrow || err instanceof DeoptError) throw err;
+            const fail = { ok: false, error: err instanceof Error ? err.message : String(err) };
+            for (const s of body) {
+              if (s.kind === "tool") {
+                scope.results.set(s.id, fail);
+                calls.push(s.tool);
+              }
+            }
+            iterLast.value = fail;
+          }
+          collected.push(iterLast.value);
+          stats.toolCalls.push(...calls);
+          if (evalAssert(step.until, iterLast.value, input, scope.results)) {
+            scope.results.set(step.id, collected);
+            if (touchLast) last.value = collected;
+            return collected;
+          }
+        }
+        throw new DeoptError(`poll ${step.until} exceeded maxIters ${maxIters}`);
+      } finally {
+        scope.results.delete(step.item);
+      }
+    }
+
+    const items = asArray(evalBinding(step.over, scope));
     const width = loopConcurrency(step, body, items.length, opts);
 
     // One iteration, against whichever scope it was given.

@@ -552,6 +552,211 @@ describe("openai proxy", () => {
     expect(state.run.measured).toBe(false);
   });
 
+  test("does not forward eden_dev to OpenAI", async () => {
+    const prev = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      let called = 0;
+      const state = createState({
+        fetch: (async () => {
+          called += 1;
+          return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+        }) as unknown as typeof fetch,
+      });
+      const res = await handleChatCompletions(
+        new Request("http://local/v1/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+          body: JSON.stringify({ model: "gpt-4o", messages: [] }),
+        }),
+        { state },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        model?: string;
+        fail_open?: boolean;
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      expect(body.model).toBe("eden");
+      expect(body.fail_open).toBe(true);
+      expect(body.choices?.[0]?.message?.content).toMatch(/OPENAI_API_KEY/);
+      expect(called).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev;
+    }
+  });
+
+  test("x-openai-api-key is the upstream key when Authorization is wrap auth", async () => {
+    const prev = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      const seen: string[] = [];
+      const state = createState({
+        fetch: (async (_url: string, init?: RequestInit) => {
+          seen.push(new Headers(init?.headers).get("authorization") ?? "");
+          return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+        }) as unknown as typeof fetch,
+      });
+      const res = await handleChatCompletions(
+        new Request("http://local/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer eden_dev",
+            "x-openai-api-key": "sk-upstream",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: "hi" }] }),
+        }),
+        { state },
+      );
+      expect(res.status).toBe(200);
+      expect(seen[0]).toBe("Bearer sk-upstream");
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev;
+    }
+  });
+
+  test("does not forward an eden_ signup key to OpenAI", async () => {
+    const prev = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      let called = 0;
+      const state = createState({
+        fetch: (async () => {
+          called += 1;
+          return new Response(JSON.stringify({ error: { message: "Incorrect API key" } }), { status: 401 });
+        }) as unknown as typeof fetch,
+      });
+      const res = await handleChatCompletions(
+        new Request("http://local/v1/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_a1b2c3d4e5f67890deadbeef", "content-type": "application/json" },
+          body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: "hi" }] }),
+        }),
+        { state },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { model?: string; fail_open?: boolean };
+      expect(body.model).toBe("eden");
+      expect(body.fail_open).toBe(true);
+      expect(called).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev;
+    }
+  });
+
+  test("compiled play answers chat when there is no model key", async () => {
+    const prev = process.env.OPENAI_API_KEY;
+    const prevSurface = process.env.EDEN_SURFACE;
+    delete process.env.OPENAI_API_KEY;
+    process.env.EDEN_SURFACE = "jit";
+    try {
+      let called = 0;
+      const p = liveProgram();
+      const state = createState({
+        programs: [p],
+        fetch: (async () => {
+          called += 1;
+          return new Response("nope");
+        }) as unknown as typeof fetch,
+      });
+      const res = await handleChatCompletions(
+        new Request("http://local/v1/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "resolve ticket T-100" }],
+          }),
+        }),
+        {
+          state,
+          getPrograms: () => [p],
+          play: async (name, args) => ({ played: name, ...args }),
+        },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { model?: string; choices?: Array<{ message?: { content?: string } }> };
+      expect(body.model).toBe("eden");
+      expect(JSON.parse(body.choices?.[0]?.message?.content || "{}")).toEqual({ played: "resolve_ticket", id: "T-100" });
+      expect(called).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev;
+      if (prevSurface === undefined) delete process.env.EDEN_SURFACE;
+      else process.env.EDEN_SURFACE = prevSurface;
+    }
+  });
+
+  test("compiled play still answers chat after JIT demote when there is no model key", async () => {
+    const prev = process.env.OPENAI_API_KEY;
+    const prevSurface = process.env.EDEN_SURFACE;
+    delete process.env.OPENAI_API_KEY;
+    process.env.EDEN_SURFACE = "jit";
+    try {
+      let called = 0;
+      const p = liveProgram();
+      const state = createState({
+        programs: [p],
+        fetch: (async () => {
+          called += 1;
+          return new Response("nope");
+        }) as unknown as typeof fetch,
+      });
+      state.jit.demoted = true;
+      const res = await handleChatCompletions(
+        new Request("http://local/v1/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "resolve ticket T-100" }],
+          }),
+        }),
+        {
+          state,
+          getPrograms: () => [p],
+          play: async (name, args) => ({ played: name, ...args }),
+        },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { model?: string; fail_open?: boolean; choices?: Array<{ message?: { content?: string } }> };
+      expect(body.model).toBe("eden");
+      expect(body.fail_open).toBeUndefined();
+      expect(JSON.parse(body.choices?.[0]?.message?.content || "{}")).toEqual({ played: "resolve_ticket", id: "T-100" });
+      expect(called).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev;
+      if (prevSurface === undefined) delete process.env.EDEN_SURFACE;
+      else process.env.EDEN_SURFACE = prevSurface;
+    }
+  });
+
+  test("uses upstreamKey when the request is wrap auth", async () => {
+    const seen: string[] = [];
+    const state = createState({
+      fetch: (async (_url: string, init?: RequestInit) => {
+        const h = init?.headers as Record<string, string>;
+        seen.push(h.authorization);
+        return new Response(JSON.stringify({ choices: [{ message: { content: "ok", tool_calls: [] } }] }));
+      }) as unknown as typeof fetch,
+    });
+    const res = await handleChatCompletions(
+      new Request("http://local/v1/chat/completions", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4o", messages: [] }),
+      }),
+      { state, upstreamKey: "sk-test-upstream" },
+    );
+    expect(res.ok).toBe(true);
+    expect(seen).toEqual(["Bearer sk-test-upstream"]);
+  });
+
   test("stream=true with live tools returns SSE", async () => {
     const p = liveProgram();
     const state = createState({
@@ -1044,6 +1249,48 @@ describe("online signal bus", () => {
     const input = JSON.parse(steered[0]!.function!.arguments) as { db?: { host?: string; user?: string } };
     expect(input.db?.host).toBe("db.example.com");
     expect(input.db?.user).toBe("deploy");
+  });
+
+  test("two Bash programs steer by command template, not list order", () => {
+    const psql = {
+      ...shapeProgram("unused"),
+      id: "p_psql",
+      name: "psql_who",
+      sequence: ["Bash"],
+      steps: [
+        {
+          id: "s0",
+          kind: "tool",
+          tool: "Bash",
+          args: { command: { kind: "transform", fn: "template", expr: "psql -c 'select 1'" } },
+        },
+      ],
+      contract: { witnesses: 3, minLlmReduction: 1, allowExact: true, envelope: { inputs: {} } },
+    } as unknown as StretchProgram;
+    const compose = {
+      ...psql,
+      id: "p_compose",
+      name: "compose_ps",
+      steps: [
+        {
+          id: "s0",
+          kind: "tool",
+          tool: "Bash",
+          args: { command: { kind: "transform", fn: "template", expr: "docker compose ps --format json" } },
+        },
+      ],
+    } as unknown as StretchProgram;
+    const live = [compose, psql];
+    const psqlOut = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "psql -c 'select 1'" }) } }],
+      live,
+    );
+    expect(psqlOut[0]!.function?.name).toBe("psql_who");
+    const composeOut = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "docker compose ps --format json" }) } }],
+      live,
+    );
+    expect(composeOut[0]!.function?.name).toBe("compose_ps");
   });
 
   test("finalize without a required check is blocked", async () => {

@@ -5,7 +5,7 @@
  * Published limits cite the same files as PUBLIC_CLAIMS / /proof.
  */
 
-import { claimById } from "@eden/measure";
+import { claimById, type ClaimKind, type ClaimSource } from "@eden/measure";
 
 export type IsolationClaim = {
   claim: string;
@@ -128,40 +128,49 @@ export type LimitClaim = {
   claim: string;
   printed: string;
   test: string;
+  kind: ClaimKind;
+  source: ClaimSource;
+  name: string;
 };
 
 /** Published limits. Same honesty as /proof. Isolation copy must name oblivious-long. Paths match PUBLIC_CLAIMS.file. */
-function limitPin(id: string, claim: string): LimitClaim {
+/** Isolation pins. Same statement as PUBLIC_CLAIMS so /isolation, /proof, and eden claims agree. */
+function limitPin(id: string): LimitClaim {
   const row = claimById(id);
   if (!row) throw new Error(`PUBLIC_CLAIMS missing ${id}`);
-  return { id, claim, printed: row.printed, test: row.file };
+  return {
+    id,
+    claim: row.statement,
+    printed: row.printed,
+    test: row.file,
+    kind: row.kind,
+    source: row.source,
+    name: row.name,
+  };
 }
 
 export const LIMIT_CLAIMS: LimitClaim[] = [
-  limitPin(
-    "oblivious-long",
-    "Wrap-path oblivious-long stays a limit: +2.8% cents and +3.2% wall. It is not a win table row.",
-  ),
-  limitPin(
-    "s1b-analogue",
-    "The analogue −9.1% cents cell is labeled analogue. It is not a live Claude Code invoice.",
-  ),
-  limitPin(
-    "s1b-live-invoice",
-    "No live Claude Code invoice quote is published. The billed S1b cell is retired.",
-  ),
-  limitPin(
-    "replica-host-drop",
-    "Replica host-drop is a host limit. Live Claude Code is not claimed to ack always-drop of a correct rewrite.",
-  ),
-  limitPin(
-    "jit-soak",
-    "JIT soak printed FAIL precision=0.789 n=38. Default EDEN_SURFACE stays all. That FAIL is a pin, not a win.",
-  ),
+  limitPin("oblivious-long"),
+  limitPin("s1b-analogue"),
+  limitPin("s1b-live-invoice"),
+  limitPin("replica-host-drop"),
+  limitPin("ood-long"),
+  limitPin("cert-bounds"),
 ];
 
 export const LIMITS_LEAD =
-  "These are pins, not reversals. Equal weight with the isolation tests. The live board is /proof and eden claims.";
+  "These are pins, not reversals. Equal weight with the isolation tests. Kind and Source sit on the same row as the meter — analogue and retired are not the same class as wrap-path. The live board is /proof and eden claims.";
+
+export const ISO_LIMIT_ROWS = LIMIT_CLAIMS.filter((c) => c.kind === "limit");
+export const ISO_ANALOGUE_ROWS = LIMIT_CLAIMS.filter((c) => c.kind === "analogue");
+export const ISO_RETIRED_ROWS = LIMIT_CLAIMS.filter((c) => c.kind === "retired");
+
+export const ISO_LIMITS_NOTE =
+  "Wrap-path loss, host limit, envelope miss, certification bounds. Not analogue cents. Not a retired invoice. JIT soak PASS lives with the wins.";
+export const ISO_ANALOGUE_NOTE =
+  "Headless replica TURN_CENTS. Labeled analogue. Not a live Claude Code invoice. Not a campaign win.";
+export const ISO_RETIRED_NOTE =
+  "Withdrawn until a file parses. Retired is a result, not a missing row.";
 
 export type OwaspRow = {
   id: string;

@@ -25,6 +25,7 @@ import {
 
 const ROOT = join(import.meta.dir, "../../../../../");
 const PAGE = readFileSync(join(import.meta.dir, "page.tsx"), "utf8");
+const TABLE = readFileSync(join(import.meta.dir, "../claim-table.tsx"), "utf8");
 const COPY = readFileSync(join(import.meta.dir, "copy.ts"), "utf8");
 const WHITEPAPER = readFileSync(join(ROOT, "docs/whitepaper.md"), "utf8");
 const CASES = readFileSync(join(ROOT, "docs/cases.md"), "utf8");
@@ -54,16 +55,17 @@ test("page maps statement and file, iso-doc, no ship CTA", () => {
   expect(PAGE).toContain("iso-doc");
   expect(PAGE).toContain("Workspace notes");
   expect(PAGE).toContain("<h1>Proof</h1>");
-  expect(PAGE).toContain("{row.statement}");
-  expect(PAGE).toContain("{row.file}");
-  expect(PAGE).toContain("{row.printed}");
-  expect(PAGE).toContain("{row.kind}");
-  expect(PAGE).toContain("{row.source}");
-  expect(PAGE).toContain("<th>Kind</th>");
-  expect(PAGE).toContain("<th>Source</th>");
+  expect(PAGE).toContain("ClaimTable");
+  expect(TABLE).toContain("{row.statement}");
+  expect(TABLE).toContain("{row.file}");
+  expect(TABLE).toContain("{row.printed}");
+  expect(TABLE).toContain("{row.kind}");
+  expect(TABLE).toContain("{row.source}");
+  expect(TABLE).toContain("<th>Kind</th>");
+  expect(TABLE).toContain("<th>Source</th>");
   expect(PAGE).toContain("{PROOF_COUNTS}");
   expect(PAGE).toContain("eden claims");
-  expect(PAGE).toContain("iso-table");
+  expect(TABLE).toContain("iso-table");
   expect(PAGE).toContain("{CUSTOMERS.length}");
   expect(PAGE).not.toMatch(/Arc 8/);
   expect(PAGE).not.toMatch(/className="[^"]*ship/);
@@ -124,8 +126,8 @@ test("analogue, oblivious-long, invoice, host-drop land in the right tables", ()
   expect(WINS.some((c) => c.source === "analogue-headless")).toBe(false);
   expect(WINS.some((c) => c.id === "oblivious-long")).toBe(false);
   expect(LIMITS.find((c) => c.id === "oblivious-long")?.kind).toBe("limit");
-  expect(LIMITS.find((c) => c.id === "jit-soak")?.printed).toBe("FAIL precision=0.789 n=38");
-  expect(WINS.some((c) => c.id === "jit-soak")).toBe(false);
+  expect(LIMITS.some((c) => c.id === "jit-soak")).toBe(false);
+  expect(WINS.find((c) => c.id === "jit-soak")?.printed).toBe("PASS precision=1.000 n=38");
   expect(RETIRED.find((c) => c.id === "s1b-live-invoice")?.kind).toBe("retired");
   const host = LIMITS.find((c) => c.id === "replica-host-drop");
   expect(host?.name).toBe("replica host-drop");
@@ -141,7 +143,16 @@ test("fixture studies are campaign measurements; customer studies stay 0", () =>
   expect(CASES_LEAD).toMatch(/campaign fixture/i);
   expect(CASES_LEAD).toMatch(/not customers/);
   expect(CASES_LEAD).toMatch(/: 0/);
-  expect(PAGE).toContain("Campaign measurement · {row.vertical}");
+  expect(CASES_LEAD).toMatch(/same table chrome/i);
+  expect(PAGE).toContain("fromFixtures(FIXTURES)");
+  expect(PAGE).toContain("ClaimTable");
+  expect(PAGE).toContain("CLASS_KEY");
+  expect(PAGE).toContain("tag: \"fixture\"");
+  expect(PAGE).toContain("Fixture verticals");
+  expect(PAGE).not.toContain("<h2 id=\"proof-cases\">Case studies</h2>");
+  expect(TABLE).toContain("<th>Kind</th>");
+  expect(TABLE).toContain("<th>Source</th>");
+  expect(TABLE).toContain("iso-tag");
   expect(CUSTOMERS.length).toBe(0);
 });
 
@@ -153,6 +164,7 @@ test("whitepaper and cases map PUBLIC_CLAIMS statements and files", () => {
   for (const row of FIXTURES) {
     expect(CASES).toContain(row.statement);
     expect(CASES).toContain(row.file);
+    expect(CASES).toMatch(/\| Kind \| Source \|/);
     expect(CASES).toMatch(new RegExp(`${row.vertical}.*Campaign measurement`, "s"));
   }
   expect(CASES).toMatch(/Customer-approved measured studies: \*\*0\*\*/);

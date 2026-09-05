@@ -4,6 +4,41 @@ Each line is a fact we can open a test for. Nothing here is a badge. This is not
 
 The live page is `/isolation`. Graphite only.
 
+## Published limits
+
+Pins, not reversals. Kind and Source sit on the same row as the meter. Analogue and retired are not the same class as wrap-path. The live board is `/proof` and `eden claims`.
+
+analogue — headless replica, not a live invoice. limit — wrap-path, host, envelope miss, cert bounds. retired — withdrawn until a file parses.
+
+### Limits
+
+Wrap-path loss, host limit, envelope miss, certification bounds. Not analogue cents. Not a retired invoice. JIT soak PASS lives with the wins.
+
+| Name | Kind | Source | Printed | File |
+|---|---|---|---|---|
+| oblivious-long | limit | campaign | `+2.8% cents / +3.2% wall` | `benchmarks/campaign/OBLIVIOUS-LONG.md` |
+| replica host-drop | limit | host-limit | `host limit (replica-only)` | `benchmarks/campaign/HOST-DROP.md` |
+| ood-long | limit | campaign | `parity (miss)` | `benchmarks/campaign/bench-campaign.ts` |
+| certification bounds | limit | campaign | `11/14 soak certified` | `benchmarks/campaign/WITNESS-ECON.md` |
+
+### Analogue
+
+Headless replica TURN_CENTS. Labeled analogue. Not a live Claude Code invoice.
+
+| Name | Kind | Source | Printed | File |
+|---|---|---|---|---|
+| S1b headless analogue | analogue | analogue-headless | `−9.1% cents (analogue)` | `benchmarks/campaign/SILENT-DROP.md` |
+
+### Retired
+
+Withdrawn until a file parses. Retired is a result.
+
+| Name | Kind | Source | Printed | File |
+|---|---|---|---|---|
+| S1b live Claude Code invoice | retired | retired | `retired` | `benchmarks/campaign/LIVE-AB.md` |
+
+## What we can prove
+
 | Claim | Test |
 |---|---|
 | Two workspaces that record the same public-API sequence keep their own cluster rows. | `apps/site/src/tenancy.test.ts` |
@@ -53,15 +88,3 @@ Credential-free alone is not enough. An internal no-auth API still serves per-te
 **When the list is reviewed:** on every change to that `Set`, in the same PR as the host. Adding a host must show that unauthenticated GET bodies are byte-identical for every caller. Removing a host is the same PR bar in reverse. Re-read the set before expanding it. An empty list means no public pool, not all hosts.
 
 Related: [evidence pack](evidence-pack.md), [ZDR guidance](zdr.md), [logging](logging.md), [OWASP MCP Top 10](owasp-mcp.md).
-
-## Published limits
-
-Pins, not reversals. The live board is `/proof` and `eden claims`.
-
-| Limit | Printed | File |
-|---|---|---|
-| Wrap-path `oblivious-long` stays a limit. It is not a win table row. | `+2.8% cents / +3.2% wall` | `docs/ROADMAP.md` |
-| The analogue −9.1% cents cell is labeled analogue. It is not a live Claude Code invoice. | `−9.1% cents (analogue)` | `benchmarks/campaign/SILENT-DROP.md` |
-| No live Claude Code invoice quote is published. The billed S1b cell is retired. | `retired` | `benchmarks/campaign/LIVE-AB.md` |
-| Replica host-drop is a host limit. Live Claude Code is not claimed to ack always-drop of a correct rewrite. | `host limit (replica-only)` | `benchmarks/campaign/HOST-DROP.md` |
-| JIT soak printed FAIL precision=0.789 n=38. Default `EDEN_SURFACE` stays `all`. | `FAIL precision=0.789 n=38` | `benchmarks/campaign/JIT-SOAK.md` |

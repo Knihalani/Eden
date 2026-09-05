@@ -194,7 +194,7 @@ describe("Arc 2 / 3 / 4 substrate pins", () => {
     expect(sys[1]!.cache_control).toEqual({ type: "ephemeral" });
   });
 
-  test("bindable listAll mines foreach (Arc 4 read-set); cursor listPage does not", () => {
+  test("bindable listAll mines foreach (Arc 4 read-set); cursor listPage mines until+flatten", () => {
     const bound = compileTraces(
       Array.from({ length: 3 }, (_, i) => ({
         id: `arc-pb${i}`,

@@ -87,6 +87,11 @@ describe("extract", () => {
     expect(qualityHost("https://github.com/whatwg/sg/raw/main/db.json")).toBe(true);
     expect(qualityHost("https://en.wikipedia.org/wiki/Kenya")).toBe(true);
     expect(qualityHost("https://github.com/other/repo")).toBe(false);
+    expect(qualityHost("https://github.com/oven-sh/bun")).toBe(true);
+    expect(qualityHost("https://github.com/oven-sh/bun/issues/1")).toBe(true);
+    expect(qualityHost("https://raw.githubusercontent.com/rust-lang/rust/master/README.md")).toBe(true);
+    expect(qualityHost("https://doc.rust-lang.org/book/")).toBe(true);
+    expect(qualityHost("https://bun.sh/docs")).toBe(true);
     expect(qualityHost("https://learn-python-scam.example/essay")).toBe(false);
     expect(qualityHost("https://spam.rfc.test/clickbait")).toBe(false);
     expect(qualityHost("https://notw3.org/TR/x")).toBe(false);
@@ -209,7 +214,7 @@ describe("extract", () => {
         o: "JSON",
         e: "",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       persistable("https://www.iana.org/assignments/well-known-uris/well-known-uris.xml", {
         s: "IANA well-known change-password",
@@ -217,7 +222,7 @@ describe("extract", () => {
         o: "Change Password",
         e: "",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       persistable("https://www.iana.org/assignments/well-known-uris/well-known-uris.xml", {
         s: "IANA well-known obscure-x",
@@ -233,7 +238,7 @@ describe("extract", () => {
         o: "CBOR",
         e: "",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       persistable("https://www.iana.org/assignments/uri-schemes/uri-schemes.xml", {
         s: "IANA scheme bitcoin",
@@ -241,7 +246,7 @@ describe("extract", () => {
         o: "Bitcoin",
         e: "",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       persistable("https://www.iana.org/assignments/link-relations/link-relations.xml", {
         s: "IANA rel stylesheet",
@@ -249,7 +254,7 @@ describe("extract", () => {
         o: "Stylesheet",
         e: "",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       persistable("https://www.iana.org/assignments/link-relations/link-relations.xml", {
         s: "IANA rel obscure-x",
@@ -265,7 +270,7 @@ describe("extract", () => {
         o: "security.txt",
         e: "",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(qualityUrlSql()).not.toContain("LIKE '%rfc-editor.org%'");
     expect(qualityUrlSql()).toContain("LIKE 'https://%.rfc-editor.org/%'");
     expect(qualityUrlSql()).not.toMatch(/LIKE '%python\.org%'/);
@@ -293,6 +298,8 @@ describe("extract", () => {
     expect(p.search("application/cbor")[0]?.s).toBe("IANA media application/cbor");
     expect(p.search("Brazil")[0]?.o).toBe("Brasilia");
     expect(queryShapes("bitcoin").some((s) => /IANA scheme bitcoin/i.test(s))).toBe(true);
+    expect(queryShapes("RFC 8259 obsoletes")).toContain("RFC 8259");
+    expect(queryShapes("RFC 4627 obsoletes")).toContain("RFC 4627");
     expect(knowQuery("bitcoin", p).fact ?? "").toMatch(/URI scheme/i);
     expect(knowQuery("stylesheet", p).fact ?? "").toMatch(/link relation/i);
   });
@@ -333,7 +340,7 @@ describe("extract", () => {
       "protocol",
     );
     expect(proto).toEqual([{ s: "IANA protocol 6", p: "is", o: "TCP", e: "" }]);
-    expect(persistable("https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml", proto[0]!)).toBe(true);
+    expect(persistable("https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml", proto[0]!)).toBe(false);
     const http = parseIanaXml(`<record><value>404</value><description>Not Found</description></record>`, "http");
     expect(http[0]?.s).toBe("IANA http 404");
     const media = parseIanaXml(
@@ -349,7 +356,7 @@ describe("extract", () => {
       ],
     });
     expect(spdx).toEqual([{ s: "SPDX MIT", p: "is", o: "MIT License", e: "" }]);
-    expect(persistable("https://spdx.org/licenses/licenses.json", spdx[0]!)).toBe(true);
+    expect(persistable("https://spdx.org/licenses/licenses.json", spdx[0]!)).toBe(false);
     const whatwg = parseWhatwgDb({
       workstreams: [{ standards: [{ name: "HTML", href: "https://html.spec.whatwg.org/multipage/", reference: "HTML" }] }],
     });
@@ -357,10 +364,10 @@ describe("extract", () => {
     expect(whatwg[0]?.o).toContain("HTML");
     const blocks = parseUnicodeBlocks("# Blocks-16.0.0.txt\n0000..007F; Basic Latin\n0080..00FF; Latin-1 Supplement\n");
     expect(blocks[0]).toEqual({ s: "Unicode Block Basic Latin", p: "is", o: "U+0000..U+007F", e: "" });
-    expect(persistable("https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt", blocks[0]!)).toBe(true);
+    expect(persistable("https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt", blocks[0]!)).toBe(false);
     const langs = parseLangSubtags("%%\nType: language\nSubtag: en\nDescription: English\n%%\nType: language\nSubtag: zxx\nDescription: No linguistic content\nScope: special\n");
     expect(langs).toEqual([{ s: "IANA language en", p: "is", o: "English", e: "" }]);
-    expect(persistable("https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry", langs[0]!)).toBe(true);
+    expect(persistable("https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry", langs[0]!)).toBe(false);
     const methods = parseIanaXml(`<record><value>GET</value><description>Transfer a current representation</description></record>`, "method");
     expect(methods[0]?.s).toBe("IANA method GET");
     const methodsXml = parseIanaXml(
@@ -374,7 +381,7 @@ describe("extract", () => {
     expect(sc[0]).toEqual({ s: "Unicode Script Latn", p: "is", o: "Latin", e: "" });
     const cs = parseIanaXml(`<record><name>UTF-8</name><preferred_alias>utf-8</preferred_alias></record>`, "charset");
     expect(cs[0]?.s).toBe("IANA charset utf-8");
-    expect(persistable("https://www.iana.org/assignments/character-sets/character-sets.xml", cs[0]!)).toBe(true);
+    expect(persistable("https://www.iana.org/assignments/character-sets/character-sets.xml", cs[0]!)).toBe(false);
     const hdr = parseIanaXml(`<record><name>Accept</name><status>permanent</status><description>Media types</description></record>`, "header");
     expect(hdr[0]?.s).toBe("IANA header Accept");
     expect(hdr[0]?.o).toBe("Media types");
@@ -401,7 +408,7 @@ describe("extract", () => {
       },
     ]);
     expect(t.some((x) => x.s === "W3C web-share" && /Share/i.test(x.o))).toBe(true);
-    expect(persistable("https://api.w3.org/specifications", t[0]!)).toBe(true);
+    expect(persistable("https://api.w3.org/specifications", t[0]!)).toBe(false);
   });
   test("ietf related folds updates per source rfc", () => {
     const t = parseRelatedDocs(
@@ -507,7 +514,7 @@ describe("extract", () => {
         o: "Robots Exclusion Protocol",
         e: "RFC 9309: Robots Exclusion Protocol",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -527,9 +534,10 @@ describe("store", () => {
   test("round trip nodes and crush expiry", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "France", p: "capital", o: "Paris", e: "The capital of France is Paris." }], 30);
-    const hits = s.search("France capital");
-    expect(hits[0]?.o).toBe("Paris");
+    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    const hits = s.search("used for JSON");
+    expect(hits[0]?.s).toBe("jq");
+    expect(hits[0]?.url).toBe("https://example.org/a");
     s.db.run(`UPDATE nodes SET as_of = 0, ttl_days = 1`);
     s.expire(Date.now());
     const crushed = (s.db.query(`SELECT COUNT(*) AS n FROM evidence`).get() as { n: number }).n;
@@ -543,8 +551,8 @@ describe("store", () => {
     s.putPage({ url: "https://spam.example/x", digest: "abc", chars: 10, source: "cc", ttl_days: 1, skip: "language" });
     expect((s.db.query(`SELECT COUNT(*) AS n FROM pages`).get() as { n: number }).n).toBe(0);
     expect(s.pageDigest("https://spam.example/x")).toBe("abc");
-    s.putNodes("https://example.org/a", [{ s: "France", p: "capital", o: "Paris", e: "The capital of France is Paris." }], 30);
-    expect(s.search("France")[0]?.o).toBe("Paris");
+    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    expect(s.search("jq")[0]?.o).toMatch(/used for/);
     expect(s.search("RFC 3986").length).toBe(0);
     const posts = (s.db.query(`SELECT COUNT(*) AS n FROM post`).get() as { n: number }).n;
     expect(posts).toBeGreaterThan(0);
@@ -559,13 +567,11 @@ describe("store", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
     s.putNodes("https://example.org/a", [
-      { s: "France", p: "capital", o: "Paris", e: "The capital of France is Paris." },
-      { s: "Kenya", p: "capital", o: "Nairobi", e: "The capital of Kenya is Nairobi." },
+      { s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." },
+      { s: "Bun", p: "is", o: "used for running TypeScript", e: "Use Bun to run TypeScript services." },
     ], 30);
-    const n = (s.db.query(`SELECT COUNT(*) AS n FROM intern WHERE s = 'capital'`).get() as { n: number }).n;
-    expect(n).toBe(1);
-    expect((s.db.query(`SELECT COUNT(*) AS n FROM intern WHERE s = 'france'`).get() as { n: number }).n).toBe(0);
-    expect((s.db.query(`SELECT COUNT(*) AS n FROM lex WHERE t = 'france'`).get() as { n: number }).n).toBe(1);
+    expect((s.db.query(`SELECT COUNT(*) AS n FROM intern WHERE s = 'is'`).get() as { n: number }).n).toBe(1);
+    expect((s.db.query(`SELECT COUNT(*) AS n FROM lex WHERE t = 'json'`).get() as { n: number }).n).toBeGreaterThan(0);
     expect(s.schemaVersion()).toBeGreaterThanOrEqual(10);
     expect((s.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip")).toBe(false);
     s.putNodes("https://example.org/dump", [{ s: "x", p: "about", o: "a long page title dump", e: "nope" }], 30);
@@ -583,31 +589,24 @@ describe("store", () => {
     s.putNodes("https://datatracker.ietf.org/doc/html/rfc3986", [
       { s: "RFC 3986", p: "is", o: "URI Generic Syntax other host", e: "RFC 3986 URI Generic Syntax other host" },
     ], 30);
-    expect((s.db.query(`SELECT COUNT(*) AS n FROM nodes n JOIN intern s ON s.id = n.sid WHERE s.s = 'RFC 3986'`).get() as { n: number }).n).toBe(1);
+    expect((s.db.query(`SELECT COUNT(*) AS n FROM nodes n JOIN intern s ON s.id = n.sid WHERE s.s = 'RFC 3986'`).get() as { n: number }).n).toBe(0);
     s.putNodes("https://www.rfc-editor.org/rfc-index.xml", [
       { s: "RFC 2119", p: "is", o: "Key words for use in RFCs", e: "" },
     ], 30);
     s.putNodes("https://www.rfc-editor.org/rfc/rfc2119.html", [
       { s: "RFC 2119", p: "is", o: "Key words MUST SHOULD", e: "RFC 2119: Key words for use in RFCs to Indicate Requirement Levels" },
     ], 30);
-    const upgraded = s.search("RFC 2119")[0];
-    expect(upgraded?.o).toContain("MUST");
-    expect(upgraded?.e).toContain("Requirement");
+    expect(s.search("RFC 2119").length).toBe(0);
     s.close();
     rmSync(dir, { recursive: true, force: true });
   });
   test("catalog aliases hit sqlite before compact", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
-    s.putNodes("https://www.iana.org/assignments/media-types/media-types.xml", [
-      { s: "IANA media application/json", p: "is", o: "JSON", e: "" },
-      { s: "SPDX JSON", p: "is", o: "JSON License", e: "" },
+    s.putNodes("https://jqlang.github.io/jq/", [
+      { s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." },
     ], 30);
-    s.putNodes("https://www.iana.org/assignments/http-methods/http-methods.xml", [
-      { s: "IANA method GET", p: "is", o: "safe, idempotent, RFC 9110", e: "" },
-    ], 30);
-    expect(s.search("json")[0]?.s).toBe("IANA media application/json");
-    expect(s.search("GET")[0]?.s).toBe("IANA method GET");
+    expect(s.search("used for JSON")[0]?.s).toBe("jq");
     s.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -669,15 +668,15 @@ describe("store", () => {
   test("compact freezes the graph into a pack", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "France", p: "capital", o: "Paris", e: "The capital of France is Paris." }], 30);
+    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
     s.compact();
     expect((s.db.query(`SELECT COUNT(*) AS n FROM nodes`).get() as { n: number }).n).toBe(0);
-    expect(s.search("France")[0]?.o).toBe("Paris");
+    expect(s.search("jq")[0]?.s).toBe("jq");
     expect(s.count().wal_nodes).toBe(0);
     expect(s.count().pack).toBeGreaterThanOrEqual(1);
     s.close();
     const q = openQueryStore(dir);
-    expect(q.search("France")[0]?.o).toBe("Paris");
+    expect(q.search("jq")[0]?.s).toBe("jq");
     q.close?.();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -685,25 +684,25 @@ describe("store", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-base-"));
     const s = openStore(dir);
     expect(s.count().pack).toBe(0);
-    s.compact([{ s: "France", p: "capital", o: "Paris", e: "", url: "" }]);
-    expect(s.search("France")[0]?.o).toBe("Paris");
+    s.compact([{ s: "jq", p: "is", o: "used for filtering JSON", e: "", url: "" }]);
+    expect(s.search("jq")[0]?.s).toBe("jq");
     expect(s.count().pack).toBeGreaterThanOrEqual(1);
     s.close();
     const q = openQueryStore(dir);
-    expect(q.search("France")[0]?.o).toBe("Paris");
+    expect(q.search("jq")[0]?.s).toBe("jq");
     q.close?.();
     rmSync(dir, { recursive: true, force: true });
   });
   test("query store ignores WAL until compact", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-wal-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "Kenya", p: "capital", o: "Nairobi", e: "The capital of Kenya is Nairobi." }], 30);
+    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
     const q = openQueryStore(dir);
-    expect(q.search("Kenya").length).toBe(0);
+    expect(q.search("jq").length).toBe(0);
     q.close?.();
     s.compact();
     const q2 = openQueryStore(dir);
-    expect(q2.search("Kenya")[0]?.o).toBe("Nairobi");
+    expect(q2.search("jq")[0]?.s).toBe("jq");
     q2.close?.();
     s.close();
     rmSync(dir, { recursive: true, force: true });
@@ -876,14 +875,15 @@ describe("know crush holdout", () => {
     }
   });
 
-  test("openStore requeues wikipedia seeds; skipHost keeps nytimes out", () => {
+  test("openStore requeues talk and RFC seeds; skipHost keeps nytimes out", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-seeds-"));
     const s = openStore(dir);
     try {
       const urls = (s.db.query(`SELECT url FROM frontier`).all() as { url: string }[]).map((r) => r.url);
-      expect(urls.some((u) => u.includes("wikipedia.org"))).toBe(true);
+      expect(urls.some((u) => u.includes("wikipedia.org"))).toBe(false);
+      expect(urls.some((u) => /reddit\.com|stackoverflow\.com/.test(u))).toBe(true);
       expect(urls.some((u) => /rfc3986/i.test(u))).toBe(true);
-      expect(SEED_URLS.some((u) => u.includes("wikipedia.org"))).toBe(true);
+      expect(SEED_URLS.some((u) => u.includes("wikipedia.org"))).toBe(false);
       expect(skipHost("https://en.wikipedia.org/wiki/Kenya")).toBeUndefined();
       expect(skipHost("https://www.nytimes.com/2026/01/01/x")).toBe("paywall-host");
       expect(urls.every((u) => skipHost(u) === undefined)).toBe(true);

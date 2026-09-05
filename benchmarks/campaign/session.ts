@@ -16,7 +16,7 @@
  */
 import type { IslandCaller, StretchProgram, StretchTrace } from "@eden/ir";
 import { IslandReply } from "@eden/ir";
-import { compileTraces } from "@eden/compile";
+import { compileTraces, findForkedGroups, forkWitnessTraces, type ForkCandidate } from "@eden/compile";
 import { registryFrom } from "@eden/runtime";
 import { shadowProgram } from "@eden/shadow";
 import { createState, wrapTools, type ToolDef, type ToolsIn, type WrapState } from "@eden/wrap";
@@ -76,6 +76,127 @@ type WorldSlot = {
 };
 
 const SCRAPED_ISLAND = { prompt_tokens: 80, completion_tokens: 20 } as const;
+
+/** Matches compileTraces default — family detection must see the same forks. */
+const FORK_MIN_SUPPORT = 3;
+
+/**
+ * Collapsed tool-order (consecutive repeats dropped). Width-7 and width-10
+ * of the same stretch stay one class. Full event signatures would re-split
+ * mixed fan-out widths — that SKIP is the width_class_split honesty gate.
+ */
+function collapsedShapeKey(t: StretchTrace): string {
+  const names: string[] = [];
+  for (const e of t.events) {
+    if (!e.ok || e.skipped) continue;
+    if (names.at(-1) !== e.name) names.push(e.name);
+  }
+  return names.join("\0");
+}
+
+function find(parent: Map<string, string>, k: string): string {
+  let r = parent.get(k) ?? k;
+  while ((parent.get(r) ?? r) !== r) r = parent.get(r)!;
+  let x = k;
+  while (x !== r) {
+    const n = parent.get(x) ?? x;
+    parent.set(x, r);
+    x = n;
+  }
+  return r;
+}
+
+/**
+ * Shape families for go-live split. Collapsed order is the atom. Traces that
+ * findForkedGroups would merge as one n-way fork union into one family.
+ * Unrelated linear pipelines that only share a first tool stay apart unless
+ * the compiler would actually fork them (discriminator + minSupport).
+ */
+function shapeFamilies(clean: StretchTrace[]): { families: Map<string, StretchTrace[]>; forks: ForkCandidate[] } {
+  const parent = new Map<string, string>();
+  for (const t of clean) {
+    const k = collapsedShapeKey(t);
+    if (!parent.has(k)) parent.set(k, k);
+  }
+  const forks = clean.length >= FORK_MIN_SUPPORT * 2 ? findForkedGroups(clean, FORK_MIN_SUPPORT) : [];
+  for (const f of forks) {
+    const keys: string[] = [];
+    const seen = new Set<string>();
+    for (const t of forkWitnessTraces(f)) {
+      const k = collapsedShapeKey(t);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      keys.push(k);
+    }
+    for (let i = 1; i < keys.length; i++) {
+      const ra = find(parent, keys[0]!);
+      const rb = find(parent, keys[i]!);
+      if (ra !== rb) parent.set(ra, rb);
+    }
+  }
+  const families = new Map<string, StretchTrace[]>();
+  for (const t of clean) {
+    const root = find(parent, collapsedShapeKey(t));
+    const arr = families.get(root);
+    if (arr) arr.push(t);
+    else families.set(root, [t]);
+  }
+  return { families, forks };
+}
+
+/** n-way nestedArms repeats the else arm as rest[0]; don't double-count it. */
+function uniqueForkArms(c: ForkCandidate): StretchTrace[][] {
+  if (c.nestedArms && c.nestedArms.length >= 2) {
+    return [c.thenTraces, ...c.nestedArms.map((a) => a.traces)];
+  }
+  return [c.thenTraces, c.elseTraces];
+}
+
+function forkMatchingFamily(forks: ForkCandidate[], family: ReadonlySet<StretchTrace>): ForkCandidate | undefined {
+  let best: ForkCandidate | undefined;
+  let bestN = 0;
+  for (const f of forks) {
+    let n = 0;
+    for (const t of forkWitnessTraces(f)) if (family.has(t)) n++;
+    if (n > bestN) {
+      bestN = n;
+      best = f;
+    }
+  }
+  return bestN > 0 ? best : undefined;
+}
+
+/**
+ * Hold out from a shape family. Prefer ≥1 per fork arm when there are enough
+ * duplicate ids to keep a training rep of each held input.
+ */
+function pickHoldout(family: StretchTrace[], need: number, arms: StretchTrace[][] | undefined): StretchTrace[] {
+  const idKey = (t: StretchTrace) => JSON.stringify(t.input ?? {});
+  const remainingById = new Map<string, number>();
+  for (const t of family) remainingById.set(idKey(t), (remainingById.get(idKey(t)) ?? 0) + 1);
+  const familySet = new Set(family);
+  const held: StretchTrace[] = [];
+  const heldSet = new Set<StretchTrace>();
+  const tryTake = (t: StretchTrace): boolean => {
+    if (held.length >= need || heldSet.has(t) || !familySet.has(t)) return false;
+    const k = idKey(t);
+    if ((remainingById.get(k) ?? 0) <= 1) return false;
+    remainingById.set(k, remainingById.get(k)! - 1);
+    held.push(t);
+    heldSet.add(t);
+    return true;
+  };
+  if (arms && arms.length >= 2) {
+    for (const arm of arms) {
+      if (held.length >= need) break;
+      for (let i = arm.length - 1; i >= 0; i--) {
+        if (tryTake(arm[i]!)) break;
+      }
+    }
+  }
+  for (let i = family.length - 1; i >= 0 && held.length < need; i--) tryTake(family[i]!);
+  return held;
+}
 
 /** Campaign analogue of wrap's provider scraper (island usage on IslandReply). */
 function scrapeIsland(island: IslandCaller): IslandCaller {
@@ -298,28 +419,14 @@ export class Session {
         reasons: [`only ${clean.length} clean traces of ${usable.length}`],
       });
     }
-    // Split by SHAPE CLASS (collapsed tool order). Event length is the wrong
-    // proxy for fan-out worlds: width-7 and width-10 are the same stretch, and
-    // splitting them made 8-witness go-live SKIP on orders. Hold out from the
-    // dominant clean shape so held traces share the program's envelope, keep
-    // ≥1 rep of every held id in training, and let everything else train.
-    const shapeKey = (t: StretchTrace) => {
-      const names: string[] = [];
-      for (const e of t.events) {
-        if (!e.ok || e.skipped) continue;
-        if (names.at(-1) !== e.name) names.push(e.name);
-      }
-      return names.join("\0");
-    };
-    const byShape = new Map<string, StretchTrace[]>();
-    for (const t of clean) {
-      const k = shapeKey(t);
-      const arr = byShape.get(k);
-      if (arr) arr.push(t);
-      else byShape.set(k, [t]);
-    }
+    // Split by SHAPE FAMILY. Atom = collapsed tool order (width-7 and width-10
+    // of the same stretch stay one class — width_class_split in WITNESS-ECON.md).
+    // Traces findForkedGroups would merge as one n-way fork are one family, so a
+    // 3-arm gate is not three thin linear shapes. Hold out from the dominant
+    // family (prefer ≥1 per arm), keep ≥1 rep of every held id in training.
+    const { families, forks } = shapeFamilies(clean);
     let dominant: StretchTrace[] = [];
-    for (const arr of byShape.values()) if (arr.length > dominant.length) dominant = arr;
+    for (const arr of families.values()) if (arr.length > dominant.length) dominant = arr;
     if (dominant.length < need.holdout + 3) {
       return tagGoLive({
         program: null,
@@ -327,17 +434,8 @@ export class Session {
         reasons: [`dominant shape has only ${dominant.length} clean traces`],
       });
     }
-    const holdout: StretchTrace[] = [];
-    const idKey = (t: StretchTrace) => JSON.stringify(t.input ?? {});
-    const remainingById = new Map<string, number>();
-    for (const t of dominant) remainingById.set(idKey(t), (remainingById.get(idKey(t)) ?? 0) + 1);
-    for (let i = dominant.length - 1; i >= 0 && holdout.length < need.holdout; i--) {
-      const t = dominant[i]!;
-      const k = idKey(t);
-      if ((remainingById.get(k) ?? 0) <= 1) continue; // keep the last rep of an id in training
-      remainingById.set(k, (remainingById.get(k) ?? 0) - 1);
-      holdout.push(t);
-    }
+    const familyFork = forkMatchingFamily(forks, new Set(dominant));
+    const holdout = pickHoldout(dominant, need.holdout, familyFork ? uniqueForkArms(familyFork) : undefined);
     const heldSet = new Set(holdout);
     const train: StretchTrace[] = clean.filter((t) => !heldSet.has(t));
     // Variants vote for sequence shape (Wave 3.5). Envelope values come only

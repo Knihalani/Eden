@@ -2,8 +2,10 @@ import type { StretchProgram } from "@eden/ir";
 import { redact } from "@eden/ir";
 import { compiledSchema, steerToolCalls } from "./steer";
 import { noteJitUsed, selectForRequest } from "./intent";
+import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
-import { filterCanary, type WrapState } from "./wrap-tools";
+import type { WrapState } from "./wrap-tools";
+import { withKnowFactsAnthropic } from "./know-inject";
 
 /**
  * Anthropic Messages API dialect (G7).
@@ -323,6 +325,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
 
   applyCacheBreakpoints(body);
+  body = withKnowFactsAnthropic(body) as AnthropicRequest;
 
   const fn = opts.fetch ?? fetch;
   const anthropicKey = req.headers.get("x-api-key") || process.env.ANTHROPIC_API_KEY || "";

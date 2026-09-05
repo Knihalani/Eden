@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mcpInstructions, MCP_INSTRUCTIONS_CHARS } from "@eden/core";
 import { openDb, type EdenDb } from "./db";
-import { handleMcp, toolRowToProgram } from "./mcp";
+import { dispatchResult, handleMcp, toolRowToProgram, wrapDispatchResult } from "./mcp";
 import { dispatchPrograms, selectSurfacePrograms } from "@eden/wrap";
 
 type InitResult = {
@@ -212,6 +212,18 @@ describe("handleMcp initialize", () => {
       "http://x",
     )) as { result: { tools: Array<{ name: string }> } };
     expect(alias.result.tools.map((t) => t.name)).toEqual(["github_pr_bundle"]);
+    const viaUrl = (await handleMcp(
+      db,
+      "ws_local",
+      {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/dispatch",
+        params: { url: "https://api.github.com/repos/acme/app/pulls/12" },
+      },
+      "http://x",
+    )) as { result: { tools: Array<{ name: string }> } };
+    expect(viaUrl.result.tools.map((t) => t.name)).toEqual(["github_pr_bundle"]);
   });
 
   test("dispatch still matches a 7th live tool — the old list cap must not starve it", async () => {
@@ -281,6 +293,58 @@ describe("handleMcp initialize", () => {
     const viaJit = selectSurfacePrograms({ mode: "jit", live: programs, messages: GH_MESSAGE }).surface.map((p) => p.name);
     expect(viaDispatch).toEqual(viaJit);
     expect(viaDispatch).toEqual(["github_pr_bundle"]);
+  });
+
+  test("forge-origin seed steps dispatch on GitHub issues and pulls URLs, not on the name alone", () => {
+    const steps = [
+      { url: "{origin}/forge/repos/acme/app/issues/{issue}" },
+      { url: "{origin}/forge/repos/acme/app/issues/{issue}/comments" },
+      { url: "{origin}/forge/repos/acme/app/pulls/{issue}" },
+    ];
+    const row = {
+      id: "x",
+      name: "fetch_issue_bundle",
+      when_to_use: "Prefer this over six curl/gh calls.",
+      steps: JSON.stringify(steps),
+      uses_count: 0,
+    };
+    const issues = dispatchResult([row], {
+      messages: [{ role: "user", content: "Look at https://api.github.com/repos/acme/app/issues/1" }],
+    });
+    const pulls = dispatchResult([row], {
+      messages: [
+        { role: "user", content: "Look at https://api.github.com/repos/acme/app/pulls/12 and summarize the reviews" },
+      ],
+    });
+    const nameOnly = dispatchResult([row], {
+      messages: [{ role: "user", content: "Use fetch_issue_bundle" }],
+    });
+    expect(issues.tools.map((t) => t.name)).toEqual(["fetch_issue_bundle"]);
+    expect(pulls.tools.map((t) => t.name)).toEqual(["fetch_issue_bundle"]);
+    expect(nameOnly.tools).toEqual([]);
+    const htmlIssues = dispatchResult([row], {
+      messages: [{ role: "user", content: "https://github.com/acme/app/issues/1" }],
+    });
+    const htmlPull = dispatchResult([row], {
+      messages: [{ role: "user", content: "https://github.com/KaiavN/Eden/pulls/12" }],
+    });
+    expect(htmlIssues.tools.map((t) => t.name)).toEqual(["fetch_issue_bundle"]);
+    const htmlPulls = dispatchResult([row], {
+      messages: [{ role: "user", content: "https://github.com/acme/app/pulls/12 and summarize the reviews" }],
+    });
+    expect(htmlPulls.tools.map((t) => t.name)).toEqual(["fetch_issue_bundle"]);
+    expect(htmlPull.tools.map((t) => t.name)).toEqual(["fetch_issue_bundle"]);
+    const http = wrapDispatchResult([row], {
+      url: "https://github.com/KaiavN/Eden/issues/1",
+    });
+    expect(http.tools).toHaveLength(1);
+    expect(http.tools[0]).toMatchObject({
+      type: "function",
+      function: { name: "fetch_issue_bundle" },
+      defer_loading: true,
+    });
+    expect((http.tools[0] as { function: { parameters?: unknown } }).function.parameters).toBeTruthy();
+    expect("inputSchema" in http.tools[0]!).toBe(false);
   });
 
   test("scorer fault fail-opens to empty tools, never throws", async () => {

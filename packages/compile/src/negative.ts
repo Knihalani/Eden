@@ -30,18 +30,16 @@ function samePoll(a: TraceEvent, b: TraceEvent): boolean {
   return a.name === b.name && canonicalize(a.args ?? {}) === canonicalize(b.args ?? {});
 }
 
-function resultsDiverge(run: TraceEvent[]): boolean {
-  const first = canonicalize(run[0]?.result ?? null);
-  return run.some((e) => canonicalize(e.result ?? null) !== first);
-}
-
-/** Consecutive same-args reads that are a wait, not a foreach (foreach varies args). */
+/** Consecutive same-args reads that are a named wait, not a foreach (foreach varies args). */
 function isPollRun(run: TraceEvent[]): boolean {
   if (run.length < 2) return false;
   const name = run[0]?.name;
   if (!name || !isPollCandidate(name)) return false;
   if (!run.every((e) => isPollCandidate(e.name) && samePoll(run[0]!, e))) return false;
-  return isPollName(name) || resultsDiverge(run);
+  // Named waits (status/poll/wait) stay negative space. A same-args read
+  // whose result *changes* (ready false→true) is a poll-until candidate —
+  // compile.ts mines `until`, it is not stripped here.
+  return isPollName(name);
 }
 
 function addValues(into: Set<string>, value: unknown): void {

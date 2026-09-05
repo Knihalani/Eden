@@ -285,9 +285,22 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
   type Hit = { p: StretchProgram; input: Record<string, unknown>; by: "name" | "argshape" };
   const hits: Hit[] = [];
   // Gate one: name prefix. The original signal; cheap and unambiguous.
+  // Shell programs all share first-tool `Bash` — name alone would steer every
+  // kubectl/psql/terraform call onto whichever shell program was listed first.
+  // A command template must also structurally fit the live command.
   for (const p of live) {
     const seq = p.sequence ?? [];
     if (!seq.length || seq[0] !== name) continue;
+    const tmpl = firstCommandTemplate(p);
+    if (tmpl) {
+      const cmdLive = callArgs(first).command;
+      if (typeof cmdLive !== "string" || !templateFits(tmpl, cmdLive)) continue;
+      const recovered = recoverShellInput(p, callArgs(first));
+      const input = recovered ?? extractInput(p, callArgs(first));
+      if (!inputServes(p, input)) continue;
+      hits.push({ p, input, by: "name" });
+      continue;
+    }
     const input = extractInput(p, callArgs(first));
     if (!inputServes(p, input)) continue;
     hits.push({ p, input, by: "name" });

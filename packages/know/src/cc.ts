@@ -3,9 +3,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EDENBOT } from "./ua";
 import { junkFrontier, knowDir } from "./store";
-import { englishEnough, hostOf, qualityHost, skipHost } from "./extract";
+import { encyclopediaUrl, englishEnough, hostOf, qualityHost, skipHost } from "./extract";
 import { pageTtl } from "./ttl";
-import { cheapSkip, gopherSkip, headerSkipHost, wetFactBearing, wetSpam } from "./gate";
+import { cheapSkip, gopherSkip, headerSkipHost, wetFactBearing, wetSpam, wetTalkBearing } from "./gate";
+import { githubFrontierJunk, githubToolUrl, talkFrontierJunk, talkUrl, toolDocsUrl } from "./tools";
 import { englishTrigram } from "./lang";
 import { minhashBands } from "./minhash";
 import { WET_SCAN_MULT, envNum, shardWetIndex, wetByteCap } from "./defaults";
@@ -137,22 +138,20 @@ export async function newsWarcPath(index = 0, at = new Date()): Promise<string> 
 
 /** Catalog registries: hostname match, never a URI substring. Wikipedia is not a registry. */
 const REGISTRY_HOST = /(?:^|\.)(iana|rfc-editor|ietf|w3|spdx|unicode|whatwg)\.org$/i;
-const WIKI_NS_SKIP = /\/wiki\/(?:File|Special|Help|Talk|User|Template|Wikipedia|Category|Portal|Draft|Module):/i;
 
 /**
- * Lower fetches first. Dense wiki lists beat RFC HTML beat other registries
- * beat wiki articles beat other catalog hosts. Paywalls are 90 (also skipHost).
+ * Lower fetches first. Talk and tool docs beat RFC HTML beat other registries.
+ * Encyclopedia wiki is junk (90). Paywalls are 90 (also skipHost).
  */
 export function rankFrontier(url: string): number {
   if (skipHost(url) || junkFrontier(url)) return 90;
   const u = url.toLowerCase();
-  if (/wikipedia\.org\/wiki\/(?:list_of_|outline_of_)/i.test(u)) return 1;
+  if (talkUrl(url)) return 0;
+  if (toolDocsUrl(url) || githubToolUrl(url)) return 1;
   if (/rfc[-/_]?\d{3,5}/i.test(u) && (catalogRegistry(url) || qualityHost(url))) return 2;
   if (catalogRegistry(url)) return 3;
-  if (/wikipedia\.org\/wiki\//i.test(u) && !WIKI_NS_SKIP.test(u)) return 4;
-  if (/(?:wikidata|wiktionary|wikimedia|wikibooks|wikisource)\.org/i.test(u) && qualityHost(url)) return 5;
   if (qualityHost(url)) return 6;
-  if (/rfc[-/_]?\d{3,5}/i.test(u) || /\/wiki\//i.test(u)) return 7;
+  if (/rfc[-/_]?\d{3,5}/i.test(u)) return 7;
   return 8;
 }
 
@@ -181,24 +180,27 @@ export function catalogRegistry(url: string): boolean {
   }
 }
 
-const TOPICAL_WET =
-  /(?:wikipedia|wikidata|wiktionary|wikibooks|wikisource)\.org|arxiv\.org|pubmed|ncbi\.nlm|europepmc\.org|openalex\.org|semanticscholar\.org|doaj\.org|doi\.org/i;
+const TOPICAL_WET = /arxiv\.org|doi\.org/i;
 
 /**
  * FineWeb meter is *slice* yield: kept / scanned on a WET window.
  * Catalog registries: length ≥ 80.
- * Wikipedia / arXiv / PubMed / OpenAlex: English Gopher-quality, any topic.
- * Other hosts still need a typed-fact signal so casino/spam English does not fill the slice.
+ * Encyclopedia wiki / PubMed stay out unless the page is how-to talk.
+ * arXiv CS stays. Other hosts still need a typed-fact or talk signal.
  */
 export function keepWet(rec: WetRecord): boolean {
   if (skipHost(rec.uri)) return false;
+  if (githubFrontierJunk(rec.uri) || talkFrontierJunk(rec.uri)) return false;
   if (rec.text.length < 80) return false;
   if (catalogRegistry(rec.uri)) return true;
   if (cheapSkip(rec.uri, rec.text)) return false;
   if (wetSpam(rec.text)) return false;
   if (gopherSkip(rec.text)) return false;
   if (!englishEnough(rec.text) || !englishTrigram(rec.text)) return false;
+  if (encyclopediaUrl(rec.uri)) return wetTalkBearing(rec.text);
   if (TOPICAL_WET.test(rec.uri)) return true;
+  if (toolDocsUrl(rec.uri)) return true;
+  if (talkUrl(rec.uri)) return wetTalkBearing(rec.text) || wetFactBearing(rec.text);
   if (pageTtl(rec.uri, rec.text).class === "news") return true;
   return wetFactBearing(rec.text);
 }

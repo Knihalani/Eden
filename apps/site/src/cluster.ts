@@ -65,10 +65,14 @@ export async function ingest(
   // has drifted enough. It is guarded twice over so ingest latency stays
   // exactly what it was — the call is not awaited, and a synchronous throw
   // before the first await cannot escape either.
-  try {
-    void maybeRecompileWorkspace(db, workspaceId, canaryWorkspaceDeps()).catch(() => undefined);
-  } catch {
-    /* ingest must never wait on the canary */
+  // On Vercel, Fluid Compute waits for pending promises before freezing the
+  // isolate. Starting the canary here made POST /v1/ingest look hung.
+  if (!process.env.VERCEL) {
+    try {
+      void maybeRecompileWorkspace(db, workspaceId, canaryWorkspaceDeps()).catch(() => undefined);
+    } catch {
+      /* ingest must never wait on the canary */
+    }
   }
   // Sampled housekeeping, same shape as the result_cache sweep. tool_event
   // and stretch are mining inputs, not records queried forever; without a
@@ -85,7 +89,7 @@ export async function ingest(
       .run(`DELETE FROM watched_issue WHERE seen_at < ?`, [Date.now() - 30 * 24 * 60 * 60_000])
       .catch(() => undefined);
   }
-  if (!stretchEnd) return { drafts: 0 };
+  if (!stretchEnd) return { drafts: 0, islands: 0, stored: events.length };
   const rows = await db.all<{
     event_id: string;
     seq: number;
@@ -276,7 +280,7 @@ export async function ingest(
       }
     }
   }
-  return { drafts, islands: islands.length };
+  return { drafts, islands: islands.length, stored: events.length };
 }
 
 async function rememberIssues(db: EdenDb, workspaceId: string, events: ToolEvent[]): Promise<void> {

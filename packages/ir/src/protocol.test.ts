@@ -38,6 +38,7 @@ describe("protocol version gate", () => {
       expect(gate.status).toBe(426);
       expect(gate.reason).toContain(`client speaks ${EDEN_PROTOCOL_VERSION + 1}`);
       expect(gate.reason).toContain(`server speaks ${EDEN_PROTOCOL_VERSION}`);
+      expect(gate.reason).toMatch(/@kaiavn\/eden/);
     }
   });
 

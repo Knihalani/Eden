@@ -59,9 +59,12 @@ function isEligibleChild(p: StretchProgram): boolean {
   return (p.sequence?.length ?? 0) >= 1;
 }
 
-/** Island/loop/branch stretches stay one program — do not split TicketShip, desk, ETL. */
+/** Island/loop/branch stretches stay one program — do not split TicketShip, desk, ETL.
+ *  A long linear provision (Helix 12-step launch) is also the product, not two
+ *  midpoint children whose names are not world tools. */
 function isRichStretch(p: StretchProgram): boolean {
-  return p.steps.some((s) => s.kind === "island" || s.kind === "loop" || s.kind === "branch");
+  if (p.steps.some((s) => s.kind === "island" || s.kind === "loop" || s.kind === "branch")) return true;
+  return (p.sequence?.length ?? 0) >= 10;
 }
 
 function seqKey(seq: string[]): string {

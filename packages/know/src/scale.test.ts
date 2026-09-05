@@ -97,7 +97,7 @@ describe("scale retrieval", () => {
     };
     expect(injectFromText("Please refactor the leftover intern firm and ship the crate.", store)).toBeUndefined();
     expect(n).toBe(0);
-    expect(injectFromText("Send application/json please.", store)?.fact).toMatch(/application\/json/);
+    expect(injectFromText("Send application/json please.", store)).toBeUndefined();
     expect(n).toBe(0);
   });
 });

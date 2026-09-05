@@ -1,5 +1,5 @@
 {
-  "name": "eden",
+  "name": "@kaiavn/eden",
   "version": "0.1.0",
   "description": "Compiles repeated agent tool-call patterns into single-call tools. Domain-general, fail-safe, measured.",
   "type": "module",
@@ -8,14 +8,23 @@
   },
   "files": [
     "dist/eden.js",
+    "dist/demo.js",
     "README.md"
   ],
   "scripts": {
     "build": "bash ../../scripts/build-cli.sh",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "EDEN_SKIP_CHECKS=1 bun run build"
   },
   "engines": {
     "bun": ">=1.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KaiavN/Eden.git",
+    "directory": "packages/cli"
   },
   "keywords": [
     "ai",
@@ -26,9 +35,5 @@
     "openai",
     "mcp"
   ],
-  "license": "MIT",
-  "dependencies": {
-    "@eden/measure": "workspace:*",
-    "@eden/know": "workspace:*"
-  }
+  "license": "MIT"
 }

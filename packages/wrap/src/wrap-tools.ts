@@ -4,7 +4,6 @@ import {
   emptyTokenClasses,
   evidenceLedger,
   firstWarningIndex,
-    inCanary,
     isMutating,
   isReadName,
   judgeGrounding,
@@ -21,6 +20,7 @@ import {
 import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram, type RunStats } from "@eden/runtime";
 import { MAX_RUN_STEPS } from "@eden/ir";
 import { asToolDef, emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
+import { filterCanary } from "./canary";
 import { extractInput } from "./steer";
 import type { StretchTrace, TraceEvent } from "@eden/ir";
 import { cacheHitSpread, resetUsage } from "./usage";
@@ -833,29 +833,7 @@ function liveOf(state: WrapState): StretchProgram[] {
   );
 }
 
-/**
- * Canary programs serve only the hashed 10% bucket. Empty session is the
- * operator and sees canary. Missing rollout stays 100%. A bookkeeping throw
- * drops canary tools (fail-open to raw), never silently serves them at 100%.
- */
-export function filterCanary<T extends { rollout?: "canary" | "live" }>(
-  programs: T[],
-  sessionId: string | undefined | null,
-): T[] {
-  try {
-    const out: T[] = [];
-    for (const p of programs) {
-      try {
-        if (p.rollout !== "canary" || inCanary(sessionId)) out.push(p);
-      } catch {
-        /* skip this program — fail-open to raw, never 100% canary */
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
+export { filterCanary } from "./canary";
 
 function entityKey(rec: Record<string, unknown> | undefined): string | undefined {
   try {

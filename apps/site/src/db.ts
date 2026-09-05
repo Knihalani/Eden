@@ -123,7 +123,7 @@ export async function openDb(path?: string): Promise<EdenDb> {
   const file = path || process.env.EDEN_DB || "./.eden-local/eden.db";
   const { mkdirSync } = await import("node:fs");
   const { dirname } = await import("node:path");
-  const { Database } = await import("bun:sqlite");
+  const { Database } = await import(/* webpackIgnore: true */ "bun" + ":sqlite");
   mkdirSync(dirname(file), { recursive: true });
   const sqlite = new Database(file, { create: true });
   sqlite.exec("PRAGMA journal_mode=WAL;");

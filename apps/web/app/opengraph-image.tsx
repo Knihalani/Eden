@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Eden — Making your agents more deterministic.";
+export const alt = "Eden — Making your agent do less work.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -50,10 +50,10 @@ export default function OpengraphImage() {
               display: "flex",
             }}
           >
-            Making your agents more deterministic.
+            Making your agent do less work.
           </div>
           <div style={{ fontSize: 30, color: "#b9b7c6", maxWidth: 800, display: "flex" }}>
-            Turn repeated agent tool work into compiled tools you inspect and Approve.
+            Eden sits beside the agent you already run.
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>

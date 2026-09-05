@@ -10,6 +10,7 @@
     "@eden/ir": "workspace:*",
     "@eden/runtime": "workspace:*",
     "@eden/compile": "workspace:*",
-    "@eden/measure": "workspace:*"
+    "@eden/measure": "workspace:*",
+    "@eden/know": "workspace:*"
   }
 }

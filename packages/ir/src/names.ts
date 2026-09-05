@@ -14,6 +14,19 @@ export const MUTATING_VERBS = [
   "drop",
   "publish",
   "upsert",
+  "apply",
+  "charge",
+  "reserve",
+  "assign",
+  "allocate",
+  "merge",
+  "grant",
+  "revoke",
+  "restock",
+  "escalate",
+  "book",
+  "enroll",
+  "set",
 ] as const;
 
 export const MUTATING = new RegExp(`^(${MUTATING_VERBS.join("|")})([A-Z0-9_].*)?$`);

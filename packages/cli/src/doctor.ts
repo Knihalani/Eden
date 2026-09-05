@@ -49,7 +49,8 @@ export function parseNetAllow(raw: string | undefined): string[] {
 }
 
 const NET_ALLOW_EMPTY = "EDEN_NET_ALLOW empty · piped network binaries stay refused";
-const SURFACE_ALL = "EDEN_SURFACE all · jit-soak FAIL precision=0.789 n=38 · default stays all";
+const SURFACE_JIT = "EDEN_SURFACE jit · default after soak PASS precision=1.000 n=38";
+const SURFACE_ALL = "EDEN_SURFACE all · opt-out · default jit after soak PASS precision=1.000 n=38";
 export const PROBE_MS = 800;
 
 /** Fetch + JSON with a hard deadline. AbortSignal alone can miss a hanging body. */
@@ -57,6 +58,7 @@ export async function probeJson(
   url: string,
   fetchFn: typeof fetch = fetch,
   ms = PROBE_MS,
+  init?: RequestInit,
 ): Promise<{ ok: boolean; status: number; body: unknown } | null> {
   const ac = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -67,7 +69,7 @@ export async function probeJson(
     }, ms);
   });
   try {
-    const pending = fetchFn(url, { signal: ac.signal });
+    const pending = fetchFn(url, { ...init, signal: ac.signal });
     void pending.catch(() => {});
     const r = await Promise.race([pending, deadline]);
     const text = await Promise.race([r.text(), deadline]);
@@ -87,26 +89,32 @@ export async function probeJson(
   }
 }
 
-/** Same split as wrap `surfaceMode()`. Empty/unknown is `all`, never a silent jit flip. */
+/** Same split as wrap `surfaceMode()`. Empty is `jit` after soak PASS; unknown is `all`. */
 export function surfaceModeOf(raw: string | undefined = process.env.EDEN_SURFACE): "all" | "none" | "jit" | "jit-shadow" {
   const v = String(raw ?? "")
     .trim()
     .toLowerCase();
   if (v === "none") return "none";
-  if (v === "jit") return "jit";
+  if (v === "all") return "all";
   if (v === "jit-shadow" || v === "shadow") return "jit-shadow";
+  if (v === "jit") return "jit";
+  if (!v) return "jit";
   return "all";
 }
 
 export function surfaceCheck(raw: string | undefined = process.env.EDEN_SURFACE): DoctorCheck {
   const mode = surfaceModeOf(raw);
+  const v = String(raw ?? "").trim();
+  if (!v) {
+    return { name: "surface", ok: true, detail: SURFACE_JIT };
+  }
   if (mode === "all") {
     return { name: "surface", ok: true, detail: SURFACE_ALL };
   }
   return {
     name: "surface",
     ok: true,
-    detail: `EDEN_SURFACE ${mode} · opt-in · default all until soak PASS`,
+    detail: `EDEN_SURFACE ${mode} · soak PASS precision=1.000 n=38 · default jit`,
   };
 }
 
@@ -166,7 +174,7 @@ export function recordState(
 function mineFix(mined: number, stuck: number): string {
   if (!mined) return "wrap more runs";
   if (stuck) return `${stuck} pending/uncovered · eden explain`;
-  return "eden explain";
+  return "eden approve";
 }
 
 export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<DoctorCheck[]> {
@@ -192,6 +200,8 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
 
   let wrapUp = false;
   let tracesKnown: number | undefined;
+  let wrapCandidates: number | undefined;
+  let wrapLive: number | undefined;
   const wrap = await probeJson(`${base}/health`, fetchFn);
   if (wrap) {
     const j = wrap.body && typeof wrap.body === "object" ? (wrap.body as {
@@ -203,11 +213,35 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
     }) : null;
     wrapUp = wrap.ok;
     if (wrap.ok && typeof j?.traces === "number") tracesKnown = j.traces;
+    if (wrap.ok && typeof j?.candidates === "number") wrapCandidates = j.candidates;
+    if (wrap.ok && typeof j?.live === "number") wrapLive = j.live;
     health.push({
       name: "wrap",
       ok: wrap.ok,
       detail: wrap.ok ? `up · traces ${j?.traces ?? "?"} · live ${j?.live ?? "?"}` : `HTTP ${wrap.status}`,
     });
+    if (wrap.ok) {
+      const key = cfg?.api_key;
+      const agent = await probeJson(`${base}/v1/wrap`, fetchFn, PROBE_MS, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(key ? { authorization: `Bearer ${key}` } : {}),
+        },
+        body: JSON.stringify({ name: "eden_doctor_probe", args: {} }),
+      });
+      const stale = !agent || agent.status === 404;
+      const keyedReject = Boolean(key) && agent?.status === 401;
+      health.push({
+        name: "agent-http",
+        ok: !stale && !keyedReject,
+        detail: stale
+          ? "POST /v1/wrap is 404 · restart eden wrap"
+          : keyedReject
+            ? "POST /v1/wrap HTTP 401 with the configured key"
+            : `POST /v1/wrap HTTP ${agent.status}`,
+      });
+    }
     if (wrap.ok && j && "registry" in j) {
       health.push({
         name: "registry",
@@ -236,7 +270,13 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   let served = 0;
   let stuck = 0;
   if (wrapUp) {
-    const inbox = await probeJson(`${base}/v1/inbox`, fetchFn);
+    const key = cfg?.api_key;
+    const inbox = await probeJson(
+      `${base}/v1/inbox`,
+      fetchFn,
+      PROBE_MS,
+      key ? { headers: { Authorization: `Bearer ${key}` } } : undefined,
+    );
     if (inbox?.ok && inbox.body && typeof inbox.body === "object") {
       const box = inbox.body as { candidates?: InboxCandidate[]; live?: InboxLive[] };
       const cands = box.candidates ?? [];
@@ -246,6 +286,10 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
       stuck = cands.filter(
         (c) => c.verdict === "pending" || c.refusal?.reason?.startsWith("uncovered"),
       ).length;
+    } else if (inbox?.status === 401 && typeof wrapCandidates === "number") {
+      // Inbox is key-gated; health.candidates is public. Prefer the
+      // authenticated body when the key works — this is the last honest count.
+      mined = wrapCandidates;
     }
   }
 
@@ -287,7 +331,7 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   if (existsSync(live)) {
     try {
       const tools = JSON.parse(readFileSync(live, "utf8")) as unknown;
-      health.push({ name: "live-tools", ok: true, detail: liveToolsDetail(tools) });
+      health.push({ name: "live-tools", ok: true, detail: liveToolsDoctorLine(tools, wrapLive) });
     } catch {
       health.push({ name: "live-tools", ok: false, detail: "unreadable JSON" });
     }
@@ -311,6 +355,14 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   ];
 
   return [...health, ...funnel];
+}
+
+export function liveToolsDoctorLine(tools: unknown, wrapLive?: number): string {
+  const disk = liveToolsDetail(tools);
+  if (typeof wrapLive === "number" && wrapLive === 0 && Array.isArray(tools) && tools.length > 0) {
+    return `${disk} on disk · wrap serving 0`;
+  }
+  return disk;
 }
 
 /** Same words as Home/canvas/explain: Canary vs Live. Missing rollout stays Live (already-shipped 100%). */
@@ -348,7 +400,7 @@ export function doctorHelp(): string {
 
 NET_ALLOW empty refuses piped network binaries. A live hookd without a
 matching pid file is named orphan · eden hookd --stop. EDEN_AUTO_APPROVE=1
-prints as a bypass, never a default. Wave 21 leftovers stay Next. Wave 22 stays Later.
+prints as a bypass, never a default. Wave 21 honesty files shipped. Wave 22 stays Later.
 `;
 }
 

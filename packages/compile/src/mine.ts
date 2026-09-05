@@ -334,11 +334,30 @@ function matchesGram(seq: string[], full: string[]): boolean {
   return oneInsert(seq, full);
 }
 
+function hasRetryShape(t: StretchTrace): boolean {
+  const byTool = new Map<string, Array<{ ok?: boolean }>>();
+  for (const e of t.events) {
+    if (e.skipped) continue;
+    const n = effectiveEventName(e);
+    const g = byTool.get(n);
+    if (g) g.push(e);
+    else byTool.set(n, [e]);
+  }
+  for (const attempts of byTool.values()) {
+    if (attempts.length < 2) continue;
+    const last = attempts.at(-1)!;
+    if (!last.ok) continue;
+    const fails = attempts.slice(0, -1);
+    if (fails.length && fails.every((e) => e.ok === false)) return true;
+  }
+  return false;
+}
+
 function clusterByShape(traces: StretchTrace[], minSupport: number, maxLen: number): Cluster[] {
   const byShape = new Map<string, StretchTrace[]>();
   for (const t of traces) {
     const arr = names(t);
-    if (arr.length < 3) continue;
+    if (arr.length < 3 && !(arr.length >= 2 && hasRetryShape(t))) continue;
     const k = shapeSignature(arr);
     const g = byShape.get(k);
     if (g) g.push(t);
@@ -348,7 +367,8 @@ function clusterByShape(traces: StretchTrace[], minSupport: number, maxLen: numb
   for (const g of byShape.values()) {
     if (g.length < minSupport) continue;
     const sequence = majoritySequence(g, 0.8, maxLen);
-    if (sequence.length < 3 || sequence.length > maxLen) continue;
+    const retryOk = sequence.length === 2 && g.every(hasRetryShape);
+    if ((sequence.length < 3 && !retryOk) || sequence.length > maxLen) continue;
     clusters.push({ sequence, traces: g });
   }
   clusters.sort((a, b) => b.sequence.length - a.sequence.length || b.traces.length - a.traces.length);
@@ -360,12 +380,39 @@ function clusterByShape(traces: StretchTrace[], minSupport: number, maxLen: numb
   return kept;
 }
 
+/**
+ * True when every trace of length ≥3 already sits in a shape cluster whose
+ * mined sequence covers that trace — so n-gram mining cannot add a cluster
+ * that is not already a subsequence of a shape cluster. Skipping ngrams in
+ * that case is quality-identical on the current corpus (homogeneous ETL/desk
+ * batches, mixed-width fan-out) and is the compiler's wasted work on synth500.
+ *
+ * Conservative: if any covered trace is longer than its cluster sequence
+ * (maxGram truncated the tail), a suffix n-gram could still be new, so we
+ * keep mining.
+ */
+function shapeCoversLongTraces(traces: StretchTrace[], fromShape: Cluster[]): boolean {
+  const covered = new Set<StretchTrace>();
+  for (const c of fromShape) {
+    for (const t of c.traces) {
+      covered.add(t);
+      if (names(t).length > c.sequence.length) return false;
+    }
+  }
+  for (const t of traces) {
+    if (okEventCount(t) < 3) continue;
+    if (!covered.has(t)) return false;
+  }
+  return true;
+}
+
 export function clusterTraces(traces: StretchTrace[], minSupport = 3, maxLen = DEFAULT_MAX_GRAM): Cluster[] {
   // Fan-out widths share a collapsed shape but not a contiguous n-gram of the
   // tail: findOrder + 8 checks is a window of a 10-wide stretch, and the
   // report/refund suffix never follows those 8 checks. Shape clustering keeps
   // the whole stretch; per-trace loop binding still respects each width.
   const fromShape = clusterByShape(traces, minSupport, maxLen);
+  if (fromShape.length && shapeCoversLongTraces(traces, fromShape)) return fromShape;
   const grams = ngrams(traces, minSupport, 3, maxLen);
   const fromNgrams: Cluster[] = [];
   for (const seq of grams) {

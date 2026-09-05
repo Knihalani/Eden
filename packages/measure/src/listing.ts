@@ -75,7 +75,7 @@ export function renderClaimsListing(claims: readonly PublicClaim[] = PUBLIC_CLAI
       : uniqueVerticals(claims);
   const verticals = fixtures.map((c) => c.vertical).filter((v): v is string => typeof v === "string");
 
-  lines.push("## Case studies");
+  lines.push("## Fixture verticals");
   lines.push("");
   lines.push(
     `Customer-approved measured studies: ${approved.length}. Fixture verticals (${verticals.join(", ") || "none"}) are campaign measurements, not customers. Do not invent a company.`,

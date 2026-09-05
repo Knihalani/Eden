@@ -1,4 +1,5 @@
-import { readConfig, ensureHome, resolveApiKey, sitePlaneUrl } from "./home";
+import { existsSync, readFileSync } from "node:fs";
+import { readConfig, ensureHome, resolveApiKey, sitePlaneUrl, wrapBase } from "./home";
 import {
   bundleJson,
   compactReceipt,
@@ -13,32 +14,214 @@ import {
   type TypedPrRow,
 } from "@eden/core";
 
-export async function playCli(args: string[]): Promise<void> {
-  ensureHome();
-  const name = args[0];
-  if (!name) {
-    console.error("eden play <tool> --ids 11,12");
-    process.exit(1);
+export const PLAY_USAGE = `eden play <tool> --input '{...}'`;
+
+export function playHelp(): string {
+  return `eden play — run a compiled tool
+
+  eden play <tool> --input '{...}'     POST wrap /v1/wrap-run (generic JSON)
+  eden play <tool> --input ./in.json    Same, from a file
+  eden play <tool> --ids 11,12         GitHub-shaped POST /v1/play (legacy)
+
+Missing name: one sentence on stderr. Wrap down: one sentence, exit 1.
+Play does not Approve. Human Approve is the only On switch.
+Default wrap is config / 127.0.0.1:8788. A demo sitting on another PORT:
+EDEN_WRAP_URL=http://127.0.0.1:8799 eden play <name> --input '{"id":"T-100"}'
+`;
+}
+
+function flag(args: string[], name: string): string | undefined {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+}
+
+function has(args: string[], name: string): boolean {
+  return args.includes(name);
+}
+
+const VALUE_FLAGS = new Set(["--input", "--ids", "--issues", "--issue", "--key"]);
+
+function firstPositional(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--help" || a === "-h") continue;
+    if (a.startsWith("--")) {
+      if (a.includes("=")) continue;
+      if (VALUE_FLAGS.has(a)) i += 1;
+      continue;
+    }
+    return a;
   }
-  const issuesIdx = args.indexOf("--issues");
-  const idsIdx = args.indexOf("--ids");
-  const issueIdx = args.indexOf("--issue");
-  const dryRun = args.includes("--dry-run");
-  const issues =
-    idsIdx >= 0 ? args[idsIdx + 1] : issuesIdx >= 0 ? args[issuesIdx + 1] : issueIdx >= 0 ? args[issueIdx + 1] : args[1];
-  const cfg = readConfig();
-  const base = sitePlaneUrl(cfg?.base_url || process.env.EDEN_BASE_URL);
-  const key = resolveApiKey(args.slice(1));
-  const res = await fetch(`${base}/v1/play`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ name, issues, ids: issues, issue: String(issues || "").split(/[,\s]+/)[0], dryRun }),
-  });
-  const json = (await res.json()) as {
+  return undefined;
+}
+
+/** JSON object from --input '{...}' or a file path. Empty --input is {}. */
+export function parsePlayInput(raw: string | undefined): Record<string, unknown> {
+  if (raw == null || raw === "") return {};
+  const text =
+    raw !== "-" && existsSync(raw) && !raw.trimStart().startsWith("{")
+      ? readFileSync(raw, "utf8")
+      : raw;
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`eden play: --input is not valid JSON (${(e as Error).message})`);
+  }
+  if (json == null || typeof json !== "object" || Array.isArray(json)) {
+    throw new Error("eden play: --input must be a JSON object");
+  }
+  return json as Record<string, unknown>;
+}
+
+async function fetchJson(
+  url: string,
+  init: RequestInit,
+  fetchFn: typeof fetch,
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  try {
+    const r = await fetchFn(url, { ...init, signal: init.signal ?? AbortSignal.timeout(8_000) });
+    const body = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, body };
+  } catch {
+    return { ok: false, status: 0, body: { error: "wrap is down" } };
+  }
+}
+
+function wrapDownSentence(): string {
+  return "play: wrap is down · start eden wrap";
+}
+
+function asRecord(body: unknown): Record<string, unknown> | null {
+  return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+}
+
+/** One stderr sentence for a wrap-run error body. Never a JSON dump. */
+function wrapRunErrorSentence(body: unknown): string {
+  const rec = asRecord(body);
+  const err = typeof rec?.error === "string" ? rec.error : "";
+  if (err === "not live") return "play: not live · Approve is the On switch";
+  if (err === "paused") return "play: paused · the tool is off";
+  if (err === "no registry") return "play: no registry · start eden wrap";
+  if (err === "wrap is down") return wrapDownSentence();
+  if (err === "deopt") {
+    const reason = typeof rec?.reason === "string" && rec.reason.trim() ? rec.reason.trim() : "the run left the compiled path";
+    return `play: deopt · ${reason}`;
+  }
+  if (err) return `play: ${err}`;
+  return "play: wrap-run failed";
+}
+
+/** Success prints the value, not the {ok,value,stats} envelope. */
+function wrapRunSuccessText(body: unknown): string {
+  const rec = asRecord(body);
+  if (rec && rec.ok === true && "value" in rec) {
+    const value = rec.value;
+    if (value === undefined) return "";
+    if (typeof value === "string") return value;
+    return JSON.stringify(value, null, 2);
+  }
+  if (typeof body === "string") return body;
+  return JSON.stringify(body ?? {}, null, 2);
+}
+
+export async function playCli(args: string[], opts?: { fetch?: typeof fetch }): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(playHelp());
+    return 0;
+  }
+  const name = firstPositional(args);
+  if (!name) {
+    console.error(PLAY_USAGE);
+    return 1;
+  }
+  const idsRaw = flag(args, "--ids") ?? flag(args, "--issues") ?? flag(args, "--issue");
+  const githubShaped = has(args, "--ids") || has(args, "--issues") || has(args, "--issue");
+  const fetchFn = opts?.fetch ?? fetch;
+
+  if (githubShaped) {
+    return playGithub(name, args, idsRaw, fetchFn);
+  }
+
+  let input: Record<string, unknown>;
+  try {
+    input = parsePlayInput(flag(args, "--input"));
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    return 1;
+  }
+
+  ensureHome();
+  let base: string;
+  let key: string;
+  try {
+    const cfg = readConfig();
+    base = wrapBase(cfg);
+    key = resolveApiKey(args);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    return 1;
+  }
+
+  const { ok, status, body } = await fetchJson(
+    `${base}/v1/wrap-run`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ toolId: name, input, program: { name } }),
+    },
+    fetchFn,
+  );
+  if (status === 0) {
+    console.error(wrapDownSentence());
+    return 1;
+  }
+  if (!ok) {
+    console.error(wrapRunErrorSentence(body));
+    return 1;
+  }
+  const text = wrapRunSuccessText(body);
+  if (text) process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
+  return 0;
+}
+
+async function playGithub(
+  name: string,
+  args: string[],
+  issues: string | undefined,
+  fetchFn: typeof fetch,
+): Promise<number> {
+  ensureHome();
+  const dryRun = has(args, "--dry-run");
+  let base: string;
+  let key: string;
+  try {
+    const cfg = readConfig();
+    base = sitePlaneUrl(cfg?.base_url || process.env.EDEN_BASE_URL);
+    key = resolveApiKey(args.slice(1));
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    return 1;
+  }
+  const { ok, status, body } = await fetchJson(
+    `${base}/v1/play`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ name, issues, ids: issues, issue: String(issues || "").split(/[,\s]+/)[0], dryRun }),
+    },
+    fetchFn,
+  );
+  if (status === 0) {
+    console.error(wrapDownSentence());
+    return 1;
+  }
+  const json = (body ?? {}) as {
     table?: string;
     facts?: unknown;
     ok?: boolean;
     rows?: TypedPrRow[];
+    error?: string;
   };
   const issueIds = parseIssueList(issues);
   const rows = json.rows?.length ? json.rows : prRowsFromFacts(json.facts, issueIds);
@@ -57,7 +240,8 @@ export async function playCli(args: string[]): Promise<void> {
       ? receiptJson(generic)
       : json.table || compactReceipt(json.facts) || JSON.stringify(json.facts ?? json);
   process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
-  if (!res.ok || json.ok === false) process.exit(1);
+  if (!ok || json.ok === false) return 1;
+  return 0;
 }
 
 export async function recallCli(args: string[]): Promise<void> {
@@ -122,15 +306,6 @@ export async function prefetchCli(args: string[]): Promise<void> {
       writePrefetch(`repos/${repo}/pulls/${n}/files`, String(Array.isArray(files) ? files.length : 0));
     }),
   );
-}
-
-function flag(args: string[], name: string): string | undefined {
-  const i = args.indexOf(name);
-  return i >= 0 ? args[i + 1] : undefined;
-}
-
-function has(args: string[], name: string): boolean {
-  return args.includes(name);
 }
 
 const jsonCache = new Map<string, { at: number; value: unknown }>();

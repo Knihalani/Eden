@@ -171,6 +171,16 @@ describe("runtime bind/deopt", () => {
 });
 
 describe("TicketShip handwritten program vs naive", () => {
+  test("recorded event duration includes think time (demo sitting can measure savings)", async () => {
+    const world = createTicketShip({ llmMs: 20 });
+    const run = await runNaive(world, "T-100", { skipVerifyP: 0, seed: 1 });
+    expect(run.events.length).toBe(8);
+    for (const e of run.events) {
+      expect(e.duration_ms ?? 0).toBeGreaterThanOrEqual(15);
+    }
+    expect(run.stats.duration_ms).toBeGreaterThanOrEqual(8 * 15);
+  });
+
   test("5x llm, latency, cost; verify never skipped; ood deopts without mutation", async () => {
     const program = ticketShipProgram();
     const naiveWorld = createTicketShip();

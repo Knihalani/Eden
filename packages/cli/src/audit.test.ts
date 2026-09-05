@@ -345,12 +345,15 @@ describe("eden audit CLI", () => {
   });
 
   test("cli.ts help text names the command", async () => {
-    const proc = Bun.spawn(["bun", join(import.meta.dir, "cli.ts")], { stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn(["bun", join(import.meta.dir, "cli.ts"), "help", "-a"], { stdout: "pipe", stderr: "pipe" });
     const out = await new Response(proc.stdout).text();
     await proc.exited;
-    expect(out).toContain("eden audit export");
-    expect(out).toContain("eden audit review");
-    expect(out).toContain("eden audit verify");
+    expect(out).toMatch(/^\s+audit export/m);
+    expect(out).toMatch(/^\s+audit review/m);
+    expect(out).toMatch(/^\s+audit verify/m);
+    expect(out).not.toContain("eden audit export");
+    expect(out).not.toContain("eden audit review");
+    expect(out).not.toContain("eden audit verify");
   });
 
   test("runExport from --store does not throw into the caller on a missing file", async () => {

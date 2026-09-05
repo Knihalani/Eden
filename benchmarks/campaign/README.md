@@ -8,7 +8,13 @@ workloads — short and long running — without ever corrupting state?**
 
 | File | What it is |
 | --- | --- |
-| `worlds.ts` | Six agent domains with different waste shapes: billing desk (linear mutating stretch, sloppy-agent noise), orders (fan-out inventory loop → refund), etl (read fan-out, fat payloads, one report), incident triage (flaky reads + retries + mutating tail), code research (many reads + island summary + write), and a thrash loop (failing probe→restart→verify). |
+| `holdout-worlds.ts` | **New domains** (not a retune of desk/orders/etl): CRM pipeline, calendar RSVP, nested-JSON payments, cart loop over `{sku,qty}` objects, unique-work noise. `HOLD-OUT.md`. |
+| `bench-holdout.ts` | Gated holdout campaign. `--short --fast` is the already-live sequential comparison (short-crm / short-cart 5.00× turns). CI: `holdout.test.ts`. `bun run bench:holdout`. |
+| `moonshot-worlds.ts` | **Newer domains** (not holdout): github-pr, terraform, flags, dns-tls, inventory, tenant, map-reduce. `MOONSHOT.md`. |
+| `horizon-worlds.ts` | **Still-newer domains** (not moonshot): GraphQL Relay `node.*`, SSO nested object body, ranked top-k, k8s poll, saga 2-arm, SQL templates, webhook fanout, inbox island. `HORIZON.md`. `bun run bench:horizon-short`. |
+| `horizon-extra-worlds.ts` | Nested outer-scope k8s, email tz, s3 versionId, 3-way sev fork, set-diff except, four-level JSON. CI: `horizon-extra.test.ts`. |
+| `apex-worlds.ts` | **Still-newer domains** (not horizon): Stripe cursor invoices, HRIS lookup, sentry filter, CMS flatten, transcode chunk, catalog zip, OAuth token. `APEX.md`. CI: `apex.test.ts`. |
+| `helix-worlds.ts` | **Still-newer domains** (not apex): 12-step launch-pad, GitLab page/limit, 429-retry, nested tree, unique-addr, sort-by-prio, ledger sum, barcode+lotCode. `HELIX.md`. CI: `helix.test.ts`. `bun run bench:helix-short`. |
 | `session.ts` | Session driver: charges an LLM turn for every call the agent decides to make (even ones Eden suppresses), records compilable traces, and performs the real go-live path: `compileTraces` → `shadowProgram` on a sandbox world → manifest on PASS. |
 | `bench-campaign.ts` | Nine gated scenarios. Every scenario is paired by `(task, repeat)` blocks, counterbalanced via `@eden/measure`'s `runPlan`, and decided by `decide()` (bootstrap CI + permutation p). A LOSS or any correctness violation fails the exit code. |
 | `bench-negative.ts` | **Negative controls** — nine regimes where Eden should NOT help dishonestly: non-repeating work, all-judgment stretches, sub-minimum sequences, instant tools, distribution drift, failure-dominant workloads (observe + enforce), concurrent interleaved goals, and a **silent-drop host** (R1: always drops `updatedToolOutput`). Parity here is the success criterion; a LOSS fails the exit code. |
@@ -70,7 +76,7 @@ These stay in the campaign as measurement fixtures. They are not quoted as wins.
 
 | Scenario | Result | File |
 | --- | --- | --- |
-| oblivious-long | +2.8% cents / +3.2% wall on wrap skipRest when the model never early-stops. Retired from the win table. | `docs/ROADMAP.md`, `LIVE-AB.md` |
+| oblivious-long | +2.8% cents / +3.2% wall on wrap skipRest when the model never early-stops. Retired from the win table. | `OBLIVIOUS-LONG.md`, `LIVE-AB.md` |
 | ood-long | Steering misses; parity expected; corruption fails. | `bench-campaign.ts` |
 | replica host-drop | Live Claude Code cannot ack always-drop of a correct rewrite. Replica host-drop is a permanent host limit. | `HOST-DROP.md` |
 | S1b live invoice | No live Claude Code invoice in the tree. Retired until `parseInvoice` returns live-invoice. | `LIVE-AB.md` |

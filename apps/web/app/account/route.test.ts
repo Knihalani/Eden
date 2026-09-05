@@ -69,14 +69,15 @@ test("landing and proof stay free of invented customers and unproven percents", 
   const landing = [
     readFileSync(join(app, "(marketing)/page.tsx"), "utf8"),
     readFileSync(join(app, "landing/hero.tsx"), "utf8"),
-    readFileSync(join(app, "landing/story.tsx"), "utf8"),
     readFileSync(join(app, "landing/close.tsx"), "utf8"),
+    readFileSync(join(app, "landing/products.tsx"), "utf8"),
+    readFileSync(join(app, "landing/lamp.tsx"), "utf8"),
   ].join("\n");
   const proof = readFileSync(join(app, "(notes)/proof/page.tsx"), "utf8");
   expect(landing).not.toMatch(/N teams|98%|SOC2 certified|6\.67|−9\.1|\+2\.8%/);
   expect(landing).not.toMatch(/from "@clerk/);
   expect(proof).not.toMatch(/Sign up|from "@clerk"/);
-  expect(landing).toContain("Making your agents more deterministic.");
+  expect(landing).toContain("Making your agent do less work.");
 });
 
 test("PasswordField is the password control on sign-up and sign-in", () => {
@@ -102,11 +103,16 @@ test("pending SSO stays on the callback; notes stay even in-product", () => {
   expect(productGate({ path: "/proof", isAuthenticated: true, sessionStatus: "active", orgId: "org_1" })).toBe(null);
 });
 
-test("story invoice is product copy; landing and proof invent 0 customers", async () => {
+test("landing story is company, not compile; proof invents 0 customers", async () => {
   const app = join(import.meta.dir, "..");
-  const story = readFileSync(join(app, "landing/story.tsx"), "utf8");
-  expect(story).toMatch(/invoice/);
-  expect(story).not.toMatch(/Claude Code invoice|billed invoice|\$99/);
+  const landing = [
+    readFileSync(join(app, "landing/hero.tsx"), "utf8"),
+    readFileSync(join(app, "landing/close.tsx"), "utf8"),
+    readFileSync(join(app, "landing/products.tsx"), "utf8"),
+    readFileSync(join(app, "landing/lamp.tsx"), "utf8"),
+  ].join("\n");
+  expect(landing).not.toMatch(/look then write|Keep one|Show the repeats|Invoice runner/);
+  expect(landing).not.toMatch(/Compile repeating tools|Claude Code invoice|billed invoice|\$99/);
   const { CUSTOMERS } = await import("../(notes)/proof/copy");
   expect(CUSTOMERS.length).toBe(0);
 });

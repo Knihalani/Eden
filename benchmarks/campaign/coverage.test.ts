@@ -228,7 +228,7 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
     TIMEOUT,
   );
 
-  test("pagination-bindable traces mine a foreach; cursor pagination does not", () => {
+  test("pagination-bindable traces mine a foreach; cursor pagination mines until+flatten", () => {
     const bindable = Array.from({ length: 3 }, (_, i) => ({
       id: `pb${i}`,
       llmCalls: 8,
@@ -267,11 +267,10 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
         { name: "sealBatch", args: { batch: `C${i}` }, result: { sealed: true }, ok: true },
       ],
     }));
-    const refused = compileTraces(cursor);
-    expect(refused.refusals.some((r) => r.reason.includes("listPage") && r.reason.includes("without a bindable foreach"))).toBe(
-      true,
-    );
-    expect(refused.refusals.some((r) => r.code === "unbound_foreach")).toBe(true);
+    const compiled = compileTraces(cursor);
+    expect(compiled.refusals.filter((r) => r.code === "unbound_foreach" && r.reason.includes("listPage"))).toEqual([]);
+    expect(compiled.programs.some((p) => p.steps.some((s) => s.kind === "loop" && s.until))).toBe(true);
+    expect(compiled.programs.some((p) => p.steps.some((s) => s.kind === "loop" && s.over.kind === "transform" && s.over.fn === "flatten"))).toBe(true);
   });
 
   test("partial-iteration (Wave 3 rotation): 12 hits / 6 reads is a named read-set miss", async () => {

@@ -384,7 +384,7 @@ export function createPagination(): World {
 /**
  * Bindable pagination: one `listAll` returns the full catalog as an array,
  * then getItem+writeItem per id. Inverse of `createPagination` (cursor walk
- * that repeats `listPage` without a bindable foreach — honest NO_PROGRAM).
+ * that compiles to until+flatten).
  * compile.test.ts "mines a foreach loop over a prior array" is the unit pin;
  * this world is the campaign-shaped version of that lesson.
  */

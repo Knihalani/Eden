@@ -1,16 +1,19 @@
 import type { StretchProgram } from "@eden/ir";
-import { compiledSchema, injectTools, steerToolCalls } from "./steer";
+import { compiledSchema, extractInput, injectTools, steerToolCalls } from "./steer";
 import { noteJitUsed, selectForRequest } from "./intent";
 import { recordCompletion, tapSseUsage, withStreamUsage } from "./usage";
-import { filterCanary, type WrapState } from "./wrap-tools";
+import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
-import { turnBoundary } from "./speculate";
+import type { WrapState } from "./wrap-tools";
+import { withKnowFacts } from "./know-inject";
 
 export type ProxyOpts = {
   state: WrapState;
   upstream?: string;
   upstreamKey?: string;
   getPrograms?: () => StretchProgram[];
+  /** Play a compiled tool when chat has no model key. Fail-open: throw or return null. */
+  play?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 };
 
 function corsOrigin(req: Request): Record<string, string> {
@@ -31,22 +34,110 @@ function programs(opts: ProxyOpts): StretchProgram[] {
   }
 }
 
+/** Wrap auth (`eden_dev`, `eden_*` signup keys, `EDEN_API_KEY`) is not an OpenAI key. Never forward it. */
+export function isWrapAuthToken(key: string): boolean {
+  const t = key.trim();
+  if (!t) return false;
+  if (t === "eden_dev" || t.startsWith("eden_")) return true;
+  const env = (process.env.EDEN_API_KEY || "").trim();
+  return env.length > 0 && t === env;
+}
+
+export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): string {
+  const headerKey =
+    req.headers.get("x-openai-api-key")?.trim() ||
+    req.headers.get("openai-api-key")?.trim() ||
+    "";
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  const configured = (opts.upstreamKey || process.env.OPENAI_API_KEY || "").trim();
+  for (const k of [headerKey, configured, bearer]) {
+    if (k && !isWrapAuthToken(k)) return k;
+  }
+  return "";
+}
+
+function wrapTokenBlocked(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): boolean {
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  return isWrapAuthToken(bearer) && !resolveUpstreamKey(opts, req);
+}
+
 function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string; fn: typeof fetch; timeout: number } {
-  const base = (opts.upstream || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  // OPENAI_BASE_URL is the agent-facing pointer at this wrap. Upstream is
+  // OPENAI_API_BASE (or api.openai.com). Using BASE_URL here looped traffic.
+  const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
   // Generous by default — completions and streams legitimately run minutes —
   // but bounded, so a hung upstream is an error the client can see rather than
   // a request that never returns.
   const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
   return {
     url: `${base}/chat/completions`,
-    key:
-      opts.upstreamKey ||
-      req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-      process.env.OPENAI_API_KEY ||
-      "",
+    key: resolveUpstreamKey(opts, req),
     fn: opts.state.opts.fetch ?? fetch,
     timeout: Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000,
   };
+}
+
+/** Miss without a model key: HTTP 200 so OpenAI clients do not treat wrap as down. */
+export function noModelKey(): Response {
+  return Response.json({
+    id: "eden-failopen",
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model: "eden",
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content: "set OPENAI_API_KEY so wrap can reach the model. An Eden key (eden_dev or eden_…) is wrap auth, not OpenAI.",
+        },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    fail_open: true,
+  });
+}
+
+function messageText(messages: unknown): string {
+  if (!Array.isArray(messages)) return "";
+  return messages
+    .map((m) => {
+      if (!m || typeof m !== "object") return "";
+      const c = (m as { content?: unknown }).content;
+      return typeof c === "string" ? c : "";
+    })
+    .join("\n");
+}
+
+export function argsFromMessages(program: StretchProgram, messages: unknown): Record<string, unknown> {
+  const text = messageText(messages);
+  const raw: Record<string, unknown> = {};
+  const ticket = text.match(/\bT-\d+\b/i);
+  if (ticket) raw.id = ticket[0];
+  const gh = text.match(/\/(?:issues|pulls|pull)\/(\d+)/i);
+  if (gh) {
+    raw.issue = gh[1];
+    if (!raw.id) raw.id = gh[1];
+  }
+  return extractInput(program, raw);
+}
+
+function compiledAnswer(facts: unknown): Response {
+  return Response.json({
+    id: "eden-compiled",
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model: "eden",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: typeof facts === "string" ? facts : JSON.stringify(facts) },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  });
 }
 
 export async function handleChatCompletions(req: Request, opts: ProxyOpts): Promise<Response> {
@@ -70,10 +161,28 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   const steerable =
     !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   const wantsStream = Boolean(body.stream);
-  // Opt-in means the client sent a tools ARRAY — an empty array has opted into
-  // function calling and is exactly who compiled tools serve (see injectTools).
-  // A missing tools field has not.
   const clientOptedIn = Array.isArray(body.tools);
+  const msgs = body.messages as unknown[] | undefined;
+  const blocked = wrapTokenBlocked(opts, req);
+  // Catalog demote must not hide a compiled play when wrap has no model key.
+  const picked = steerable
+    ? safely(
+        () => selectForRequest(live, msgs, blocked ? undefined : opts.state.jit),
+        [] as StretchProgram[],
+      )
+    : [];
+  if (blocked) {
+    const hit = picked[0];
+    if (hit && opts.play) {
+      try {
+        const facts = await opts.play(hit.name, argsFromMessages(hit, body.messages));
+        if (facts !== undefined && facts !== null) return compiledAnswer(facts);
+      } catch {
+        /* fail-open: no model key, play fault → same letter */
+      }
+    }
+    return noModelKey();
+  }
   const { url, key, fn, timeout } = upstreamChat(opts, req);
   const shouldSteer = steerable && live.length > 0 && clientOptedIn;
   if (wantsStream && !shouldSteer) {
@@ -98,7 +207,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit)) : body.tools),
     body.tools,
   );
-  const steeredBody = { ...body, stream: false, tools: injected };
+  const steeredBody = withKnowFacts({ ...body, stream: false, tools: injected });
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {

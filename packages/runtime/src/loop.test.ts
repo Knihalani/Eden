@@ -417,3 +417,392 @@ describe("a top-level wave holds to the same safety test as a loop body", () => 
     expect(r.peakConcurrency).toBe(2);
   });
 });
+
+describe("map-then-reduce: merge binds from the loop's collected results", () => {
+  /**
+   * Compiler moonshot: after foreach mapChunk, mergeReport({ rows }) must
+   * take the array the loop stored at its step id — not a coincidental
+   * sibling array of the same length. Runtime already writes that array to
+   * scope.results[loopId]. This pin is the serve half; compile must emit it.
+   */
+  function mapReduceProgram(n: number): StretchProgram {
+    return withVersion({
+      id: "p_map_reduce",
+      name: "map_reduce",
+      description: "d",
+      inputSchema: { type: "object", properties: { batch: { type: "string" } }, required: ["batch"] },
+      sequence: ["listChunks", "mapChunk", "mergeReport"],
+      steps: [
+        { id: "listChunks", kind: "tool", tool: "listChunks", args: { batch: { kind: "input", path: "batch" } } },
+        {
+          id: "mapChunk_loop",
+          kind: "loop",
+          over: { kind: "from", step: "listChunks", path: "chunks" },
+          item: "item_map",
+          body: ["mapChunk"],
+        },
+        {
+          id: "mapChunk",
+          kind: "tool",
+          tool: "mapChunk",
+          args: { id: { kind: "from", step: "item_map", path: "id" } },
+        },
+        {
+          id: "mergeReport",
+          kind: "tool",
+          tool: "mergeReport",
+          args: { rows: { kind: "from", step: "mapChunk_loop", path: "" } },
+        },
+      ],
+      returns: { kind: "from", step: "mergeReport", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
+      manifest: null,
+    } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
+  }
+
+  test("mergeReport receives the mapped rows in item order, not the source chunks", async () => {
+    const n = 5;
+    const seen: unknown[] = [];
+    const reg = {
+      async execute(tool: string, args: Record<string, unknown>) {
+        if (tool === "listChunks") {
+          return { chunks: Array.from({ length: n }, (_, i) => ({ id: `c${i}` })) };
+        }
+        if (tool === "mapChunk") return { row: `R-${args.id}`, id: args.id };
+        if (tool === "mergeReport") {
+          seen.push(args.rows);
+          return { merged: true, n: Array.isArray(args.rows) ? args.rows.length : -1 };
+        }
+        return {};
+      },
+      has: () => true,
+    };
+    const out = await runProgram(mapReduceProgram(n), { batch: "B1" }, { registry: reg, checkEnvelope: false });
+    expect(out.value).toEqual({ merged: true, n });
+    expect(seen[0]).toEqual(Array.from({ length: n }, (_, i) => ({ row: `R-c${i}`, id: `c${i}` })));
+  });
+
+  test("empty chunks: mergeReport still runs with [] and does not deopt", async () => {
+    const reg = {
+      async execute(tool: string, args: Record<string, unknown>) {
+        if (tool === "listChunks") return { chunks: [] };
+        if (tool === "mergeReport") return { merged: true, n: Array.isArray(args.rows) ? args.rows.length : -1 };
+        return { row: args.id };
+      },
+      has: () => true,
+    };
+    const out = await runProgram(mapReduceProgram(0), { batch: "B0" }, { registry: reg, checkEnvelope: false });
+    expect(out.value).toEqual({ merged: true, n: 0 });
+  });
+
+  test("mapChunk without readOnly stays sequential; with readOnly it fans out", async () => {
+    const n = 8;
+    const chunks = Array.from({ length: n }, (_, i) => ({ id: `c${i}` }));
+    const make = (readOnly?: boolean) => {
+      const p = mapReduceProgram(n);
+      const body = p.steps.find((s) => s.id === "mapChunk") as { readOnly?: boolean };
+      if (readOnly) body.readOnly = true;
+      let inFlight = 0;
+      let peak = 0;
+      const registry = {
+        async execute(tool: string, args: Record<string, unknown>) {
+          if (tool === "listChunks") return { chunks };
+          if (tool === "mapChunk") {
+            inFlight++;
+            peak = Math.max(peak, inFlight);
+            await Bun.sleep(8);
+            inFlight--;
+            return { row: args.id };
+          }
+          return { merged: true };
+        },
+        has: () => true,
+      };
+      return { p, registry, peakOf: () => peak };
+    };
+    const seq = make(false);
+    await runProgram(seq.p, { batch: "B" }, { registry: seq.registry, checkEnvelope: false });
+    expect(seq.peakOf()).toBe(1);
+    const par = make(true);
+    await runProgram(par.p, { batch: "B" }, { registry: par.registry, checkEnvelope: false });
+    expect(par.peakOf()).toBeGreaterThan(1);
+  });
+});
+
+describe("three-field object items", () => {
+  test("restockLine receives sku, qty, and warehouse from each item", async () => {
+    const items = [
+      { sku: "A", qty: 2, warehouse: "w1" },
+      { sku: "B", qty: 5, warehouse: "w2" },
+    ];
+    const seen: Array<Record<string, unknown>> = [];
+    const p = withVersion({
+      id: "p_three",
+      name: "inventory",
+      description: "d",
+      inputSchema: { type: "object", properties: { cart: { type: "string" } }, required: ["cart"] },
+      sequence: ["listBins", "restockLine", "createShipment"],
+      steps: [
+        { id: "listBins", kind: "tool", tool: "listBins", args: { cart: { kind: "input", path: "cart" } } },
+        {
+          id: "loop1",
+          kind: "loop",
+          over: { kind: "from", step: "listBins", path: "items" },
+          item: "item_loop1",
+          body: ["restockLine"],
+        },
+        {
+          id: "restockLine",
+          kind: "tool",
+          tool: "restockLine",
+          args: {
+            sku: { kind: "from", step: "item_loop1", path: "sku" },
+            qty: { kind: "from", step: "item_loop1", path: "qty" },
+            warehouse: { kind: "from", step: "item_loop1", path: "warehouse" },
+          },
+        },
+        {
+          id: "createShipment",
+          kind: "tool",
+          tool: "createShipment",
+          args: { cart: { kind: "input", path: "cart" } },
+        },
+      ],
+      returns: { kind: "from", step: "createShipment", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
+      manifest: null,
+    } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
+    const out = await runProgram(p, { cart: "C1" }, {
+      registry: {
+        async execute(tool: string, args: Record<string, unknown>) {
+          if (tool === "listBins") return { items };
+          if (tool === "restockLine") {
+            seen.push({ ...args });
+            return { restocked: true };
+          }
+          return { shipped: true };
+        },
+        has: () => true,
+      },
+      checkEnvelope: false,
+    });
+    expect(out.value).toEqual({ shipped: true });
+    expect(seen).toEqual(items);
+  });
+});
+
+describe("poll-until loops", () => {
+  function pollProgram(maxIters: number): StretchProgram {
+    return withVersion({
+      id: "p_poll",
+      name: "poll",
+      description: "d",
+      inputSchema: { type: "object", properties: { deploy: { type: "string" } }, required: ["deploy"] },
+      sequence: ["getRollout", "verifyRollout"],
+      steps: [
+        {
+          id: "loop1",
+          kind: "loop",
+          over: { kind: "literal", value: [0] },
+          item: "item_loop1",
+          body: ["getRollout"],
+          until: "ready == true",
+          maxIters,
+          parallel: false,
+        },
+        {
+          id: "getRollout",
+          kind: "tool",
+          tool: "getRollout",
+          args: { deploy: { kind: "input", path: "deploy" } },
+        },
+        {
+          id: "verifyRollout",
+          kind: "tool",
+          tool: "verifyRollout",
+          args: { deploy: { kind: "input", path: "deploy" } },
+        },
+      ],
+      returns: { kind: "from", step: "verifyRollout", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
+      manifest: null,
+    } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
+  }
+
+  test("repeats the body until ready is true, then runs the following tool", async () => {
+    let n = 0;
+    const seen: string[] = [];
+    const out = await runProgram(pollProgram(5), { deploy: "d1" }, {
+      registry: {
+        async execute(tool: string, args: Record<string, unknown>) {
+          seen.push(tool);
+          if (tool === "getRollout") {
+            n++;
+            return { deploy: args.deploy, ready: n >= 3 };
+          }
+          return { verified: true };
+        },
+        has: () => true,
+      },
+      checkEnvelope: false,
+    });
+    expect(out.value).toEqual({ verified: true });
+    expect(seen).toEqual(["getRollout", "getRollout", "getRollout", "verifyRollout"]);
+  });
+
+  test("deopts when ready never becomes true before maxIters", async () => {
+    await expect(
+      runProgram(pollProgram(3), { deploy: "d1" }, {
+        registry: {
+          async execute() {
+            return { ready: false };
+          },
+          has: () => true,
+        },
+        checkEnvelope: false,
+      }),
+    ).rejects.toThrow(/exceeded maxIters/);
+  });
+
+  test("poll stays sequential even if the body is a read", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    let n = 0;
+    await runProgram(pollProgram(5), { deploy: "d1" }, {
+      registry: {
+        async execute(tool: string) {
+          if (tool === "getRollout") {
+            inFlight++;
+            peak = Math.max(peak, inFlight);
+            await Bun.sleep(8);
+            inFlight--;
+            n++;
+            return { ready: n >= 3 };
+          }
+          return { verified: true };
+        },
+        has: () => true,
+      },
+      checkEnvelope: false,
+    });
+    expect(peak).toBe(1);
+  });
+
+  test("retry-until catches tool throws and succeeds on a later attempt", async () => {
+    let n = 0;
+    const p = withVersion({
+      id: "p_retry",
+      name: "retry",
+      description: "d",
+      inputSchema: { type: "object", properties: { tag: { type: "string" } }, required: ["tag"] },
+      sequence: ["pushImage", "tagRelease"],
+      steps: [
+        {
+          id: "loop1",
+          kind: "loop",
+          over: { kind: "literal", value: [0] },
+          item: "item_loop1",
+          body: ["pushImage"],
+          until: "pushed == true",
+          maxIters: 3,
+          parallel: false,
+        },
+        {
+          id: "pushImage",
+          kind: "tool",
+          tool: "pushImage",
+          args: { tag: { kind: "input", path: "tag" } },
+        },
+        {
+          id: "tagRelease",
+          kind: "tool",
+          tool: "tagRelease",
+          args: { tag: { kind: "input", path: "tag" } },
+        },
+      ],
+      returns: { kind: "from", step: "tagRelease", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
+      manifest: null,
+    } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
+    const out = await runProgram(p, { tag: "img-0" }, {
+      registry: {
+        async execute(tool: string) {
+          if (tool === "pushImage") {
+            n++;
+            if (n < 3) throw new Error("429 rate limited");
+            return { pushed: true, tag: "img-0" };
+          }
+          return { released: true };
+        },
+        has: () => true,
+      },
+      checkEnvelope: false,
+    });
+    expect(n).toBe(3);
+    expect(out.value).toEqual({ released: true });
+  });
+});
+
+describe("nested loop-item paths", () => {
+  test("updateIssue receives node.id and node.title from each edge", async () => {
+    const edges = [
+      { node: { id: "I-1", title: "one" } },
+      { node: { id: "I-2", title: "two" } },
+    ];
+    const seen: Array<Record<string, unknown>> = [];
+    const p = withVersion({
+      id: "p_relay",
+      name: "relay",
+      description: "d",
+      inputSchema: { type: "object", properties: { repo: { type: "string" } }, required: ["repo"] },
+      sequence: ["listIssues", "updateIssue", "publishDigest"],
+      steps: [
+        { id: "listIssues", kind: "tool", tool: "listIssues", args: { repo: { kind: "input", path: "repo" } } },
+        {
+          id: "loop1",
+          kind: "loop",
+          over: { kind: "from", step: "listIssues", path: "edges" },
+          item: "item_loop1",
+          body: ["updateIssue"],
+        },
+        {
+          id: "updateIssue",
+          kind: "tool",
+          tool: "updateIssue",
+          args: {
+            id: { kind: "from", step: "item_loop1", path: "node.id" },
+            title: { kind: "from", step: "item_loop1", path: "node.title" },
+          },
+        },
+        {
+          id: "publishDigest",
+          kind: "tool",
+          tool: "publishDigest",
+          args: { repo: { kind: "input", path: "repo" } },
+        },
+      ],
+      returns: { kind: "from", step: "publishDigest", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
+      manifest: null,
+    } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
+    const out = await runProgram(p, { repo: "acme" }, {
+      registry: {
+        async execute(tool: string, args: Record<string, unknown>) {
+          if (tool === "listIssues") return { edges };
+          if (tool === "updateIssue") {
+            seen.push({ ...args });
+            return { updated: true };
+          }
+          return { published: true };
+        },
+        has: () => true,
+      },
+      checkEnvelope: false,
+    });
+    expect(out.value).toEqual({ published: true });
+    expect(seen).toEqual([
+      { id: "I-1", title: "one" },
+      { id: "I-2", title: "two" },
+    ]);
+  });
+});

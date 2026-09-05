@@ -83,17 +83,17 @@ describe("Wave 19.2 oblivious-long", () => {
     expect(row?.kind).toBe("limit");
     expect(row?.printed).toBe("+2.8% cents / +3.2% wall");
     const iso = LIMIT_CLAIMS.find((c) => c.id === "oblivious-long");
-    expect(iso?.claim).toMatch(/oblivious-long/);
+    expect(iso?.claim).toBe(row?.statement);
     expect(iso?.claim).toMatch(/\+2\.8% cents/);
     expect(iso?.claim).toMatch(/\+3\.2% wall/);
-    expect(iso?.claim).toMatch(/not a win table row/);
+    expect(iso?.claim).toMatch(/Retired from the win table/);
     expect(read("docs/isolation.md")).toMatch(/oblivious-long/);
     expect(read("docs/isolation.md")).toMatch(/\+2\.8% cents/);
   });
 });
 
 describe("Wave 19.3 JIT soak pin", () => {
-  test("FAIL precision=0.789 n=38 stays the pin; default surface is all", () => {
+  test("historical FAIL remains in the pin file; Wave 22.2 PASS is the live default", () => {
     const pin = read("benchmarks/campaign/JIT-SOAK.md");
     expect(pin).toMatch(/precision=0\.789 n=38/);
     expect(pin).toMatch(/verdict=FAIL/);
@@ -101,16 +101,19 @@ describe("Wave 19.3 JIT soak pin", () => {
     expect(pin).toMatch(/JIT_DEFAULT=all/);
     expect(pin).toMatch(/Measurement-only/);
     expect(pin).not.toMatch(/retuned the soak fixture/);
+    expect(pin).toMatch(/precision=1\.000 n=38/);
+    expect(pin).toMatch(/surfaceMode_unset=jit/);
+    expect(pin).toMatch(/JIT_DEFAULT=jit/);
     const row = claimById("jit-soak");
-    expect(row?.kind).toBe("limit");
-    expect(row?.printed).toBe("FAIL precision=0.789 n=38");
-    expect(LIMITS.some((c) => c.id === "jit-soak")).toBe(true);
-    expect(WINS.some((c) => c.id === "jit-soak")).toBe(false);
+    expect(row?.kind).toBe("win");
+    expect(row?.printed).toBe("PASS precision=1.000 n=38");
+    expect(LIMITS.some((c) => c.id === "jit-soak")).toBe(false);
+    expect(WINS.some((c) => c.id === "jit-soak")).toBe(true);
     delete process.env.EDEN_SURFACE;
-    expect(surfaceMode()).toBe("all");
-    expect(surfaceModeOf(undefined)).toBe("all");
-    expect(surfaceCheck(undefined).detail).toMatch(/precision=0\.789 n=38/);
-    expect(surfaceCheck("jit").detail).toMatch(/opt-in/);
+    expect(surfaceMode()).toBe("jit");
+    expect(surfaceModeOf(undefined)).toBe("jit");
+    expect(surfaceCheck(undefined).detail).toMatch(/precision=1\.000 n=38/);
+    expect(surfaceCheck("all").detail).toMatch(/opt-out/);
   });
 });
 
@@ -142,8 +145,9 @@ describe("Wave 19.4 replica host-drop", () => {
     expect(row?.name).not.toMatch(/live host-drop/i);
     expect(row?.source).toBe("host-limit");
     const iso = LIMIT_CLAIMS.find((c) => c.id === "replica-host-drop");
-    expect(iso?.claim).toMatch(/Replica host-drop is a host limit/);
-    expect(iso?.claim).toMatch(/not claimed to ack/);
+    expect(iso?.claim).toBe(row?.statement);
+    expect(iso?.claim).toMatch(/permanent host limit/);
+    expect(iso?.claim).toMatch(/not a live ack/);
     expect(iso?.test).toBe("benchmarks/campaign/HOST-DROP.md");
   });
 });

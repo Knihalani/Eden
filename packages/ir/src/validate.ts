@@ -31,6 +31,7 @@ function checkBinding(b: unknown, path: string, issues: ValidateIssue[]): void {
   if (b.kind === "from") {
     if (typeof b.step !== "string" || !b.step) issues.push({ path, message: "from binding needs step" });
     if (typeof b.path !== "string") issues.push({ path, message: "from binding needs path" });
+    if (b.or !== undefined) checkBinding(b.or, `${path}.or`, issues);
     return;
   }
   if (b.kind === "transform") {
@@ -70,6 +71,12 @@ function checkStep(step: unknown, path: string, issues: ValidateIssue[]): void {
     if (!Array.isArray(step.body) || step.body.some((id) => typeof id !== "string")) {
       issues.push({ path, message: "loop body must be step ids" });
     }
+    if (step.until !== undefined && (typeof step.until !== "string" || !step.until)) {
+      issues.push({ path, message: "loop until must be a non-empty string when present" });
+    }
+    if (step.maxIters !== undefined && (typeof step.maxIters !== "number" || !Number.isFinite(step.maxIters) || step.maxIters < 1)) {
+      issues.push({ path, message: "loop maxIters must be a positive number when present" });
+    }
     return;
   }
   if (step.kind === "branch") {
@@ -79,6 +86,25 @@ function checkStep(step: unknown, path: string, issues: ValidateIssue[]): void {
     }
     if (step.else !== undefined && (!Array.isArray(step.else) || step.else.some((id) => typeof id !== "string"))) {
       issues.push({ path, message: "branch else must be step ids when present" });
+    }
+    if (step.cases !== undefined) {
+      if (!Array.isArray(step.cases)) {
+        issues.push({ path, message: "branch cases must be an array when present" });
+      } else {
+        for (let j = 0; j < step.cases.length; j++) {
+          const c = step.cases[j];
+          if (!isObj(c)) {
+            issues.push({ path: `${path}.cases[${j}]`, message: "branch case must be an object" });
+            continue;
+          }
+          if (typeof c.expr !== "string" || !c.expr) {
+            issues.push({ path: `${path}.cases[${j}].expr`, message: "branch case needs expr" });
+          }
+          if (!Array.isArray(c.steps) || !c.steps.length || c.steps.some((id) => typeof id !== "string")) {
+            issues.push({ path: `${path}.cases[${j}].steps`, message: "branch case steps must be non-empty step ids" });
+          }
+        }
+      }
     }
     return;
   }
@@ -151,6 +177,18 @@ export function validateProgram(program: unknown): ValidateIssue[] {
             if (!ids.has(id)) issues.push({ path: `steps[${i}].${armLabel}`, message: `unknown arm step ${id}` });
           }
         }
+        const cases = (step as unknown as Record<string, unknown>).cases;
+        if (Array.isArray(cases)) {
+          for (let j = 0; j < cases.length; j++) {
+            const c = cases[j];
+            const steps = isObj(c) && Array.isArray(c.steps) ? c.steps : [];
+            for (const id of steps) {
+              if (typeof id === "string" && !ids.has(id)) {
+                issues.push({ path: `steps[${i}].cases[${j}].steps`, message: `unknown arm step ${id}` });
+              }
+            }
+          }
+        }
       }
     }
     for (let i = 0; i < program.steps.length; i++) {
@@ -160,6 +198,7 @@ export function validateProgram(program: unknown): ValidateIssue[] {
         if (b.kind === "from" && typeof b.step === "string" && !ids.has(b.step)) {
           issues.push({ path, message: `unknown step ${b.step}` });
         }
+        if (b.kind === "from" && b.or !== undefined) check(b.or, `${path}.or`);
         if (b.kind === "transform") check(b.of, `${path}.of`);
       };
       if (step?.kind === "tool") for (const [k, b] of Object.entries(step.args ?? {})) check(b, `steps[${i}].args.${k}`);
@@ -179,6 +218,7 @@ export function validateProgram(program: unknown): ValidateIssue[] {
       if (b.kind === "from" && typeof b.step === "string" && !ids.has(b.step)) {
         issues.push({ path, message: `unknown step ${b.step}` });
       }
+      if (b.kind === "from" && b.or !== undefined) check(b.or, `${path}.or`);
       if (b.kind === "transform") check(b.of, `${path}.of`);
     };
     check(program.returns, "returns");

@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encodePack } from "./pack";
 import { openStore } from "./store";
-import { formatCard, knowQuery, MAX_TOKENS } from "./query";
+import { citeableUrl, formatCard, knowQuery, MAX_TOKENS } from "./query";
 import { injectFromText } from "./inject";
-import { needleRank, needlesFromText, rankNeedles } from "./needles";
+import { needleRank, needlesFromText, rankNeedles, techniqueNeedleFromText, techniqueQueryFallbacks } from "./needles";
 
 const FACTS = [
   { s: "RFC 35", p: "is", o: "Network Meeting", e: "", url: "https://www.rfc-editor.org/rfc/rfc35.html" },
@@ -27,8 +27,30 @@ const FACTS = [
   { s: "IANA well-known change-password", p: "is", o: "Change Password", e: "", url: "https://www.iana.org/assignments/well-known-uris/well-known-uris.xml" },
   { s: "SPDX MIT", p: "is", o: "MIT License", e: "", url: "https://spdx.org/licenses/licenses.json" },
   { s: "SPDX Apache-2.0", p: "is", o: "Apache License 2.0", e: "", url: "https://spdx.org/licenses/licenses.json" },
+  { s: "SPDX CC-BY-4.0", p: "is", o: "Creative Commons Attribution 4.0 International", e: "", url: "https://spdx.org/licenses/licenses.json" },
   { s: "W3C web-share", p: "is", o: "Web Share API", e: "", url: "https://www.w3.org/TR/web-share/" },
   { s: "WHATWG html", p: "is", o: "HTML", e: "", url: "https://html.spec.whatwg.org/multipage/" },
+  {
+    s: "jq",
+    p: "is",
+    o: "used for filtering JSON on the command line",
+    e: "jq is used for filtering JSON on the command line",
+    url: "https://jqlang.github.io/jq/",
+  },
+  {
+    s: "Bun",
+    p: "is",
+    o: "used for running TypeScript services",
+    e: "Use Bun to run TypeScript services",
+    url: "https://bun.sh/",
+  },
+  {
+    s: "RFC 8259",
+    p: "obsoletes",
+    o: "RFC 4627",
+    e: "",
+    url: "https://www.rfc-editor.org/rfc/rfc8259.html",
+  },
 ];
 
 function packed() {
@@ -142,12 +164,9 @@ describe("needle rank", () => {
     expect(needleRank("UTF-8")).toBe(needleRank("Accept"));
     expect(needleRank("RFC 3986")).toBeLessThan(needleRank("application/json"));
     expect(needleRank("application/json")).toBeLessThan(needleRank("GET"));
-    expect(fact(injectFromText("Send UTF-8 and set Accept."))).toMatch(/^Accept is /);
-    expect(fact(injectFromText("Send UTF-8 and set Accept."))).not.toMatch(/charset/i);
-    expect(fact(injectFromText("GET and application/json"))).toContain("application/json");
-    expect(fact(injectFromText("GET and application/json"))).not.toMatch(/^GET is /);
-    expect(fact(injectFromText("GET and RFC 3986"))).toContain("RFC 3986");
-    expect(fact(injectFromText("GET and RFC 3986"))).not.toMatch(/^GET is /);
+    expect(fact(injectFromText("Send UTF-8 and set Accept."))).toBe("");
+    expect(fact(injectFromText("GET and application/json"))).toBe("");
+    expect(fact(injectFromText("GET and RFC 3986"))).toBe("");
   });
 });
 
@@ -163,6 +182,15 @@ describe("cards", () => {
     expect(fact(theUk)).toBe("The capital of the United Kingdom is London.");
     expect(fact(formatCard("capital of Kenya", [{ s: "Kenya", p: "capital", o: "Nairobi", e: "" }]))).toBe(
       "The capital of Kenya is Nairobi.",
+    );
+    expect(
+      fact(formatCard("English", [{ s: "English", p: "is", o: "an official language of Kenya", e: "" }])),
+    ).toBe("English is an official language of Kenya.");
+    expect(
+      fact(formatCard("Kenya", [{ s: "Kenya", p: "is", o: "a unitary presidential republic", e: "" }])),
+    ).toBe("Kenya is a unitary presidential republic.");
+    expect(fact(formatCard("Kenya", [{ s: "Kenya", p: "is", o: "a unitary presidential republic", e: "" }]))).not.toMatch(
+      /^The Kenya is /,
     );
     expect(
       fact(
@@ -208,6 +236,28 @@ describe("cards", () => {
     expect(fact(lang)).toBe("IANA language en is English.");
   });
 
+  test("cards keep a citeable source URL off the fact sentence", () => {
+    const rfc = formatCard("RFC 3986", [
+      { s: "RFC 3986", p: "is", o: "Uniform Resource Identifier (URI): Generic Syntax", e: "" },
+    ]);
+    expect("url" in rfc && rfc.url).toBe("https://www.rfc-editor.org/rfc/rfc3986.html");
+    expect(fact(rfc)).not.toMatch(/https?:\/\//);
+    const talk = formatCard("used for JSON", [
+      {
+        s: "jq",
+        p: "is",
+        o: "used for filtering JSON on the command line",
+        e: "jq is used for filtering JSON on the command line",
+        url: "https://jqlang.github.io/jq/",
+      },
+    ]);
+    expect("url" in talk && talk.url).toBe("https://jqlang.github.io/jq/");
+    expect(fact(talk)).toBe("jq is used for filtering JSON on the command line.");
+    expect(citeableUrl("javascript:alert(1)")).toBeUndefined();
+    expect(citeableUrl("/wiki/Kenya")).toBeUndefined();
+    expect(citeableUrl("https://jqlang.github.io/jq/")).toBe("https://jqlang.github.io/jq/");
+  });
+
   test("area-only RFC card upgrades to the stored title", () => {
     expect(
       fact(formatCard("RFC 9000", [{ s: "RFC 9000", p: "is", o: "HTTP", e: "" }])),
@@ -226,6 +276,22 @@ describe("cards", () => {
     ).toBe("RFC 9000 is QUIC: A UDP-Based Multiplexed and Secure Transport.");
   });
 
+  test("RFC is-obsoleted-by keeps the successor number", () => {
+    expect(
+      fact(
+        formatCard("RFC 1111", [
+          {
+            s: "RFC 1111",
+            p: "is",
+            o: "obsoleted by RFC 9998",
+            e: "",
+            url: "https://www.rfc-editor.org/rfc/rfc9998.html",
+          },
+        ]),
+      ),
+    ).toBe("RFC 1111 is obsoleted by RFC 9998.");
+  });
+
   test("RFC keeps (URI); SPDX is not a tautology dump; media is not RFC 4627", () => {
     const rfc = formatCard("RFC 3986", [
       { s: "RFC 3986", p: "is", o: "Uniform Resource Identifier (URI): Generic Syntax", e: "" },
@@ -235,6 +301,11 @@ describe("cards", () => {
     const mit = formatCard("MIT", [{ s: "SPDX MIT", p: "is", o: "MIT License", e: "" }]);
     expect(fact(mit)).toMatch(/MIT/);
     expect(fact(mit)).not.toBe("SPDX MIT is MIT License.");
+    const cc = formatCard("SPDX CC-BY-4.0", [
+      { s: "SPDX CC-BY-4.0", p: "is", o: "Creative Commons Attribution 4.0 International", e: "" },
+    ]);
+    expect(fact(cc)).toBe("CC-BY-4.0 is Creative Commons Attribution 4.0 International.");
+    expect(fact(cc)).not.toMatch(/unknown/);
     const json = formatCard("application/json", [
       { s: "RFC 4627", p: "is", o: "The application/json Media Type for JSON", e: "RFC 4627: The application&#x2F;json Media Type for JSON" },
       { s: "IANA media application/json", p: "is", o: "JSON", e: "" },
@@ -266,72 +337,61 @@ describe("injectFromText ranking", () => {
   test("most specific needle wins; silent and disabled stay quiet", () => {
     const { dir, store } = packed();
     try {
-      const rfc = injectFromText("Use GET and RFC 3986 when parsing.", store);
-      expect(fact(rfc)).toContain("RFC 3986");
-      expect(fact(rfc)).toContain("URI");
-      expect(fact(rfc)).not.toMatch(/^GET is /);
-
-      const short = injectFromText("See RFC 35.", store);
-      expect(fact(short)).toBe("RFC 35 is Network Meeting.");
-
-      const json = injectFromText("Send GET with application/json.", store);
-      expect(fact(json)).toContain("application/json");
-      expect(fact(json)).not.toContain("4627");
-      expect(fact(json)).not.toMatch(/^GET is /);
-
-      const status = injectFromText("GET then return HTTP 404.", store);
-      expect(fact(status)).toContain("404");
-      expect(fact(status)).not.toMatch(/^GET is /);
-
-      const hdr = injectFromText("GET and set Accept.", store);
-      expect(fact(hdr)).toMatch(/^Accept is /);
-
-      const proto = injectFromText("GET over TCP.", store);
-      expect(fact(proto)).toBe("TCP is protocol 6.");
-
-      const mit = injectFromText("GET with MIT.", store);
-      expect(fact(mit)).toMatch(/MIT/);
-      expect(fact(mit)).not.toBe("SPDX MIT is MIT License.");
-
-      expect(fact(injectFromText("charset=utf8", store))).toMatch(/UTF-8/);
-      expect(fact(injectFromText("SPDX-License-Identifier: Apache-2.0", store))).toMatch(/Apache-2\.0/);
-      expect(fact(injectFromText("https://example.com/path", store))).toMatch(/^https is /);
-      expect(fact(injectFromText("DNS AAAA record", store))).toBe("AAAA is an IP6 Address record.");
-      expect(fact(injectFromText("United Kingdom's capital", store))).toBe("The capital of the United Kingdom is London.");
-      expect(fact(injectFromText("Content-Type: text/plain; charset=utf-8", store))).toMatch(/^Content-Type is /);
-      expect(fact(injectFromText("Content-Type: text/plain; charset=utf-8", store))).not.toMatch(/UTF-8/);
-      expect(fact(injectFromText("RFC 3986 xyzzy-not-a-token", store))).toContain("RFC 3986");
-      expect(fact(injectFromText("RFC 3986 xyzzy-not-a-token", store))).not.toMatch(/^GET is /);
-      expect(fact(injectFromText("SPDX-License-Identifier: MIT", store))).toMatch(/MIT/);
-
-      const coldRfcGet = injectFromText("Use GET and RFC 4627 when parsing.", store);
-      expect(fact(coldRfcGet)).toContain("RFC 4627");
-      expect(fact(coldRfcGet)).not.toMatch(/^GET is /);
-      const coldRfcJson = injectFromText("Send GET with application/json and see RFC 4627.", store);
-      expect(fact(coldRfcJson)).toContain("RFC 4627");
-      expect(fact(coldRfcJson)).not.toMatch(/^GET is /);
-      expect(fact(coldRfcJson)).not.toMatch(/^application\/json is /);
-      expect(fact(injectFromText("RFC 4627 and application/json", store))).toContain("RFC 4627");
-      expect(fact(injectFromText("RFC 4627 and application/json", store))).not.toMatch(/^application\/json is /);
-      const wkStore = {
+      expect(injectFromText("Use GET and RFC 3986 when parsing.", store)).toBeUndefined();
+      expect(injectFromText("See RFC 35.", store)).toBeUndefined();
+      expect(injectFromText("Send GET with application/json.", store)).toBeUndefined();
+      expect(injectFromText("GET then return HTTP 404.", store)).toBeUndefined();
+      expect(injectFromText("GET and set Accept.", store)).toBeUndefined();
+      expect(injectFromText("GET over TCP.", store)).toBeUndefined();
+      expect(injectFromText("GET with MIT.", store)).toBeUndefined();
+      expect(injectFromText("charset=utf8", store)).toBeUndefined();
+      expect(injectFromText("SPDX-License-Identifier: Apache-2.0", store)).toBeUndefined();
+      expect(injectFromText("https://example.com/path", store)).toBeUndefined();
+      expect(injectFromText("DNS AAAA record", store)).toBeUndefined();
+      expect(injectFromText("United Kingdom's capital", store)).toBeUndefined();
+      expect(injectFromText("Content-Type: text/plain; charset=utf-8", store)).toBeUndefined();
+      expect(injectFromText("RFC 3986 xyzzy-not-a-token", store)).toBeUndefined();
+      expect(injectFromText("SPDX-License-Identifier: MIT", store)).toBeUndefined();
+      expect(fact(injectFromText("Use GET and RFC 4627 when parsing.", store))).toBe("RFC 8259 obsoletes RFC 4627.");
+      expect(fact(injectFromText("Send GET with application/json and see RFC 4627.", store))).toBe(
+        "RFC 8259 obsoletes RFC 4627.",
+      );
+      expect(fact(injectFromText("RFC 4627 and application/json", store))).toBe("RFC 8259 obsoletes RFC 4627.");
+      expect(injectFromText("/.well-known/change-password", {
         search(q: string) {
           if (/change-password/i.test(q)) {
             return [{ s: "IANA well-known change-password", p: "is", o: "Change Password", e: "", url: "" }];
           }
           return [];
         },
-      };
-      expect(fact(injectFromText("/.well-known/change-password", wkStore))).toMatch(/change-password/);
+      })).toBeUndefined();
 
       expect(injectFromText("no fact shaped tokens here at all", store)).toBeUndefined();
-      expect(fact(injectFromText("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store))).toContain(
-        "RFC 3986",
-      );
-      expect(fact(injectFromText("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store))).toContain(
-        "(URI)",
-      );
-      expect(fact(injectFromText("Follow HTTP Semantics when writing the handler.", store))).toContain("RFC 9110");
+      expect(injectFromText("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store)).toBeUndefined();
+      expect(injectFromText("Follow HTTP Semantics when writing the handler.", store)).toBeUndefined();
       expect(injectFromText("Please refactor the auth middleware and add a log line.", store)).toBeUndefined();
+      expect(techniqueNeedleFromText("what's the best way to filter JSON on the command line")).toBe(
+        "used for filter JSON command line",
+      );
+      expect(needlesFromText("what's the best way to filter JSON on the command line")[0]).toBe(
+        "used for filter JSON command line",
+      );
+      expect(fact(injectFromText("what's the best way to filter JSON on the command line", store))).toBe(
+        "jq is used for filtering JSON on the command line.",
+      );
+      expect(fact(injectFromText("what's the best way to filter JSON on the command line", store))).not.toMatch(
+        /media type/i,
+      );
+      expect(fact(injectFromText("what's the best way to filter JSON on the command line", store))).not.toMatch(/^python /i);
+      expect(injectFromText("use jq to filter JSON on the command line", store)).toBeUndefined();
+      expect(fact(injectFromText("what should I use for running TypeScript", store))).toBe(
+        "Bun is used for running TypeScript services.",
+      );
+      expect(fact(injectFromText("Parse the body with RFC 4627.", store))).toBe("RFC 8259 obsoletes RFC 4627.");
+      expect(fact(injectFromText("cat payload.json and pull the nested ids", store))).toMatch(/^jq is used for/);
+      expect(techniqueQueryFallbacks("used for JSON command line")).toContain("used for JSON");
+      expect(fact(knowQuery("used for JSON command line", store))).toMatch(/^jq is used for/);
+      expect(injectFromText("Use the Web Share API from the document.", store)).toBeUndefined();
       const prev = process.env.EDEN_KNOW;
       process.env.EDEN_KNOW = "0";
       try {
@@ -357,6 +417,7 @@ describe("injectFromText ranking", () => {
       expect(fact(knowQuery("charset=utf-8", store))).toBe("UTF-8 is a charset.");
       expect(fact(knowQuery("utf8", store))).toBe("UTF-8 is a charset.");
       expect(fact(knowQuery("SPDX-License-Identifier: Apache-2.0", store))).toMatch(/Apache-2\.0/);
+      expect(fact(knowQuery("SPDX CC-BY-4.0", store))).toBe("CC-BY-4.0 is Creative Commons Attribution 4.0 International.");
       expect(fact(knowQuery("https://example.com/path", store))).toMatch(/^https is /);
       expect(fact(knowQuery("AAAA", store))).toBe("AAAA is an IP6 Address record.");
       expect("unknown" in knowQuery("charset=utf-8 xyzzy-not-a-token", store)).toBe(true);
@@ -368,6 +429,32 @@ describe("injectFromText ranking", () => {
       expect(fact(knowQuery("Not Found", store))).toBe("HTTP 404 is Not Found.");
       expect("unknown" in knowQuery("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store)).toBe(
         true,
+      );
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("technique AND-miss falls back to the task object", () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-know-tech-fb-"));
+    writeFileSync(
+      join(dir, "graph.kpk"),
+      encodePack([
+        {
+          s: "jq",
+          p: "is",
+          o: "used for filtering JSON",
+          e: "jq is used for filtering JSON",
+          url: "https://jqlang.github.io/jq/",
+        },
+      ]),
+    );
+    const store = openStore(dir);
+    try {
+      expect(fact(knowQuery("used for JSON command line", store))).toBe("jq is used for filtering JSON.");
+      expect(fact(injectFromText("what's the best way to filter JSON on the command line", store))).toBe(
+        "jq is used for filtering JSON.",
       );
     } finally {
       store.close();

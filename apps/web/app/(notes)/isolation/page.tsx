@@ -1,8 +1,36 @@
-import { ISOLATION_CLAIMS, LIMIT_CLAIMS, LIMITS_LEAD, LOGGING, OWASP_ROWS, ISO_LEAD, PACK, PACK_ROWS } from "./copy";
+import {
+  ISOLATION_CLAIMS,
+  ISO_ANALOGUE_NOTE,
+  ISO_ANALOGUE_ROWS,
+  ISO_LIMITS_NOTE,
+  ISO_LIMIT_ROWS,
+  ISO_RETIRED_NOTE,
+  ISO_RETIRED_ROWS,
+  LIMITS_LEAD,
+  LOGGING,
+  OWASP_ROWS,
+  ISO_LEAD,
+  PACK,
+  PACK_ROWS,
+  type LimitClaim,
+} from "./copy";
+import { ClaimTable, LIMIT_KEY } from "../claim-table";
 
 export const metadata = {
   title: "Isolation — Eden",
 };
+
+function fromPins(rows: readonly LimitClaim[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    printed: row.printed,
+    kind: row.kind,
+    source: row.source,
+    statement: row.claim,
+    file: row.test,
+  }));
+}
 
 export default function IsolationPage() {
   return (
@@ -13,6 +41,42 @@ export default function IsolationPage() {
         <p className="iso-lead">{ISO_LEAD}</p>
         <p className="iso-not">{LOGGING.notClaimed}</p>
       </header>
+
+      <section className="iso-section" aria-labelledby="iso-limits">
+        <h2 id="iso-limits">Published limits</h2>
+        <p className="iso-note">{LIMITS_LEAD}</p>
+        <p className="iso-note">{LIMIT_KEY}</p>
+
+        <h3 id="iso-limits-limit">Limits</h3>
+        <p className="iso-note">{ISO_LIMITS_NOTE}</p>
+        <ClaimTable
+          rows={fromPins(ISO_LIMIT_ROWS)}
+          caption="Kind limit — wrap-path, host, soak FAIL, envelope miss, cert bounds."
+        />
+
+        <h3 id="iso-limits-analogue">Analogue</h3>
+        <p className="iso-note">{ISO_ANALOGUE_NOTE}</p>
+        <ClaimTable
+          rows={fromPins(ISO_ANALOGUE_ROWS)}
+          caption="Kind analogue — not a live Claude Code invoice."
+        />
+
+        <h3 id="iso-limits-retired">Retired</h3>
+        <p className="iso-note">{ISO_RETIRED_NOTE}</p>
+        <ClaimTable rows={fromPins(ISO_RETIRED_ROWS)} caption="Kind retired — withdrawn until a file parses." />
+      </section>
+
+      <section className="iso-section" aria-labelledby="iso-claims">
+        <h2 id="iso-claims">What we can prove</h2>
+        <ol className="iso-claims">
+          {ISOLATION_CLAIMS.map((row) => (
+            <li key={row.claim}>
+              <p>{row.claim}</p>
+              <p className="iso-path">{row.test}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       <section className="iso-section" aria-labelledby="iso-pack">
         <h2 id="iso-pack">{PACK.title}</h2>
@@ -41,34 +105,6 @@ export default function IsolationPage() {
         <p>
           Live binder: <a href={PACK.href}>{PACK.href}</a>
         </p>
-      </section>
-
-      <section className="iso-section" aria-labelledby="iso-limits">
-        <h2 id="iso-limits">Published limits</h2>
-        <p className="iso-note">{LIMITS_LEAD}</p>
-        <ol className="iso-claims">
-          {LIMIT_CLAIMS.map((row) => (
-            <li key={row.id}>
-              <p>
-                <span className="iso-id">{row.printed}</span>
-                {row.claim}
-              </p>
-              <p className="iso-path">{row.test}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="iso-section" aria-labelledby="iso-claims">
-        <h2 id="iso-claims">What we can prove</h2>
-        <ol className="iso-claims">
-          {ISOLATION_CLAIMS.map((row) => (
-            <li key={row.claim}>
-              <p>{row.claim}</p>
-              <p className="iso-path">{row.test}</p>
-            </li>
-          ))}
-        </ol>
       </section>
 
       <section className="iso-section" aria-labelledby="iso-log">

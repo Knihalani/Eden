@@ -15,7 +15,7 @@ import {
   CAPITAL_OF,
   UNICODE_BLOCK_OBJECT,
 } from "./synth";
-import { HEADER_SET, METHOD_SET, PROTO_SET, SCHEME_SET, DNS_SET } from "./needles";
+import { HEADER_SET, METHOD_SET, PROTO_SET, SCHEME_SET, DNS_SET, techniqueQueryFallbacks } from "./needles";
 import { phraseExact } from "./phrase";
 
 const STOP = new Set(["the", "of", "is", "a", "an", "on", "to", "and", "in"]);
@@ -40,6 +40,8 @@ const AREA_SET = new Set<string>([
 ]);
 /** Glue for implementer cards. Not STOP — extra query tokens like “AAAA record” stay unknown. */
 const CARD_GLUE = new Set(["record", "type", "scheme", "uri", "link", "relation"]);
+/** Filler in technique queries; pack AND still saw them, card grounding should not require them. */
+const TECH_OPTIONAL = new Set(["command", "line", "cli", "tool", "using", "with", "from", "into", "this", "that", "nested", "output", "records", "services", "without", "compile", "step", "please", "just"]);
 const MAX_TOKENS = 48;
 const ENTITY = /&(?:#x?[0-9a-f]+|[a-z]+);/i;
 const URLISH = /https?:\/\//i;
@@ -68,11 +70,39 @@ const THE_COUNTRY = new Set(
   ],
 );
 
-type Hit = { s: string; p: string; o: string; e: string };
+type Hit = { s: string; p: string; o: string; e: string; url?: string };
 type KnowSearch = {
   search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[];
   close?: () => void;
 };
+
+export type FactCard = { fact: string; confidence: number; url?: string };
+
+/** Public page a card can name. Empty / relative / javascript stay off the cite. */
+export function citeableUrl(raw?: string): string | undefined {
+  const u = (raw || "").trim();
+  if (u.length < 12 || u.length > 240) return;
+  if (!/^https?:\/\//i.test(u)) return;
+  if (/[\s<>"'\\]/.test(u)) return;
+  try {
+    const p = new URL(u);
+    if (p.protocol !== "http:" && p.protocol !== "https:") return;
+    if (!p.hostname.includes(".")) return;
+    return u;
+  } catch {
+    return;
+  }
+}
+
+function rfcPageUrl(s: string): string | undefined {
+  const m = /^RFC\s+(\d{1,5})$/i.exec(s.trim());
+  if (!m) return;
+  return `https://www.rfc-editor.org/rfc/rfc${Number(m[1])}.html`;
+}
+
+function sourceOf(raw: Hit, s: string): string | undefined {
+  return citeableUrl(raw.url) || rfcPageUrl(s);
+}
 
 let extractMod: typeof import("./extract") | undefined;
 function extract() {
@@ -200,8 +230,23 @@ function rankHits(q: string, hits: Hit[]): Hit[] {
     : hits.slice();
   if (mediaQ && !list.length) return [];
   const ql = q.trim().toLowerCase();
+  const wantObs = /\bobsolet/.test(ql);
+  const wantUpd = /\bupdates\b/.test(ql) || /\bupdated by\b/.test(ql);
+  const techniqueQ = ql.startsWith("used for ");
+  const techRest = techniqueQ ? toks(ql.slice(9)) : [];
   const score = (h: Hit): number => {
     const sl = h.s.toLowerCase();
+    if (wantObs && (h.p === "obsoletes" || (h.p === "is" && /obsoleted by/i.test(h.o)))) return -1;
+    if (wantUpd && (h.p === "updates" || (h.p === "is" && /updated by/i.test(h.o)))) return -1;
+    if (techniqueQ && h.p === "is" && h.o.toLowerCase().startsWith("used for")) {
+      const ot = toks(h.o);
+      let n = 0;
+      for (const t of techRest) {
+        if (ot.includes(t)) n++;
+        else if (t.length >= 4 && ot.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4)) n++;
+      }
+      return -8 - n - Math.min(h.o.length, 80) / 80;
+    }
     if (mediaQ && (ianaMedia(h.s) || "") === mediaQ) return 0;
     if (sl === ql) return h.p === "is" ? 0 : 0.4;
     if (sl === `iana method ${ql}` || sl === `iana http ${ql}` || sl === `iana header ${ql}`) return 0;
@@ -219,7 +264,7 @@ function rankHits(q: string, hits: Hit[]): Hit[] {
 function cardFromHit(
   q: string,
   raw: Hit,
-): { fact: string; confidence: number } | undefined {
+): FactCard | undefined {
   const { looksLikeCode, decodeEntities } = extract();
   const n = {
     s: decodeEntities(raw.s),
@@ -236,9 +281,12 @@ function cardFromHit(
     fact = `The capital of ${countryForCard(n.s)} is ${n.o}.`;
   }
   else if (/^RFC\s+\d/i.test(n.s) && n.p === "is") {
-    const title = rfcTitle(n.o, n.e);
-    if (AREA_SET.has(title)) fact = `${n.s} is ${articleFor(title)} ${title} RFC.`;
-    else fact = `${n.s} is ${title}.`;
+    if (/^(?:obsoleted|updated) by RFC\s+\d/i.test(n.o)) fact = `${n.s} is ${n.o}.`;
+    else {
+      const title = rfcTitle(n.o, n.e);
+      if (AREA_SET.has(title)) fact = `${n.s} is ${articleFor(title)} ${title} RFC.`;
+      else fact = `${n.s} is ${title}.`;
+    }
   }
   else if (/^W3C\s+/i.test(n.s) && n.p === "is") fact = `${n.s} is ${n.o}.`;
   else if (/^IANA\s+media\s+/i.test(n.s) && n.p === "is") {
@@ -246,7 +294,8 @@ function cardFromHit(
     fact = `${media} is ${articleFor(n.o)} ${n.o} media type.`;
   } else if (/^SPDX\s+/i.test(n.s) && n.p === "is") {
     const id = n.s.replace(/^SPDX\s+/i, "");
-    fact = `${id} is an SPDX license.`;
+    fact =
+      tautology(n.o, `${id} license`) || tautology(n.o, id) ? `${id} is an SPDX license.` : `${id} is ${n.o}.`;
   } else if (/^IANA\s+method\s+/i.test(n.s) && n.p === "is") {
     fact = `${n.s.replace(/^IANA\s+method\s+/i, "")} is ${n.o}.`;
   } else if (/^IANA\s+http\s+/i.test(n.s) && n.p === "is") {
@@ -275,25 +324,35 @@ function cardFromHit(
   } else if (/^(IANA|WHATWG|Unicode)\s+/i.test(n.s) && n.p === "is") fact = `${n.s} is ${n.o}.`;
   else if (n.p === "obsoletes") fact = `${n.s} obsoletes ${n.o}.`;
   else if (n.p === "updates") fact = `${n.s} updates ${n.o}.`;
-  else if (n.p === "is") fact = `The ${n.s} is ${n.o}.`;
+  else if (n.p === "is") fact = `${n.s} is ${n.o}.`;
   else fact = capTokens(`${n.s} ${n.p} ${n.o}`, 32);
   if (fact.endsWith("..")) fact = fact.slice(0, -1);
   fact = capTokens(fact, MAX_TOKENS);
   if (!fact.trim() || ENTITY.test(fact) || URLISH.test(fact)) return undefined;
   const blob = `${n.s} ${n.p} ${n.o} ${n.e}`.toLowerCase();
   const blobToks = new Set(toks(blob));
-  const qtoks = toks(q).filter((t) => !STOP.has(t));
-  const queryHit = !qtoks.length || qtoks.every((t) => blobToks.has(t));
+  const techniqueQ = q.trim().toLowerCase().startsWith("used for ");
+  const qtoks = toks(q).filter((t) => !STOP.has(t) && !(techniqueQ && TECH_OPTIONAL.has(t)));
+  const queryHit =
+    !qtoks.length ||
+    qtoks.every(
+      (t) =>
+        blobToks.has(t) ||
+        (techniqueQ &&
+          t.length >= 4 &&
+          [...blobToks].some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4)),
+    );
   const grounded = toks(fact)
     .map((t) => t.replace(/^[.-]+|[.-]+$/g, ""))
     .filter((t) => t.length > 1)
     .every((t) => STOP.has(t) || CARD_GLUE.has(t) || blobToks.has(t) || blob.includes(t));
   if (!grounded || !queryHit) return undefined;
   const typed = n.p === "capital" || n.p === "is" || n.p === "obsoletes" || n.p === "updates";
-  return { fact, confidence: typed ? 0.6 : 0.5 };
+  const url = sourceOf(raw, n.s);
+  return url ? { fact, confidence: typed ? 0.6 : 0.5, url } : { fact, confidence: typed ? 0.6 : 0.5 };
 }
 
-export function formatCard(q: string, hits: Hit[]): { fact: string; as_of?: string; ttl_days?: number; confidence: number } | { unknown: true } {
+export function formatCard(q: string, hits: Hit[]): FactCard | { unknown: true } {
   if (!q.trim()) return { unknown: true };
   for (const raw of rankHits(q, hits)) {
     const card = cardFromHit(q, raw);
@@ -302,7 +361,6 @@ export function formatCard(q: string, hits: Hit[]): { fact: string; as_of?: stri
   return { unknown: true };
 }
 
-type FactCard = { fact: string; confidence: number };
 const CONF = 0.6;
 
 /** Closed-universe intern. Kenya / JSON / 404 / hot RFC never touch rfc-titles.bin. */
@@ -541,13 +599,27 @@ export function knowQuery(q: string, store?: KnowSearch) {
   const flash = buildTyped(nq);
   if (flash) return flash;
   const s = store ?? sharedStore();
-  let hits = s.search(nq, 8).filter((h) => h.p !== "about" && h.p !== "date");
-  if (/\b(obsoletes|updates)\b/i.test(nq)) {
-    const want = /\bupdates\b/i.test(nq) ? "updates" : "obsoletes";
-    const edge = hits.find((h) => h.p === want);
-    if (edge) hits = [edge, ...hits.filter((h) => h !== edge)];
+  const searchHits = (query: string) => {
+    let hits = s.search(query, 8).filter((h) => h.p !== "about" && h.p !== "date");
+    if (/\b(obsoletes|obsoleted|updates|updated)\b/i.test(query)) {
+      const want = /\bupdates?\b/i.test(query) && !/\bobsolet/i.test(query) ? "updates" : "obsoletes";
+      const edge = hits.find((h) => h.p === want) || hits.find((h) => h.p === "is" && /obsoleted by|updated by/i.test(h.o));
+      if (edge) hits = [edge, ...hits.filter((h) => h !== edge)];
+    }
+    return hits;
+  };
+  let query = nq;
+  let hits = searchHits(query);
+  if (!hits.length && /^used for /i.test(nq)) {
+    for (const alt of techniqueQueryFallbacks(nq)) {
+      hits = searchHits(alt);
+      if (hits.length) {
+        query = alt;
+        break;
+      }
+    }
   }
-  return formatCard(nq, hits);
+  return formatCard(query, hits);
 }
 
 export { MAX_TOKENS };
