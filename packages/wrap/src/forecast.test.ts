@@ -193,11 +193,8 @@ describe("predicted vs actual (llm / ms / cents)", () => {
       },
       state,
     );
-    // Tail path (list_comments is not sequence[0]). Head compile-steer is the
-    // test below — wrap's real first-tool path.
     const out = (await tools.list_comments.execute({})) as { eden?: string; reason?: string; detail?: string };
     expect(out).toEqual({ eden: "halted", reason: "budget", detail: "predicted llmCalls=2 actual=2" });
-    // emit() on halt resets the recorder; the comparison used llmCalls=2.
   });
 
   test("unwarned: firstWarningAt undefined, actual llmCalls>=predicted → enforce halt, observe served", async () => {
