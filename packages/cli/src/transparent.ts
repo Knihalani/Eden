@@ -17,13 +17,10 @@ export type LiveTool = {
   id?: string;
   envelope?: { inputs?: Record<string, unknown[]> } | null;
   read_only?: boolean;
-  /** Approve-time checkbox. Required (with the env) to serve a Write-inclusive program. */
   transparent_writes?: boolean;
-  /** Missing = already-live 100%. Canary serves only the hashed session bucket. */
   rollout?: "canary" | "live";
 };
 
-/** Canary tools stay off for hosted sessions outside the bucket. Empty session is the operator. */
 export function inSessionBucket(entry: Pick<LiveTool, "rollout">, sessionId?: string | null): boolean {
   if (entry.rollout !== "canary") return true;
   return inCanary(sessionId);
@@ -42,11 +39,6 @@ export function sequenceIncludesWrite(seq: string[] | undefined): boolean {
   return (seq ?? []).includes("Write");
 }
 
-/**
- * Host tool args are a superset of the program envelope (Read always carries
- * `file_path`, Grep `pattern`, …). Envelope membership is about witnessed
- * entity keys, not the host schema — slice before `inDistribution`.
- */
 export function envelopeSlice(entry: LiveTool, input: Record<string, unknown>): Record<string, unknown> {
   const env = entry.envelope?.inputs;
   if (!env) return input;
@@ -58,7 +50,6 @@ export function envelopeSlice(entry: LiveTool, input: Record<string, unknown>): 
   return out;
 }
 
-/** Eligibility is fail-closed: anything unknown disqualifies. */
 export function eligibleForTransparent(entry: LiveTool, input: Record<string, unknown>): boolean {
   if (!transparencyEnabled(readConfigSafely())) return false;
   if (!entry || typeof entry.name !== "string" || !entry.name) return false;
@@ -94,7 +85,6 @@ const TRANSPARENT_TIMEOUT_MS = Math.min(
   Math.max(1_000, Number(process.env.EDEN_TRANSPARENT_MS) || 6_000),
 );
 
-/** Execute the compiled program; any failure resolves null (fail open). */
 export async function executeTransparent(entry: LiveTool, input: Record<string, unknown>): Promise<string | null> {
   const cfg = readConfigSafely();
   if (!cfg) return null;
@@ -125,19 +115,9 @@ export async function executeTransparent(entry: LiveTool, input: Record<string, 
 }
 
 export type PostToolUseOpts = {
-  /** Degrade path (R3): additionalContext still lands when the host blocks. */
   decision?: "block";
 };
 
-/**
- * Claude Code PostToolUse output replacement.
- *
- * `updatedToolOutput` must mirror the tool's NATIVE result shape. Built-ins
- * get a structured object with the sentinel merged into the text field (Glob
- * has none — object identity preserved, sentinel only in additionalContext).
- * Unknown tools get a string. Facts are always duplicated into
- * `additionalContext` (R3). Cap 9,500 with an honest truncation note.
- */
 export function postToolUseReplacement(
   toolName: string,
   originalOutput: unknown,
