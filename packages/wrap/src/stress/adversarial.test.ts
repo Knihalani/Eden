@@ -206,7 +206,6 @@ d("simulation: ci watcher agent (realistic cadence)", () => {
         },
         state,
       );
-      // The agent loop: up to 8 polls, fixing when it sees failure.
       for (let i = 0; i < 8; i++) {
         const s = (await tools.get_status.execute({})) as { state: string };
         if (s.state === "success") break;
