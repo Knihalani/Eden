@@ -61,7 +61,6 @@ export function withWitnessMemo(
     const key = islandMemoKey(req as never);
     const hit = table.lookup(key);
     if (hit !== undefined) return new IslandReply(hit, { prompt_tokens: 0, completion_tokens: 0, memoized: true });
-    // Pinned islands are memo-only. A miss deopts — never a silent model call.
     if (req.pinned === true) throw new Error("pinned island miss");
     const out = await base(req);
     const { value } = unwrapIsland(out);
