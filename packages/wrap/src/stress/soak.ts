@@ -101,7 +101,6 @@ async function memorySoak(): Promise<void> {
   line(`  verdict: ${drift < 50 ? "BOUNDED" : "GROWTH SUSPECT — investigate"}`);
 }
 
-// ─── 3. Compile-time scaling ────────────────────────────────────────────────
 function makeTraces(n: number, seed: number): StretchTrace[] {
   let s = seed >>> 0;
   const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0), s / 0xffffffff);
