@@ -116,9 +116,6 @@ function discardSlot(slot: Slot | null): void {
   slot.discarded = true;
 }
 
-/**
- * Drop any in-flight guess. The agent never receives its value.
- */
 export function discardSpeculation(state: WrapState): void {
   try {
     const s = storeOf(state);
