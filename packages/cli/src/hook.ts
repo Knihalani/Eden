@@ -54,6 +54,11 @@ const EVENT_ALIASES: Record<string, string> = {
   pre_compact: "PreCompact",
   preCompact: "PreCompact",
   PreCompress: "PreCompact",
+  precompress: "PreCompact",
+  compact: "PreCompact",
+  after_agent: "Stop",
+  agent_end: "Stop",
+  turn_complete: "Stop",
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
