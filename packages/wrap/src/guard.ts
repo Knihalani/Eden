@@ -27,7 +27,6 @@ function matchingProgram(live: StretchProgram[], pred: (p: StretchProgram) => bo
   return live.filter((p) => p.manifest).find(pred);
 }
 
-/** Checks required by the live program this run is actually on, not the union of every live tool. */
 export function requiredChecks(
   live: StretchProgram[],
   events: { name: string; skipped?: boolean }[],
