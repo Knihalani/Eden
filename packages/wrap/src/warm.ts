@@ -330,15 +330,6 @@ export function withWarmLookup(
   };
 }
 
-/**
- * Start first-wave read-only work of the next likely compiled program.
- * Never awaits the tools — the caller (`runCompiled`) proceeds so warming
- * overlaps the current stretch. Never starts a mutating tool or the whole
- * next stretch.
- *
- * Returns a handle when work was started; null on kill-switch, mutating,
- * nothing to guess, or any throw (fail-open).
- */
 export function watchWarm(
   state: WrapState,
   current: StretchProgram,
