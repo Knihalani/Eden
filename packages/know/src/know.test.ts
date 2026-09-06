@@ -452,8 +452,6 @@ describe("extract", () => {
     expect(keepWet({ uri: "https://spam.rfc.test/clickbait", text: long })).toBe(false);
   });
   test("keepWet slice yield is the FineWeb meter (not lifetime host_prior.skipped)", () => {
-    // 90 long junk pages would have passed the old text.length >= 200 admit-all.
-    // Slice yield = kept/scanned. Lifetime host_prior.skipped will not fall.
     const longJunk =
       "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(4);
     expect(longJunk.length).toBeGreaterThanOrEqual(200);
