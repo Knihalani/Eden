@@ -156,8 +156,6 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         const old = String(args.old_string ?? args.oldString ?? "");
         const next = String(args.new_string ?? args.newString ?? args.contents ?? "");
         const cur = await readFile(path, { encoding: "utf8", signal: ctx?.signal });
-        // An omitted old_string used to mean "replace the whole file", so a
-        // malformed Edit silently truncated the target instead of failing.
         if (!old) throw new Error("old_string is required; use Write to replace a whole file");
         const at = cur.indexOf(old);
         if (at === -1) throw new Error("old_string not found");
