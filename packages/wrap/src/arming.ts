@@ -61,7 +61,6 @@ export type Armed = {
    */
   readOnly?: boolean;
   fleetId?: string;
-  /** sequence[0] — not in `rest`. Fleet head-skip uses this. */
   head?: string;
   /** Names the compiled run served. Fleet agents skip these even after rest is 0. */
   served?: Set<string>;
