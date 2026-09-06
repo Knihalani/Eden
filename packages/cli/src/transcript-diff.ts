@@ -146,12 +146,6 @@ export function applyCodexAfter(
   return applyHookOutput(mapped, original, hookResult);
 }
 
-/**
- * Gemini AfterTool / AfterToolUse: `hookSpecificOutput.additionalContext` is
- * appended to the tool result. `updatedToolOutput` is not a Gemini field —
- * the structured rewrite is dropped and classed. Sentinel still reaches the
- * model via additionalContext (R3).
- */
 export function applyGeminiAfter(
   tool: string,
   original: unknown,

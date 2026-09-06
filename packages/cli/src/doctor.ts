@@ -113,7 +113,6 @@ export function surfaceCheck(raw: string | undefined = process.env.EDEN_SURFACE)
   };
 }
 
-/** Listener up, pid file missing/stale/wrong — operator can `eden hookd --stop`. */
 export function hookdOrphanDetail(healthPid: number | null, filePid: number | null): string {
   const live = healthPid != null ? String(healthPid) : "?";
   const recorded = filePid != null ? String(filePid) : "missing";
@@ -148,7 +147,6 @@ function servedCount(live: InboxLive[]): number {
   return live.reduce((n, t) => n + (Number(t.stats?.n) > 0 ? 1 : 0), 0);
 }
 
-/** Traces when wrap reported them. Never a fake 1 from hookd-up + wrap-down. */
 export function recordState(
   traces: number | undefined,
   wrapUp: boolean,
@@ -360,7 +358,6 @@ export function liveToolsDoctorLine(tools: unknown, wrapLive?: number): string {
   return disk;
 }
 
-/** Same words as Home/canvas/explain: Canary vs Live. Missing rollout stays Live (already-shipped 100%). */
 export function liveToolsDetail(tools: unknown): string {
   if (!Array.isArray(tools)) return "unreadable JSON";
   const rows = tools.map((raw) => {
