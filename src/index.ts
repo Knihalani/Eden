@@ -36,9 +36,9 @@ function convBlob(list: unknown[]): string {
     } else if (Array.isArray(c)) {
       for (const b of c) {
         if (b && typeof b === "object") {
-          const x = b as { text?: string; content?: unknown; alt?: string; name?: string; caption?: string; title?: string; filename?: string; url?: string; href?: string; source?: string; uri?: string; id?: string; mimeType?: string };
-          const t = x.text || (typeof x.content === "string" ? x.content : "") || (typeof x.alt === "string" ? x.alt : "") || (typeof x.name === "string" ? x.name : "") || (typeof x.caption === "string" ? x.caption : "") || (typeof x.title === "string" ? x.title : "") || (typeof x.filename === "string" ? x.filename : "") || (typeof x.url === "string" ? x.url : "") || (typeof x.href === "string" ? x.href : "") || (typeof x.source === "string" ? x.source : "") || (typeof x.uri === "string" ? x.uri : "") || (typeof x.id === "string" ? x.id : "") || (typeof x.mimeType === "string" ? x.mimeType : "");
-          if (t) parts.push(t);
+          const x = b as Record<string, unknown>;
+          const t = ["text","content","alt","name","caption","title","filename","url","href","source","uri","id","mimeType"].map((k) => x[k]).find((v) => typeof v === "string" && v);
+          if (t) parts.push(t as string);
         }
       }
     }
@@ -114,15 +114,7 @@ export class AgentMemory {
   }
 
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string } = {}): MemoryRecord {
-    const rec: MemoryRecord = {
-      id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
-      text: String(text || "").trim(),
-      kind: opts.kind || "fact",
-      tags: (opts.tags || []).map((t) => t.toLowerCase()),
-      agent: opts.agent || this.agent,
-      project: opts.project || this.project,
-      at: Date.now(),
-    };
+    const rec: MemoryRecord = { id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, text: String(text || "").trim(), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => t.toLowerCase()), agent: opts.agent || this.agent, project: opts.project || this.project, at: Date.now() };
     if (!rec.text) return rec;
     const c = compile(rec);
     const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
@@ -170,8 +162,7 @@ export class AgentMemory {
 
   query(q: string, k = 5): QueryHit[] {
     const qn = q.trim();
-    const out: QueryHit[] = [];
-    if (qn) for (const m of this.relevant(qn, k)) out.push({ text: m.text, source: "memory", id: m.id });
+    const out: QueryHit[] = qn ? this.relevant(qn, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
     try {
       const card = knowQuery(qn, this.know);
       if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url });
