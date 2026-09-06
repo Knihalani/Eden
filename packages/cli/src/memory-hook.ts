@@ -19,15 +19,13 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
   if (typeof path !== "string" || !path || !existsSync(path)) return [];
   try {
     const out: Array<{ role: string; content: string }> = [];
-    for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean).slice(-Math.max(cap * 2, cap))) {
-      try {
-        const rec = asRec(JSON.parse(line));
-        const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
-        const role = String(msg.role || rec.type || "");
-        const content = flattenContent(msg.content);
-        if ((role === "user" || role === "assistant") && content) out.push({ role, content });
-      } catch {}
-    }
+    for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean).slice(-Math.max(cap * 2, cap))) try {
+      const rec = asRec(JSON.parse(line));
+      const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
+      const role = String(msg.role || rec.type || "");
+      const content = flattenContent(msg.content);
+      if ((role === "user" || role === "assistant") && content) out.push({ role, content });
+    } catch {}
     return out.slice(-cap);
   } catch {
     return [];
@@ -76,18 +74,12 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
 export async function runMemoryHookStdin(): Promise<void> {
   let body: Record<string, unknown> = {};
   try {
-    body = JSON.parse(
-      (await new Promise<string>((resolve) => {
-        const chunks: Buffer[] = [];
-        process.stdin.on("data", (c) => chunks.push(c as Buffer));
-        process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-        if (process.stdin.isTTY) resolve("{}");
-      })) || "{}",
-    ) as Record<string, unknown>;
+    body = JSON.parse((await new Promise<string>((resolve) => {
+      const chunks: Buffer[] = [];
+      process.stdin.on("data", (c) => chunks.push(c as Buffer));
+      process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+      if (process.stdin.isTTY) resolve("{}");
+    })) || "{}") as Record<string, unknown>;
   } catch {}
-  try {
-    process.stdout.write(JSON.stringify(memoryHookResponse(body) ?? {}));
-  } catch {
-    process.stdout.write("{}");
-  }
+  try { process.stdout.write(JSON.stringify(memoryHookResponse(body) ?? {})); } catch { process.stdout.write("{}"); }
 }
