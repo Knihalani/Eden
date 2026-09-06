@@ -122,11 +122,6 @@ function anthropicToolDef(program: StretchProgram) {
   };
 }
 
-/**
- * Inject compiled tools into an Anthropic request's tools array. `programs`
- * is what the caller chose to surface via selectSurfacePrograms() — this
- * stays pure formatting (Dispatch policy lives in intent.ts).
- */
 function injectAnthropicTools(
   existing: AnthropicRequest["tools"],
   programs: StretchProgram[],
