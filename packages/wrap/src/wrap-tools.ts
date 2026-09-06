@@ -722,7 +722,6 @@ function markDirty(state: WrapState, rec: Record<string, unknown> | undefined, n
       state.dirtyAt.set(k, performance.now());
     }
   } catch {
-    /* fail open: a dirty-set fault must not fail the write */
   }
 }
 
