@@ -145,7 +145,8 @@ export class AgentMemory {
   }
 
   observe(messages: unknown[]): MemoryRecord[] {
-    const blob = convBlob(Array.isArray(messages) ? messages : []);
+    const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
+    const blob = convBlob(list);
     const out: MemoryRecord[] = [];
     for (const text of extractDurable(blob)) {
       if (this.compiled.some((c) => c.rec.text.toLowerCase() === text.toLowerCase())) continue;
