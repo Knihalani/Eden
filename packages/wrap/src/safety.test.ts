@@ -301,7 +301,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
 
     await tools.start!.execute({ id: "T-first" });
     const afterFirst = c.calls.filter((n) => n === "write").length;
-    // 70 short-tailed armings, taking the map past ARM_MAX_ENTRIES of 64.
     for (let i = 0; i < 70; i++) await tools.lookupTicket!.execute({ id: `T-${i}` });
 
     expect(await tools.write!.execute({ id: "T-first" })).toEqual({ eden: "steered", skipped: "write" });
