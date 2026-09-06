@@ -1002,8 +1002,6 @@ export function wrapTools<T extends ToolsIn>(
           if (run.events.length) emit(run.events[0]?.args, owner);
           const pair = safely(() => armTail(hit.p, hit.input), null);
           if (!pair) {
-            // Corrupt program defeated arming; treat as no opinion and let the
-            // raw call run below.
           } else {
           const { key: armKey, armed } = pair;
           try {
