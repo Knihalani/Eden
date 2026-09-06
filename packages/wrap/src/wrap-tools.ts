@@ -94,7 +94,6 @@ export type WrapState = {
   /** Session-partitioned suppression store. Shared when `opts.arming` is set. */
   arming: ArmingStore;
   sessionId: string;
-  /** Fleet key for read-only cross-agent claims. Empty = no sharing. */
   fleetId: string;
   /** Stable agent identity stamped on traces/receipts/events. */
   agentId: string;
