@@ -99,7 +99,6 @@ export type RunRecorder = {
   cached_tokens: number;
   cache_write_tokens: number;
   cache_input_tokens: number;
-  /** Island scrape accumulated from compiled runs this window. */
   island_prompt_tokens: number;
   island_completion_tokens: number;
   island_cached_tokens: number;
@@ -114,7 +113,6 @@ export type RunRecorder = {
   warnBudget?: SignalBudget;
   evidence?: EvidenceLedger;
   tripped?: boolean;
-  /** Executed (non-skipped) raw calls this run. Unconditional ceiling input. */
   rawExecuted: number;
 };
 
