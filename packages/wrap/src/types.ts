@@ -30,10 +30,6 @@ export type Receipt = {
   parentRunId?: string;
   fleetId?: string;
   region?: string;
-  /**
-   * Agents that shared this serving (Wave 7.1). Omitted at 1.
-   * Product copy: `shared across ${sharedAcross} agents`.
-   */
   sharedAcross?: number;
 };
 
