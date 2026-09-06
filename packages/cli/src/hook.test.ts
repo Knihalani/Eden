@@ -263,9 +263,7 @@ describe("hook", () => {
             health = (await r.json()) as typeof health;
             break;
           }
-        } catch {
-          /* still binding */
-        }
+        } catch {}
         await Bun.sleep(40);
       }
       expect(health?.ok).toBe(true);
@@ -291,9 +289,7 @@ describe("hook", () => {
       console.error = orig;
       try {
         if (child.pid) process.kill(child.pid, "SIGKILL");
-      } catch {
-        /* already gone */
-      }
+      } catch {}
       clearHookdPid();
       if (prevHome === undefined) delete process.env.EDEN_HOME;
       else process.env.EDEN_HOME = prevHome;

@@ -354,9 +354,7 @@ describe("multi-agent installer", () => {
       try {
         const { stopHookd } = await import("./hookd");
         stopHookd();
-      } catch {
-        /* best-effort */
-      }
+      } catch {}
       if (prevHome === undefined) delete process.env.EDEN_HOME;
       else process.env.EDEN_HOME = prevHome;
       if (prevHookd === undefined) delete process.env.EDEN_HOOKD;
