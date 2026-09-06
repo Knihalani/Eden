@@ -43,7 +43,6 @@ export type WarmStats = {
 
 export type WarmRunner = {
   live: () => StretchProgram[];
-  /** Raw tool execute — never `runCompiled`. Mutating names must not be called. */
   execute: (tool: string, args: Record<string, unknown>) => Promise<unknown>;
 };
 
