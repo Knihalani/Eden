@@ -1032,14 +1032,6 @@ export function wrapTools<T extends ToolsIn>(
             } catch { /* deferred already gone */ }
             if (state.opts.failOpen === false) throw err;
             void pullLive(state);
-            // Fall back to raw whenever replay provably duplicates nothing:
-            // a deopt that issued no tool calls, or an all-reads stretch. A
-            // plain Error has UNKNOWN touched-ness — it may have thrown after
-            // earlier steps ran — so only all-reads stretches replay it.
-            // Everything else returns the structured deopt: re-running raw
-            // could repeat a write, and a structured result is one the agent
-            // can read and recover from. Eden chose to run this stretch, so
-            // an Eden-side failure may never become the call's result.
             const touched = isDeopt(err) && !isEarlyDeopt(err);
             const unknownState = !isDeopt(err);
             if ((touched || unknownState) && !replayableProgram(hit.p)) {
