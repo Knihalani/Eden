@@ -223,9 +223,9 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
         const p = u.pathname.replace(/\/+$/, "").replace(/^\/v1(?=\/)/, "") || "/";
         if (req.method === "DELETE") return json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
         if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
-          const b = (await req.json().catch(() => ({}))) as { text?: string; prompt?: string; input?: string; content?: string; query?: string; message?: string; system?: string; systemInstruction?: unknown; system_instruction?: unknown; id?: string; messages?: unknown[]; conversation?: unknown[]; contents?: unknown[]; q?: string; k?: number };
+          const b = (await req.json().catch(() => ({}))) as { text?: string; prompt?: string; input?: string; content?: string; query?: string; message?: string; body?: string; system?: string; systemInstruction?: unknown; system_instruction?: unknown; id?: string; messages?: unknown[]; conversation?: unknown[]; contents?: unknown[]; q?: string; k?: number };
           const sys = b.systemInstruction ?? b.system_instruction;
-          const blob = String(b.text || b.prompt || b.input || b.content || b.query || b.message || b.system || (typeof sys === "string" ? sys : "") || "");
+          const blob = String(b.text || b.prompt || b.input || b.content || b.query || b.message || b.body || b.system || (typeof sys === "string" ? sys : "") || "");
           const msgs = b.messages || b.conversation || b.contents || (blob ? [{ role: "user", content: blob }] : sys && typeof sys !== "string" ? [sys] : []);
           const run = ({ "/observe": () => memory.observe(msgs), "/remember": () => memory.remember(blob, b), "/forget": () => ({ ok: memory.forget(String(b.id || blob)) }), "/inject": () => { const n = memory.inject(msgs); return Array.isArray(b.contents) && !b.messages ? { contents: n, messages: n } : { messages: n }; }, "/query": () => memory.query(String(b.q || blob), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return json(run());
