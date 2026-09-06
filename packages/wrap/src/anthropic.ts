@@ -130,15 +130,6 @@ function injectAnthropicTools(
   return [...extra, ...(existing ?? []).filter((t) => !names.has(t.name))];
 }
 
-/**
- * Extract tool_use invocations from an Anthropic response and steer them.
- *
- * Replacements are keyed by the ORIGINAL block id, never by position:
- * steerToolCalls absorbs siblings naming later steps of the matched sequence,
- * and positional zipping shifted every subsequent block's replacement onto
- * the wrong call. Absorbed blocks are REMOVED — leaving them in place would
- * have the host execute raw work the compiled run already did.
- */
 export function steerAnthropicToolUses(
   content: AnthropicContentBlock[],
   programs: StretchProgram[],
