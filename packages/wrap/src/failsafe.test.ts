@@ -68,7 +68,6 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { choices: Array<{ message: { content: string } }> };
     expect(json.choices[0]!.message.content).toBe("upstream said hi");
-    // Unsteered: the client's original tool list went up untouched.
     expect(upstreamBody).toContain('"name":"x"');
     expect(upstreamBody).not.toContain("resolve_ticket");
   });
@@ -111,9 +110,6 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
   });
 
   test("corrupt program shapes fall back to the raw tool", async () => {
-    // sequence that is not an array, envelope that is an array where an object
-    // belongs — real-world corruption from a bad pull or hand-edit. Whatever
-    // Eden does with these, the call itself must not break.
     const corrupt = [
       liveProgram({ id: "c1", sequence: "lookupTicket" as unknown as string[] }),
       liveProgram({ id: "c2", contract: [] as unknown as StretchProgram["contract"] }),
