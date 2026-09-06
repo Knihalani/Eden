@@ -111,8 +111,6 @@ export class AgentMemory {
   private project?: string;
   private compiled: Compiled[];
   private path: string;
-  private cache = new Map<string, Note[]>();
-  private out = new WeakMap<object, unknown[]>();
 
   constructor(opts: MemoryOptions = {}) {
     this.dir = opts.dir || join(homedir(), ".eden", "memory");
@@ -174,8 +172,6 @@ export class AgentMemory {
 
   private persist() {
     writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
-    this.cache.clear();
-    this.out = new WeakMap();
   }
 
   relevant(text: string, cap = 6): MemoryRecord[] {
@@ -198,25 +194,14 @@ export class AgentMemory {
 
   inject(messages: unknown[]): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
-    const hit = this.out.get(list);
-    if (hit) return hit;
     try {
       const blob = convBlob(list);
-      let notes = this.cache.get(blob);
-      if (!notes) {
-        notes = [];
-        if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
-          const mems = this.relevant(blob);
-          if (mems.length) {
-            let body = MEMORY_MARK;
-            for (const m of mems) body += `\n- ${m.text}`;
-            notes.push({ role: "system", content: body });
-          }
-          const card = injectFromRequest({ text: blob }, this.know);
-          if (card) notes.push({ role: "system", content: injectNote(card) });
-        }
-        if (this.cache.size > 256) this.cache.clear();
-        this.cache.set(blob, notes);
+      const notes: Note[] = [];
+      if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
+        const mems = this.relevant(blob);
+        if (mems.length) notes.push({ role: "system", content: MEMORY_MARK + mems.map((m) => `\n- ${m.text}`).join("") });
+        const card = injectFromRequest({ text: blob }, this.know);
+        if (card) notes.push({ role: "system", content: injectNote(card) });
       }
       const next = notes.length ? list.slice() : list;
       if (notes.length) {
@@ -225,7 +210,6 @@ export class AgentMemory {
         next.splice(i, 0, ...notes);
       }
       this.observe(list);
-      this.out.set(list, next);
       return next;
     } catch {
       return list;
@@ -237,7 +221,7 @@ export class AgentMemory {
     const next = this.inject(messages);
     return next === messages ? body : { ...body, messages: next };
   }
-  close() { this.cache.clear(); this.out = new WeakMap(); }
+  close() {}
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory {
