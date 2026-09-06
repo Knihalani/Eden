@@ -10,7 +10,6 @@ function line(s: string): void {
   console.log(s);
 }
 
-// ─── 1. Sustained throughput ────────────────────────────────────────────────
 async function sustainedThroughput(): Promise<void> {
   line("\n═══ 1. SUSTAINED THROUGHPUT (30s mixed workload) ═══");
   const rand = (() => {
