@@ -448,8 +448,6 @@ describe("phase 1: bounded network paths (M6)", () => {
     process.env.EDEN_ISLAND_MS = "garbage";
     try {
       const caller = wrapIsland({ apiKey: "sk-test" });
-      // Construction itself must not throw; timeout parsing is deferred to call
-      // time and guarded there.
       expect(caller !== undefined || caller === undefined).toBe(true);
     } finally {
       delete process.env.EDEN_ISLAND_MS;
