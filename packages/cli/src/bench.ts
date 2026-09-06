@@ -163,9 +163,6 @@ async function replayPass(
         timeoutMs: 60_000,
         llmCents: 1,
       });
-      // Paired like shadow's ledger: naive numbers accumulate only over the
-      // traces whose compiled numbers do, so a trace the recording cannot
-      // answer inflates neither side alone.
       const block: Block = {
         task: t.id,
         naiveCents: t.cost_cents,

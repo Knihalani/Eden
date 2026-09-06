@@ -194,7 +194,6 @@ describe("withFileLock", () => {
     const lock = join(home, "runs", "slow.jsonl.lock");
     let reentered = false;
     withFileLock(lock, () => {
-      // Make the live holder's lock look ancient.
       const old = new Date(Date.now() - 120_000);
       utimesSync(lock, old, old);
       expect(() => withFileLock(lock, () => (reentered = true))).toThrow(/could not acquire lock/);
@@ -203,17 +202,11 @@ describe("withFileLock", () => {
   });
 
   test("a holder does not delete a lock that is no longer its own", () => {
-    // Once a lock has been broken, the file at that path belongs to whoever
-    // took it next. The original holder's finally used to unlink it anyway,
-    // letting a third process in behind the new holder's back and cascading
-    // the mutual-exclusion failure forward.
     const lock = join(home, "runs", "stolen.jsonl.lock");
     withFileLock(lock, () => {
-      // Simulate a contender that broke our lock and installed its own.
       rmSync(lock, { force: true });
       writeFileSync(lock, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() }));
     });
-    // The successor's lock must survive our release.
     expect(existsSync(lock)).toBe(true);
     rmSync(lock, { force: true });
   });
