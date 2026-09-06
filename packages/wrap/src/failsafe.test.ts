@@ -137,13 +137,10 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
       },
       state,
     );
-    // Trip the circuit breaker: repeated failures of the agent's own tool.
     for (let i = 0; i < 4; i++) {
       await expect(tools.boom.execute({})).rejects.toThrow("no");
     }
     expect(state.run.warnings.some((w) => w.kind === "fail_streak")).toBe(true);
-    // Observe mode keeps serving — both the failing tool (the agent's own
-    // error, not ours) and unrelated healthy work.
     await expect(tools.boom.execute({})).rejects.toThrow("no");
     await expect((tools.ok.execute({}) as Promise<unknown>)).resolves.toEqual({ fine: true });
   });
