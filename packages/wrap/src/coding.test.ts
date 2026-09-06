@@ -96,7 +96,6 @@ describe("coding registry", () => {
   });
 
   test("Edit without old_string does not truncate the file", async () => {
-    // An omitted old_string used to mean "replace the whole file".
     const dir = join(import.meta.dir, "../../.tmp-coding");
     mkdirSync(dir, { recursive: true });
     const path = join(dir, "keep.txt");
