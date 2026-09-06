@@ -155,18 +155,11 @@ export async function handleHookd(req: Request): Promise<Response> {
   } catch {
     return Response.json({});
   }
-  // Serialized: the HTTP timeout does not abandon `respondToHook`. The old
-  // Promise.race lived *inside* the queue job, so a timeout resolved the
-  // client while work kept running and `tail` advanced — concurrent handlers
-  // and lock contention, the bug the queue was meant to kill. Timeout now
-  // races only the returned promise; `tail` waits for the work itself.
   const done = enqueue(input);
   try {
     const out = await done;
     return Response.json(out);
   } catch (err) {
-    // Same last-line-of-defence contract as `eden hook`: `{}` never blocks the
-    // agent — but the failure must still reach the operator's log.
     process.stderr.write(`eden hookd: ${(err as Error)?.message ?? String(err)}\n`);
     return Response.json({});
   }

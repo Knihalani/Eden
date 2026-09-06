@@ -199,6 +199,7 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
       try {
         const u = new URL(req.url);
         const p = u.pathname;
+        if (req.method === "DELETE") return Response.json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
         if (req.method === "POST") {
           const b = (await req.json()) as { text?: string; id?: string; messages?: unknown[]; q?: string; k?: number };
           const run = ({ "/observe": () => memory.observe(b.messages || []), "/remember": () => memory.remember(String(b.text || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || []) }), "/query": () => memory.query(String(b.q || ""), Number(b.k) || 5) } as Record<string, () => unknown>)[p];
