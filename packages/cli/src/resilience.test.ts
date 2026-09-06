@@ -191,13 +191,6 @@ describe("withFileLock", () => {
   });
 
   test("does not break the lock of a holder that is merely slow", () => {
-    // Staleness used to be judged on age alone, which is not the same question
-    // as "is the holder gone". A process only has to be *stopped* for longer
-    // than the horizon — a suspended laptop, SIGSTOP under a debugger, a
-    // swapping machine, a hung network mount — and a waiter would delete its
-    // lock and enter the critical section alongside it. Two concurrent
-    // read-modify-writes of one events file lose events, which is the single
-    // thing this lock exists to prevent.
     const lock = join(home, "runs", "slow.jsonl.lock");
     let reentered = false;
     withFileLock(lock, () => {
