@@ -117,7 +117,7 @@ export class AgentMemory {
   forget(id: string): boolean {
     const n = this.compiled.length;
     this.compiled = this.compiled.filter((c) => c.rec.id !== id && c.rec.text !== id && c.rec.text.toLowerCase() !== id.toLowerCase() && subjectKey(c.rec.text) !== id.toLowerCase());
-    return this.compiled.length !== n && (this.persist(), true);
+    return this.compiled.length !== n && (this.persist(false), true);
   }
 
   observe(messages: unknown[]): MemoryRecord[] {
@@ -135,7 +135,8 @@ export class AgentMemory {
     return out;
   }
 
-  private persist() {
+  private persist(merge = true) {
+    if (merge) for (const c of load(this.path)) { const key = subjectKey(c.rec.text); if (!this.compiled.some((x) => x.rec.id === c.rec.id || x.rec.text.toLowerCase() === c.rec.text.toLowerCase() || (key != null && subjectKey(x.rec.text) === key))) this.compiled.push(c); }
     if (this.compiled.length > 2000) { const keep = this.compiled.filter((c) => c.rec.kind === "constraint").sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => c.rec.kind !== "constraint").sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; }
     writeFileSync(this.path + ".tmp", this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { flush: true });
     renameSync(this.path + ".tmp", this.path);
