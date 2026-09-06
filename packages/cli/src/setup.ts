@@ -266,7 +266,6 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
 type HookEntry = { hooks?: Array<{ type?: string; command?: string }> };
 type HookMap = Record<string, HookEntry[]>;
 
-/** True if this hook entry was written by a previous `eden setup`. */
 function isEdenHook(entry: HookEntry): boolean {
   return (entry.hooks ?? []).some((h) => {
     const c = String(h?.command ?? "");
@@ -274,7 +273,6 @@ function isEdenHook(entry: HookEntry): boolean {
   });
 }
 
-/** Replace Eden entries, keep the user's; re-run stays idempotent. */
 export function mergeHooks(existing: unknown, ours: HookMap): HookMap {
   const out: HookMap = {};
   const prev = (existing && typeof existing === "object" ? existing : {}) as HookMap;
