@@ -224,6 +224,7 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
           if (p === "/inject") return Response.json({ messages: memory.inject(b.messages || []) });
           if (p === "/query") return Response.json(memory.query(String(b.q || ""), Number(b.k) || 5));
         }
+        if (req.method === "GET" && p === "/health") return Response.json({ ok: true });
         if (req.method === "GET" && p === "/query") return Response.json(memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || 5));
         if (req.method === "GET" && p === "/memories") return Response.json(memory.memories());
         return new Response("eden memory\n");
