@@ -48,7 +48,7 @@ function convBlob(list: unknown[]): string {
   return parts.join("\n");
 }
 
-const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|please\b|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack)\b/i;
+const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|please\b|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers)\b/i;
 
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>();

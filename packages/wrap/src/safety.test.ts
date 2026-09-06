@@ -46,8 +46,6 @@ function counted(names: string[], opts: { delayMs?: number } = {}): Counter {
 
 function program(sequence: string[], steps: Step[], name = "stretch"): StretchProgram {
   return withVersion({
-    // Derived from the name so a test can hold two distinct programs at once;
-    // armings and the compiled-tool cache are both keyed by program id.
     id: `p_${name}`,
     name,
     description: "d",
