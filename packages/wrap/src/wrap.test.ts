@@ -1077,10 +1077,6 @@ describe("online signal bus", () => {
   });
 
   test("a poll whose result changed is not halted, a stalled one still is (W2)", async () => {
-    // CI polling: get_status → list_checks … All-read loops are never
-    // hard-stopped — the halt would land on exactly the observation that
-    // would have shown progress. Mixed loops with a mutating or unknown-name
-    // tool still stop after two identical stalled cycles.
     let ci = "pending";
     const state = createState({ programs: [] });
     const tools = wrapTools(
