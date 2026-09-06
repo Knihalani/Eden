@@ -127,7 +127,6 @@ description: ${description}
 ${lines.join("\n")}`;
 }
 
-/** Third person, what AND when, names routines, ≤1024, no XML, no reserved words. */
 export function skillDescription(tools: ManifestTool[]): string {
   const names = tools
     .map((t) => t.name)
