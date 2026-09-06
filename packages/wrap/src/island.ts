@@ -111,7 +111,6 @@ export function isTransientIslandFailure(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
-/** Island retry policy. Total attempts = 1 + ISLAND_RETRIES; linear backoff. */
 export const ISLAND_RETRIES = 2;
 
 function islandTimeoutMs(): number {
