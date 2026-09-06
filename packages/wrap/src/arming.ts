@@ -128,8 +128,6 @@ export function mightClaim(armed: Armed, name: string, args: Record<string, unkn
   const argHint = hintIdOf(args);
   if (armed.hintId !== undefined && argHint !== undefined && armed.hintId !== argHint) return false;
   if (armed.rest.has(name)) return true;
-  // Budget path: same-entity noise still counts even when `name` is not in rest.
-  // No identity on the call cannot be that noise, and cannot claim — skip extractInput.
   if (armed.hintId !== undefined && argHint !== undefined && armed.hintId === argHint) return true;
   return false;
 }
