@@ -478,12 +478,6 @@ export async function runCompiled(
   }
 }
 
-/**
- * Append, keeping the buffer bounded.
- *
- * Trimming one element per push once the cap is reached moves the whole array
- * every time; dropping a batch amortises that to O(1) per push.
- */
 function pushCapped<T>(buf: T[], item: T): void {
   buf.push(item);
   if (buf.length > MAX_TRACES + 256) buf.splice(0, buf.length - MAX_TRACES);
