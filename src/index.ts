@@ -22,6 +22,10 @@ function tokList(s: string): string[] {
 }
 
 function convBlob(list: unknown[]): string {
+  if (list.length === 1) {
+    const o = list[0] as Record<string, unknown> | undefined;
+    if (o && typeof o.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content;
+  }
   const parts: string[] = [];
   for (const m of list) {
     if (!m || typeof m !== "object") continue;
@@ -31,8 +35,8 @@ function convBlob(list: unknown[]): string {
       if (c) parts.push(c);
     } else if (Array.isArray(c)) {
       for (const b of c) {
-        if (b && typeof b === "object" && typeof (b as { text?: string }).text === "string") {
-          const t = (b as { text: string }).text;
+        if (b && typeof b === "object") {
+          const t = (b as { text?: string }).text;
           if (t) parts.push(t);
         }
       }
