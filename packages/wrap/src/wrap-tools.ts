@@ -95,7 +95,6 @@ export type WrapState = {
   arming: ArmingStore;
   sessionId: string;
   fleetId: string;
-  /** Stable agent identity stamped on traces/receipts/events. */
   agentId: string;
   parentRunId?: string;
   spanId?: string;
