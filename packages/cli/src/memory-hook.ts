@@ -17,17 +17,10 @@ function asRec(v: unknown): Record<string, unknown> {
 function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
-  const parts: string[] = [];
-  for (const b of content) {
-    if (typeof b === "string") {
-      parts.push(b);
-      continue;
-    }
-    const o = asRec(b);
-    const t = o.text ?? o.content ?? o.alt ?? o.name;
-    if (typeof t === "string" && t) parts.push(t);
-  }
-  return parts.join("\n");
+  return content
+    .map((b) => (typeof b === "string" ? b : String(asRec(b).text ?? asRec(b).content ?? asRec(b).alt ?? asRec(b).name ?? "")))
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** Last turns of a Claude Code JSONL transcript. Fail-open: missing/corrupt → []. */

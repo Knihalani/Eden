@@ -77,9 +77,7 @@ function compile(rec: MemoryRecord): Compiled {
 function load(path: string): Compiled[] {
   if (!existsSync(path)) return [];
   const out: Compiled[] = [];
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
+  for (const t of readFileSync(path, "utf8").split("\n")) {
     try {
       const rec = JSON.parse(t) as MemoryRecord;
       if (rec?.id && rec.text) out.push(compile(rec));
