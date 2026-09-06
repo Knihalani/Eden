@@ -13,8 +13,6 @@ async function ticketShipTraces(dir: string, count: number): Promise<void> {
       if (file >= count) break;
       const world = createTicketShip({ llmMs: 0 });
       const run = await runNaive(world, tid, { skipVerifyP: 0, seed: rep + 1 });
-      // Real sessions never replay byte-for-byte; vary a field nothing binds
-      // so the recordings stay distinct observations instead of duplicates.
       const details = run.events.find((e) => e.name === "fetchDetails");
       if (details) details.result = { ...(details.result as Record<string, unknown>), session_note: `session ${rep}` };
       const trace = toNaiveTrace(`b${file}`, tid, run);
@@ -49,12 +47,10 @@ describe("eden bench", () => {
     expect(report.tokens.estimated).toBe(true);
     expect(report.tokens.delta).toBeLessThan(0);
 
-    // The fixture clock is synthetic; the bench must say so instead of claiming ms.
     expect(report.time_ms).toEqual({ delta: null, measured: false });
     expect(report.notes.join("\n")).toContain("time not measured");
     expect(report.notes.join("\n")).toContain("tokens estimated");
 
-    // What stdout carries parses back to the same honest object.
     const printed = JSON.parse(formatBench(report)) as Record<string, unknown>;
     expect(Object.keys(printed).sort()).toEqual(
       ["ci", "n", "notes", "p_value", "time_ms", "tokens", "verdict"].sort(),
