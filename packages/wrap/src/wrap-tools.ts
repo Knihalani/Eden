@@ -794,9 +794,6 @@ export function wrapTools<T extends ToolsIn>(
   const run = state.run;
   const invocations = new Map<number, Invocation>();
   let nextInvocationId = 0;
-  // Bounded like every other per-call structure: once finished entries are
-  // evicted, their buffered events are treated as long-finished and claimed by
-  // the next flush rather than leaking forever.
   const evictInvocations = (): void => {
     if (invocations.size <= 256) return;
     for (const [id, rec] of invocations) {
