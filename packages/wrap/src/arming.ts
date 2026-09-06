@@ -37,10 +37,6 @@ export type Armed = {
   headErr?: unknown;
   closed: boolean;
   hintId: unknown;
-  /**
-   * True only when every sequence name is a read and none is a mutation.
-   * Mutating programs never set this. scanFleet requires `true`.
-   */
   readOnly?: boolean;
   fleetId?: string;
   head?: string;
