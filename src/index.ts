@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { alreadyInjected, injectFromRequest, injectNote } from "../packages/know/src/inject";
@@ -19,13 +19,7 @@ export type QueryHit = { text: string; source: "memory" | "know"; url?: string; 
 type Compiled = { rec: MemoryRecord; needles: string[] };
 type Note = { role: "system"; content: string };
 
-const STOP = new Set([
-  "the", "of", "is", "a", "an", "on", "to", "and", "in", "for", "this", "that", "with", "from",
-  "into", "about", "these", "then", "still", "has", "out", "please", "how", "should", "what",
-  "why", "was", "are", "you", "your", "its", "our", "not", "never", "use", "used", "just",
-  "last", "week", "down", "look", "next", "need", "before", "merge", "prefers", "user",
-  "memory", "ran", "fact", "such", "or", "no", "app",
-]);
+const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
 function tokList(s: string): string[] {
   return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
@@ -94,7 +88,7 @@ export class AgentMemory {
     const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     if (i >= 0) this.compiled[i] = c;
     else this.compiled.push(c);
-    appendFileSync(this.path, JSON.stringify(rec) + "\n");
+    writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + "\n");
     this.cache.clear();
     return rec;
   }
