@@ -14,20 +14,6 @@ import {
 import { isUnrecordedCall, replayRegistry } from "../../shadow/src/replay";
 import { runProgram } from "../../runtime/src/index";
 
-/**
- * `eden bench` — the paired A/B harness the internal scripts were wiring by hand.
- *
- * Each supplied trace is one paired block. The naive side is what the recording
- * actually paid; the compiled side replays the mined program against the same
- * trace through the shadow tape registry, so nothing hits the network. The
- * verdict comes from the measure pipeline — permutation p-value over sign-flips,
- * bootstrap CI on the paired deltas, and the four-way call that can say
- * "I cannot tell" and "my instrument is broken".
- *
- * Honest numbers or absent: a delta with no instrument behind it prints as
- * "not measured" and carries no claim.
- */
-
 const USAGE = `eden bench --traces <dir|glob> [--seed N] [--blocks N]
 
 Paired A/B between recorded naive runs and their compiled replay.
@@ -109,7 +95,6 @@ function parseTrace(text: string, path: string): StretchTrace {
   return t as unknown as StretchTrace;
 }
 
-/** Resolve --traces to trace files. A directory means *.json inside it. */
 export function tracePaths(spec: string): string[] {
   const out: string[] = [];
   if (spec.includes("*") || spec.includes("?")) {
@@ -152,12 +137,6 @@ export async function loadTraces(spec: string): Promise<StretchTrace[]> {
   return dedupeTraces(traces);
 }
 
-/**
- * Byte-identical recordings are one observation, however many files carry it.
- * Counting them separately manufactures sample size — the same failure
- * compileTraces refuses with uniqueTraces — and a paired test built on
- * pseudo-replicated blocks would shrink its own interval.
- */
 function dedupeTraces(traces: StretchTrace[]): StretchTrace[] {
   const seen = new Set<string>();
   const out: StretchTrace[] = [];
