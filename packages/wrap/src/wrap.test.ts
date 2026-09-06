@@ -925,11 +925,6 @@ describe("the proxy speaks the protocol its clients read", () => {
   };
 
   test("a streamed reply carries delta, not message", async () => {
-    // The request is forced non-streaming upstream so tool calls can be
-    // steered, and the completion was then wrapped in a single `data:` line
-    // unchanged. A streaming client reads choices[].delta, so `delta` was
-    // undefined and both content and tool calls came back empty — every
-    // OpenAI-SDK client using stream:true with a tool list got nothing.
     const { text, chunks } = await streamed(
       { id: "x", model: "gpt-4o", choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }] },
       [{ type: "function", function: { name: "lookupTicket" } }],
