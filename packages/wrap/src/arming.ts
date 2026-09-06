@@ -62,7 +62,6 @@ export type Armed = {
   readOnly?: boolean;
   fleetId?: string;
   head?: string;
-  /** Names the compiled run served. Fleet agents skip these even after rest is 0. */
   served?: Set<string>;
   agentIds?: Set<string>;
 };
