@@ -61,6 +61,8 @@ export function installedHooks(hookCmd: string, preCmd: string = preHookCommand(
     // Host has no matcher for PostToolBatch. One Eden command, same warm chain
     // as PostToolUse. Remainder arms from the full parallel set here (R2).
     PostToolBatch: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
+    UserPromptSubmit: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
+    PreCompact: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     Stop: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     SessionStart: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
   };
@@ -312,7 +314,7 @@ function isEdenHook(entry: HookEntry): boolean {
  * Add Eden's hooks alongside whatever is already installed.
  *
  * This was a shallow spread of one object over another, so Eden's
- * PreToolUse/PostToolUse/PostToolBatch/Stop/SessionStart arrays *replaced* the user's
+ * PreToolUse/PostToolUse/PostToolBatch/Stop/SessionStart/UserPromptSubmit/PreCompact arrays *replaced* the user's
  * entries for those events outright. Anyone who had their own PreToolUse hook
  * — a command allowlist, an audit log, a secret scanner — silently lost it the
  * first time they ran `eden setup`, and Eden is not entitled to disarm

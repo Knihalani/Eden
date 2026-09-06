@@ -28,7 +28,8 @@ describe("setup hookd", () => {
     expect(hooks.PostToolBatch).toHaveLength(1);
     expect(hooks.Stop).toBeTruthy();
     expect(hooks.SessionStart).toBeTruthy();
-    expect("UserPromptSubmit" in hooks).toBe(false);
+    expect(hooks.UserPromptSubmit).toBeTruthy();
+    expect(hooks.PreCompact).toBeTruthy();
     expect("PostToolUseFailure" in hooks).toBe(false);
   });
 
@@ -45,7 +46,7 @@ describe("setup hookd", () => {
     expect(pre).toContain("|| echo '{}'");
     expect(pre).not.toContain("bun ");
     // The warm chain stays on Post/Stop/SessionStart/PostToolBatch.
-    for (const event of ["PostToolUse", "PostToolBatch", "Stop", "SessionStart"] as const) {
+    for (const event of ["PostToolUse", "PostToolBatch", "Stop", "SessionStart", "UserPromptSubmit", "PreCompact"] as const) {
       const cmd = String(hooks[event]![0]!.hooks[0]!.command);
       expect(cmd).toContain("--max-time 8");
       expect(cmd).toContain("bun '/abs/cli.ts' hook");

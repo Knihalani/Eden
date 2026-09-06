@@ -7,6 +7,7 @@ import { eligibleForTransparent, executeTransparent, inSessionBucket, postToolUs
 import { applyHookOutput } from "./transcript-diff";
 import { appendLedgerRow, armRemainder, armRemainderFromBatch, claimRemainder, parseToolCalls, remainderDenyReason } from "./remainder";
 import { mapHostToolName } from "./shapes";
+import { memoryHookResponse } from "./memory-hook";
 
 export type HookIn = {
   hook_event_name?: string;
@@ -19,6 +20,9 @@ export type HookIn = {
   tool_calls?: unknown;
   /** Claude Code project cwd. Remainder joins relative `file_path`/`path` against this. */
   cwd?: string;
+  prompt?: string;
+  transcript_path?: string;
+  source?: string;
 };
 
 export type HookHost = "claude" | "gemini" | "opencode" | "codex" | "unknown";
@@ -42,6 +46,10 @@ const EVENT_ALIASES: Record<string, string> = {
   session_stop: "Stop",
   SessionStart: "SessionStart",
   session_start: "SessionStart",
+  UserPromptSubmit: "UserPromptSubmit",
+  user_prompt_submit: "UserPromptSubmit",
+  PreCompact: "PreCompact",
+  pre_compact: "PreCompact",
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -73,6 +81,8 @@ function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost 
     eventRaw === "PreToolUse" ||
     eventRaw === "Stop" ||
     eventRaw === "SessionStart" ||
+    eventRaw === "UserPromptSubmit" ||
+    eventRaw === "PreCompact" ||
     eventRaw === "PostToolBatch"
   ) {
     return "claude";
@@ -104,6 +114,10 @@ export function normalizeHookIn(raw: unknown): { hook: HookIn; host: HookHost } 
   }
   const cwdRaw = r.cwd;
   const cwd = typeof cwdRaw === "string" && cwdRaw ? cwdRaw : undefined;
+  const promptRaw = r.prompt;
+  const prompt = typeof promptRaw === "string" ? promptRaw : undefined;
+  const transcriptRaw = r.transcript_path ?? r.transcriptPath;
+  const transcript_path = typeof transcriptRaw === "string" && transcriptRaw ? transcriptRaw : undefined;
   return {
     host,
     hook: {
@@ -114,6 +128,8 @@ export function normalizeHookIn(raw: unknown): { hook: HookIn; host: HookHost } 
       tool_input,
       tool_response,
       cwd,
+      prompt,
+      transcript_path,
     },
   };
 }
@@ -345,6 +361,19 @@ export async function respondToHook(
   const session = body.session_id || "local";
   const name = body.tool_name;
   const cwd = typeof body.cwd === "string" && body.cwd ? body.cwd : undefined;
+  if (
+    body.hook_event_name === "UserPromptSubmit" ||
+    body.hook_event_name === "SessionStart" ||
+    body.hook_event_name === "PreCompact"
+  ) {
+    try {
+      const mem = memoryHookResponse(body as Record<string, unknown>);
+      if (mem) return { ok: true, ...mem };
+    } catch {
+      /* fall open */
+    }
+    return { ok: true };
+  }
   if (body.hook_event_name === "PostToolUse" && name) {
     const event = redact({
       id: crypto.randomUUID(),
@@ -445,6 +474,11 @@ export async function respondToHook(
     }
   }
   if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
+    try {
+      memoryHookResponse(body as Record<string, unknown>);
+    } catch {
+      /* observe is best-effort */
+    }
     await locker(`${outboxPath()}.lock`, () =>
       appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),
     );
