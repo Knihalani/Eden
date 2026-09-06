@@ -173,8 +173,6 @@ export function openaiIsland(opts: {
       } catch (err) {
         lastErr = err;
         if (callerAborted(err, signal)) throw err;
-        // Network-level failures carry no status; truncation-style corruption
-        // is often transient. Both are worth one more attempt.
         const transient =
           err instanceof NonJsonReply ||
           !(err instanceof Error && /^island llm \d+$/.test(err.message));
