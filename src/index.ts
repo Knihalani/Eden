@@ -226,7 +226,7 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
           const b = (await req.json().catch(() => ({}))) as { text?: string; prompt?: string; input?: string; content?: string; query?: string; message?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; contents?: unknown[]; q?: string; k?: number };
           const blob = String(b.text || b.prompt || b.input || b.content || b.query || b.message || "");
           const msgs = b.messages || b.conversation || b.contents || (blob ? [{ role: "user", content: blob }] : []);
-          const run = ({ "/observe": () => memory.observe(msgs), "/remember": () => memory.remember(blob, b), "/forget": () => ({ ok: memory.forget(String(b.id || blob)) }), "/inject": () => ({ messages: memory.inject(msgs) }), "/query": () => memory.query(String(b.q || blob), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
+          const run = ({ "/observe": () => memory.observe(msgs), "/remember": () => memory.remember(blob, b), "/forget": () => ({ ok: memory.forget(String(b.id || blob)) }), "/inject": () => { const n = memory.inject(msgs); return Array.isArray(b.contents) && !b.messages ? { contents: n, messages: n } : { messages: n }; }, "/query": () => memory.query(String(b.q || blob), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return json(run());
         } else {
           const q = u.searchParams.get("q") || u.searchParams.get("text") || u.searchParams.get("prompt") || u.searchParams.get("input") || u.searchParams.get("content") || u.searchParams.get("message") || "";

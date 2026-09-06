@@ -68,8 +68,6 @@ async function main(): Promise<void> {
   else if (cmd === "status") { const { status } = await import("./login"); await status(); }
   else if (cmd === "wrap") { const { wrapCmd } = await import("./wrap-cmd"); await wrapCmd(rest); }
   else if (cmd === "hook") {
-    // Overlap bind with the one-shot so PostToolBatch's process can exit
-    // only after /health answers — the next PreToolUse is 1s curl, no bun.
     const hookdP = import("./hookd").then((m) => m.startHookdBackground());
     const { runHook } = await import("./hook");
     await runHook();
