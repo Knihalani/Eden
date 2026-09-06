@@ -207,7 +207,6 @@ describe("steer + inject", () => {
     });
 
     test("no identifiable shape never matches", () => {
-      // Prose carries no URL or named CLI signature; fail closed.
       const p = shapeProgram("gh pr view 123");
       const out = steerToolCalls(
         [{ function: { name: "runGh", arguments: JSON.stringify({ id: "T-100", target: "just some prose" }) } }],
@@ -331,7 +330,6 @@ describe("wrapTools", () => {
     const emptyHit = await toolsEmpty.lookupTicket.execute({ id: "T-100" });
     expect(inHit).toEqual({ notified: true, id: "T-100" });
     expect(outHit).not.toEqual({ notified: true, id: "T-100" });
-    // Unpartitioned wrap is the operator: Approve canary must still serve.
     expect(emptyHit).toEqual({ notified: true, id: "T-100" });
   });
 
