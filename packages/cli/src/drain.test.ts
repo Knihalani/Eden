@@ -77,9 +77,6 @@ describe("drain actually drains", () => {
   }
 
   test("a drained run is removed from the outbox instead of being re-sent forever", async () => {
-    // dropRuns was populated only after a `continue` that the healthy path
-    // always took, so rewriteOutbox removed nothing. The row was immortal and
-    // every later drain re-POSTed stretch_end for a run that was still live.
     serveSite();
     const events = join(home, "runs", "r1.jsonl");
     appendJsonl(events, { id: "e1", name: "Bash", args: {}, ok: true });
@@ -96,9 +93,6 @@ describe("drain actually drains", () => {
   });
 
   test("an event written during the upload is not destroyed", async () => {
-    // The "nothing had an id" fallback unlinked the whole events file, and it
-    // ran outside the lock — so a PostToolUse hook that appended during the
-    // in-flight POST lost its event.
     const events = join(home, "runs", "r2.jsonl");
     let late = false;
     server = Bun.serve({
@@ -129,9 +123,6 @@ describe("drain actually drains", () => {
   });
 
   test("an unreachable site leaves everything for the next attempt", async () => {
-    // fetch rejects on ECONNREFUSED, and there was no try/catch in drain() —
-    // so one unreachable plane threw out of the loop before the outbox
-    // rewrite, making drain a permanent no-op rather than a retry.
     process.env.EDEN_BASE_URL = "http://127.0.0.1:1"; // nothing listens here
     const events = join(home, "runs", "r3.jsonl");
     appendJsonl(events, { id: "e1", name: "Bash", args: {}, ok: true });
