@@ -149,7 +149,6 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
         : need.queries;
     for (let i = 0; i < queries.length && i < 8; i++) {
       const q = queries[i]!;
-      if (!injectWorthQuery(q)) continue;
       const card = factFor(q, store);
       if (!card) continue;
       if (subjectMentioned(text, card.fact)) continue;
