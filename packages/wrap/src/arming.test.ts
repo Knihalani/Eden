@@ -72,7 +72,6 @@ describe("arming store", () => {
     s.insert("", "old", fakeArmed({ input: { id: "E-1" }, rest: new Map([["write", 1]]) }));
     s.insert("", "new", fakeArmed({ input: { id: "E-2" }, rest: new Map([["write", 1]]) }));
     const keys = s.scan("", "write", { id: "E-2" }, performance.now()).map(([k]) => k);
-    // E-2 is newest; E-1 is identity-rejected. Newest-first still holds on all().
     expect(s.all("", performance.now()).map(([k]) => k)).toEqual(["new", "old"]);
     expect(keys).toEqual(["new"]);
   });
