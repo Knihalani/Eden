@@ -62,11 +62,6 @@ const idArg = { id: { kind: "input" as const, path: "id" } };
 
 describe("wrap never applies a mutation twice", () => {
   test("a write before an island is not replayed when the island cannot run", async () => {
-    // The default configuration: no island caller unless OPENAI_API_KEY is set.
-    // An island sits wherever it sat in the observed trace, so it is routinely
-    // *after* a write. The old fall-through decided replay safety by matching
-    // the deopt reason, and "needs an island caller" was on the safe list — so
-    // the compiled leg wrote the record, bailed, and the raw write ran again.
     const c = counted(["writeRecord", "notify"]);
     const p = program(
       ["writeRecord", "draftReply", "notify"],
