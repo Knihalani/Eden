@@ -82,6 +82,7 @@ export class AgentMemory {
   private compiled: Compiled[];
   private path: string;
   private cache = new Map<string, Note[]>();
+  private out = new WeakMap<object, unknown[]>();
 
   constructor(opts: MemoryOptions = {}) {
     this.dir = opts.dir || join(homedir(), ".eden", "memory");
@@ -110,8 +111,7 @@ export class AgentMemory {
     const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     if (i >= 0) this.compiled[i] = c;
     else this.compiled.push(c);
-    writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + "\n");
-    this.cache.clear();
+    this.persist();
     return rec;
   }
 
@@ -119,9 +119,14 @@ export class AgentMemory {
     const n = this.compiled.length;
     this.compiled = this.compiled.filter((c) => c.rec.id !== id);
     if (this.compiled.length === n) return false;
-    writeFileSync(this.path, this.compiled.map((c) => JSON.stringify(c.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
-    this.cache.clear();
+    this.persist();
     return true;
+  }
+
+  private persist() {
+    writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
+    this.cache.clear();
+    this.out = new WeakMap();
   }
 
   relevant(text: string, cap = 6): MemoryRecord[] {
@@ -153,30 +158,32 @@ export class AgentMemory {
   inject(messages: unknown[]): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
+      const hit = this.out.get(list);
+      if (hit) return hit;
       const blob = convBlob(list);
       let notes = this.cache.get(blob);
       if (!notes) {
-        if (alreadyInjected(blob) || blob.includes(MEMORY_MARK)) {
-          this.cache.set(blob, []);
-          return list;
-        }
-        const mems = this.relevant(blob);
-        const card = injectFromRequest({ text: blob }, this.know);
         notes = [];
-        if (mems.length) {
-          let body = MEMORY_MARK;
-          for (const m of mems) body += `\n- ${m.text}`;
-          notes.push({ role: "system", content: body });
+        if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
+          const mems = this.relevant(blob);
+          if (mems.length) {
+            let body = MEMORY_MARK;
+            for (const m of mems) body += `\n- ${m.text}`;
+            notes.push({ role: "system", content: body });
+          }
+          const card = injectFromRequest({ text: blob }, this.know);
+          if (card) notes.push({ role: "system", content: injectNote(card) });
         }
-        if (card) notes.push({ role: "system", content: injectNote(card) });
         if (this.cache.size > 256) this.cache.clear();
         this.cache.set(blob, notes);
       }
-      if (!notes.length) return list;
-      const next = list.slice();
-      let i = 0;
-      while (i < next.length && (next[i] as { role?: string })?.role === "system") i++;
-      next.splice(i, 0, ...notes);
+      const next = notes.length ? list.slice() : list;
+      if (notes.length) {
+        let i = 0;
+        while (i < next.length && (next[i] as { role?: string })?.role === "system") i++;
+        next.splice(i, 0, ...notes);
+      }
+      this.out.set(list, next);
       return next;
     } catch {
       return list;
