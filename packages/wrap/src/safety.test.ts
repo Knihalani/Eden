@@ -133,8 +133,6 @@ describe("wrap never applies a mutation twice", () => {
   });
 
   test("a tool repeated in the sequence suppresses both raw repeats", async () => {
-    // `rest` was a Set, so only the first raw repeat was swallowed and the
-    // second executed again on top of what the compiled run had already done.
     const c = counted(["lookupTicket", "notify"]);
     const p = program(
       ["lookupTicket", "notify", "notify"],
