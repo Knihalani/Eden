@@ -222,9 +222,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     });
   }
   safely(() => recordCompletion(opts.state.run, json as Record<string, unknown>), undefined);
-  // Steer only when this request was steerable — an unsteered passthrough
-  // (tripped kill switch, no live programs, client sent no tools) must return
-  // the model's own tool calls untouched.
   const choice = json.choices?.[0]?.message;
   if (shouldSteer && choice && Array.isArray(choice.tool_calls)) {
     safely(
