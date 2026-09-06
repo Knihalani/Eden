@@ -7,8 +7,6 @@ import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { withKnowFactsAnthropic } from "./know-inject";
 
-/** Anthropic Messages API dialect (G7). */
-
 export interface AnthropicProxyOpts {
   state: WrapState;
   getPrograms?: () => StretchProgram[];
