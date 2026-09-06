@@ -1,21 +1,6 @@
 import { ensureHome, readConfig, resolveApiKey } from "./home";
 import { codingRegistry } from "@eden/wrap";
 
-/**
- * eden runner (G1a): laptop bridge for hosted-compiled CLI stretches.
- *
- * Hosted MCP cannot execute runner-kind steps (shell commands, file system
- * operations). This daemon polls the control plane for pending runner jobs,
- * executes them through the local coding registry, and posts receipts back —
- * so a stretch compiled on the server can execute through the user's hands
- * without any cloud sandbox infrastructure.
- *
- * Security model:
- * - The daemon only executes tools from the LOCAL coding registry (Bash, Read,
- *   Write, Edit, Glob, Grep) — never arbitrary code from the server.
- * - Each job carries a tool name + args; the registry validates and dispatches.
- * - The daemon authenticates with the user's own API key.
- */
 export async function runner(args: string[]): Promise<void> {
   ensureHome();
   const cfg = readConfig();
