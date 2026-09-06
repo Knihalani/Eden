@@ -6,6 +6,7 @@ import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { withKnowFactsAnthropic } from "./know-inject";
+import { processMemory } from "../../../src/index";
 
 export interface AnthropicProxyOpts {
   state: WrapState;
@@ -278,6 +279,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
 
   applyCacheBreakpoints(body);
+  processMemory().observe((body.messages as unknown[]) || []);
   body = withKnowFactsAnthropic(body) as AnthropicRequest;
 
   const fn = opts.fetch ?? fetch;

@@ -84,11 +84,6 @@ export function withWitnessMemo(
   };
 }
 
-/**
- * Lookup-only island: every request is treated as pinned. Miss deopts to raw.
- * Share `table` with an earlier withWitnessMemo so Approve-pin serves the
- * same witnesses the unpinned island already recorded.
- */
 export function withPinnedIsland(
   base: IslandCaller,
   table: ReturnType<typeof createWitnessTable> = createWitnessTable(),
