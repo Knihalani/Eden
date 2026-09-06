@@ -40,9 +40,7 @@ export function notesFromInject(injected: unknown[]): string {
 }
 
 function briefing(mem: AgentMemory, q = ""): string {
-  const n = Number(process.env.EDEN_MEMORY_CAP) || 6;
-  const recs = mem.memories();
-  const pick = [...recs.filter((r) => r.kind === "constraint").slice(-n), ...(q ? mem.relevant(q, n).filter((r) => r.kind !== "constraint") : recs.filter((r) => r.kind !== "constraint").slice(-n))];
+  const pick = mem.notesFor(q);
   return pick.length ? MEMORY_MARK + pick.map((m) => `\n- ${m.text}`).join("") : "";
 }
 

@@ -149,9 +149,14 @@ export class AgentMemory {
     return this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project)).map((c) => ({ rec: c.rec, n: c.needles.reduce((a, x) => a + (hay.has(x) ? 1 : 0), 0) })).filter((x) => x.n).sort((a, b) => Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.n - a.n || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
+  notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
+    const recs = this.memories();
+    return [...recs.filter((r) => r.kind === "constraint").slice(-k), ...(text ? this.relevant(text, k) : recs.filter((r) => r.kind !== "constraint").slice(-k))].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k);
+  }
+
   query(q: string, k = Number(process.env.EDEN_MEMORY_CAP) || 6): QueryHit[] {
     const qn = q.trim();
-    const out: QueryHit[] = qn ? [...this.memories().filter((r) => r.kind === "constraint").slice(-k), ...this.relevant(qn, k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
+    const out: QueryHit[] = qn ? this.notesFor(qn, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
     try { const card = knowQuery(qn, this.know); if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url }); } catch {}
     return out.slice(0, k);
   }
@@ -162,8 +167,7 @@ export class AgentMemory {
       const blob = convBlob(list);
       const notes: { role: "system"; content: string }[] = [];
       if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
-        const cap = Number(process.env.EDEN_MEMORY_CAP) || 6;
-        const mems = [...this.memories().filter((r) => r.kind === "constraint").slice(-cap), ...this.relevant(blob).filter((r) => r.kind !== "constraint")].slice(0, cap);
+        const mems = this.notesFor(blob);
         if (mems.length) notes.push({ role: "system", content: MEMORY_MARK + mems.map((m) => `\n- ${m.text}`).join("") });
         const card = injectFromRequest({ text: blob }, this.know);
         if (card) notes.push({ role: "system", content: injectNote(card) });
