@@ -1156,7 +1156,6 @@ describe("online signal bus", () => {
         state,
       );
       for (let i = 0; i < 15; i++) await tools.poll.execute({});
-      // A brand-new kind of work proceeds normally afterwards.
       const out = (await tools.other.execute({})) as { fine?: boolean };
       expect(out.fine).toBe(true);
     } finally {
