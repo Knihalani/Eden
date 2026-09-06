@@ -242,9 +242,6 @@ export function claimWarm(state: WrapState, program: StretchProgram, input: Reco
   }
 }
 
-/**
- * Drop any in-flight guess. The agent never receives its value.
- */
 export function discardWarm(state: WrapState): void {
   try {
     const s = storeOf(state);
