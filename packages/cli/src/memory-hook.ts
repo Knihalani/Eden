@@ -21,21 +21,15 @@ function flattenContent(content: unknown): string {
 export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: string; content: string }> {
   if (typeof path !== "string" || !path || !existsSync(path)) return [];
   try {
-    const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
     const out: Array<{ role: string; content: string }> = [];
-    for (const line of lines.slice(-Math.max(cap * 2, cap))) {
-      let j: unknown;
+    for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean).slice(-Math.max(cap * 2, cap))) {
       try {
-        j = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const rec = asRec(j);
-      const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
-      const role = String(msg.role || rec.type || "");
-      if (role !== "user" && role !== "assistant") continue;
-      const content = flattenContent(msg.content);
-      if (content) out.push({ role, content });
+        const rec = asRec(JSON.parse(line));
+        const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
+        const role = String(msg.role || rec.type || "");
+        const content = flattenContent(msg.content);
+        if ((role === "user" || role === "assistant") && content) out.push({ role, content });
+      } catch {}
     }
     return out.slice(-cap);
   } catch {
