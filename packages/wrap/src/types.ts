@@ -26,7 +26,6 @@ export type Receipt = {
   cache_input_tokens?: number;
   tokenClasses?: TokenClasses;
   certified?: boolean;
-  /** Agent that produced this receipt. Absent = single-agent wrap. */
   agentId?: string;
   parentRunId?: string;
   fleetId?: string;
@@ -66,7 +65,6 @@ export type EdenOpts = {
    * or the single-tenant bucket.
    */
   sessionId?: string;
-  /** Shared suppression store. Omit for an isolated per-wrap map. */
   arming?: ArmingStore;
   armMax?: number;
   armGlobal?: number;
