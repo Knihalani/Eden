@@ -285,7 +285,6 @@ export function mergeHooks(existing: unknown, ours: HookMap): HookMap {
   return out;
 }
 
-/** Unreadable settings are backed up alongside, never overwritten unseen. */
 function readSettings(path: string): Record<string, unknown> {
   if (!existsSync(path)) return {};
   const raw = readFileSync(path, "utf8");

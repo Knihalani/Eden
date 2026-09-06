@@ -13,7 +13,7 @@ function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) {
     const o = asRec(content);
-    return String(o.text ?? o.content ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? o.alt ?? o.name ?? "");
+    return String(o.text ?? o.content ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? o.alt ?? o.name ?? o.caption ?? o.title ?? o.filename ?? "");
   }
   return content.map(flattenContent).filter(Boolean).join("\n");
 }
