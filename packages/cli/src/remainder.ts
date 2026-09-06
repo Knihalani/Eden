@@ -1,16 +1,3 @@
-/**
- * Hook-path remainder store (S1b).
- *
- * Mirrors wrap skipRest: rest counts on sequence[1..], matched-calls budget,
- * partial-input match, fail-open at cap, no live eviction. File-backed under
- * ~/.eden so one-shot `eden hook` and hookd share state across Post then Pre.
- *
- * Does not edit packages/wrap/src/arming.ts. Imports the wrap contract so the
- * numbers and rest map are the same typed helpers, not a second invented map.
- * Path identity: relative `file_path`/`path` join against hook `cwd` via
- * `path.resolve`. Wrap `hintIdOf` still ignores paths; remainder-local hint
- * includes the resolved path.
- */
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import {
