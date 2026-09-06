@@ -142,10 +142,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     const last = opts.state.run.events.at(-1);
     turnBoundary(opts.state, { lastTool: last?.name, lastArgs: last?.args, input: last?.args });
   }, undefined);
-  // A tripped kill switch must never take the user's traffic down with it
-  // (prime directive: Eden never blocks the agent). It only loses its privilege
-  // to steer: requests pass straight through, untouched, while the condition
-  // stays visible on the dashboard.
   const steerable =
     !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   const wantsStream = Boolean(body.stream);
