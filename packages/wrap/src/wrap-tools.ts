@@ -1022,8 +1022,6 @@ export function wrapTools<T extends ToolsIn>(
               armed.closed = true;
               armed.resolveSettled(true);
             } catch { /* deferred already gone */ }
-            // Flush after the steered tail is absorbed so skipped names land
-            // on this stretch instead of leaking into the next ticket.
             if (!armed.rest.size) emit(hit.input, owner);
             return value;
           } catch (err) {
