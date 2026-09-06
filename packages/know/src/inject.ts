@@ -9,10 +9,9 @@ type KnowSearch = {
 export const KNOW_INJECT_MARK = "Eden Know:";
 
 export function usefulInjectFact(fact: string): boolean {
-  const f = fact.trim();
-  if (!f) return false;
-  if (/ is used for /i.test(f)) return true;
-  return /\bRFC\s+\d{1,5}\s+(?:obsoletes|updates|is obsoleted by|is updated by)\s+RFC\s+\d/i.test(f);
+  if (!fact) return false;
+  if (/ is used for /i.test(fact)) return true;
+  return /\bRFC\s+\d{1,5}\s+(?:obsoletes|updates|is obsoleted by|is updated by)\s+RFC\s+\d/i.test(fact);
 }
 
 export function injectWorthQuery(q: string): boolean {
