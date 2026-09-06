@@ -601,9 +601,6 @@ function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, e
 
 function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
   if (run.warnings.length >= MAX_WARNINGS) return;
-  // Idle / first-call: no live programs and fewer than two events cannot
-  // produce a signal (fail streak and n-grams need 2). Still stamp
-  // firstWarningAt so a failed first call is visible to killAfterWarning.
   if (run.events.length < 2 && state.programs.length === 0) {
     if (run.firstWarningAt == null) {
       const at = firstWarningIndex(run.events, run.warnings);
