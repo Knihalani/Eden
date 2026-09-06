@@ -63,7 +63,6 @@ export type Armed = {
    * Mutating programs never set this. scanFleet requires `true`.
    */
   readOnly?: boolean;
-  /** Fleet key this arming may be claimed under. Absent/empty = session only. */
   fleetId?: string;
   /** sequence[0] — not in `rest`. Fleet head-skip uses this. */
   head?: string;
