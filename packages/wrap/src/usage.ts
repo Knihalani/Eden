@@ -15,7 +15,6 @@ export type ChatUsage = {
   cached_tokens?: number;
   /** Provider cache-write tokens. Stamped from the usage object; 0 is measured. */
   cache_write_tokens?: number;
-  /** Hit-% denominator stamped at parse time. Not billed prompt. */
   cache_input_tokens?: number;
 };
 
