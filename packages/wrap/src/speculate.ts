@@ -16,7 +16,6 @@ import { extractInput } from "./steer";
 import type { WrapState } from "./wrap-tools";
 
 export type SpeculateHint = {
-  /** Next-stretch input, when the caller already knows it (fixture). */
   input?: Record<string, unknown>;
   /** Prefer this live program (object, id, or name). */
   program?: StretchProgram | string;
