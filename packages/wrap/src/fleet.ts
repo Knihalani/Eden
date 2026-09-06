@@ -23,10 +23,6 @@ export function wrapRegion(explicit?: string): string {
   return typeof env === "string" && env.length > 0 ? env : "";
 }
 
-/**
- * Read-only iff every sequence name is a read and none is a mutation.
- * Empty sequence is not shareable.
- */
 export function isProgramReadOnly(program: StretchProgram): boolean {
   const seq = program.sequence ?? [];
   if (!seq.length) return false;
