@@ -50,11 +50,7 @@ function briefing(mem: AgentMemory): string {
 
 function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
   const cwd = asRec(raw).cwd;
-  return openMemory({
-    dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
-    agent: process.env.EDEN_MEMORY_AGENT || undefined,
-    project: typeof cwd === "string" && cwd ? cwd : process.env.EDEN_MEMORY_PROJECT || undefined,
-  });
+  return openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), agent: process.env.EDEN_MEMORY_AGENT || undefined, project: typeof cwd === "string" && cwd ? cwd : process.env.EDEN_MEMORY_PROJECT || undefined });
 }
 
 function additional(event: string, text: string): Record<string, unknown> | null {
