@@ -97,6 +97,13 @@ function load(path: string): Compiled[] {
   return out;
 }
 
+function subjectKey(text: string): string | null {
+  const m = text.trim().match(/^(.{4,80}?)\s+(?:is|are|was|were)\s+\S/i);
+  if (!m) return null;
+  const k = m[1].toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return k.length >= 4 ? k : null;
+}
+
 export class AgentMemory {
   readonly dir: string;
   private know?: KnowSearch;
@@ -154,6 +161,8 @@ export class AgentMemory {
     const out: MemoryRecord[] = [];
     for (const text of extractDurable(blob)) {
       if (this.compiled.some((c) => (!this.project || c.rec.project === this.project) && c.rec.text.toLowerCase() === text.toLowerCase())) continue;
+      const key = subjectKey(text);
+      if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
       const tags = tokList(text);
       if (/\bpull requests?\b/i.test(text)) tags.push("pr");
       if (/\btimezone|pacific|utc\b/i.test(text)) tags.push("tz");
@@ -172,7 +181,7 @@ export class AgentMemory {
   relevant(text: string, cap = 6): MemoryRecord[] {
     const hay = new Set(tokList(text));
     const hit = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project) && c.needles.some((n) => hay.has(n))).map((c) => c.rec);
-    hit.sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint"));
+    hit.sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at);
     return hit.slice(0, cap);
   }
 
