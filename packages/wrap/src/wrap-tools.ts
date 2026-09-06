@@ -999,11 +999,6 @@ export function wrapTools<T extends ToolsIn>(
               }
             }
           } else if (!sessionArmed) {
-          // Armed *before* the await, not after. Real hosts issue a turn's tool
-          // calls in parallel, and while the compiled program was running the
-          // map was still empty — so a sibling call naming a later step of the
-          // same stretch sailed past the skip check and executed for real,
-          // duplicating whatever the compiled leg was in the middle of doing.
           if (run.events.length) emit(run.events[0]?.args, owner);
           const pair = safely(() => armTail(hit.p, hit.input), null);
           if (!pair) {
