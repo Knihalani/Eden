@@ -280,7 +280,6 @@ export function wrapPlaneUrl(raw?: string | null): string {
   return /127\.0\.0\.1:8787|localhost:8787/.test(u) ? u.replace(":8787", ":8788") : u;
 }
 
-/** Env beats config so a demo sitting on PORT is reachable: EDEN_WRAP_URL=http://127.0.0.1:8799 */
 export function wrapBase(cfg?: { base_url?: string } | null): string {
   return wrapPlaneUrl(process.env.EDEN_WRAP_URL || process.env.EDEN_BASE_URL || cfg?.base_url);
 }
