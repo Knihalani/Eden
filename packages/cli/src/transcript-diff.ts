@@ -127,12 +127,6 @@ export function applyOpenCodeHostOutput(
   return applied;
 }
 
-/**
- * Codex `post_tool` command stdout is Claude-like PostToolUse JSON
- * (`postToolUseReplacement`). Object originals follow R1. String originals
- * (Codex `tool_response` is a string) land the rewrite's model-visible text.
- * Glob has no text field — additionalContext degrade, drop classed.
- */
 export function applyCodexAfter(
   tool: string,
   original: unknown,

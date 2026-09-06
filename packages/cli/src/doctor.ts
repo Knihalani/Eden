@@ -50,7 +50,6 @@ const SURFACE_JIT = "EDEN_SURFACE jit · default after soak PASS precision=1.000
 const SURFACE_ALL = "EDEN_SURFACE all · opt-out · default jit after soak PASS precision=1.000 n=38";
 export const PROBE_MS = 800;
 
-/** Fetch + JSON with a hard deadline. AbortSignal alone can miss a hanging body. */
 export async function probeJson(
   url: string,
   fetchFn: typeof fetch = fetch,
