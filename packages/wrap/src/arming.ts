@@ -64,7 +64,6 @@ export type Armed = {
   head?: string;
   /** Names the compiled run served. Fleet agents skip these even after rest is 0. */
   served?: Set<string>;
-  /** Agents that have joined this serving. Size ≥2 → `shared across N agents`. */
   agentIds?: Set<string>;
 };
 
