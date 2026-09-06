@@ -249,7 +249,6 @@ export function applyFlushTruncate(path: string, flushedIds: string[]): void {
   setCursorLines(path, rest.length);
 }
 
-/** Sidecar `<session>.jsonl.cursor.json` so PostToolUse does not re-parse the whole log. */
 function cursorPathFor(path: string): string {
   return `${path}.cursor.json`;
 }
@@ -273,7 +272,6 @@ function countSessionLines(path: string): number {
   return readFileSync(path, "utf8").split("\n").filter(Boolean).length;
 }
 
-/** Count one append under `${path}.lock`. Rebuild a missing cursor from the log, never restart at zero. */
 export function recordAppendedEvent(path: string, append: () => void): number {
   const prev = readCursorLines(path);
   const lines = (prev ?? countSessionLines(path)) + 1;

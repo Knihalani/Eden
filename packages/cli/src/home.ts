@@ -165,9 +165,6 @@ function inodeAt(lockPath: string): number | null {
   }
 }
 
-/**
- * Advisory lock around a small file mutation.
- */
 export function withFileLock<T>(lockPath: string, fn: () => T): T {
   mkdirSync(dirname(lockPath), { recursive: true });
   const t0 = Date.now();
@@ -201,7 +198,6 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
   throw new Error(`could not acquire lock ${lockPath}`);
 }
 
-/** Async twin of {@link withFileLock} for long-lived processes. */
 export async function withFileLockAsync<T>(lockPath: string, fn: () => T | Promise<T>): Promise<T> {
   mkdirSync(dirname(lockPath), { recursive: true });
   const t0 = Date.now();
