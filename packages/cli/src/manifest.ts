@@ -27,14 +27,11 @@ export type ManifestTool = {
   read_only?: boolean;
   envelope?: unknown;
   transparent_writes?: boolean;
-  /** Missing = already-live 100%. Drain must not drop canary. */
   rollout?: "canary" | "live";
 };
 
-/** Parent directory + Agent Skills `name` — they must match. */
 export const SKILL_NAME = "eden-routines";
 
-/** First line of the local marketplace draft. Not a publish. */
 export const LISTING_WITHHELD_BANNER = CLAIMS_LISTING_BANNER;
 
 const DESC_MAX = 1024;

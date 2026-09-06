@@ -1,7 +1,3 @@
-/**
- * Kill-switch inventory (Wave 20.3). A production EDEN_* without a §15 row
- * or an explicit path/test allowlist is a review blocker.
- */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -15,7 +11,6 @@ const SKIP_DIR = new Set([
   "coverage",
 ]);
 
-/** Path, identity, clocks, and test harness — not behavioral kill-switches. */
 export const PATH_ALLOWLIST = new Set([
   "EDEN_AGENT",
   "EDEN_API_KEY",
