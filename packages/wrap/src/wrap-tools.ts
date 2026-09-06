@@ -105,7 +105,6 @@ export type WrapState = {
    */
   dirtyEntities: Set<string>;
   dirtyAt: Map<string, number>;
-  /** JIT injection-rate bookkeeping for this wrap (one episode). */
   jit: JitGuard;
 };
 
