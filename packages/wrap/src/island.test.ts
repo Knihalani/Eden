@@ -12,7 +12,6 @@ import {
   withWitnessMemo,
 } from "./island";
 
-/** Fake OpenAI fetch. Latency is optional; default 0 — tests assert memoization, not wall time. */
 function fakeFetch(calls: { n: number }, latencyMs = 0): typeof fetch {
   const fn = async (_url: unknown, init: RequestInit) => {
     calls.n++;
@@ -27,7 +26,6 @@ function fakeFetch(calls: { n: number }, latencyMs = 0): typeof fetch {
   return fn as typeof fetch;
 }
 
-/** Immediate fake: `/messages/batches` returns ended results; `/chat/completions` is the sync fallback. */
 function fakeProvider(calls: { chat: number; batch: number }, opts: { batchStatus?: number } = {}): typeof fetch {
   const fn = async (url: unknown, init?: RequestInit) => {
     const u = String(url);
