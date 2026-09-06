@@ -36,9 +36,9 @@ export function notesFromInject(injected: unknown[]): string {
   return injected.map((m) => asRec(m)).filter((o) => o.role === "system" && typeof o.content === "string" && (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:"))).map((o) => String(o.content)).join("\n\n");
 }
 
-function briefing(mem: AgentMemory): string {
+function briefing(mem: AgentMemory, q = ""): string {
   const recs = mem.memories();
-  const pick = [...recs.filter((r) => r.kind === "constraint").slice(-6), ...recs.filter((r) => r.kind !== "constraint").slice(-6)];
+  const pick = [...recs.filter((r) => r.kind === "constraint").slice(-6), ...(q ? mem.relevant(q, 6).filter((r) => r.kind !== "constraint") : recs.filter((r) => r.kind !== "constraint").slice(-6))];
   return pick.length ? MEMORY_MARK + pick.map((m) => `\n- ${m.text}`).join("") : "";
 }
 
@@ -62,7 +62,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     if (stop || event === "SessionStart") {
       const extra = String(r.prompt ?? r.text ?? r.prompt_response ?? r.user_message ?? "");
       mem.observe(prior.length ? prior : extra ? [{ role: "user", content: extra }] : []);
-      return stop ? null : additional(event, briefing(mem));
+      return stop ? null : additional(event, briefing(mem, extra));
     }
     const prompt = String(r.prompt ?? r.text ?? r.user_message ?? "");
     const list = prompt ? [...prior, { role: "user", content: prompt }] : prior.length ? prior : [{ role: "user", content: "continue" }];

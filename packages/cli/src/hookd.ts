@@ -99,29 +99,6 @@ export function hookdTimeoutMs(): number {
   return Number.isFinite(n) ? Math.min(60_000, Math.max(500, n)) : 8000;
 }
 
-/**
- * Refuses requests a browser could have made on the user's behalf.
- *
- * hookd listens on loopback with no credential, which is fine for the CLI but
- * not for the web: a POST with `content-type: text/plain` is a CORS *simple*
- * request, so any page the user visits can drive this endpoint with no
- * preflight and no consent. Bun's req.json() parses regardless of content type,
- * so the wrong content type was not a barrier either.
- *
- * The hook is a local, machine-to-machine caller, so it never carries Origin.
- * A browser always does, and Sec-Fetch-Mode marks the request as cross-site.
- * Rejecting on either closes the ordinary drive-by path without needing a
- * shared secret the hook command would have to carry.
- *
- * Neither of those signals survives DNS rebinding, though, because both are
- * relative to an origin the attacker now controls the name of. A page on
- * http://evil.test:8794 whose hostname re-resolves to 127.0.0.1 is, as far as
- * the browser is concerned, talking to itself: it sends no Origin and
- * `Sec-Fetch-Site: same-origin`, and both checks above pass. The one header
- * that still tells the truth is Host, which carries the name the client
- * *asked* for rather than the address it reached — and a genuine local caller
- * asks for 127.0.0.1 or localhost.
- */
 function looksBrowserDriven(req: Request): boolean {
   if (req.headers.get("origin")) return true;
   const site = req.headers.get("sec-fetch-site");
