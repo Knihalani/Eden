@@ -10,7 +10,6 @@ import type { StretchProgram } from "@eden/ir";
 
 export const ARM_TTL_MS = 60_000;
 export const ARM_SLACK_CALLS = 32;
-/** Per-session capacity. Bursts past this fail open (A3). */
 export const ARM_MAX_PER_SESSION = 64;
 export const ARM_MAX_GLOBAL = 4_096;
 export const ARM_MAX_ENTRIES = ARM_MAX_PER_SESSION;
