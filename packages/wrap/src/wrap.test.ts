@@ -162,8 +162,6 @@ describe("steer + inject", () => {
     });
 
     test("a different repo never matches", () => {
-      // Same numeric shape of path, different repository segment: exact
-      // signature equality fails and the call passes through untouched.
       const p = shapeProgram("https://api.github.com/repos/acme/widgets/pulls/7");
       const out = steerToolCalls(
         [
