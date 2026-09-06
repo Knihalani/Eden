@@ -116,7 +116,7 @@ export class AgentMemory {
 
   forget(id: string): boolean {
     const n = this.compiled.length;
-    this.compiled = this.compiled.filter((c) => c.rec.id !== id && c.rec.text !== id);
+    this.compiled = this.compiled.filter((c) => c.rec.id !== id && c.rec.text !== id && c.rec.text.toLowerCase() !== id.toLowerCase() && subjectKey(c.rec.text) !== id.toLowerCase());
     return this.compiled.length !== n && (this.persist(), true);
   }
 
