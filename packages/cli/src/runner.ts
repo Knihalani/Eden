@@ -56,7 +56,6 @@ export async function runner(args: string[]): Promise<void> {
               allOk = false;
             }
           }
-          // Post receipt back to control plane.
           await fetch(`${base}/v1/runner/receipt`, {
             method: "POST",
             headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
@@ -66,7 +65,6 @@ export async function runner(args: string[]): Promise<void> {
         }
       }
     } catch {
-      // Network error: silently retry on next poll.
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }

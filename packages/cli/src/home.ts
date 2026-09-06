@@ -58,7 +58,6 @@ function sweepRunsHome(h: string): void {
           rmQuietly(join(runsDir, `${base}.cursor`));
         }
       } else {
-        // Sidecar without its log: pure garbage.
         if (!existsSync(join(runsDir, `${base}.jsonl`))) rmQuietly(p);
       }
     }
@@ -153,11 +152,6 @@ export function writeConfig(c: Config): void {
   ensureHome();
   const p = configPath();
   writeFileSync(p, JSON.stringify(c, null, 2), { mode: 0o600 });
-  // `mode` on writeFileSync applies only when the file is *created*. Rewriting
-  // an existing config left whatever mode it already had, so a config.json
-  // that had once been written without the flag — or created by an editor,
-  // or restored from a backup — kept its 0644 and the API key stayed
-  // world-readable however many times setup ran.
   chmodQuietly(p, 0o600);
 }
 
