@@ -347,11 +347,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
 
 describe("wrap follows a program that has been rebuilt or pulled back", () => {
   test("a new build of the same id replaces the cached compiled tool", async () => {
-    // compiledDef closes over the program it was built from, and the cache was
-    // keyed by id alone — so the first build of an id was pinned for the life
-    // of the process. After pullLive swapped in a corrected (or rolled back)
-    // build, this process kept running the old steps, which is precisely what a
-    // server-side rollback exists to stop.
     const c = counted(["lookupTicket", "repair"]);
     const state = createState({
       programs: [program(["lookupTicket"], [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }], "flow")],
