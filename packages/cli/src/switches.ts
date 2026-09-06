@@ -106,9 +106,7 @@ export function productionEdenNames(root: string): string[] {
     const p = join(root, top);
     try {
       walk(p, files);
-    } catch {
-      /* missing workspace */
-    }
+    } catch {}
   }
   const names = new Set<string>();
   for (const f of files) {

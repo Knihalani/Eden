@@ -291,9 +291,7 @@ function readSettings(path: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-  } catch {
-    /* fall through to the backup path */
-  }
+  } catch {}
   const backup = `${path}.eden-backup-${Date.now()}`;
   writeFileAtomic(backup, raw);
   console.warn(`eden setup: ${path} was not valid JSON. Kept a copy at ${backup} and started a fresh one.`);
@@ -373,9 +371,7 @@ export async function setup(args: string[]): Promise<void> {
       const g = readSettings(gPath);
       writeFileAtomic(gPath, JSON.stringify(geminiHookConfig(g, preCmd, hookCmd), null, 2));
       agents.push(`gemini → ${gPath}`);
-    } catch {
-      /* a failed side install never fails setup */
-    }
+    } catch {}
   }
   const codexHome = join(homedir(), ".codex");
   if (allAgents || existsSync(codexHome)) {
@@ -385,9 +381,7 @@ export async function setup(args: string[]): Promise<void> {
       const existingToml = existsSync(cPath) ? readFileSync(cPath, "utf8") : "";
       writeFileAtomic(cPath, applyCodexToml(existingToml, hookCmd, preCmd));
       agents.push(`codex → ${cPath}`);
-    } catch {
-      /* best-effort */
-    }
+    } catch {}
   }
   const ocDir = join(homedir(), ".config", "opencode", "plugin");
   if (allAgents || existsSync(join(homedir(), ".config", "opencode"))) {
@@ -396,9 +390,7 @@ export async function setup(args: string[]): Promise<void> {
       const oPath = join(ocDir, "eden-recorder.js");
       writeFileAtomic(oPath, opencodePluginSource(cliPath));
       agents.push(`opencode → ${oPath}`);
-    } catch {
-      /* best-effort */
-    }
+    } catch {}
   }
 
   console.log("Eden setup complete.");
