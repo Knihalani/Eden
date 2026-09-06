@@ -178,7 +178,6 @@ describe("anthropic handler", () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { content: Array<{ type: string; name?: string }> };
     const tools = json.content.filter((b) => b.type === "tool_use");
-    // Unsteered: the model's original tool choices go to the client untouched.
     expect(tools.map((t) => t.name)).toEqual(["search", "write"]);
   });
 
