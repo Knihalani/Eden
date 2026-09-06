@@ -233,9 +233,7 @@ function releaseLock(lockPath: string, ino: number | null): void {
   try {
     if (ino !== null && inodeAt(lockPath) !== ino) return;
     unlinkSync(lockPath);
-  } catch {
-    /* already gone */
-  }
+  } catch {}
 }
 
 function sleepBriefly(): void {
@@ -243,9 +241,7 @@ function sleepBriefly(): void {
     Bun.sleepSync(8);
   } catch {
     const end = Date.now() + 8;
-    while (Date.now() < end) {
-      /* wait for lock */
-    }
+    while (Date.now() < end) {}
   }
 }
 
