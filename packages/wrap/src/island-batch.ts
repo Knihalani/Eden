@@ -17,7 +17,6 @@ export type IslandBatchOpts = {
   baseURL?: string;
   apiKey?: string;
   model?: string;
-  /** Coalesce window in ms. 0 / absent = next microtask (tests, live waves). */
   coalesceMs?: number;
 };
 
