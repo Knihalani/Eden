@@ -26,7 +26,6 @@ export function armMaxGlobal(explicit?: number): number {
   return Math.min(1_000_000, Math.max(1, Math.floor(raw)));
 }
 
-/** Empty string is the single-tenant default bucket. */
 export function wrapSessionId(explicit?: string): string {
   if (typeof explicit === "string" && explicit.length > 0) return explicit;
   const env = process.env.EDEN_SESSION;
@@ -74,7 +73,6 @@ export type Armed = {
   agentIds?: Set<string>;
 };
 
-/** Cross-session hit for read-only fleet claims. */
 export type FleetHit = { session: string; key: string; armed: Armed };
 
 export type ArmingStats = {
