@@ -62,14 +62,14 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const event = EVENT_ALIASES[String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "")] ?? String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory(r);
-    const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...(Array.isArray(r.messages) ? (r.messages as unknown[]) : []).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content); return (o.role === "user" || o.role === "assistant") && c ? [{ role: String(o.role), content: c }] : []; })].slice(-40);
+    const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content); return (o.role === "user" || o.role === "assistant") && c ? [{ role: String(o.role), content: c }] : []; })].slice(-40);
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
-      const extra = [r.prompt, r.text, r.user_message, r.prompt_response, r.response, r.output, r.completion].filter((x) => typeof x === "string" && x).join("\n");
+      const extra = [r.prompt, r.text, r.user_message, r.prompt_response, r.response, r.output, r.completion, r.last_user_message, r.user_text, r.assistant_message].filter((x) => typeof x === "string" && x).join("\n");
       mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior);
       return stop ? null : additional(event, briefing(mem, extra));
     }
-    const prompt = String(r.prompt ?? r.text ?? r.user_message ?? r.response ?? "");
+    const prompt = String(r.prompt ?? r.text ?? r.user_message ?? r.response ?? r.last_user_message ?? r.user_text ?? "");
     const list = prompt ? [...prior, { role: "user", content: prompt }] : prior.length ? prior : [{ role: "user", content: "continue" }];
     return additional(event, notesFromInject(mem.inject(list)));
   } catch {
