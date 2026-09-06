@@ -1,15 +1,3 @@
-/**
- * LONG-RUNNING SOAK BENCHMARKS.
- *
- * Run: EDEN_STRESS=1 bun packages/wrap/src/stress/soak.ts
- *
- * Five independent measurements, each reported honestly including failures:
- *   1. Sustained throughput — 30s of continuous mixed wrapped calls
- *   2. Memory soak — 10k payload-bearing calls, RSS drift
- *   3. Compile scaling — witness count vs compile time (10..500)
- *   4. Steering accuracy — correct/false/miss rates across randomized programs
- *   5. Multi-session isolation — interleaved agents sharing one process
- */
 import { createState, wrapTools } from "../index";
 import { compileTraces } from "../../../compile/src/index";
 import type { StretchTrace } from "@eden/ir";
