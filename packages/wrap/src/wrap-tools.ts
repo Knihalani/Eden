@@ -93,7 +93,6 @@ export type WrapState = {
   droppedPosts: number;
   /** Session-partitioned suppression store. Shared when `opts.arming` is set. */
   arming: ArmingStore;
-  /** Hosted-dispatch session key. Empty string is the single-tenant bucket. */
   sessionId: string;
   /** Fleet key for read-only cross-agent claims. Empty = no sharing. */
   fleetId: string;
