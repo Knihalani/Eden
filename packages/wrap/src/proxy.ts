@@ -279,22 +279,6 @@ function safely<T>(fn: () => T, fallback: T): T {
   }
 }
 
-/**
- * Re-frame a completed, non-streaming response as the SSE a streaming client
- * expects.
- *
- * When the client asks for a stream *and* sends tools, the request is forced
- * non-streaming upstream so the tool calls can be steered before the client
- * sees them. What came back was the `chat.completion` object wrapped in one
- * `data:` line — but a streaming client reads `choices[].delta`, not
- * `choices[].message`, so `delta` was undefined and content and tool calls
- * both arrived empty. Any OpenAI-SDK client doing `stream: true` with a tool
- * list got nothing at all.
- *
- * The shape below is what a real stream ends with: one chunk carrying the
- * content and tool calls as a delta, one carrying the finish reason, then
- * [DONE].
- */
 function asStreamChunks(json: Record<string, unknown>): string {
   const j = json as {
     id?: string;
