@@ -3,7 +3,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { alreadyInjected, injectFromRequest, injectNote } from "../packages/know/src/inject";
 import { knowQuery } from "../packages/know/src/query";
-import { messageText } from "../packages/wrap/src/intent";
 
 export const MEMORY_MARK = "Eden Memory:";
 
@@ -20,6 +19,28 @@ const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this"
 
 function tokList(s: string): string[] {
   return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
+}
+
+function convBlob(list: unknown[]): string {
+  const parts: string[] = [];
+  for (const m of list) {
+    if (!m || typeof m !== "object") continue;
+    const o = m as Record<string, unknown>;
+    const c = o.content;
+    if (typeof c === "string") {
+      if (c) parts.push(c);
+    } else if (Array.isArray(c)) {
+      for (const b of c) {
+        if (b && typeof b === "object" && typeof (b as { text?: string }).text === "string") {
+          const t = (b as { text: string }).text;
+          if (t) parts.push(t);
+        }
+      }
+    }
+    const r = o.reasoning_content ?? o.thinking ?? o.reasoning;
+    if (typeof r === "string" && r) parts.push(r);
+  }
+  return parts.join("\n");
 }
 
 function compile(rec: MemoryRecord): Compiled {
@@ -128,8 +149,7 @@ export class AgentMemory {
   inject(messages: unknown[]): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
-      const one = list.length === 1 && list[0] && typeof list[0] === "object" ? (list[0] as { content?: unknown }) : undefined;
-      const blob = typeof one?.content === "string" && !("reasoning_content" in (one as object)) ? one.content : messageText(list);
+      const blob = convBlob(list);
       let notes = this.cache.get(blob);
       if (!notes) {
         if (alreadyInjected(blob) || blob.includes(MEMORY_MARK)) {

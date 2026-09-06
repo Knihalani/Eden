@@ -17,29 +17,6 @@ export function surfaceMode(): SurfaceMode {
   return "all";
 }
 
-/**
- * Deterministic intent scoring. No embeddings, no model call: the same
- * structural vocabulary reactive steering matches on is what a conversation
- * exhibits before the agent writes its loop.
- *
- * Evidence tiers (a program's score is its best evidence plus capped token
- * overlap):
- *   +4  shape hit      a URL or CLI shape extracted from recent messages equals
- *                      one of the program's first-step witness shapes.
- *   +3  template fit   the program's shell command template structurally fits
- *                      a command-looking string in the messages (same binary,
- *                      same arity, same flags — slot positions may differ).
- *   +3  envelope hit   a dense token in the messages equals a dense string in
- *                      that program's envelope.inputs (account id, UUID, email,
- *                      ARN, Stripe id, S3 URI, GID). Exact membership only.
- *   +1  token overlap  distinct informative words shared between the program's
- *                      name/sequence and the message text, capped at +2 total.
- *
- * MIN_SCORE = 3 means token overlap alone can NEVER surface anything: a
- * mention of the word "ticket" is not evidence. Envelope hits require the
- * exact id to have been witnessed on that program — `N-0` and `ticket 123`
- * stay silent unless those values are in the envelope.
- */
 const SCORE_SHAPE = 4;
 const SCORE_TEMPLATE = 3;
 const SCORE_WITNESS = 3;
