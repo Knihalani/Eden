@@ -6,12 +6,6 @@ import { codingRegistry } from "./coding";
 
 const CWD = mkdtempSync(join(tmpdir(), "eden-jail-"));
 
-/**
- * bashJail is the security boundary between an LLM-supplied command and the
- * filesystem. Each case here is a real escape shape: a path glued to a
- * redirect operator, a `~user` expansion, and a `cd` hidden behind `then` or
- * inside a subshell.
- */
 describe("bash jail", () => {
   const registry = codingRegistry(CWD);
 
