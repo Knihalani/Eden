@@ -17,7 +17,6 @@ export function wrapIsland(opts: { apiKey?: string; upstream?: string; fetch?: t
   if (!key) return undefined;
   const baseURL = islandUpstreamUrl(opts.upstream);
   const sync = openaiIsland({ apiKey: key, baseURL, fetch: opts.fetch });
-  // Memo first (hits and pinned never reach the transport), then batch, then sync.
   return withWitnessMemo(withIslandBatch(sync, { apiKey: key, baseURL, fetch: opts.fetch }));
 }
 
