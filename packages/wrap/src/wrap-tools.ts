@@ -945,9 +945,6 @@ export function wrapTools<T extends ToolsIn>(
         const live = state.programs.length === 0 ? NO_LIVE : liveOf(state);
         const owner = { id: selfId, startedAt, invocations };
 
-        // Everything between here and the raw execute is Eden's own
-        // bookkeeping, each piece wrapped so its failure degrades to
-        // "no opinion" rather than a failed call (see safely()).
         const prefixHits = live.length
           ? safely(
               () =>
