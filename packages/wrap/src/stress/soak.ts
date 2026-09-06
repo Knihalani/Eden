@@ -196,7 +196,6 @@ async function steeringAccuracy(): Promise<void> {
       miss++; // structured deopt / refusal: safe, but not a steer
     }
 
-    // Out-of-envelope call on a fresh state: must NOT interfere at all.
     const state2 = createState({ programs: [manifestProg] });
     const ran2: Record<string, number> = { lookup: 0, enrich: 0, respond: 0 };
     const mk2 = (name: string, val: unknown) => async (a: Record<string, unknown>) => {
