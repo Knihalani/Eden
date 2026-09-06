@@ -73,13 +73,10 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory(asRec(raw));
     const prior = messagesFromTranscript(asRec(raw).transcript_path);
-    if (event === "Stop" || event === "SessionEnd") {
+    const stop = event === "Stop" || event === "SessionEnd";
+    if (stop || event === "SessionStart") {
       if (prior.length) mem.observe(prior);
-      return null;
-    }
-    if (event === "SessionStart") {
-      if (prior.length) mem.observe(prior);
-      return additional(event, briefing(mem));
+      return stop ? null : additional(event, briefing(mem));
     }
     const prompt = String(asRec(raw).prompt ?? "");
     const list = prompt ? [...prior, { role: "user", content: prompt }] : prior.length ? prior : [{ role: "user", content: "continue" }];
