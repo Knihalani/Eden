@@ -936,8 +936,7 @@ function cleanTask(raw: string): string | undefined {
 
 export function techniqueTaskFromText(text: string): string | undefined {
   if (text.length < 12 || !TASK_OBJ_HIT.test(text)) return undefined;
-  const t = text.replace(/\s+/g, " ").trim();
-  const m = TECHNIQUE_CUE.exec(t) || INTENT_CUE.exec(t);
+  const m = TECHNIQUE_CUE.exec(text) || INTENT_CUE.exec(text);
   if (!m) return undefined;
   return cleanTask(m[1]!);
 }
