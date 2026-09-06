@@ -11,22 +11,6 @@ import {
   sentinelInTextField,
 } from "./shapes";
 
-/**
- * Transparent execution — surfacing without a surface.
- *
- * When a recorded tool call matches a live read-only program's first step,
- * Eden executes the program and merges the remainder into the native result
- * shape (plus `additionalContext` so R3 still delivers if the host drops the
- * rewrite). Unknown tools degrade to a string + additionalContext duplicate.
- *
- * Failsafe rules:
- *   - read-only programs only unless Write dual-gate is on
- *   - unknown eligibility ⇒ ineligible (fail closed)
- *   - every failure path returns null → the hook answers normally
- *   - kill switch: `transparent_exec: false` or EDEN_TRANSPARENT=0
- *   - writes: EDEN_TRANSPARENT_WRITES=1 AND `transparent_writes: true` on the tool
- */
-
 export type LiveTool = {
   name?: string;
   sequence?: string[];
