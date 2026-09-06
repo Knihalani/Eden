@@ -94,7 +94,6 @@ export function remainingBudgetForRun(args: {
   });
 }
 
-/** Unique-work: this stretch matches no live program (or live is empty). */
 export function isUniqueWork(
   live: StretchProgram[],
   events: { name: string; skipped?: boolean }[],
