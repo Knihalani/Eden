@@ -182,27 +182,17 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
   const server = Bun.serve({
     port: opts.port ?? 8787,
     async fetch(req) {
-      const u = new URL(req.url);
       try {
-        if (req.method === "POST" && u.pathname === "/remember") {
-          const b = (await req.json()) as { text?: string; kind?: string; tags?: string[]; id?: string };
-          return Response.json(memory.remember(String(b.text || ""), b));
+        const p = new URL(req.url).pathname;
+        if (req.method === "POST") {
+          const b = (await req.json()) as { text?: string; kind?: string; tags?: string[]; id?: string; messages?: unknown[] };
+          if (p === "/remember") return Response.json(memory.remember(String(b.text || ""), b));
+          if (p === "/forget") return Response.json({ ok: memory.forget(String(b.id || "")) });
+          if (p === "/inject") return Response.json({ messages: memory.inject(b.messages || []) });
         }
-        if (req.method === "POST" && u.pathname === "/forget") {
-          const b = (await req.json()) as { id?: string };
-          return Response.json({ ok: memory.forget(String(b.id || "")) });
-        }
-        if (req.method === "POST" && u.pathname === "/inject") {
-          const b = (await req.json()) as { messages?: unknown[] };
-          return Response.json({ messages: memory.inject(b.messages || []) });
-        }
-        if (req.method === "GET" && u.pathname === "/query") {
-          return Response.json(memory.query(u.searchParams.get("q") || ""));
-        }
-        if (req.method === "GET" && u.pathname === "/memories") {
-          return Response.json(memory.memories());
-        }
-        return new Response("eden memory\n", { status: 200 });
+        if (req.method === "GET" && p === "/query") return Response.json(memory.query(new URL(req.url).searchParams.get("q") || ""));
+        if (req.method === "GET" && p === "/memories") return Response.json(memory.memories());
+        return new Response("eden memory\n");
       } catch (e) {
         return Response.json({ error: String(e) }, { status: 400 });
       }
