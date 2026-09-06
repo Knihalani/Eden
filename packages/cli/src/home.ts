@@ -131,9 +131,7 @@ function readLockStamp(lockPath: string): LockStamp | null {
     if (typeof s?.pid === "number" && typeof s?.host === "string") {
       return { pid: s.pid, host: s.host, ts: Number(s.ts) || 0 };
     }
-  } catch {
-    /* absent, empty, half-written, or a pre-stamp lock: fall back to age */
-  }
+  } catch {}
   return null;
 }
 
@@ -172,14 +170,10 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
     let ino: number | null = null;
     try {
       ino = fstatSync(fd).ino;
-    } catch {
-      /* no provable identity; release falls back to an unconditional unlink */
-    }
+    } catch {}
     try {
       writeSync(fd, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() } satisfies LockStamp));
-    } catch {
-      /* unstamped: contenders fall back to the age horizon */
-    }
+    } catch {}
     try {
       return fn();
     } finally {
@@ -205,14 +199,10 @@ export async function withFileLockAsync<T>(lockPath: string, fn: () => T | Promi
     let ino: number | null = null;
     try {
       ino = fstatSync(fd).ino;
-    } catch {
-      /* no provable identity; release falls back to an unconditional unlink */
-    }
+    } catch {}
     try {
       writeSync(fd, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() } satisfies LockStamp));
-    } catch {
-      /* unstamped: contenders fall back to the age horizon */
-    }
+    } catch {}
     try {
       return await fn();
     } finally {
