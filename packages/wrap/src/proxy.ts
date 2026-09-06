@@ -161,7 +161,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
         const facts = await opts.play(hit.name, argsFromMessages(hit, body.messages));
         if (facts !== undefined && facts !== null) return compiledAnswer(facts);
       } catch {
-        /* fail-open: no model key, play fault → same letter */
       }
     }
     return noModelKey();
