@@ -200,21 +200,25 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
   const server = Bun.serve({
     port: Number(opts.port ?? process.env.EDEN_MEMORY_PORT) || 8787,
     async fetch(req) {
+      const origin = req.headers.get("origin") || "";
+      const cors = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ? { "access-control-allow-origin": origin, vary: "origin" } : {};
+      const json = (body: unknown, status = 200) => Response.json(body, { status, headers: cors });
       try {
+        if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET,POST,DELETE,OPTIONS", "access-control-allow-headers": "content-type" } });
         const u = new URL(req.url);
         const p = u.pathname;
-        if (req.method === "DELETE") return Response.json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
+        if (req.method === "DELETE") return json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
         if (req.method === "POST") {
           const b = (await req.json()) as { text?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; q?: string; k?: number };
           const run = ({ "/observe": () => memory.observe(b.messages || b.conversation || []), "/remember": () => memory.remember(String(b.text || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || b.conversation || []) }), "/query": () => memory.query(String(b.q || ""), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
-          if (run) return Response.json(run());
+          if (run) return json(run());
         } else {
           const run = ({ "/health": () => ({ ok: true, n: memory.memories().length }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6) : memory.memories().slice().sort((a, b) => b.at - a.at)) } as Record<string, () => unknown>)[p];
-          if (run) return Response.json(run());
+          if (run) return json(run());
         }
-        return new Response("eden memory\n");
+        return new Response("eden memory\n", { headers: cors });
       } catch (e) {
-        return Response.json({ error: String(e) }, { status: 400 });
+        return json({ error: String(e) }, 400);
       }
     },
   });
