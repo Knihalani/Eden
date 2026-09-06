@@ -2,10 +2,6 @@ import type { IslandCaller } from "@eden/ir";
 import { IslandReply, type IslandUsage } from "@eden/ir";
 import { parseCacheTokens, parseUsage } from "./usage";
 
-/**
- * Provider Message Batches contract: billed usage is half of the sync price.
- * Applied on the batch path only — not an Eden-invented discount.
- */
 export const PROVIDER_BATCH_CENTS = 0.5;
 
 export function islandBatchEnabled(): boolean {
