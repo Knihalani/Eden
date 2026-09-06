@@ -44,7 +44,6 @@ export function parseHookdHealthPid(j: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
 }
 
-/** GET loopback `/health`. Never throws. `ok` means this is eden-hookd. */
 export async function fetchHookdHealth(timeoutMs = 200): Promise<{ ok: boolean; pid: number | null }> {
   const port = process.env.EDEN_HOOKD_PORT || "8794";
   try {
@@ -138,7 +137,6 @@ export async function handleHookd(req: Request): Promise<Response> {
   }
 }
 
-/** Serializes /hook handling. The client is bounded by hookdTimeoutMs; work is not. */
 let tail: Promise<unknown> = Promise.resolve();
 function enqueue(input: HookIn): Promise<Record<string, unknown>> {
   const work = tail.then(
@@ -159,7 +157,6 @@ export async function hookdHealthy(timeoutMs = 200): Promise<boolean> {
   return (await fetchHookdHealth(timeoutMs)).ok;
 }
 
-/** Poll loopback `/health` until hookd answers, or give up. Never throws. */
 export async function waitForHookdHealth(attempts = 15): Promise<boolean> {
   for (let i = 0; i < attempts; i++) {
     if (await hookdHealthy()) return true;
@@ -230,18 +227,13 @@ export async function runHookd(args: string[] = []): Promise<void> {
   }
   writeHookdPid();
   console.error(`eden hookd ${server.url}`);
-  // Graceful shutdown: stop accepting, let the in-flight queue drain (each
-  // entry bounded by its own timeout), then exit 0. SIGKILL remains the
-  // user's escape hatch; stale-lock detection covers it.
   let closing = false;
   const shutdown = (): void => {
     if (closing) return;
     closing = true;
-    server.stop(false); // stop accepting new connections
+    server.stop(false);
     clearHookdPid();
     void tail.then(() => process.exit(0));
-    // If draining somehow wedges, the unref'd timers below still let the
-    // process die naturally rather than hanging forever.
     setTimeout(() => process.exit(0), 10_000).unref?.();
   };
   process.on("SIGTERM", shutdown);
