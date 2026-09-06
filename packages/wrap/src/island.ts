@@ -92,16 +92,6 @@ export function withPinnedIsland(
   return async (req) => inner({ ...req, pinned: true });
 }
 
-/**
- * Which island failures are worth another attempt?
- *
- * An island that throws mid-program is a deopt the caller cannot always
- * replay safely — by then earlier steps may have written. A 429 or a provider
- * blip is not information about the program; paying one short backoff to
- * avoid tearing down a half-executed stretch is the cheapest failure
- * recovery available. Schema rejections (other 4xx) are not transient and
- * fail immediately.
- */
 export function isTransientIslandFailure(status: number): boolean {
   return status === 429 || status >= 500;
 }
