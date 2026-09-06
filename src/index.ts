@@ -196,6 +196,7 @@ export class AgentMemory {
     const next = this.inject(messages);
     return next === messages ? body : { ...body, messages: next };
   }
+  close() { this.cache.clear(); this.out = new WeakMap(); }
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory {
@@ -231,5 +232,5 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
       }
     },
   });
-  return { url: String(server.url), stop: () => server.stop(), memory };
+  return { url: String(server.url), stop: () => { memory.close(); server.stop(); }, memory };
 }
