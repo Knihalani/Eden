@@ -59,7 +59,6 @@ type Store = {
   runner?: WarmRunner;
   entries: Entry[];
   stats: WarmStats;
-  /** Last compiled program that started. Used to score the next likely tool. */
   lastServedId: string | null;
   /** fromProgramId → toProgramId → count. Watch-time "likely" is witnessed follows, not longest sequence. */
   follows: Map<string, Map<string, number>>;
