@@ -182,19 +182,6 @@ function wrapAuth(state: WrapState): string | undefined {
   return state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
 }
 
-/**
- * May the caller re-run the raw sequence after this failure?
- *
- * Only when the compiled attempt provably issued no tool calls. This used to
- * match on the reason string, and "island X needs an island caller" was on the
- * safe list — but an island sits wherever it sat in the observed trace, which
- * is routinely after a write. With no island caller configured (the default
- * whenever OPENAI_API_KEY is unset) a program of
- * `[tool writeRecord, island draft, tool notify]` wrote the record, bailed at
- * the island, was declared "early", and the raw writeRecord then ran again.
- *
- * runProgram now reports what it actually did, so the guess is gone.
- */
 function isEarlyDeopt(err: unknown): boolean {
   return isReplaySafe(err);
 }
