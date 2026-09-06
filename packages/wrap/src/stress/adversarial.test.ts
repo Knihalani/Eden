@@ -17,7 +17,6 @@ import "@eden/ir";
 const gate = process.env.EDEN_STRESS === "1";
 const d = describe.skipIf(!gate);
 
-// ─── deterministic RNG so failures are reproducible across runs ─────────────
 export function rng(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
