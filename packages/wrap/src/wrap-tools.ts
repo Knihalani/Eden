@@ -687,9 +687,6 @@ function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, regist
           return { eden: "deopt", reason: (err as Error).message };
         }
         if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
-        // No raw counterpart exists for this compiled name. Nothing proved
-        // touched (or it is all reads), but there is nothing to fall back to:
-        // hand back a structured result rather than a thrown error.
         return { eden: "deopt", reason: (err as Error).message };
       } finally {
         afterTurn(state, args, p.name);
