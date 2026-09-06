@@ -52,33 +52,17 @@ const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|please\b)/i;
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  const add = (s: string) => {
-    const t = s.replace(/\s+/g, " ").trim().replace(/^[.\s]+|[.\s]+$/g, "");
-    if (t.length < 12 || t.length > 280) return;
-    const k = t.toLowerCase();
-    if (seen.has(k)) return;
-    seen.add(k);
-    out.push(t);
-  };
   for (const raw of blob.split(/(?<=[.!\n])\s+/)) {
-    const t = raw.trim();
-    if (!t) continue;
-    if (t.includes(MEMORY_MARK) || t.includes("Eden Know:")) continue;
-    if (/\bleftover intern firm\b/i.test(t)) continue;
-    if (/^thinking about\b/i.test(t)) continue;
-    if (CHAT.test(t)) continue;
+    let t = raw.trim().replace(/\s+/g, " ");
+    if (t.length < 12 || t.length > 280 || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^thinking about\b/i.test(t) || CHAT.test(t)) continue;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i);
-    if (rem) {
-      add(rem[1]);
-      continue;
-    }
-    if (t.endsWith("?")) continue;
-    if (
-      /\b(prefer(?:s|red)?|never |always |timezone|deploys?|flyctl|DSN|postgres:\/\/|credentials\.json|\.env|reviewers?|ran out of memory|bun test)\b/i.test(
-        t,
-      )
-    ) {
-      add(t);
+    if (rem) t = rem[1].trim();
+    else if (t.endsWith("?") || !/\b(prefer(?:s|red)?|never |always |timezone|deploys?|flyctl|DSN|postgres:\/\/|credentials\.json|\.env|reviewers?|ran out of memory|bun test)\b/i.test(t)) continue;
+    t = t.replace(/^[.\s]+|[.\s]+$/g, "");
+    const k = t.toLowerCase();
+    if (t.length >= 12 && !seen.has(k)) {
+      seen.add(k);
+      out.push(t);
     }
   }
   return out;
@@ -165,7 +149,9 @@ export class AgentMemory {
     const out: MemoryRecord[] = [];
     for (const text of extractDurable(blob)) {
       if (this.compiled.some((c) => c.rec.text.toLowerCase() === text.toLowerCase())) continue;
-      out.push(this.remember(text, { kind: "episode" }));
+      const tags = tokList(text);
+      if (/\bpull requests?\b/i.test(text)) tags.push("pr");
+      out.push(this.remember(text, { kind: "episode", tags }));
     }
     return out;
   }
