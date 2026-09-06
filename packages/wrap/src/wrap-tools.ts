@@ -1227,9 +1227,6 @@ export function wrapTools<T extends ToolsIn>(
       ...spec,
       execute: async (args: Record<string, unknown>) => {
         calls++;
-        // One invocation record per execute. The `finally` stamps completion
-        // even when the call throws, so a failed raw call's event is still
-        // claimable by a later sequential flush.
         const selfId = ++nextInvocationId;
         const rec: Invocation = { startedAt: performance.now(), done: false, finishedAt: 0 };
         invocations.set(selfId, rec);
