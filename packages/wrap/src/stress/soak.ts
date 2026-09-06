@@ -137,7 +137,6 @@ function rawOk(out: Record<string, unknown> | undefined): boolean {
   return !!out && (out as { found?: boolean }).found === true;
 }
 
-// ─── 4. Steering accuracy under noise ────────────────────────────────────────
 async function steeringAccuracy(): Promise<void> {
   line("\n═══ 4. STEERING ACCURACY (randomized, 40 trials) ═══");
   let truePositive = 0;
