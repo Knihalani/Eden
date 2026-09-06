@@ -79,7 +79,6 @@ export type EdenOpts = {
   fleetId?: string;
   /** Stable agent identity for attribution. Default: `EDEN_AGENT` or sessionId. */
   agentId?: string;
-  /** Parent orchestrator run id. Child traces stamp `parentRunId`. */
   parentRunId?: string;
   /** Orchestrator span id this wrap's traces must carry. */
   spanId?: string;
