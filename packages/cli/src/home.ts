@@ -16,23 +16,6 @@ export function ensureHome(): string {
   return h;
 }
 
-/**
- * Retention for ~/.eden/runs: un-uploaded session logs used to grow forever
- * when the plane stayed down, and drained sessions left empty .jsonl shells
- * and .lock/.cursor sidecars behind permanently.
- *
- * Swept here (every ensureHome — every CLI entry point) rather than in drain,
- * because drain is exactly the thing that is DOWN when files accumulate.
- * Best-effort by construction: any failure to sweep must never fail the
- * command that called ensureHome.
- *
- * Policy:
- *   - delete empty .jsonl shells older than an hour (a fresh file may be
- *     mid-session with nothing written yet)
- *   - delete orphaned sidecars (.lock/.cursor) whose log is gone or stale
- *   - delete non-empty logs older than RETAIN_DAYS (default 14) — recording
- *     exists to be uploaded; two-week-old un-uploaded runs are dead weight
- */
 function sweepRunsHome(h: string): void {
   try {
     const runsDir = join(h, "runs");
@@ -86,19 +69,6 @@ export function liveToolsPath(): string {
   return join(edenHome(), "live-tools.json");
 }
 
-/**
- * A session/run id is only ever used to name a file, so it must not be able to
- * name a *different* file. `session_id` arrives from the hook payload, which
- * hookd accepts unauthenticated over HTTP, and it used to be interpolated
- * straight into a path: `../../../foo` reached anything on disk. Combined with
- * drain, which uploads and then unlinks whatever the id points at, that meant a
- * remote caller could exfiltrate and delete arbitrary .jsonl files — including
- * the Claude Code transcripts under ~/.claude/projects.
- *
- * Anything outside the allowlist is folded to a stable hashed name rather than
- * rejected, so a host that uses unusual session ids still records events
- * instead of silently losing them.
- */
 export function safeRunId(runId: string): string {
   if (/^[A-Za-z0-9_-]{1,128}$/.test(runId)) return runId;
   return `sess_${createHash("sha256").update(runId).digest("hex").slice(0, 32)}`;
