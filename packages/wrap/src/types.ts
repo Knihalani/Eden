@@ -25,7 +25,6 @@ export type Receipt = {
   completion_tokens?: number;
   cached_tokens?: number;
   cache_write_tokens?: number;
-  /** Hit-% denominator stamped at parse. OpenAI prompt; Anthropic read+write+input. */
   cache_input_tokens?: number;
   tokenClasses?: TokenClasses;
   certified?: boolean;
