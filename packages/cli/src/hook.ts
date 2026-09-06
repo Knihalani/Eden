@@ -453,11 +453,6 @@ export async function respondToHook(
       .filter((t) => (t.sequence ?? [])[0] === name && inSessionBucket(t, body.session_id))
       .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
     const hit = hits[0];
-    // Never deny in favour of a tool we cannot name. drain writes
-    // `name: t.program?.name ?? t.name`, either of which may be undefined, and
-    // the result was a hard deny on every Bash call telling the agent to "use
-    // the Eden compiled tool null" — Eden bricking the user's agent, which is
-    // the one thing it must never do.
     if (hit && typeof hit.name === "string" && hit.name.length > 0) {
       if (hit.envelope?.inputs) {
         const probe = {
