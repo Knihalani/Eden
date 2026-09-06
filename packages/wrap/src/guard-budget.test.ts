@@ -29,11 +29,6 @@ function program(id: string, budgetMs: number): StretchProgram {
 function run() {
   const r = emptyRun();
   r.firstWarningAt = 0;
-  // Pin the run's clock origin. emptyRun stamps t0 from performance.now(),
-  // so with a literal `now` below this test only passed while the
-  // whole suite finished within that window of process start — a longer suite
-  // silently flipped these cases into "no time pressure". Control both ends
-  // of the subtraction. Event "a" identifies the in-flight sequence ["a","b"].
   r.t0 = 0;
   r.events.push({ name: "a", args: {}, ok: true });
   return r;
