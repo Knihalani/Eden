@@ -43,7 +43,6 @@ describe("remainder store (S1b / skipRest on the hook path)", () => {
       const denies = [d1, d2].filter(Boolean).length;
       expect(realCalls).toBe(1);
       expect(denies).toBe(2);
-      // Tail exhausted — a third Grep is not claimed.
       expect(await claimRemainder("s1", "Grep", { id: "E-1" })).toBeNull();
     } finally {
       restore();
@@ -64,7 +63,6 @@ describe("remainder store (S1b / skipRest on the hook path)", () => {
     const { restore } = isolate();
     try {
       expect(await armRemainder("s1", pr, { id: "E-1" })).toBe(true);
-      // rest = 2, slack = 32 → budget 34. 34 matching pings expire the arming.
       for (let i = 0; i < ARM_SLACK_CALLS + 2; i++) {
         expect(await claimRemainder("s1", "ping", { id: "E-1" })).toBeNull();
       }
@@ -102,7 +100,6 @@ describe("remainder store (S1b / skipRest on the hook path)", () => {
     try {
       expect(await armRemainder("s1", pr, { id: "E-1" })).toBe(true);
       expect(await armRemainder("s1", { ...pr, name: "other", id: "t2" }, { id: "E-9" })).toBe(false);
-      // First arming still claims. Second never armed.
       expect(await claimRemainder("s1", "Grep", { id: "E-1" })).toMatchObject({ program: "pr_summary" });
       expect(await claimRemainder("s1", "Grep", { id: "E-9" })).toBeNull();
     } finally {
