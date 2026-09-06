@@ -283,7 +283,6 @@ export function tapSseUsage(stream: ReadableStream<Uint8Array>, run: RunRecorder
       try {
         await reader.cancel();
       } catch {
-        /* already closed */
       }
     },
   });
