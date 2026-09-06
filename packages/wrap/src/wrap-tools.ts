@@ -1084,9 +1084,6 @@ export function wrapTools<T extends ToolsIn>(
           const ok = await waitSettled(armed, wrapTimeoutMs(state.opts.timeoutMs));
           if (ok) {
             if (isReadName(name) && staleRead(state, args, armed)) continue;
-            // Re-verify the entry still holds work to claim (a concurrent sibling may
-            // have taken the last unit while we waited). Fleet head is not in
-            // rest — skip it without decrementing.
             if (fleetServed && !remaining) {
               skipAsShared(armed, name, selfId);
               steeredSkip = true;
