@@ -32,11 +32,6 @@ export type Armed = {
   armedAtCall: number;
   budgetCalls: number;
   matchedCalls: number;
-  /**
-   * Resolves true when the head's compiled run SUCCEEDED, false when it
-   * failed. Parallel siblings wait on this before claiming their share of the
-   * tail.
-   */
   settled: Promise<boolean>;
   resolveSettled: (ok: boolean) => void;
   headErr?: unknown;
