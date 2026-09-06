@@ -18,7 +18,6 @@ function tinyProgram(over: Partial<StretchProgram> = {}): StretchProgram {
   } as unknown as StretchProgram;
 }
 
-/** Matches the nShadow the wrap tests use for a live manifest. */
 const liveManifestN = 6;
 
 function manifestOf(name: string): StretchProgram["manifest"] {
