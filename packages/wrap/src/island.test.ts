@@ -163,7 +163,6 @@ describe("deterministic-first islands", () => {
     expect(unwrapIsland(hit).usage).toEqual({ prompt_tokens: 0, completion_tokens: 0, memoized: true });
     expect(calls.n).toBe(0);
 
-    // withWitnessMemo honors req.pinned the same way: miss never fetches.
     const memo = withWitnessMemo(base, table);
     await expect(memo({ ...req, pinned: true, input: { repos: ["unseen/x"] } } as never)).rejects.toThrow(
       /pinned island miss/,
