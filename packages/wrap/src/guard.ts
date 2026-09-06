@@ -57,7 +57,6 @@ export function enforcementEnabled(opts: EdenOpts): boolean {
   return process.env.EDEN_ENFORCE === "1";
 }
 
-/** Cheap mid-run halt / steer. No extra LLM. */
 export function decideGuard(args: {
   name: string;
   run: RunRecorder;
