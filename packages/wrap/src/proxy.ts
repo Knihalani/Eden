@@ -172,7 +172,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       const upstreamRes = await fn(url, {
         method: "POST",
         headers: { authorization: key ? `Bearer ${key}` : "", "content-type": "application/json" },
-        body: JSON.stringify(withStreamUsage(body)),
+        body: JSON.stringify(withStreamUsage(processMemory().injectBody(body))),
         signal: AbortSignal.timeout(timeout),
       });
       const src = upstreamRes.body;
