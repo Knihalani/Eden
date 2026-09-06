@@ -353,8 +353,6 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
       const boom = (tools as unknown as Record<string, { execute: () => Promise<unknown> }>).boom_a!;
       await boom.execute().catch(() => {});
       await boom.execute().catch(() => {});
-      // pauseLiveFor is a no-op in observe mode: local set stays empty and no
-      // fire-and-forget POST is scheduled, so hits stay empty without sleeping.
       expect(state.pausedIds.size).toBe(0);
       expect(cap.hits.filter((h) => h.includes("/pause"))).toHaveLength(0);
     } finally {
