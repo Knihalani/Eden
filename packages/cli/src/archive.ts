@@ -71,7 +71,6 @@ export function archivePaths(home = edenHome()): { hot: string; warm: string; co
   };
 }
 
-/** Frozen DC% — same arithmetic as @eden/measure dcShare. Provider cache excluded. */
 export function archiveDcShare(c: TokenClasses): number {
   const det = c.compiled + c.memoized + c.transparent + c.steeredSkip;
   const total = det + c.frontier;
