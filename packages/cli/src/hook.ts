@@ -420,8 +420,6 @@ export async function respondToHook(
   ) as Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>;
   const cfg = readConfigSafely();
   if (body.hook_event_name === "PreToolUse" && name) {
-    // S1b remainder deny: already-served tail. Independent of MCP steer
-    // (EDEN_STEER_HOOKS stays default off). Fail-open on any throw.
     try {
       const claimed = await claimRemainder(session, name, body.tool_input ?? {}, locker, undefined, cwd);
       if (claimed) {
