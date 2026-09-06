@@ -280,7 +280,6 @@ function asStreamChunks(json: Record<string, unknown>): string {
     const delta: Record<string, unknown> = { role: role ?? "assistant", ...rest };
     if (content !== undefined && content !== null) delta.content = content;
     if (Array.isArray(tool_calls)) {
-      // Streamed tool calls carry an index; a non-streaming response does not.
       delta.tool_calls = tool_calls.map((t, k) => ({ index: k, ...(t as Record<string, unknown>) }));
     }
     lines.push(`data: ${JSON.stringify({ ...base, choices: [{ index, delta, finish_reason: null }] })}\n\n`);
