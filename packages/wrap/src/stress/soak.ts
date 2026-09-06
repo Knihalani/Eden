@@ -146,7 +146,6 @@ async function steeringAccuracy(): Promise<void> {
   let totalOutOfEnvelope = 0;
   for (let trial = 0; trial < 40; trial++) {
     const id = `T-${trial}`;
-    // Three witnessed ids so the envelope has real distribution.
     const ids = [`T-${trial}-a`, `T-${trial}-b`, `T-${trial}-c`];
     const traces: StretchTrace[] = ids.map((wid) => ({
       id: `t-${wid}`,
@@ -165,8 +164,6 @@ async function steeringAccuracy(): Promise<void> {
     const mined = compileTraces(traces);
     const prog = mined.programs[0];
     if (!prog) continue;
-    // compileTraces leaves manifest null (approval happens elsewhere); the
-    // wrap layer requires it before steering. Simulate approval.
     const manifestProg = {
       ...prog,
       manifest: { llmReduction: 8, latencyReduction: 8, costReduction: 8, skipRateBefore: 0.2, skipRateAfter: 0, nShadow: 6 },
