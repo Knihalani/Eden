@@ -1,9 +1,3 @@
-/**
- * Fleet identity and the read-only gate for Wave 7.1 cross-agent claims.
- *
- * Empty fleetId means no sharing. Mutating programs never set readOnly.
- * The claim machinery stays Armed.matchedCalls / rest / mightClaim.
- */
 import { isMutating, isReadName, type StretchProgram } from "@eden/ir";
 
 export function sharedAcrossLine(n: number): string {
