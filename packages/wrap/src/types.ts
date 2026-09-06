@@ -69,7 +69,6 @@ export type EdenOpts = {
   sessionId?: string;
   /** Shared suppression store. Omit for an isolated per-wrap map. */
   arming?: ArmingStore;
-  /** Per-session arming cap (default 64). Bursts fail open. */
   armMax?: number;
   /** Process-wide arming cap across sessions (default 4096). */
   armGlobal?: number;
