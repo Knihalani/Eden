@@ -1018,7 +1018,6 @@ export function wrapTools<T extends ToolsIn>(
             armed.armedAtCall = calls;
             const compiled = [...state.receipts].reverse().find((r) => r.toolId === hit.p.id && r.ok);
             if (compiled) armedReceipts.set(armed, compiled);
-            // Wake any parallel siblings that were waiting on this outcome.
             try {
               armed.closed = true;
               armed.resolveSettled(true);
