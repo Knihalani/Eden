@@ -135,6 +135,7 @@ export class AgentMemory {
   }
 
   private persist() {
+    if (this.compiled.length > 2000) { const keep = this.compiled.filter((c) => c.rec.kind === "constraint").slice(-2000); this.compiled = [...keep, ...this.compiled.filter((c) => c.rec.kind !== "constraint").slice(Math.max(0, this.compiled.length - 2000))]; }
     writeFileSync(this.path + ".tmp", this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
     renameSync(this.path + ".tmp", this.path);
   }
