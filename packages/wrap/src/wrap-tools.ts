@@ -142,11 +142,6 @@ function waitSettled(armed: Armed, timeoutMs: number): Promise<boolean> {
   ]);
 }
 
-/**
- * Default compiled-run ceiling. Justified by `benchmarks/campaign/TIMEOUT.md`
- * (Wave 4.4): must exceed p99 of a healthy compiled stretch; 60s sits under
- * the 300s cap and matches ARM_TTL so settled armings and the run share a clock.
- */
 export const DEFAULT_WRAP_TIMEOUT_MS = 60_000;
 
 export function wrapTimeoutMs(explicit?: number): number {
