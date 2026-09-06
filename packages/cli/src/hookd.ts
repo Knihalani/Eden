@@ -58,10 +58,6 @@ export async function fetchHookdHealth(timeoutMs = 200): Promise<{ ok: boolean; 
   }
 }
 
-/**
- * SIGTERM the process that answers `/health`, even when `hookd.pid` is stale.
- * No listener and no pid file: quiet 0, "not running".
- */
 export async function stopHookd(): Promise<number> {
   const recorded = readHookdPid();
   const live = (await fetchHookdHealth(400)).pid;
