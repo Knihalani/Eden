@@ -414,7 +414,6 @@ describe("phase 1: pure-compiled tool fallback policy (M4)", () => {
       },
       state,
     ) as Record<string, { execute: (a: unknown) => Promise<unknown> }>;
-    // The compiled-only name surfaces through the Proxy's ownKeys.
     const compiledName = Object.keys(tools).find((n) => !["lookup_fan", "fetch_details"].includes(n));
     expect(compiledName).toBeDefined();
     const out = await tools[compiledName!]!.execute({});
