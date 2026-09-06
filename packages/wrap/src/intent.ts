@@ -127,12 +127,6 @@ function commandCandidateLines(text: string): string[] {
   return out;
 }
 
-/**
- * `github.com/o/r/issues/1` without a scheme is still a GitHub URL.
- * `api.github.com/repos/o/r/issues/{id}` and `github.com/o/r/issues/{id}`
- * are the same resource kind so a forge seed compiled from acme/app still
- * JIT-matches a stranger's KaiavN/Eden link.
- */
 export function githubBareUrls(text: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -169,12 +163,6 @@ function githubShapeHit(msgShapes: Set<string>, progShapes: string[]): boolean {
   });
 }
 
-/**
- * Rank programs against a conversation. Returns ALL candidates that clear the
- * evidence bar, best first; callers decide how many may be surfaced (Dispatch
- * caps it at one). Never throws on program weirdness — a corrupt program
- * scores zero instead of poisoning the pass.
- */
 export function rankPrograms(messages: readonly unknown[], programs: StretchProgram[]): RankedMatch[] {
   const text = messageText(messages);
   if (!text) return [];
