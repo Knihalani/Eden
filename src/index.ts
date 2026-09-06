@@ -127,9 +127,7 @@ export class AgentMemory {
   forget(id: string): boolean {
     const n = this.compiled.length;
     this.compiled = this.compiled.filter((c) => c.rec.id !== id && c.rec.text !== id);
-    if (this.compiled.length === n) return false;
-    this.persist();
-    return true;
+    return this.compiled.length !== n && (this.persist(), true);
   }
 
   observe(messages: unknown[]): MemoryRecord[] {
@@ -194,9 +192,9 @@ export class AgentMemory {
   }
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
-    const messages = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
-    const next = this.inject(messages);
-    return next === messages ? body : { ...body, messages: next };
+    const m = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
+    const next = this.inject(m);
+    return next === m ? body : { ...body, messages: next };
   }
   close() {}
 }
