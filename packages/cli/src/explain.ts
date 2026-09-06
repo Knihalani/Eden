@@ -139,7 +139,6 @@ export function servingLine(live: Array<{ rollout?: string; program?: StretchPro
   return parts.join(" · ");
 }
 
-/** Same words as doctor when first-stretch knock.json is waiting. Never invents a compile. */
 function knockMention(home: string): string | null {
   try {
     if (!existsSync(join(home, "knock.json"))) return null;

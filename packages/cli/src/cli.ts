@@ -1,13 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Root `eden` CLI. Command modules load on use so `eden compile` does not
- * pay for wrap, Know, or the rest of the tree (wall time is the compile).
- */
-
-/**
- * Root `eden` help. Grouped like `git help`: start → compile path first,
- * then record / inspect. Advanced commands live on `eden help -a`.
- */
 export function edenHelp(): string {
   return `usage: eden [--help] <command> [<args>]
 

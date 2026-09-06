@@ -68,7 +68,6 @@ function dayKey(day: Date): string {
   return `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
 }
 
-/** Same DC window Home uses: local days, unmeasured days are 0 / measured:false. */
 export function dcFromReceipts(
   receipts: unknown[],
   now = Date.now(),
@@ -117,11 +116,6 @@ function asNonNeg(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-/**
- * Provider cache hit % (0–100) over receipts.
- * Per receipt: OpenAI subset uses prompt; Anthropic residual uses cached+prompt+write.
- * Omit when unmeasured. Not run-cache cache_hits/cache_lookups.
- */
 export function cacheHitPctFromReceipts(receipts: unknown[]): number | null {
   let cached = 0;
   let input = 0;
