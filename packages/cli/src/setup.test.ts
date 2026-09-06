@@ -11,8 +11,6 @@ describe("setup hookd", () => {
   test("hooks fail-open through hookd then bun hook", () => {
     const cmd = hookCommand("/abs/cli.ts", 8794);
     expect(cmd).toContain("http://127.0.0.1:8794/hook");
-    // Single-quoted: this string is persisted into settings.json and run by a
-    // shell on every tool call, and double quotes do not stop $(...).
     expect(cmd).toContain("bun '/abs/cli.ts' hook");
     expect(cmd).toContain("|| echo '{}'");
     expect(cmd).toContain("--max-time 8");
@@ -122,8 +120,6 @@ describe("eden setup does not disarm the user's own hooks", () => {
   });
 
   test("a shell substitution in the install path is not executed", () => {
-    // The command is persisted into settings.json and run by a shell on every
-    // tool call. Double quotes do not stop $(...) or backticks.
     const cmd = hookCommand("/tmp/$(touch /tmp/pwned)/cli.ts", 8794);
     expect(cmd).toContain("'/tmp/$(touch /tmp/pwned)/cli.ts'");
     expect(cmd).not.toContain('"/tmp/$(touch /tmp/pwned)/cli.ts"');
@@ -268,7 +264,6 @@ describe("multi-agent installer", () => {
       expect(edenHomeBaked).toBe(home);
       expect(cliBaked).toBe(cli);
 
-      // cwd-hop program: bun PostToolBatch arms remainder; hookd PreToolUse claims.
       writeFileSync(
         join(home, "live-tools.json"),
         JSON.stringify([{ name: "pr_write", sequence: ["Read", "Grep", "Write"], id: "t-write" }]),
