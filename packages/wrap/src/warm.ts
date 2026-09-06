@@ -82,7 +82,6 @@ function storeOf(state: WrapState): Store {
   return s;
 }
 
-/** Kill switch. Default on; only the explicit `0` disables. */
 export function watchWarmEnabled(): boolean {
   try {
     return process.env.EDEN_WATCH_WARM !== "0";
