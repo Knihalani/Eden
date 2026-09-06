@@ -252,21 +252,6 @@ export async function withFileLockAsync<T>(lockPath: string, fn: () => T | Promi
   throw new Error(`could not acquire lock ${lockPath}`);
 }
 
-/**
- * Remove a lock that its holder can no longer release.
- *
- * Only three things justify deleting a lock we do not hold: the process that
- * stamped it is gone, the lock is unattributable and older than the horizon, or
- * it is so old that whatever the stamp says, nobody is coming back for it. A
- * live local holder is otherwise left alone however long it has been in there.
- *
- * The abandonment decision and the unlink are two syscalls apart, and in
- * between the holder may release and a third process may acquire. Deleting
- * then would evict a live holder — the very failure this function exists to
- * avoid — so the inode observed when the decision was made is captured and
- * compared before unlinking. Checking merely that *a* file is still there is
- * not the same test: a replacement lock is also a file.
- */
 function breakIfAbandoned(lockPath: string): void {
   try {
     const before = inodeAt(lockPath);
