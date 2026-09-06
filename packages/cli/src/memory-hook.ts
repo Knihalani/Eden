@@ -12,10 +12,7 @@ function asRec(v: unknown): Record<string, unknown> {
 function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
-  return content
-    .map((b) => (typeof b === "string" ? b : String(asRec(b).text ?? asRec(b).content ?? asRec(b).alt ?? asRec(b).name ?? "")))
-    .filter(Boolean)
-    .join("\n");
+  return content.map((b) => (typeof b === "string" ? b : String(asRec(b).text ?? asRec(b).content ?? asRec(b).alt ?? asRec(b).name ?? ""))).filter(Boolean).join("\n");
 }
 
 export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: string; content: string }> {

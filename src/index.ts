@@ -198,6 +198,7 @@ export class AgentMemory {
     const next = this.inject(messages);
     return next === messages ? body : { ...body, messages: next };
   }
+  close() {}
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory {
