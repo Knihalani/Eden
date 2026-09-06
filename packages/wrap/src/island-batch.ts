@@ -21,15 +21,6 @@ export function islandBatchUrl(baseURL?: string | null): string {
   return `${base}/messages/batches`;
 }
 
-/**
- * Whether to POST the provider batch contract.
- *
- * Injected `fetch` (tests, custom transports) may implement `/messages/batches`
- * with in-band results, or a retrieve that ends inside the island timeout.
- * The public OpenAI host has no such path (404 then sync). The public
- * Anthropic host accepts the POST but is a 24h SLA — not a live island —
- * so we skip it too. Private proxies still attempt the batch.
- */
 export function canUseProviderBatch(opts: IslandBatchOpts = {}): boolean {
   if (opts.fetch) return true;
   const base = (opts.baseURL || "").replace(/\/$/, "") || "https://api.openai.com/v1";
