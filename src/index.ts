@@ -116,8 +116,7 @@ export class AgentMemory {
     if (!rec.text) return rec;
     const c = compile(rec);
     const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
-    if (i >= 0) this.compiled[i] = c;
-    else this.compiled.push(c);
+    i >= 0 ? (this.compiled[i] = c) : this.compiled.push(c);
     this.persist();
     return rec;
   }
@@ -201,9 +200,8 @@ export function processMemory(): AgentMemory {
 
 export function host(opts: MemoryOptions & { port?: number } = {}) {
   const memory = openMemory(opts);
-  const port = Number(opts.port ?? process.env.EDEN_MEMORY_PORT) || 8787;
   const server = Bun.serve({
-    port: port > 0 ? port : 8787,
+    port: Number(opts.port ?? process.env.EDEN_MEMORY_PORT) || 8787,
     async fetch(req) {
       try {
         const u = new URL(req.url);
