@@ -248,8 +248,6 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
 
   const live = filterCanary(opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest), opts.state.sessionId);
   const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
-  // Opt-in means the client sent a tools ARRAY — an empty array has opted into
-  // function calling (see injectTools). A missing tools field has not.
   const shouldSteer = steerable && live.length > 0 && Array.isArray(body.tools);
   if (shouldSteer) body.tools = injectAnthropicTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit));
 
