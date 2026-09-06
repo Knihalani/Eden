@@ -1243,8 +1243,6 @@ export function wrapTools<T extends ToolsIn>(
     };
   }
 
-  // Name collisions between a host's own tool and an approved compiled tool
-  // must resolve the SAME WAY everywhere: injectTools (the HTTP proxy) already
   // drops the client's duplicate, so the compiled tool wins there. The local
   // Proxy used to do the opposite — raw wins — so the same agent executed
   // different logic depending on how it was connected. Compiled wins now,
