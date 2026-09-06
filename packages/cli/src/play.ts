@@ -55,7 +55,6 @@ function firstPositional(args: string[]): string | undefined {
   return undefined;
 }
 
-/** JSON object from --input '{...}' or a file path. Empty --input is {}. */
 export function parsePlayInput(raw: string | undefined): Record<string, unknown> {
   if (raw == null || raw === "") return {};
   const text =
@@ -96,7 +95,6 @@ function asRecord(body: unknown): Record<string, unknown> | null {
   return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
 }
 
-/** One stderr sentence for a wrap-run error body. Never a JSON dump. */
 function wrapRunErrorSentence(body: unknown): string {
   const rec = asRecord(body);
   const err = typeof rec?.error === "string" ? rec.error : "";

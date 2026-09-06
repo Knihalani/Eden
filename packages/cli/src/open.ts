@@ -6,9 +6,6 @@ export async function openTool(): Promise<void> {
   const cfg = readConfig();
   const base = sitePlaneUrl(cfg?.base_url);
   const knockPath = join(edenHome(), "knock.json");
-  // A half-written or corrupt knock.json used to throw straight out of
-  // JSON.parse; it is advisory data, so a bad file just means the plain
-  // workshop URL — same guard drain uses for its reads.
   const knock = readJson<{ tool_id?: string }>(knockPath, {});
   const url = knockWorkshopUrl(base, knock);
   openBrowser(url);

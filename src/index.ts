@@ -207,7 +207,7 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
     port: Number(opts.port ?? process.env.EDEN_MEMORY_PORT) || 8787,
     async fetch(req) {
       const origin = req.headers.get("origin") || "";
-      const cors = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ? { "access-control-allow-origin": origin, vary: "origin" } : {};
+      const cors = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin) ? { "access-control-allow-origin": origin, vary: "origin" } : {};
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: cors });
       try {
         if (req.method === "HEAD") return new Response(null, { status: 200, headers: cors });
