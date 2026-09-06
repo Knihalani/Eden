@@ -30,17 +30,14 @@ What was not measured is reported as not measured.
 export type BenchOpts = { seed?: number; minBlocks?: number };
 
 export type BenchMetric = {
-  /** Mean compiled − naive across paired blocks. null when not measured. */
   delta: number | null;
   measured: boolean;
-  /** True when the number is an extrapolation rather than a metered reading. */
   estimated?: boolean;
 };
 
 export type BenchReport = {
   verdict: Verdict;
   n: number;
-  /** null when the permutation test returned a non-finite p (see notes). */
   p_value: number | null;
   ci: {
     point: number | null;
@@ -54,7 +51,6 @@ export type BenchReport = {
   notes: string[];
 };
 
-/** Deterministic local island: schema-shaped prose derived from its input. */
 const localIsland: IslandCaller = async ({ input }) => {
   const f = (input ?? {}) as Record<string, unknown>;
   const who = f.customer ?? "there";
@@ -149,14 +145,6 @@ function dedupeTraces(traces: StretchTrace[]): StretchTrace[] {
   return out;
 }
 
-/**
- * Replay the compiled program once per pass over every block.
- *
- * Two passes on purpose: pairing pass 1 against pass 2 gives the A/A cells the
- * measure pipeline wants — two runs of the *same* arm. If they differ
- * detectably, the harness is measuring something other than the treatment, and
- * decide() refuses the A/B reading outright.
- */
 async function replayPass(
   program: StretchProgram,
   traces: StretchTrace[],
