@@ -385,7 +385,6 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
 
 describe("phase 1: pure-compiled tool fallback policy (M4)", () => {
   test("early deopt with no raw counterpart returns a structured result, not a thrown error", async () => {
-    // Steps reference a tool absent from the registry: provably nothing ran.
     const p = twoStepProgram("m4a", "compiled_only", "lookup_fan", "fetch_details");
     p.sequence = ["compiled_only", "other"];
     p.steps = [
