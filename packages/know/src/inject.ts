@@ -113,9 +113,8 @@ function boundMention(text: string, token: string): boolean {
 }
 
 function rfcRelationQuestion(text: string): boolean {
-  return /\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b/i.test(
-    text,
-  );
+  if (text.indexOf("obsolet") < 0 && text.indexOf("update") < 0 && text.indexOf("successor") < 0 && text.indexOf("replac") < 0) return false;
+  return /\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b/i.test(text);
 }
 
 export function subjectMentioned(text: string, fact: string): boolean {
@@ -145,7 +144,7 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
     }
     const need = detectNeed(input, { skipIdent: true });
     const queries =
-      store && hasRfc
+      store && hasRfc && /\d/.test(text)
         ? [...need.queries, ...successorQueries(text, store, need.queries)]
         : need.queries;
     for (let i = 0; i < queries.length && i < 8; i++) {
