@@ -240,16 +240,6 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
   });
 });
 
-/**
- * Phase 1 — prime-directive completion.
- *
- *   C3: a parallel sibling suppressed against a compiled run must never lose
- *       its work when that run fails mid-flight.
- *   M3: observe mode must not mutate live programs (no pause posts).
- *   M4: pure-compiled tools follow the same fallback policy as prefix steering.
- *   M6: control-plane and island network calls are time-bounded.
- */
-
 import { wrapIsland } from "./island";
 
 function threeStepProgram(id: string, t1: string, t2: string, t3: string): StretchProgram {
