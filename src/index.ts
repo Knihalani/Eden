@@ -214,24 +214,21 @@ export function processMemory(): AgentMemory {
 
 export function host(opts: MemoryOptions & { port?: number } = {}) {
   const memory = openMemory(opts);
-  const port = opts.port ?? (process.env.EDEN_MEMORY_PORT ? Number(process.env.EDEN_MEMORY_PORT) : 8787);
+  const port = Number(opts.port ?? process.env.EDEN_MEMORY_PORT) || 8787;
   const server = Bun.serve({
-    port: Number.isFinite(port) && port > 0 ? port : 8787,
+    port: port > 0 ? port : 8787,
     async fetch(req) {
       try {
         const u = new URL(req.url);
         const p = u.pathname;
         if (req.method === "POST") {
-          const b = (await req.json()) as { text?: string; kind?: string; tags?: string[]; id?: string; agent?: string; messages?: unknown[]; q?: string; k?: number };
-          if (p === "/observe") return Response.json(memory.observe(b.messages || []));
-          if (p === "/remember") return Response.json(memory.remember(String(b.text || ""), b));
-          if (p === "/forget") return Response.json({ ok: memory.forget(String(b.id || b.text || "")) });
-          if (p === "/inject") return Response.json({ messages: memory.inject(b.messages || []) });
-          if (p === "/query") return Response.json(memory.query(String(b.q || ""), Number(b.k) || 5));
+          const b = (await req.json()) as { text?: string; id?: string; messages?: unknown[]; q?: string; k?: number };
+          const run = ({ "/observe": () => memory.observe(b.messages || []), "/remember": () => memory.remember(String(b.text || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || []) }), "/query": () => memory.query(String(b.q || ""), Number(b.k) || 5) } as Record<string, () => unknown>)[p];
+          if (run) return Response.json(run());
+        } else {
+          const run = ({ "/health": () => ({ ok: true }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || 5), "/memories": () => memory.memories() } as Record<string, () => unknown>)[p];
+          if (run) return Response.json(run());
         }
-        if (req.method === "GET" && p === "/health") return Response.json({ ok: true });
-        if (req.method === "GET" && p === "/query") return Response.json(memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || 5));
-        if (req.method === "GET" && p === "/memories") return Response.json(memory.memories());
         return new Response("eden memory\n");
       } catch (e) {
         return Response.json({ error: String(e) }, { status: 400 });

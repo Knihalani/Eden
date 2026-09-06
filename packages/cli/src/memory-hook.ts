@@ -23,7 +23,6 @@ function flattenContent(content: unknown): string {
     .join("\n");
 }
 
-/** Last turns of a Claude Code JSONL transcript. Fail-open: missing/corrupt → []. */
 export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: string; content: string }> {
   if (typeof path !== "string" || !path || !existsSync(path)) return [];
   try {
@@ -79,19 +78,9 @@ function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
 }
 
 function additional(event: string, text: string): Record<string, unknown> | null {
-  if (!text) return null;
-  return {
-    hookSpecificOutput: {
-      hookEventName: event,
-      additionalContext: text,
-    },
-  };
+  return text ? { hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
 }
 
-/**
- * Passive memory for coding-agent hooks. Never throws to the caller.
- * UserPromptSubmit / PreCompact inject; SessionStart briefs; Stop observes.
- */
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
     const event = EVENT_ALIASES[String(asRec(raw).hook_event_name ?? "")] ?? String(asRec(raw).hook_event_name ?? "");
@@ -128,20 +117,14 @@ function readStdin(): Promise<string> {
   });
 }
 
-/** Stdin JSON → stdout JSON. Always prints a body; never a non-zero exit. */
 export async function runMemoryHookStdin(): Promise<void> {
-  const raw = await readStdin();
   let body: Record<string, unknown> = {};
   try {
-    body = JSON.parse(raw || "{}") as Record<string, unknown>;
-  } catch {
-    body = {};
-  }
-  let out: Record<string, unknown> = {};
+    body = JSON.parse((await readStdin()) || "{}") as Record<string, unknown>;
+  } catch {}
   try {
-    out = memoryHookResponse(body) ?? {};
+    process.stdout.write(JSON.stringify(memoryHookResponse(body) ?? {}));
   } catch {
-    out = {};
+    process.stdout.write("{}");
   }
-  process.stdout.write(JSON.stringify(out));
 }
