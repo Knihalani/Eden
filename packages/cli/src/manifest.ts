@@ -144,14 +144,10 @@ export function logSkillHash(path: string, bytes: string): string {
   try {
     ensureHome();
     writeFileAtomic(skillHashLogPath(), JSON.stringify(rec, null, 2) + "\n");
-  } catch {
-    /* hash log is evidence, not a ship gate */
-  }
+  } catch {}
   try {
     console.error(`eden skill: ${path} sha256=${sha256}`);
-  } catch {
-    /* stderr is nice-to-have */
-  }
+  } catch {}
   return sha256;
 }
 
@@ -163,9 +159,7 @@ export function writeSkillBundle(skillPath: string, tools: ManifestTool[]): stri
   try {
     ensureHome();
     writeFileAtomic(listingDraftPath(), renderListingDraft(tools));
-  } catch {
-    /* listing draft is evidence, not a ship gate */
-  }
+  } catch {}
   dropSkillDirListing(dirname(skillPath));
   return sha256;
 }
@@ -173,9 +167,7 @@ export function writeSkillBundle(skillPath: string, tools: ManifestTool[]): stri
 function dropSkillDirListing(skillDir: string): void {
   try {
     unlinkSync(join(skillDir, "LISTING.md"));
-  } catch {
-    /* absent is the goal */
-  }
+  } catch {}
 }
 
 export function refreshOptedInSurfaces(

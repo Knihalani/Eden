@@ -224,9 +224,7 @@ function breakIfAbandoned(lockPath: string): void {
     if (state === "unknown" && age <= LOCK_STALE_MS) return;
     if (inodeAt(lockPath) !== before) return;
     unlinkSync(lockPath);
-  } catch {
-    /* raced with the holder releasing it, or not ours to remove; just retry */
-  }
+  } catch {}
 }
 
 function releaseLock(lockPath: string, ino: number | null): void {
