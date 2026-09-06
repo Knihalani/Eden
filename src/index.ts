@@ -24,20 +24,18 @@ function tokList(s: string): string[] {
 function convBlob(list: unknown[]): string {
   if (list.length === 1) {
     const o = list[0] as Record<string, unknown> | undefined;
-    if (o && typeof o.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content;
+    if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content;
   }
   const parts: string[] = [];
   for (const m of list) {
     if (!m || typeof m !== "object") continue;
     const o = m as Record<string, unknown>;
     const c = o.content;
-    if (typeof c === "string") {
-      if (c) parts.push(c);
-    } else if (Array.isArray(c)) {
+    if (typeof c === "string" && c) parts.push(c);
+    else if (Array.isArray(c)) {
       for (const b of c) {
         if (b && typeof b === "object") {
-          const x = b as Record<string, unknown>;
-          const t = ["text","content","alt","name","caption","title","filename","url","href","source","uri","id","mimeType"].map((k) => x[k]).find((v) => typeof v === "string" && v);
+          const t = ["text","content","alt","name","caption","title","filename","url","href","source","uri","id","mimeType"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v);
           if (t) parts.push(t as string);
         }
       }
