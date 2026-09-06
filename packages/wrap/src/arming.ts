@@ -92,7 +92,6 @@ export type ArmingStore = {
    */
   scanFleet(fleetId: string, name: string, args: Record<string, unknown>, now: number): FleetHit[];
   all(session: string, now: number): Array<[string, Armed]>;
-  /** All live read-only armings in this fleet. Empty fleetId returns []. */
   allFleet(fleetId: string, now: number): FleetHit[];
   sessionSize(session: string): number;
   globalSize(): number;
