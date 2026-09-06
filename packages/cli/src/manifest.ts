@@ -4,21 +4,6 @@ import { dirname, join } from "node:path";
 import { CLAIMS_LISTING_BANNER, renderClaimsListing } from "@eden/measure";
 import { edenHome, ensureHome, readJson, writeFileAtomic } from "./home";
 
-/**
- * Filesystem-native tool surface.
- *
- * MCP assumes a client connection and pays schema tokens every turn.
- * Coding agents already read files progressively — a manifest in the repo
- * gives them Eden's programs at ~10–30 tokens per program when relevant and
- * ZERO otherwise, with no transport, no client requirement, and git history
- * for free. This mirrors how AGENTS.md / Skills already work; Eden rides the
- * pattern instead of inventing a transport.
- *
- * The manifest points execution at ONE entry point (`eden run`) rather than
- * advertising schemas; steering and transparent execution remain the primary
- * paths — this file is for the times the agent goes looking on its own.
- */
-
 export type ManifestTool = {
   name?: string;
   sequence?: string[];
@@ -81,16 +66,6 @@ export function renderManifest(tools: ManifestTool[], opts: { runCommand?: strin
   return lines.join("\n");
 }
 
-/**
- * Skill-native surface: the SAME content as a SKILL.md bundle.
- *
- * Agent Skills is the cross-agent standard (Claude Code, Codex, Cursor, and
- * dozens more read it), and its progressive-disclosure model is exactly
- * right for us: the frontmatter description is all an agent loads at start,
- * the body only when relevant — so N routines cost ~nothing until used.
- * Prefer emitting this where skills are supported; plain eden.tools.md stays
- * as the fallback for everything else.
- */
 export function renderSkill(tools: ManifestTool[], opts: { runCommand?: string } = {}): string {
   const run = opts.runCommand ?? "eden run <name> --issue <id>";
   const description = skillDescription(tools);
