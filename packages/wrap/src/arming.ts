@@ -119,10 +119,6 @@ export function hintIdOf(rec: Record<string, unknown>): unknown {
   return undefined;
 }
 
-/**
- * In-flight heads must not expire: siblings wait on `settled`, and a TTL
- * delete would drop the only record of in-flight work (Wave 4 hard case).
- */
 export function armExpired(a: Armed, now: number): boolean {
   if (!a.closed) return false;
   return now - a.armedAt > ARM_TTL_MS || a.matchedCalls >= a.budgetCalls;
