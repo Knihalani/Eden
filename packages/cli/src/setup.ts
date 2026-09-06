@@ -8,12 +8,10 @@ function claudeSettingsDir(scope: "user" | "project"): string {
   return join(process.cwd(), ".claude");
 }
 
-/** POSIX single-quoting: the only form a shell does no substitution inside. */
 function shq(v: string): string {
   return `'${v.replaceAll("'", `'\\''`)}'`;
 }
 
-/** PreToolUse: 1s curl, fail-open `{}`, never spawn bun. */
 export function preHookCommand(hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
   const hookd = `http://127.0.0.1:${hookdPort}/hook`;
   return `curl -sS --max-time 1 -H 'content-type: application/json' --data-binary @- ${hookd} || echo '{}'`;
