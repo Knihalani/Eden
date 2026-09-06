@@ -191,14 +191,6 @@ function recordAnthropicCompletion(run: WrapState["run"], msg: AnthropicMessage)
   if (texts.length) run.output = redact(texts.join("\n"));
 }
 
-/**
- * Re-frame a completed non-streaming message as the SSE a streaming client
- * expects (message_start → per-block start/delta/stop → message_delta →
- * message_stop). When the client asks for a stream AND sends tools, the
- * request is forced non-streaming upstream so tool_use blocks can be steered
- * before the client sees them — same structure as the OpenAI path's
- * asStreamChunks.
- */
 export function anthropicMessageToSse(msg: AnthropicMessage): string {
   const indexByBlock = new Map<AnthropicContentBlock, number>();
   let out = "";
