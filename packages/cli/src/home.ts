@@ -313,15 +313,6 @@ function breakIfAbandoned(lockPath: string): void {
   }
 }
 
-/**
- * Release only our own lock.
- *
- * If a contender already judged this lock abandoned and replaced it, the file
- * sitting at `lockPath` belongs to that contender and deleting it would let a
- * third process in behind their back. In the rare case where we never got an
- * inode to compare against, an unconditional unlink is still better than
- * leaving the lock wedged for the whole staleness horizon.
- */
 function releaseLock(lockPath: string, ino: number | null): void {
   try {
     if (ino !== null && inodeAt(lockPath) !== ino) return;
