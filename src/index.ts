@@ -159,7 +159,8 @@ export class AgentMemory {
       const blob = convBlob(list);
       const notes: { role: "system"; content: string }[] = [];
       if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
-        const mems = this.relevant(blob);
+        const cap = Number(process.env.EDEN_MEMORY_CAP) || 6;
+        const mems = [...this.memories().filter((r) => r.kind === "constraint").slice(-cap), ...this.relevant(blob).filter((r) => r.kind !== "constraint")].slice(0, cap);
         if (mems.length) notes.push({ role: "system", content: MEMORY_MARK + mems.map((m) => `\n- ${m.text}`).join("") });
         const card = injectFromRequest({ text: blob }, this.know);
         if (card) notes.push({ role: "system", content: injectNote(card) });
