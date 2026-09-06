@@ -413,7 +413,6 @@ function remainderSkipReason(program: string, tool: string): string {
   return `Already served by ${program}. Do not re-run ${tool} — facts are in the last tool output or attached as context.`;
 }
 
-/** Stamp the successful compiled receipt so canvas reads remainder copy from the live path. */
 function stampRemainderSkip(state: WrapState, armed: Armed, toolName: string): void {
   const last = [...state.receipts].reverse().find((r) => r.toolId === armed.programId && r.ok);
   if (!last) return;
