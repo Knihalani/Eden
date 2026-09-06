@@ -1132,10 +1132,6 @@ export function wrapTools<T extends ToolsIn>(
             steeredSkip = true;
             break;
           }
-          // Reads are always safe to re-run. A mutating step under unknown
-          // state gets the honest structured result — never a silent re-run
-          // that could duplicate a write, never a false "steered" that claims
-          // work happened when nobody knows.
           if (!isReadName(name)) {
             const reason = safely(
               () => (armed.headErr instanceof Error ? armed.headErr.message : String(armed.headErr)),
