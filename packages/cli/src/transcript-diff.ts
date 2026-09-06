@@ -22,9 +22,7 @@ export type HookResponse = {
 };
 
 export type AppliedHook = {
-  /** Tool result the model sees after the host applies (or drops) the rewrite. */
   visible: unknown;
-  /** Always populated from the hook payload when present — survives a dropped rewrite. */
   additionalContext: string;
   droppedRewrite: boolean;
 };
@@ -41,14 +39,6 @@ function rewriteOf(hook: HookResponse | null | undefined): unknown {
   return hook?.hookSpecificOutput?.updatedToolOutput;
 }
 
-/**
- * Simulate Claude Code applying a PostToolUse hook to a tool result.
- *
- * Built-ins: object rewrite lands iff it matches the native schema; a string
- * rewrite is dropped. Unknown / MCP tools are unvalidated — any rewrite lands.
- * `additionalContext` is always returned, even when the rewrite is dropped or
- * `decision` is `"block"`.
- */
 export function applyHookOutput(
   toolName: string,
   original: unknown,
