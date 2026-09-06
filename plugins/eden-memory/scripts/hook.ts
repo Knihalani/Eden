@@ -1,22 +1,15 @@
 #!/usr/bin/env bun
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-
-async function findRun(): Promise<(() => Promise<void>) | undefined> {
-  for (const start of [process.env.CLAUDE_PLUGIN_ROOT, process.env.EDEN_ROOT, import.meta.dir].filter(Boolean) as string[]) {
-    for (let dir = start, i = 0; i < 8; i++, dir = dirname(dir)) {
-      for (const p of [join(dir, "packages/cli/src/memory-hook.ts"), join(dir, "cli/src/memory-hook.ts")]) {
-        if (!existsSync(p)) continue;
-        try {
-          const mod = (await import(p)) as { runMemoryHookStdin?: () => Promise<void> };
-          if (typeof mod.runMemoryHookStdin === "function") return mod.runMemoryHookStdin;
-        } catch {}
-      }
-      if (dirname(dir) === dir) break;
-    }
-  }
+try {
+  const { runMemoryHookStdin } = await import("../../../packages/cli/src/memory-hook.ts");
+  await runMemoryHookStdin();
+} catch {
+  try {
+    const body = await new Promise<string>((r) => {
+      const c: Buffer[] = [];
+      process.stdin.on("data", (b) => c.push(b as Buffer));
+      process.stdin.on("end", () => r(Buffer.concat(c).toString("utf8")));
+      if (process.stdin.isTTY) r("{}");
+    });
+    process.stdout.write(await (await fetch(`http://127.0.0.1:${process.env.EDEN_HOOKD_PORT || 8794}/hook`, { method: "POST", headers: { "content-type": "application/json" }, body: body || "{}", signal: AbortSignal.timeout(8000) })).text());
+  } catch { process.stdout.write("{}"); }
 }
-
-const run = await findRun();
-if (run) await run();
-else process.stdout.write("{}");
