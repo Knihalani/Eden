@@ -371,8 +371,6 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
         const boom = (tools as unknown as Record<string, { execute: () => Promise<unknown> }>).boom_a!;
         await boom.execute().catch(() => {});
         await boom.execute().catch(() => {});
-        // Local pause is synchronous; join the fire-and-forget POST via the
-        // server waiter instead of a wall-clock sleep.
         expect(state.pausedIds.has(p.id)).toBe(true);
         await cap.whenHit();
         expect(cap.hits.filter((h) => h.includes("/pause")).length).toBe(1);
