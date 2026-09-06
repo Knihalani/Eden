@@ -310,19 +310,7 @@ function isEdenHook(entry: HookEntry): boolean {
   });
 }
 
-/**
- * Add Eden's hooks alongside whatever is already installed.
- *
- * This was a shallow spread of one object over another, so Eden's
- * PreToolUse/PostToolUse/PostToolBatch/Stop/SessionStart/UserPromptSubmit/PreCompact arrays *replaced* the user's
- * entries for those events outright. Anyone who had their own PreToolUse hook
- * — a command allowlist, an audit log, a secret scanner — silently lost it the
- * first time they ran `eden setup`, and Eden is not entitled to disarm
- * somebody's guard rail in order to install itself.
- *
- * Re-running setup replaces our own previous entry rather than appending a
- * second copy, so it stays idempotent.
- */
+/** Replace Eden entries, keep the user's; re-run stays idempotent. */
 export function mergeHooks(existing: unknown, ours: HookMap): HookMap {
   const out: HookMap = {};
   const prev = (existing && typeof existing === "object" ? existing : {}) as HookMap;

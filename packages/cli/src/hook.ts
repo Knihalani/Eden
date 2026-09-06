@@ -28,28 +28,30 @@ export type HookIn = {
 export type HookHost = "claude" | "gemini" | "opencode" | "codex" | "unknown";
 
 const EVENT_ALIASES: Record<string, string> = {
-  PostToolUse: "PostToolUse",
   AfterToolUse: "PostToolUse",
   AfterTool: "PostToolUse",
   post_tool: "PostToolUse",
   "tool.execute.after": "PostToolUse",
-  PostToolBatch: "PostToolBatch",
   AfterToolBatch: "PostToolBatch",
   post_tool_batch: "PostToolBatch",
-  PreToolUse: "PreToolUse",
   BeforeToolUse: "PreToolUse",
   BeforeTool: "PreToolUse",
   pre_tool: "PreToolUse",
   "tool.execute.before": "PreToolUse",
-  Stop: "Stop",
   SessionEnd: "Stop",
   session_stop: "Stop",
-  SessionStart: "SessionStart",
+  session_end: "Stop",
+  sessionEnd: "Stop",
+  AfterAgent: "Stop",
+  stop: "Stop",
   session_start: "SessionStart",
-  UserPromptSubmit: "UserPromptSubmit",
+  sessionStart: "SessionStart",
   user_prompt_submit: "UserPromptSubmit",
-  PreCompact: "PreCompact",
+  beforeSubmitPrompt: "UserPromptSubmit",
+  BeforeAgent: "UserPromptSubmit",
   pre_compact: "PreCompact",
+  preCompact: "PreCompact",
+  PreCompress: "PreCompact",
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -249,20 +251,6 @@ function flushSession(session: string, events: Array<Record<string, unknown>>): 
     .catch(() => undefined);
 }
 
-/**
- * Drop the events that were successfully uploaded, keeping everything else.
- *
- * Two failure modes this has to avoid, both of which lose events:
- *  - An empty id set used to fall through to `rest = []`, i.e. "nothing was
- *    confirmed sent, so delete the entire log". Callers happen to guard
- *    against it today, but the safe reading of "no ids to drop" is to drop
- *    nothing.
- *  - Rewriting in place truncates first and writes after. A crash, a full
- *    disk, or a power loss in between leaves the log empty or ending in half a
- *    line, which `readJsonl` then cannot parse. Writing a sibling temp file
- *    and renaming makes the replacement atomic: readers see either the old
- *    file or the new one, never a partial one.
- */
 /**
  * Drop exactly the lines a caller has finished with, keeping anything that
  * arrived since it read them.
