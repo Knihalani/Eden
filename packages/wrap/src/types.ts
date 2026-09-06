@@ -55,11 +55,6 @@ export type EdenOpts = {
   onReceipt?: (r: Receipt) => void;
   shadow?: boolean;
   timeoutMs?: number;
-  /**
-   * Hosted-dispatch session key. Armings are partitioned by this id so two
-   * agents on one process cannot claim each other's tails. Default: `EDEN_SESSION`
-   * or the single-tenant bucket.
-   */
   sessionId?: string;
   arming?: ArmingStore;
   armMax?: number;
