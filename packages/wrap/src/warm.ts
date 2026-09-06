@@ -310,11 +310,6 @@ export async function takeWarm(
   }
 }
 
-/**
- * Registry wrapper: first-wave reads of this program join an in-flight warm
- * (or take a completed one). Everything else goes to the real registry.
- * Fail-open: a warm miss or error executes for real.
- */
 export function withWarmLookup(
   state: WrapState,
   program: StretchProgram,
