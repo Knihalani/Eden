@@ -225,7 +225,6 @@ export function anthropicMessageToSse(msg: AnthropicMessage): string {
       sse("content_block_stop", { type: "content_block_stop", index: i });
       return;
     }
-    // Unknown block type: pass it through both start and stop so indexes stay aligned.
     sse("content_block_start", { type: "content_block_start", index: i, content_block: block });
     sse("content_block_stop", { type: "content_block_stop", index: i });
   });
