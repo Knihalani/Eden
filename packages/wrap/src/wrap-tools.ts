@@ -852,14 +852,6 @@ function replayableProgram(p: StretchProgram): boolean {
   return (p.sequence ?? []).every((n) => isReadName(n));
 }
 
-/**
- * Returns `{ [K in keyof T]: ToolDef }`, not `T` — every entry has been through
- * asToolDef(), so a bare function in becomes a ToolDef out. Saying `T` claimed
- * the inputs came back untouched, which handed callers the *input* signature:
- * an inline `{ ping: { execute: () => 1 } }` made `tools.ping.execute({})` a
- * type error even though the proxy passes args through. Intersecting with the
- * index signature keeps dynamic lookups of compiled tools working.
- */
 export function wrapTools<T extends ToolsIn>(
   tools: T,
   state: WrapState,
