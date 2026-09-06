@@ -221,11 +221,6 @@ describe("withFileLock", () => {
   });
 
   test("breaking an abandoned lock does not delete the lock that replaced it", () => {
-    // The decision to break and the unlink are two syscalls apart. If the dead
-    // holder's lock is released and a live process acquires in between, an
-    // unlink that only checks "is there still a file here" evicts that live
-    // holder — the exact failure breaking is supposed to avoid. The inode
-    // observed when the decision was made has to be the one removed.
     const lock = join(home, "runs", "swapped.jsonl.lock");
     writeFileSync(lock, JSON.stringify({ pid: 0x7ffffffe, host: hostname(), ts: Date.now() }));
 

@@ -183,9 +183,6 @@ async function replayPass(
       }
       blocks.push(block);
     } catch (err) {
-      // Not necessarily a fault: the compiled program runs the checks the
-      // agent skipped. The trace simply cannot pair this program, so it is
-      // counted and set aside — never silently dropped.
       if (isUnrecordedCall(err)) unrecorded++;
       else {
         errored++;
