@@ -299,7 +299,6 @@ export async function scrapeSseUsage(stream: ReadableStream<Uint8Array>, run: Ru
     try {
       reader.releaseLock();
     } catch {
-      /* already released */
     }
   }
 }
