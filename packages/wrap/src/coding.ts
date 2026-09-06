@@ -31,7 +31,6 @@ function bashJail(cwd: string, cmd: string): void {
   if (/(^|[\s;(])cd\s+['"]?(\.\.|\/|~)/.test(cmd)) {
     throw new Error("path outside workspace");
   }
-  // ~user expansions resolve outside the workspace just like ~/ do.
   if (/(^|[\s;|&'"(])~[A-Za-z0-9_-]/.test(cmd)) {
     throw new Error("path outside workspace");
   }
