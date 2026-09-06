@@ -120,11 +120,9 @@ describe("hook", () => {
     mkdirSync(home, { recursive: true });
     process.env.EDEN_HOME = home;
     writeFileSync(join(home, "live-tools.json"), JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"] }]));
-    // Default is observe: a matching call is allowed through untouched.
     delete process.env.EDEN_STEER_HOOKS;
     const observe = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-100" } });
     expect((observe as { ok?: boolean }).ok).toBe(true);
-    // Opt-in via env steers (denies the raw call in favour of the MCP tool).
     process.env.EDEN_STEER_HOOKS = "1";
     try {
       const out = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-100" } });
@@ -508,7 +506,6 @@ describe("hook", () => {
       return { wrote: true };
     };
     try {
-      // Batch already ran the tails this turn — count 1 from the simulation.
       executeWrite();
       expect(mutate).toBe(1);
 
@@ -538,7 +535,6 @@ describe("hook", () => {
         tool_input: { issue: "101", file_path: "/repo/pr.ts" },
       })) as { hookSpecificOutput?: { permissionDecision?: string } };
       expect(write.hookSpecificOutput?.permissionDecision).toBe("deny");
-      // Denied — the test double is not executed again.
       expect(mutate).toBe(1);
     } finally {
       delete process.env.EDEN_STEER_HOOKS;

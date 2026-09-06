@@ -79,7 +79,6 @@ describe("transcript-diff headless host (Claude Code silent drop)", () => {
 
     const dropped = applyHookOutput("mcp__vendor__thing", orig, {
       hookSpecificOutput: {
-        // Simulate a host that ignores even unvalidated rewrites.
         additionalContext: (hook as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput
           .additionalContext,
       },

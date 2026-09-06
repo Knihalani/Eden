@@ -97,7 +97,6 @@ describe("transparent execution (surfacing without a surface)", () => {
     };
     expect(out.hookSpecificOutput.hookEventName).toBe("PostToolUse");
     const u = out.hookSpecificOutput.updatedToolOutput;
-    // Shape is the whole point: a plain string here would be silently ignored.
     expect(typeof u).toBe("object");
     expect(u.stderr).toBe("");
     expect(u.interrupted).toBe(false);
@@ -245,7 +244,6 @@ describe("transparent execution (surfacing without a surface)", () => {
       delete process.env.EDEN_TRANSPARENT_WRITES;
       expect(eligibleForTransparent({ ...writeTool, transparent_writes: true }, { issue: "101" })).toBe(false);
 
-      // Shape table still knows Write even when serving is gated off.
       const shaped = postToolUseReplacement("Write", ORIGINALS.Write, "facts", "patch_pr");
       expect(matchesNativeShape("Write", (shaped as { hookSpecificOutput: { updatedToolOutput: unknown } }).hookSpecificOutput.updatedToolOutput)).toBe(true);
     } finally {
