@@ -21,18 +21,6 @@ export function wrapIsland(opts: { apiKey?: string; upstream?: string; fetch?: t
   return withWitnessMemo(withIslandBatch(sync, { apiKey: key, baseURL, fetch: opts.fetch }));
 }
 
-/**
- * Deterministic-first serving: compiled programs come from witnesses, and an
- * island whose identical input already produced the SAME output twice is not
- * a semantic question anymore — it is a lookup. Calling gpt-4o-mini to look
- * up an answer the recordings already contain is pure waste (latency + cost
- * + a nondeterminism surface). Unseen or disagreeing inputs fall through to
- * the live model, and its answer is recorded for next time.
- *
- * Keyed on (system, input, schema); temperature is pinned to 0 upstream, so
- * agreement between two past runs is meaningful evidence. Bounded; a burst
- * of unique inputs clears rather than grows without limit.
- */
 const ISLAND_MEMO_CAP = 512;
 
 export function createWitnessTable(): {
