@@ -1243,8 +1243,6 @@ export function wrapTools<T extends ToolsIn>(
     };
   }
 
-  // with a one-time warning; the compiled artifact passed human approval and
-  // shadow validation, its ad-hoc namesake did not.
   const warnedCollisions = new Set<string>();
   return new Proxy(wrapped, {
     get(target, prop, recv) {
