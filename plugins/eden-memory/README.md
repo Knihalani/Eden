@@ -10,7 +10,7 @@ Do not enable the plugin **and** `eden setup`. Both attach UserPromptSubmit, so 
 
 ### Plugin (Claude Code only)
 
-From this repo: `/plugin marketplace add .` then `/plugin install eden-memory`. Needs Bun. Marketplace copy must include the Eden checkout (`packages/cli`), not the plugin folder alone.
+`/plugin marketplace add .` then `/plugin install eden-memory`. Needs Bun. Works from this checkout, or with `eden hookd`/`eden wrap` running if the marketplace copy is the plugin folder alone.
 
 ### `eden setup`
 
