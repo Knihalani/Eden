@@ -155,8 +155,6 @@ d("v2: sustained steering correctness (varied shapes)", () => {
         contract: {
           witnesses: 3,
           minLlmReduction: 2,
-          // Envelope constrains k to the witnessed set, so "unknown" keys are
-          // genuinely out-of-distribution rather than steered blindly.
           allowExact: false,
           envelope: { inputs: { k: witnessedKs } },
         },
