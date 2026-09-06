@@ -1,10 +1,3 @@
-/**
- * Idle-path micro-bench: wrap overhead with no live programs vs raw execute,
- * and with 64 live armings on a non-matching tool (Wave 4.3).
- * Prints µs/call. Not a correctness test.
- *
- *   bun packages/wrap/src/idle.bench.ts
- */
 import { withVersion, type StretchProgram } from "@eden/ir";
 import { createState, wrapTools } from "./index";
 
