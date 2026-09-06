@@ -52,8 +52,6 @@ describe("hook", () => {
 
   test("PostToolUse advances the flushed-cursor sidecar once per event", async () => {
     const home = join(import.meta.dir, "../../.tmp-eden-cursor");
-    // A previous failed run leaves its temp home behind; counts would then
-    // start from stale state instead of zero.
     rmSync(home, { recursive: true, force: true });
     mkdirSync(join(home, "runs"), { recursive: true });
     process.env.EDEN_HOME = home;
