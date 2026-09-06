@@ -3,16 +3,6 @@ import type { StretchProgram } from "@eden/ir";
 import { decideGuard, requiredChecks } from "./guard";
 import { emptyRun, type EdenOpts } from "./types";
 
-/**
- * Guard-branch regressions from the waste audit.
- *
- * The budget and loop branches decide whether an in-flight run keeps
- * spending. Every branch here is one that previously had no direct test:
- * the budget steer picked whichever program came first rather than one that
- * fit the time left, and the loop branch hardened against productive polls
- * (see signals.ts repeatProgress / READ_NGRAM_REPEAT_AT).
- */
-
 function tinyProgram(over: Partial<StretchProgram> = {}): StretchProgram {
   return {
     id: "p_tiny",
