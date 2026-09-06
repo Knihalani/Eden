@@ -285,11 +285,6 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
       sleepBriefly();
       continue;
     }
-    // Stamp who we are so a contender can tell "still running" from "died
-    // holding it". Best effort: an unstamped lock is simply judged on age, as
-    // it was before, so a failure here degrades rather than breaks.
-    // Identity first and on its own: fstat of a descriptor we just opened is
-    // the one part that cannot realistically fail, and release depends on it.
     let ino: number | null = null;
     try {
       ino = fstatSync(fd).ino;
@@ -301,8 +296,6 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
     } catch {
       /* unstamped: contenders fall back to the age horizon */
     }
-    // Outside the acquisition try/catch: whatever fn() throws is the caller's
-    // error and propagates unchanged, exactly once.
     try {
       return fn();
     } finally {
@@ -336,8 +329,6 @@ export async function withFileLockAsync<T>(lockPath: string, fn: () => T | Promi
       await Bun.sleep(8);
       continue;
     }
-    // Stamp who we are so a contender can tell "still running" from "died
-    // holding it" — same best-effort stamp as withFileLock.
     let ino: number | null = null;
     try {
       ino = fstatSync(fd).ino;
