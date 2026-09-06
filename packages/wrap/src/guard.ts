@@ -90,10 +90,6 @@ export function decideGuard(args: {
     actual: actualSpend(run, now),
     remainingTimeoutMs: remaining,
   });
-  // Spent (actual ≥ predicted llm/ms/cents) does not wait on firstWarningAt.
-  // Timeout-pressure (predicted ms > remaining timeout) still does: lifting
-  // that would false-halt the first call of any program whose predicted ms
-  // exceeds the cap left.
   if (view.spent) return { action: "halt", reason: "budget", detail: forecastCopy(view) };
   if (run.firstWarningAt == null) return null;
   if (view.timeoutPressure) {
