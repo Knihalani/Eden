@@ -107,7 +107,7 @@ function informativeTokens(s: string): string[] {
     .filter((t) => t.length >= 4 && !STOP_TOKENS.has(t));
 }
 
-const MSG_TEXT_KEYS = ["content", "text", "command", "url", "thinking", "reasoning_content", "reasoning"];
+const MSG_TEXT_KEYS = new Set(["content", "text", "command", "url", "thinking", "reasoning_content", "reasoning"]);
 
 export function messageText(messages: readonly unknown[], maxMessages = 8): string {
   const parts: string[] = [];
@@ -123,9 +123,7 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
     }
     if (v && typeof v === "object") {
       const o = v as Record<string, unknown>;
-      for (const key of MSG_TEXT_KEYS) {
-        if (key in o) walk(o[key], depth + 1);
-      }
+      for (const key in o) if (MSG_TEXT_KEYS.has(key)) walk(o[key], depth + 1);
     }
   };
   const start = messages.length > maxMessages ? messages.length - maxMessages : 0;
@@ -164,11 +162,6 @@ export function envelopeDenseWitnesses(p: StretchProgram): string[] {
   return out;
 }
 
-/**
- * Drop trailing English so `psql -c 'select 1' please` still has shape
- * `cli:psql` and still template-fits. The cut requires a space before the
- * conjunction, so `please handle ticket 123` is unchanged.
- */
 function commandCandidateLines(text: string): string[] {
   const out: string[] = [];
   for (const line of text.split("\n")) {
