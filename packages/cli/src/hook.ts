@@ -149,15 +149,6 @@ export async function runHook(): Promise<void> {
   } catch {
     body = {}
   }
-  // The last line of defence for "a broken Eden never blocks the agent". Any
-  // throw in here — a stale lock, an unreadable home directory, a corrupt run
-  // log — used to exit non-zero with empty stdout. `{}` is the answer that
-  // lets the tool call proceed.
-  //
-  // The same defence against *hanging*: Claude Code waits on this process, so
-  // respondToHook is raced against a hard timeout. A wedged lock or a slow
-  // disk costs Eden its recording for one event; it never costs the agent its
-  // tool call.
   const HOOK_TIMEOUT_MS = 2_500;
   let out: Record<string, unknown> = { ok: true };
   try {
