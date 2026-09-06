@@ -505,13 +505,6 @@ describe("phase 1: bounded network paths (M6)", () => {
   });
 });
 
-/**
- * Phase 2 — G2 fork programs through the live wrap pipeline.
- *
- * Compile a branched workflow from witnesses, approve it (manifest), and
- * prove the branch selects arms from the REAL tool's answer at runtime —
- * including falling back to raw for out-of-envelope inputs.
- */
 describe("phase 2: branched programs steer end-to-end", () => {
   function forkTrace(id: string, state: string, tail: string[], pr: number): StretchTrace {
     return {
