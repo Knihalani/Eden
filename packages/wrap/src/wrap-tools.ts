@@ -1148,9 +1148,6 @@ export function wrapTools<T extends ToolsIn>(
         }
         if (structuredDeopt != null) return { eden: "deopt", reason: structuredDeopt };
 
-        // Guards only act — halt, block, refuse — when enforcement is on. In
-        // the default fail-safe mode they stay observers: warnings accumulate
-        // (noteSignals), show up on the dashboard, and never stop a call.
         if (enforcementEnabled(state.opts)) {
           const guard = safely(() => decideGuard({ name, run, live, opts: state.opts, now }), null);
           if (guard && guard.action !== "steer") {
