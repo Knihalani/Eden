@@ -162,10 +162,6 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         if (cur.indexOf(old, at + old.length) !== -1) {
           throw new Error("old_string is not unique; include more context");
         }
-        // Spliced, not String.replace(). replace() expands $&, $`, $' and $1 in
-        // the *replacement* even when the pattern is a plain string, so an edit
-        // introducing `cost * $&` or a shell snippet containing `$'` rewrote
-        // itself into something else on the way to disk.
         const updated = cur.slice(0, at) + next + cur.slice(at + old.length);
         await writeFile(path, updated, { encoding: "utf8", signal: ctx?.signal });
         return { ok: true, path };
