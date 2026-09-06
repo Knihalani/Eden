@@ -792,8 +792,6 @@ export function wrapTools<T extends ToolsIn>(
   state: WrapState,
 ): { [K in keyof T]: ToolDef } & Record<string, ToolDef> {
   const run = state.run;
-  // Per-invocation records for trace attribution (see emitTrace). Keyed by a
-  // monotonically increasing id stamped onto each pushed event.
   const invocations = new Map<number, Invocation>();
   let nextInvocationId = 0;
   // Bounded like every other per-call structure: once finished entries are
