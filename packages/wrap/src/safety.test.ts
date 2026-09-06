@@ -12,11 +12,6 @@ async function withClockAdvanced<T>(ms: number, fn: () => T | Promise<T>): Promi
   }
 }
 
-/**
- * A monotonic clock the test can push forward at a chosen moment — including
- * from inside a tool's execute, which is how "the compiled run itself took
- * longer than the TTL" is reproduced.
- */
 function controllableClock(): { advance: (ms: number) => void; restore: () => void } {
   const real = performance.now.bind(performance);
   let offset = 0;
