@@ -42,7 +42,6 @@ export function createWitnessTable(): {
       }
       if (JSON.stringify(e.out) === json) e.seen += 1;
       else {
-        // Disagreement: prior evidence was noise. Restart counting at 1.
         e.out = out;
         e.seen = 1;
       }
