@@ -6,12 +6,7 @@ import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { withKnowFactsAnthropic } from "./know-inject";
-import { MEMORY_MARK, openMemory } from "../../../src/index";
-
-let wrapMem: ReturnType<typeof openMemory> | undefined;
-function wrapMemory() {
-  return (wrapMem ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR }));
-}
+import { MEMORY_MARK, processMemory } from "../../../src/index";
 
 /** Anthropic Messages API dialect (G7). */
 
@@ -316,7 +311,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   body = withKnowFactsAnthropic(body) as AnthropicRequest;
   try {
     const sys = typeof body.system === "string" ? body.system : (body.system ?? []).map((b) => b.text || "").join("\n");
-    const mems = wrapMemory().relevant(`${sys}\n${messageText(body.messages ?? [])}`);
+    const mems = processMemory().relevant(`${sys}\n${messageText(body.messages ?? [])}`);
     if (mems.length) {
       const extra = { type: "text" as const, text: `${MEMORY_MARK}\n${mems.map((m) => `- ${m.text}`).join("\n")}` };
       body = typeof body.system === "string"
