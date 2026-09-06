@@ -53,10 +53,6 @@ export function remainderDenyReason(program: string, tool: string): string {
   return `Already served by ${program}. Do not re-run ${tool} — facts are in the last tool output or attached as context.`;
 }
 
-/** Observed only when a host (or replica) actually drops `updatedToolOutput`.
- * Live Claude Code never acks always-drop of a *correct* native rewrite.
- * `applyHookOutput.droppedRewrite` is shape-mismatch only; the silent-drop
- * replica writes this class when it forces the drop. */
 export function hostDropReason(): string {
   return "The host dropped the rewrite (updatedToolOutput). Original tool output was kept.";
 }

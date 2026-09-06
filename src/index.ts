@@ -31,10 +31,11 @@ function convBlob(list: unknown[]): string {
     const o = m as Record<string, unknown>;
     const c = o.content;
     if (typeof c === "string" && c) parts.push(c);
+    else if (typeof o.llmContent === "string" && o.llmContent) parts.push(o.llmContent);
     else if (Array.isArray(c)) {
       for (const b of c) {
         if (b && typeof b === "object") {
-          const t = ["text","content","alt","name","caption","title","filename","url","href","source","uri","id","mimeType"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v);
+          const t = ["text","content","llmContent","alt","name","caption","title","filename","url","href","source","uri","id","mimeType"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v);
           if (t) parts.push(t as string);
         }
       }
