@@ -4,14 +4,9 @@ import { dirname, join } from "node:path";
 
 async function findRun(): Promise<(() => Promise<void>) | undefined> {
   const files: string[] = [];
-  const roots = [process.env.CLAUDE_PLUGIN_ROOT, process.env.EDEN_ROOT, import.meta.dir].filter(
-    (x): x is string => typeof x === "string" && x.length > 0,
-  );
-  for (const start of roots) {
-    let dir = start;
-    for (let i = 0; i < 8; i++) {
-      files.push(join(dir, "packages/cli/src/memory-hook.ts"));
-      files.push(join(dir, "cli/src/memory-hook.ts"));
+  for (const start of [process.env.CLAUDE_PLUGIN_ROOT, process.env.EDEN_ROOT, import.meta.dir].filter(Boolean) as string[]) {
+    for (let dir = start, i = 0; i < 8; i++) {
+      files.push(join(dir, "packages/cli/src/memory-hook.ts"), join(dir, "cli/src/memory-hook.ts"));
       const parent = dirname(dir);
       if (parent === dir) break;
       dir = parent;
@@ -22,11 +17,8 @@ async function findRun(): Promise<(() => Promise<void>) | undefined> {
     try {
       const mod = (await import(p)) as { runMemoryHookStdin?: () => Promise<void> };
       if (typeof mod.runMemoryHookStdin === "function") return mod.runMemoryHookStdin;
-    } catch {
-      /* try next */
-    }
+    } catch {}
   }
-  return undefined;
 }
 
 const run = await findRun();
