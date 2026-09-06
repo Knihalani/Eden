@@ -44,10 +44,6 @@ describe("anthropic steering (block-level)", () => {
   });
 
   test("unrelated siblings survive, and a removed sibling never shifts replacements (H1 regression)", () => {
-    // tu_2 (write) is absorbed. The OLD positional zip fed tu_3 the replacement
-    // intended for tu_2's slot — here there is none, so tu_3 kept its own name
-    // but tu_1's replacement could land on the wrong block entirely when more
-    // calls preceded.
     const content = [
       { type: "tool_use", id: "tu_1", name: "search", input: { q: "test" } },
       { type: "tool_use", id: "tu_2", name: "write", input: {} },
