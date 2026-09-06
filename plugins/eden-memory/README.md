@@ -10,21 +10,7 @@ Do not enable the plugin **and** `eden setup`. Both attach UserPromptSubmit, so 
 
 ### Plugin (Claude Code only)
 
-From a clone of this repo, in Claude Code:
-
-```
-/plugin marketplace add .
-/plugin install eden-memory
-```
-
-Or, if the GitHub marketplace is added as `KaiavN/Eden`:
-
-```
-/plugin marketplace add KaiavN/Eden
-/plugin install eden-memory
-```
-
-Needs Bun on PATH. The marketplace copy must include the Eden checkout (`packages/cli`), not the plugin folder alone.
+From this repo: `/plugin marketplace add .` then `/plugin install eden-memory`. Needs Bun. Marketplace copy must include the Eden checkout (`packages/cli`), not the plugin folder alone.
 
 ### `eden setup`
 
@@ -37,3 +23,4 @@ Installs the same memory hooks on Claude Code plus SessionStart/Stop observe on 
 | UserPromptSubmit, PreCompact | Inject relevant notes, then store this turn |
 | SessionStart | Brief stored constraints (and observe the transcript if present) |
 | Stop, SessionEnd | Store from the transcript; no inject |
+| OpenCode `chat.message` / `session.created` | Same inject + brief via `eden setup` plugin |
