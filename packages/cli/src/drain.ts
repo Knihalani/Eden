@@ -7,7 +7,7 @@ import { refreshOptedInSurfaces, type ManifestTool } from "./manifest";
 function ingestible(row: Record<string, unknown>): boolean {
   const hook = String(row.hook || "");
   if (hook === "PreToolUse") return false;
-  if (hook === "SessionStart" || hook === "Stop" || hook === "UserPromptSubmit") return false;
+  if (hook === "SessionStart" || hook === "Stop" || hook === "UserPromptSubmit" || hook === "PreCompact") return false;
   return Boolean(row.name);
 }
 
