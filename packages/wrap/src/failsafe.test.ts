@@ -431,9 +431,6 @@ describe("phase 1: bounded network paths (M6)", () => {
       process.env.EDEN_CONTROL_TIMEOUT_MS = "150";
       try {
         const state = createState({ baseUrl: `http://127.0.0.1:${server.port}`, apiKey: "k" });
-        // AbortSignal.timeout is real wall time; Date.now may be flake-skewed.
-        // Assert completion + that we waited at least a large fraction of the
-        // configured timeout under the worst scale the harness applies (0.7).
         const t0 = Date.now();
         await pullLive(state);
         const elapsed = Date.now() - t0;
