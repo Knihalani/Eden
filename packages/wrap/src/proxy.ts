@@ -33,7 +33,6 @@ function programs(opts: ProxyOpts): StretchProgram[] {
   }
 }
 
-/** Wrap auth (`eden_dev`, `eden_*` signup keys, `EDEN_API_KEY`) is not an OpenAI key. Never forward it. */
 export function isWrapAuthToken(key: string): boolean {
   const t = key.trim();
   if (!t) return false;
@@ -76,7 +75,6 @@ function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string
   };
 }
 
-/** Miss without a model key: HTTP 200 so OpenAI clients do not treat wrap as down. */
 export function noModelKey(): Response {
   return Response.json({
     id: "eden-failopen",
