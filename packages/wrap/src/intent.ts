@@ -108,12 +108,6 @@ function informativeTokens(s: string): string[] {
     .filter((t) => t.length >= 4 && !STOP_TOKENS.has(t));
 }
 
-/**
- * Pull candidate text out of a request's messages — OpenAI and Anthropic
- * dialects both, since the scorer runs before either handler branches. Only
- * string content is read; depth and volume are bounded so a pathological
- * payload costs bounded work.
- */
 export function messageText(messages: readonly unknown[], maxMessages = 8): string {
   const parts: string[] = [];
   const msgs = messages.slice(-maxMessages);
@@ -129,23 +123,12 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
     }
     if (v && typeof v === "object") {
       const o = v as Record<string, unknown>;
-      // Content blocks: {type:"text", text}, tool results, etc. Read the
-      // usual text-bearing fields; ignore ids, roles, schemas.
-      for (const key of ["content", "text", "command", "url", "thinking"]) {
+      for (const key of ["content", "text", "command", "url", "thinking", "reasoning_content", "reasoning"]) {
         if (key in o) walk(o[key], depth + 1);
       }
     }
   };
-  for (const m of msgs) {
-    walk(m, 0);
-    if (m && typeof m === "object") {
-      const o = m as Record<string, unknown>;
-      const rc = o.reasoning_content;
-      if (typeof rc === "string" && rc.length) parts.push(rc.slice(0, 2000));
-      const rs = o.reasoning;
-      if (typeof rs === "string" && rs.length) parts.push(rs.slice(0, 2000));
-    }
-  }
+  for (const m of msgs) walk(m, 0);
   return parts.join("\n").slice(0, 16_000);
 }
 
