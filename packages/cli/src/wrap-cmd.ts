@@ -5,7 +5,6 @@ import { ensureHome, resolveApiKey } from "./home";
 import { codingRegistry, wrapIsland } from "@eden/wrap";
 import { replayRegistry } from "@eden/shadow";
 
-/** Bring up hookd so Claude Code's 1s PreToolUse curl can deny remainder. */
 export async function bootHookdFromWrap(): Promise<boolean> {
   const { startHookdBackground } = await import("./hookd");
   return startHookdBackground();
@@ -43,7 +42,6 @@ Does not Approve. Live tools stay 0 until a human Approve. T-100 is eden demo.
 `;
 }
 
-/** Printed after listen. Not the gated workbench. */
 export function wrapBootLetter(origin: string, live = 0): string {
   const base = origin.replace(/\/$/, "");
   return `Eden wrap ${base}
