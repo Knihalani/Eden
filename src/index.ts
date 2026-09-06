@@ -100,13 +100,11 @@ export class AgentMemory {
   private path: string;
 
   constructor(opts: MemoryOptions = {}) {
-    this.dir = opts.dir || join(homedir(), ".eden", "memory");
     this.know = opts.know;
     this.agent = opts.agent;
     this.project = opts.project;
-    mkdirSync(this.dir, { recursive: true });
-    this.path = join(this.dir, "memories.jsonl");
-    this.compiled = load(this.path);
+    mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
+    this.compiled = load((this.path = join(this.dir, "memories.jsonl")));
   }
 
   memories(): MemoryRecord[] {
