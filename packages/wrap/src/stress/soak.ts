@@ -212,7 +212,6 @@ async function steeringAccuracy(): Promise<void> {
     );
     const out2 = (await tools2.lookup.execute({ id: `UNKNOWN-${trial}` })) as Record<string, unknown>;
     if (rawOk(out2) && ran2.lookup === 1 && ran2.enrich === 0 && ran2.respond === 0) {
-      // Correctly left alone: raw ran once, nothing else fired.
     } else {
       falseSteer++;
     }
