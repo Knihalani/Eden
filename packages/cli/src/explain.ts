@@ -61,9 +61,7 @@ function tracesFromRuns(home: string): StretchTrace[] {
           result: row.tool_response ?? row.result,
           ok: row.ok !== false,
         });
-      } catch {
-        /* skip the bad line; the letter still prints */
-      }
+      } catch {}
     }
     if (!events.length) continue;
     out.push({

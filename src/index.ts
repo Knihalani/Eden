@@ -223,13 +223,13 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
         const p = u.pathname.replace(/\/+$/, "").replace(/^\/v1(?=\/)/, "") || "/";
         if (req.method === "DELETE") return json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
         if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
-          const b = (await req.json().catch(() => ({}))) as { text?: string; prompt?: string; input?: string; content?: string; query?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; contents?: unknown[]; q?: string; k?: number };
-          const blob = String(b.text || b.prompt || b.input || b.content || b.query || "");
+          const b = (await req.json().catch(() => ({}))) as { text?: string; prompt?: string; input?: string; content?: string; query?: string; message?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; contents?: unknown[]; q?: string; k?: number };
+          const blob = String(b.text || b.prompt || b.input || b.content || b.query || b.message || "");
           const msgs = b.messages || b.conversation || b.contents || (blob ? [{ role: "user", content: blob }] : []);
           const run = ({ "/observe": () => memory.observe(msgs), "/remember": () => memory.remember(blob, b), "/forget": () => ({ ok: memory.forget(String(b.id || blob)) }), "/inject": () => ({ messages: memory.inject(msgs) }), "/query": () => memory.query(String(b.q || blob), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return json(run());
         } else {
-          const q = u.searchParams.get("q") || u.searchParams.get("text") || u.searchParams.get("prompt") || u.searchParams.get("input") || "";
+          const q = u.searchParams.get("q") || u.searchParams.get("text") || u.searchParams.get("prompt") || u.searchParams.get("input") || u.searchParams.get("content") || u.searchParams.get("message") || "";
           const k = Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6;
           const health = () => ({ ok: true, n: memory.memories().length });
           const run = ({ "/": health, "/health": health, "/query": () => memory.query(q, k), "/observe": () => memory.observe(q ? [{ role: "user", content: q }] : []), "/remember": () => memory.remember(q), "/forget": () => ({ ok: memory.forget(String(u.searchParams.get("id") || q)) }), "/inject": () => ({ messages: memory.inject(q ? [{ role: "user", content: q }] : []) }), "/memories": () => (q ? memory.query(q, k) : memory.memories().slice().sort((a, b) => b.at - a.at).slice(0, Number(u.searchParams.get("limit") || u.searchParams.get("k")) || 500)) } as Record<string, () => unknown>)[p];
