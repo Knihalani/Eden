@@ -373,8 +373,6 @@ describe("hook", () => {
       expect(ledger).toContain('"class":"transparent"');
       expect(ledger).toContain('"class":"steered-skip"');
       expect(ledger.split("\n").filter((l) => l.includes("steered-skip")).length).toBe(2);
-      // Native Read rewrite matches the schema — Claude Code would keep it.
-      // Always-drop of a *correct* object is invisible to the live hook.
       expect(ledger).not.toContain('"class":"host-drop"');
     } finally {
       globalThis.fetch = prevFetch;
