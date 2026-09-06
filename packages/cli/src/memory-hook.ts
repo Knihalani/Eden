@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
-const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", session_start: "SessionStart", pre_compact: "PreCompact", session_stop: "Stop" };
+const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", session_start: "SessionStart", session_end: "SessionEnd", pre_compact: "PreCompact", session_stop: "Stop", beforeSubmitPrompt: "UserPromptSubmit" };
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -35,11 +35,7 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
 }
 
 export function notesFromInject(injected: unknown[]): string {
-  return injected
-    .map((m) => asRec(m))
-    .filter((o) => o.role === "system" && typeof o.content === "string" && (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:")))
-    .map((o) => String(o.content))
-    .join("\n\n");
+  return injected.map((m) => asRec(m)).filter((o) => o.role === "system" && typeof o.content === "string" && (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:"))).map((o) => String(o.content)).join("\n\n");
 }
 
 function briefing(mem: AgentMemory): string {

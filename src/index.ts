@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { alreadyInjected, injectFromRequest, injectNote } from "../packages/know/src/inject";
@@ -135,7 +135,8 @@ export class AgentMemory {
   }
 
   private persist() {
-    writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
+    writeFileSync(this.path + ".tmp", this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
+    renameSync(this.path + ".tmp", this.path);
   }
 
   relevant(text: string, cap = 6): MemoryRecord[] {
@@ -168,9 +169,7 @@ export class AgentMemory {
       while (i < next.length && (next[i] as { role?: string })?.role === "system") i++;
       next.splice(i, 0, ...notes);
       return next;
-    } catch {
-      return list;
-    }
+    } catch { return list; }
   }
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
