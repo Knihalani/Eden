@@ -79,7 +79,7 @@ function load(path: string): Compiled[] {
 }
 
 function subjectKey(text: string): string | null {
-  const k = text.trim().match(/^(.{4,80}?)\s+(?:is|are|was|were)\s+\S/i)?.[1]?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() ?? "";
+  const k = text.trim().match(/^(.{4,80}?)\s+(?:is|are|was|were|prefers?|uses?|lives in|belongs to|owned by)\s+\S/i)?.[1]?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() ?? "";
   return k.length >= 4 ? k : null;
 }
 

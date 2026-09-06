@@ -64,9 +64,6 @@ export async function wrapCmd(args: string[]): Promise<void> {
     console.log("Recording daemon starting (`eden hookd`). Stop with `eden hookd --stop`.");
   }
   const { port, hostname } = wrapListen(args);
-  // A laptop often has DATABASE_URL set for the hosted site. That trips
-  // isManagedDeployment() and then refuses eden_dev — while wrap is bound to
-  // loopback. Loopback wrap is a deliberate local install; Vercel is not.
   if (
     (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1") &&
     !process.env.VERCEL &&
@@ -77,13 +74,8 @@ export async function wrapCmd(args: string[]): Promise<void> {
   const db = process.env.EDEN_DB || join(process.env.EDEN_HOME || join(homedir(), ".eden"), "control.sqlite");
   const store = new Store(db);
   const token = resolveApiKey(args);
-  // OPENAI_BASE_URL is what the agent sets to this wrap. Using it as wrap's
-  // own upstream looped chat back into 8788. OPENAI_API_BASE is the model.
   const upstream = process.env.OPENAI_API_BASE || "https://api.openai.com/v1";
   const registry = wrapRegistry(args);
-  // A laptop registry executes runner steps (Bash/cwd/fs), so locally a
-  // pure-CLI stretch — kubectl, aws, psql — may compile. Hosted MCP keeps
-  // the cloud-only default because it cannot play runner steps.
   process.env.EDEN_RUNNER_ISLANDS = "1";
   const fetchHandler = createHandler({
     store,
