@@ -61,11 +61,11 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const prior = messagesFromTranscript(r.transcript_path ?? r.transcriptPath);
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
-      const extra = [r.prompt, r.text, r.user_message, r.prompt_response].filter((x) => typeof x === "string" && x).join("\n");
+      const extra = [r.prompt, r.text, r.user_message, r.prompt_response, r.response, r.output, r.completion].filter((x) => typeof x === "string" && x).join("\n");
       mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior);
       return stop ? null : additional(event, briefing(mem, extra));
     }
-    const prompt = String(r.prompt ?? r.text ?? r.user_message ?? "");
+    const prompt = String(r.prompt ?? r.text ?? r.user_message ?? r.response ?? "");
     const list = prompt ? [...prior, { role: "user", content: prompt }] : prior.length ? prior : [{ role: "user", content: "continue" }];
     return additional(event, notesFromInject(mem.inject(list)));
   } catch {
