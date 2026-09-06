@@ -336,8 +336,6 @@ export async function respondToHook(
       if (entry) {
         const receiptText = await executeTransparent(entry, body.tool_input ?? {});
         if (receiptText !== null) {
-          // `name` (the real tool, e.g. Bash) selects the native result shape;
-          // the program name appears in the appended sentinel.
           const replacement = postToolUseReplacement(
             name,
             body.tool_response ?? body.tool_output ?? "",
@@ -434,8 +432,6 @@ export async function respondToHook(
             permissionDecisionReason: reason,
           },
         };
-        // Gemini BeforeTool reads top-level decision/reason. Claude uses
-        // permissionDecision only — extra decision on Claude Pre is omitted.
         if (host === "gemini") {
           deny.decision = "deny";
           deny.reason = reason;

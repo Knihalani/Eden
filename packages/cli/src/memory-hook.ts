@@ -11,8 +11,11 @@ function asRec(v: unknown): Record<string, unknown> {
 
 function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.map((b) => (typeof b === "string" ? b : String(asRec(b).text ?? asRec(b).content ?? asRec(b).alt ?? asRec(b).name ?? ""))).filter(Boolean).join("\n");
+  if (!Array.isArray(content)) {
+    const o = asRec(content);
+    return String(o.text ?? o.content ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? o.alt ?? o.name ?? "");
+  }
+  return content.map(flattenContent).filter(Boolean).join("\n");
 }
 
 export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: string; content: string }> {
@@ -23,7 +26,7 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
       const rec = asRec(JSON.parse(line));
       const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
       const role = String(msg.role || rec.type || "");
-      const content = flattenContent(msg.content);
+      const content = [flattenContent(msg.content), String(msg.reasoning_content ?? msg.thinking ?? msg.reasoning ?? "")].filter(Boolean).join("\n");
       if ((role === "user" || role === "assistant") && content) out.push({ role, content });
     } catch {}
     return out.slice(-cap);
