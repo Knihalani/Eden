@@ -2,6 +2,17 @@ import { existsSync, readFileSync } from "node:fs";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
+const EVENT_ALIASES: Record<string, string> = {
+  UserPromptSubmit: "UserPromptSubmit",
+  user_prompt_submit: "UserPromptSubmit",
+  SessionStart: "SessionStart",
+  session_start: "SessionStart",
+  PreCompact: "PreCompact",
+  pre_compact: "PreCompact",
+  Stop: "Stop",
+  SessionEnd: "SessionEnd",
+  session_stop: "Stop",
+};
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -98,7 +109,7 @@ function additional(event: string, text: string): Record<string, unknown> | null
  */
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
-    const event = String(asRec(raw).hook_event_name ?? "");
+    const event = EVENT_ALIASES[String(asRec(raw).hook_event_name ?? "")] ?? String(asRec(raw).hook_event_name ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory();
     const prior = messagesFromTranscript(asRec(raw).transcript_path);
