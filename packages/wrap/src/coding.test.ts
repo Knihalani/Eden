@@ -110,7 +110,6 @@ describe("coding registry", () => {
     expect(reg.allowed_callers).toEqual(["direct", "code_execution_20260120"]);
     const out = (await reg.execute("Read", { path: "ptc.txt" })) as { content: string };
     expect(out.content).toBe("ok");
-    // Guidance only — execute does not inspect a caller field.
     expect(JSON.stringify(reg)).not.toMatch(/forbidden|denied|unauthorized/i);
   });
 });
