@@ -844,7 +844,7 @@ const JS_PKG = /\b(?:npm|yarn|pnpm|bun)\b/i;
 const JSON_STRUCT = /\b(?:ids?|keys?|nested|fields?|items?|jsonpath|ndjson|jsonl|values?)\b/i;
 
 export function configJsonPath(s: string): boolean {
-  return /\b(?:package|tsconfig|jsconfig|composer|deno)\.json\b/i.test(s);
+  return s.indexOf(".json") >= 0 && /\b(?:package|tsconfig|jsconfig|composer|deno)\.json\b/i.test(s);
 }
 
 export function jsonTaskToken(text: string): boolean {
@@ -856,9 +856,7 @@ export function jsonTaskToken(text: string): boolean {
 }
 
 export function jsonWrongWay(text: string): boolean {
-  if (!GREP_LINE.test(text) || !jsonTaskToken(text)) return false;
-  if (/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text)) return false;
-  return true;
+  return GREP_LINE.test(text) && jsonTaskToken(text) && !(/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text));
 }
 
 export function jsonCliNeed(text: string): boolean {
