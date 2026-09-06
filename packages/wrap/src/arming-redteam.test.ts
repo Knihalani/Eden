@@ -1,7 +1,3 @@
-/**
- * Wave 4 red-team: try to break the store / fast-path the way struggle probes
- * found A1–A4. Findings here are pins, not tolerances.
- */
 import { describe, expect, test } from "bun:test";
 import { createArmingStore, createState, wrapTools, type ToolDef } from "./index";
 import { withVersion, type StretchProgram } from "@eden/ir";
