@@ -237,10 +237,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
     );
     const clock = controllableClock();
     try {
-      // The clock moves on *while the compiled program is running*, which is
-      // the case the old stamping got wrong. Advancing it around the call
-      // instead would stamp the arming at the later time too, and prove
-      // nothing.
       const slow = { ...c.tools };
       const realLookup = slow.lookupTicket!.execute;
       slow.lookupTicket = {
