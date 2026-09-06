@@ -1,14 +1,3 @@
-/**
- * Turn-boundary speculation (Wave 13.2 / PASTE-class).
- *
- * While the model is thinking / the turn is settling, start the next compiled
- * *read-only* stretch. A miss discards; the agent never sees an unconfirmed
- * result. Mutating programs are never started. Errors fail open (prime
- * directive). Kill switch: `EDEN_SPECULATE=0`.
- *
- * `turnBoundary` is the product hook: wrap calls it when a tool result returns
- * (end of turn), and a fixture may call it before think-time of a new stretch.
- */
 import type { StretchProgram } from "@eden/ir";
 import { eq, isMutating, isReadName, mayServe } from "@eden/ir";
 import { isProgramReadOnly } from "./fleet";
