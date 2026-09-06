@@ -1,14 +1,3 @@
-/**
- * Headless host that simulates Claude Code PostToolUse application (R1).
- *
- * Apply `updatedToolOutput` only when it matches the native schema for a
- * built-in. Otherwise keep the original (silent drop). Always keep
- * `additionalContext` (R3), including under `decision: "block"`.
- *
- * OpenCode / Codex / Gemini apply* helpers are the same replacement landing
- * on each host's channel — or an honest additionalContext degrade with the
- * drop classed.
- */
 import {
   capMerged,
   isBuiltInTool,

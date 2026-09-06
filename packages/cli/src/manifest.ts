@@ -195,7 +195,6 @@ export function writeSkillBundle(skillPath: string, tools: ManifestTool[]): stri
   return sha256;
 }
 
-/** A leftover LISTING.md in the skill folder is a level-3 extra an agent may load. */
 function dropSkillDirListing(skillDir: string): void {
   try {
     unlinkSync(join(skillDir, "LISTING.md"));
