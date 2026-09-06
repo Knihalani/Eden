@@ -549,12 +549,9 @@ describe("phase 3: collision precedence (M5)", () => {
         state,
       ) as Record<string, { execute: (a: unknown) => Promise<unknown> }>;
       const out = await tools["fetch_details"]!.execute({ id: "T-100" });
-      // The COMPILED definition executed: the whole stretch ran (its first
-      // step called lookup_fan), not just the host's lone fetch function.
       expect(out).toEqual({ details: "leaf" });
       expect(lookups).toBe(1);
       expect(errors.some((e) => e.includes("takes precedence"))).toBe(true);
-      // Warning fires ONCE per name, not per call.
       await tools["fetch_details"]!.execute({ id: "T-100" });
       const hits = errors.filter((e) => e.includes("takes precedence")).length;
       expect(hits).toBe(1);
