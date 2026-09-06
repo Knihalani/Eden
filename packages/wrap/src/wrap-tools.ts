@@ -1175,9 +1175,6 @@ export function wrapTools<T extends ToolsIn>(
                   armed.closed = true;
                   armed.resolveSettled(false);
                 } catch { /* deferred already gone */ }
-                // Keep the arming (see prefix-steering catch): a sibling whose
-                // step the failed run already performed must claim it, not
-                // re-run it, even though THIS call is refused.
                 emit(run.events[0]?.args, owner);
                 // DIFFERENT from prefix steering, deliberately: the guard
                 // chose this program because the raw call was unacceptable
