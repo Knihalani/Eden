@@ -67,9 +67,6 @@ describe("coding registry", () => {
   });
 
   test("Edit splices literally instead of expanding $ patterns", async () => {
-    // String.prototype.replace expands $&, $` and $' in the *replacement* even
-    // when the pattern is a plain string, so an edit introducing a `$` rewrote
-    // itself into something else on the way to disk. Silent source corruption.
     const dir = join(import.meta.dir, "../../.tmp-coding");
     mkdirSync(dir, { recursive: true });
     const reg = codingRegistry(dir);
