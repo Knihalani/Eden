@@ -644,10 +644,6 @@ function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
 }
 
 function pauseLiveFor(state: WrapState, toolName: string): void {
-  // Enforcement-only action. Pausing mutates which programs run and POSTs
-  // control-plane state — in observe mode the guards are witnesses, not
-  // actors: they record the fail_streak and surface it, they don't reach
-  // into the agent's toolset.
   if (!enforcementEnabled(state.opts)) return;
   for (const p of state.programs) {
     if (!p.manifest || state.pausedIds.has(p.id)) continue;
