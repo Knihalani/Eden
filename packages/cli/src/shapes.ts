@@ -327,7 +327,6 @@ export function mapHostToolName(name: string): string {
   return aliased ?? name;
 }
 
-/** OpenCode MCP after-hook payload (issue #25918): raw CallToolResult. */
 export function isMcpShapedOutput(value: unknown): boolean {
   if (!isRecord(value) || !Array.isArray(value.content) || value.content.length === 0) return false;
   return value.content.every(
