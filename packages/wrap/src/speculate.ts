@@ -146,14 +146,6 @@ function sameStretch(
   return !!a && a.programId === program.id && eq(a.input, input);
 }
 
-/**
- * Start a read-only compiled stretch at the turn boundary. Never awaits the
- * run — the caller (wrap, or a fixture before think-time) returns immediately
- * so tool latency overlaps the model's think.
- *
- * Returns a handle when a run was started; null on kill-switch, mutating,
- * nothing to guess, or any throw (fail-open).
- */
 export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): SpeculateHandle | null {
   try {
     if (!speculateEnabled()) return null;
