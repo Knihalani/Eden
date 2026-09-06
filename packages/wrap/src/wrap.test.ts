@@ -1314,11 +1314,6 @@ describe("online signal bus", () => {
   });
 
   test("a gated flush does not swallow a concurrent call's events", async () => {
-    // notify flushes as soon as it resolves; search overlaps it and lands its
-    // event mid-flight. The shared run recorder used to drain the whole buffer
-    // at flush time, so whoever flushed second either lost its event or had it
-    // attributed to the wrong trace. The overlapping search event must stay
-    // buffered for search's own flush.
     const state = createState({ programs: [] });
     const tools = wrapTools(
       {
