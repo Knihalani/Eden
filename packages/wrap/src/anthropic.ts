@@ -326,7 +326,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
 
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin)) {
     return { "access-control-allow-origin": origin, vary: "origin" };
   }
   return {};
