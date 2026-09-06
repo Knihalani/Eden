@@ -61,7 +61,6 @@ export function bindSpeculateRunner(state: WrapState, runner: SpeculateRunner): 
   try {
     storeOf(state).runner = runner;
   } catch {
-    /* fail-open: missing runner means turnBoundary is a no-op */
   }
 }
 
