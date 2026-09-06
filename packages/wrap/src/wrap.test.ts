@@ -18,12 +18,6 @@ function liveProgram() {
   return { ...ticketShipProgram(), manifest: liveManifest };
 }
 
-/**
- * A live one-step program whose first step binds a literal string (a URL or a
- * command). The envelope gates only `id`, so the shaped value itself can be
- * anything — that is what lets the arg-shape matcher be tested separately
- * from the distribution gate.
- */
 function shapeProgram(literal: string): StretchProgram {
   return {
     id: "shapeprog",
