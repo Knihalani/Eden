@@ -73,7 +73,6 @@ function withoutComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
-/** Env keys actually read: process.env.EDEN_* or a quoted EDEN_* env constant. */
 export function productionEnvNamesIn(text: string): string[] {
   const src = withoutComments(text);
   const out = new Set<string>();

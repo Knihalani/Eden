@@ -157,12 +157,6 @@ function clipDesc(s: string): string {
   return clean.length <= DESC_MAX ? clean : clean.slice(0, DESC_MAX);
 }
 
-/**
- * Local marketplace draft only. First line is the withheld banner.
- * Body is PUBLIC_CLAIMS — live tool names are not claims, and refusing to
- * interpolate them is how customer names, URLs, and SkillHub stay out.
- * Never POSTed anywhere.
- */
 export function renderListingDraft(_tools: ManifestTool[]): string {
   const draft = renderClaimsListing();
   return draft.startsWith(LISTING_WITHHELD_BANNER) ? draft : `${LISTING_WITHHELD_BANNER}\n\n${draft}`;
@@ -170,7 +164,6 @@ export function renderListingDraft(_tools: ManifestTool[]): string {
 
 export type SkillHashRecord = { path: string; sha256: string; at: string };
 
-/** SHA-256 of the exact bytes written to SKILL.md. Best-effort log; never throws. */
 export function logSkillHash(path: string, bytes: string): string {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const rec: SkillHashRecord = { path, sha256, at: new Date().toISOString() };
