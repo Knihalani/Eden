@@ -202,8 +202,6 @@ const Glob: ToolShape = {
     return true;
   },
   merge(original) {
-    // No text field on the real schema — keep native identity so the rewrite
-    // is applied; sentinel rides additionalContext only.
     if (this.match(original)) {
       const o = original as Record<string, unknown>;
       const out: Record<string, unknown> = {

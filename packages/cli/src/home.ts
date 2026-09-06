@@ -183,25 +183,8 @@ export function appendJsonl(path: string, row: unknown): void {
   appendFileSync(path, JSON.stringify(row) + "\n");
 }
 
-/**
- * Fallback staleness horizon, used only when the lock does not say who holds
- * it (a legacy lock, or one caught between create and stamp) or when it is
- * held from a different machine. A live local holder is detected directly and
- * is never judged stale, however long it has been running.
- */
 const LOCK_STALE_MS = 30_000;
 const LOCK_WAIT_MS = 1500;
-/**
- * Backstop for a stamp that claims to be alive.
- *
- * `kill(pid, 0)` answers "is this pid addressable", not "is this the process
- * that took the lock". After a reboot or enough process churn the pid can
- * belong to something else entirely, and EPERM — a pid owned by another user —
- * also reads as alive. Without an upper bound those cases wedge the lock
- * permanently, because the staleness horizon is never consulted for a stamped
- * lock. Nothing legitimately holds one of these for ten minutes: every
- * critical section here is a small file rewrite.
- */
 const LOCK_ABANDON_MS = 600_000;
 
 type LockStamp = { pid: number; host: string; ts: number };
