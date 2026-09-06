@@ -247,8 +247,6 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   }
 
   const live = filterCanary(opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest), opts.state.sessionId);
-  // A tripped kill switch must never take the user's traffic down (prime
-  // directive). It only loses Eden its privilege to steer.
   const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   // Opt-in means the client sent a tools ARRAY — an empty array has opted into
   // function calling (see injectTools). A missing tools field has not.
