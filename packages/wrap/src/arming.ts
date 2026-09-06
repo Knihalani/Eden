@@ -128,12 +128,6 @@ export function armExpired(a: Armed, now: number): boolean {
   return now - a.armedAt > ARM_TTL_MS || a.matchedCalls >= a.budgetCalls;
 }
 
-/**
- * Skip extractInput when this arming cannot be this call.
- *
- * Claim path: rest still has `name` (unless identity already disagrees).
- * Budget path: same-entity noise still counts even when `name` is not in rest.
- */
 export function mightClaim(armed: Armed, name: string, args: Record<string, unknown>): boolean {
   const argHint = hintIdOf(args);
   if (armed.hintId !== undefined && argHint !== undefined && armed.hintId !== argHint) return false;
