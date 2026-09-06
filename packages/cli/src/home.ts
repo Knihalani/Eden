@@ -333,14 +333,6 @@ function sleepBriefly(): void {
   }
 }
 
-/**
- * Non-reversible stand-in for an API key in human-facing output.
- *
- * doctor and login used to print the first 6–8 characters of the key itself,
- * which is exactly the part of a bearer token that carries its prefix and
- * narrows a brute force. A SHA-256 fingerprint identifies *which* key this is
- * ("is that the dev key or the prod one?") without disclosing any of it.
- */
 export function keyFingerprint(key: string): string {
   return createHash("sha256").update(key).digest("hex").slice(0, 12);
 }
