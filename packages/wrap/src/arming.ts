@@ -36,7 +36,6 @@ export type Armed = {
   rest: Map<string, number>;
   input: Record<string, unknown>;
   programId: string;
-  /** Monotonic (performance.now), so an NTP step cannot make this immortal. */
   armedAt: number;
   armedAtCall: number;
   /**
