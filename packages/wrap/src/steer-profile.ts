@@ -1,12 +1,3 @@
-/**
- * Wave 4.3 — steering decision forensics.
- *
- * Times the wrap execute path for a non-matching call (ping) with W live
- * armings, session-partitioned vs one-bucket. p50 W=100 vs W=10 must stay
- * flat. p99 of the decision must be <1 ms.
- *
- *   bun packages/wrap/src/steer-profile.ts
- */
 import { withVersion, type StretchProgram } from "@eden/ir";
 import { createArmingStore, createState, wrapTools, type ToolDef } from "./index";
 
