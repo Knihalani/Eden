@@ -1,7 +1,3 @@
-/**
- * ADVERSARIAL SUITE v2 — different seeds, bigger volumes, different surfaces.
- * Deliberately NOT reusing v1's scenarios verbatim: fixes must generalize.
- */
 import { describe, expect, test } from "bun:test";
 import { createState, wrapTools, handleChatCompletions, handleAnthropicMessages } from "../index";
 import { redact } from "@eden/ir";
