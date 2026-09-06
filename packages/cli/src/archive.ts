@@ -1,12 +1,3 @@
-/**
- * Archival tiers on top of ~/.eden/runs retention.
- *
- *   hot  — ~/.eden/runs (existing retain window, EDEN_RETAIN_DAYS default 14)
- *   warm — ~/.eden/archive/warm compacted JSONL receipts (no full events)
- *   cold — ~/.eden/archive/cold/YYYY-MM.jsonl monthly DC+counts
- *
- * CLI-only. A bug here must never throw on the wrap/agent path.
- */
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { billedTokens, emptyTokenClasses, type TokenClasses } from "@eden/ir";
