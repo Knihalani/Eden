@@ -133,6 +133,7 @@ export class AgentMemory {
     const hay = new Set(tokList(text));
     const out: MemoryRecord[] = [];
     for (const c of this.compiled) {
+      if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
       for (const n of c.needles) {
         if (hay.has(n)) {
           out.push(c.rec);

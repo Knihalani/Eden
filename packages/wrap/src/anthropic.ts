@@ -37,26 +37,6 @@ interface AnthropicRequest {
   stream?: boolean;
 }
 
-/**
- * Serving-side prompt-cache discipline (W20). Provider caches bill a stable
- * prefix at ~10% of input price, but only up to an explicit breakpoint, and
- * any byte that changes invalidates from there back. Eden controls three
- * naturally-stable boundaries in every proxied request:
- *
- *   1. the last tool definition (covers system + tools),
- *   2. the system prompt itself,
- *   3. the final content block of the last message — sessions are
- *      append-only, so "everything before the newest turn" is exactly the
- *      cacheable history.
- *
- * Sessions that reorder their tool array churn the prefix and pay full price
- * regardless; nothing here can help that (and alphabetical emission is the
- * MCP surface's job). Opt out with EDEN_PROMPT_CACHE=0.
- *
- * Cache-guard (`EDEN_CACHE_GUARD=1`): volatile prefix blocks (timestamps,
- * skill listings) move after the stable prefix so the breakpoint stays on
- * stable text. Kill switch `EDEN_PROMPT_CACHE=0` still wins.
- */
 const VOLATILE_TEXT = /(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})|(?:available skills)|(?:skill(?:s)?\s+(?:list|index|listing))/i;
 
 export function isVolatilePrefixText(text: string): boolean {
