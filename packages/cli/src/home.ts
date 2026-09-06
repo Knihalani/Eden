@@ -214,29 +214,6 @@ function inodeAt(lockPath: string): number | null {
 
 /**
  * Advisory lock around a small file mutation.
- *
- * Two things this has to get right, both learned the hard way:
- *
- *  - The lock file is removed in a `finally`, which does not run for SIGKILL,
- *    a panic, or a reset. Without staleness detection one dead process wedged
- *    every later hook: 1.5s of spinning and then a throw, on every tool call,
- *    until someone deleted the file by hand.
- *  - The callback's own failure must not be reported as lock contention. The
- *    single try/catch could not tell `openSync` failing from `fn()` failing, so
- *    a real error (ENOSPC, a JSON throw) was swallowed, the caller was told
- *    "could not acquire lock", and the side-effecting callback was retried
- *    ~124 times over the wait window.
- *  - Staleness had been judged purely on the lock's age, which broke mutual
- *    exclusion outright. A holder only has to be *stopped* for longer than the
- *    horizon, not dead — a suspended laptop, SIGSTOP under a debugger, a
- *    swapping machine or a hung network mount all qualify. The waiter deleted a
- *    live holder's lock, took its own, and both ran the critical section at
- *    once; then the original holder's `finally` deleted the *waiter's* lock,
- *    letting a third process in, and so on. Two concurrent
- *    read-modify-writes of the same events file lose events, which is the one
- *    thing this lock exists to prevent. So the holder now stamps its identity
- *    into the lock and a live local holder is never broken, and release only
- *    removes the lock if it is still the one we created.
  */
 export function withFileLock<T>(lockPath: string, fn: () => T): T {
   mkdirSync(dirname(lockPath), { recursive: true });
