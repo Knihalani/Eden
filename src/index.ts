@@ -208,11 +208,11 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
       const cors = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ? { "access-control-allow-origin": origin, vary: "origin" } : {};
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: cors });
       try {
-        if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET,POST,DELETE,OPTIONS", "access-control-allow-headers": "content-type" } });
+        if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS", "access-control-allow-headers": "content-type" } });
         const u = new URL(req.url);
         const p = u.pathname.replace(/\/+$/, "").replace(/^\/v1(?=\/)/, "") || "/";
         if (req.method === "DELETE") return json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
-        if (req.method === "POST") {
+        if (req.method === "POST" || req.method === "PUT") {
           const b = (await req.json()) as { text?: string; prompt?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; q?: string; k?: number };
           const run = ({ "/observe": () => memory.observe(b.messages || b.conversation || ((b.text || b.prompt) ? [{ role: "user", content: String(b.text || b.prompt) }] : [])), "/remember": () => memory.remember(String(b.text || b.prompt || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || b.prompt || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || b.conversation || ((b.text || b.prompt) ? [{ role: "user", content: String(b.text || b.prompt) }] : [])) }), "/query": () => memory.query(String(b.q || b.prompt || b.text || ""), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return json(run());
