@@ -863,16 +863,11 @@ export function jsonWrongWay(text: string): boolean {
 
 export function jsonCliNeed(text: string): boolean {
   if (!jsonTaskToken(text)) return false;
-  if (/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text) && !/\bndjson\b|\bjsonl\b/i.test(text)) {
-    return false;
-  }
+  if (/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text) && !/\bndjson\b|\bjsonl\b/i.test(text)) return false;
   if (GREP_LINE.test(text)) return true;
   const struct = JSON_STRUCT.test(text);
-  if (struct && /\.(jsonl?|ndjson)\b/i.test(text) && /\b(?:pull|pluck|grep|cat|sed|awk|extract|parse|get|read|print)\b/i.test(text)) {
-    return true;
-  }
-  const stripped = text.replace(/application\/json/gi, " ");
-  if (/\bjson\b/i.test(stripped) && /\bcli\b/i.test(text)) return true;
+  if (struct && /\.(jsonl?|ndjson)\b/i.test(text) && /\b(?:pull|pluck|grep|cat|sed|awk|extract|parse|get|read|print)\b/i.test(text)) return true;
+  if (/\bjson\b/i.test(text.indexOf("application") < 0 ? text : text.replace(/application\/json/gi, " ")) && /\bcli\b/i.test(text)) return true;
   return struct && /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line|pipeline)\b/i.test(text);
 }
 
