@@ -201,13 +201,6 @@ describe("wrap never applies a mutation twice", () => {
 });
 
 describe("wrap stops trusting an arming that has gone stale", () => {
-  /**
-   * An arming suppresses the agent's raw calls because the compiled run just
-   * made them. That is only true for the stretch the agent is in the middle of.
-   * Nothing retired an arming, so one taken early in a long-lived process still
-   * swallowed a raw call much later — a genuinely separate mutation that
-   * happened to carry the same id — and the user's second write vanished.
-   */
   function armed(): { c: Counter; state: ReturnType<typeof createState>; tools: Record<string, { execute: (a: Record<string, unknown>) => unknown }> } {
     const c = counted(["lookupTicket", "notify", "ping"]);
     const p = program(
