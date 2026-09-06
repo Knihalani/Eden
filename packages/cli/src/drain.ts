@@ -137,9 +137,6 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
       // is not.
     }
   }
-  // Refreshing the live-tool list is best effort. It used to sit unguarded
-  // between the ingest loop and the outbox rewrite, so an unreachable wrap or
-  // site plane threw straight past the rewrite and drain never drained.
   try {
     await refreshLiveTools(site, wrap, key, opts.workspace);
   } catch {
@@ -148,8 +145,6 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
   if (existsSync(outboxPath())) {
     withFileLock(`${outboxPath()}.lock`, () => {
       const fresh = existsSync(outboxPath()) ? readFileSync(outboxPath(), "utf8") : "";
-      // Atomic, like applyFlushTruncate: this file holds the stretch_end
-      // markers, and an in-place rewrite that dies halfway loses them.
       writeFileAtomic(outboxPath(), rewriteOutbox(fresh, dropRuns));
     });
   }
@@ -208,11 +203,6 @@ function whenFromProgram(program: NonNullable<PlaneTool["program"]>): string | u
   );
 }
 
-/**
- * Keep name / sequence / read_only / when_to_use from wrap or site payloads.
- * Drain used to drop when_to_use, so SKILL.md had no one-liners after Approve.
- * Prefer the island line via whenToUseOf; silent islands fall back to description.
- */
 export function projectLiveTools(tools: unknown): ManifestTool[] {
   if (!Array.isArray(tools)) return [];
   return tools.map((raw) => {
