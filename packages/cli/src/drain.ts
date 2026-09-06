@@ -43,10 +43,6 @@ export function rewriteOutbox(text: string, dropRunIds: Set<string>): string {
         return true;
       }
     })
-    // Trailing newline, or the next appendJsonl() concatenates onto the last
-    // record and destroys two rows at once: the one it lands on and its own.
-    // Because stretch_end markers live in this file, a swallowed marker means
-    // the run never clusters — a silent, permanent loss of the core signal.
     .map((line) => `${line}\n`)
     .join("");
 }
