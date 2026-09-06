@@ -1014,13 +1014,6 @@ export function wrapTools<T extends ToolsIn>(
               ? taken.value
               : await runCompiled(state, hit.p, hit.input, tools, registry);
             if (!taken.hit) markStretchServed(state, hit.p, hit.input);
-            // Re-stamp now the run has actually finished. The TTL was started
-            // before the await, but wrapTimeoutMs permits a compiled program
-            // up to 300s — five times the TTL — so a legitimately slow run
-            // returned to an arming that had already expired and every raw
-            // tail call went straight through to the real tool. The entry
-            // still has to be *inserted* early, for the parallel-sibling race
-            // above; only the clock starts late.
             armed.armedAt = performance.now();
             armed.armedAtCall = calls;
             const compiled = [...state.receipts].reverse().find((r) => r.toolId === hit.p.id && r.ok);
