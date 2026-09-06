@@ -70,7 +70,6 @@ export type EdenOpts = {
   /** Shared suppression store. Omit for an isolated per-wrap map. */
   arming?: ArmingStore;
   armMax?: number;
-  /** Process-wide arming cap across sessions (default 4096). */
   armGlobal?: number;
   /**
    * Fleet key for read-only cross-agent claims (Wave 7.1). Distinct sessions
