@@ -98,7 +98,6 @@ export type WrapState = {
   parentRunId?: string;
   spanId?: string;
   region?: string;
-  /** Count of stretches that failed open because the session/global cap was full. */
   capacityMisses: number;
   /**
    * Entity ids written this session. Compiled/cache hits for a dirty id miss
