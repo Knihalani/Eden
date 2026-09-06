@@ -874,15 +874,12 @@ describe("control outbox", () => {
   });
 
   test("outbox overflow counts drops and surfaces dropped_posts on traces", async () => {
-    // The outbox used to discard receipts/traces past MAX_OUTBOX — and once a
-    // job exhausted its retries — without any record that telemetry was lost.
     const state = createState({
       baseUrl: "http://127.0.0.1:9",
       apiKey: "k",
       fetch: (async () => new Response("down", { status: 500 })) as unknown as typeof fetch,
     });
     const tools = wrapTools({ notify: async () => ({ done: true }) }, state);
-    // Every notify posts a trace; 80 posts into a 64-slot queue must drop.
     for (let i = 0; i < 80; i++) await tools.notify.execute({ i });
     for (let i = 0; i < 500 && state.droppedPosts === 0; i++) {
       if (pendingPosts(state) > 0) await flushOutbox(state);
