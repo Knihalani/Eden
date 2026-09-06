@@ -4,14 +4,9 @@ import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
 const EVENT_ALIASES: Record<string, string> = {
-  UserPromptSubmit: "UserPromptSubmit",
   user_prompt_submit: "UserPromptSubmit",
-  SessionStart: "SessionStart",
   session_start: "SessionStart",
-  PreCompact: "PreCompact",
   pre_compact: "PreCompact",
-  Stop: "Stop",
-  SessionEnd: "SessionEnd",
   session_stop: "Stop",
 };
 
