@@ -37,10 +37,6 @@ function bashJail(cwd: string, cmd: string): void {
     if (token.startsWith("~")) throw new Error("path outside workspace");
     confined(cwd, path);
   }
-  // Exfiltration needs no forbidden path: print a file, pipe it to curl. The
-  // danger is the process on the other end of the pipe, so it gets its own
-  // refusal. Plain use of a network binary (no pipe) is untouched, and
-  // EDEN_NET_ALLOW is the explicit escape hatch.
   const allow = networkAllow();
   const segments = cmd.split(/\||&&/);
   for (let s = 1; s < segments.length; s++) {
