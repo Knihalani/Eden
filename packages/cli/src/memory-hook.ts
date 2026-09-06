@@ -69,17 +69,10 @@ export function notesFromInject(injected: unknown[]): string {
 
 function briefing(mem: AgentMemory): string {
   const recs = mem.memories();
-  if (!recs.length) return "";
   const constraints = recs.filter((r) => r.kind === "constraint").slice(-6);
   const seen = new Set(constraints.map((r) => r.id));
-  const others: typeof recs = [];
-  for (let i = recs.length - 1; i >= 0 && others.length < 6; i--) {
-    const r = recs[i]!;
-    if (!seen.has(r.id)) others.push(r);
-  }
-  const pick = [...constraints, ...others.reverse()];
-  if (!pick.length) return "";
-  return MEMORY_MARK + pick.map((m) => `\n- ${m.text}`).join("");
+  const pick = [...constraints, ...recs.filter((r) => !seen.has(r.id)).slice(-6)];
+  return pick.length ? MEMORY_MARK + pick.map((m) => `\n- ${m.text}`).join("") : "";
 }
 
 function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
