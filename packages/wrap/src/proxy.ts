@@ -59,9 +59,6 @@ function wrapTokenBlocked(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): b
 
 function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string; fn: typeof fetch; timeout: number } {
   const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
-  // Generous by default — completions and streams legitimately run minutes —
-  // but bounded, so a hung upstream is an error the client can see rather than
-  // a request that never returns.
   const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
   return {
     url: `${base}/chat/completions`,
