@@ -1005,11 +1005,6 @@ describe("mcp", () => {
   });
 
   test("a stalled wrap endpoint answers with an error instead of wedging the chain", async () => {
-    // The wrap-run fetch used to carry no AbortSignal, so an endpoint that
-    // accepted the connection and never answered parked the serialized stdio
-    // chain — every later request waited forever behind it. With a tiny
-    // EDEN_TIMEOUT_MS the abort must surface as the normal isError reply,
-    // well before the default horizon.
     const prevTimeout = process.env.EDEN_TIMEOUT_MS;
     const prev = globalThis.fetch;
     process.env.EDEN_TIMEOUT_MS = "50";

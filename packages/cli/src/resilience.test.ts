@@ -55,9 +55,6 @@ describe("hookd refuses drive-by callers", () => {
     });
 
   test("rejects a request carrying an Origin", async () => {
-    // A POST with content-type: text/plain is a CORS simple request, so any
-    // page the user visits could drive this loopback server with no preflight.
-    // The hook is a local process and never sends Origin.
     const res = await handleHookd(post({ origin: "https://evil.example" }));
     expect(res.status).toBe(403);
   });
