@@ -95,7 +95,6 @@ export function extractOutput(json: Record<string, unknown>): unknown {
   return undefined;
 }
 
-/** Record one finished chat completion onto the wrap’s current run. */
 export function recordCompletion(run: RunRecorder, json: Record<string, unknown>): void {
   run.llmCalls += 1;
   const usage = parseUsage(json.usage);
