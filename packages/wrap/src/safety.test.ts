@@ -156,9 +156,6 @@ describe("wrap never applies a mutation twice", () => {
   });
 
   test("an out-of-distribution input still falls through cleanly", async () => {
-    // The envelope check runs before any step, so nothing has happened and
-    // replaying the raw tool is safe. This is the fall-through that must keep
-    // working after tightening the replay rule.
     const c = counted(["lookupTicket"]);
     const p = withVersion({
       id: "p_env",
