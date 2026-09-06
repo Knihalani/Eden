@@ -6,7 +6,6 @@ import type { ToolRegistry, ToolRunCtx } from "@eden/ir";
 import { PTC_CALLERS } from "@eden/ir";
 import { DeoptError } from "@eden/runtime";
 
-/** Binaries that move data over the network when they are on the receiving end of a pipe. */
 const NETWORK_BINARIES = new Set(["curl", "wget", "nc", "ncat", "netcat", "ssh", "scp", "ftp"]);
 
 function networkAllow(): Set<string> {
