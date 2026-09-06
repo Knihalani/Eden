@@ -110,9 +110,6 @@ describe("steer + inject", () => {
   });
 
   test("an unrelated sibling in a steered batch survives", () => {
-    // The steered call used to be returned alone, silently dropping every
-    // sibling in the batch — an agent asking for [lookupTicket, webSearch]
-    // lost the webSearch entirely.
     const p = liveProgram();
     const out = steerToolCalls(
       [
