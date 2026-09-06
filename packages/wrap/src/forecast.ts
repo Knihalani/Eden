@@ -1,12 +1,3 @@
-/**
- * Budget forecast for wrap: which program this run is actually on, and
- * whether its predicted llm/ms/cents still fit what is left.
- *
- * Halt is implied by enforce (wrap-tools ignores decideGuard halt in observe).
- * There is no extra EDEN_BUDGET_HALT; EDEN_KILL_AFTER_WARNING remains the
- * post-warning refuse override and stays default-off.
- */
-
 import type { StretchProgram } from "@eden/ir";
 import { remainingBudget, spend, type ForecastSpend, type ForecastView } from "@eden/measure";
 import type { EdenOpts, RunRecorder } from "./types";
