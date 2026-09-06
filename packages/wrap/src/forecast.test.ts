@@ -355,7 +355,6 @@ describe("predicted vs actual (llm / ms / cents)", () => {
   test("observe: same actual >= predicted does not halt", async () => {
     const p = program({ budget: { llmCalls: 2, ms: 80_000, cents: 8 } });
     const run = warnedRun({ llmCalls: 2, events: ["get_issue"], t0: 0 });
-    // decideGuard still *returns* halt (the choice lives at wrap); wrap ignores it.
     const d = decideGuard({
       name: "list_comments",
       run,
