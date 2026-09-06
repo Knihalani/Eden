@@ -16,9 +16,7 @@ export type HookIn = {
   tool_input?: Record<string, unknown>;
   tool_response?: unknown;
   tool_output?: unknown;
-  /** PostToolBatch: one entry per resolved call. Absent/garbage → fail-open `{}`. */
   tool_calls?: unknown;
-  /** Claude Code project cwd. Remainder joins relative `file_path`/`path` against this. */
   cwd?: string;
   prompt?: string;
   transcript_path?: string;
