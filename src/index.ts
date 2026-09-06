@@ -181,13 +181,12 @@ export class AgentMemory {
         const card = injectFromRequest({ text: blob }, this.know);
         if (card) notes.push({ role: "system", content: injectNote(card) });
       }
-      const next = notes.length ? list.slice() : list;
-      if (notes.length) {
-        let i = 0;
-        while (i < next.length && (next[i] as { role?: string })?.role === "system") i++;
-        next.splice(i, 0, ...notes);
-      }
       this.observe(list);
+      if (!notes.length) return list;
+      const next = list.slice();
+      let i = 0;
+      while (i < next.length && (next[i] as { role?: string })?.role === "system") i++;
+      next.splice(i, 0, ...notes);
       return next;
     } catch {
       return list;
@@ -199,7 +198,6 @@ export class AgentMemory {
     const next = this.inject(messages);
     return next === messages ? body : { ...body, messages: next };
   }
-  close() {}
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory {
@@ -208,8 +206,7 @@ export function openMemory(opts: MemoryOptions = {}): AgentMemory {
 
 let proc: AgentMemory | undefined;
 export function processMemory(): AgentMemory {
-  if (process.argv.some((a) => a.endsWith(".test.ts"))) return openMemory({ dir: join(tmpdir(), "eden-m-" + Math.random().toString(36).slice(2)) });
-  return (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR || undefined }));
+  return process.argv.some((a) => a.endsWith(".test.ts")) ? openMemory({ dir: join(tmpdir(), "eden-m-" + Math.random().toString(36).slice(2)) }) : (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR || undefined }));
 }
 
 export function host(opts: MemoryOptions & { port?: number } = {}) {
@@ -235,5 +232,5 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
       }
     },
   });
-  return { url: String(server.url), stop: () => { memory.close(); server.stop(); }, memory };
+  return { url: String(server.url), stop: () => server.stop(), memory };
 }
