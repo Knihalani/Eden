@@ -1,11 +1,3 @@
-/**
- * Session-partitioned suppression store (Wave 4.2) and the scan fast-path (4.3).
- *
- * One wrap used to keep a single Map capped at 64. That is the right fail-open
- * gate for ONE agent (ADR 004: never evict a live arming). Hosted dispatch of
- * many agents on one process needs the same gate *per session*, plus a global
- * ceiling, plus a scan that does not walk everyone else's armings.
- */
 import type { StretchProgram } from "@eden/ir";
 
 export const ARM_TTL_MS = 60_000;
