@@ -3,14 +3,6 @@ import { protocolHeaders, redact, type StretchTrace } from "@eden/ir";
 import { loadCompileTraces } from "./compile";
 import { readConfig, resolveApiKey, wrapBase } from "./home";
 
-/**
- * `eden import` — send traces to wrap. Does not Approve.
- *
- * `--traces` loads the same StretchTrace JSON as `eden compile` and POSTs
- * them to wrap `/v1/traces`. Wrap may compile. Human Approve is the On switch.
- * `--file` keeps LangSmith / OTel / JSONL exports.
- */
-
 export const IMPORT_USAGE = `eden import --traces <dir|glob>
 eden import --file <export>`;
 
@@ -27,7 +19,6 @@ When wrap minted a candidate, Next is eden approve (read the verdict). It does n
 `;
 }
 
-/** Refuse to buffer absurd files; a multi-GB export would OOM before parsing. */
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 
 const WRAP_DOWN = "import: wrap is down · start eden wrap";
