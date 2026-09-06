@@ -1187,8 +1187,6 @@ export function wrapTools<T extends ToolsIn>(
 
         const t0 = performance.now();
         if (enforcementEnabled(state.opts) && run.rawExecuted >= maxRunSteps()) {
-          // Explicit reset: with the marker flushed, the next cycle starts
-          // fresh — sustained thrash re-arms the ceiling instead of wedging.
           run.rawExecuted = 0;
           note();
           const marker: TraceEvent = { name, args: {}, ok: true, skipped: true, duration_ms: 0 };
