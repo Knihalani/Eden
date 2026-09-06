@@ -30,7 +30,6 @@ export function hookCommand(
   return opts.failOpen === false ? core : `${core} || echo '{}'`;
 }
 
-/** Install-time home, POSIX-quoted. Same token Claude, Gemini, Codex, and OpenCode bake. */
 function edenHomeExport(): string {
   return `export EDEN_HOME=${shq(edenHome())}`;
 }
@@ -53,7 +52,6 @@ export function wrapMcpServer(cliPath: string): { command: string; args: string[
   return { command: "bun", args: [cliPath, "mcp"] };
 }
 
-/** After `npm i -g`, invoke dist/eden.js (process.argv[1]), not a sibling that does not ship. */
 export function installedCliPath(): string {
   const sibling = join(import.meta.dir, "cli.ts");
   const dist = join(import.meta.dir, "eden.js");
@@ -71,7 +69,6 @@ export function installedCliPath(): string {
   return sibling;
 }
 
-/** Gemini CLI: tool probe stays fast; agent/session/compress use the warm memory chain. */
 function isEdenGeminiEntry(entry: unknown): boolean {
   if (!entry || typeof entry !== "object") return false;
   const e = entry as { command?: string; hooks?: Array<{ command?: string }> };
@@ -109,7 +106,6 @@ export function geminiHookConfig(existing: unknown, preCmd: string, hookCmd: str
   };
 }
 
-/** Codex: managed TOML; session_* pipe host stdin through the warm hook chain. */
 export function codexTomlSection(hookCmd: string, preCmd: string = preHookCommand()): string {
   return [
     "",
