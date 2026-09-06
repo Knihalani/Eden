@@ -93,8 +93,6 @@ export function decideGuard(args: {
   if (view.spent) return { action: "halt", reason: "budget", detail: forecastCopy(view) };
   if (run.firstWarningAt == null) return null;
   if (view.timeoutPressure) {
-    // that could not fit and would itself deopt on timeout. Scope the
-    // candidates to the in-flight match set, not every live tool.
     const hit = matchingProgram(matches, (p) => (p.budget?.ms ?? 0) <= remaining);
     if (hit) return { action: "steer", program: hit, reason: "budget" };
     return { action: "halt", reason: "budget", detail: forecastCopy(view) };
