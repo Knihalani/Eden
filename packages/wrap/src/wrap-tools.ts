@@ -294,7 +294,6 @@ export async function pullLive(state: WrapState): Promise<void> {
       else state.pausedIds.add(id);
     }
   } catch {
-    /* fail-open */
   }
 }
 
