@@ -278,11 +278,6 @@ export function warmHitRate(state: WrapState, programId?: string): { hits: numbe
   }
 }
 
-/**
- * Confirm-or-miss for one tool call of a compiled run. Only a matching
- * first-wave lookup of the warmed program may observe the value. A mismatch
- * isolates the guess; the agent runs the real path.
- */
 export async function takeWarm(
   state: WrapState,
   program: StretchProgram,
