@@ -125,10 +125,6 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         const err: Buffer[] = [];
         proc.stdout.on("data", (c) => chunks.push(c as Buffer));
         proc.stderr.on("data", (c) => err.push(c as Buffer));
-        // Coerce defensively: Number("30s") is NaN, and setTimeout(NaN)
-        // fires immediately — every command died at t≈0 with truncated
-        // output. Anything non-numeric (or non-positive) falls back to the
-        // default instead.
         const requested = Number(args.timeout_ms);
         const ms = Math.min(Number.isFinite(requested) && requested > 0 ? requested : 15_000, 60_000);
         const killer = setTimeout(() => proc.kill("SIGKILL"), ms);
