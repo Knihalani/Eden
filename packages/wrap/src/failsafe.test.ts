@@ -203,8 +203,6 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
   });
 
   test("Eden bookkeeping crash mid-call still executes the raw tool", async () => {
-    // noteSignals/trace flush run on every call; if the run recorder is put
-    // into a state where they throw, the raw call must still go through.
     const state = createState({ programs: [] });
     (state.run as unknown as { warnings: null }).warnings = null; // poison the recorder
     const tools = wrapTools({ ping: async () => ({ pong: true }) }, state);
