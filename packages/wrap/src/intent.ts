@@ -235,11 +235,6 @@ export type SurfaceSelection = {
   surface: StretchProgram[];
 };
 
-/**
- * Apply the surface policy. `onShadow` fires at most once per request under
- * jit-shadow, naming what would have been surfaced — the telemetry that lets
- * jit earn its rollout (precision target ≥ 95% on shadow traffic first).
- */
 export function selectSurfacePrograms(opts: {
   mode: SurfaceMode;
   live: StretchProgram[];
@@ -269,13 +264,6 @@ export function selectSurfacePrograms(opts: {
   return { surface: ranked.length ? [ranked[0]!.program] : [] };
 }
 
-/**
- * MCP POST-transcript dispatch. Same scorer as local JIT — not a second ranker.
- * Shadow pick equals `selectSurfacePrograms({ mode: "jit", live, messages })`
- * on the same transcript + programs. Result length is 0 or 1.
- *
- * Missing / non-array messages, empty transcript, or a scorer fault → [].
- */
 export function dispatchPrograms(
   messages: unknown[] | undefined,
   programs: StretchProgram[],
