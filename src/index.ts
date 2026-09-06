@@ -165,18 +165,9 @@ export class AgentMemory {
 
   relevant(text: string, cap = 6): MemoryRecord[] {
     const hay = new Set(tokList(text));
-    const out: MemoryRecord[] = [];
-    for (const c of this.compiled) {
-      if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
-      for (const n of c.needles) {
-        if (hay.has(n)) {
-          out.push(c.rec);
-          break;
-        }
-      }
-      if (out.length >= cap) break;
-    }
-    return out;
+    const hit = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && c.needles.some((n) => hay.has(n))).map((c) => c.rec);
+    hit.sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint"));
+    return hit.slice(0, cap);
   }
 
   query(q: string, k = 5): QueryHit[] {
