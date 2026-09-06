@@ -739,8 +739,6 @@ function staleRead(
     if (!k || !state.dirtyEntities.has(k)) return false;
     const writtenAt = state.dirtyAt.get(k);
     if (writtenAt == null) return true;
-    // Same-stretch arming is restamped after the compiled run; its reads
-    // already saw the write. Only pre-write armings are stale.
     if (armed && armed.armedAt >= writtenAt) return false;
     return true;
   } catch {
