@@ -1182,8 +1182,6 @@ export function wrapTools<T extends ToolsIn>(
                 }
               }
             }
-            // pair === null: arming failed on a corrupt program — fall through
-            // to raw rather than ending the call.
           }
         }
 
