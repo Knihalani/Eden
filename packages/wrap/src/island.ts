@@ -129,7 +129,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** True when the error came from the *caller's* signal — retries must stop. */
 function callerAborted(err: unknown, signal?: AbortSignal): boolean {
   if (!signal?.aborted) return false;
   // Match by name first: providers raise AbortError ("This operation was
