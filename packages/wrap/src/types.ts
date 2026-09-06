@@ -80,9 +80,7 @@ export type EdenOpts = {
   agentId?: string;
   parentRunId?: string;
   spanId?: string;
-  /** Region label on traces/receipts. Default: `EDEN_REGION`. */
   region?: string;
-  /** Operator override (43): after the first warning, further LLM/tool spend is refused. */
   killAfterWarning?: boolean;
   /**
    * Opt-in hard enforcement. Default (false) is strict fail-safe: Eden never

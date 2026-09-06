@@ -253,6 +253,7 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
         const p = u.pathname;
         if (req.method === "POST") {
           const b = (await req.json()) as { text?: string; kind?: string; tags?: string[]; id?: string; agent?: string; messages?: unknown[]; q?: string; k?: number };
+          if (p === "/observe") return Response.json(memory.observe(b.messages || []));
           if (p === "/remember") return Response.json(memory.remember(String(b.text || ""), b));
           if (p === "/forget") return Response.json({ ok: memory.forget(String(b.id || b.text || "")) });
           if (p === "/inject") return Response.json({ messages: memory.inject(b.messages || []) });
