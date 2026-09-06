@@ -413,9 +413,6 @@ export async function runCompiled(
   registry?: ToolRegistry,
 ): Promise<unknown> {
   const t0 = performance.now();
-  // Watch-time: overlap the next program's first-wave reads with this stretch.
-  // Fail-open — a warm miss must never fail the current run. Distinct from
-  // turnBoundary (whole next stretch during think).
   safely(() => watchWarm(state, program, { input }), null);
   safely(() => claimWarm(state, program, input), null);
   const island: IslandCaller =
