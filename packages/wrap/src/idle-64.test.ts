@@ -1,8 +1,3 @@
-/**
- * CI pin: idle with 64 live armings stays in the same order of magnitude as
- * idle with none. Absolute µs flakes under load (Wave 4.3 bench is the 12 µs
- * quiet-machine budget). A linear scan of 64 extractInputs would be 10×+.
- */
 import { describe, expect, test } from "bun:test";
 import { withVersion, type StretchProgram } from "@eden/ir";
 import { createState, wrapTools } from "./index";
