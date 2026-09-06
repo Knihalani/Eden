@@ -85,11 +85,6 @@ export type WrapState = {
   pulls?: number;
   run: RunRecorder;
   pausedIds: Set<string>;
-  /**
-   * Receipts/traces the control-plane outbox had to throw away because it was
-   * full (or a job exhausted its retries). Telemetry loss is not silent:
-   * every trace emitted afterwards carries `dropped_posts`.
-   */
   droppedPosts: number;
   arming: ArmingStore;
   sessionId: string;
