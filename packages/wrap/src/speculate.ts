@@ -183,10 +183,6 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
   }
 }
 
-/**
- * Confirm-or-discard. Only a matching head call may observe the speculated
- * value. A mismatch isolates the guess; the agent runs the real path.
- */
 export async function takeSpeculation(
   state: WrapState,
   program: StretchProgram,
