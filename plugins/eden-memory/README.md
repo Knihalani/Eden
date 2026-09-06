@@ -4,4 +4,4 @@ Passive memory for Claude Code. Durable facts persist without `remember()`. Matc
 
 `/plugin marketplace add .` then `/plugin install eden-memory`. Needs Bun. Works from this checkout, `EDEN_ROOT`, `eden hookd`/`eden wrap`, `eden` on PATH, or `bun $EDEN_ROOT/packages/cli/src/cli.ts hook`. `eden setup` installs the same hooks on Claude Code plus Gemini, Codex, and OpenCode when those agents are already present. Wrap (`eden wrap`) injects the same store. Cursor-style event names (`beforeSubmitPrompt`, `afterAgentResponse`) work when the host POSTs to hookd.
 
-UserPromptSubmit / PreCompact inject then store. SessionStart briefs constraints. Stop / SessionEnd / SubagentStop store only. HTTP (`127.0.0.1:8787`): `GET /observe?text=`, `GET /inject?text=`, `GET /remember?text=`, `HEAD`/`GET /`.
+UserPromptSubmit / PreCompact inject then store. SessionStart briefs constraints. Stop / SessionEnd / SubagentStop store only. HTTP (`127.0.0.1:8787`): `GET /observe?text=`, `GET /inject?text=`, `GET /remember?text=`, `GET /forget?id=`, `HEAD`/`GET /`.

@@ -214,7 +214,6 @@ const samplesOf = (
   return out;
 };
 
-/** Both sides measurable on exactly the same blocks — anything else drops. */
 function paired<T>(blocks: readonly Block[], x: (b: Block) => T | undefined, y: (b: Block) => T | undefined): Array<{ x: T; y: T }> {
   const out: Array<{ x: T; y: T }> = [];
   for (const b of blocks) {
