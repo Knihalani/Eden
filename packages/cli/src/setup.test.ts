@@ -76,9 +76,6 @@ describe("eden setup does not disarm the user's own hooks", () => {
   };
 
   test("an existing hook on the same event survives", () => {
-    // A shallow spread replaced the user's PreToolUse array outright, so
-    // anyone with their own command allowlist, audit log or secret scanner
-    // silently lost it the first time they ran `eden setup`.
     const merged = mergeHooks(usersOwn, ours);
     const commands = merged.PreToolUse!.flatMap((e) => e.hooks!.map((h) => h.command));
     expect(commands).toContain("/usr/local/bin/allowlist-guard");
