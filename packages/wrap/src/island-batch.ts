@@ -174,8 +174,6 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   const json = (await res.json()) as unknown;
   const first = completeReplies(json, reqs);
   if (first) return first;
-  // Partial CREATE (some custom_ids present) fail-opens the missing rows —
-  // do not stall the wave waiting for a row the host already omitted.
   if (reqs.some((_, i) => parseBatchResult(json, String(i)))) {
     return reqs.map((_, i) => parseBatchResult(json, String(i)));
   }
