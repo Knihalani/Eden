@@ -244,7 +244,6 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
       return { sessions: sessions.size, armings: global, admits, rejects };
     },
     noteRest() {
-      /* rest is read live off Armed; index is optional. Hook kept for callers. */
     },
   };
 }
