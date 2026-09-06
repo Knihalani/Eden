@@ -116,7 +116,6 @@ type OutboxJob = { path: string; body: unknown; tries: number };
 
 const outboxes = new WeakMap<WrapState, OutboxJob[]>();
 const flushers = new WeakMap<WrapState, ReturnType<typeof setTimeout>>();
-/** Leader compiled receipt, so a follower can stamp `shared across N agents`. */
 const armedReceipts = new WeakMap<Armed, Receipt>();
 
 function stampIdentity(state: WrapState, receipt: Receipt): Receipt {
