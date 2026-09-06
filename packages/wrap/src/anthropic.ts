@@ -310,7 +310,6 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
         msg.content.filter((b) => b.type === "tool_use" && b.name).map((b) => b.name!),
       );
     } catch {
-      /* steering is a bonus; the model's own tool_use blocks still go back */
     }
   }
 
