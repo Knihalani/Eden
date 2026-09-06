@@ -23,8 +23,6 @@ export function formatStatus(
     savings?: { llmReductionMean?: number; tokensSavedMean?: number; timeSavedMsMean?: number; runs?: number };
   } | null,
 ): string {
-  // A fingerprint, not a prefix: the leading characters of a bearer key are
-  // its most guessable half, and status output has no need of them.
   const short = keyFingerprint(key);
   if (!health?.ok) return `${base} · down · key ${short}`;
   const fails = health.fails ? ` · fails ${health.fails}` : "";

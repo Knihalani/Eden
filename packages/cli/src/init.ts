@@ -69,7 +69,6 @@ export async function init(args: string[]): Promise<number> {
     await setup(args);
     console.log("✓ config written, hooks installed, MCP configured\n");
   } catch (err) {
-    // If auth fails but we're in dev mode, continue — local wrap doesn't need a key.
     const isDev = process.env.EDEN_DEV === "1" || args.includes("--dev");
     if (!isDev) throw err;
     console.log("⚠ auth skipped (dev mode)\n");

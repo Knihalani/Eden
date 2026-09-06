@@ -209,8 +209,6 @@ export function manifestCli(args: string[]): void {
   const asSkill = args.includes("--skill");
   const paths = skillPaths();
   const outPath = outArg ?? (asSkill ? paths.skill : paths.toolsMd);
-  // Prefer the plane's richer view (when_to_use, read_only) when reachable;
-  // fall back to the local cache so this works offline.
   let tools: ManifestTool[] = [];
   const localPath = join(edenHome(), "live-tools.json");
   if (existsSync(localPath)) {

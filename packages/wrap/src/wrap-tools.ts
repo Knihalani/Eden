@@ -1016,7 +1016,7 @@ export function wrapTools<T extends ToolsIn>(
             try {
               armed.closed = true;
               armed.resolveSettled(true);
-            } catch { /* deferred already gone */ }
+            } catch {}
             if (!armed.rest.size) emit(hit.input, owner);
             return value;
           } catch (err) {
@@ -1024,7 +1024,7 @@ export function wrapTools<T extends ToolsIn>(
             try {
               armed.closed = true;
               armed.resolveSettled(false);
-            } catch { /* deferred already gone */ }
+            } catch {}
             if (state.opts.failOpen === false) throw err;
             void pullLive(state);
             const touched = isDeopt(err) && !isEarlyDeopt(err);
@@ -1161,7 +1161,7 @@ export function wrapTools<T extends ToolsIn>(
                 try {
                   armed.closed = true;
                   armed.resolveSettled(true);
-                } catch { /* deferred already gone */ }
+                } catch {}
                 if (!armed.rest.size) emit(steeredIn, owner);
                 return value;
               } catch (err) {
@@ -1169,7 +1169,7 @@ export function wrapTools<T extends ToolsIn>(
                 try {
                   armed.closed = true;
                   armed.resolveSettled(false);
-                } catch { /* deferred already gone */ }
+                } catch {}
                 emit(run.events[0]?.args, owner);
                 const touched = isDeopt(err) && !isEarlyDeopt(err);
                 if (!(replayableProgram(guard.program) && !touched)) {
