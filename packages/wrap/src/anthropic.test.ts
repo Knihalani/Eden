@@ -30,8 +30,6 @@ function liveProgram(): StretchProgram {
 
 describe("anthropic steering (block-level)", () => {
   test("head block is replaced by the compiled tool; absorbed siblings are REMOVED", () => {
-    // write and notify are later steps of the matched sequence: leaving them
-    // in place would make the host execute raw work the compiled run does.
     const content = [
       { type: "text", text: "Working." },
       { type: "tool_use", id: "tu_1", name: "search", input: { q: "test" } },
