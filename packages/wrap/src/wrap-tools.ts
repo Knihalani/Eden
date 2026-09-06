@@ -255,9 +255,6 @@ function post(state: WrapState, path: string, body: unknown): void {
     if (ok) return;
     const q = outboxOf(state);
     if (q.length >= MAX_OUTBOX) {
-      // The outbox is full and this receipt/trace is gone. Count it: the
-      // dropped_posts field on the next emitted trace is the only record
-      // that telemetry was lost here.
       state.droppedPosts++;
       return;
     }
