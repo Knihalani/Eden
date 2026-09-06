@@ -57,11 +57,6 @@ export function speculateEnabled(): boolean {
   }
 }
 
-/**
- * Bind the wrap-local runner (live programs + compiled execute). wrapTools
- * registers this so `turnBoundary(state, hint)` can start work without the
- * caller threading tools through every call.
- */
 export function bindSpeculateRunner(state: WrapState, runner: SpeculateRunner): void {
   try {
     storeOf(state).runner = runner;
