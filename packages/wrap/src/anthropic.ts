@@ -302,9 +302,6 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   }
 
   recordAnthropicCompletion(opts.state.run, msg);
-  // Steer tool_use blocks against live programs — only when this request was
-  // actually steerable; an unsteered passthrough must return the model's own
-  // tool choices untouched.
   if (shouldSteer && msg.stop_reason === "tool_use" && Array.isArray(msg.content)) {
     try {
       msg.content = steerAnthropicToolUses(msg.content, live);
