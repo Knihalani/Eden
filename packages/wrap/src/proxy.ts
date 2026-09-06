@@ -5,7 +5,12 @@ import { recordCompletion, tapSseUsage, withStreamUsage } from "./usage";
 import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
-import { withKnowFacts } from "./know-inject";
+import { openMemory } from "../../../src/index";
+
+let wrapMem: ReturnType<typeof openMemory> | undefined;
+function wrapMemory() {
+  return (wrapMem ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR }));
+}
 
 export type ProxyOpts = {
   state: WrapState;
@@ -207,7 +212,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit)) : body.tools),
     body.tools,
   );
-  const steeredBody = withKnowFacts({ ...body, stream: false, tools: injected });
+  const steeredBody = wrapMemory().injectBody({ ...body, stream: false, tools: injected });
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {
