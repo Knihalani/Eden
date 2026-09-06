@@ -3,30 +3,6 @@ import { jitMax } from "@eden/ir";
 import { argShapes, firstCommandTemplate, programFirstStepShapes, templateFits } from "./steer";
 import { looksLikeDenseWitness } from "../../core/src/shapes";
 
-/**
- * Dispatch surface policy (docs/dispatch.md).
- *
- * The catalog lives in the runtime, not in the model's context. EDEN_SURFACE
- * picks how much of it a request may see:
- *
- *   all        every live program's schema is appended to the client's tools
- *              (the pre-Dispatch behavior). Opt in with EDEN_SURFACE=all.
- *   none       nothing is injected. Routing is purely reactive steering: the
- *              model writes its natural raw call and the proxy rewrites it.
- *              Zero Eden tokens in context, zero catalog churn.
- *   jit        at most ONE program's schema is injected, chosen per-request
- *              by the deterministic intent scorer below, only when concrete
- *              structural evidence (a URL shape, a CLI shape, a command
- *              template fit, or an envelope witness id) appears in the
- *              conversation. Silence otherwise.
- *   jit-shadow behaves exactly like `none` but logs which single program the
- *              scorer WOULD have surfaced. This is how precision is measured
- *              on real traffic before jit is allowed anywhere near it.
- *
- * The default is "jit" after the Wave 22.2 soak printed PASS at the
- * registered bar (precision ≥ 0.95, unique-work empty catalog). Set
- * EDEN_SURFACE=all to restore the historic full catalog.
- */
 export type SurfaceMode = "all" | "none" | "jit" | "jit-shadow";
 
 export function surfaceMode(): SurfaceMode {

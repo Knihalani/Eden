@@ -9,10 +9,7 @@ export const MEMORY_MARK = "Eden Memory:";
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
 export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; at: number };
-export type KnowSearch = {
-  search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[];
-  close?: () => void;
-};
+export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string };
 export type QueryHit = { text: string; source: "memory" | "know"; url?: string; id?: string };
 
@@ -131,7 +128,8 @@ export class AgentMemory {
   inject(messages: unknown[]): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
-      const blob = messageText(list);
+      const one = list.length === 1 && list[0] && typeof list[0] === "object" ? (list[0] as { content?: unknown }) : undefined;
+      const blob = typeof one?.content === "string" && !("reasoning_content" in (one as object)) ? one.content : messageText(list);
       let notes = this.cache.get(blob);
       if (!notes) {
         if (alreadyInjected(blob) || blob.includes(MEMORY_MARK)) {
