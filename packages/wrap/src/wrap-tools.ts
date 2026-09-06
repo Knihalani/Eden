@@ -971,12 +971,6 @@ export function wrapTools<T extends ToolsIn>(
               return guardRefuse(guard);
             }
           }
-          // If this entity is already armed, do NOT start a second compiled run.
-          // A sequence that repeats the head tool name — or an oblivious agent
-          // that re-issues the head call — used to re-steer here and duplicate
-          // every mutation the in-flight (or just-finished) run already
-          // performed. Fall through to the sibling claim path instead (ADR 002
-          // partial-input identity; ADR 003 keep failed armings readable).
           const sessionArmed = safely(() => {
             const t = performance.now();
             for (const [, armed] of store.all(session, t)) {
