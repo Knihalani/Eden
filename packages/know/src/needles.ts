@@ -982,23 +982,20 @@ const TASK_REV = new RegExp(
 
 export function implicitTechniqueTask(text: string): string | undefined {
   if (text.length < 8) return undefined;
-  const t = text.replace(/\s+/g, " ");
-  if (jsonCliNeed(t) && !jsonTechniqueBlockedByRfc(t)) return "JSON";
-  if (pythonInstallNeed(t)) return "Python";
-  if (typescriptRunNeed(t)) return "TypeScript";
-  if (findFilesNeed(t)) return "files";
-  if (repoSearchNeed(t)) return "search";
-  if ((t.indexOf("rust") >= 0 || t.indexOf("Rust") >= 0) && (t.indexOf("crate") >= 0 || t.indexOf("binary") >= 0) && /\brust\b/i.test(t) && /\b(?:crate|binary)\b/i.test(t)) return "Rust";
-  if (!TASK_OBJ_HIT.test(t)) return undefined;
-  const m = TASK_FWD.exec(t) || TASK_REV.exec(t);
+  if (jsonCliNeed(text) && !jsonTechniqueBlockedByRfc(text)) return "JSON";
+  if (pythonInstallNeed(text)) return "Python";
+  if (typescriptRunNeed(text)) return "TypeScript";
+  if (findFilesNeed(text)) return "files";
+  if (repoSearchNeed(text)) return "search";
+  if ((text.indexOf("rust") >= 0 || text.indexOf("Rust") >= 0) && (text.indexOf("crate") >= 0 || text.indexOf("binary") >= 0) && /\brust\b/i.test(text) && /\b(?:crate|binary)\b/i.test(text)) return "Rust";
+  if (!TASK_OBJ_HIT.test(text)) return undefined;
+  const m = TASK_FWD.exec(text) || TASK_REV.exec(text);
   if (!m) return undefined;
   const obj = m[1]!.trim();
   const canon = canonTaskObj(obj);
-  if (/^JSON$/i.test(canon) && (jsonTechniqueBlockedByRfc(t) || (!jsonTaskToken(t) && !jsonCliNeed(t)))) return undefined;
-  if (/^Python$/i.test(canon) && !pythonInstallNeed(t)) return undefined;
-  if (/^TypeScript$/i.test(canon) && !typescriptRunNeed(t) && !/\b(?:run|execute|running|executing)s?\b/i.test(t)) {
-    return undefined;
-  }
+  if (/^JSON$/i.test(canon) && (jsonTechniqueBlockedByRfc(text) || (!jsonTaskToken(text) && !jsonCliNeed(text)))) return undefined;
+  if (/^Python$/i.test(canon) && !pythonInstallNeed(text)) return undefined;
+  if (/^TypeScript$/i.test(canon) && !typescriptRunNeed(text) && !/\b(?:run|execute|running|executing)s?\b/i.test(text)) return undefined;
   return canon.length >= 2 && canon.length <= 24 ? canon : undefined;
 }
 
