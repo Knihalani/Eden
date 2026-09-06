@@ -916,7 +916,6 @@ async function safelyAsync<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-/** End of turn: start the next read-only stretch during the model's think. */
 function afterTurn(state: WrapState, args: Record<string, unknown>, name?: string): void {
   safely(() => turnBoundary(state, { lastTool: name, lastArgs: args, input: args }), null);
 }
