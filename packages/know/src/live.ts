@@ -55,7 +55,6 @@ async function prepareLive(
   }
   const robots = await fetchRobots(parsed.origin);
   if (robots && !robotsAllows(robots, UA_TOKEN, parsed.pathname || "/")) {
-    // Wikimedia Disallow:/w/ is /w/index.php, not /wiki/. Read APIs are in (API ToS + this UA).
     if (!wikiReadAllowed(url)) return { ...empty, skip: "robots" };
   }
   const delay = robotsCrawlDelaySec(robots, UA_TOKEN) ?? 0;
