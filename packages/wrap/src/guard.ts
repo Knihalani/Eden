@@ -61,10 +61,6 @@ export function decideGuard(args: {
   }
   const loop = [...run.warnings].reverse().find((w) => w.kind === "repeat_ngram" && w.ngram && new Set(w.ngram).size >= 2);
   if (loop?.ngram && loop.ngram.includes(name)) {
-    // An all-read loop is never hard-stopped. The halt lands on the *next*
-    // loop call, which for a poller is exactly the observation that would
-    // have shown progress — CI flips to success, and the agent is killed
-    // one call before seeing it. Reads are cheap and side-effect-free; the
     // asymmetry runs entirely the wrong way. They keep accumulating
     // repeat_ngram / low_gain warnings (visible on traces, honoured by
     // killAfterWarning and the budget guard), they just don't get executed
