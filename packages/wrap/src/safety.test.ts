@@ -272,7 +272,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
     await tools.start!.execute({ id: "T-1" });
     const compiledWrites = c.calls.filter((n) => n === "write").length;
 
-    // The agent now replays its own tail. Not one of them may reach the tool.
     for (let i = 0; i < tail.length; i++) {
       expect(await tools.write!.execute({ id: "T-1" })).toEqual({ eden: "steered", skipped: "write" });
     }
