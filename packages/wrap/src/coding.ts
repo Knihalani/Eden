@@ -23,9 +23,6 @@ function bashJail(cwd: string, cmd: string): void {
   if (/(^|[;&|\n]|&&|\|\|)\s*cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s'"`])\.\.(\/|$)/.test(cmd)) {
     throw new Error("path outside workspace");
   }
-  // `cd` into absolute/home/parent territory is refused wherever it hides —
-  // statement position, a subshell, or behind a `then`. A compiled replay has
-  // no business leaving the workspace directory at all.
   if (/(^|[\s;(])cd\s+['"]?(\.\.|\/|~)/.test(cmd)) {
     throw new Error("path outside workspace");
   }
