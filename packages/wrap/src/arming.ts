@@ -91,7 +91,6 @@ export type ArmingStore = {
    * returns []. Does not return mutating armings.
    */
   scanFleet(fleetId: string, name: string, args: Record<string, unknown>, now: number): FleetHit[];
-  /** Newest-first, expired swept. For the already-armed head check. */
   all(session: string, now: number): Array<[string, Armed]>;
   /** All live read-only armings in this fleet. Empty fleetId returns []. */
   allFleet(fleetId: string, now: number): FleetHit[];
