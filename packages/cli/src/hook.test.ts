@@ -68,12 +68,7 @@ describe("hook", () => {
     const cursor = JSON.parse(readFileSync(cursorPath, "utf8")) as { lines: number };
     const actual = readFileSync(join(home, "runs", "cur.jsonl"), "utf8").split("\n").filter(Boolean).length;
     expect(cursor.lines).toBe(actual);
-    // The hot path must not have needed the session log: with a valid cursor
-    // it only ever appends to it and rewrites the sidecar.
 
-    // A lost (or corrupt) cursor is rebuilt from the real log, not restarted
-    // at zero — otherwise stretch-end flushing would go quiet until two more
-    // events happened by.
     rmSync(cursorPath);
     await respondToHook({
       hook_event_name: "PostToolUse",
@@ -87,8 +82,6 @@ describe("hook", () => {
     expect(rebuilt.lines).toBe(afterRebuild);
     expect(rebuilt.lines).toBe(4);
 
-    // Truncation re-anchors the cursor: applyFlushTruncate drops two confirmed
-    // ids and the sidecar follows the file down.
     const path = join(home, "runs", "cur.jsonl");
     const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
     const ids = lines.slice(0, 2).map((l) => String((JSON.parse(l) as { id?: string }).id));

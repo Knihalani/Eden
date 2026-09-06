@@ -37,7 +37,6 @@ describe("setup hookd", () => {
     expect(pre).toContain("--max-time 1");
     expect(pre).toContain("|| echo '{}'");
     expect(pre).not.toContain("bun ");
-    // The warm chain stays on Post/Stop/SessionStart/PostToolBatch.
     for (const event of ["PostToolUse", "PostToolBatch", "Stop", "SessionStart", "UserPromptSubmit", "PreCompact"] as const) {
       const cmd = String(hooks[event]![0]!.hooks[0]!.command);
       expect(cmd).toContain("--max-time 8");
