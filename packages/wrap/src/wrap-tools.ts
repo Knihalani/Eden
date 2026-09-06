@@ -676,12 +676,6 @@ function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, regist
         return value;
       } catch (err) {
         if (state.opts.failOpen === false) throw err;
-        // Same fallback policy as the prefix-steer path — one engine, one
-        // promise. A plain Error has UNKNOWN touched-ness (it may have thrown
-        // after earlier steps ran), so only an all-reads stretch replays raw.
-        // Everything else returns the structured deopt the agent can read and
-        // recover from; a validation bug or registry gap never becomes the
-        // call's result.
         const first = (p.sequence ?? [])[0];
         const canReplay = replayableProgram(p) && !!first && first in tools;
         if (!isDeopt(err)) {
