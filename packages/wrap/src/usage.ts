@@ -190,10 +190,6 @@ export function withStreamUsage(body: Record<string, unknown>): Record<string, u
   return { ...body, stream_options: { ...opts, include_usage: true } };
 }
 
-/**
- * Pull usage off an SSE body. Does not keep assistant text — wrap traces prefer
- * the last tool result, and concatenating a long stream is wasted RAM.
- */
 export class SseUsageParser {
   private buf = "";
   private usage: Record<string, unknown> | null = null;

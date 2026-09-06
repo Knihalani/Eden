@@ -52,7 +52,7 @@ const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|please\b)/i;
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of blob.split(/(?<=[.!\n])\s+/)) {
+  for (const raw of blob.split(/(?<=[.!\n;])\s+/)) {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess)\s+/i, "");
     if (t.length < 8 || t.length > 400 || t.startsWith("{") || t.startsWith("[") || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|this is|it is|that is|there (is|are)|i am going|i want to|this means)\b/i.test(t) || CHAT.test(t)) continue;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i);
