@@ -172,7 +172,6 @@ export function openaiIsland(opts: {
         }
       } catch (err) {
         lastErr = err;
-        // The caller gave up; no amount of retrying honours an abort.
         if (callerAborted(err, signal)) throw err;
         // Network-level failures carry no status; truncation-style corruption
         // is often transient. Both are worth one more attempt.
