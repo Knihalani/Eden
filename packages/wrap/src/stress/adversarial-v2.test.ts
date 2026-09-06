@@ -133,7 +133,6 @@ d("v2: redaction volume + variety", () => {
     const cleaned = redact(shapes) as Array<Record<string, unknown>>;
     const raw = JSON.stringify(cleaned);
     for (let i = 0; i < 100; i += 7) {
-      // Spot-check a subset of each family for leakage.
       expect(raw).not.toContain(`sk-live-${i}abcdef123456`);
       expect(raw).not.toContain(`pw-${i}-supersecret`);
     }
