@@ -918,7 +918,6 @@ function afterTurn(state: WrapState, args: Record<string, unknown>, name?: strin
   safely(() => turnBoundary(state, { lastTool: name, lastArgs: args, input: args }), null);
 }
 
-/** Can this stretch be re-run raw after a partial compiled attempt without duplicating side effects? */
 function replayableProgram(p: StretchProgram): boolean {
   return (p.sequence ?? []).every((n) => isReadName(n));
 }
