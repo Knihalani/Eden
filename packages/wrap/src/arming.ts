@@ -59,10 +59,6 @@ export type ArmingStore = {
   insert(session: string, key: string, armed: Armed): boolean;
   delete(session: string, key: string): void;
   get(session: string, key: string): Armed | undefined;
-  /**
-   * Newest-first candidates that might match this call. Sweeps expired
-   * (settled) entries. Does not walk other sessions.
-   */
   scan(session: string, name: string, args: Record<string, unknown>, now: number): Array<[string, Armed]>;
   /**
    * Read-only armings in this fleet, newest-first per session. Empty fleetId
