@@ -228,10 +228,6 @@ function sameWarm(
   return wave.every((w) => findEntry(entries, programId, w.tool, w.args));
 }
 
-/**
- * The agent has confirmed this program+input. Mismatched guesses for the
- * same program are discarded so an unconfirmed result can never leak.
- */
 export function claimWarm(state: WrapState, program: StretchProgram, input: Record<string, unknown>): void {
   try {
     const wave = firstWaveReads(program, input);
