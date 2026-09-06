@@ -106,7 +106,6 @@ export type WrapState = {
    * and force execute so a sibling read cannot see a pre-write value.
    */
   dirtyEntities: Set<string>;
-  /** When each dirty entity was last written (performance.now). */
   dirtyAt: Map<string, number>;
   /** JIT injection-rate bookkeeping for this wrap (one episode). */
   jit: JitGuard;
