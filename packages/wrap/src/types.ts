@@ -59,11 +59,6 @@ export type EdenOpts = {
   arming?: ArmingStore;
   armMax?: number;
   armGlobal?: number;
-  /**
-   * Fleet key for read-only cross-agent claims (Wave 7.1). Distinct sessions
-   * in the same fleet may claim each other's *read-only* fetches. Mutating
-   * tails stay session-scoped. Default: `EDEN_FLEET` or empty (no sharing).
-   */
   fleetId?: string;
   agentId?: string;
   parentRunId?: string;
