@@ -961,10 +961,6 @@ export function wrapTools<T extends ToolsIn>(
         }
         const hit = prefixHits[0];
         if (hit) {
-          // Spent halt must win before compile-steer. Wrap's real first-tool
-          // path is this sequence head — the later decideGuard never sees it.
-          // Observe/default skip this consult (prime directive). Steer falls
-          // through to prefix-serve; guard-steer already exists on the raw path.
           if (enforcementEnabled(state.opts)) {
             const guard = safely(
               () => decideGuard({ name, run, live, opts: state.opts, now: performance.now() }),
