@@ -131,6 +131,7 @@ function compiledAnswer(facts: unknown): Response {
 }
 
 export async function handleChatCompletions(req: Request, opts: ProxyOpts): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" } });
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;

@@ -140,10 +140,6 @@ function strField(row: Record<string, unknown>, key: string): string | undefined
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-/**
- * Compact one hot run file into a warm receipt. Full `events` are dropped.
- * Identity and tokenClasses come from the file name + last record that carried them.
- */
 export function compactHotFile(path: string, id: string, at: number): WarmReceipt {
   const rows = readJsonl(path);
   const receipt: WarmReceipt = { id, at };
@@ -225,10 +221,6 @@ function writeCold(path: string, row: ColdMonth): void {
   writeFileAtomic(path, JSON.stringify(row) + "\n");
 }
 
-/**
- * Move eligible hot → warm → cold. Never deletes a live hot file younger than
- * the retain window. Never throws (fail-open for the CLI; wrap never calls this).
- */
 export function compactArchive(now = Date.now()): CompactResult {
   try {
     return compactArchiveUnsafe(now);
