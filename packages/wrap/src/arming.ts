@@ -53,7 +53,6 @@ export type Armed = {
   settled: Promise<boolean>;
   resolveSettled: (ok: boolean) => void;
   headErr?: unknown;
-  /** True once the head compiled run resolved. In-flight heads do not TTL-expire. */
   closed: boolean;
   /** Cheap identity for fast reject before extractInput. Canonical form of the arming input (id / ticket_id / orderId). */
   hintId: unknown;
