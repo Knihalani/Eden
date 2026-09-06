@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
-const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", session_start: "SessionStart", session_end: "SessionEnd", pre_compact: "PreCompact", session_stop: "Stop", beforeSubmitPrompt: "UserPromptSubmit" };
+const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", session_start: "SessionStart", sessionStart: "SessionStart", session_end: "SessionEnd", sessionEnd: "SessionEnd", pre_compact: "PreCompact", preCompact: "PreCompact", PreCompress: "PreCompact", session_stop: "Stop", stop: "Stop", AfterAgent: "Stop", beforeSubmitPrompt: "UserPromptSubmit", BeforeAgent: "UserPromptSubmit" };
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -48,22 +48,22 @@ function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
 }
 
 function additional(event: string, text: string): Record<string, unknown> | null {
-  return text ? { hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
+  return text ? { additional_context: text, hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
 }
 
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
-    const name = String(asRec(raw).hook_event_name ?? "");
-    const event = EVENT_ALIASES[name] ?? name;
+    const r = asRec(raw);
+    const event = EVENT_ALIASES[String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "")] ?? String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
-    const mem = hookMemory(asRec(raw));
-    const prior = messagesFromTranscript(asRec(raw).transcript_path);
+    const mem = hookMemory(r);
+    const prior = messagesFromTranscript(r.transcript_path);
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
       if (prior.length) mem.observe(prior);
       return stop ? null : additional(event, briefing(mem));
     }
-    const prompt = String(asRec(raw).prompt ?? "");
+    const prompt = String(r.prompt ?? r.text ?? "");
     const list = prompt ? [...prior, { role: "user", content: prompt }] : prior.length ? prior : [{ role: "user", content: "continue" }];
     return additional(event, notesFromInject(mem.inject(list)));
   } catch {
