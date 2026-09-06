@@ -152,7 +152,7 @@ export class AgentMemory {
       if (this.compiled.some((c) => c.rec.text.toLowerCase() === text.toLowerCase())) continue;
       const tags = tokList(text);
       if (/\bpull requests?\b/i.test(text)) tags.push("pr");
-      out.push(this.remember(text, { kind: "episode", tags }));
+      out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided )\b/i.test(text) ? "episode" : "fact", tags }));
     }
     return out;
   }

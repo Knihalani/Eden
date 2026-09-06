@@ -254,11 +254,6 @@ async function parsePollBody(res: Response): Promise<unknown> {
   }
 }
 
-/**
- * Retrieve until every custom_id has a result, or until the host is clearly
- * not going to finish inside a live island (empty polls / HTTP errors).
- * Never waits the provider's 24h SLA.
- */
 async function pollUntilComplete(
   fn: typeof fetch,
   opts: IslandBatchOpts,
