@@ -149,9 +149,6 @@ describe("the hook never blocks the agent", () => {
 
 describe("withFileLock", () => {
   test("breaks a lock left behind by a dead process", () => {
-    // The lock is released in a finally, which never runs for SIGKILL. Without
-    // staleness detection one dead process cost every later hook 1.5s of
-    // spinning and then a throw, permanently.
     const lock = join(home, "runs", "stale.jsonl.lock");
     closeSync(openSync(lock, "w"));
     const old = new Date(Date.now() - 120_000);
@@ -166,10 +163,6 @@ describe("withFileLock", () => {
   test("a fresh lock is still respected", () => {
     const lock = join(home, "runs", "fresh.jsonl.lock");
     closeSync(openSync(lock, "w"));
-    // Align fs mtime with the clock home.ts uses for age (Date.now). A flake-audit
-    // offset would otherwise make a brand-new lock look up to ~18s old and, late
-    // in a long suite, older than LOCK_STALE_MS — so it would be broken instead
-    // of respected.
     const now = new Date(Date.now());
     utimesSync(lock, now, now);
     expect(() => withFileLock(lock, () => "nope")).toThrow(/could not acquire lock/);
