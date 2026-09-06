@@ -112,7 +112,6 @@ d("v2: proxy under concurrency", () => {
       expect(res.headers.get("content-type") || "").toContain("text/event-stream");
       const text = await res.text();
       expect(text).toContain("event: message_stop");
-      // The absorbed sibling must never appear in a streamed response.
       expect(text).not.toContain('"name":"respond"');
     }
   });
