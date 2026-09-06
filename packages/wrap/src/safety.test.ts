@@ -219,11 +219,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
     const { c, tools } = armed();
     await tools.lookupTicket!.execute({ id: "T-100" });
     const afterCompiled = c.calls.filter((n) => n === "notify").length;
-    // Armings are timed on the monotonic clock, not the wall clock, so this
-    // advances performance.now rather than the system time. Wall-clock timing
-    // meant an NTP step backwards made `now - armedAt` negative and the arming
-    // immortal — it would go on swallowing genuinely new mutations — while a
-    // step forwards disarmed one mid-stretch.
     expect(await withClockAdvanced(61_000, () => tools.notify!.execute({ id: "T-100" }))).toEqual({
       ran: "notify",
       id: "T-100",
