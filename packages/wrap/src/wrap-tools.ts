@@ -91,7 +91,6 @@ export type WrapState = {
    * every trace emitted afterwards carries `dropped_posts`.
    */
   droppedPosts: number;
-  /** Session-partitioned suppression store. Shared when `opts.arming` is set. */
   arming: ArmingStore;
   sessionId: string;
   fleetId: string;
