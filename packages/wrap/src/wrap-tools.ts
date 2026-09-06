@@ -494,10 +494,6 @@ function emitTrace(
 ): void {
   if (!run.events.length) return;
   let events = run.events;
-  // Whether this pass actually consumed events. A partitioned pass that claims
-  // nothing of its own must not touch the shared warning state: another
-  // invocation is mid-flight and resetting its budget/window under it would
-  // corrupt the trace it is still building.
   let consumed = true;
   try {
     if (owner) {
