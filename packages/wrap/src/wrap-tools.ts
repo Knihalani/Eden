@@ -584,8 +584,6 @@ function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, e
   trace.usable = usableTrace(trace);
   trace.grounded = judgeGrounding(trace).grounded;
   if (state.droppedPosts > 0) {
-    // Outbox overflow silently destroyed receipts/traces. Surface the count on
-    // every later trace so the loss is at least visible to the desk.
     (trace as StretchTrace & { dropped_posts?: number }).dropped_posts = state.droppedPosts;
   }
   if (state.agentId) trace.agentId = state.agentId;
