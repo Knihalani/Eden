@@ -235,6 +235,7 @@ export function anthropicMessageToSse(msg: AnthropicMessage): string {
 }
 
 export async function handleAnthropicMessages(req: Request, opts: AnthropicProxyOpts): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsHeaders(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization, anthropic-version, x-api-key", "access-control-max-age": "86400" } });
   let body: AnthropicRequest;
   try {
     body = (await req.json()) as AnthropicRequest;
