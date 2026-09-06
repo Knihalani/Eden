@@ -7,12 +7,6 @@ import { handleHookd } from "./hookd";
 import { applyFlushTruncate, respondToHook } from "./hook";
 import { rewriteOutbox } from "./drain";
 
-/**
- * Eden sits on the tool path of somebody's agent. The invariant that matters
- * more than any feature is that a broken Eden gets out of the way. These are
- * the cases where it did not.
- */
-
 let home: string;
 let savedHome: string | undefined;
 

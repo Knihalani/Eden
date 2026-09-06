@@ -3,11 +3,6 @@ import { mkdirSync, rmSync, utimesSync, closeSync, openSync, existsSync, writeFi
 import { join } from "node:path";
 import { ensureHome } from "./home";
 
-/**
- * P2: ~/.eden/runs retention. Un-uploaded logs used to grow forever when the
- * plane stayed down; drained sessions left empty .jsonl shells and .lock /
- * .cursor sidecars behind permanently.
- */
 describe("runs retention sweep", () => {
   let home: string;
 
