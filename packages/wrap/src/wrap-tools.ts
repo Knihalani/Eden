@@ -457,9 +457,6 @@ export async function runCompiled(
       err,
     );
     stampIdentity(state, receipt);
-    // Capped on this path too. The success branch trimmed to MAX_TRACES and
-    // this one did not, so a program that deopts on every call grew the array
-    // without limit for the life of the process.
     pushCapped(state.receipts, receipt);
     notifyHost(() => state.opts.onReceipt?.(receipt));
     post(state, "/v1/receipts", receipt);
