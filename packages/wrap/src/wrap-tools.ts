@@ -1115,9 +1115,6 @@ export function wrapTools<T extends ToolsIn>(
             skipArmed = armed;
             break;
           }
-          // Head failed. Was THIS step already performed before the failure?
-          // DeoptError carries the completed-tool list; a plain error tells us
-          // nothing about state.
           const doneByCompiled = safely(() => {
             const e = armed.headErr;
             return isDeopt(e) && Array.isArray((e as { toolCalls?: string[] }).toolCalls)
