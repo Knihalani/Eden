@@ -849,7 +849,6 @@ describe("wrapTimeoutMs", () => {
 });
 
 describe("control outbox", () => {
-  /** Yield the event loop so fire-and-forget sendPost().then handlers settle — not a flake delay. */
   const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
   test("failed posts retry on flush", async () => {
@@ -1331,7 +1330,6 @@ describe("online signal bus", () => {
     await Promise.all([tools.notify.execute({ id: "T-1" }), tools.search.execute({ q: "x" })]);
     expect(state.traces.length).toBe(1);
     expect(state.traces[0]!.events.map((e) => e.name)).toEqual(["notify"]);
-    // Not dropped, not misattributed: still waiting for its own trace.
     expect(state.run.events.some((e) => e.name === "search")).toBe(true);
   });
 });
