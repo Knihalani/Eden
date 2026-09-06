@@ -157,7 +157,6 @@ export function cacheHitSpread(
 
 export function attachChatUsage(trace: StretchTrace, usage: ChatUsage | null): StretchTrace {
   if (!usage) return trace;
-  // Already scraped (in-process wrap) — don't clobber, and leave server usage for another trace.
   if (trace.prompt_tokens != null) return trace;
   const llmCalls = usage.llmCalls > 0 && !trace.llmCalls ? usage.llmCalls : trace.llmCalls;
   const output = trace.output ?? usage.output;
