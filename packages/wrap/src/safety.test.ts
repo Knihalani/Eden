@@ -308,8 +308,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
   });
 
   test("a host telemetry callback that throws does not fail the tool call", async () => {
-    // onTrace, onWarning, and onReceipt are arbitrary host code. A throw in any
-    // of them used to propagate out of a tool call that had already succeeded.
     const c = counted(["ping"]);
     const tools = wrapTools(
       c.tools,
