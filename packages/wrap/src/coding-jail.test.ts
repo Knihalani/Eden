@@ -94,8 +94,6 @@ describe("bash timeout_ms coercion", () => {
   const registry = codingRegistry(CWD);
 
   test("a non-numeric timeout_ms falls back to the default instead of killing instantly", async () => {
-    // Number("30s") === NaN → setTimeout(NaN) fired SIGKILL at t≈0, so every
-    // command returned code 1 with truncated output.
     const r = (await registry.execute(
       "Bash",
       { command: "echo hi", timeout_ms: "30s" },
