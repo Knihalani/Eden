@@ -157,9 +157,9 @@ export class AgentMemory {
 
   inject(messages: unknown[]): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
+    const hit = this.out.get(list);
+    if (hit) return hit;
     try {
-      const hit = this.out.get(list);
-      if (hit) return hit;
       const blob = convBlob(list);
       let notes = this.cache.get(blob);
       if (!notes) {

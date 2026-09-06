@@ -245,8 +245,6 @@ export function selectSurfacePrograms(opts: {
   const msgs = opts.messages;
   if (mode === "none") return { surface: [] };
   if (mode !== "all" && !msgs?.length) {
-    // jit / jit-shadow without a conversation to read have no evidence and no
-    // business surfacing anything: degrade to silence, never to the catalog.
     return { surface: [] };
   }
   if (mode === "all") return { surface: live };
@@ -254,7 +252,7 @@ export function selectSurfacePrograms(opts: {
   try {
     ranked = msgs ? rankPrograms(msgs, live) : [];
   } catch {
-    ranked = []; // scorer fault degrades to silence, never to a fat catalog
+    ranked = [];
   }
   const names = ranked.slice(0, 1).map((m) => m.program.name);
   if (mode === "jit-shadow") {
@@ -287,10 +285,6 @@ export function dispatchMessages(params?: Record<string, unknown> | null): unkno
 
 export const JIT_UNUSED_DEMOTE = 3;
 
-/**
- * Per-episode JIT bookkeeping. One of these lives on WrapState so inject,
- * the proxy response, and wrapTools share a conversion counter.
- */
 export type JitGuard = {
   injections: number;
   unusedStreak: number;
@@ -359,16 +353,6 @@ function recordJitInject(jit: JitGuard, program: StretchProgram): void {
   jit.pendingAliases = seq0 && seq0 !== program.name ? [program.name, seq0] : [program.name];
 }
 
-/**
- * The one entry point request handlers call: reads EDEN_SURFACE, applies the
- * policy, logs shadow candidates. On any internal fault it degrades to the
- * historic full catalog — steering is unaffected either way, and a fat catalog
- * costs tokens while silence-by-crash starves the library silently.
- *
- * When mode is jit, `jit` caps injections per episode at jitMax() (EDEN_JIT_MAX,
- * default 4). Three consecutive unused injections demote the rest of the
- * episode to S0 (nothing surfaced).
- */
 export function selectForRequest(
   live: StretchProgram[],
   messages?: unknown[],
