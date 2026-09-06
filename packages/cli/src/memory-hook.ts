@@ -3,12 +3,7 @@ import { join } from "node:path";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
-const EVENT_ALIASES: Record<string, string> = {
-  user_prompt_submit: "UserPromptSubmit",
-  session_start: "SessionStart",
-  pre_compact: "PreCompact",
-  session_stop: "Stop",
-};
+const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", session_start: "SessionStart", pre_compact: "PreCompact", session_stop: "Stop" };
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -49,14 +44,14 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
 }
 
 export function notesFromInject(injected: unknown[]): string {
-  const parts: string[] = [];
-  for (const m of injected) {
-    const o = asRec(m);
-    if (o.role !== "system") continue;
-    const c = typeof o.content === "string" ? o.content : "";
-    if (c.includes(MEMORY_MARK) || c.includes("Eden Know:")) parts.push(c);
-  }
-  return parts.join("\n\n");
+  return injected
+    .map((m) => {
+      const o = asRec(m);
+      const c = o.role === "system" && typeof o.content === "string" ? o.content : "";
+      return c.includes(MEMORY_MARK) || c.includes("Eden Know:") ? c : "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function briefing(mem: AgentMemory): string {
@@ -83,7 +78,8 @@ function additional(event: string, text: string): Record<string, unknown> | null
 
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
-    const event = EVENT_ALIASES[String(asRec(raw).hook_event_name ?? "")] ?? String(asRec(raw).hook_event_name ?? "");
+    const name = String(asRec(raw).hook_event_name ?? "");
+    const event = EVENT_ALIASES[name] ?? name;
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory(asRec(raw));
     const prior = messagesFromTranscript(asRec(raw).transcript_path);
