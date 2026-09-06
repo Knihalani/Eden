@@ -191,7 +191,6 @@ d("v2: sustained steering correctness (varied shapes)", () => {
       if (shapeIdx === 0) {
         const out = (await tools.alpha.execute({ k })) as Record<string, unknown>;
         if (inEnvelope) {
-          // Compiled flow runs alpha→beta→gamma; result is gamma's {done}.
           if (out.done === true && (executed[`beta:${k}`] ?? 0) >= 1) correct++;
         } else if (out.step === 1 && (executed[`beta:${k}`] ?? 0) === 0) correct++;
       } else if (shapeIdx === 1) {
