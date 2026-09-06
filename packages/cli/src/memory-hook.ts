@@ -25,7 +25,8 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
     for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean).slice(-Math.max(cap * 2, cap))) try {
       const rec = asRec(JSON.parse(line));
       const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
-      const role = String(msg.role || rec.type || "");
+      const rawRole = String(msg.role || rec.type || "");
+      const role = rawRole === "human" || rawRole === "Human" ? "user" : rawRole === "model" || rawRole === "ai" ? "assistant" : rawRole;
       const content = [flattenContent(msg.content), String(msg.reasoning_content ?? msg.thinking ?? msg.reasoning ?? "")].filter(Boolean).join("\n");
       if ((role === "user" || role === "assistant") && content) out.push({ role, content });
     } catch {}
