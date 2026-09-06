@@ -2,18 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { createState, wrapTools } from "../index";
 import "@eden/ir";
 
-/**
- * ADVERSARIAL SUITE v1 — real-world hostile inputs, not the happy path.
- *
- * These tests are written to BREAK Eden, not to pass. Everything here models
- * production realities: nondeterministic outputs, flaky tools, hostile
- * payloads, memory pressure, concurrent abuse. Failures found by this suite
- * get fixed in the engine, and the suite then gets VARIED (new seeds, new
- * shapes) so fixes cannot overfit to one scenario.
- *
- * Gated behind EDEN_STRESS=1 so normal CI stays fast; run explicitly.
- */
-
 const gate = process.env.EDEN_STRESS === "1";
 const d = describe.skipIf(!gate);
 
@@ -25,7 +13,6 @@ export function rng(seed: number): () => number {
   };
 }
 
-/** A tool whose result carries a fresh timestamp + random id on every call: the classic pattern that defeats output-similarity detection. */
 function nondeterministicTool(name: string, rand: () => number) {
   return async (args: Record<string, unknown>) => ({
     name,

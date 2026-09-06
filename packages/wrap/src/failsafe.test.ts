@@ -335,7 +335,6 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
       hits,
       url: `http://127.0.0.1:${server.port}`,
       stop: () => server.stop(true),
-      /** Resolves on the next (or already-recorded) hit — no wall sleep. */
       whenHit: () =>
         new Promise<void>((resolve) => {
           if (hits.length) resolve();
