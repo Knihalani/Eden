@@ -316,22 +316,14 @@ export async function respondToHook(
       ts: Date.now(),
     }) as Record<string, unknown>;
     const path = eventsPath(session);
-    // Append and count under one lock acquisition: the hot path never opens
-    // the session log itself, only the tiny cursor sidecar.
     let lineCount = 0;
     await locker(`${path}.lock`, () => {
       lineCount = recordAppendedEvent(path, () => appendJsonl(path, event));
     });
-    // Full read only at a stretch end; flushSession's own `events.length >= 2`
-    // guard on the real snapshot stays authoritative.
     if (lineCount >= 2 && isStretchEnd(name)) {
       const events = readJsonl(path);
       if (events.length >= 2) flushSession(session, events);
     }
-    // Transparent execution: this call matched a live read-only program's
-    // first step — serve the rest of the routine by replacing this call's
-    // output. Recording above already happened; every failure below falls
-    // open to `{ ok: true }` so the agent's own output stands.
     try {
       const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
       const live = (Array.isArray(liveRaw) ? liveRaw : []) as LiveTool[];
