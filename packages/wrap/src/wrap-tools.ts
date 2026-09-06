@@ -1186,15 +1186,6 @@ export function wrapTools<T extends ToolsIn>(
         }
 
         const t0 = performance.now();
-        //
-        // The halt MUST push a marker event before flushing: emitTrace
-        // early-returns on an empty buffer and its finally-block is the only
-        // place rawExecuted resets when the window carries loop warnings.
-        // Without the marker the first halt wedged the state permanently —
-        // every later call halted with an empty event buffer, unreachable by
-        // the reset. After the marker, the window flushes clean-ish and work
-        // resumes; sustained thrash simply re-arms the ceiling (bounded spend,
-        // never a bricked state).
         if (enforcementEnabled(state.opts) && run.rawExecuted >= maxRunSteps()) {
           // Explicit reset: with the marker flushed, the next cycle starts
           // fresh — sustained thrash re-arms the ceiling instead of wedging.
