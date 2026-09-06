@@ -206,11 +206,11 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
       try {
         if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET,POST,DELETE,OPTIONS", "access-control-allow-headers": "content-type" } });
         const u = new URL(req.url);
-        const p = u.pathname;
+        const p = u.pathname.replace(/\/+$/, "").replace(/^\/v1(?=\/)/, "") || "/";
         if (req.method === "DELETE") return json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
         if (req.method === "POST") {
-          const b = (await req.json()) as { text?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; q?: string; k?: number };
-          const run = ({ "/observe": () => memory.observe(b.messages || b.conversation || (b.text ? [{ role: "user", content: String(b.text) }] : [])), "/remember": () => memory.remember(String(b.text || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || b.conversation || (b.text ? [{ role: "user", content: String(b.text) }] : [])) }), "/query": () => memory.query(String(b.q || ""), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
+          const b = (await req.json()) as { text?: string; prompt?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; q?: string; k?: number };
+          const run = ({ "/observe": () => memory.observe(b.messages || b.conversation || ((b.text || b.prompt) ? [{ role: "user", content: String(b.text || b.prompt) }] : [])), "/remember": () => memory.remember(String(b.text || b.prompt || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || b.prompt || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || b.conversation || ((b.text || b.prompt) ? [{ role: "user", content: String(b.text || b.prompt) }] : [])) }), "/query": () => memory.query(String(b.q || b.prompt || b.text || ""), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return json(run());
         } else {
           const run = ({ "/health": () => ({ ok: true, n: memory.memories().length }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6) : memory.memories().slice().sort((a, b) => b.at - a.at).slice(0, Number(u.searchParams.get("limit") || u.searchParams.get("k")) || 500)) } as Record<string, () => unknown>)[p];

@@ -94,7 +94,6 @@ function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost 
   return "unknown";
 }
 
-/** Map host-native hook payloads onto Claude-shaped {@link HookIn}. */
 export function normalizeHookIn(raw: unknown): { hook: HookIn; host: HookHost } {
   const r = asRecord(raw);
   const eventRaw = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
@@ -167,7 +166,6 @@ export async function runHook(): Promise<void> {
   process.stdout.write(JSON.stringify(out));
 }
 
-/** Sync lock for one-shot `eden hook`; hookd passes async so sleepSync cannot stall other sessions. */
 export type HookLocker = <T>(lockPath: string, fn: () => T) => T | Promise<T>;
 
 function readConfigSafely(): { steer_hooks?: boolean } | null {
