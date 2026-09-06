@@ -1081,11 +1081,6 @@ export function wrapTools<T extends ToolsIn>(
             armed.fleetId === fleetId &&
             (armed.served?.has(name) === true || armed.head === name);
           if (!remaining && !fleetServed) continue;
-          // The head's compiled run is doing this call's work. Wait for its
-          // outcome before claiming anything — claiming first and learning
-          // later is how a suppressed sibling's work was lost forever when the
-          // head failed mid-flight. Bounded by the wrap timeout so a hung head
-          // degrades to raw execution, never an eternal wait.
           const ok = await waitSettled(armed, wrapTimeoutMs(state.opts.timeoutMs));
           if (ok) {
             // Head succeeded; the compiled run performed this step. A dirty
