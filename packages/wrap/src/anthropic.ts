@@ -107,7 +107,6 @@ function upstreamTimeoutMs(): number {
   return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000;
 }
 
-/** Convert a compiled program's schema to Anthropic tool definition format. */
 function anthropicToolDef(program: StretchProgram) {
   const openai = compiledSchema(program);
   const fn = "function" in openai ? openai.function : undefined;
