@@ -32,8 +32,8 @@ function convBlob(list: unknown[]): string {
     const c = o.content;
     if (typeof c === "string" && c) parts.push(c);
     else if (typeof o.llmContent === "string" && o.llmContent) parts.push(o.llmContent);
-    else if (Array.isArray(c) || Array.isArray(o.parts)) {
-      for (const b of (Array.isArray(c) ? c : o.parts as unknown[])) {
+    else if (Array.isArray(c) || Array.isArray(o.parts) || (c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).parts))) {
+      for (const b of (Array.isArray(c) ? c : Array.isArray(o.parts) ? o.parts as unknown[] : (c as Record<string, unknown>).parts as unknown[])) {
         if (b && typeof b === "object") {
           const t = ["text","content","llmContent","alt","name","caption","title","filename","url","href","source","uri","id","mimeType"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v);
           if (t) parts.push(t as string);
@@ -42,6 +42,7 @@ function convBlob(list: unknown[]): string {
     }
     const r = o.reasoning_content ?? o.thinking ?? o.reasoning;
     if (typeof r === "string" && r) parts.push(r);
+    if (Array.isArray(o.candidates)) for (const x of o.candidates as Record<string, unknown>[]) { const ps = (x?.content as Record<string, unknown> | undefined)?.parts; if (Array.isArray(ps)) for (const b of ps) { const t = b && typeof b === "object" ? ["text","content","llmContent"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v) : undefined; if (typeof t === "string") parts.push(t); } }
   }
   return parts.join("\n");
 }
