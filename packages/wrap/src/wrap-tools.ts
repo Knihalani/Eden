@@ -988,7 +988,6 @@ export function wrapTools<T extends ToolsIn>(
             const ok = await waitSettled(fleetHit.armed, wrapTimeoutMs(state.opts.timeoutMs));
             if (ok) {
               if (isReadName(name) && staleRead(state, args, fleetHit.armed)) {
-                /* pre-write cache; fall through to execute */
               } else {
               skipAsShared(fleetHit.armed, name, selfId);
               return { eden: "steered", skipped: name };
