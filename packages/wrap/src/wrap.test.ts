@@ -1147,10 +1147,6 @@ describe("online signal bus", () => {
   });
 
   test("a max_steps halt does not wedge the state for unrelated work (probe R1)", async () => {
-    // The original ceiling implementation halted and then NEVER reset:
-    // every later call on the same state — including completely different,
-    // legitimate work — returned {eden:"halted"} forever. The halt must push
-    // its marker through the flush path so the counter resets.
     process.env.EDEN_MAX_STEPS = "12";
     try {
       const state = createState({ programs: [], enforce: true });
