@@ -177,21 +177,12 @@ function asArmed(row: Persisted): Armed {
   };
 }
 
-/**
- * Join a hook `file_path`/`path` against the Claude `cwd`.
- *
- * `path.resolve(cwd, relative)` is the identity: `./a.ts` under
- * `/Users/me/repo` is `/Users/me/repo/a.ts`. An already-absolute path ignores
- * cwd (Node right-to-left). Without cwd, relatives stay as written — we never
- * invent `process.cwd()` (hookd's cwd is not the agent's project).
- */
 export function joinAgainstCwd(filePath: string, cwd?: string): string {
   if (!filePath) return filePath;
   if (typeof cwd === "string" && cwd.length > 0) return resolve(cwd, filePath);
   return isAbsolute(filePath) ? resolve(filePath) : filePath;
 }
 
-/** Wrap `hintIdOf` for tickets; remainder-local hint is the resolved path when wrap has none. */
 export function remainderHintOf(rec: Record<string, unknown>): unknown {
   const ticket = hintIdOf(rec);
   if (ticket !== undefined) return ticket;
@@ -270,7 +261,6 @@ function inputMatches(armedInput: Record<string, unknown>, cur: Record<string, u
   return keys.length > 0 && keys.every((k) => k in armedInput && eq(cur[k], armedInput[k]));
 }
 
-/** Pull the armed entity keys out of a later call that may carry extra tool args. */
 function extractAgainst(armedInput: Record<string, unknown>, args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = Object.create(null);
   for (const k of Object.keys(armedInput)) {
