@@ -258,11 +258,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
   });
 
   test("a tail longer than the call budget is suppressed to the end", async () => {
-    // Every wrapped execute increments the call counter, including the
-    // suppressed ones — so a flat budget was spent by the very calls it
-    // existed to absorb. A program with a tail longer than the budget disarmed
-    // partway through and executed the remainder for real: 40 compiled writes
-    // followed by 8 raw ones. The budget has to be counted on top of the tail.
     const c = counted(["start", "write"]);
     const tail = Array.from({ length: 40 }, () => "write");
     const p = program(
