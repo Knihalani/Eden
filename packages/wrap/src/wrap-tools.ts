@@ -506,23 +506,6 @@ type Invocation = {
   finishedAt: number;
 };
 
-/**
- * Flush the buffered events as a trace.
- *
- * With an `owner` (the invocation doing the flushing) the buffer is
- * partitioned: the trace takes the owner's own events plus events from
- * invocations that had already *finished before the owner began* — the
- * ordinary sequential case, where earlier calls are simply waiting to be
- * flushed. Events from invocations that overlap the owner stay buffered and
- * ride out with their own flush.
- *
- * Residual risk, accepted on purpose: warnings/seenSignals/usage/t0 remain
- * per-state rather than per-invocation, so two overlapping calls can still
- * share a warning budget or a duration window; and an event whose invocation
- * record has been evicted (see the bound below) is treated as long-finished
- * and claimed by the next flush. Partitioning events is the part that could
- * corrupt or lose attribution of results; the rest only skews telemetry.
- */
 function emitTrace(
   state: WrapState,
   run: ReturnType<typeof emptyRun>,
