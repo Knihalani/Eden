@@ -2,17 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { withVersion, type Step, type StretchProgram } from "@eden/ir";
 import { createState, wrapTools } from "./index";
 
-/**
- * The oblivious-agent regression: an agent that keeps issuing calls after the
- * head call was steered.
- *
- * Tail calls routinely cannot carry the head call's full input (the program's
- * input schema includes a complaint `text`, but listInvoices/applyCredit only
- * take an id). Sibling matching required FULL input equality, so every tail
- * call fell through and executed raw after the compiled run had already done
- * its work — one compiled applyCredit plus one raw applyCredit per stretch:
- * duplicated writes for any agent that does not stop at the first call.
- */
 function program(): StretchProgram {
   const step = (id: string, tool: string, args: Record<string, unknown>): Step =>
     ({ id, kind: "tool", tool, args }) as Step;
