@@ -101,7 +101,6 @@ type AnthropicMessage = {
   usage?: { input_tokens?: number; output_tokens?: number };
 };
 
-/** Generous by default — completions legitimately run minutes — but bounded. */
 function upstreamTimeoutMs(): number {
   const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
   return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000;
