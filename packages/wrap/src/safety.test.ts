@@ -206,8 +206,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
   });
 
   test("an arming stops suppressing once the agent has moved well past it", async () => {
-    // Past ARM_MAX_CALLS intervening calls the agent is demonstrably no longer
-    // in that stretch, so a raw notify is a new intent and must reach the tool.
     const { c, tools } = armed();
     await tools.lookupTicket!.execute({ id: "T-100" });
     const afterCompiled = c.calls.filter((n) => n === "notify").length;
