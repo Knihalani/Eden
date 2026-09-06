@@ -5,13 +5,6 @@ import type { StretchTrace } from "@eden/ir";
 import { createTicketShip, runNaive, toNaiveTrace, WITNESS_IDS } from "../../runtime/src/ticketship";
 import { bench, collectBench, formatBench, loadTraces } from "./bench";
 
-/**
- * Fixture traces come from the TicketShip world itself, so every number the
- * bench reads was produced by the fixture rather than invented by the test.
- * llmMs: 0 keeps replays off any clock, and toNaiveTrace stamps the fixture's
- * synthetic clock (duration_ms == 200 × llmCalls) — which is precisely the
- * case the time verdict must refuse to measure.
- */
 async function ticketShipTraces(dir: string, count: number): Promise<void> {
   mkdirSync(dir, { recursive: true });
   let file = 0;

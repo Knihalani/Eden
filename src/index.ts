@@ -42,6 +42,9 @@ function convBlob(list: unknown[]): string {
     }
     const r = o.reasoning_content ?? o.thinking ?? o.reasoning;
     if (typeof r === "string" && r) parts.push(r);
+    const si = o.systemInstruction ?? o.system_instruction;
+    if (typeof si === "string" && si) parts.push(si);
+    else if (si && typeof si === "object") { const ps = (si as Record<string, unknown>).parts; if (Array.isArray(ps)) for (const b of ps) { const t = b && typeof b === "object" ? ["text","content"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v) : undefined; if (typeof t === "string") parts.push(t); } }
     if (Array.isArray(o.candidates)) for (const x of o.candidates as Record<string, unknown>[]) { const ps = (x?.content as Record<string, unknown> | undefined)?.parts; if (Array.isArray(ps)) for (const b of ps) { const t = b && typeof b === "object" ? ["text","content","llmContent"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v) : undefined; if (typeof t === "string") parts.push(t); } }
   }
   return parts.join("\n");

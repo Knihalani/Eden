@@ -23,10 +23,6 @@ describe("drain outbox", () => {
 });
 
 describe("drain actually drains", () => {
-  /**
-   * These exercise the real drain() against a stub site, because the bugs were
-   * all in its control flow rather than in the pure helpers above.
-   */
   let home: string;
   let savedHome: string | undefined;
   let savedKey: string | undefined;
@@ -59,7 +55,6 @@ describe("drain actually drains", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  /** A site that accepts ingest and reports no live tools. */
   function serveSite(): void {
     server = Bun.serve({
       port: 0,
