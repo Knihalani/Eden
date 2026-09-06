@@ -1180,7 +1180,6 @@ export function wrapTools<T extends ToolsIn>(
                 if (!(replayableProgram(guard.program) && !touched)) {
                   return { eden: "halted", reason: guard.reason };
                 }
-                // all-reads + provably-untouched: safe to fall through to raw
               }
             }
             // pair === null: arming failed on a corrupt program — fall through
