@@ -148,7 +148,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   const clientOptedIn = Array.isArray(body.tools);
   const msgs = body.messages as unknown[] | undefined;
   const blocked = wrapTokenBlocked(opts, req);
-  // Catalog demote must not hide a compiled play when wrap has no model key.
   const picked = steerable
     ? safely(
         () => selectForRequest(live, msgs, blocked ? undefined : opts.state.jit),
