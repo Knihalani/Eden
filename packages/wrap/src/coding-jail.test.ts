@@ -37,11 +37,6 @@ describe("bash jail", () => {
     await refuses("echo $(cat /etc/passwd)");
   });
 
-  /**
-   * The escapes below never spell a forbidden path — the danger is the
-   * *process* on the other end of an fd or pipe, so the path token scan
-   * cannot see them. They get their own refusal messages.
-   */
   async function refusesProcess(command: string, message: RegExp) {
     await expect(
       registry.execute("Bash", { command }, { signal: new AbortController().signal }),
