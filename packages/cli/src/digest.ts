@@ -256,10 +256,6 @@ function asRequest(value: unknown): {
   };
 }
 
-/**
- * Same tile numbers Home uses: compiled, runs, waiting, fails, tokensSaved, dcPct.
- * Unit-testable without a network.
- */
 export function digestFromInbox(inbox: InboxSlice | null | undefined, receipts: unknown[] = [], now = Date.now()): DigestInput {
   if (!inbox) return { ...EMPTY_DIGEST };
   const workflows = (inbox.live ?? []).flatMap((row) => {
