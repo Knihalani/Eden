@@ -1095,9 +1095,6 @@ describe("online signal bus", () => {
   });
 
   test("an unconditional executed-call ceiling halts drifting thrash (probe)", async () => {
-    // Progress detection is heuristic: one rotating field in results or args
-    // defeats every similarity check. The executed-call ceiling cannot be
-    // fooled because it counts executions.
     process.env.EDEN_MAX_STEPS = "12";
     try {
       let n = 0;
@@ -1124,9 +1121,6 @@ describe("online signal bus", () => {
   });
 
   test("an unconditional executed-call ceiling halts drifting thrash (probe)", async () => {
-    // Progress detection is heuristic: one rotating field in results or args
-    // defeats every similarity check. The executed-call ceiling cannot be
-    // fooled because it counts executions.
     process.env.EDEN_MAX_STEPS = "12";
     try {
       let n = 0;
