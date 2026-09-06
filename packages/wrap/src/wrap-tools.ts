@@ -1186,11 +1186,6 @@ export function wrapTools<T extends ToolsIn>(
         }
 
         const t0 = performance.now();
-        // Unconditional run-length ceiling — enforcement mode only (see
-        // enforcementEnabled). Progress detection is heuristic; one drifting
-        // field (a timestamp on results, a nonce in args) can defeat every
-        // detector while spend accumulates per call. This cap counts
-        // executions, not similarity, so it cannot be gamed.
         //
         // The halt MUST push a marker event before flushing: emitTrace
         // early-returns on an empty buffer and its finally-block is the only
