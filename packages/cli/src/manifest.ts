@@ -52,7 +52,6 @@ export function skillHashLogPath(): string {
   return join(edenHome(), "skill-hash.json");
 }
 
-/** Local withheld draft. Lives in Eden home — never inside the SKILL.md directory. */
 export function listingDraftPath(): string {
   return join(edenHome(), "listing-draft.md");
 }
@@ -205,10 +204,6 @@ function dropSkillDirListing(skillDir: string): void {
   }
 }
 
-/**
- * Refresh SKILL.md / eden.tools.md only when the user already opted in
- * (file present). Drain must not surprise-install a skill.
- */
 export function refreshOptedInSurfaces(
   tools: ManifestTool[],
   opts: { workspace?: string } = {},
