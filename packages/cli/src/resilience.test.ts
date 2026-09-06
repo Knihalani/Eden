@@ -228,9 +228,6 @@ describe("withFileLock", () => {
     writeFileSync(lock, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() }));
     const liveBody = readFileSync(lock, "utf8");
 
-    // Overlayfs on CI reuses inodes after rm+create, so identity is the
-    // stamp, not the inode number. The successor is this process and must
-    // be left alone; the lock file must survive.
     expect(() => withFileLock(lock, () => "nope")).toThrow(/could not acquire lock/);
     expect(existsSync(lock)).toBe(true);
     expect(readFileSync(lock, "utf8")).toBe(liveBody);
@@ -238,11 +235,6 @@ describe("withFileLock", () => {
   });
 
   test("a lock claiming a live pid is still broken once it is absurdly old", () => {
-    // kill(pid, 0) answers "addressable", not "the same process". After a
-    // reboot or enough pid churn a stamp can name an unrelated live process,
-    // and EPERM reads as alive too. Without a backstop those wedge the lock
-    // forever, since the staleness horizon is never consulted for a stamped
-    // lock.
     const lock = join(home, "runs", "wedged.jsonl.lock");
     writeFileSync(lock, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() }));
     const ancient = new Date(Date.now() - 3_600_000);
