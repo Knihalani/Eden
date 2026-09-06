@@ -92,11 +92,7 @@ function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost 
   return "unknown";
 }
 
-/**
- * Map host-native hook payloads onto Claude-shaped {@link HookIn}.
- * Gemini `tool_response.llmContent` becomes the original text; OpenCode
- * `tool`/`args`/`sessionID` become `tool_name`/`tool_input`/`session_id`.
- */
+/** Map host-native hook payloads onto Claude-shaped {@link HookIn}. */
 export function normalizeHookIn(raw: unknown): { hook: HookIn; host: HookHost } {
   const r = asRecord(raw);
   const eventRaw = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
@@ -243,14 +239,7 @@ function flushSession(session: string, events: Array<Record<string, unknown>>): 
     .catch(() => undefined);
 }
 
-/**
- * Drop exactly the lines a caller has finished with, keeping anything that
- * arrived since it read them.
- *
- * Matching on the raw line text rather than unlinking the file is what makes
- * this safe against a hook appending during an in-flight upload: a line the
- * caller never saw cannot be in `consumed`.
- */
+/** Drop consumed log lines by exact text so a concurrent append cannot vanish. */
 export function dropConsumedLines(path: string, consumed: string[]): void {
   if (!consumed.length || !existsSync(path)) return;
   const drop = new Set(consumed);
@@ -258,8 +247,6 @@ export function dropConsumedLines(path: string, consumed: string[]): void {
   const rest = current.filter((l) => !drop.has(l));
   if (rest.length === current.length) return;
   writeFileAtomic(path, rest.length ? rest.join("\n") + "\n" : "");
-  // The log just shrank behind the cursor's back; re-anchor it so the hot path
-  // does not act on a count that no longer describes the file.
   setCursorLines(path, rest.length);
 }
 
