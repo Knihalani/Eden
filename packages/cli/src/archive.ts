@@ -125,9 +125,7 @@ function readJsonl(path: string): unknown[] {
       if (!line.trim()) continue;
       try {
         out.push(JSON.parse(line));
-      } catch {
-        /* skip corrupt line — fail-open */
-      }
+      } catch {}
     }
     return out;
   } catch {
@@ -165,9 +163,7 @@ export function compactHotFile(path: string, id: string, at: number): WarmReceip
 function rmQuiet(p: string): void {
   try {
     unlinkSync(p);
-  } catch {
-    /* gone */
-  }
+  } catch {}
 }
 
 function countLines(path: string): number {
