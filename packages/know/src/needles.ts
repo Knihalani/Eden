@@ -851,10 +851,8 @@ export function jsonTaskToken(text: string): boolean {
   if (text.indexOf("json") < 0 && text.indexOf("JSON") < 0) return false;
   if (/\bndjson\b|\bjsonl\b/i.test(text)) return true;
   if (configJsonPath(text) && !JSON_STRUCT.test(text)) return false;
-  if ((/\b(?:content-type|media type|iana)\b/i.test(text) || /application\/json/i.test(text)) && !/\.(jsonl?|ndjson)\b/i.test(text)) {
-    return false;
-  }
-  return /\bjson\b|\.jsonl?\b/i.test(text.replace(/application\/(?:ld\+)?json/gi, " "));
+  if ((/\b(?:content-type|media type|iana)\b/i.test(text) || /application\/json/i.test(text)) && !/\.(jsonl?|ndjson)\b/i.test(text)) return false;
+  return /\bjson\b|\.jsonl?\b/i.test(text.indexOf("application") < 0 ? text : text.replace(/application\/(?:ld\+)?json/gi, " "));
 }
 
 export function jsonWrongWay(text: string): boolean {
