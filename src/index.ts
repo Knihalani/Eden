@@ -7,9 +7,9 @@ import { knowQuery } from "../packages/know/src/query";
 export const MEMORY_MARK = "Eden Memory:";
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; at: number };
+export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number };
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
-export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string };
+export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string };
 export type QueryHit = { text: string; source: "memory" | "know"; url?: string; id?: string };
 
 type Compiled = { rec: MemoryRecord; needles: string[] };
@@ -101,6 +101,7 @@ export class AgentMemory {
   readonly dir: string;
   private know?: KnowSearch;
   private agent?: string;
+  private project?: string;
   private compiled: Compiled[];
   private path: string;
   private cache = new Map<string, Note[]>();
@@ -110,22 +111,24 @@ export class AgentMemory {
     this.dir = opts.dir || join(homedir(), ".eden", "memory");
     this.know = opts.know;
     this.agent = opts.agent;
+    this.project = opts.project;
     mkdirSync(this.dir, { recursive: true });
     this.path = join(this.dir, "memories.jsonl");
     this.compiled = load(this.path);
   }
 
   memories(): MemoryRecord[] {
-    return this.compiled.map((c) => c.rec);
+    return this.compiled.map((c) => c.rec).filter((r) => !this.project || r.project === this.project);
   }
 
-  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string } = {}): MemoryRecord {
+  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string } = {}): MemoryRecord {
     const rec: MemoryRecord = {
       id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
       text: String(text || "").trim(),
       kind: opts.kind || "fact",
       tags: (opts.tags || []).map((t) => t.toLowerCase()),
       agent: opts.agent || this.agent,
+      project: opts.project || this.project,
       at: Date.now(),
     };
     if (!rec.text) return rec;
@@ -150,7 +153,7 @@ export class AgentMemory {
     const blob = convBlob(list);
     const out: MemoryRecord[] = [];
     for (const text of extractDurable(blob)) {
-      if (this.compiled.some((c) => c.rec.text.toLowerCase() === text.toLowerCase())) continue;
+      if (this.compiled.some((c) => (!this.project || c.rec.project === this.project) && c.rec.text.toLowerCase() === text.toLowerCase())) continue;
       const tags = tokList(text);
       if (/\bpull requests?\b/i.test(text)) tags.push("pr");
       if (/\btimezone|pacific|utc\b/i.test(text)) tags.push("tz");
@@ -168,7 +171,7 @@ export class AgentMemory {
 
   relevant(text: string, cap = 6): MemoryRecord[] {
     const hay = new Set(tokList(text));
-    const hit = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && c.needles.some((n) => hay.has(n))).map((c) => c.rec);
+    const hit = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project) && c.needles.some((n) => hay.has(n))).map((c) => c.rec);
     hit.sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint"));
     return hit.slice(0, cap);
   }
