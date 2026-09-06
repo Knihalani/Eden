@@ -26,16 +26,9 @@ function controllableClock(): { advance: (ms: number) => void; restore: () => vo
   };
 }
 
-/**
- * The wrap runs a compiled program in place of the agent's raw calls, so every
- * bug here is a bug that either performs a mutation twice or drops one the
- * agent needed. These are the cases that did.
- */
-
 type FakeTool = { execute: (a: Record<string, unknown>) => Promise<unknown> };
 type Counter = { calls: string[]; tools: Record<string, FakeTool> };
 
-/** Tool set that records every call, so a duplicate is visible. */
 function counted(names: string[], opts: { delayMs?: number } = {}): Counter {
   const calls: string[] = [];
   const tools: Counter["tools"] = {};
@@ -51,7 +44,6 @@ function counted(names: string[], opts: { delayMs?: number } = {}): Counter {
   return { calls, tools };
 }
 
-/** allowExact with no envelope keeps every input in distribution. */
 function program(sequence: string[], steps: Step[], name = "stretch"): StretchProgram {
   return withVersion({
     // Derived from the name so a test can hold two distinct programs at once;
