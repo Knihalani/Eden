@@ -24,7 +24,6 @@ export type Receipt = {
   prompt_tokens?: number;
   completion_tokens?: number;
   cached_tokens?: number;
-  /** Provider cache-write tokens. 0 is measured Anthropic write. */
   cache_write_tokens?: number;
   /** Hit-% denominator stamped at parse. OpenAI prompt; Anthropic read+write+input. */
   cache_input_tokens?: number;
