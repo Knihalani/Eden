@@ -1122,8 +1122,6 @@ export function wrapTools<T extends ToolsIn>(
               : null;
           }, null);
           if (doneByCompiled === true) {
-            // The compiled run completed this step before failing later on.
-            // Claim it exactly like a success.
             safely(() => {
               const left = armed.rest.get(name)!;
               if (left > 1) armed.rest.set(name, left - 1);
