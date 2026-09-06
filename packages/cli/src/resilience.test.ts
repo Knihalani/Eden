@@ -170,9 +170,6 @@ describe("withFileLock", () => {
   });
 
   test("reports the callback's own error, once, not as lock contention", () => {
-    // One try/catch could not tell openSync failing from fn() failing, so a
-    // real error surfaced as "could not acquire lock" and the side-effecting
-    // callback was replayed for the whole wait window.
     const lock = join(home, "runs", "boom.jsonl.lock");
     let calls = 0;
     expect(() =>
