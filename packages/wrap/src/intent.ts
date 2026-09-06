@@ -108,9 +108,10 @@ function informativeTokens(s: string): string[] {
     .filter((t) => t.length >= 4 && !STOP_TOKENS.has(t));
 }
 
+const MSG_TEXT_KEYS = ["content", "text", "command", "url", "thinking", "reasoning_content", "reasoning"];
+
 export function messageText(messages: readonly unknown[], maxMessages = 8): string {
   const parts: string[] = [];
-  const msgs = messages.slice(-maxMessages);
   const walk = (v: unknown, depth: number): void => {
     if (parts.length > 64 || depth > 4) return;
     if (typeof v === "string") {
@@ -123,12 +124,12 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
     }
     if (v && typeof v === "object") {
       const o = v as Record<string, unknown>;
-      for (const key of ["content", "text", "command", "url", "thinking", "reasoning_content", "reasoning"]) {
+      for (const key of MSG_TEXT_KEYS) {
         if (key in o) walk(o[key], depth + 1);
       }
     }
   };
-  for (const m of msgs) walk(m, 0);
+  for (const m of messages.slice(-maxMessages)) walk(m, 0);
   return parts.join("\n").slice(0, 16_000);
 }
 
@@ -142,7 +143,6 @@ function programTokens(p: StretchProgram): Set<string> {
 const DENSE_EXTRACT =
   /[^\s]+@[^\s]+|s3:\/\/[^\s]+|arn:aws:[^\s]+|gid:\/\/[^\s]+|\+[1-9]\d{6,14}|[A-Za-z0-9_.:/-]{4,}/g;
 
-/** Dense tokens in conversation text. One pass per rankPrograms call. */
 export function denseTokensFromText(text: string): Set<string> {
   const out = new Set<string>();
   const matches = text.match(DENSE_EXTRACT) ?? [];
@@ -153,7 +153,6 @@ export function denseTokensFromText(text: string): Set<string> {
   return out;
 }
 
-/** Envelope values that are themselves dense witnesses. */
 export function envelopeDenseWitnesses(p: StretchProgram): string[] {
   const out: string[] = [];
   for (const vals of Object.values(p.contract.envelope?.inputs ?? {})) {
