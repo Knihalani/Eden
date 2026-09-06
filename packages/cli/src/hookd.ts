@@ -168,11 +168,6 @@ export async function waitForHookdHealth(attempts = 15): Promise<boolean> {
   return false;
 }
 
-/**
- * Detached hookd. No-op if already healthy or EDEN_HOOKD=0.
- * Returns true only when this call spawned a child that answered /health.
- * Never throws.
- */
 export async function startHookdBackground(): Promise<boolean> {
   if (process.env.EDEN_HOOKD === "0") return false;
   try {
@@ -208,7 +203,6 @@ export async function startHookdBackground(): Promise<boolean> {
   }
 }
 
-/** Prefer this module so `local.ts` (not `cli.ts`) can start hookd without a package cycle. */
 function hookdSpawnCmd(): string[] {
   const sibling = join(import.meta.dir, "hookd.ts");
   if (existsSync(sibling)) return [process.execPath, sibling];
