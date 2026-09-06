@@ -1,12 +1,11 @@
 import type { StretchProgram } from "@eden/ir";
 import { redact } from "@eden/ir";
 import { compiledSchema, steerToolCalls } from "./steer";
-import { noteJitUsed, selectForRequest, messageText } from "./intent";
+import { noteJitUsed, selectForRequest } from "./intent";
 import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { withKnowFactsAnthropic } from "./know-inject";
-import { MEMORY_MARK, processMemory } from "../../../src/index";
 
 /** Anthropic Messages API dialect (G7). */
 
@@ -289,16 +288,6 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
 
   applyCacheBreakpoints(body);
   body = withKnowFactsAnthropic(body) as AnthropicRequest;
-  try {
-    const sys = typeof body.system === "string" ? body.system : (body.system ?? []).map((b) => b.text || "").join("\n");
-    const mems = processMemory().relevant(`${sys}\n${messageText(body.messages ?? [])}`);
-    if (mems.length) {
-      const extra = { type: "text" as const, text: `${MEMORY_MARK}\n${mems.map((m) => `- ${m.text}`).join("\n")}` };
-      body = typeof body.system === "string"
-        ? { ...body, system: [{ type: "text", text: body.system }, extra] }
-        : { ...body, system: [...(Array.isArray(body.system) ? body.system : []), extra] };
-    }
-  } catch {}
 
   const fn = opts.fetch ?? fetch;
   const anthropicKey = req.headers.get("x-api-key") || process.env.ANTHROPIC_API_KEY || "";
