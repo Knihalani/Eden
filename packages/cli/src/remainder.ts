@@ -371,7 +371,6 @@ export async function claimRemainder(
         const cur = Object.keys(against).length ? against : fallback;
         if (!mightClaim(armed, toolName, cur) && !mightClaim(armed, toolName, resolved)) continue;
         if (!inputMatches(row.input, cur, cwd)) continue;
-        // Burn budget whether or not a rest unit remains (wrap skipRest).
         row.matchedCalls += 1;
         const left = restToMap(row.rest).get(toolName) ?? 0;
         if (!left) continue;

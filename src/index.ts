@@ -203,6 +203,7 @@ export function processMemory(): AgentMemory {
 export function host(opts: MemoryOptions & { port?: number } = {}) {
   const memory = openMemory(opts);
   const server = Bun.serve({
+    hostname: process.env.EDEN_MEMORY_HOST || "127.0.0.1",
     port: Number(opts.port ?? process.env.EDEN_MEMORY_PORT) || 8787,
     async fetch(req) {
       const origin = req.headers.get("origin") || "";

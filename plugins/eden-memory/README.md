@@ -2,7 +2,7 @@
 
 Passive memory for Claude Code. Durable facts persist without `remember()`. Matching notes inject later. Broken Eden never blocks the agent (`{}`).
 
-Store: `~/.eden/memory/memories.jsonl` (`EDEN_MEMORY_DIR`, inject cap `EDEN_MEMORY_CAP`, isolate with `EDEN_MEMORY_AGENT` / project cwd). Dir `0700`, file `0600`.
+Store: `~/.eden/memory/memories.jsonl` (`EDEN_MEMORY_DIR`, inject cap `EDEN_MEMORY_CAP`, isolate with `EDEN_MEMORY_AGENT` / project cwd, host `EDEN_MEMORY_HOST` default `127.0.0.1`). Dir `0700`, file `0600`.
 
 Do not enable the plugin **and** `eden setup` — both attach UserPromptSubmit.
 
