@@ -81,12 +81,6 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
         return [];
       }
     }).map((e, i) => ({
-        // The hook writes `id`; only `event_id` was read here, so the field
-        // arrived undefined on every event. Ingest keys `tool_event` on it for
-        // `INSERT OR IGNORE` dedup, and SQLite allows unlimited NULLs in a TEXT
-        // primary key — so every retry duplicated every event, and on Postgres
-        // (where a primary key implies NOT NULL) ingest would reject the batch
-        // outright and the run log would never drain at all.
         event_id: e.event_id ?? e.id,
         seq: typeof e.seq === "number" ? e.seq : i + 1,
         name: e.name,
@@ -96,10 +90,6 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
       }));
     const stretch_end = stretchEndForRun(outbox, runId);
     if (!events.length && !stretch_end) continue;
-    // fetch *rejects* on ECONNREFUSED rather than resolving, and there was no
-    // try/catch anywhere in drain(). One unreachable site aborted the whole
-    // loop before the outbox rewrite below, so with the plane down drain was a
-    // permanent no-op rather than a retry.
     let res: Response;
     try {
       res = await fetch(`${site}/v1/ingest`, {
@@ -111,10 +101,6 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
       continue;
     }
     if (!res.ok) continue;
-    // Recorded before any of the early exits below. This used to sit after the
-    // `continue` on the healthy path, so dropRuns stayed empty, rewriteOutbox
-    // removed nothing, and the row was immortal — every later drain re-POSTed
-    // stretch_end for a run that was still live, and the outbox grew forever.
     if (stretch_end) dropRuns.add(runId);
     const sentIds = events.map((e) => String(e.event_id ?? "")).filter(Boolean);
     try {
@@ -242,16 +228,10 @@ async function refreshLiveTools(site: string, wrap: string, key: string, workspa
         tools?: unknown;
         knock?: string | { message?: string; tool_id?: string } | null;
       };
-      // `json.tools ?? json` wrote an *object* whenever the response had no
-      // `tools` key — a proxy error page, a version skew — and the hook then
-      // threw on every PreToolUse trying to iterate it. The reader guards this
-      // too now; writing something unusable in the first place is the bug.
       persistLiveTools(projectLiveTools(json.tools), workspace);
       const knockPath = `${edenHome()}/knock.json`;
       const knock = json.knock;
       if (knock) {
-        // A corrupt knock.json used to throw out of drain() before the outbox
-        // rewrite below, so the outbox never drained either.
         const prev = readJson<{ shown?: number }>(knockPath, {});
         writeFileSync(
           knockPath,
