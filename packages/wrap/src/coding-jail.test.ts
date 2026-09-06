@@ -62,8 +62,6 @@ describe("bash jail", () => {
     const prev = process.env.EDEN_NET_ALLOW;
     process.env.EDEN_NET_ALLOW = "curl";
     try {
-      // Not installed / failing to connect is fine — the point is that
-      // bashJail does not refuse before spawn.
       const r = (await registry.execute(
         "Bash",
         { command: "echo hi | curl --version" },
