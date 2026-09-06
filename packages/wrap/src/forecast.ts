@@ -24,7 +24,6 @@ export {
 export const FORECAST_TIMEOUT_DEFAULT_MS = 60_000;
 export const FORECAST_TIMEOUT_CAP_MS = 300_000;
 
-/** Same cap as wrapTimeoutMs — kept here so guard does not import wrap-tools. */
 export function forecastTimeoutMs(opts: Pick<EdenOpts, "timeoutMs"> | number | undefined): number {
   const explicit = typeof opts === "number" ? opts : opts?.timeoutMs;
   const env = Number(process.env.EDEN_TIMEOUT_MS);
