@@ -446,11 +446,6 @@ export async function respondToHook(
       /* fall open */
     }
     if (live.some((t) => t.name === name)) return { ok: true };
-    // Steering a raw call to the MCP tool is opt-in (steer_hooks in config, or
-    // EDEN_STEER_HOOKS=1). Default is observe: Eden records the pattern but
-    // never denies the agent's own call — if the MCP server is down, mid-restart,
-    // or the compiled tool deopts, a deny here would leave the agent stranded
-    // with no way to do the work at all. Remainder deny above is not this.
     const steerHooks =
       process.env.EDEN_STEER_HOOKS === "1" || cfg?.steer_hooks === true;
     if (!steerHooks) return { ok: true };
