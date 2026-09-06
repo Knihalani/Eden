@@ -55,13 +55,10 @@ describe("oblivious agents (tail calls after steering)", () => {
     const state = createState({ programs: [program()] });
     const wrapped = wrapTools(tools, state) as Record<string, { execute: (a: Record<string, unknown>) => Promise<unknown> }>;
 
-    // Head call carries full context; steering runs the whole stretch.
     const head = (await wrapped.lookup!.execute({ id: "X1", text: "refund please" })) as Record<string, unknown>;
     expect(head).toEqual({ applied: true });
     expect(calls).toEqual(["lookup:refund please", "fetch", "apply"]);
 
-    // An agent that did NOT stop now issues the tail calls anyway. Every one
-    // must come back steered WITHOUT executing again.
     const r1 = (await wrapped.fetch!.execute({ id: "X1" })) as Record<string, unknown>;
     const r2 = (await wrapped.apply!.execute({ id: "X1" })) as Record<string, unknown>;
     expect(r1).toMatchObject({ eden: "steered" });
