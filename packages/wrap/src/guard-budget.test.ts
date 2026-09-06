@@ -34,8 +34,6 @@ function run() {
   return r;
 }
 
-// opts.timeoutMs = 20_000, now = 2_000, t0 = 0
-// → elapsed 2_000, cap 20_000, remaining 18_000.
 const timing = { opts: { timeoutMs: 20_000 }, now: 2_000 };
 
 describe("budget guard", () => {
