@@ -535,7 +535,6 @@ describe("phase 3: collision precedence (M5)", () => {
     const origErr = console.error;
     console.error = (m: unknown) => errors.push(String(m));
     try {
-      // The program's NAME collides with an existing host tool.
       const p = twoStepProgram("coll", "fetch_details", "lookup_fan", "fetch_details");
       const state = createState({ programs: [p] });
       let lookups = 0;
