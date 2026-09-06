@@ -120,7 +120,6 @@ function islandTimeoutMs(): number {
 }
 const ISLAND_BACKOFF_MS = 300;
 
-/** Marks corruption-style replies (valid HTTP, unparseable body). */
 class NonJsonReply extends Error {
   constructor() {
     super("island returned non-JSON");
