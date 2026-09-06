@@ -107,11 +107,6 @@ function isSafeReadTool(step: Step): step is Step & { kind: "tool" } {
   return Object.values(step.args).every((b) => !bindingDependsOnStep(b));
 }
 
-/**
- * First-wave read-only tools of a program: the opening parallel-safe reads
- * whose args bind from input/literals only. Later waves (from-deps, islands,
- * writes) are not returned and must not be pre-executed.
- */
 export function firstWaveReads(
   program: StretchProgram,
   input: Record<string, unknown>,
