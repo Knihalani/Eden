@@ -62,7 +62,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const event = EVENT_ALIASES[String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "")] ?? String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory(r);
-    const prior = messagesFromTranscript(r.transcript_path ?? r.transcriptPath);
+    const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...(Array.isArray(r.messages) ? (r.messages as unknown[]) : []).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content); return (o.role === "user" || o.role === "assistant") && c ? [{ role: String(o.role), content: c }] : []; })].slice(-40);
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
       const extra = [r.prompt, r.text, r.user_message, r.prompt_response, r.response, r.output, r.completion].filter((x) => typeof x === "string" && x).join("\n");

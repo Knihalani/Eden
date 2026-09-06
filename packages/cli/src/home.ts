@@ -201,14 +201,6 @@ function readLockStamp(lockPath: string): LockStamp | null {
   return null;
 }
 
-/**
- * Is the process named by the lock still around?
- *
- * `kill(pid, 0)` sends no signal, it only asks whether the pid is addressable.
- * EPERM means the process exists but belongs to another user, which still
- * counts as alive. A stamp from another host cannot be judged this way, so it
- * is reported as unknown and the caller falls back to the age horizon.
- */
 function holderState(stamp: LockStamp | null): "alive" | "dead" | "unknown" {
   if (!stamp) return "unknown";
   if (stamp.host !== hostname()) return "unknown";
