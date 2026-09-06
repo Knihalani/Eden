@@ -69,7 +69,6 @@ async function sustainedThroughput(): Promise<void> {
   line(`  rss end: ${rss().toFixed(0)}MB`);
 }
 
-// ─── 2. Memory soak ──────────────────────────────────────────────────────────
 async function memorySoak(): Promise<void> {
   line("\n═══ 2. MEMORY SOAK (10k payload calls) ═══");
   const state = createState({ programs: [] });
@@ -77,7 +76,6 @@ async function memorySoak(): Promise<void> {
     { record: async (a: Record<string, unknown>) => ({ echoLen: JSON.stringify(a).length }) },
     state,
   );
-  // Warm-up to settle JIT allocations.
   for (let i = 0; i < 200; i++) await tools.record.execute({ n: i });
   if (globalThis.gc) globalThis.gc();
   const before = rss();
