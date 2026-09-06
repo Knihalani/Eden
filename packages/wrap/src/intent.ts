@@ -78,7 +78,6 @@ export type RankedMatch = {
 
 type RankedInternal = RankedMatch & { idx: number };
 
-/** Words too generic to count as evidence on their own. */
 const STOP_TOKENS = new Set([
   "tool",
   "tools",
@@ -129,7 +128,8 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
       }
     }
   };
-  for (const m of messages.slice(-maxMessages)) walk(m, 0);
+  const start = messages.length > maxMessages ? messages.length - maxMessages : 0;
+  for (let i = start; i < messages.length; i++) walk(messages[i], 0);
   return parts.join("\n").slice(0, 16_000);
 }
 
@@ -201,7 +201,6 @@ export function githubBareUrls(text: string): string[] {
   return out;
 }
 
-/** Resource kind after owner/repo: issues/{id} vs pulls/{id}, host-agnostic. */
 export function githubResourceKey(shape: string): string | null {
   const s = shape.replace(/^https?:\/\//i, "");
   const m = s.match(/^(?:api\.)?github\.com(?:\/repos)?\/[^/]+\/[^/]+\/(issues|pulls|pull)(\/\{id\}.*)$/i);
@@ -354,7 +353,6 @@ export function dispatchPrograms(
   }
 }
 
-/** JSON-RPC params: `{ messages }` or alias `{ transcript }`. A string `url` is one user turn. Non-arrays are missing. */
 export function dispatchMessages(params?: Record<string, unknown> | null): unknown[] | undefined {
   if (!params || typeof params !== "object") return undefined;
   const raw = params.messages ?? params.transcript;
@@ -365,7 +363,6 @@ export function dispatchMessages(params?: Record<string, unknown> | null): unkno
   return undefined;
 }
 
-/** Consecutive unused JIT injections before the episode demotes to S0 (none). */
 export const JIT_UNUSED_DEMOTE = 3;
 
 /**
@@ -384,7 +381,6 @@ export function createJitGuard(): JitGuard {
   return { injections: 0, unusedStreak: 0, pendingAliases: [], demoted: false };
 }
 
-/** The injected schema (or its first raw step) was actually called. */
 export function noteJitUsed(jit: JitGuard, names: readonly string[]): void {
   if (!jit.pendingName) return;
   const hit = names.some((n) => n === jit.pendingName || jit.pendingAliases.includes(n));
