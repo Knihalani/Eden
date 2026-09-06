@@ -23,7 +23,6 @@ describe("provider usage scrape", () => {
   });
 
   test("parseUsage does not fold cache fields into prompt/completion (Arc 1 catcher)", () => {
-    // Billing stays prompt+completion until Arc 1 wires a ledger line.
     expect(
       parseUsage({
         prompt_tokens: 100,
