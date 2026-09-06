@@ -79,9 +79,6 @@ describe("wrap never applies a mutation twice", () => {
   });
 
   test("a parallel sibling call does not race the arming window", async () => {
-    // Hosts issue a turn's tool calls in parallel. The tail used to be armed
-    // only after the compiled run resolved, so a sibling naming a later step
-    // arrived while the map was still empty and executed for real.
     const c = counted(["lookupTicket", "writeRecord", "notify"], { delayMs: 20 });
     const p = program(
       ["lookupTicket", "writeRecord", "notify"],

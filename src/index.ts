@@ -36,8 +36,8 @@ function convBlob(list: unknown[]): string {
     } else if (Array.isArray(c)) {
       for (const b of c) {
         if (b && typeof b === "object") {
-          const x = b as { text?: string; content?: unknown; alt?: string; name?: string; caption?: string; title?: string; filename?: string; url?: string; href?: string; source?: string; uri?: string; id?: string };
-          const t = x.text || (typeof x.content === "string" ? x.content : "") || (typeof x.alt === "string" ? x.alt : "") || (typeof x.name === "string" ? x.name : "") || (typeof x.caption === "string" ? x.caption : "") || (typeof x.title === "string" ? x.title : "") || (typeof x.filename === "string" ? x.filename : "") || (typeof x.url === "string" ? x.url : "") || (typeof x.href === "string" ? x.href : "") || (typeof x.source === "string" ? x.source : "") || (typeof x.uri === "string" ? x.uri : "") || (typeof x.id === "string" ? x.id : "");
+          const x = b as { text?: string; content?: unknown; alt?: string; name?: string; caption?: string; title?: string; filename?: string; url?: string; href?: string; source?: string; uri?: string; id?: string; mimeType?: string };
+          const t = x.text || (typeof x.content === "string" ? x.content : "") || (typeof x.alt === "string" ? x.alt : "") || (typeof x.name === "string" ? x.name : "") || (typeof x.caption === "string" ? x.caption : "") || (typeof x.title === "string" ? x.title : "") || (typeof x.filename === "string" ? x.filename : "") || (typeof x.url === "string" ? x.url : "") || (typeof x.href === "string" ? x.href : "") || (typeof x.source === "string" ? x.source : "") || (typeof x.uri === "string" ? x.uri : "") || (typeof x.id === "string" ? x.id : "") || (typeof x.mimeType === "string" ? x.mimeType : "");
           if (t) parts.push(t);
         }
       }
