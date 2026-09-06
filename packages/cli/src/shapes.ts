@@ -2,7 +2,6 @@ export const HOOK_OUTPUT_CAP = 9_500;
 
 const DANGEROUS_KEY = /^(?:__proto__|constructor|prototype)$/;
 
-/** Single escaping builder for facts that ride the hook channel. */
 export function escapeFacts(facts: unknown): string {
   let raw: string;
   if (typeof facts === "string") {
@@ -80,13 +79,9 @@ function originalText(original: unknown): string {
 }
 
 export type ToolShape = {
-  /** True when `value` is a native result the host will accept. */
   match(value: unknown): boolean;
-  /** Merge sentinel into the native object (or build one from a non-native original). */
   merge(original: unknown, sentinel: string): unknown;
-  /** Text the model would read from a native (or string) result. */
   textOf(value: unknown): string;
-  /** True when this shape has no text field — sentinel lives only in additionalContext. */
   textField?: "none";
 };
 
@@ -308,11 +303,6 @@ export function sentinelInTextField(toolName: string): boolean {
   return TOOL_SHAPES[toolName]?.textField !== "none";
 }
 
-/**
- * Host-native names → Claude builtin, only when the result shape is the same.
- * `edit` stays unmapped (string merge): OpenCode's edit output is not Write's
- * `{type,filePath,content,structuredPatch,originalFile}`.
- */
 export const HOST_TOOL_ALIASES: Record<string, string> = {
   bash: "Bash",
   shell: "Bash",
