@@ -1,7 +1,3 @@
-/**
- * Wave 15.1 — predicted llm/ms/cents vs remaining; unique-work never
- * budget-halted; observe never forecast-halts; killAfterWarning still wins.
- */
 import { describe, expect, test } from "bun:test";
 import type { StretchProgram } from "@eden/ir";
 import {
