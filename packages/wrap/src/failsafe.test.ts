@@ -282,9 +282,7 @@ describe("phase 1: sibling work is never lost (C3)", () => {
       tools.lookup_fan.execute({ id: "T-100" }) as Promise<unknown>,
       tools.fetch_details.execute({ id: "T-100" }) as Promise<unknown>,
     ]);
-    // Head fell back to raw (all-reads stretch) and got the real result.
     expect(head).toEqual({ ticket: "T" });
-    // The sibling re-ran raw and the WORK HAPPENED instead of vanishing.
     expect(tail).toEqual({ details: "D" });
     expect(fetchCalls).toBe(2);
   });
