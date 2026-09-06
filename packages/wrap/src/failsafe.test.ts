@@ -4,21 +4,6 @@ import { filterCanary, pullLive } from "../src/wrap-tools";
 import { DeoptError } from "@eden/runtime";
 import type { StretchProgram, StretchTrace } from "@eden/ir";
 
-/**
- * The prime-directive suite: every test here injects a failure INTO EDEN and
- * asserts the agent's own call still succeeds. If any of these fail, Eden has
- * broken its one non-negotiable promise — it is a passenger, never the driver.
- *
- * Failure modes covered:
- *   - proxy: kill switch tripped        -> traffic passes through unsteered
- *   - proxy: program list throws         -> response passes through
- *   - proxy: upstream body is not JSON   -> body handed back verbatim
- *   - wrap:  corrupt program shapes      -> raw tool executes
- *   - wrap:  guard would halt (observe)  -> raw tool executes, warning recorded
- *   - wrap:  read-only stretch deopts    -> raw fallback result
- *   - hook:  corrupt config              -> allow
- */
-
 function twoStepProgram(id: string, name: string, t1: string, t2: string): StretchProgram {
   return {
     id,
