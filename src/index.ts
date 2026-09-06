@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { alreadyInjected, injectFromRequest, injectNote } from "../packages/know/src/inject";
 import { knowQuery } from "../packages/know/src/query";
@@ -57,7 +57,7 @@ function extractDurable(blob: string): string[] {
     if (t.length < 8 || t.length > 280 || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|this is|it is|that is|there (is|are)|i am going|i want to)\b/i.test(t) || CHAT.test(t)) continue;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i);
     if (rem) t = rem[1].trim();
-    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t forget|ran out|i want )\b/i.test(t) || (/\b(is|are|needs?|uses?)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+/.test(t)))) continue;
+    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t forget|ran out|i want |fyi)\b/i.test(t) || (/\b(is|are|needs?|uses?)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+/.test(t)) || /^[A-Z][A-Za-z0-9 /._-]{1,32}:\s+\S/.test(t))) continue;
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
     const k = t.toLowerCase();
     if (t.length >= 8 && !seen.has(k)) {
@@ -240,7 +240,7 @@ export function openMemory(opts: MemoryOptions = {}): AgentMemory {
 
 let proc: AgentMemory | undefined;
 export function processMemory(): AgentMemory {
-  return (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR }));
+  return (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.argv.some((a) => a.endsWith(".test.ts")) ? join(tmpdir(), "eden-memory-test") : undefined) }));
 }
 
 export function host(opts: MemoryOptions & { port?: number } = {}) {

@@ -54,11 +54,6 @@ const MAX_OUTBOX = 64;
 const MAX_POST_TRIES = 5;
 const MAX_WARNINGS = 32;
 
-/**
- * Executed-call ceiling for one wrap run (see ir MAX_RUN_STEPS rationale).
- * Counted on real executions only — steered skips do not spend, so they do
- * not consume the budget.
- */
 export function maxRunSteps(): number {
   const env = Number(process.env.EDEN_MAX_STEPS);
   if (Number.isFinite(env) && env > 0) return Math.min(10_000, Math.max(10, Math.floor(env)));
