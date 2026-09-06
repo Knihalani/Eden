@@ -887,13 +887,6 @@ export function wrapTools<T extends ToolsIn>(
     execute: (tool, args) => registry.execute(tool, args),
   });
   const wrapped: Record<string, ToolDef> = {};
-  // Keyed by program id, but holding the program the entry was built from.
-  // `compiledDef` closes over that program, so caching by id alone pinned the
-  // first version ever seen: after pullLive swapped in a fixed — or rolled
-  // back — build of the same id, this process kept executing the old steps for
-  // the life of the process, which is exactly the case a server-side rollback
-  // exists to stop. Comparing identity re-derives on any swap, and needs no
-  // version field to be present or trustworthy.
   const compiledCache = new Map<string, { program: StretchProgram; def: ToolDef }>();
   let calls = 0;
   let skipSeq = 0;
