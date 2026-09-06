@@ -61,10 +61,6 @@ export function decideGuard(args: {
   }
   const loop = [...run.warnings].reverse().find((w) => w.kind === "repeat_ngram" && w.ngram && new Set(w.ngram).size >= 2);
   if (loop?.ngram && loop.ngram.includes(name)) {
-    // asymmetry runs entirely the wrong way. They keep accumulating
-    // repeat_ngram / low_gain warnings (visible on traces, honoured by
-    // killAfterWarning and the budget guard), they just don't get executed
-    // into a dead stop. Loops touching a mutating or unknown-name tool stay
     // subject to the hard stop: repeating writes is both expensive and
     // dangerous.
     const allReads = loop.ngram.every((n) => isReadName(n));
