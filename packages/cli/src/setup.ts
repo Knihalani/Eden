@@ -13,17 +13,7 @@ function shq(v: string): string {
   return `'${v.replaceAll("'", `'\\''`)}'`;
 }
 
-/**
- * The PreToolUse probe: a single curl with a one-second ceiling that fails
- * open to `{}` and never spawns bun.
- *
- * PreToolUse runs on *every* tool call, and it used to share the PostToolUse
- * chain — `--max-time 8` curl, then a cold `bun <cli> hook` spawn. When hookd
- * was down, a tool call blocked for up to eight-plus seconds before the CLI
- * even started. Ordinary tool calls must never wait on Eden, so the Pre path
- * gives up after 1s and answers `{}`, which lets the call proceed; the deny
- * steering toward compiled tools is best-effort by design.
- */
+/** PreToolUse: 1s curl, fail-open `{}`, never spawn bun. */
 export function preHookCommand(hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
   const hookd = `http://127.0.0.1:${hookdPort}/hook`;
   return `curl -sS --max-time 1 -H 'content-type: application/json' --data-binary @- ${hookd} || echo '{}'`;
@@ -35,16 +25,9 @@ export function hookCommand(
   opts: { failOpen?: boolean } = {},
 ): string {
   const hookd = `http://127.0.0.1:${hookdPort}/hook`;
-  // Single-quoted, not double: this string is persisted into the user's
-  // settings.json and run by a shell on every tool call, and double quotes do
-  // not stop `$(...)` or backticks. An install path is not usually hostile,
-  // but it is not always chosen by the person being protected either.
   const bunHook = `bun ${shq(cliPath)} hook`;
   const ms = Number(process.env.EDEN_HOOKD_TIMEOUT_MS || 8000);
   const sec = Math.min(60, Math.max(2, Math.ceil((Number.isFinite(ms) ? ms : 8000) / 1000)));
-  // Bake home into the bun fallback (and the spawned hookd it warms). Curl
-  // itself ignores EDEN_HOME; without this, wrap/hookd on a custom home and
-  // Claude's bun path on ~/.eden split the remainder store.
   const core = `${edenHomeExport()}; curl -sS --max-time ${sec} -H 'content-type: application/json' --data-binary @- ${hookd} || ${bunHook}`;
   return opts.failOpen === false ? core : `${core} || echo '{}'`;
 }
@@ -58,13 +41,12 @@ export function installedHooks(hookCmd: string, preCmd: string = preHookCommand(
   return {
     PreToolUse: [{ hooks: [{ type: "command" as const, command: preCmd }] }],
     PostToolUse: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    // Host has no matcher for PostToolBatch. One Eden command, same warm chain
-    // as PostToolUse. Remainder arms from the full parallel set here (R2).
     PostToolBatch: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     UserPromptSubmit: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     PreCompact: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     Stop: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     SessionStart: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
+    SessionEnd: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
   };
 }
 
@@ -72,10 +54,7 @@ export function wrapMcpServer(cliPath: string): { command: string; args: string[
   return { command: "bun", args: [cliPath, "mcp"] };
 }
 
-/**
- * Path hooks and MCP should invoke. After `npm i -g` that is dist/eden.js
- * (process.argv[1]), not a sibling cli.ts that does not ship.
- */
+/** After `npm i -g`, invoke dist/eden.js (process.argv[1]), not a sibling that does not ship. */
 export function installedCliPath(): string {
   const sibling = join(import.meta.dir, "cli.ts");
   const dist = join(import.meta.dir, "eden.js");
@@ -93,18 +72,7 @@ export function installedCliPath(): string {
   return sibling;
 }
 
-// ── Multi-agent recording (Gemini CLI / OpenCode / Codex) ───────────────────
-//
-// Claude Code is the reference integration; the same fail-open probe now
-// installs wherever an interception point exists. Everything here follows the
-// house rules: merge idempotently, never clobber user config, back up what we
-// cannot parse, and answer "allow" when Eden itself is down.
-
-/**
- * Gemini CLI hooks: BeforeTool/AfterTool (native) plus BeforeToolUse/AfterToolUse
- * (the names this installer has always written). One Eden command per key.
- * Re-running setup replaces our entry and keeps the user's.
- */
+/** Gemini CLI: tool probe stays fast; agent/session/compress use the warm memory chain. */
 function isEdenGeminiEntry(entry: unknown): boolean {
   if (!entry || typeof entry !== "object") return false;
   const e = entry as { command?: string; hooks?: Array<{ command?: string }> };
@@ -133,22 +101,17 @@ export function geminiHookConfig(existing: unknown, preCmd: string, hookCmd: str
       AfterToolUse: mergeGeminiEvent(hooks.AfterToolUse, { command: hookCmd }),
       BeforeTool: mergeGeminiEvent(hooks.BeforeTool, { command: preCmd }),
       AfterTool: mergeGeminiEvent(hooks.AfterTool, { command: hookCmd }),
+      BeforeAgent: mergeGeminiEvent(hooks.BeforeAgent, { command: hookCmd }),
+      AfterAgent: mergeGeminiEvent(hooks.AfterAgent, { command: hookCmd }),
+      SessionStart: mergeGeminiEvent(hooks.SessionStart, { command: hookCmd }),
+      SessionEnd: mergeGeminiEvent(hooks.SessionEnd, { command: hookCmd }),
+      PreCompress: mergeGeminiEvent(hooks.PreCompress, { command: hookCmd }),
     },
   };
 }
 
-/**
- * Codex CLI hooks: one managed TOML section. `post_tool` stdin is the tool
- * event (piped to hookd); stdout is Claude-like PostToolUse JSON
- * (`postToolUseReplacement`) so the host can apply the rewrite. `pre_tool`
- * is the fast fail-open remainder probe. Re-running setup replaces this
- * section and nothing else.
- */
+/** Codex: managed TOML; session_* pipe host stdin through the warm hook chain. */
 export function codexTomlSection(hookCmd: string, preCmd: string = preHookCommand()): string {
-  const port = Number(process.env.EDEN_HOOKD_PORT || 8794);
-  const home = edenHomeExport();
-  const start = `${home}; curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_start"}' http://127.0.0.1:${port}/hook || true`;
-  const stop = `${home}; curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_stop"}' http://127.0.0.1:${port}/hook || true`;
   return [
     "",
     "# --- eden-recorder (managed; re-run `eden setup` to refresh) ---",
@@ -156,8 +119,8 @@ export function codexTomlSection(hookCmd: string, preCmd: string = preHookComman
     "codex_hooks = true",
     "",
     "[hooks.eden]",
-    `session_start = ["sh", "-c", ${JSON.stringify(start)}]`,
-    `session_stop = ["sh", "-c", ${JSON.stringify(stop)}]`,
+    `session_start = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
+    `session_stop = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
     `pre_tool = ["sh", "-c", ${JSON.stringify(preCmd)}]`,
     `post_tool = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
     "# --- end eden-recorder ---",
