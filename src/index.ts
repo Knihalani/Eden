@@ -54,10 +54,10 @@ function extractDurable(blob: string): string[] {
   const out: string[] = [];
   for (const raw of blob.split(/(?<=[.!\n])\s+/)) {
     let t = raw.trim().replace(/\s+/g, " ");
-    if (t.length < 8 || t.length > 280 || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|this is|it is|that is|there (is|are)|i am going)\b/i.test(t) || CHAT.test(t)) continue;
+    if (t.length < 8 || t.length > 280 || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|this is|it is|that is|there (is|are)|i am going|i want to)\b/i.test(t) || CHAT.test(t)) continue;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i);
     if (rem) t = rem[1].trim();
-    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t forget|ran out)\b/i.test(t) || (/\b(is|are|needs?|uses?)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+/.test(t)))) continue;
+    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t forget|ran out|i want )\b/i.test(t) || (/\b(is|are|needs?|uses?)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+/.test(t)))) continue;
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
     const k = t.toLowerCase();
     if (t.length >= 8 && !seen.has(k)) {
