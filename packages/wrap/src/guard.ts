@@ -40,17 +40,6 @@ export function killAfterWarningEnabled(opts: EdenOpts): boolean {
   return process.env.EDEN_KILL_AFTER_WARNING === "1";
 }
 
-/**
- * Is hard enforcement on?
- *
- * Default is NO — and this default is the product's prime directive: a broken
- * or thrashing Eden must never refuse, block, or halt the agent's own call.
- * Guards still observe (warnings are recorded, surfaced on the dashboard, and
- * honoured by steering that has a verified fallback), they just never stop
- * traffic. Operators who want hard caps opt in with `enforce: true` or
- * EDEN_ENFORCE=1, accepting that a guard can refuse a call in exchange for
- * bounded spend.
- */
 export function enforcementEnabled(opts: EdenOpts): boolean {
   if (opts.enforce != null) return opts.enforce;
   return process.env.EDEN_ENFORCE === "1";
