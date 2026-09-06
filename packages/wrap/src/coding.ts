@@ -113,9 +113,6 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         bashJail(cwd, cmd);
         const env = { ...process.env };
         for (const k of Object.keys(env)) {
-          // Key-name patterns are not enough: a credential under an innocent
-          // name (EDEN_WEBHOOK_URL) reaches the child shell verbatim. Values
-          // carrying URL-embedded credentials are filtered too.
           if (/key|token|secret|password|passwd|authorization/i.test(k)) {
             delete env[k];
             continue;
