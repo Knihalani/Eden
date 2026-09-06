@@ -472,7 +472,6 @@ function notifyHost(fn: () => void): void {
   try {
     fn();
   } catch {
-    /* the host's observer is the host's problem */
   }
 }
 
