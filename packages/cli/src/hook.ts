@@ -190,7 +190,6 @@ function readJsonl(path: string): Array<Record<string, unknown>> {  if (!existsS
     .filter((x): x is Record<string, unknown> => !!x);
 }
 
-/** Tools-only hook stretch. Real `usage` is attached at ingest from the chat proxy. */
 export function hookTraceBody(events: Array<Record<string, unknown>>): Record<string, unknown> {
   const first = events[0]!;
   const t0 = Number(first.ts ?? Date.now());
@@ -230,7 +229,6 @@ function flushSession(session: string, events: Array<Record<string, unknown>>): 
     .catch(() => undefined);
 }
 
-/** Drop consumed log lines by exact text so a concurrent append cannot vanish. */
 export function dropConsumedLines(path: string, consumed: string[]): void {
   if (!consumed.length || !existsSync(path)) return;
   const drop = new Set(consumed);
