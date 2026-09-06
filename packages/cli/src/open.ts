@@ -12,13 +12,11 @@ export async function openTool(): Promise<void> {
   console.log(url);
 }
 
-/** Workshop URL from an advisory knock. Corrupt/missing knock → root, never throw. */
 export function knockWorkshopUrl(base: string, knock: { tool_id?: string } | null | undefined): string {
   const id = knock?.tool_id;
   return id ? `${base}/workshop/${id}` : `${base}/workshop`;
 }
 
-/** Cross-platform browser open. macOS is not the only place agents run. */
 export function openBrowser(url: string): void {
   const platform = process.platform;
   const cmd =
@@ -29,12 +27,8 @@ export function openBrowser(url: string): void {
         : ["xdg-open", url];
   try {
     const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
-    // xdg-open exits non-zero when nothing can claim the URL; the printed
-    // link below is the fallback either way.
     void proc.exited.catch(() => undefined);
-  } catch {
-    /* the URL is printed regardless */
-  }
+  } catch {}
 }
 
 export async function rejectTool(): Promise<number> {

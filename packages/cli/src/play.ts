@@ -110,7 +110,6 @@ function wrapRunErrorSentence(body: unknown): string {
   return "play: wrap-run failed";
 }
 
-/** Success prints the value, not the {ok,value,stats} envelope. */
 function wrapRunSuccessText(body: unknown): string {
   const rec = asRecord(body);
   if (rec && rec.ok === true && "value" in rec) {
