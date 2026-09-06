@@ -65,9 +65,7 @@ type DictKind =
   | "schemeCue";
 const TOKEN_MAP = new Map<string, { kind: DictKind; emit: string }>();
 
-/** First two ASCII bytes of a dict key. Skip trieGet when the token cannot match. */
 const PREFIX2 = new Uint8Array(16384);
-/** Packed first three ASCII bytes. Cuts PREFIX2 collisions (when/callback/health). */
 const PREFIX3 = new Set<number>();
 
 function dictPut(k: string, kind: DictKind, emit: string) {
@@ -410,7 +408,6 @@ type ScanFlags = {
   colonSlash: boolean;
 };
 
-/** Single-pass byte scan. No matchAll, no whole-string toLowerCase. */
 const DNS_LATER: string[] = [];
 const SCHEME_LATER: string[] = [];
 
@@ -708,7 +705,6 @@ export function needleRank(q: string): number {
   return 9;
 }
 
-/** Serving lane for a needle. Token is cold/wiki; everything else is the hot catalog shard. */
 export type NeedleLane = "rfc" | "media" | "capital" | "status" | "header" | "spdx" | "catalog" | "method" | "token";
 
 export function needleLane(q: string): NeedleLane {
@@ -847,12 +843,16 @@ export function configJsonPath(s: string): boolean {
   return s.indexOf(".json") >= 0 && /\b(?:package|tsconfig|jsconfig|composer|deno)\.json\b/i.test(s);
 }
 
+let _jt = "";
+let _jh = false;
 export function jsonTaskToken(text: string): boolean {
-  if (text.indexOf("json") < 0 && text.indexOf("JSON") < 0) return false;
-  if (/\bndjson\b|\bjsonl\b/i.test(text)) return true;
-  if (configJsonPath(text) && !JSON_STRUCT.test(text)) return false;
-  if ((/\b(?:content-type|media type|iana)\b/i.test(text) || /application\/json/i.test(text)) && !/\.(jsonl?|ndjson)\b/i.test(text)) return false;
-  return /\bjson\b|\.jsonl?\b/i.test(text.indexOf("application") < 0 ? text : text.replace(/application\/(?:ld\+)?json/gi, " "));
+  if (text === _jt) return _jh;
+  _jt = text;
+  if (text.indexOf("json") < 0 && text.indexOf("JSON") < 0) return (_jh = false);
+  if (/\bndjson\b|\bjsonl\b/i.test(text)) return (_jh = true);
+  if (configJsonPath(text) && !JSON_STRUCT.test(text)) return (_jh = false);
+  if ((/\b(?:content-type|media type|iana)\b/i.test(text) || /application\/json/i.test(text)) && !/\.(jsonl?|ndjson)\b/i.test(text)) return (_jh = false);
+  return (_jh = /\bjson\b|\.jsonl?\b/i.test(text.indexOf("application") < 0 ? text : text.replace(/application\/(?:ld\+)?json/gi, " ")));
 }
 
 export function jsonWrongWay(text: string): boolean {
@@ -1030,7 +1030,6 @@ export function techniqueQueryFallbacks(q: string): string[] {
   return out;
 }
 
-/** Pack search needle: `used for JSON` so media `json` does not steal the card. */
 export function techniqueNeedleFromText(text: string): string | undefined {
   const cued = techniqueTaskFromText(text);
   if (cued) {
