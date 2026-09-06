@@ -1,7 +1,3 @@
-/**
- * Ledger vs a recorded provider window: billed classes === prompt+completion.
- * Cache is a separate line and must not enter the five classes.
- */
 import { describe, expect, test } from "bun:test";
 import { billedTokens, IslandReply, providerCacheHitPct, reconcileTokenClasses } from "@eden/ir";
 import { createTicketShip, ticketShipProgram } from "../../runtime/src/ticketship";
