@@ -108,7 +108,8 @@ export class AgentMemory {
     if (!rec.text) return rec;
     const c = compile(rec);
     const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
-    i >= 0 ? (this.compiled[i] = c) : this.compiled.push(c);
+    i >= 0 && this.compiled.splice(i, 1);
+    this.compiled.push(c);
     this.persist();
     return rec;
   }
@@ -135,7 +136,7 @@ export class AgentMemory {
   }
 
   private persist() {
-    if (this.compiled.length > 2000) { const keep = this.compiled.filter((c) => c.rec.kind === "constraint").slice(-2000); this.compiled = [...keep, ...this.compiled.filter((c) => c.rec.kind !== "constraint").slice(Math.max(0, this.compiled.length - 2000))]; }
+    if (this.compiled.length > 2000) { const keep = this.compiled.filter((c) => c.rec.kind === "constraint").sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => c.rec.kind !== "constraint").sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; }
     writeFileSync(this.path + ".tmp", this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
     renameSync(this.path + ".tmp", this.path);
   }

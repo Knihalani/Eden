@@ -17,8 +17,6 @@ export function wrapRegistry(args: string[]) {
 }
 
 export function wrapListen(args: string[]): { port: number; hostname: string } {
-  // `||` used to swallow an explicit `--port 0` (ephemeral), and
-  // Number("887o") sailed NaN into Bun.serve. Parse, then validate.
   const raw = arg(args, "--port") ?? process.env.PORT ?? "8788";
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 0 || port > 65_535) {
