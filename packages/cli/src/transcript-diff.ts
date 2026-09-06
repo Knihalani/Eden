@@ -57,7 +57,6 @@ export function applyHookOutput(
   return { visible: rewrite, additionalContext, droppedRewrite: false };
 }
 
-/** Concatenate native text + additionalContext — what a model can actually read. */
 export function modelVisibleText(toolName: string, applied: AppliedHook): string {
   const body = nativeTextOf(mapHostToolName(toolName), applied.visible);
   return applied.additionalContext ? `${body}\n${applied.additionalContext}` : body;
@@ -90,14 +89,6 @@ function stringLand(mapped: string, original: unknown, hook: HookResponse | null
   return undefined;
 }
 
-/**
- * OpenCode `tool.execute.after`: plugins mutate `output.output` (string) in
- * place. Native tools: that mutation is what the model reads.
- *
- * MCP-shaped after payload `{ content: [{type,text}] }` is assembled AFTER the
- * hook (issue #25918). Mutating `output.output` is dropped. `additionalContext`
- * / `output.inject` still travel so remainder deny and the degrade path hold.
- */
 export function applyOpenCodeAfter(
   tool: string,
   originalOutput: unknown,

@@ -14,6 +14,7 @@ function flattenContent(content: unknown): string {
   if (!Array.isArray(content)) {
     const o = asRec(content);
     if (Array.isArray(o.parts)) return flattenContent(o.parts);
+    if (Array.isArray(o.candidates)) return flattenContent(o.candidates.map((x) => asRec(x).content ?? x));
     return String(o.text ?? o.content ?? o.llmContent ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? o.alt ?? o.name ?? o.caption ?? o.title ?? o.filename ?? "");
   }
   return content.map(flattenContent).filter(Boolean).join("\n");
@@ -27,7 +28,7 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
       const rec = asRec(JSON.parse(line));
       const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
       const rawRole = String(msg.role || rec.type || "");
-      const role = rawRole === "human" || rawRole === "Human" ? "user" : rawRole === "model" || rawRole === "ai" ? "assistant" : rawRole;
+      const role = rawRole === "human" || rawRole === "Human" ? "user" : rawRole === "model" || rawRole === "Model" || rawRole === "ai" || rawRole === "AI" ? "assistant" : rawRole;
       const content = [flattenContent(msg.content ?? msg.parts), String(msg.llmContent ?? msg.reasoning_content ?? msg.thinking ?? msg.reasoning ?? "")].filter(Boolean).join("\n");
       if ((role === "user" || role === "assistant") && content) out.push({ role, content });
     } catch {}
@@ -62,7 +63,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const event = EVENT_ALIASES[String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "")] ?? String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory(r);
-    const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "ai" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; })].slice(-40);
+    const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; })].slice(-40);
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
       const extra = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.prompt_response, r.response, r.output, r.completion, r.result, r.answer, r.reply, r.last_user_message, r.user_text, r.assistant_message].filter((x) => typeof x === "string" && x).join("\n");
