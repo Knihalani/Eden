@@ -497,16 +497,6 @@ function notifyHost(fn: () => void): void {
   }
 }
 
-/**
- * Which invocation pushed which event.
- *
- * `state.run` is one shared RunRecorder for every wrapped tool call in the
- * process. When a raw call and a compiled call overlap in time, a flush that
- * drained the whole buffer attributed the other call's events — sometimes its
- * results, sometimes its failures — to the wrong trace. Each pushed event now
- * carries the id of the invocation that produced it under this module-level
- * symbol, and emitTrace partitions on it.
- */
 const INVOCATION = Symbol("eden.invocation");
 type TaggedEvent = TraceEvent & { [INVOCATION]?: number };
 
