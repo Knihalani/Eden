@@ -35,11 +35,6 @@ export function actualSpend(run: RunRecorder, now: number): ForecastSpend {
   });
 }
 
-/**
- * Programs this run is actually on. Same idea as requiredChecks: the seen
- * (non-skipped) names must be a subsequence of the program, starting at
- * sequence[0]. Longest sequence first. No match → unique-work.
- */
 export function matchingRunPrograms(
   live: StretchProgram[],
   events: { name: string; skipped?: boolean }[],
