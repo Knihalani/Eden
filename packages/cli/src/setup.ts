@@ -260,12 +260,7 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
 type HookEntry = { hooks?: Array<{ type?: string; command?: string }> };
 type HookMap = Record<string, HookEntry[]>;
 
-/**
- * Is this one of ours, from a previous `eden setup`?
- *
- * Both spellings of the command — the curl to hookd and the `bun … hook`
- * fallback — appear in the same string, so either is enough to recognise it.
- */
+/** True if this hook entry was written by a previous `eden setup`. */
 function isEdenHook(entry: HookEntry): boolean {
   return (entry.hooks ?? []).some((h) => {
     const c = String(h?.command ?? "");
@@ -286,11 +281,7 @@ export function mergeHooks(existing: unknown, ours: HookMap): HookMap {
   return out;
 }
 
-/**
- * A settings file we cannot parse is not a reason to abort setup, and it is
- * certainly not a reason to overwrite it unseen: it is kept alongside so the
- * user can get their configuration back.
- */
+/** Unreadable settings are backed up alongside, never overwritten unseen. */
 function readSettings(path: string): Record<string, unknown> {
   if (!existsSync(path)) return {};
   const raw = readFileSync(path, "utf8");

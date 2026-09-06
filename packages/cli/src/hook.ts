@@ -178,15 +178,7 @@ export async function runHook(): Promise<void> {
   process.stdout.write(JSON.stringify(out));
 }
 
-/**
- * The lock a hook run takes around each session-file mutation.
- *
- * One-shot `eden hook` processes keep the sync {@link withFileLock}: the
- * process exists for one event, has nothing else to serve, and spinning on
- * sleepSync costs it nothing. hookd passes {@link withFileLockAsync} instead —
- * sleepSync parks its whole event loop, so one contended lock stalled every
- * other session's request behind it.
- */
+/** Sync lock for one-shot `eden hook`; hookd passes async so sleepSync cannot stall other sessions. */
 export type HookLocker = <T>(lockPath: string, fn: () => T) => T | Promise<T>;
 
 function readConfigSafely(): { steer_hooks?: boolean } | null {
@@ -281,23 +273,7 @@ export function applyFlushTruncate(path: string, flushedIds: string[]): void {
   setCursorLines(path, rest.length);
 }
 
-/**
- * Flushed-cursor sidecar: `<session>.jsonl.cursor.json`.
- *
- * PostToolUse fires on every tool call and used to re-read and JSON-parse the
- * *entire* session log synchronously just to learn its line count for the
- * stretch-end check. The sidecar records how many lines have been appended,
- * under the same file lock as the append itself, so the hot path touches only
- * this tiny file; the full log is read where it is actually needed — at a
- * stretch end, or once after the count has been invalidated (a lost or corrupt
- * sidecar, or another writer having truncated the log).
- *
- * A cursor that has drifted high only makes the stretch-end check fire early,
- * and the authoritative `events.length >= 2` guard in flushSession still runs
- * on the real snapshot — so drift costs a redundant read, never a lost or
- * duplicated event. "Every event flushed exactly once" stays owned by the id
- * matching in applyFlushTruncate.
- */
+/** Sidecar `<session>.jsonl.cursor.json` so PostToolUse does not re-parse the whole log. */
 function cursorPathFor(path: string): string {
   return `${path}.cursor.json`;
 }
@@ -321,17 +297,7 @@ function countSessionLines(path: string): number {
   return readFileSync(path, "utf8").split("\n").filter(Boolean).length;
 }
 
-/**
- * One appended event later. Must run under `${path}.lock`, alongside the
- * append it counts, so the sidecar can never describe a line that was not
- * written or miss one that was.
- *
- * A missing or invalid cursor is rebuilt from the real log once (the
- * invalidation path) rather than silently restarting at zero, which would
- * suppress stretch-end flushing until two more events happened by. The rebuild
- * count is taken *before* the append so the fresh line itself is not counted
- * twice.
- */
+/** Count one append under `${path}.lock`. Rebuild a missing cursor from the log, never restart at zero. */
 export function recordAppendedEvent(path: string, append: () => void): number {
   const prev = readCursorLines(path);
   const lines = (prev ?? countSessionLines(path)) + 1;
