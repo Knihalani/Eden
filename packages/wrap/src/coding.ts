@@ -183,10 +183,6 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         }
         const root = confined(cwd, String(args.path ?? args.file_path ?? "."));
         const matches: Array<{ path: string; line: number; text: string }> = [];
-        // Directory budget. A large tree with few matches used to be walked in
-        // full — minutes inside node_modules-scale layouts for a pattern that
-        // is nowhere. After 500 visited dirs the scan stops and returns what
-        // it has; the 200-match cap still bounds the result either way.
         const MAX_DIRS = 500;
         let dirsVisited = 0;
         const walk = async (dir: string) => {
