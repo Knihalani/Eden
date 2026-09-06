@@ -129,7 +129,6 @@ export function markStretchServed(
   try {
     storeOf(state).lastServed = { programId: program.id, input };
   } catch {
-    /* fail-open */
   }
 }
 
