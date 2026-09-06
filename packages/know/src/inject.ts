@@ -103,9 +103,8 @@ function rfcRelationQuestion(text: string): boolean {
 }
 
 export function subjectMentioned(text: string, fact: string): boolean {
-  const f = fact.trim();
-  const used = /^(.+?) is used for /i.exec(f);
-  const edge = /^(RFC\s+\d{1,5})\s+(?:obsoletes|updates|is obsoleted by|is updated by)\b/i.exec(f);
+  const used = /^(.+?) is used for /i.exec(fact);
+  const edge = /^(RFC\s+\d{1,5})\s+(?:obsoletes|updates|is obsoleted by|is updated by)\b/i.exec(fact);
   const subject = (used?.[1] || edge?.[1] || "").trim();
   if (!subject || subject.length < 2) return false;
   if (/^RFC\s+\d/i.test(subject)) {
