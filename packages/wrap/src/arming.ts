@@ -30,11 +30,6 @@ export type Armed = {
   programId: string;
   armedAt: number;
   armedAtCall: number;
-  /**
-   * Matching-call budget: how many calls agreeing with this input the arming
-   * may see before it is considered stale. Claims and same-input noise both
-   * count; other stretches' calls do not.
-   */
   budgetCalls: number;
   matchedCalls: number;
   /**
