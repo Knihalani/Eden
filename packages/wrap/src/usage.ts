@@ -35,7 +35,6 @@ export function parseUsage(raw: unknown): { prompt: number; completion: number }
 export type CacheTokenFields = {
   cached: number;
   cacheWrite?: number;
-  /** Dialect total input, stamped from the usage object. */
   denom?: number;
 };
 
