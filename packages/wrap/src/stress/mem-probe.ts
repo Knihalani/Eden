@@ -20,7 +20,6 @@ for (let i = 0; i < 50_000; i++) {
   await tools.record.execute({ n: i, payload: "p".repeat(300), nested: { a: [1, 2, 3] } });
   if (i % 5000 === 4999) snapshot(`${i + 1}`);
 }
-// What's inside a retained trace? Size sample.
 if (state.traces.length) {
   const sizes = state.traces.map((t) => JSON.stringify(t).length);
   const total = sizes.reduce((a, b) => a + b, 0);
