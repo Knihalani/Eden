@@ -96,7 +96,6 @@ export function eligibleForTransparent(entry: LiveTool, input: Record<string, un
 
 let cfgCache: { at: number; cfg: Config | null } | null = null;
 function readConfigSafely(): Config | null {
-  // Hook fires per tool call; config is tiny but disk is disk.
   if (cfgCache && Date.now() - cfgCache.at < 2_000) return cfgCache.cfg;
   try {
     cfgCache = { at: Date.now(), cfg: readConfig() };
