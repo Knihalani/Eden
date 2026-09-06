@@ -161,8 +161,6 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
   });
 
   test("read-only stretch that deopts mid-run replays raw instead of erroring", async () => {
-    // All-reads program whose second step explodes. Replaying raw duplicates
-    // nothing (reads only), so the agent gets the real result, not a deopt.
     const p = twoStepProgram("ro", "read_stretch", "lookupTicket", "fetchDetails");
     const state = createState({ programs: [p] });
     let lookups = 0;
