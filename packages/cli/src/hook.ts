@@ -262,9 +262,7 @@ function readCursorLines(path: string): number | null {
   try {
     const c = JSON.parse(readFileSync(cursorPathFor(path), "utf8")) as { lines?: unknown };
     if (typeof c?.lines === "number" && Number.isInteger(c.lines) && c.lines >= 0) return c.lines;
-  } catch {
-    /* absent, corrupt, or half-written: fall through to a rebuild */
-  }
+  } catch {}
   return null;
 }
 
@@ -302,9 +300,7 @@ export async function respondToHook(
     try {
       const mem = memoryHookResponse(body as Record<string, unknown>);
       if (mem) return { ok: true, ...mem };
-    } catch {
-      /* fall open */
-    }
+    } catch {}
     return { ok: true };
   }
   if (body.hook_event_name === "PostToolUse" && name) {
@@ -351,15 +347,11 @@ export async function respondToHook(
             if (applied.droppedRewrite) {
               appendLedgerRow({ session, class: "host-drop", program: entry.name, programId: entry.id, tool: name });
             }
-          } catch {
-            /* serve stands even if remainder/ledger fail */
-          }
+          } catch {}
           return replacement;
         }
       }
-    } catch {
-      /* fall open */
-    }
+    } catch {}
   }
   if (body.hook_event_name === "PostToolBatch") {
     try {
@@ -395,9 +387,7 @@ export async function respondToHook(
   if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
     try {
       memoryHookResponse(body as Record<string, unknown>);
-    } catch {
-      /* observe is best-effort */
-    }
+    } catch {}
     await locker(`${outboxPath()}.lock`, () =>
       appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),
     );
@@ -422,9 +412,7 @@ export async function respondToHook(
             programId: claimed.programId,
             tool: name,
           });
-        } catch {
-          /* deny still stands */
-        }
+        } catch {}
         const reason = remainderDenyReason(claimed.program, name);
         const deny: Record<string, unknown> = {
           hookSpecificOutput: {
@@ -439,9 +427,7 @@ export async function respondToHook(
         }
         return deny;
       }
-    } catch {
-      /* fall open */
-    }
+    } catch {}
     if (live.some((t) => t.name === name)) return { ok: true };
     const steerHooks =
       process.env.EDEN_STEER_HOOKS === "1" || cfg?.steer_hooks === true;
