@@ -2,13 +2,6 @@ import { doctor } from "./doctor";
 import { setup } from "./setup";
 import { startHookdBackground } from "./hookd";
 
-/**
- * eden init: one command that goes from zero to running.
- *
- * Calls setup (config + hooks + MCP), starts the recording daemon when it is
- * down, then runs doctor. Does NOT start `eden wrap` — that stays the other
- * process. Stop the daemon with `eden hookd --stop`.
- */
 export const INIT_NEXT_STEPS = `
 Next steps:
   1. Start wrap:                  eden wrap
