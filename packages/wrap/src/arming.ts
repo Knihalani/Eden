@@ -101,7 +101,6 @@ export type ArmingStore = {
 
 type Bucket = {
   byKey: Map<string, Armed>;
-  /** Newest last. n ≤ perSessionMax, so reverse scan is cheap. */
   recency: string[];
 };
 
