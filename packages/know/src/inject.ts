@@ -48,17 +48,6 @@ function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
 
 const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
 
-function rfcCopulaQueries(text: string): string[] {
-  const out: string[] = [];
-  const re = /\bRFC\s+is\s+(\d{1,5})\b/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    const q = hotStaleQuery(m[1]!);
-    if (q && !out.includes(q)) out.push(q);
-  }
-  return out;
-}
-
 function successorQueries(text: string, store: KnowSearch, already: string[]): string[] {
   const have = new Set(already.map((q) => q.toLowerCase()));
   const out: string[] = [];
@@ -137,7 +126,14 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
   try {
     const text = input.text || "";
     const hasRfc = text.indexOf("RFC") >= 0 || text.indexOf("rfc") >= 0;
-    const copula = hasRfc ? rfcCopulaQueries(text) : [];
+    const copula: string[] = [];
+    if (hasRfc && text.indexOf(" is ") >= 0) {
+      const re = /\bRFC\s+is\s+(\d{1,5})\b/gi;
+      for (let m; (m = re.exec(text)); ) {
+        const q = hotStaleQuery(m[1]!);
+        if (q && !copula.includes(q)) copula.push(q);
+      }
+    }
     for (const cq of copula) {
       const card = factFor(cq, store);
       if (card && !subjectMentioned(text, card.fact)) return card;
