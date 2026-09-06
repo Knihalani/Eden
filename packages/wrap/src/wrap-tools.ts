@@ -1025,10 +1025,6 @@ export function wrapTools<T extends ToolsIn>(
             if (!armed.rest.size) emit(hit.input, owner);
             return value;
           } catch (err) {
-            // Only this invocation's arming. The previous code deleted every
-            // arming for the program, so one failed run for input B disarmed a
-            // successful run for input A and let A's raw tail execute a second
-            // time.
             armed.headErr = err;
             try {
               armed.closed = true;
