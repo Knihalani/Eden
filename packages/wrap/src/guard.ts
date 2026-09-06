@@ -61,8 +61,6 @@ export function decideGuard(args: {
   }
   const loop = [...run.warnings].reverse().find((w) => w.kind === "repeat_ngram" && w.ngram && new Set(w.ngram).size >= 2);
   if (loop?.ngram && loop.ngram.includes(name)) {
-    // subject to the hard stop: repeating writes is both expensive and
-    // dangerous.
     const allReads = loop.ngram.every((n) => isReadName(n));
     if (!allReads && latestRepeatStalled(run.events, loop.ngram)) {
       const hit = matchingProgram(live, (p) => hasNgram(p.sequence, loop.ngram!));
