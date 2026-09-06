@@ -235,7 +235,6 @@ function shouldRetryStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
-/** Bounded control-plane calls: a hung plane must cost telemetry, not requests. */
 function controlTimeoutMs(): number {
   const env = Number(process.env.EDEN_CONTROL_TIMEOUT_MS);
   return Number.isFinite(env) && env > 0 ? Math.min(120_000, env) : 10_000;
