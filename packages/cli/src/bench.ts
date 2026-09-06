@@ -313,8 +313,6 @@ export async function collectBench(traces: StretchTrace[], opts: BenchOpts = {})
 
   notes.push(...decision.reasons);
 
-  // Honest numbers or absent: a non-finite statistic must never stringify to
-  // null silently — it becomes an explicit null plus a note saying why.
   const p = Number.isFinite(decision.p) ? decision.p : null;
   if (p === null) notes.push("p_value not measured: the permutation test returned a non-finite p.");
   const point = Number.isFinite(decision.delta.point) ? decision.delta.point : null;
