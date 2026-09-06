@@ -773,8 +773,6 @@ describe("eden() fail-open helper", () => {
   });
 
   test("resolve falls back to api.openai.com when the local wrap is down", async () => {
-    // Port 9 refuses instantly, so this exercises the fallback path without
-    // waiting out the health-check timeout.
     const prev = process.env.EDEN_WRAP_URL;
     process.env.EDEN_WRAP_URL = "http://127.0.0.1:9/v1";
     try {
