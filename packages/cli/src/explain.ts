@@ -130,7 +130,6 @@ export async function collectExplain(opts?: {
   return { findings, letter, refusals };
 }
 
-/** Same words as Home/canvas/doctor. A canary tool is Canary, never also Live. */
 export function servingLine(live: Array<{ rollout?: string; program?: StretchProgram | null }>): string {
   if (!live.length) return "";
   const p = rolloutPartition(live);
