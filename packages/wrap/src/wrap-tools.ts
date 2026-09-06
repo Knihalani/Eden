@@ -489,16 +489,6 @@ function pushCapped<T>(buf: T[], item: T): void {
   if (buf.length > MAX_TRACES + 256) buf.splice(0, buf.length - MAX_TRACES);
 }
 
-/**
- * Run a host callback without letting it fail the caller's tool call.
- *
- * onTrace, onWarning, and onReceipt are arbitrary code supplied by whoever
- * wrapped the tools. A throw in any of them used to propagate out of a tool
- * call that had already succeeded — and for onReceipt inside runCompiled, out
- * of one whose compiled program had already performed its writes, where
- * isDeopt says "not a deopt" and the error is rethrown. Host telemetry is not
- * allowed to decide whether the agent's tool worked.
- */
 function notifyHost(fn: () => void): void {
   try {
     fn();
