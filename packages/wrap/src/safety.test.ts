@@ -73,7 +73,6 @@ describe("wrap never applies a mutation twice", () => {
     );
     const state = createState({ programs: [p] }); // no island caller
     const tools = wrapTools(c.tools, state);
-    // execute() may return a bare value (sync tools are allowed), so resolve first.
     await Promise.resolve(tools.writeRecord!.execute({ id: "T-100" })).catch(() => undefined);
     expect(c.calls.filter((n) => n === "writeRecord")).toHaveLength(1);
   });
@@ -98,9 +97,6 @@ describe("wrap never applies a mutation twice", () => {
   });
 
   test("a failed run for one input does not disarm another input's tail", async () => {
-    // The disarm loop deleted every arming for the program, not this
-    // invocation's, so a later failure re-opened an earlier success's tail and
-    // the agent's remaining raw calls executed against already-written state.
     let failNext = false;
     const calls: string[] = [];
     const tools = {
