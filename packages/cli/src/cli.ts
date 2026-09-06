@@ -37,7 +37,6 @@ for advanced commands. 'eden <command> --help' for a specific command.
 `;
 }
 
-/** `git help -a` analogue — not on the first screen. */
 export function edenHelpAdvanced(): string {
   return `usage: eden [--help] <command> [<args>]
 
