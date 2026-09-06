@@ -96,8 +96,6 @@ describe("oblivious agents (tail calls after steering)", () => {
     const wrapped = wrapTools(tools, state) as Record<string, { execute: (a: Record<string, unknown>) => Promise<unknown> }>;
     await wrapped.lookup!.execute({ id: "X1", text: "refund please" });
 
-    // Different id: the arming must not claim it. Raw execution is correct —
-    // and since lookup is sequence[0], it steers a fresh compiled run.
     const out = (await wrapped.lookup!.execute({ id: "X2", text: "other" })) as Record<string, unknown>;
     void out;
     expect(calls.filter((c) => c.startsWith("apply:X1"))).toHaveLength(1);
