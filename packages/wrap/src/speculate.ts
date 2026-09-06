@@ -17,7 +17,6 @@ import type { WrapState } from "./wrap-tools";
 
 export type SpeculateHint = {
   input?: Record<string, unknown>;
-  /** Prefer this live program (object, id, or name). */
   program?: StretchProgram | string;
   /** Last tool of the settling turn (wrap path). */
   lastTool?: string;
