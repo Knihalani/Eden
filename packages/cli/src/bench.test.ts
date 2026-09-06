@@ -111,9 +111,6 @@ describe("eden bench", () => {
     const report = await collectBench(traces as StretchTrace[]);
     expect(report.time_ms.measured).toBe(false);
     expect(report.time_ms.delta).toBeNull();
-    // And an honest clock survives: give the traces wall that is off the
-    // fixture formula *and* per-event durations — the instrument reads
-    // real numbers again.
     const real = traces.map((t, i) => ({
       ...t,
       duration_ms: 200 * t.llmCalls + 37 + i,

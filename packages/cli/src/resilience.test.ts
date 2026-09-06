@@ -25,10 +25,6 @@ afterEach(() => {
 
 describe("run ids cannot escape the runs directory", () => {
   test("traversal is folded to a hashed name inside runs/", () => {
-    // session_id arrives in an unauthenticated hook payload and used to be
-    // interpolated straight into a path. Combined with drain — which uploads
-    // and then unlinks whatever the id names — that reached any .jsonl on disk,
-    // including ~/.claude/projects transcripts.
     for (const hostile of ["../../victim/private", "..", "/etc/passwd", "a/../../b"]) {
       const p = eventsPath(hostile);
       expect(p.startsWith(join(home, "runs") + "/")).toBe(true);
