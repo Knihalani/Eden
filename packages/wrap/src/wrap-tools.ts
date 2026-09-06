@@ -1043,9 +1043,6 @@ export function wrapTools<T extends ToolsIn>(
         }
 
         const now = performance.now();
-        // Per-entry isolation: one corrupt arming degrades to "no opinion" for
-        // itself without taking down the scan or the call. Newest first; identity
-        // reject before extractInput (Wave 4.3).
         let steeredSkip = false;
         let skipArmed: Armed | undefined;
         let structuredDeopt: string | null = null;
