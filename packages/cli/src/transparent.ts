@@ -79,7 +79,6 @@ export function eligibleForTransparent(entry: LiveTool, input: Record<string, un
   if (!transparencyEnabled(readConfigSafely())) return false;
   if (!entry || typeof entry.name !== "string" || !entry.name) return false;
   const seq = entry.sequence ?? [];
-  // Must be the program's FIRST step — later steps are remainder, not trigger.
   if (seq.length < 2) return false;
   if (sequenceIncludesWrite(seq)) {
     if (!writesGateOpen(entry)) return false;

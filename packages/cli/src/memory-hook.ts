@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
-const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", session_start: "SessionStart", sessionStart: "SessionStart", session_end: "SessionEnd", sessionEnd: "SessionEnd", pre_compact: "PreCompact", preCompact: "PreCompact", PreCompress: "PreCompact", session_stop: "Stop", stop: "Stop", AfterAgent: "Stop", SubagentStop: "Stop", subagent_stop: "Stop", afterAgentResponse: "Stop", AfterAgentResponse: "Stop", beforeSubmitPrompt: "UserPromptSubmit", BeforeAgent: "UserPromptSubmit" };
+const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", userPromptSubmit: "UserPromptSubmit", "chat.message": "UserPromptSubmit", session_start: "SessionStart", sessionStart: "SessionStart", "session.created": "SessionStart", session_end: "SessionEnd", sessionEnd: "SessionEnd", "session.deleted": "SessionEnd", pre_compact: "PreCompact", preCompact: "PreCompact", PreCompress: "PreCompact", "experimental.session.compacting": "PreCompact", session_stop: "Stop", stop: "Stop", AfterAgent: "Stop", SubagentStop: "Stop", subagent_stop: "Stop", afterAgentResponse: "Stop", AfterAgentResponse: "Stop", "session.idle": "Stop", beforeSubmitPrompt: "UserPromptSubmit", BeforeAgent: "UserPromptSubmit" };
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -47,7 +47,7 @@ function briefing(mem: AgentMemory, q = ""): string {
 }
 
 function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
-  const cwd = raw.cwd ?? raw.directory ?? raw.workspace_root ?? raw.git_root ?? raw.workspaceRoot;
+  const cwd = raw.cwd ?? raw.directory ?? raw.workspace_root ?? raw.git_root ?? raw.workspaceRoot ?? asRec(raw.project).directory ?? asRec(raw.project).workspace_root;
   return openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), agent: process.env.EDEN_MEMORY_AGENT || undefined, project: typeof cwd === "string" && cwd ? cwd : process.env.EDEN_MEMORY_PROJECT || undefined });
 }
 

@@ -10,10 +10,6 @@ export function edenHome(): string {
 export function ensureHome(): string {
   const h = edenHome();
   mkdirSync(join(h, "runs"), { recursive: true });
-  // ~/.eden holds the API key and the full recorded tool traces of every
-  // session. mkdir's mode is masked by the process umask and is not applied at
-  // all to a directory that already exists, so the permissions are set
-  // explicitly rather than requested.
   chmodQuietly(h, 0o700);
   chmodQuietly(join(h, "runs"), 0o700);
   sweepRunsHome(h);
