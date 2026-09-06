@@ -44,25 +44,19 @@ function sweepRunsHome(h: string): void {
         if (!existsSync(join(runsDir, `${base}.jsonl`))) rmQuietly(p);
       }
     }
-  } catch {
-    /* sweeping must never break the command that ran ensureHome */
-  }
+  } catch {}
 }
 
 function rmQuietly(p: string): void {
   try {
     unlinkSync(p);
-  } catch {
-    /* gone already, or locked this instant — either is fine */
-  }
+  } catch {}
 }
 
 function chmodQuietly(path: string, mode: number): void {
   try {
     chmodSync(path, mode);
-  } catch {
-    /* a filesystem without POSIX modes, or not ours to change */
-  }
+  } catch {}
 }
 
 export function liveToolsPath(): string {
@@ -116,9 +110,7 @@ export function writeFileAtomic(path: string, body: string): void {
   } catch (err) {
     try {
       unlinkSync(tmp);
-    } catch {
-      /* nothing to clean up */
-    }
+    } catch {}
     throw err;
   }
 }
