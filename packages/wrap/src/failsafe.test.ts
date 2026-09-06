@@ -258,16 +258,12 @@ describe("phase 1: sibling work is never lost (C3)", () => {
       tools.lookup_fan.execute({ id: "T-100" }) as Promise<unknown>,
       tools.fetch_details.execute({ id: "T-100" }) as Promise<unknown>,
     ]);
-    // The head carries the compiled stretch's return value (its last step).
     expect(head).toEqual({ details: "D" });
     expect(tail).toEqual({ eden: "steered", skipped: "fetch_details" });
     expect(fetches).toBe(1); // performed by the compiled run only
   });
 
   test("compiled failure on an all-reads stretch: the sibling's work still happens", async () => {
-    // Regression for C3: before the settle-wait, this sibling was told
-    // "steered" while the head was still running; when the head then failed,
-    // nobody ever fetched the details.
     const p = twoStepProgram("c3read", "lookup_to_details", "lookup_fan", "fetch_details");
     const state = createState({ programs: [p] });
     let fetchCalls = 0;
