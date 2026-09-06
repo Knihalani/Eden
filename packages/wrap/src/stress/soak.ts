@@ -182,10 +182,6 @@ async function steeringAccuracy(): Promise<void> {
       },
       state,
     );
-    // In-envelope call: prefix-hit → compiled run executes ALL THREE steps via
-    // the registry and returns the LAST step's value. A miss would return the
-    // raw lookup value instead. A correct steer also means every step ran
-    // exactly ONCE (no raw replay after the compiled leg).
     const out = (await tools.lookup.execute({ id: ids[0] })) as Record<string, unknown>;
     if (
       out.sent === true &&
