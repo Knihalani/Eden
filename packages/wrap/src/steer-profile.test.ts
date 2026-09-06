@@ -1,7 +1,3 @@
-/**
- * CI pin for Wave 4.3 numbers. Generous bounds so load does not flake;
- * a global scan (10×) still fails.
- */
 import { describe, expect, test } from "bun:test";
 import { withVersion, type StretchProgram } from "@eden/ir";
 import { createArmingStore, createState, wrapTools, type ToolDef } from "./index";
