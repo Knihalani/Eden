@@ -1030,15 +1030,6 @@ export function wrapTools<T extends ToolsIn>(
               armed.closed = true;
               armed.resolveSettled(false);
             } catch { /* deferred already gone */ }
-            // KEEP this arming. Deleting it here used to strand the very
-            // information siblings need: a deopt after a mutating step means
-            // that step is DONE, and the only record of which steps ran is
-            // this entry's headErr.toolCalls. With the entry gone, an
-            // oblivious agent's next raw call found nothing to claim and
-            // executed a second time — a duplicated write on every failed
-            // stretch. Failed armings expire through the normal paths (TTL,
-            // call budget, bounded-map eviction); input matching keeps them
-            // from claiming anything but their own stretch.
             if (state.opts.failOpen === false) throw err;
             void pullLive(state);
             // Fall back to raw whenever replay provably duplicates nothing:
