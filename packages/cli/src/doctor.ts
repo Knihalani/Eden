@@ -9,7 +9,6 @@ import { hookdPidAlive, readHookdPid } from "./hookd";
 
 export type DoctorCheck = { name: string; ok: boolean; detail: string; count?: number | null };
 
-/** install → record → mine → knock → approve → serving */
 export const FUNNEL_STAGES = ["install", "record", "mine", "knock", "approve", "serving"] as const;
 export type FunnelStage = (typeof FUNNEL_STAGES)[number];
 
@@ -18,13 +17,11 @@ const WRAP_DOWN = "unknown · wrap is down";
 type InboxCandidate = { verdict?: string; refusal?: { reason?: string } | null };
 type InboxLive = { stats?: { n?: number } };
 
-/** Count + fix sentence. Wrap-down (`count === null`) is always `unknown · wrap is down`. */
 export function funnelCheck(name: FunnelStage, ok: boolean, count: number | null, fix: string): DoctorCheck {
   if (count === null) return { name, ok, detail: WRAP_DOWN, count: null };
   return { name, ok, detail: `${count} · ${fix}`, count };
 }
 
-/** Redacted: stage names and counts only. */
 export function funnelSnapshot(checks: DoctorCheck[]): Array<{ name: FunnelStage; count: number | null }> {
   return FUNNEL_STAGES.map((name) => {
     const c = checks.find((x) => x.name === name);
