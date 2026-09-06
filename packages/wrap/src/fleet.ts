@@ -6,7 +6,6 @@
  */
 import { isMutating, isReadName, type StretchProgram } from "@eden/ir";
 
-/** Product copy. Ledger, Home, and canvas use this exact string. */
 export function sharedAcrossLine(n: number): string {
   return `shared across ${n} agents`;
 }
