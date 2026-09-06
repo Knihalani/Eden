@@ -223,7 +223,6 @@ async function steeringAccuracy(): Promise<void> {
   line(`  steer precision: ${totalInEnvelope ? ((truePositive / totalInEnvelope) * 100).toFixed(1) : "n/a"}% | interference rate: ${((falseSteer / totalOutOfEnvelope) * 100).toFixed(1)}%`);
 }
 
-// ─── 5. Multi-session isolation ─────────────────────────────────────────────
 async function multiSession(): Promise<void> {
   line("\n═══ 5. MULTI-SESSION ISOLATION (3 concurrent agents × 20 calls) ═══");
   const sessions = ["alice", "bob", "carol"].map((who) => {
@@ -252,7 +251,6 @@ async function multiSession(): Promise<void> {
   line("  no cross-session bleed detected");
 }
 
-// ─── run all ─────────────────────────────────────────────────────────────────
 import { expect } from "bun:test";
 await sustainedThroughput();
 await memorySoak();
