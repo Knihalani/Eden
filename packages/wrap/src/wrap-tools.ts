@@ -1099,10 +1099,6 @@ export function wrapTools<T extends ToolsIn>(
               break;
             }
             safely(() => {
-              // Decrement rather than delete: a sequence may call the same tool
-              // more than once, and the compiled program performed each of those.
-              // Treating the tail as a Set swallowed only the first raw repeat and
-              // let every later one execute again.
               const left = armed.rest.get(name)!;
               if (left > 1) armed.rest.set(name, left - 1);
               else armed.rest.delete(name);
