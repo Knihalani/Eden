@@ -1,55 +1,11 @@
 {
   "description": "Eden passive memory — observe conversation, inject relevant notes. Fail-open.",
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'"
-          }
-        ]
-      }
-    ]
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'" }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'" }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" || echo '{}'" }] }]
   }
 }

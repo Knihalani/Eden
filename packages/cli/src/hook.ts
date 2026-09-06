@@ -414,16 +414,10 @@ export async function respondToHook(
     const events = readJsonl(path);
     if (events.length >= 2) flushSession(session, events);
   }
-  // readJson only guards against a parse error, not against the file holding
-  // something other than an array. drain writes `json.tools ?? json`, so a site
-  // response without a `tools` key — a proxy error page, a version skew — put
-  // an *object* here and `live.some(...)` then threw on every single PreToolUse.
   const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
   const live = (
     Array.isArray(liveRaw) ? liveRaw : []
   ) as Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>;
-  // Config is advisory here: a corrupt or half-written config.json must not
-  // stop the hook from answering (an answer of "allow" is always available).
   const cfg = readConfigSafely();
   if (body.hook_event_name === "PreToolUse" && name) {
     // S1b remainder deny: already-served tail. Independent of MCP steer

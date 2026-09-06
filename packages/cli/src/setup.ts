@@ -47,6 +47,7 @@ export function installedHooks(hookCmd: string, preCmd: string = preHookCommand(
     Stop: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     SessionStart: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     SessionEnd: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
+    SubagentStop: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
   };
 }
 
