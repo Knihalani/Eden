@@ -138,8 +138,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     return Response.json({ error: { message: "invalid json" } }, { status: 400 });
   }
   const live = filterCanary(programs(opts), opts.state.sessionId);
-  // Think-time of this request: start a read-only stretch from the last turn
-  // so tool latency overlaps generation. Fail-open; mutating never starts.
   safely(() => {
     const last = opts.state.run.events.at(-1);
     turnBoundary(opts.state, { lastTool: last?.name, lastArgs: last?.args, input: last?.args });
