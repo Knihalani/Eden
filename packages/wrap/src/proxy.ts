@@ -24,8 +24,6 @@ function corsOrigin(req: Request): Record<string, string> {
 }
 
 function programs(opts: ProxyOpts): StretchProgram[] {
-  // A throwing program source is degraded to "nothing live": the request
-  // proceeds unsteered rather than failing.
   try {
     return opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest);
   } catch {
