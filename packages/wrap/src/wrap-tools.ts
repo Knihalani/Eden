@@ -555,7 +555,6 @@ function notifyHost(fn: () => void): void {
 const INVOCATION = Symbol("eden.invocation");
 type TaggedEvent = TraceEvent & { [INVOCATION]?: number };
 
-/** Lifetime of one wrapped execute(). */
 type Invocation = {
   startedAt: number;
   done: boolean;
