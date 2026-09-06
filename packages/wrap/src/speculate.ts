@@ -118,7 +118,6 @@ export function discardSpeculation(state: WrapState): void {
     discardSlot(s.slot);
     s.slot = null;
   } catch {
-    /* fail-open */
   }
 }
 
