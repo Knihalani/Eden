@@ -139,9 +139,7 @@ export class AgentMemory {
       const key = subjectKey(text);
       if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
       const tags = tokList(text);
-      if (/\bpull requests?\b/i.test(text)) tags.push("pr");
-      if (/\btimezone|pacific|utc\b/i.test(text)) tags.push("tz");
-      if (/@[\w.-]+\.[a-z]{2,}/i.test(text)) tags.push("email");
+      for (const [re, t] of [[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"]] as const) if (re.test(text)) tags.push(t);
       out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided )\b/i.test(text) ? "episode" : "fact", tags }));
     }
     return out;
