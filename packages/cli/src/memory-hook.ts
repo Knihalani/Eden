@@ -84,19 +84,17 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
   }
 }
 
-function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (c) => chunks.push(c as Buffer));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    if (process.stdin.isTTY) resolve("{}");
-  });
-}
-
 export async function runMemoryHookStdin(): Promise<void> {
   let body: Record<string, unknown> = {};
   try {
-    body = JSON.parse((await readStdin()) || "{}") as Record<string, unknown>;
+    body = JSON.parse(
+      (await new Promise<string>((resolve) => {
+        const chunks: Buffer[] = [];
+        process.stdin.on("data", (c) => chunks.push(c as Buffer));
+        process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+        if (process.stdin.isTTY) resolve("{}");
+      })) || "{}",
+    ) as Record<string, unknown>;
   } catch {}
   try {
     process.stdout.write(JSON.stringify(memoryHookResponse(body) ?? {}));
