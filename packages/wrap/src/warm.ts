@@ -73,11 +73,6 @@ export function watchWarmEnabled(): boolean {
   }
 }
 
-/**
- * Bind the wrap-local runner (live programs + raw tool execute). wrapTools
- * registers this next to `bindSpeculateRunner` so `watchWarm` can fire at
- * `runCompiled` start without the caller threading tools through every call.
- */
 export function bindWarmRunner(state: WrapState, runner: WarmRunner): void {
   try {
     storeOf(state).runner = runner;
