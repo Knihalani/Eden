@@ -133,8 +133,6 @@ export function openaiIsland(opts: {
               { role: "user", content: JSON.stringify(input) },
             ],
           }),
-          // AbortSignal.timeout (which throws synchronously and used to be
-          // retried as a "transient" failure forever).
           signal: signal
             ? AbortSignal.any([signal, AbortSignal.timeout(islandTimeoutMs())])
             : AbortSignal.timeout(islandTimeoutMs()),
