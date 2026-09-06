@@ -207,7 +207,6 @@ export function withStreamUsage(body: Record<string, unknown>): Record<string, u
  */
 export class SseUsageParser {
   private buf = "";
-  /** Raw provider `usage` object — cache dialects ride with prompt/completion. */
   private usage: Record<string, unknown> | null = null;
   private finished = false;
   private committed = false;
