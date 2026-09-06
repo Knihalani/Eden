@@ -1071,9 +1071,6 @@ export function wrapTools<T extends ToolsIn>(
             return inputAgrees(armed, cur as Record<string, unknown>);
           }, false);
           if (!inputMatches) continue;
-          // A matching call burns budget whether or not a unit is left: this
-          // is how an agent that has moved well past the stretch eventually
-          // disarms it, while other stretches' interleaved calls do not.
           safely(() => {
             armed.matchedCalls++;
           }, undefined);
