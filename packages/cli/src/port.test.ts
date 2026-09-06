@@ -7,7 +7,6 @@ describe("port parsing", () => {
   });
 
   test("--port 0 means ephemeral, not the fallback", () => {
-    // Number("0") || fallback used to swallow an explicit 0.
     const prev = process.env.PORT;
     delete process.env.PORT;
     try {

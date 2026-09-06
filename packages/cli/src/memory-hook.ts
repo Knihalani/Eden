@@ -16,7 +16,7 @@ function flattenContent(content: unknown): string {
     if (Array.isArray(o.parts)) return flattenContent(o.parts);
     if (Array.isArray(o.candidates)) return flattenContent(o.candidates.map((x) => asRec(x).content ?? x));
     const sys = o.systemInstruction ?? o.system_instruction;
-    const body = String(o.text ?? o.content ?? o.llmContent ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? o.alt ?? o.name ?? o.caption ?? o.title ?? o.filename ?? "");
+    const body = String(o.text ?? o.content ?? o.llmContent ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? o.alt ?? o.name ?? o.caption ?? o.title ?? o.filename ?? o.value ?? "");
     return sys && sys !== content ? [flattenContent(sys), body].filter(Boolean).join("\n") : body;
   }
   return content.map(flattenContent).filter(Boolean).join("\n");

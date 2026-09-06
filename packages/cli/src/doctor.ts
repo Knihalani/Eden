@@ -275,8 +275,6 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
         (c) => c.verdict === "pending" || c.refusal?.reason?.startsWith("uncovered"),
       ).length;
     } else if (inbox?.status === 401 && typeof wrapCandidates === "number") {
-      // Inbox is key-gated; health.candidates is public. Prefer the
-      // authenticated body when the key works — this is the last honest count.
       mined = wrapCandidates;
     }
   }
