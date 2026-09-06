@@ -284,8 +284,6 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
       { status: 502 },
     );
   }
-  // Failed or non-JSON upstream bodies pass through verbatim — they are the
-  // provider's answer to the user's request, not ours to rewrite.
   const text = await upstreamRes.text();
   if (!upstreamRes.ok) {
     return new Response(text, {
