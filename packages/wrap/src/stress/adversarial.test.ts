@@ -51,7 +51,6 @@ d("adversarial: hostile outputs", () => {
       },
       state,
     );
-    // 30 polls with rotating results: no crash, every call served.
     for (let i = 0; i < 30; i++) {
       const out = (await tools.poll_ci.execute({})) as { state: string };
       expect(out.state).toBe("pending");
