@@ -117,7 +117,6 @@ export function emptyRun(): RunRecorder {
     island_measured: false,
     warnings: [],
     seenSignals: new Set(),
-    /** Executed (non-skipped) raw calls this run. Unconditional ceiling input. */
     rawExecuted: 0,
   };
 }
