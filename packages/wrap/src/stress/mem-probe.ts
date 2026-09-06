@@ -1,4 +1,3 @@
-/** Focused memory probe: what retains memory across 50k calls? */
 import { createState, wrapTools } from "../index";
 
 const state = createState({ programs: [] });
