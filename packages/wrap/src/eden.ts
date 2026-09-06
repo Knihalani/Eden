@@ -10,8 +10,6 @@ export type OpenAiHandle = {
 
 async function wrapUp(base: string): Promise<boolean> {
   try {
-    // wrap came up a few hundred ms later. 1.5s is still well under any
-    // caller's patience and covers a cold start.
     const r = await fetch(`${base.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(1500) });
     return r.ok;
   } catch {
