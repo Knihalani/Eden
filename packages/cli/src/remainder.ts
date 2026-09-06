@@ -398,11 +398,6 @@ export type BatchCall = {
   tool_input: Record<string, unknown>;
 };
 
-/**
- * Claude Code `PostToolBatch` payload: `tool_calls[]` with name/input/response.
- * Missing or non-array → null (caller fail-opens to `{}`). Items without a
- * name are skipped; an empty parsed list is still a valid batch (no-op arm).
- */
 export function parseToolCalls(raw: unknown): BatchCall[] | null {
   if (!Array.isArray(raw)) return null;
   const out: BatchCall[] = [];
@@ -439,14 +434,6 @@ function mergeBatchIdentity(calls: BatchCall[], head?: string, cwd?: string): Re
   return resolveIdentity(picked, cwd);
 }
 
-/**
- * After a parallel batch resolves, arm remainder from the full `tool_calls`
- * set so sibling tails do not double-execute on the next PreToolUse.
- *
- * Arms a live program when rest names appear in the batch AND (the head is
- * in this batch OR it was already served this session). Returns the program
- * names that were armed. Fail-open: throws never, empty list on error.
- */
 export async function armRemainderFromBatch(
   session: string,
   calls: BatchCall[],

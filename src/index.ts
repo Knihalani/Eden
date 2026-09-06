@@ -32,8 +32,8 @@ function convBlob(list: unknown[]): string {
     const c = o.content;
     if (typeof c === "string" && c) parts.push(c);
     else if (typeof o.llmContent === "string" && o.llmContent) parts.push(o.llmContent);
-    else if (Array.isArray(c)) {
-      for (const b of c) {
+    else if (Array.isArray(c) || Array.isArray(o.parts)) {
+      for (const b of (Array.isArray(c) ? c : o.parts as unknown[])) {
         if (b && typeof b === "object") {
           const t = ["text","content","llmContent","alt","name","caption","title","filename","url","href","source","uri","id","mimeType"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v);
           if (t) parts.push(t as string);
@@ -215,11 +215,14 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
         const p = u.pathname.replace(/\/+$/, "").replace(/^\/v1(?=\/)/, "") || "/";
         if (req.method === "DELETE") return json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
         if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
-          const b = (await req.json()) as { text?: string; prompt?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; q?: string; k?: number };
-          const run = ({ "/observe": () => memory.observe(b.messages || b.conversation || ((b.text || b.prompt) ? [{ role: "user", content: String(b.text || b.prompt) }] : [])), "/remember": () => memory.remember(String(b.text || b.prompt || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || b.prompt || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || b.conversation || ((b.text || b.prompt) ? [{ role: "user", content: String(b.text || b.prompt) }] : [])) }), "/query": () => memory.query(String(b.q || b.prompt || b.text || ""), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
+          const b = (await req.json()) as { text?: string; prompt?: string; input?: string; content?: string; query?: string; id?: string; messages?: unknown[]; conversation?: unknown[]; q?: string; k?: number };
+          const blob = String(b.text || b.prompt || b.input || b.content || b.query || "");
+          const msgs = b.messages || b.conversation || (blob ? [{ role: "user", content: blob }] : []);
+          const run = ({ "/observe": () => memory.observe(msgs), "/remember": () => memory.remember(blob, b), "/forget": () => ({ ok: memory.forget(String(b.id || blob)) }), "/inject": () => ({ messages: memory.inject(msgs) }), "/query": () => memory.query(String(b.q || blob), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return json(run());
         } else {
-          const run = ({ "/health": () => ({ ok: true, n: memory.memories().length }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6) : memory.memories().slice().sort((a, b) => b.at - a.at).slice(0, Number(u.searchParams.get("limit") || u.searchParams.get("k")) || 500)) } as Record<string, () => unknown>)[p];
+          const health = () => ({ ok: true, n: memory.memories().length });
+          const run = ({ "/": health, "/health": health, "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6) : memory.memories().slice().sort((a, b) => b.at - a.at).slice(0, Number(u.searchParams.get("limit") || u.searchParams.get("k")) || 500)) } as Record<string, () => unknown>)[p];
           if (run) return json(run());
         }
         return new Response("eden memory\n", { headers: cors });
