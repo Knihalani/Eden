@@ -580,9 +580,6 @@ describe("phase 2: branched programs steer end-to-end", () => {
   });
 });
 
-/**
- * Phase 3 — M5: name collisions resolve identically everywhere.
- */
 describe("phase 3: collision precedence (M5)", () => {
   test("compiled tool wins in-process, matching injectTools, with a one-time warning", async () => {
     const errors: string[] = [];
