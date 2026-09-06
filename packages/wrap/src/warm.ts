@@ -18,7 +18,6 @@ import { extractInput } from "./steer";
 import type { WrapState } from "./wrap-tools";
 
 export type WarmHint = {
-  /** Next-program input. Defaults to the current stretch's input. */
   input?: Record<string, unknown>;
   program?: StretchProgram | string;
 };
