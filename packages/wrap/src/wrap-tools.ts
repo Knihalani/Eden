@@ -1083,9 +1083,6 @@ export function wrapTools<T extends ToolsIn>(
           if (!remaining && !fleetServed) continue;
           const ok = await waitSettled(armed, wrapTimeoutMs(state.opts.timeoutMs));
           if (ok) {
-            // Head succeeded; the compiled run performed this step. A dirty
-            // entity after a mutating write must not be served from a pre-write
-            // skip/cache — force execute the read instead.
             if (isReadName(name) && staleRead(state, args, armed)) continue;
             // Re-verify the entry still holds work to claim (a concurrent sibling may
             // have taken the last unit while we waited). Fleet head is not in
