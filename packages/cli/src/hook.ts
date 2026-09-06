@@ -42,7 +42,7 @@ const EVENT_ALIASES: Record<string, string> = {
   session_stop: "Stop",
   session_end: "Stop",
   sessionEnd: "Stop",
-  AfterAgent: "Stop",
+  AfterAgent: "Stop", SubagentStop: "Stop", subagent_stop: "Stop", afterAgentResponse: "Stop", AfterAgentResponse: "Stop",
   stop: "Stop",
   session_start: "SessionStart",
   sessionStart: "SessionStart",
@@ -370,10 +370,6 @@ export async function respondToHook(
       /* fall open */
     }
   }
-  // PostToolBatch fires once after a parallel batch resolves, before the next
-  // model call. Remainder is armed from the full set so sibling tails do not
-  // double-execute on the next PreToolUse. Never decision:block — that would
-  // halt the agentic loop; suppression is PreToolUse deny (already shipped).
   if (body.hook_event_name === "PostToolBatch") {
     try {
       const parsed = parseToolCalls(body.tool_calls);
