@@ -12,7 +12,6 @@ export type ProxyOpts = {
   upstream?: string;
   upstreamKey?: string;
   getPrograms?: () => StretchProgram[];
-  /** Play a compiled tool when chat has no model key. Fail-open: throw or return null. */
   play?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 };
 
