@@ -226,7 +226,6 @@ d("adversarial: memory signals", () => {
       await tools.churn.execute({ n: i, filler: "y".repeat(200) });
     }
     expect(state.traces.length).toBeLessThanOrEqual(2000); // hard cap exists
-    // Buffered events must not grow unboundedly either.
     expect(state.run.events.length).toBeLessThan(100);
   });
 });
