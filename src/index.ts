@@ -54,7 +54,7 @@ function extractDurable(blob: string): string[] {
   const out: string[] = [];
   for (const raw of blob.split(/(?<=[.!\n;])\s+/)) {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess)\s+/i, "");
-    if (t.length < 8 || t.length > 400 || t.startsWith("{") || t.startsWith("[") || t.startsWith("```") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function |npm |pnpm |bun |git |cd |curl |yarn |npx |sudo |echo |cat |ls )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|i'm|we will)\b/i.test(t) || CHAT.test(t)) continue;
+    if (t.length < 8 || t.length > 400 || t.startsWith("{") || t.startsWith("[") || t.startsWith("```") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function |npm |pnpm |bun |git |cd |curl |yarn |npx |sudo |echo |cat |ls )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|i'm|we will|look at)\b/i.test(t) || CHAT.test(t)) continue;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i);
     if (rem) t = rem[1].trim();
     else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t |ran out|i want |fyi|also,|we should |make sure |stands for| aka |called |confirmed |decided |shipped |assigned |owned by|belongs to|due on|due by|deadline|blocked on|depends on|required |lives in|based in|located |works (?:at|for)|reports to)\b/i.test(t) || (/\b(is|are|was|were|needs?|uses?|will be|ha(?:s|ve) been)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+|\d{2,}/.test(t)) || /^[A-Z][A-Za-z0-9 /._-]{1,32}:\s+\S/.test(t) || /^\d+[.)]\s+.{8,}/.test(t) || /^[-*]\s+.{8,}/.test(t) || /"[^"]{4,80}"\s+(?:is|means|aka)/i.test(t) || /@[\w.-]+\.[a-z]{2,}/i.test(t) || /\b20\d{2}-\d{2}-\d{2}\b/.test(t) || /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(t) || /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(t) || /\$\d{2,}/.test(t) || /(?:~\/|\/(?:Users|home|opt|usr|var|etc)\/)[\w./-]+/.test(t) || /\b[A-Z][A-Z0-9_]{2,}=\S/.test(t) || /\bport\s+\d{2,5}\b/i.test(t) || /\b[\w.-]+\.(?:json|ya?ml|toml|env)\b/.test(t) || /\b[\w-]+\.(?:com|io|dev|internal|local)\b/.test(t))) continue;
@@ -231,7 +231,8 @@ export function openMemory(opts: MemoryOptions = {}): AgentMemory {
 
 let proc: AgentMemory | undefined;
 export function processMemory(): AgentMemory {
-  return (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.argv.some((a) => a.endsWith(".test.ts")) ? join(tmpdir(), "eden-memory-test") : undefined) }));
+  if (process.argv.some((a) => a.endsWith(".test.ts"))) return openMemory({ dir: join(tmpdir(), "eden-m-" + Math.random().toString(36).slice(2)) });
+  return (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR || undefined }));
 }
 
 export function host(opts: MemoryOptions & { port?: number } = {}) {
