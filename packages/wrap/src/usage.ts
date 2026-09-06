@@ -38,10 +38,6 @@ export type CacheTokenFields = {
   denom?: number;
 };
 
-/**
- * Hit-% denominator from the raw usage object (not cached vs prompt).
- * OpenAI: prompt_tokens. Anthropic: cache_read + cache_creation + input_tokens.
- */
 export function cacheHitDenomFromUsage(raw: unknown): number | null {
   if (!raw || typeof raw !== "object") return null;
   const u = raw as Record<string, unknown>;
