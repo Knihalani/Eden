@@ -2,7 +2,6 @@ import { redact } from "@eden/ir";
 import type { StretchTrace } from "@eden/ir";
 import type { RunRecorder } from "./types";
 
-/** Bound unparsed SSE text so a stuck/malformed stream cannot grow forever. */
 const MAX_SSE_BUF = 256 * 1024;
 const SSE_TAIL = 8 * 1024;
 
