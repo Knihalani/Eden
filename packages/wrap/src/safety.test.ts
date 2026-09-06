@@ -227,12 +227,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
   });
 
   test("a compiled run slower than the TTL still suppresses its own tail", async () => {
-    // armedAt was stamped before awaiting the compiled program, but
-    // wrapTimeoutMs allows that program 300s — five times the TTL. A
-    // legitimately slow run therefore returned to an arming that had already
-    // expired, and every raw call in the tail went through to the real tool,
-    // duplicating what the compiled leg had just done. The clock has to start
-    // when the run finishes.
     const c = counted(["lookupTicket", "notify"]);
     const p = program(
       ["lookupTicket", "notify"],
