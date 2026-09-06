@@ -294,10 +294,6 @@ async function withStore<T>(locker: RemainderLocker, fn: (data: FileShape) => T)
   );
 }
 
-/**
- * Arm the tail after a successful transparent serve. Fail-open at cap (no live
- * eviction). Returns false when the session/global gate refuses the insert.
- */
 export async function armRemainder(
   session: string,
   entry: RemainderEntry,
@@ -346,10 +342,6 @@ export async function armRemainder(
 
 export type RemainderClaim = { program: string; programId: string; tool: string; key: string };
 
-/**
- * Claim one rest unit for this call. Newest-first. Matching calls burn budget
- * even when the name is not in rest. Throws never — fail-open returns null.
- */
 export async function claimRemainder(
   session: string,
   toolName: string,
