@@ -179,9 +179,6 @@ async function replayPass(
       const naiveTools = naiveToolMs(t);
       if (!block.syntheticClock && naiveTools != null && toolsMs != null) {
         block.naiveMs = naiveTools;
-        // Same convention as shadow's manifest: this trace's tool durations on
-        // both sides, plus real wall for any island step. Blocks missing any
-        // duration drop out rather than mixing clocks.
         block.compiledMs = toolsMs + (hasIsland && run.stats.llmCalls >= 1 ? run.stats.islandMs : 0);
       }
       blocks.push(block);

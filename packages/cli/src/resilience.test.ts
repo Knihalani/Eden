@@ -212,8 +212,6 @@ describe("withFileLock", () => {
   });
 
   test("recovers immediately from a crashed holder rather than waiting out the horizon", () => {
-    // A lock naming a pid that is gone is abandoned no matter how fresh it is,
-    // so a crash costs the next hook milliseconds instead of 30s.
     const lock = join(home, "runs", "crashed.jsonl.lock");
     writeFileSync(lock, JSON.stringify({ pid: 0x7ffffffe, host: hostname(), ts: Date.now() }));
     const t0 = Date.now();
@@ -231,7 +229,6 @@ describe("withFileLock", () => {
     const lock = join(home, "runs", "swapped.jsonl.lock");
     writeFileSync(lock, JSON.stringify({ pid: 0x7ffffffe, host: hostname(), ts: Date.now() }));
 
-    // A successor replaces it before we get to the unlink.
     rmSync(lock, { force: true });
     writeFileSync(lock, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() }));
     const liveBody = readFileSync(lock, "utf8");
