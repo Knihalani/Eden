@@ -209,7 +209,7 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
           const run = ({ "/observe": () => memory.observe(b.messages || []), "/remember": () => memory.remember(String(b.text || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || []) }), "/query": () => memory.query(String(b.q || ""), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return Response.json(run());
         } else {
-          const run = ({ "/health": () => ({ ok: true }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6) : memory.memories().slice().sort((a, b) => b.at - a.at)) } as Record<string, () => unknown>)[p];
+          const run = ({ "/health": () => ({ ok: true, n: memory.memories().length }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6) : memory.memories().slice().sort((a, b) => b.at - a.at)) } as Record<string, () => unknown>)[p];
           if (run) return Response.json(run());
         }
         return new Response("eden memory\n");
