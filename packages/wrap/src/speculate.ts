@@ -99,9 +99,6 @@ function pick(
     : live.filter((p) => isSafeToSpeculate(p)).sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
   for (const program of candidates) {
     if (!isSafeToSpeculate(program)) continue;
-    // Auto wrap/proxy hints include lastTool. Starting that program again
-    // would duplicate the stretch (fleet GET 2×, failsafe sibling +1). An
-    // explicit `hint.program` is a next-stretch prediction and may start.
     if (!named && hint.lastTool && (program.sequence ?? []).includes(hint.lastTool)) continue;
     const input = raw ? extractInput(program, raw) : {};
     if (!Object.keys(input).length) continue;
