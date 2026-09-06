@@ -2,13 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { withVersion, type Step, type StretchProgram } from "@eden/ir";
 import { createState, wrapTools } from "./index";
 
-/**
- * Run `fn` with the monotonic clock jumped forward by `ms`.
- *
- * Arming lifetime is measured on performance.now(), not Date.now(), so
- * setSystemTime cannot age one. Everything wrap measures in elapsed time —
- * step durations — tolerates the jump, and it is restored either way.
- */
 async function withClockAdvanced<T>(ms: number, fn: () => T | Promise<T>): Promise<T> {
   const real = performance.now.bind(performance);
   performance.now = () => real() + ms;
