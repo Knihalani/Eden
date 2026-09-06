@@ -60,10 +60,6 @@ export type ArmingStore = {
   delete(session: string, key: string): void;
   get(session: string, key: string): Armed | undefined;
   scan(session: string, name: string, args: Record<string, unknown>, now: number): Array<[string, Armed]>;
-  /**
-   * Read-only armings in this fleet, newest-first per session. Empty fleetId
-   * returns []. Does not return mutating armings.
-   */
   scanFleet(fleetId: string, name: string, args: Record<string, unknown>, now: number): FleetHit[];
   all(session: string, now: number): Array<[string, Armed]>;
   allFleet(fleetId: string, now: number): FleetHit[];
