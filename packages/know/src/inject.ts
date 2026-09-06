@@ -67,12 +67,9 @@ function successorQueries(text: string, store: KnowSearch, already: string[]): s
         if (h.p === "is" && subj.test(h.s.trim())) {
           const dest = /(?:obsoleted|updated) by RFC\s*(\d{1,5})/i.exec(h.o);
           if (dest) q = /updated/i.test(h.o) ? `RFC ${dest[1]} updates` : `RFC ${dest[1]} obsoletes`;
-        } else if (h.p === "obsoletes" && inObj.test(h.o)) {
+        } else if ((h.p === "obsoletes" || h.p === "updates") && inObj.test(h.o)) {
           const src = /^RFC\s+(\d{1,5})/i.exec(h.s);
-          if (src) q = `RFC ${src[1]} obsoletes`;
-        } else if (h.p === "updates" && inObj.test(h.o)) {
-          const src = /^RFC\s+(\d{1,5})/i.exec(h.s);
-          if (src) q = `RFC ${src[1]} updates`;
+          if (src) q = `RFC ${src[1]} ${h.p}`;
         }
         if (q && !have.has(q.toLowerCase()) && !out.some((x) => x.toLowerCase() === q.toLowerCase())) {
           out.push(q);
