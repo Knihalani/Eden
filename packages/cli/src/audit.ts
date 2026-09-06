@@ -121,11 +121,6 @@ export function runVerify(text: string): { ok: true; n: number } | { ok: false; 
   return verifyAudit(text);
 }
 
-/**
- * CLI entry. Returns an exit code. Never throws into wrap — this command is
- * the whole path; a failure here is fail-closed for verify and a printed
- * error for export, not an agent crash.
- */
 export async function auditCli(args: string[]): Promise<number> {
   try {
     const sub = args[0];

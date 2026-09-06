@@ -48,10 +48,11 @@ function briefing(mem: AgentMemory, q = ""): string {
 }
 
 function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
+  const strip = (v: unknown) => typeof v === "string" && v ? (v.startsWith("file:") ? decodeURIComponent(v.replace(/^file:\/\//, "").replace(/^\/([A-Za-z]:)/, "$1")) : v) : undefined;
   const folder0 = Array.isArray(raw.workspaceFolders) ? raw.workspaceFolders[0] : undefined;
-  const cwd = raw.cwd ?? raw.directory ?? raw.workspace_root ?? raw.git_root ?? raw.workspaceRoot ?? raw.repo_root ?? raw.repoRoot ?? raw.workspaceFolder ?? raw.root ?? raw.folderUri ?? asRec(raw.project).directory ?? asRec(raw.project).workspace_root ?? asRec(raw.project).workspaceRoot ?? (typeof folder0 === "string" ? folder0 : asRec(folder0).path ?? asRec(folder0).uri ?? asRec(folder0).directory ?? asRec(folder0).folderUri);
+  const cwd = strip(raw.cwd) ?? strip(raw.directory) ?? strip(raw.workspace_root) ?? strip(raw.git_root) ?? strip(raw.workspaceRoot) ?? strip(raw.repo_root) ?? strip(raw.repoRoot) ?? strip(raw.workspaceFolder) ?? strip(raw.root) ?? strip(raw.folderUri) ?? strip(asRec(raw.project).directory) ?? strip(asRec(raw.project).workspace_root) ?? strip(asRec(raw.project).workspaceRoot) ?? strip(typeof folder0 === "string" ? folder0 : asRec(folder0).path ?? asRec(folder0).uri ?? asRec(folder0).directory ?? asRec(folder0).folderUri);
   const agent = [process.env.EDEN_MEMORY_AGENT, raw.agent, raw.agent_id, raw.agentName, raw.agent_name, raw.agent_type, raw.agentType, raw.client, raw.editor].find((x) => typeof x === "string" && x);
-  return openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), agent: typeof agent === "string" ? agent : undefined, project: typeof cwd === "string" && cwd ? cwd : process.env.EDEN_MEMORY_PROJECT || undefined });
+  return openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), agent: typeof agent === "string" ? agent : undefined, project: cwd || process.env.EDEN_MEMORY_PROJECT || undefined });
 }
 
 function additional(event: string, text: string): Record<string, unknown> | null {
