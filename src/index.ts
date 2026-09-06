@@ -13,7 +13,6 @@ export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; p
 export type QueryHit = { text: string; source: "memory" | "know"; url?: string; id?: string };
 
 type Compiled = { rec: MemoryRecord; needles: string[] };
-type Note = { role: "system"; content: string };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
@@ -155,7 +154,7 @@ export class AgentMemory {
     const list = Array.isArray(messages) ? messages : [];
     try {
       const blob = convBlob(list);
-      const notes: Note[] = [];
+      const notes: { role: "system"; content: string }[] = [];
       if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
         const mems = this.relevant(blob);
         if (mems.length) notes.push({ role: "system", content: MEMORY_MARK + mems.map((m) => `\n- ${m.text}`).join("") });
