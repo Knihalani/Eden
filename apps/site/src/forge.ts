@@ -71,9 +71,79 @@ export function forgeRuns(n: string) {
   };
 }
 
+export function forgeFiles(n: string) {
+  const count = (Number(n) % 7) + 3;
+  return Array.from({ length: count }, (_, i) => ({
+    filename: `src/f${i}-${n}.ts`,
+    status: "modified",
+    additions: i + 1,
+    deletions: 0,
+  }));
+}
+
+export function shopOrder(n: string) {
+  const id = Number(n);
+  return {
+    id,
+    title: `Order ${n}`,
+    total: id * 10 + 5,
+    status: id % 2 === 0 ? "paid" : "open",
+  };
+}
+
+export function shopItems(n: string) {
+  return [
+    { sku: `SKU-${n}-A`, qty: 2 },
+    { sku: `SKU-${n}-B`, qty: 1 },
+  ];
+}
+
+export function shopCustomer(n: string) {
+  return {
+    id: Number(n),
+    name: `Customer ${n}`,
+    email: `c${n}@example.com`,
+  };
+}
+
+export function shopCustomerOrders(n: string) {
+  const id = Number(n);
+  return [
+    { id: id * 10, total: 50 },
+    { id: id * 10 + 1, total: 25 },
+  ];
+}
+
+export function shopTicket(n: string) {
+  return {
+    id: Number(n),
+    title: `Ticket ${n}`,
+    state: Number(n) % 3 === 0 ? "closed" : "open",
+  };
+}
+
+export function shopTicketComments(n: string) {
+  return Array.from({ length: (Number(n) % 3) + 1 }, (_, i) => ({
+    id: Number(n) * 10 + i,
+    body: `note ${i} on ${n}`,
+  }));
+}
+
 export function handleForge(url: URL): Response | null {
   const p = url.pathname;
+  if (p.startsWith("/shop/")) {
+    const n = p.match(/\/(\d+)(?:\/|$)/)?.[1] || "1";
+    if (p.includes("/orders/") && p.endsWith("/items")) return json(shopItems(n));
+    if (/\/orders\/\d+$/.test(p)) return json(shopOrder(n));
+    if (p.includes("/customers/") && p.endsWith("/orders")) return json(shopCustomerOrders(n));
+    if (/\/customers\/\d+$/.test(p)) return json(shopCustomer(n));
+    if (p.includes("/tickets/") && p.endsWith("/comments")) return json(shopTicketComments(n));
+    if (/\/tickets\/\d+$/.test(p)) return json(shopTicket(n));
+    return json({ error: "unknown_shop_path" });
+  }
+  if (!p.startsWith("/forge/") && !p.includes("/forge/")) return null;
   const n = p.match(/\/(\d+)(?:\/|$)/)?.[1] || url.searchParams.get("pr") || "1";
+  if (p.includes("/files")) return json(forgeFiles(n));
   if (p.includes("/comments")) return json(forgeComments(n));
   if (p.includes("/reviews")) return json(forgeReviews(n));
   if (p.includes("/status")) return json(forgeStatus());

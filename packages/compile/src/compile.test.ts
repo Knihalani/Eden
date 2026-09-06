@@ -1,0 +1,951 @@
+import { describe, expect, test } from "bun:test";
+import { compileTraces, inferSchema, isCheckName, isIslandName, isMutating, majoritySequence, tryTemplateForTest, oneInsert, oneSubstitute, islandWhenToUse } from "../src/index";
+import type { StretchProgram, StretchTrace } from "@eden/ir";
+import { whenToUseOf } from "@eden/ir";
+import { createTicketShip, runNaive, ticketShipProgram, underdeterminedSiblingTraces, WITNESS_IDS } from "../../runtime/src/ticketship";
+
+/** A list/get/fetch is the world: it must compile as a tool, never an island. */
+function expectToolNotIsland(p: StretchProgram, tool: string) {
+  expect(p.steps.some((s) => s.kind === "tool" && s.tool === tool)).toBe(true);
+  expect(
+    p.steps.some(
+      (s) =>
+        s.kind === "island" &&
+        (s.id === tool || s.id.startsWith(`${tool}_`) || s.system.includes(`Perform the ${tool} step`)),
+    ),
+  ).toBe(false);
+}
+
+async function ticketTraces(n = 10): Promise<StretchTrace[]> {
+  const traces: StretchTrace[] = [];
+  for (let i = 0; i < n; i++) {
+    const world = createTicketShip({ llmMs: 0 });
+    const id = WITNESS_IDS[i % WITNESS_IDS.length]!;
+      const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : 0, seed: 10 + i });
+    traces.push({
+      id: `t${i}`,
+      events: run.events,
+      input: { id },
+      output: run.output,
+      llmCalls: run.stats.llmCalls,
+      duration_ms: 200 * run.stats.llmCalls,
+      cost_cents: run.stats.cost_cents,
+      skipped: run.stats.skipped,
+      complete: run.stats.complete,
+    });
+  }
+  return traces;
+}
+
+describe("compile", () => {
+  test("mines TicketShip into an island + verify program", async () => {
+    const traces = await ticketTraces(10);
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals).toEqual([]);
+    expect(programs.length).toBe(1);
+    const p = programs[0]!;
+    expect(p.steps.some((s) => s.kind === "island")).toBe(true);
+    expect(p.steps.some((s) => s.kind === "tool" && s.tool === "verifyWrite")).toBe(true);
+    const verify = p.steps.find((s) => s.kind === "tool" && s.tool === "verifyWrite");
+    expect(verify && verify.kind === "tool" && verify.args.id).toEqual({ kind: "input", path: "id" });
+    expect(p.steps.some((s) => s.kind === "tool" && s.tool === "writeRecord")).toBe(true);
+    expect(p.steps.some((s) => s.kind === "assert")).toBe(true);
+    expect(p.sequence).toContain("draftReply");
+    const draft = p.steps.find((s) => s.kind === "island");
+    expect(draft?.kind === "island" && draft.when_to_use).toBe(
+      islandWhenToUse("draftReply", (p.sequence ?? []).slice(0, (p.sequence ?? []).indexOf("draftReply"))),
+    );
+    expect(p.when_to_use).toBe(draft && draft.kind === "island" ? draft.when_to_use : undefined);
+    expect(whenToUseOf(p)).toBe(p.when_to_use);
+    expect(p.when_to_use).not.toMatch(/Run the repeating stretch as one tool/);
+    expect(p.description).toMatch(/Run the repeating stretch as one tool/);
+    expect(p.contract.envelope?.inputs.id?.sort()).toEqual([...WITNESS_IDS].sort());
+    const hand = ticketShipProgram();
+    const compiledTools = p.steps.filter((s) => s.kind === "tool").map((s) => s.tool);
+    const handTools = hand.steps.filter((s) => s.kind === "tool").map((s) => s.tool);
+    expect(compiledTools).toEqual(handTools);
+    expect(p.id).toMatch(/^p_[0-9a-f]{16}$/);
+    expect(p.name).toBe("lookupTicket_to_notify");
+    expect(p.contract.minLlmReduction).toBe(2);
+    const again = compileTraces(traces).programs[0]!;
+    expect(again.id).toBe(p.id);
+  });
+
+  test("skip-verify noise does not mint a second program without verifyWrite", async () => {
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 12; i++) {
+      const world = createTicketShip({ llmMs: 0 });
+      const id = WITNESS_IDS[i % WITNESS_IDS.length]!;
+      const run = await runNaive(world, id, { skipVerifyP: i < 5 ? 1 : 0, seed: 20 + i });
+      traces.push({
+        id: `sv${i}`,
+        events: run.events,
+        input: { id },
+        llmCalls: run.stats.llmCalls,
+        duration_ms: 200 * run.stats.llmCalls,
+        cost_cents: run.stats.cost_cents,
+        skipped: run.stats.skipped,
+        complete: run.stats.complete,
+      });
+    }
+    const { programs } = compileTraces(traces);
+    expect(programs.length).toBe(1);
+    expect(programs[0]!.sequence).toContain("verifyWrite");
+    expect(programs[0]!.steps.some((s) => s.kind === "tool" && s.tool === "verifyWrite")).toBe(true);
+  });
+
+  test("refuses under-determined writeRecord.id sibling", () => {
+    const { programs, refusals } = compileTraces(underdeterminedSiblingTraces(3));
+    expect(programs).toEqual([]);
+    expect(refusals.length).toBeGreaterThanOrEqual(1);
+    expect(refusals[0]!.reason.toLowerCase()).toMatch(/under-determined|writeRecord/);
+  });
+
+  test("no repetition compiles nothing", () => {
+    const traces: StretchTrace[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `u${i}`,
+      llmCalls: 2,
+      duration_ms: 10,
+      cost_cents: 2,
+      input: { id: `x${i}` },
+      events: [
+        { name: `toolA${i}`, args: { id: `x${i}` }, result: { ok: true }, ok: true },
+        { name: `toolB${i}`, args: { id: `x${i}` }, result: { ok: true }, ok: true },
+        { name: `toolC${i}`, args: { id: `x${i}` }, result: { ok: true }, ok: true },
+      ],
+    }));
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs).toEqual([]);
+    expect(refusals).toEqual([]);
+  });
+
+  test("identical copies do not count as separate witnesses", () => {
+    const one: StretchTrace = {
+      id: "u0",
+      llmCalls: 3,
+      duration_ms: 10,
+      cost_cents: 3,
+      input: { id: "T-100" },
+      events: [
+        { name: "lookupTicket", args: { id: "T-100" }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: "T-100" }, result: { written: true }, ok: true },
+        { name: "verifyWrite", args: { id: "T-100" }, result: { verified: true }, ok: true },
+      ],
+    };
+    const { programs, refusals } = compileTraces(Array.from({ length: 8 }, (_, i) => ({ ...one, id: `u${i}` })));
+    expect(programs).toEqual([]);
+    expect(refusals).toEqual([]);
+  });
+
+  test("92% trap refuses almost-constant mutating slot", () => {
+    const traces: StretchTrace[] = Array.from({ length: 12 }, (_, i) => {
+      const id = `T-${i}`;
+      const dest = i === 0 ? "other-mailbox" : "ops@acme.test";
+      return {
+        id: `g${i}`,
+        llmCalls: 3,
+        duration_ms: 600,
+        cost_cents: 3,
+        input: { id },
+        complete: true,
+        events: [
+          { name: "lookupTicket", args: { id }, result: { ok: true, id }, ok: true },
+          { name: "fetchDetails", args: { id }, result: { id, body: "x" }, ok: true },
+          { name: "notify", args: { id, to: dest }, result: { notified: true }, ok: true },
+        ],
+      };
+    });
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs).toEqual([]);
+    expect(refusals.some((r) => /92%|under-determined|notify/i.test(r.reason))).toBe(true);
+  });
+
+  test("name heuristics", () => {
+    expect(isIslandName("draftReply")).toBe(true);
+    expect(isMutating("writeRecord")).toBe(true);
+    expect(isMutating("notify")).toBe(true);
+    expect(isMutating("poster")).toBe(false);
+    expect(isCheckName("ensureWrite")).toBe(true);
+    expect(isMutating("ensureWrite")).toBe(false);
+  });
+
+  test("compiles a stretch buried under extra prefix tools", async () => {
+    const traces = await ticketTraces(8);
+    for (const t of traces) {
+      t.events = [
+        { name: "Read", args: { path: "notes.md" }, result: { content: "x" }, ok: true },
+        { name: "Bash", args: { command: "pwd" }, result: { code: 0 }, ok: true },
+        ...t.events,
+      ];
+    }
+    const { programs } = compileTraces(traces);
+    expect(programs.length).toBeGreaterThanOrEqual(1);
+    expect(programs[0]!.steps.some((s) => s.kind === "tool" && s.tool === "verifyWrite")).toBe(true);
+  });
+
+  test("hyphenated tool names bind from step ids", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
+      const id = `T-${100 + i}`;
+      return {
+        id: `h${i}`,
+        llmCalls: 4,
+        duration_ms: 800,
+        cost_cents: 4,
+        input: { id },
+        complete: true,
+        events: [
+          { name: "lookup-ticket", args: { id }, result: { ok: true, id }, ok: true },
+          { name: "fetch-details", args: { id }, result: { id, customer: `Ada-${i}` }, ok: true },
+          { name: "write-record", args: { id, customer: `Ada-${i}` }, result: { wrote: true }, ok: true },
+          { name: "verify-write", args: { id }, result: { verified: true }, ok: true },
+        ],
+      };
+    });
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals).toEqual([]);
+    const p = programs[0]!;
+    const write = p.steps.find((s) => s.kind === "tool" && s.tool === "write-record");
+    expect(write && write.kind === "tool").toBe(true);
+    if (write && write.kind === "tool") {
+      const customer = write.args.customer;
+      expect(customer?.kind).toBe("from");
+      if (customer?.kind === "from") expect(p.steps.some((s) => s.id === customer.step)).toBe(true);
+    }
+  });
+
+  test("templates bind interpolated strings from input", () => {
+    const traces: StretchTrace[] = [
+      { id: "a", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { id: "T-100" }, events: [] },
+      { id: "b", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { id: "T-101" }, events: [] },
+    ];
+    const tmpl = tryTemplateForTest(["hello T-100", "hello T-101"], traces, []);
+    expect(tmpl).toEqual({
+      kind: "transform",
+      fn: "template",
+      expr: "hello {id}",
+      of: { kind: "input", path: "" },
+    });
+  });
+
+  test("templates prefer the longest overlapping input string", () => {
+    const traces: StretchTrace[] = [
+      { id: "a", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { short: "T-1", id: "T-10" }, events: [] },
+      { id: "b", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { short: "T-2", id: "T-20" }, events: [] },
+    ];
+    const tmpl = tryTemplateForTest(["hello T-10", "hello T-20"], traces, []);
+    expect(tmpl && tmpl.kind === "transform" && tmpl.expr).toBe("hello {id}");
+  });
+
+  test("templates bind nested JSON object bodies from input", () => {
+    const traces: StretchTrace[] = [
+      {
+        id: "a",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-0", email: "u0@co.com", name: "User 0" },
+        events: [],
+      },
+      {
+        id: "b",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-1", email: "u1@co.com", name: "User 1" },
+        events: [],
+      },
+    ];
+    const tmpl = tryTemplateForTest(
+      [
+        { user: { email: "u0@co.com", name: "User 0" }, orgId: "org-0" },
+        { user: { email: "u1@co.com", name: "User 1" }, orgId: "org-1" },
+      ],
+      traces,
+      [],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr.trim().startsWith("{")).toBe(true);
+      expect(tmpl.expr).toContain("{email}");
+      expect(tmpl.expr).toContain("{orgId}");
+    }
+  });
+
+  test("templates bind quoted SQL tokens when the token is 'value' not value", () => {
+    const traces: StretchTrace[] = [
+      { id: "a", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { report: "R-1" }, events: [] },
+      { id: "b", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { report: "R-2" }, events: [] },
+    ];
+    const tmpl = tryTemplateForTest(
+      ["SELECT * FROM events WHERE report = 'R-1'", "SELECT * FROM events WHERE report = 'R-2'"],
+      traces,
+      [],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr).toContain("{report}");
+      expect(tmpl.expr).toContain("'");
+      expect(tmpl.expr).not.toContain("R-1");
+    }
+  });
+
+  test("templates bind nested object bodies whose name is assembled from email", () => {
+    const traces: StretchTrace[] = [
+      {
+        id: "a",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-relay", email: "ada@horizon.example" },
+        events: [],
+      },
+      {
+        id: "b",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-globex", email: "ben@horizon.example" },
+        events: [],
+      },
+    ];
+    const tmpl = tryTemplateForTest(
+      [
+        { user: { email: "ada@horizon.example", name: "User ada@horizon.example" }, orgId: "org-relay" },
+        { user: { email: "ben@horizon.example", name: "User ben@horizon.example" }, orgId: "org-globex" },
+      ],
+      traces,
+      [],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr.trim().startsWith("{")).toBe(true);
+      expect(tmpl.expr).toContain("{email}");
+      expect(tmpl.expr).toContain("{orgId}");
+      expect(tmpl.expr).toContain("User {email}");
+    }
+  });
+
+  test("templates bind mixed JSON from input email plus one prior orgId", () => {
+    const traces: StretchTrace[] = [
+      {
+        id: "a",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { email: "u0@co.com" },
+        events: [{ name: "getOrg", args: { email: "u0@co.com" }, result: { orgId: "org-0", plan: "pro" }, ok: true }],
+      },
+      {
+        id: "b",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { email: "u1@co.com" },
+        events: [{ name: "getOrg", args: { email: "u1@co.com" }, result: { orgId: "org-1", plan: "pro" }, ok: true }],
+      },
+    ];
+    const tmpl = tryTemplateForTest(
+      [
+        { user: { email: "u0@co.com", name: "User u0@co.com" }, orgId: "org-0" },
+        { user: { email: "u1@co.com", name: "User u1@co.com" }, orgId: "org-1" },
+      ],
+      traces,
+      ["getOrg"],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr.trim().startsWith("{")).toBe(true);
+      expect(tmpl.expr).toContain("{email}");
+      expect(tmpl.expr).toContain("{orgId}");
+      expect(tmpl.of).toEqual({ kind: "from", step: "getOrg", path: "" });
+    }
+  });
+
+  test("envelope treats key-reordered objects as one witness", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `e${i}`,
+      llmCalls: 3,
+      duration_ms: 30,
+      cost_cents: 3,
+      complete: true,
+      input: {
+        id: `T-10${i}`,
+        record: i === 1 ? { b: 2, a: 1 } : { a: 1, b: 2 },
+      },
+      events: [
+        { name: "lookupTicket", args: { id: `T-10${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-10${i}`, record: i === 1 ? { b: 2, a: 1 } : { a: 1, b: 2 } }, result: { written: true }, ok: true },
+        { name: "verifyWrite", args: { id: `T-10${i}` }, result: { verified: true }, ok: true },
+      ],
+    }));
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals).toEqual([]);
+    expect(programs.length).toBe(1);
+    expect(programs[0]!.contract.envelope?.inputs.record?.length).toBe(1);
+  });
+
+  test("mines a foreach loop over a prior array", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
+      const ids = [`a${i}`, `b${i}`, `c${i}`];
+      return {
+        id: `loop${i}`,
+        llmCalls: 5,
+        duration_ms: 1000,
+        cost_cents: 5,
+        input: { q: "open" },
+        complete: true,
+        events: [
+          { name: "listItems", args: { q: "open" }, result: { ids }, ok: true },
+          ...ids.map((id) => ({ name: "getItem", args: { id }, result: { id, ok: true }, ok: true })),
+          { name: "notify", args: { q: "open" }, result: { notified: true }, ok: true },
+        ],
+      };
+    });
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals).toEqual([]);
+    const p = programs[0]!;
+    expect(p.steps.some((s) => s.kind === "loop")).toBe(true);
+    const loop = p.steps.find((s) => s.kind === "loop");
+    expect(loop && loop.kind === "loop" && loop.body.length).toBe(1);
+
+    // A loop is pushed and its body steps pushed immediately after it, so a
+    // reverse scan of the flat array found the *body* step whenever a loop
+    // came last. The program then returned one iteration's single result
+    // instead of the collected array — and if `over` resolved to empty, the
+    // body never ran, its id was never in scope, and evaluating the return
+    // binding threw a plain "unknown step" that isReplaySafe cannot classify.
+    const bodyIds = new Set(p.steps.flatMap((s) => (s.kind === "loop" ? s.body : [])));
+    expect(bodyIds.has((p.returns as { step: string }).step)).toBe(false);
+  });
+
+  test("a program ending in a loop returns the loop, not its last iteration", () => {
+    // The loop step is pushed and its body steps pushed immediately after, so
+    // a reverse scan of the flat array found the body step. The program then
+    // returned one iteration's single result where the caller expected the
+    // collected array — and when `over` resolved to an empty array the body
+    // never ran at all, its id was never written to the scope, and evaluating
+    // the return binding threw a plain "unknown step" Error rather than a
+    // DeoptError, so isReplaySafe could not tell the caller it was safe to
+    // retry.
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
+      const ids = [`a${i}`, `b${i}`, `c${i}`];
+      return {
+        id: `tail${i}`,
+        llmCalls: 5,
+        duration_ms: 1000,
+        cost_cents: 5,
+        input: { q: "open" },
+        complete: true,
+        events: [
+          { name: "listItems", args: { q: "open" }, result: { items: ids.map((id) => ({ id })) }, ok: true },
+          ...ids.map((id) => ({ name: "getItem", args: { id }, result: { id, body: `b-${id}` }, ok: true })),
+        ],
+        output: { done: true },
+      };
+    });
+    const { programs } = compileTraces(traces);
+    const p = programs[0]!;
+    const loop = p.steps.find((s) => s.kind === "loop");
+    expect(loop).toBeTruthy();
+    expect(p.returns).toEqual({ kind: "from", step: loop!.id, path: "" });
+  });
+
+  test("mines a fan-out loop across witnesses with DIFFERENT widths", () => {
+    // Clustering deliberately merges near-identical sequences whose only
+    // difference is the fan-out width (nearSeq). The loop's `over` binding
+    // must therefore come from each witness's own array length, not the
+    // cluster-majority width — otherwise every merged cluster refuses.
+    const traces: StretchTrace[] = [4, 4, 4, 5].map((n, i) => {
+      const ids = Array.from({ length: n }, (_, j) => `s${i}-${j}`);
+      return {
+        id: `width${i}`,
+        llmCalls: n + 4,
+        duration_ms: 1000,
+        cost_cents: n + 4,
+        input: { orderId: `O-${i}` },
+        complete: true,
+        events: [
+          { name: "findOrder", args: { orderId: `O-${i}` }, result: { orderId: `O-${i}`, items: ids, paid: true }, ok: true },
+          ...ids.map((id) => ({ name: "checkStock", args: { itemId: id }, result: { itemId: id, inStock: true }, ok: true })),
+          { name: "issueRefund", args: { orderId: `O-${i}` }, result: { refunded: true }, ok: true },
+          { name: "sendReceipt", args: { orderId: `O-${i}` }, result: { sent: true }, ok: true },
+        ],
+        output: { sent: true },
+      };
+    });
+    const { programs } = compileTraces(traces);
+    // The majority-width group must yield a fan-out loop bound to the order's
+    // items array; minority widths may refuse loudly but never silently.
+    const p = programs.find((q) => q.steps.some((s) => s.kind === "loop"));
+    expect(p).toBeTruthy();
+    const loop = p!.steps.find((s) => s.kind === "loop");
+    expect(loop && loop.kind === "loop").toBe(true);
+    if (loop && loop.kind === "loop") {
+      // over must point at findOrder's items array, not a fixed width.
+      const over = loop.over;
+      const isFrom = over.kind === "from";
+      expect(isFrom).toBe(true);
+      if (isFrom) {
+        expect(over.path).toBe("items");
+        expect(p!.steps.some((s) => s.id === over.step && s.kind === "tool" && s.tool === "findOrder")).toBe(true);
+      }
+    }
+  });
+
+  test("mines a period-2 loop over a prior array", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
+      const ids = [`a${i}`, `b${i}`, `c${i}`];
+      return {
+        id: `p${i}`,
+        llmCalls: 8,
+        duration_ms: 1000,
+        cost_cents: 8,
+        input: { q: "open" },
+        complete: true,
+        events: [
+          { name: "listItems", args: { q: "open" }, result: { ids }, ok: true },
+          ...ids.flatMap((id) => [
+            { name: "getItem", args: { id }, result: { id, ok: true }, ok: true },
+            { name: "tagItem", args: { id }, result: { tagged: true }, ok: true },
+          ]),
+          { name: "notify", args: { q: "open" }, result: { notified: true }, ok: true },
+        ],
+      };
+    });
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals).toEqual([]);
+    const p = programs[0]!;
+    const loop = p.steps.find((s) => s.kind === "loop");
+    expect(loop && loop.kind === "loop" && loop.body.length).toBe(2);
+    // Constant `{q:"open"}` still returns different ids per witness — that is
+    // the world, not a model hop. Islanding listItems here is the bug.
+    expectToolNotIsland(p, "listItems");
+  });
+
+  test("mines a nested loop when a period body itself repeats", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
+      const orgs = [`o${i}a`, `o${i}b`];
+      return {
+        id: `n${i}`,
+        llmCalls: 10,
+        duration_ms: 1000,
+        cost_cents: 10,
+        input: { q: "open" },
+        complete: true,
+        events: [
+          { name: "listOrgs", args: { q: "open" }, result: { orgs }, ok: true },
+          ...orgs.flatMap((org) => {
+            const ids = [`${org}-1`, `${org}-2`];
+            return [
+              { name: "listItems", args: { id: org }, result: { ids }, ok: true },
+              ...ids.map((id) => ({ name: "getItem", args: { id }, result: { id, org }, ok: true })),
+            ];
+          }),
+          { name: "notify", args: { q: "open" }, result: { notified: true }, ok: true },
+        ],
+      };
+    });
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals).toEqual([]);
+    const p = programs[0]!;
+    const outer = p.steps.find(
+      (s) => s.kind === "loop" && s.body.some((id) => p.steps.some((x) => x.id === id && x.kind === "loop")),
+    );
+    expect(outer && outer.kind === "loop").toBe(true);
+    const inner = p.steps.find((s) => s.kind === "loop" && s.id !== (outer && "id" in outer ? outer.id : ""));
+    expect(inner && inner.kind === "loop" && inner.body.length).toBe(1);
+    expect(outer && outer.kind === "loop" && inner && outer.body.includes(inner.id)).toBe(true);
+    expectToolNotIsland(p, "listOrgs");
+    expectToolNotIsland(p, "listItems");
+  });
+
+  test("keeps two sibling stretches that share a first tool", () => {
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 3; i++) {
+      traces.push({
+        id: `a${i}`,
+        llmCalls: 3,
+        duration_ms: 30,
+        cost_cents: 3,
+        input: { id: `A-${i}` },
+        events: [
+          { name: "fetchRecord", args: { id: `A-${i}` }, result: { ok: true }, ok: true },
+          { name: "tagItem", args: { id: `A-${i}` }, result: { ok: true }, ok: true },
+          { name: "notify", args: { id: `A-${i}` }, result: { ok: true }, ok: true },
+        ],
+      });
+      traces.push({
+        id: `b${i}`,
+        llmCalls: 3,
+        duration_ms: 30,
+        cost_cents: 3,
+        input: { id: `B-${i}` },
+        events: [
+          { name: "fetchRecord", args: { id: `B-${i}` }, result: { ok: true }, ok: true },
+          { name: "closeItem", args: { id: `B-${i}` }, result: { ok: true }, ok: true },
+          { name: "notify", args: { id: `B-${i}` }, result: { ok: true }, ok: true },
+        ],
+      });
+    }
+    const { programs } = compileTraces(traces);
+    expect(programs.length).toBe(2);
+    // `sequence` is optional on StretchProgram for hand-written programs, but
+    // compileTraces() always mines one.
+    const seqs = programs.map((p) => p.sequence!.join(">")).sort();
+    expect(seqs).toEqual(["fetchRecord>closeItem>notify", "fetchRecord>tagItem>notify"]);
+  });
+
+  test("refuses a slot whose agreed value hides a redacted credential", () => {
+    // redact() rewrites credentials wherever they sit, so a header object can
+    // agree perfectly across every witness while carrying only the sentinel.
+    // Binding it as a literal would compile a tool that ships "[REDACTED]" to a
+    // live API — the call fails, or worse, quietly succeeds unauthenticated.
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 5; i++) {
+      traces.push({
+        id: `s${i}`,
+        llmCalls: 3,
+        duration_ms: 30,
+        cost_cents: 3,
+        input: { id: `R-${i}` },
+        events: [
+          { name: "fetchRecord", args: { id: `R-${i}` }, result: { id: `R-${i}`, ref: i }, ok: true },
+          {
+            name: "postUpdate",
+            args: { id: `R-${i}`, headers: { authorization: "[REDACTED]" } },
+            result: { ok: true },
+            ok: true,
+          },
+          { name: "notify", args: { id: `R-${i}` }, result: { ok: true }, ok: true },
+        ],
+      });
+    }
+    const { programs, refusals } = compileTraces(traces);
+    const literals = JSON.stringify(programs);
+    expect(literals).not.toContain("[REDACTED]");
+    expect(refusals.some((r) => /redacted secret slot/.test(r.reason))).toBe(true);
+  });
+
+  test("agreement ignores whether witnesses shared an object reference", () => {
+    // Every witness passes the same `opts` value to the mutating step, but in
+    // half of them it is the *same object* also referenced under `echo`. Two
+    // deeply-equal arguments must stay indistinguishable end to end: redact()
+    // has to expand the second reference rather than collapse it, and
+    // canonicalize() has to hash it the same either way. If either stage is
+    // reference-sensitive, these identical witnesses look like two distinct
+    // values, the slot drops below exact agreement, and the whole stretch is
+    // refused as an under-determined mutating argument.
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 6; i++) {
+      const opts = { mode: "fast", retries: 2 };
+      const shared = i % 2 === 0;
+      traces.push({
+        id: `g${i}`,
+        llmCalls: 3,
+        duration_ms: 30,
+        cost_cents: 3,
+        input: { id: `G-${i}` },
+        events: [
+          { name: "fetchRecord", args: { id: `G-${i}` }, result: { id: `G-${i}` }, ok: true },
+          {
+            name: "postUpdate",
+            args: shared
+              ? { id: `G-${i}`, opts, echo: opts }
+              : { id: `G-${i}`, opts: { mode: "fast", retries: 2 }, echo: { mode: "fast", retries: 2 } },
+            result: { ok: true },
+            ok: true,
+          },
+          { name: "notify", args: { id: `G-${i}` }, result: { ok: true }, ok: true },
+        ],
+      });
+    }
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals.map((r) => r.reason)).not.toContain("postUpdate arguments are under-determined");
+    expect(programs.length).toBe(1);
+    const post = programs[0]!.steps.find((s) => s.kind === "tool" && s.tool === "postUpdate");
+    expect(post).toBeDefined();
+    const opts = (post as { args: Record<string, { kind: string; value?: unknown }> }).args.opts;
+    expect(opts).toBeDefined();
+    expect(opts!.kind).toBe("literal");
+    expect(opts!.value).toEqual({ mode: "fast", retries: 2 });
+  });
+
+  test("pins a verify step the agent skipped in some witnesses", () => {
+    // The agent ran verifyWrite in 7 of 10 traces. Pinning exactly this case is
+    // the point of the compiler: the naive agent is unreliable about its own
+    // check, and the compiled tool should not inherit that. The pin used to be
+    // `Math.min(minFrac, 0.8)` against a default minFrac of 0.8 — never lower
+    // than the ordinary bar — so the check was mined out and the program wrote
+    // without verifying.
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 10; i++) {
+      const events = [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        ...(i >= 3
+          ? [{ name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true }]
+          : []),
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ];
+      traces.push({
+        id: `v${i}`,
+        llmCalls: 4,
+        duration_ms: 40,
+        cost_cents: 4,
+        input: { id: `T-${i}` },
+        events,
+      });
+    }
+    expect(majoritySequence(traces)).toContain("verifyWrite");
+  });
+
+  test("does not pin a check that is mostly absent", () => {
+    // The pin lowers the bar; it does not remove it. A check seen in 3 of 10
+    // traces is not part of the stretch and must not be invented.
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 10; i++) {
+      const events = [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        ...(i < 3 ? [{ name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true }] : []),
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ];
+      traces.push({
+        id: `w${i}`,
+        llmCalls: 4,
+        duration_ms: 40,
+        cost_cents: 4,
+        input: { id: `T-${i}` },
+        events,
+      });
+    }
+    expect(majoritySequence(traces)).not.toContain("verifyWrite");
+  });
+
+  test("oneInsert does not merge away a check tool", () => {
+    expect(oneInsert(["lookup", "write", "verifyWrite", "notify"], ["lookup", "write", "notify"])).toBe(false);
+    expect(oneInsert(["lookup", "write", "notify"], ["lookup", "tagItem", "write", "notify"])).toBe(true);
+    expect(oneSubstitute(["lookup", "verifyWrite", "notify"], ["lookup", "draftReply", "notify"])).toBe(false);
+  });
+});
+
+describe("an inferred schema describes what was witnessed", () => {
+  test("an array field is typed array, not string", () => {
+    // "array" and "null" both fell through to "string", so an island whose
+    // witnessed result was {items: [...]} instructed the model to return a
+    // string where the program's consumers expect an array.
+    const schema = inferSchema([
+      { items: [{ id: "a" }], n: 3, ok: true, note: "x" },
+      { items: [{ id: "b" }], n: 4, ok: false, note: "y" },
+    ]) as { properties: Record<string, { type: string }> };
+    expect(schema.properties.items!.type).toBe("array");
+    expect(schema.properties.n!.type).toBe("number");
+    expect(schema.properties.ok!.type).toBe("boolean");
+    expect(schema.properties.note!.type).toBe("string");
+  });
+
+  test("one late null does not downgrade a numeric field", () => {
+    // keys.set overwrote, so whichever witness came last decided the type,
+    // and null fell through to "string".
+    const schema = inferSchema([{ n: 1 }, { n: 2 }, { n: 3 }, { n: null }]) as {
+      properties: Record<string, { type: string }>;
+    };
+    expect(schema.properties.n!.type).toBe("number");
+  });
+});
+
+describe("compile from waste (45–49)", () => {
+  test("refuses a stretch whose recorded outputs are empty", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `e${i}`,
+      llmCalls: 3,
+      duration_ms: 40,
+      cost_cents: 1,
+      input: { id: `T-${i}` },
+      output: {},
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: {}, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: {}, ok: true },
+      ],
+    }));
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs).toEqual([]);
+    expect(refusals.some((r) => /empty.*output|identical output/i.test(r.reason))).toBe(true);
+  });
+
+  test("mines a warned prefix, not only happy traces", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `w${i}`,
+      llmCalls: 4,
+      duration_ms: 80,
+      cost_cents: 2,
+      input: { id: `T-${i}` },
+      output: { ok: true },
+      firstWarningAt: 3,
+      warnings: [{ kind: "repeat_ngram" as const, at: 3, detail: "loop", duration_ms: 80, llmCalls: 4 }],
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: { written: true }, ok: true },
+        { name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true },
+        { name: "search", args: { q: "x" }, result: { hits: [1] }, ok: true },
+        { name: "search", args: { q: "x" }, result: { hits: [1] }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    expect(programs.some((p) => p.origin?.mode === "loop")).toBe(true);
+    expect(programs.some((p) => p.budget && p.budget.ms > 0)).toBe(true);
+  });
+
+  test("two model hops compile into one program", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `i${i}`,
+      llmCalls: 4,
+      duration_ms: 50,
+      cost_cents: 2,
+      input: { id: `T-${i}` },
+      output: { text: "ok" },
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "draftReply", args: { id: `T-${i}` }, result: { text: "a" }, ok: true },
+        { name: "summarize", args: { id: `T-${i}` }, result: { text: "b" }, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    const p = programs[0];
+    expect(p).toBeTruthy();
+    expect(p!.steps.filter((s) => s.kind === "island").length).toBeGreaterThanOrEqual(2);
+    const firstIsland = p!.steps.find((s) => s.kind === "island");
+    expect(firstIsland?.kind === "island" && firstIsland.when_to_use).toBe(
+      "When the next step is a draftReply judgment after lookupTicket — one call, do not re-run the loop.",
+    );
+    expect(p!.when_to_use).toBe(
+      "When the next step is a draftReply judgment after lookupTicket — one call, do not re-run the loop.",
+    );
+  });
+});
+
+describe("island when_to_use (Wave 11.3)", () => {
+  test("islands emit a scannable one-liner, not the stretch dump", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `w${i}`,
+      llmCalls: 3,
+      duration_ms: 40,
+      cost_cents: 1,
+      input: { id: `T-${i}` },
+      output: { text: "ok" },
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "fetchDetails", args: { id: `T-${i}` }, result: { body: "x" }, ok: true },
+        { name: "draftReply", args: { id: `T-${i}` }, result: { text: "a" }, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    const p = programs[0];
+    expect(p).toBeTruthy();
+    const island = p!.steps.find((s) => s.kind === "island");
+    const line =
+      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not re-run the loop.";
+    expect(island?.kind === "island" && island.when_to_use).toBe(line);
+    expect(p!.when_to_use).toBe(line);
+    expect(whenToUseOf(p!)).toBe(line);
+    expect(p!.description).toContain("Run the repeating stretch as one tool:");
+    expect(p!.when_to_use).not.toContain("Run the repeating stretch as one tool");
+    expect(islandWhenToUse("draftReply", [])).toBe(
+      "When the next step is a draftReply judgment — one call, do not re-run the loop.",
+    );
+  });
+});
+
+describe("failure-cluster name decoration (H2)", () => {
+  test("shell events in warned prefixes keep their decorated names and compile", () => {
+    // Regression: namesBefore used raw e.name, so a warned prefix of shell
+    // calls mined as bare "Bash" — which can never align with the decorated
+    // "Bash:kubectl.*" names the rest of the pipeline matches on. The cluster
+    // was silently dropped while its sequence advertised phantom steps.
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `sh${i}`,
+      llmCalls: 4,
+      duration_ms: 80,
+      cost_cents: 2,
+      input: { id: `T-${i}` },
+      output: { ok: true },
+      firstWarningAt: 4,
+      warnings: [{ kind: "repeat_ngram" as const, at: 4, detail: "loop", duration_ms: 80, llmCalls: 4 }],
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods" }, result: { out: "a" }, ok: true },
+        { name: "Bash", args: { command: "kubectl describe pod web" }, result: { out: "b" }, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: { sent: true }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    const withShell = programs.filter((p) =>
+      p.steps?.some((s) => s.kind === "tool" && (s as { tool?: string }).tool === "Bash"),
+    );
+    expect(withShell.length).toBeGreaterThan(0);
+    // The emitted sequence carries DECORATED names (alignable), while the
+    // steps call the registry's real tool.
+    expect(withShell.some((p) => (p.sequence ?? []).some((n) => n.startsWith("Bash:kubectl.")))).toBe(true);
+  });
+});
+
+describe("map-reduce after foreach", () => {
+  test("refuses an unbound merge after a bound foreach — fail closed", () => {
+    const traces: StretchTrace[] = Array.from({ length: 4 }, (_, i) => {
+      const rows = [
+        { id: `r${i}-0` },
+        { id: `r${i}-1` },
+        { id: `r${i}-2` },
+      ];
+      return {
+        id: `u${i}`,
+        llmCalls: 5,
+        duration_ms: 40,
+        cost_cents: 5,
+        complete: true,
+        input: { batch: `B${i}` },
+        output: { merged: true },
+        events: [
+          { name: "listRows", args: { batch: `B${i}` }, result: { rows }, ok: true },
+          ...rows.map((r) => ({ name: "mapRow", args: { id: r.id }, result: { id: r.id, out: `m-${r.id}` }, ok: true })),
+          { name: "writeRows", args: { dest: `OTHER-${i}` }, result: { merged: true }, ok: true },
+        ],
+      };
+    });
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs.filter((p) => p.steps.some((s) => s.kind === "tool" && s.tool === "writeRows"))).toEqual([]);
+    expect(refusals.some((r) => r.code === "underdetermined_write")).toBe(true);
+  });
+
+  test("n>32: a write bind that holds on the first 32 witnesses but not the tail still refuses", () => {
+    const traces: StretchTrace[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `tail-${i}`,
+      llmCalls: 3,
+      duration_ms: 20,
+      cost_cents: 3,
+      complete: true,
+      input: { id: `I-${i}` },
+      output: { ok: true },
+      events: [
+        { name: "lookup", args: { id: `I-${i}` }, result: { id: `I-${i}` }, ok: true },
+        { name: "fetchDetails", args: { id: `I-${i}` }, result: { id: `I-${i}` }, ok: true },
+        {
+          name: "writeRecord",
+          args: { dest: i < 32 ? `I-${i}` : `OTHER-${i}` },
+          result: { ok: true },
+          ok: true,
+        },
+      ],
+    }));
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs.filter((p) => p.steps.some((s) => s.kind === "tool" && s.tool === "writeRecord"))).toEqual([]);
+    expect(refusals.some((r) => r.code === "underdetermined_write")).toBe(true);
+  });
+});

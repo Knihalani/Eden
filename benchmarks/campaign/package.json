@@ -1,0 +1,13 @@
+{
+  "name": "@eden/campaign",
+  "private": true,
+  "dependencies": {
+    "@eden/compile": "workspace:*",
+    "@eden/core": "workspace:*",
+    "@eden/ir": "workspace:*",
+    "@eden/measure": "workspace:*",
+    "@eden/runtime": "workspace:*",
+    "@eden/shadow": "workspace:*",
+    "@eden/wrap": "workspace:*"
+  }
+}

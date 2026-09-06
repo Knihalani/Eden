@@ -1,0 +1,73 @@
+{
+  "name": "eden-know-ingest",
+  "description": "Always-on Know crawler. Compact publishes graph.kpk to Impossible Cloud.",
+  "billing": {
+    "deploymentPlan": "nf-compute-50",
+    "buildPlan": "nf-compute-400-16"
+  },
+  "deployment": {
+    "instances": 1,
+    "docker": { "configType": "default" },
+    "storage": { "ephemeralStorage": { "storageSize": 2048 } }
+  },
+  "ports": [
+    {
+      "name": "health",
+      "internalPort": 8080,
+      "protocol": "HTTP",
+      "public": true
+    }
+  ],
+  "buildSource": "git",
+  "vcsData": {
+    "projectUrl": "https://github.com/KaiavN/Eden",
+    "projectType": "github",
+    "accountLogin": "KaiavN",
+    "projectBranch": "feat/compiled-tools-horizon"
+  },
+  "buildSettings": {
+    "dockerfile": {
+      "buildEngine": "buildkit",
+      "dockerFilePath": "/packages/know/Dockerfile",
+      "dockerWorkDir": "/packages/know"
+    }
+  },
+  "buildConfiguration": {
+    "pathIgnoreRules": ["packages/know/**"],
+    "isAllowList": true
+  },
+  "runtimeEnvironment": {
+    "EDEN_KNOW_DIR": "/data/know",
+    "PORT": "8080",
+    "EDEN_KNOW_INTERVAL": "1",
+    "EDEN_KNOW_CC": "40",
+    "EDEN_KNOW_LIVE": "96",
+    "EDEN_KNOW_NEWS": "0",
+    "EDEN_KNOW_CC_SLICES": "2",
+    "EDEN_KNOW_LIVE_CONC": "20",
+    "EDEN_KNOW_CDX": "8",
+    "EDEN_KNOW_WIKI": "0",
+    "EDEN_KNOW_WIKI_GROW": "0",
+    "EDEN_KNOW_RECRAWL": "48",
+    "EDEN_KNOW_QUALITY": "16",
+    "EDEN_KNOW_WET_SCAN": "2000",
+    "EDEN_KNOW_WET_MS": "40000",
+    "EDEN_KNOW_WET_BYTES": "8388608",
+    "EDEN_KNOW_COMPACT_MS": "300000",
+    "EDEN_KNOW_WET_EVERY": "1",
+    "EDEN_KNOW_SHARD": "0",
+    "EDEN_KNOW_SHARDS": "1",
+    "AWS_EC2_METADATA_DISABLED": "true"
+  },
+  "healthChecks": [
+    {
+      "protocol": "CMD",
+      "type": "livenessProbe",
+      "cmd": "/bin/true",
+      "initialDelaySeconds": 20,
+      "periodSeconds": 30,
+      "timeoutSeconds": 5,
+      "failureThreshold": 5
+    }
+  ]
+}

@@ -1,0 +1,352 @@
+{
+  "protocol": {
+    "seed": "none",
+    "auto_approve": true,
+    "hooks": true,
+    "ingest": "Eden drain from hooks, plus jsonl Bash backup",
+    "persist": "Eden DB + MCP across 3 sequential product sessions",
+    "tasks": "decisions/prs.json + memo/rank.md, same gold predicates as coding fair"
+  },
+  "gold": {
+    "163": {
+      "n": 163,
+      "title": "feat(help): apply leftover change as code PR or one-line replace",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 4
+    },
+    "164": {
+      "n": 164,
+      "title": "feat(help): apply code PR when leftover can find a file",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 3
+    },
+    "165": {
+      "n": 165,
+      "title": "feat(help): add-agent page picks watch and notify Slack channels",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 17
+    },
+    "166": {
+      "n": 166,
+      "title": "feat(help): find the file from leftover text, post the change, approve in Slack",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 8
+    },
+    "167": {
+      "n": 167,
+      "title": "feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 19
+    },
+    "168": {
+      "n": 168,
+      "title": "fix(help): next-week leftover copy uses apply_kind",
+      "review_count": 0,
+      "status_state": "failure",
+      "files": 5
+    },
+    "169": {
+      "n": 169,
+      "title": "fix(slack): Event Subscriptions URL must pass default-deny",
+      "review_count": 0,
+      "status_state": "failure",
+      "files": 3
+    },
+    "170": {
+      "n": 170,
+      "title": "fix(help): quote reserved window column so API can boot",
+      "review_count": 0,
+      "status_state": "failure",
+      "files": 10
+    }
+  },
+  "scored": [
+    {
+      "id": "t1-build",
+      "without": {
+        "arm": "without",
+        "task": "t1-build",
+        "wall_ms": 86578,
+        "duration_ms": 85700,
+        "tool_calls": 8,
+        "tool_names": {
+          "Bash": 6,
+          "Write": 2
+        },
+        "cost_usd": 0.30633750000000004,
+        "output_tokens": 3897,
+        "cache_creation_input_tokens": 5981,
+        "cache_read_input_tokens": 296533,
+        "result_text": "Done. Wrote `decisions/prs.json` and `memo.md` in `/tmp/eden-horizon-product/without`.\n\n**What the data shows:**\n\n| PR | Reviews | Status |\n|----|---------|--------|\n| 170 | 0 | failure |\n| 169 | 0 | failure |\n| 168 | 0 | failure |\n| 167 | 1 | failure |\n| 166 | 1 | failure |\n\nThree findings worth your attention:\n\n1. **The `failure` status is a false alarm on all five.** Every PR has the same two contexts: `CodeRabbit=success`, `Vercel=failure` — and the Vercel description is identical each time: *\"Git author Knihalani must have access to the project on Vercel to create deployments.\"* That's an account-linking problem, not a broken build. But it means combined status is red on every commit in",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 6,
+        "ingested": 0
+      },
+      "with": {
+        "arm": "with",
+        "task": "t1-build",
+        "wall_ms": 85061,
+        "duration_ms": 84164,
+        "tool_calls": 17,
+        "tool_names": {
+          "Bash": 15,
+          "Write": 2
+        },
+        "cost_usd": 0.33611,
+        "output_tokens": 4453,
+        "cache_creation_input_tokens": 5748,
+        "cache_read_input_tokens": 332918,
+        "result_text": "Both files are written to `/tmp/eden-horizon-product/with`.\n\n**`decisions/prs.json`** — flat array of five objects with `number`, `title`, `reviews` (integer), `status` (string).\n\n**Findings:**\n\n| PR | Reviews | Status |\n|----|---------|--------|\n| 170 | 0 | failure |\n| 169 | 0 | failure |\n| 168 | 0 | failure |\n| 167 | 1 | failure |\n| 166 | 1 | failure |\n\nThree things worth your attention:\n\n- **All five are red and all five merged.** Each head SHA has exactly two contexts: `Vercel` failure, `CodeRabbit` success. Identical across five independent branches — that reads as a broken Vercel integration, not five real defects.\n- **Zero human approvals.** The two non-zero review counts are both `gr",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 15,
+        "ingested": 14
+      },
+      "quality": {
+        "without": {
+          "rows": 5,
+          "expected": 5,
+          "titleHits": 5,
+          "reviewHits": 5,
+          "statusHits": 5,
+          "quality": 15,
+          "qualityMax": 15,
+          "memo_bytes": 3908,
+          "rank_bytes": 0,
+          "rank_mentions_failure": false
+        },
+        "with": {
+          "rows": 5,
+          "expected": 5,
+          "titleHits": 5,
+          "reviewHits": 5,
+          "statusHits": 5,
+          "quality": 15,
+          "qualityMax": 15,
+          "memo_bytes": 3412,
+          "rank_bytes": 0,
+          "rank_mentions_failure": false
+        }
+      },
+      "tools_after": [
+        {
+          "id": "2eebb123-edac-4c9a-aa17-8fb398654c31",
+          "name": "github_pr_bundle",
+          "state": "on",
+          "when_to_use": "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]",
+          "seen": [
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api"
+          ],
+          "has_playback": true
+        }
+      ]
+    },
+    {
+      "id": "t2-extend",
+      "without": {
+        "arm": "without",
+        "task": "t2-extend",
+        "wall_ms": 147840,
+        "duration_ms": 146945,
+        "tool_calls": 12,
+        "tool_names": {
+          "Bash": 8,
+          "Read": 2,
+          "Write": 2
+        },
+        "cost_usd": 0.5557595,
+        "output_tokens": 8128,
+        "cache_creation_input_tokens": 13476,
+        "cache_read_input_tokens": 433817,
+        "result_text": "Done. Both files written in `/tmp/eden-horizon-product/without` — nothing else touched.\n\n**Eden MCP:** not available. The connected MCP servers are Google Drive, Google Calendar, Gmail, and `plugin:parsec:scout` — none offers `github_pr_bundle` or an equivalent, so all eight PRs went through `gh api` (three calls per PR for title/reviews/status, plus `/files`).\n\n**`decisions/prs.json`** — now 8 entries, each `{number, title, reviews, status, files}` with `reviews` and `files` as integers and `status` as the combined state string. The `files` counts (from `/files`, paginated) match `changed_files` on each pull object.\n\nNew data for 163–165:\n\n| PR | Title | Reviews | Status | Files |\n|----|---",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 8,
+        "ingested": 0
+      },
+      "with": {
+        "arm": "with",
+        "task": "t2-extend",
+        "wall_ms": 205650,
+        "duration_ms": 204608,
+        "tool_calls": 18,
+        "tool_names": {
+          "Bash": 12,
+          "Read": 3,
+          "mcp__eden__github_pr_bundle": 1,
+          "Write": 2
+        },
+        "cost_usd": 0.8159724999999999,
+        "output_tokens": 11571,
+        "cache_creation_input_tokens": 21159,
+        "cache_read_input_tokens": 628343,
+        "result_text": "Done. Two files written in `/tmp/eden-horizon-product/with`, nothing else touched.\n\n**On the MCP tool:** `github_pr_bundle` exists and I used it, but it under-delivers against its schema. It advertises `[{number,title,reviews,status,files}]` and actually returns pipe-delimited text with three fields — `number | title | reviews`, no `status`, no `files`. So it replaced two of the three `gh api` calls per PR; I still needed `gh api` for combined status and for the files list. I cross-checked its `reviews` values against the reviews API on all eight and they match exactly (0,0,0,1,1,1,1,1).\n\n**`decisions/prs.json`** — all eight PRs, five fields, `reviews`/`files` as integers, `status` as the co",
+        "is_error": false,
+        "mcp_calls": 1,
+        "gh_bash_calls": 12,
+        "ingested": 2
+      },
+      "quality": {
+        "without": {
+          "rows": 8,
+          "expected": 8,
+          "titleHits": 8,
+          "reviewHits": 8,
+          "statusHits": 8,
+          "quality": 24,
+          "qualityMax": 24,
+          "memo_bytes": 3908,
+          "rank_bytes": 6488,
+          "rank_mentions_failure": true
+        },
+        "with": {
+          "rows": 8,
+          "expected": 8,
+          "titleHits": 8,
+          "reviewHits": 8,
+          "statusHits": 8,
+          "quality": 24,
+          "qualityMax": 24,
+          "memo_bytes": 3412,
+          "rank_bytes": 7535,
+          "rank_mentions_failure": true
+        }
+      },
+      "tools_after": [
+        {
+          "id": "2eebb123-edac-4c9a-aa17-8fb398654c31",
+          "name": "github_pr_bundle",
+          "state": "on",
+          "when_to_use": "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]",
+          "seen": [
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api"
+          ],
+          "has_playback": true
+        }
+      ]
+    },
+    {
+      "id": "t3-report",
+      "without": {
+        "arm": "without",
+        "task": "t3-report",
+        "wall_ms": 172422,
+        "duration_ms": 171460,
+        "tool_calls": 14,
+        "tool_names": {
+          "Bash": 13,
+          "Write": 1
+        },
+        "cost_usd": 0.9493564999999999,
+        "output_tokens": 13340,
+        "cache_creation_input_tokens": 35295,
+        "cache_read_input_tokens": 524195,
+        "result_text": "Done. Re-fetched all eight PRs and rewrote `rank.md`.\n\n**On Eden MCP tools:** none are exposed in this session — no Eden MCP server is connected, so there was nothing to prefer. Everything came from `gh api`.\n\n**The substantive finding.** The previous `rank.md` concluded the red CI was \"an account-linking problem, not a build or test failure.\" That was accurate about `commits/{sha}/status`, which carries only two legacy contexts — but it was the wrong endpoint. This pass also pulled `commits/{sha}/check-runs`, which the earlier note had flagged as unread, and the conclusion inverts: **every one of the eight merged with genuinely failing GitHub Actions checks — 3 to 9 each**, including `pytes",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 13,
+        "ingested": 0
+      },
+      "with": {
+        "arm": "with",
+        "task": "t3-report",
+        "wall_ms": 180478,
+        "duration_ms": 179407,
+        "tool_calls": 19,
+        "tool_names": {
+          "Bash": 15,
+          "mcp__eden__github_pr_bundle": 1,
+          "Read": 2,
+          "Write": 1
+        },
+        "cost_usd": 0.9624440000000001,
+        "output_tokens": 10248,
+        "cache_creation_input_tokens": 26559,
+        "cache_read_input_tokens": 879540,
+        "result_text": "Done. `rank.md` is updated; no other repo was touched.\n\n**The headline finding: the ranking key doesn't discriminate.** All eight PRs report combined status `failure`, so \"failure first\" puts every PR in one bucket. I ranked failure-first as asked and applied an explicit, stated tiebreak inside that bucket (files descending, then PR number descending) rather than silently inventing an order:\n\n| Rank | PR | Status | Reviews | Files |\n|------|----|--------|---------|-------|\n| 1 | 167 | failure | 1 | 19 |\n| 2 | 165 | failure | 1 | 17 |\n| 3 | 170 | failure | 0 | 10 |\n| 4 | 166 | failure | 1 | 8 |\n| 5 | 168 | failure | 0 | 5 |\n| 6 | 163 | failure | 1 | 4 |\n| 7 | 169 | failure | 0 | 3 |\n| 8 | 164",
+        "is_error": false,
+        "mcp_calls": 1,
+        "gh_bash_calls": 15,
+        "ingested": 12
+      },
+      "quality": {
+        "without": {
+          "rows": 8,
+          "expected": 8,
+          "titleHits": 8,
+          "reviewHits": 8,
+          "statusHits": 8,
+          "quality": 24,
+          "qualityMax": 24,
+          "memo_bytes": 3908,
+          "rank_bytes": 10978,
+          "rank_mentions_failure": true
+        },
+        "with": {
+          "rows": 8,
+          "expected": 8,
+          "titleHits": 8,
+          "reviewHits": 8,
+          "statusHits": 8,
+          "quality": 24,
+          "qualityMax": 24,
+          "memo_bytes": 3412,
+          "rank_bytes": 4983,
+          "rank_mentions_failure": true
+        }
+      },
+      "tools_after": [
+        {
+          "id": "2eebb123-edac-4c9a-aa17-8fb398654c31",
+          "name": "github_pr_bundle",
+          "state": "on",
+          "when_to_use": "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]",
+          "seen": [
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api",
+            "gh.api"
+          ],
+          "has_playback": true
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "without": {
+      "wall_ms": 406840,
+      "cost_usd": 1.8114534999999998,
+      "tool_calls": 34,
+      "mcp_calls": 0,
+      "output_tokens": 25365,
+      "quality": 63,
+      "qualityMax": 63
+    },
+    "with": {
+      "wall_ms": 471189,
+      "cost_usd": 2.1145265,
+      "tool_calls": 54,
+      "mcp_calls": 2,
+      "output_tokens": 26272,
+      "quality": 63,
+      "qualityMax": 63
+    }
+  }
+}

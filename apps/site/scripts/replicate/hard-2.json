@@ -1,0 +1,380 @@
+{
+  "protocol": {
+    "seed": "none",
+    "auto_approve": true,
+    "persist": "Eden DB + live-tools across 3 sequential sessions",
+    "tasks": "harder: 8 PRs then 12 PRs with files, then REPORT.md over 12 PRs"
+  },
+  "gold": {
+    "159": {
+      "n": 159,
+      "title": "fix(portal): close UIUX P4 R100–R129 mobile, a11y, and marketing fold",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 25
+    },
+    "160": {
+      "n": 160,
+      "title": "feat(help): verify canary on leftover-work rate vs control",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 6
+    },
+    "161": {
+      "n": 161,
+      "title": "feat(help): draft Improve from ExtraWorkEvent leftovers",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 5
+    },
+    "162": {
+      "n": 162,
+      "title": "feat(help): leftover draft says code change or instruction replace",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 2
+    },
+    "163": {
+      "n": 163,
+      "title": "feat(help): apply leftover change as code PR or one-line replace",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 4
+    },
+    "164": {
+      "n": 164,
+      "title": "feat(help): apply code PR when leftover can find a file",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 3
+    },
+    "165": {
+      "n": 165,
+      "title": "feat(help): add-agent page picks watch and notify Slack channels",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 17
+    },
+    "166": {
+      "n": 166,
+      "title": "feat(help): find the file from leftover text, post the change, approve in Slack",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 8
+    },
+    "167": {
+      "n": 167,
+      "title": "feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse",
+      "review_count": 1,
+      "status_state": "failure",
+      "files": 19
+    },
+    "168": {
+      "n": 168,
+      "title": "fix(help): next-week leftover copy uses apply_kind",
+      "review_count": 0,
+      "status_state": "failure",
+      "files": 5
+    },
+    "169": {
+      "n": 169,
+      "title": "fix(slack): Event Subscriptions URL must pass default-deny",
+      "review_count": 0,
+      "status_state": "failure",
+      "files": 3
+    },
+    "170": {
+      "n": 170,
+      "title": "fix(help): quote reserved window column so API can boot",
+      "review_count": 0,
+      "status_state": "failure",
+      "files": 10
+    }
+  },
+  "scored": [
+    {
+      "id": "t1-build",
+      "without": {
+        "arm": "without",
+        "task": "t1-build",
+        "wall_ms": 73701,
+        "duration_ms": 72792,
+        "tool_calls": 10,
+        "tool_names": {
+          "Bash": 7,
+          "Write": 3
+        },
+        "cost_usd": 0.32475100000000007,
+        "output_tokens": 3572,
+        "cache_creation_input_tokens": 4941,
+        "cache_read_input_tokens": 370200,
+        "result_text": "Done. `shipstat` is built in `/tmp/eden-horizon-hard/without` with one commit (`cde9f43`).\n\n**What I built**\n- `package.json` — `\"type\": \"module\"`, bun scripts\n- `src/index.ts` — imports the JSON, prints `number | title | reviews | status`\n- `src/index.test.ts` — 3 tests, all passing under `bun test`\n- `data/prs.json` — 8 rows\n\n**Data fetching**: 24 separate `gh api` calls (8 PRs × pull JSON + reviews list + combined commit status). Each PR's status came from `repos/KaiavN/Eden/commits/{head.sha}/status`, using the head SHA from that PR's own JSON. All 24 returned exit 0 — no synthesized or placeholder values.\n\n**Live results**\n\n| PR | reviews | status |\n|---|---|---|\n| 170, 169, 168 | 0 | f",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 7
+      },
+      "with": {
+        "arm": "with",
+        "task": "t1-build",
+        "wall_ms": 84972,
+        "duration_ms": 84079,
+        "tool_calls": 15,
+        "tool_names": {
+          "Bash": 10,
+          "Read": 2,
+          "Write": 3
+        },
+        "cost_usd": 0.5275664999999999,
+        "output_tokens": 5133,
+        "cache_creation_input_tokens": 8431,
+        "cache_read_input_tokens": 627851,
+        "result_text": "Done. `shipstat` is built in `/tmp/eden-horizon-hard/with` with one commit (`3b47d3d`), working tree clean.\n\n**Data fetched** — 24 separate `gh api` REST calls (3 per PR: `pulls/{n}`, `pulls/{n}/reviews`, `commits/{sha}/status`), all exit 0:\n\n```\n170 | fix(help): quote reserved window column so API can boot | 0 | failure\n169 | fix(slack): Event Subscriptions URL must pass default-deny | 0 | failure\n168 | fix(help): next-week leftover copy uses apply_kind | 0 | failure\n167 | feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse | 1 | failure\n166 | feat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure\n165 | feat(help): add-agent page",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 10
+      },
+      "quality": {
+        "without": {
+          "rows": 8,
+          "expected": 8,
+          "titleHits": 8,
+          "reviewHits": 8,
+          "statusHits": 8,
+          "quality": 24,
+          "qualityMax": 24,
+          "report_bytes": 0,
+          "report_mentions_failure": false,
+          "commits": 1,
+          "hasPkg": true,
+          "hasTest": true
+        },
+        "with": {
+          "rows": 8,
+          "expected": 8,
+          "titleHits": 8,
+          "reviewHits": 8,
+          "statusHits": 8,
+          "quality": 24,
+          "qualityMax": 24,
+          "report_bytes": 0,
+          "report_mentions_failure": false,
+          "commits": 1,
+          "hasPkg": true,
+          "hasTest": true
+        }
+      },
+      "tools_after": [
+        {
+          "id": "2fe82373-e450-450a-92c3-49f773fb867a",
+          "name": "github_pr_bundle",
+          "state": "on",
+          "when_to_use": "issues: csv of PR numbers. table: number | title | reviews | status | files",
+          "seen": [
+            "gh.api",
+            "gh.api",
+            "gh.api"
+          ],
+          "has_playback": true
+        }
+      ]
+    },
+    {
+      "id": "t2-extend",
+      "without": {
+        "arm": "without",
+        "task": "t2-extend",
+        "wall_ms": 126860,
+        "duration_ms": 125800,
+        "tool_calls": 19,
+        "tool_names": {
+          "Bash": 9,
+          "ListAgents": 1,
+          "Read": 4,
+          "Write": 1,
+          "Edit": 4
+        },
+        "cost_usd": 0.5708510000000001,
+        "output_tokens": 5541,
+        "cache_creation_input_tokens": 13344,
+        "cache_read_input_tokens": 595838,
+        "result_text": "Done. Committed as `47a6de8` in `/tmp/eden-horizon-hard/without` — no other repo touched.\n\n**Eden MCP:** not available. The connected MCP servers are Google Drive, Google Calendar, Gmail, and `parsec:scout` — none expose `github_pr_bundle` or an equivalent, so I used `gh api` for title/reviews/status as before.\n\n**What changed:**\n\n- `data/prs.json` — 12 rows (170→159), each `{number, title, reviews, status, files}`. The 8 pre-existing rows' title/reviews/status re-fetched and unchanged; PRs 162–161–160–159 added.\n- `scripts/fetch.sh` — rebuilds the data set. `reviews` and `files` counts use `gh api --paginate --slurp` so PRs past the 30-item page boundary count correctly; `status` is the com",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 9
+      },
+      "with": {
+        "arm": "with",
+        "task": "t2-extend",
+        "wall_ms": 89050,
+        "duration_ms": 87954,
+        "tool_calls": 17,
+        "tool_names": {
+          "Bash": 12,
+          "mcp__eden__github_pr_bundle": 1,
+          "Edit": 4
+        },
+        "cost_usd": 0.5756439999999998,
+        "output_tokens": 6206,
+        "cache_creation_input_tokens": 15519,
+        "cache_read_input_tokens": 528714,
+        "result_text": "Done. Committed as `fb6d281` in `/tmp/eden-horizon-hard/with` — no other repo touched.\n\n**What I did**\n\n- **Title/reviews/status**: used the Eden MCP `github_pr_bundle` tool with all 12 PR numbers in a **single call**, rather than 36 `gh api` requests. It returns `number | title | reviews | status | files | sha`.\n- **Files**: fetched `gh api repos/KaiavN/Eden/pulls/{n}/files --paginate` for all 12 PRs (including re-fetching 163–170), saved to `raw/files-<n>.txt`. All 12 succeeded, no errors.\n- **Cross-check**: the MCP bundle's own file-count column matched the `gh api` counts exactly for all 12 PRs, so the two independent sources agree.\n\n**Changes**\n\n- `data/prs.json` — 12 rows of `{number, ",
+        "is_error": false,
+        "mcp_calls": 1,
+        "gh_bash_calls": 12
+      },
+      "quality": {
+        "without": {
+          "rows": 12,
+          "expected": 12,
+          "titleHits": 12,
+          "reviewHits": 12,
+          "statusHits": 12,
+          "quality": 36,
+          "qualityMax": 36,
+          "report_bytes": 0,
+          "report_mentions_failure": false,
+          "commits": 2,
+          "hasPkg": true,
+          "hasTest": true
+        },
+        "with": {
+          "rows": 12,
+          "expected": 12,
+          "titleHits": 12,
+          "reviewHits": 12,
+          "statusHits": 12,
+          "quality": 36,
+          "qualityMax": 36,
+          "report_bytes": 0,
+          "report_mentions_failure": false,
+          "commits": 2,
+          "hasPkg": true,
+          "hasTest": true
+        }
+      },
+      "tools_after": [
+        {
+          "id": "2fe82373-e450-450a-92c3-49f773fb867a",
+          "name": "github_pr_bundle",
+          "state": "on",
+          "when_to_use": "issues: csv of PR numbers. table: number | title | reviews | status | files",
+          "seen": [
+            "gh.api",
+            "gh.api",
+            "gh.api"
+          ],
+          "has_playback": true
+        }
+      ]
+    },
+    {
+      "id": "t3-report",
+      "without": {
+        "arm": "without",
+        "task": "t3-report",
+        "wall_ms": 274667,
+        "duration_ms": 273848,
+        "tool_calls": 25,
+        "tool_names": {
+          "Bash": 14,
+          "Read": 5,
+          "Write": 3,
+          "Edit": 3
+        },
+        "cost_usd": 1.0162025,
+        "output_tokens": 12125,
+        "cache_creation_input_tokens": 23955,
+        "cache_read_input_tokens": 945179,
+        "result_text": "Done. Committed as `da39ea5`, all work inside `/tmp/eden-horizon-hard/without`.\n\n**Re-fetch.** No Eden MCP server is connected in this session, so I used the `gh` CLI against `KaiavN/Eden` (what `scripts/fetch.sh` already did). All 12 PRs re-fetched cleanly — title, reviews, status, and file counts matched the committed data exactly, so nothing was stale.\n\n**One finding worth your attention.** Ranking by CI status is degenerate on this data: all 12 PRs report `failure`. That's because `status` comes from GitHub's combined *commit-status* endpoint, which on Eden only carries two entries — Vercel (failing) and CodeRabbit (passing) — on every single PR. It never reflects the actual CI, which ru",
+        "is_error": false,
+        "mcp_calls": 0,
+        "gh_bash_calls": 14
+      },
+      "with": {
+        "arm": "with",
+        "task": "t3-report",
+        "wall_ms": 80538,
+        "duration_ms": 79489,
+        "tool_calls": 14,
+        "tool_names": {
+          "Bash": 7,
+          "mcp__eden__github_pr_bundle": 1,
+          "Read": 3,
+          "Edit": 3
+        },
+        "cost_usd": 0.51771,
+        "output_tokens": 4850,
+        "cache_creation_input_tokens": 13515,
+        "cache_read_input_tokens": 520894,
+        "result_text": "Done.\n\n**Re-fetch** — used the Eden MCP `github_pr_bundle` tool for all 12 PRs in one call. The returned title/reviews/status/files matched `data/prs.json` exactly, and I cross-checked the CI states and head SHAs against the cached `raw/status-*.json` files. No data changes were needed.\n\n**Notable finding:** all 12 PRs (159–170) are `failure`, not just some. So \"failure first\" doesn't actually separate anything here — the ranking is a single failure block, tie-broken by PR number descending. The report states the count explicitly (`12 failure`) rather than implying a mixed ordering.\n\n**Code** (`src/index.ts`):\n- `rankStatus` / `rankRows` — failure → error → pending → success, newest PR first",
+        "is_error": false,
+        "mcp_calls": 1,
+        "gh_bash_calls": 7
+      },
+      "quality": {
+        "without": {
+          "rows": 12,
+          "expected": 12,
+          "titleHits": 12,
+          "reviewHits": 12,
+          "statusHits": 12,
+          "quality": 36,
+          "qualityMax": 36,
+          "report_bytes": 2235,
+          "report_mentions_failure": true,
+          "commits": 3,
+          "hasPkg": true,
+          "hasTest": true
+        },
+        "with": {
+          "rows": 12,
+          "expected": 12,
+          "titleHits": 12,
+          "reviewHits": 12,
+          "statusHits": 12,
+          "quality": 36,
+          "qualityMax": 36,
+          "report_bytes": 1464,
+          "report_mentions_failure": true,
+          "commits": 3,
+          "hasPkg": true,
+          "hasTest": true
+        }
+      },
+      "tools_after": [
+        {
+          "id": "2fe82373-e450-450a-92c3-49f773fb867a",
+          "name": "github_pr_bundle",
+          "state": "on",
+          "when_to_use": "issues: csv of PR numbers. table: number | title | reviews | status | files",
+          "seen": [
+            "gh.api",
+            "gh.api",
+            "gh.api"
+          ],
+          "has_playback": true
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "without": {
+      "wall_ms": 475228,
+      "cost_usd": 1.9118045000000001,
+      "tool_calls": 54,
+      "mcp_calls": 0,
+      "output_tokens": 21238,
+      "quality": 96,
+      "qualityMax": 96
+    },
+    "with": {
+      "wall_ms": 254560,
+      "cost_usd": 1.6209205,
+      "tool_calls": 46,
+      "mcp_calls": 2,
+      "output_tokens": 16189,
+      "quality": 96,
+      "qualityMax": 96
+    }
+  }
+}

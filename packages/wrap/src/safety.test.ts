@@ -1,0 +1,373 @@
+import { describe, expect, test } from "bun:test";
+import { withVersion, type Step, type StretchProgram } from "@eden/ir";
+import { createState, wrapTools } from "./index";
+
+async function withClockAdvanced<T>(ms: number, fn: () => T | Promise<T>): Promise<T> {
+  const real = performance.now.bind(performance);
+  performance.now = () => real() + ms;
+  try {
+    return await fn();
+  } finally {
+    performance.now = real;
+  }
+}
+
+function controllableClock(): { advance: (ms: number) => void; restore: () => void } {
+  const real = performance.now.bind(performance);
+  let offset = 0;
+  performance.now = () => real() + offset;
+  return {
+    advance: (ms) => {
+      offset += ms;
+    },
+    restore: () => {
+      performance.now = real;
+    },
+  };
+}
+
+type FakeTool = { execute: (a: Record<string, unknown>) => Promise<unknown> };
+type Counter = { calls: string[]; tools: Record<string, FakeTool> };
+
+function counted(names: string[], opts: { delayMs?: number } = {}): Counter {
+  const calls: string[] = [];
+  const tools: Counter["tools"] = {};
+  for (const name of names) {
+    tools[name] = {
+      execute: async (args: Record<string, unknown>) => {
+        calls.push(name);
+        if (opts.delayMs) await Bun.sleep(opts.delayMs);
+        return { ran: name, id: args.id };
+      },
+    };
+  }
+  return { calls, tools };
+}
+
+function program(sequence: string[], steps: Step[], name = "stretch"): StretchProgram {
+  return withVersion({
+    id: `p_${name}`,
+    name,
+    description: "d",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    sequence,
+    steps,
+    returns: { kind: "from", step: steps[steps.length - 1]!.id, path: "" },
+    contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
+    manifest: { llmReduction: 3, latencyReduction: 1, costReduction: 1, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+  }) as StretchProgram;
+}
+
+const idArg = { id: { kind: "input" as const, path: "id" } };
+
+describe("wrap never applies a mutation twice", () => {
+  test("a write before an island is not replayed when the island cannot run", async () => {
+    const c = counted(["writeRecord", "notify"]);
+    const p = program(
+      ["writeRecord", "draftReply", "notify"],
+      [
+        { id: "writeRecord", kind: "tool", tool: "writeRecord", args: idArg },
+        { id: "draftReply", kind: "island", input: { kind: "input", path: "" }, system: "s", outputSchema: {} },
+        { id: "notify", kind: "tool", tool: "notify", args: idArg },
+      ],
+    );
+    const state = createState({ programs: [p] }); // no island caller
+    const tools = wrapTools(c.tools, state);
+    await Promise.resolve(tools.writeRecord!.execute({ id: "T-100" })).catch(() => undefined);
+    expect(c.calls.filter((n) => n === "writeRecord")).toHaveLength(1);
+  });
+
+  test("a parallel sibling call does not race the arming window", async () => {
+    const c = counted(["lookupTicket", "writeRecord", "notify"], { delayMs: 20 });
+    const p = program(
+      ["lookupTicket", "writeRecord", "notify"],
+      [
+        { id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg },
+        { id: "writeRecord", kind: "tool", tool: "writeRecord", args: idArg },
+        { id: "notify", kind: "tool", tool: "notify", args: idArg },
+      ],
+    );
+    const state = createState({ programs: [p] });
+    const tools = wrapTools(c.tools, state);
+    await Promise.all([
+      tools.lookupTicket!.execute({ id: "T-100" }),
+      tools.writeRecord!.execute({ id: "T-100" }),
+    ]);
+    expect(c.calls.filter((n) => n === "writeRecord")).toHaveLength(1);
+  });
+
+  test("a failed run for one input does not disarm another input's tail", async () => {
+    let failNext = false;
+    const calls: string[] = [];
+    const tools = {
+      lookupTicket: {
+        execute: async (a: Record<string, unknown>) => {
+          calls.push("lookupTicket");
+          if (failNext && a.id === "T-200") throw new Error("upstream down");
+          return { ran: "lookupTicket", id: a.id };
+        },
+      },
+      notify: {
+        execute: async (a: Record<string, unknown>) => {
+          calls.push("notify");
+          return { ran: "notify", id: a.id };
+        },
+      },
+    };
+    const p = program(
+      ["lookupTicket", "notify"],
+      [
+        { id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg },
+        { id: "notify", kind: "tool", tool: "notify", args: idArg },
+      ],
+    );
+    const state = createState({ programs: [p] });
+    const w = wrapTools(tools, state);
+
+    await w.lookupTicket!.execute({ id: "T-100" }); // succeeds, arms T-100's tail
+    failNext = true;
+    await Promise.resolve(w.lookupTicket!.execute({ id: "T-200" })).catch(() => undefined); // fails
+    const notifyBefore = calls.filter((n) => n === "notify").length;
+    await w.notify!.execute({ id: "T-100" }); // T-100's tail must still be armed
+    expect(calls.filter((n) => n === "notify")).toHaveLength(notifyBefore);
+  });
+
+  test("a tool repeated in the sequence suppresses both raw repeats", async () => {
+    const c = counted(["lookupTicket", "notify"]);
+    const p = program(
+      ["lookupTicket", "notify", "notify"],
+      [
+        { id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg },
+        { id: "notify", kind: "tool", tool: "notify", args: idArg },
+        { id: "notify_2", kind: "tool", tool: "notify", args: idArg },
+      ],
+    );
+    const state = createState({ programs: [p] });
+    const tools = wrapTools(c.tools, state);
+    await tools.lookupTicket!.execute({ id: "T-100" });
+    const afterCompiled = c.calls.filter((n) => n === "notify").length;
+    expect(afterCompiled).toBe(2); // the compiled run made both
+
+    const first = await tools.notify!.execute({ id: "T-100" });
+    const second = await tools.notify!.execute({ id: "T-100" });
+    expect(first).toEqual({ eden: "steered", skipped: "notify" });
+    expect(second).toEqual({ eden: "steered", skipped: "notify" });
+    expect(c.calls.filter((n) => n === "notify")).toHaveLength(afterCompiled);
+  });
+
+  test("an out-of-distribution input still falls through cleanly", async () => {
+    const c = counted(["lookupTicket"]);
+    const p = withVersion({
+      id: "p_env",
+      name: "narrow",
+      description: "d",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      sequence: ["lookupTicket"],
+      steps: [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }],
+      returns: { kind: "from", step: "lookupTicket", path: "" },
+      contract: {
+        witnesses: 3,
+        minLlmReduction: 2,
+        allowExact: false,
+        envelope: { inputs: { id: ["T-100"] } },
+      },
+      manifest: { llmReduction: 3, latencyReduction: 1, costReduction: 1, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+    }) as StretchProgram;
+    const state = createState({ programs: [p] });
+    const tools = wrapTools(c.tools, state);
+    const out = await tools.lookupTicket!.execute({ id: "T-999" });
+    expect(out).toEqual({ ran: "lookupTicket", id: "T-999" });
+    expect(c.calls).toEqual(["lookupTicket"]);
+  });
+});
+
+describe("wrap stops trusting an arming that has gone stale", () => {
+  function armed(): { c: Counter; state: ReturnType<typeof createState>; tools: Record<string, { execute: (a: Record<string, unknown>) => unknown }> } {
+    const c = counted(["lookupTicket", "notify", "ping"]);
+    const p = program(
+      ["lookupTicket", "notify"],
+      [
+        { id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg },
+        { id: "notify", kind: "tool", tool: "notify", args: idArg },
+      ],
+    );
+    const state = createState({ programs: [p] });
+    return { c, state, tools: wrapTools(c.tools, state) };
+  }
+
+  test("an arming still suppresses the raw tail a few calls later", async () => {
+    const { c, tools } = armed();
+    await tools.lookupTicket!.execute({ id: "T-100" });
+    const afterCompiled = c.calls.filter((n) => n === "notify").length;
+    for (let i = 0; i < 5; i++) await tools.ping!.execute({ id: "T-100" });
+
+    expect(await tools.notify!.execute({ id: "T-100" })).toEqual({ eden: "steered", skipped: "notify" });
+    expect(c.calls.filter((n) => n === "notify")).toHaveLength(afterCompiled);
+  });
+
+  test("an arming stops suppressing once the agent has moved well past it", async () => {
+    const { c, tools } = armed();
+    await tools.lookupTicket!.execute({ id: "T-100" });
+    const afterCompiled = c.calls.filter((n) => n === "notify").length;
+    for (let i = 0; i < 33; i++) await tools.ping!.execute({ id: "T-100" });
+
+    expect(await tools.notify!.execute({ id: "T-100" })).toEqual({ ran: "notify", id: "T-100" });
+    expect(c.calls.filter((n) => n === "notify")).toHaveLength(afterCompiled + 1);
+  });
+
+  test("an arming stops suppressing once it is old, with no calls in between", async () => {
+    const { c, tools } = armed();
+    await tools.lookupTicket!.execute({ id: "T-100" });
+    const afterCompiled = c.calls.filter((n) => n === "notify").length;
+    expect(await withClockAdvanced(61_000, () => tools.notify!.execute({ id: "T-100" }))).toEqual({
+      ran: "notify",
+      id: "T-100",
+    });
+    expect(c.calls.filter((n) => n === "notify")).toHaveLength(afterCompiled + 1);
+  });
+
+  test("a compiled run slower than the TTL still suppresses its own tail", async () => {
+    const c = counted(["lookupTicket", "notify"]);
+    const p = program(
+      ["lookupTicket", "notify"],
+      [
+        { id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg },
+        { id: "notify", kind: "tool", tool: "notify", args: idArg },
+      ],
+    );
+    const clock = controllableClock();
+    try {
+      const slow = { ...c.tools };
+      const realLookup = slow.lookupTicket!.execute;
+      slow.lookupTicket = {
+        execute: async (a) => {
+          clock.advance(61_000);
+          return realLookup(a);
+        },
+      };
+      const tools = wrapTools(slow, createState({ programs: [p] }));
+
+      await tools.lookupTicket!.execute({ id: "T-100" });
+      const afterCompiled = c.calls.filter((n) => n === "notify").length;
+
+      expect(await tools.notify!.execute({ id: "T-100" })).toEqual({ eden: "steered", skipped: "notify" });
+      expect(c.calls.filter((n) => n === "notify")).toHaveLength(afterCompiled);
+    } finally {
+      clock.restore();
+    }
+  });
+
+  test("a tail longer than the call budget is suppressed to the end", async () => {
+    const c = counted(["start", "write"]);
+    const tail = Array.from({ length: 40 }, () => "write");
+    const p = program(
+      ["start", ...tail],
+      [
+        { id: "start", kind: "tool", tool: "start", args: idArg },
+        ...tail.map((_, i) => ({ id: `write${i}`, kind: "tool" as const, tool: "write", args: idArg })),
+      ],
+    );
+    const tools = wrapTools(c.tools, createState({ programs: [p] }));
+
+    await tools.start!.execute({ id: "T-1" });
+    const compiledWrites = c.calls.filter((n) => n === "write").length;
+
+    for (let i = 0; i < tail.length; i++) {
+      expect(await tools.write!.execute({ id: "T-1" })).toEqual({ eden: "steered", skipped: "write" });
+    }
+    expect(c.calls.filter((n) => n === "write")).toHaveLength(compiledWrites);
+  });
+
+  test("eviction under pressure drops expired armings before live ones", async () => {
+    const c = counted(["start", "write", "lookupTicket", "notify"]);
+    const tail = Array.from({ length: 100 }, () => "write");
+    const long = program(
+      ["start", ...tail],
+      [
+        { id: "start", kind: "tool", tool: "start", args: idArg },
+        ...tail.map((_, i) => ({ id: `write${i}`, kind: "tool" as const, tool: "write", args: idArg })),
+      ],
+      "longFlow",
+    );
+    const short = program(
+      ["lookupTicket", "notify"],
+      [
+        { id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg },
+        { id: "notify", kind: "tool", tool: "notify", args: idArg },
+      ],
+      "shortFlow",
+    );
+    const tools = wrapTools(c.tools, createState({ programs: [long, short] }));
+
+    await tools.start!.execute({ id: "T-first" });
+    const afterFirst = c.calls.filter((n) => n === "write").length;
+    for (let i = 0; i < 70; i++) await tools.lookupTicket!.execute({ id: `T-${i}` });
+
+    expect(await tools.write!.execute({ id: "T-first" })).toEqual({ eden: "steered", skipped: "write" });
+    expect(c.calls.filter((n) => n === "write")).toHaveLength(afterFirst);
+  });
+
+  test("a host telemetry callback that throws does not fail the tool call", async () => {
+    const c = counted(["ping"]);
+    const tools = wrapTools(
+      c.tools,
+      createState({
+        programs: [],
+        onTrace: () => {
+          throw new Error("collector hook blew up");
+        },
+        onWarning: () => {
+          throw new Error("warning hook blew up");
+        },
+      }),
+    );
+    for (let i = 0; i < 13; i++) {
+      expect(await tools.ping!.execute({ id: "T-1" })).toEqual({ ran: "ping", id: "T-1" });
+    }
+  });
+
+  test("onWarning throw does not swallow a tool failure", async () => {
+    const tools = wrapTools(
+      {
+        boom: async () => {
+          throw new Error("no");
+        },
+      },
+      createState({
+        programs: [],
+        onWarning: () => {
+          throw new Error("warning hook blew up");
+        },
+      }),
+    );
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+  });
+});
+
+describe("wrap follows a program that has been rebuilt or pulled back", () => {
+  test("a new build of the same id replaces the cached compiled tool", async () => {
+    const c = counted(["lookupTicket", "repair"]);
+    const state = createState({
+      programs: [program(["lookupTicket"], [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }], "flow")],
+    });
+    const tools = wrapTools(c.tools, state);
+
+    await tools.flow!.execute({ id: "T-1" });
+    expect(c.calls).toEqual(["lookupTicket"]);
+
+    state.programs = [program(["repair"], [{ id: "repair", kind: "tool", tool: "repair", args: idArg }], "flow")];
+
+    await tools.flow!.execute({ id: "T-1" });
+    expect(c.calls).toEqual(["lookupTicket", "repair"]);
+  });
+
+  test("an unchanged program is not rebuilt on every lookup", async () => {
+    const c = counted(["lookupTicket"]);
+    const state = createState({
+      programs: [program(["lookupTicket"], [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }], "flow")],
+    });
+    const tools = wrapTools(c.tools, state);
+    expect(tools.flow).toBe(tools.flow);
+  });
+});

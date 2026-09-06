@@ -1,0 +1,457 @@
+{
+  "protocol": {
+    "seed": "none (EDEN_SKIP_SEED=1)",
+    "compile": "two Claude sessions (PR 170 then 169) with Eden hooks and empty MCP; auto-approve playable drafts",
+    "scored": "PR 168/167/166 held-out numbers + one local-code control; same prompts except Eden MCP hint on with-arm"
+  },
+  "compiled_tools": [
+    {
+      "id": "3add5cae-459b-4270-8f35-dfb55026cf05",
+      "name": "gh_api_gh_api_gh_api",
+      "state": "on",
+      "when_to_use": "Use when repeating gh api gh api gh api",
+      "seen": [
+        "gh.api",
+        "gh.api",
+        "gh.api"
+      ],
+      "has_playback": true
+    },
+    {
+      "id": "752fbfa5-98d1-4c9c-bcae-a74f76af14aa",
+      "name": "gh_api_gh_api_gh_api",
+      "state": "on",
+      "when_to_use": "Use when repeating gh api gh api gh api",
+      "seen": [
+        "gh.api",
+        "gh.api",
+        "gh.api",
+        "gh.api"
+      ],
+      "has_playback": true
+    }
+  ],
+  "approved": [
+    "gh_api_gh_api_gh_api",
+    "gh_api_gh_api_gh_api"
+  ],
+  "warmup": {
+    "warmup1": {
+      "label": "warmup-170",
+      "task": "compile-pr-170",
+      "wall_ms": 20792,
+      "tool_calls": 5,
+      "tool_names": {
+        "Bash": 4,
+        "Write": 1
+      },
+      "duration_ms": 16928,
+      "duration_api_ms": 12446,
+      "num_turns": 6,
+      "cost_usd": 0.11560749999999999,
+      "input_tokens": 10,
+      "output_tokens": 732,
+      "cache_creation_input_tokens": 4118,
+      "cache_read_input_tokens": 112155,
+      "result_text": "Done. Three separate `gh api` calls:\n\n1. **Title**: `fix(help): quote reserved window column so API can boot` (head SHA `7203fd16`)\n2. **Reviews**: 0\n3. **Combined status**: `failure`\n\nWritten to `/tmp/eden-bench-compile/warmup-170.txt`:\n\n```\nfix(help): quote reserved window column so API can boot | 0 | failure\n```",
+      "is_error": false
+    },
+    "warmup2": {
+      "label": "warmup-169",
+      "task": "compile-pr-169",
+      "wall_ms": 35269,
+      "tool_calls": 6,
+      "tool_names": {
+        "Bash": 5,
+        "Write": 1
+      },
+      "duration_ms": 34237,
+      "duration_api_ms": 20413,
+      "num_turns": 7,
+      "cost_usd": 0.1446565,
+      "input_tokens": 12,
+      "output_tokens": 1217,
+      "cache_creation_input_tokens": 4592,
+      "cache_read_input_tokens": 136503,
+      "result_text": "Done. Three separate `gh api` calls, results written to `/tmp/eden-bench-compile/warmup-169.txt`:\n\n```\nfix(slack): Event Subscriptions URL must pass default-deny | 0 | failure\n```\n\n- **Title:** `fix(slack): Event Subscriptions URL must pass default-deny` (head SHA `61d8bf2`)\n- **Reviews:** 0\n- **Combined status:** `failure` (2 status contexts)\n\nNote the PR title differs from the merge commit message on `main` (`fix(slack): allow Event Subscriptions through default-deny (#169)`).",
+      "is_error": false
+    },
+    "out": {
+      "w1": "fix(help): quote reserved window column so API can boot | 0 | failure",
+      "w2": "fix(slack): Event Subscriptions URL must pass default-deny | 0 | failure"
+    }
+  },
+  "gold": {
+    "166": {
+      "n": 166,
+      "title": "feat(help): find the file from leftover text, post the change, approve in Slack",
+      "sha": "ba4257b82a214c5c3cd4cd337b9ff2b258c220a8",
+      "review_count": 1,
+      "status_state": "failure",
+      "line": "feat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure"
+    },
+    "167": {
+      "n": 167,
+      "title": "feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse",
+      "sha": "76405e9e8c7be661ad0eea0edffdce6f20cf2a38",
+      "review_count": 1,
+      "status_state": "failure",
+      "line": "feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse | 1 | failure"
+    },
+    "168": {
+      "n": 168,
+      "title": "fix(help): next-week leftover copy uses apply_kind",
+      "sha": "f264010a6d37f84bba9d53c84f3554c96557f974",
+      "review_count": 0,
+      "status_state": "failure",
+      "line": "fix(help): next-week leftover copy uses apply_kind | 0 | failure"
+    },
+    "169": {
+      "n": 169,
+      "title": "fix(slack): Event Subscriptions URL must pass default-deny",
+      "sha": "61d8bf2ad96d48d8f330c369606a2818fb92503a",
+      "review_count": 0,
+      "status_state": "failure",
+      "line": "fix(slack): Event Subscriptions URL must pass default-deny | 0 | failure"
+    },
+    "170": {
+      "n": 170,
+      "title": "fix(help): quote reserved window column so API can boot",
+      "sha": "7203fd1613928ffd3e415890080eb521cb506062",
+      "review_count": 0,
+      "status_state": "failure",
+      "line": "fix(help): quote reserved window column so API can boot | 0 | failure"
+    }
+  },
+  "scored": [
+    {
+      "id": "pr-168",
+      "without": {
+        "label": "pr-168-without",
+        "task": "pr-168",
+        "wall_ms": 22469,
+        "tool_calls": 5,
+        "tool_names": {
+          "Bash": 4,
+          "Write": 1
+        },
+        "duration_ms": 21062,
+        "duration_api_ms": 17070,
+        "num_turns": 6,
+        "cost_usd": 0.1459205,
+        "input_tokens": 10,
+        "output_tokens": 822,
+        "cache_creation_input_tokens": 6713,
+        "cache_read_input_tokens": 114823,
+        "result_text": "Done. Wrote to `/tmp/eden-bench-compile/pr-168-without.txt`:\n\n```\nfix(help): next-week leftover copy uses apply_kind | 0 | failure\n```\n\n- Title: `fix(help): next-week leftover copy uses apply_kind` (head SHA `f264010a`)\n- Reviews: 0\n- Combined status: `failure` (Vercel status failed — \"Git author Knihalani must have access to the project\"; CodeRabbit was success)",
+        "is_error": false
+      },
+      "with": {
+        "label": "pr-168-with",
+        "task": "pr-168",
+        "wall_ms": 26423,
+        "tool_calls": 4,
+        "tool_names": {
+          "ToolSearch": 1,
+          "mcp__eden__gh_api_gh_api_gh_api": 1,
+          "Bash": 1,
+          "Write": 1
+        },
+        "duration_ms": 21615,
+        "duration_api_ms": 19489,
+        "num_turns": 5,
+        "cost_usd": 0.166799,
+        "input_tokens": 10,
+        "output_tokens": 1118,
+        "cache_creation_input_tokens": 8369,
+        "cache_read_input_tokens": 110218,
+        "result_text": "Used the compiled Eden MCP tool `gh_api_gh_api_gh_api` (one call, all three facts) instead of three `gh api` calls.\n\nWrote to `/tmp/eden-bench-compile/pr-168-with.txt`:\n\n```\nfix(help): next-week leftover copy uses apply_kind | 0 | failure\n```\n\nOne note: the compiled tool accepts an optional `sha` param, but resolved the head SHA itself from the PR — I passed only `issue: 168`, so I did not independently confirm which SHA its status lookup used.",
+        "is_error": false,
+        "rerun_after_forge_fix": true
+      },
+      "gold": "fix(help): next-week leftover copy uses apply_kind | 0 | failure",
+      "without_out": "fix(help): next-week leftover copy uses apply_kind | 0 | failure",
+      "with_out": "fix(help): next-week leftover copy uses apply_kind | 0 | failure",
+      "quality": {
+        "without": {
+          "title": true,
+          "reviews": true,
+          "status": true,
+          "score": 3,
+          "max": 3
+        },
+        "with": {
+          "title": true,
+          "reviews": true,
+          "status": true,
+          "score": 3,
+          "max": 3
+        }
+      },
+      "with_before_forge_fix": {
+        "label": "pr-168-with",
+        "task": "pr-168",
+        "wall_ms": 23050,
+        "tool_calls": 4,
+        "tool_names": {
+          "ToolSearch": 1,
+          "mcp__eden__gh_api_gh_api_gh_api": 1,
+          "Bash": 1,
+          "Write": 1
+        },
+        "duration_ms": 21825,
+        "duration_api_ms": 20470,
+        "num_turns": 5,
+        "cost_usd": 0.13252199999999997,
+        "input_tokens": 10,
+        "output_tokens": 1152,
+        "cache_creation_input_tokens": 4694,
+        "cache_read_input_tokens": 113464,
+        "result_text": "Used the Eden compiled tool `mcp__eden__gh_api_gh_api_gh_api` (it covered all three calls — reported `3/3`, 4824→4403B) instead of three separate `gh api` invocations.\n\nResult written to `/tmp/eden-bench-compile/pr-168-with.txt`:\n\n```\nFix deploy for 168 | 6 | pending\n```\n\nOne note: the compiled tool takes an optional `sha` param, but resolved the head SHA itself from `issue: 168` — I never had to fetch it separately, so I can't independently confirm which SHA its status check used.",
+        "is_error": false
+      }
+    },
+    {
+      "id": "pr-167",
+      "without": {
+        "label": "pr-167-without",
+        "task": "pr-167",
+        "wall_ms": 30640,
+        "tool_calls": 5,
+        "tool_names": {
+          "Bash": 4,
+          "Write": 1
+        },
+        "duration_ms": 28677,
+        "duration_api_ms": 24867,
+        "num_turns": 6,
+        "cost_usd": 0.129901,
+        "input_tokens": 12,
+        "output_tokens": 801,
+        "cache_creation_input_tokens": 4137,
+        "cache_read_input_tokens": 135354,
+        "result_text": "Done. Three separate `gh api` calls:\n\n1. `pulls/167` → title: `feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse` (head SHA `76405e9e`)\n2. `pulls/167/reviews` → 1 review\n3. `commits/76405e9e.../status` → `failure`\n\nWritten to `/tmp/eden-bench-compile/pr-167-without.txt`:\n\n```\nfeat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse | 1 | failure\n```",
+        "is_error": false
+      },
+      "with": {
+        "label": "pr-167-with",
+        "task": "pr-167",
+        "wall_ms": 36213,
+        "tool_calls": 4,
+        "tool_names": {
+          "ToolSearch": 1,
+          "mcp__eden__gh_api_gh_api_gh_api": 1,
+          "Bash": 1,
+          "Write": 1
+        },
+        "duration_ms": 34900,
+        "duration_api_ms": 29804,
+        "num_turns": 5,
+        "cost_usd": 0.157943,
+        "input_tokens": 10,
+        "output_tokens": 1870,
+        "cache_creation_input_tokens": 5406,
+        "cache_read_input_tokens": 114166,
+        "result_text": "Done. Wrote to `/tmp/eden-bench-compile/pr-167-with.txt`:\n\n```\nfeat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse | 1 | failure\n```\n\n**How it was gathered:** Eden MCP listed `gh_api_gh_api_gh_api` (\"use when repeating gh api gh api gh api\"), which covered the whole bundle, so I called it instead of the three separate `gh api` calls. It returned all three facts in one round trip (`s1` title, `s2.n` = 1 review, `s3.state` = failure).\n\nOne caveat worth flagging: the tool takes an optional `sha` parameter that I couldn't fill, since the head SHA only becomes known from the ",
+        "is_error": false,
+        "rerun_after_forge_fix": true
+      },
+      "gold": "feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse | 1 | failure",
+      "without_out": "feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse | 1 | failure",
+      "with_out": "feat(help): leftover listen, next-week result, tickets, Linear/Jira, reuse | 1 | failure",
+      "quality": {
+        "without": {
+          "title": true,
+          "reviews": true,
+          "status": true,
+          "score": 3,
+          "max": 3
+        },
+        "with": {
+          "title": true,
+          "reviews": true,
+          "status": true,
+          "score": 3,
+          "max": 3
+        }
+      },
+      "with_before_forge_fix": {
+        "label": "pr-167-with",
+        "task": "pr-167",
+        "wall_ms": 18691,
+        "tool_calls": 3,
+        "tool_names": {
+          "ToolSearch": 1,
+          "mcp__eden__gh_api_gh_api_gh_api": 1,
+          "Write": 1
+        },
+        "duration_ms": 16850,
+        "duration_api_ms": 15896,
+        "num_turns": 4,
+        "cost_usd": 0.1108625,
+        "input_tokens": 8,
+        "output_tokens": 886,
+        "cache_creation_input_tokens": 4400,
+        "cache_read_input_tokens": 89345,
+        "result_text": "The Eden MCP compiled tool `gh_api_gh_api_gh_api` covered the whole bundle, so I called it once instead of the three `gh api` requests (note: it didn't need a head SHA — passing `issue: 167` returned all three sections).\n\nResults:\n- Title: `Fix deploy for 167`\n- Reviews: 6\n- Combined status: `pending`\n\nWritten to `/tmp/eden-bench-compile/pr-167-with.txt`:\n```\nFix deploy for 167 | 6 | pending\n```",
+        "is_error": false
+      }
+    },
+    {
+      "id": "pr-166",
+      "without": {
+        "label": "pr-166-without",
+        "task": "pr-166",
+        "wall_ms": 15797,
+        "tool_calls": 4,
+        "tool_names": {
+          "Bash": 4
+        },
+        "duration_ms": 14759,
+        "duration_api_ms": 12826,
+        "num_turns": 5,
+        "cost_usd": 0.1040845,
+        "input_tokens": 8,
+        "output_tokens": 731,
+        "cache_creation_input_tokens": 4064,
+        "cache_read_input_tokens": 88721,
+        "result_text": "Done. Three separate `gh api` calls, results written to `/tmp/eden-bench-compile/pr-166-without.txt`:\n\n```\nfeat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure\n```\n\n- **Title**: `feat(help): find the file from leftover text, post the change, approve in Slack`\n- **Reviews**: 1\n- **Combined status** (head SHA `ba4257b8`): `failure`",
+        "is_error": false
+      },
+      "with": {
+        "label": "pr-166-with",
+        "task": "pr-166",
+        "wall_ms": 18186,
+        "tool_calls": 3,
+        "tool_names": {
+          "ToolSearch": 1,
+          "mcp__eden__gh_api_gh_api_gh_api": 1,
+          "Write": 1
+        },
+        "duration_ms": 16995,
+        "duration_api_ms": 14291,
+        "num_turns": 4,
+        "cost_usd": 0.11069999999999999,
+        "input_tokens": 8,
+        "output_tokens": 854,
+        "cache_creation_input_tokens": 4458,
+        "cache_read_input_tokens": 89460,
+        "result_text": "Used the compiled Eden MCP tool (`gh_api_gh_api_gh_api`) instead of the three separate `gh api` calls — it returned all three facts in one round trip (3/3 sub-calls, 1774ms).\n\nWrote to `/tmp/eden-bench-compile/pr-166-with.txt`:\n\n```\nfeat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure\n```\n\n- **Title**: feat(help): find the file from leftover text, post the change, approve in Slack\n- **Reviews**: 1\n- **Combined status**: failure (2 statuses)",
+        "is_error": false,
+        "rerun_after_forge_fix": true
+      },
+      "gold": "feat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure",
+      "without_out": "feat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure",
+      "with_out": "feat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure",
+      "quality": {
+        "without": {
+          "title": true,
+          "reviews": true,
+          "status": true,
+          "score": 3,
+          "max": 3
+        },
+        "with": {
+          "title": true,
+          "reviews": true,
+          "status": true,
+          "score": 3,
+          "max": 3
+        }
+      },
+      "with_before_forge_fix": {
+        "label": "pr-166-with",
+        "task": "pr-166",
+        "wall_ms": 35012,
+        "tool_calls": 6,
+        "tool_names": {
+          "ToolSearch": 1,
+          "mcp__eden__gh_api_gh_api_gh_api": 1,
+          "Bash": 3,
+          "Write": 1
+        },
+        "duration_ms": 33845,
+        "duration_api_ms": 30006,
+        "num_turns": 7,
+        "cost_usd": 0.174516,
+        "input_tokens": 12,
+        "output_tokens": 2015,
+        "cache_creation_input_tokens": 5492,
+        "cache_read_input_tokens": 138322,
+        "result_text": "Done. `/tmp/eden-bench-compile/pr-166-with.txt`:\n\n```\nfeat(help): find the file from leftover text, post the change, approve in Slack | 1 | failure\n```\n\n**Important: the Eden compiled tool returned fabricated data.** I called `mcp__eden__gh_api_gh_api_gh_api` first as instructed, and it claimed to bundle all three calls (`Eden 3/3 · 4824→4403B · 1ms`). Its output was wrong on every field:\n\n| Field | Eden compiled tool | Real `gh api` |\n|---|---|---|\n| title | `Fix deploy for 166` | `feat(help): find the file from leftover text, post the change, approve in Slack` |\n| reviews | 6 | 1 |\n| status ",
+        "is_error": false
+      }
+    },
+    {
+      "id": "local-nourl",
+      "without": {
+        "label": "local-nourl-without",
+        "task": "local-nourl",
+        "wall_ms": 16413,
+        "tool_calls": 3,
+        "tool_names": {
+          "Bash": 3
+        },
+        "duration_ms": 14700,
+        "duration_api_ms": 14270,
+        "num_turns": 4,
+        "cost_usd": 0.12346849999999998,
+        "input_tokens": 8,
+        "output_tokens": 798,
+        "cache_creation_input_tokens": 5728,
+        "cache_read_input_tokens": 90959,
+        "result_text": "**fail** — `playback.ts:71`: when the resolved URL is empty, the step returns `{ error: \"no_url\", fail: true }`, which sets `failed = attempted`, breaks the layer loop, and makes the receipt `ok: failed === undefined` → `false`.\n\nWrote to `/tmp/eden-bench-compile/local-nourl-without.txt`:\n```\nfail | apps/site/src/playback.ts\n```",
+        "is_error": false
+      },
+      "with": {
+        "label": "local-nourl-with",
+        "task": "local-nourl",
+        "wall_ms": 18106,
+        "tool_calls": 3,
+        "tool_names": {
+          "Bash": 3
+        },
+        "duration_ms": 15750,
+        "duration_api_ms": 14461,
+        "num_turns": 4,
+        "cost_usd": 0.12176799999999999,
+        "input_tokens": 8,
+        "output_tokens": 771,
+        "cache_creation_input_tokens": 5695,
+        "cache_read_input_tokens": 91006,
+        "result_text": "**fail** — `apps/site/src/playback.ts:71`: after template resolution, `if (!url) return { id: step.id, value: { error: \"no_url\" }, fail: true }`. That `fail: true` sets `failed = attempted` in the layer loop (line 111-112), breaks out of execution, and makes the receipt `ok: failed === undefined` → `false`, with `failed_step` recording the step index.\n\nWritten to `/tmp/eden-bench-compile/local-nourl-with.txt`.",
+        "is_error": false
+      },
+      "gold": "fail | apps/site/src/playback.ts",
+      "without_out": "fail | apps/site/src/playback.ts",
+      "with_out": "fail | apps/site/src/playback.ts",
+      "quality": {
+        "without": {
+          "correct": true,
+          "out": "fail | apps/site/src/playback.ts"
+        },
+        "with": {
+          "correct": true,
+          "out": "fail | apps/site/src/playback.ts"
+        }
+      }
+    }
+  ],
+  "totals": {
+    "without": {
+      "wall_ms": 85319,
+      "cost_usd": 0.5033745,
+      "tool_calls": 17,
+      "output_tokens": 3152,
+      "duration_ms": 79198
+    },
+    "with": {
+      "wall_ms": 98928,
+      "cost_usd": 0.55721,
+      "tool_calls": 14,
+      "output_tokens": 4613,
+      "duration_ms": 89260
+    }
+  },
+  "note": "WITH PR tasks re-run after handleForge stopped intercepting api.github.com. Compile warmups and without-arm unchanged."
+}
