@@ -516,7 +516,6 @@ function emitTrace(
     }
     buildAndSendTrace(state, run, events, input);
    } catch {
-    /* observing a call must never fail it */
   } finally {
     const hadLoopWarning =
       run.warnings.some((w) => w.kind === "repeat_ngram" || w.kind === "repeat_visits") || false;
