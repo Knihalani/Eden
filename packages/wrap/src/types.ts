@@ -79,7 +79,6 @@ export type EdenOpts = {
   /** Stable agent identity for attribution. Default: `EDEN_AGENT` or sessionId. */
   agentId?: string;
   parentRunId?: string;
-  /** Orchestrator span id this wrap's traces must carry. */
   spanId?: string;
   /** Region label on traces/receipts. Default: `EDEN_REGION`. */
   region?: string;
