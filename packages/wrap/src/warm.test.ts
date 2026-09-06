@@ -24,7 +24,6 @@ const liveManifest = {
   nShadow: 6,
 };
 
-/** Current stretch: serial reads (first-wave is getIssue only). */
 function currentProgram(ids: string[] = ["T-100"]): StretchProgram {
   return {
     id: "fetch-issue",
@@ -49,7 +48,6 @@ function currentProgram(ids: string[] = ["T-100"]): StretchProgram {
   };
 }
 
-/** Next stretch: two independent first-wave reads, then a dependent later wave. */
 function nextProgram(ids: string[] = ["T-100"]): StretchProgram {
   return {
     id: "fetch-meta",
