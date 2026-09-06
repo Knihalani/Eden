@@ -19,7 +19,6 @@ export type Receipt = {
   tokensSaved?: number | null;
   timeSavedMs?: number | null;
   fingerprint?: string;
-  /** Token class for this compiled/skipped/raw serving. */
   tokenClass?: TokenClass;
   prompt_tokens?: number;
   completion_tokens?: number;
