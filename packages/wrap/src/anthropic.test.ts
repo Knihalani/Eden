@@ -93,24 +93,19 @@ function toolUseMsg(): Record<string, unknown> {
 }
 
 async function callHandler(body: object, fetchImpl?: typeof fetch, env?: Record<string, string>) {
-  const saved = { ...process.env };
   Object.assign(process.env, env);
-  try {
-    return await handleAnthropicMessages(
-      new Request("http://local/v1/messages", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": "sk-test" },
-        body: JSON.stringify(body),
-      }),
-      {
-        state: createState({ programs: [liveProgram()], fetch: undefined }),
-        getPrograms: () => [liveProgram()],
-        ...(fetchImpl ? { fetch: fetchImpl } : {}),
-      },
-    );
-  } finally {
-    // no env mutation to undo — kept symmetric with callers that pass env
-  }
+  return await handleAnthropicMessages(
+    new Request("http://local/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": "sk-test" },
+      body: JSON.stringify(body),
+    }),
+    {
+      state: createState({ programs: [liveProgram()], fetch: undefined }),
+      getPrograms: () => [liveProgram()],
+      ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    },
+  );
 }
 
 describe("anthropic handler", () => {
@@ -149,7 +144,6 @@ describe("anthropic handler", () => {
       expect(text).toContain(`event: ${event}`);
     }
     expect(text).toContain('"stop_reason":"tool_use"');
-    // The steered compiled name appears; the absorbed raw sibling does not.
     expect(text).toContain("search_to_notify");
     expect(text).not.toContain("tu_2");
   });
