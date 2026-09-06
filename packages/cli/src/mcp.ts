@@ -46,7 +46,6 @@ export async function handleMcp(msg: Rpc, ctx: {
   }
   if (msg.method === "resources/list") {
     try {
-      // Same as tools/list: enumerating every live program is a catalog dump.
       await ctx.programs();
       ctx.send(msg.id, { resources: [] });
     } catch (err) {
