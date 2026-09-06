@@ -111,9 +111,7 @@ function postLedgerReceipt(row: {
         reason,
       }),
     }).catch(() => undefined);
-  } catch {
-    /* fail-open: ledger already landed */
-  }
+  } catch {}
 }
 
 function emptyFile(): FileShape {
