@@ -97,9 +97,7 @@ export type RunRecorder = {
   completion_tokens: number;
   measured: boolean;
   cached_tokens: number;
-  /** Provider cache-write tokens. Separate line; 0 is measured. */
   cache_write_tokens: number;
-  /** Hit-% denominator stamped from the usage object (not inferred later). */
   cache_input_tokens: number;
   /** Island scrape accumulated from compiled runs this window. */
   island_prompt_tokens: number;

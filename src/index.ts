@@ -54,13 +54,13 @@ function extractDurable(blob: string): string[] {
   const out: string[] = [];
   for (const raw of blob.split(/(?<=[.!\n])\s+/)) {
     let t = raw.trim().replace(/\s+/g, " ");
-    if (t.length < 12 || t.length > 280 || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^thinking about\b/i.test(t) || /^you are\b/i.test(t) || CHAT.test(t)) continue;
+    if (t.length < 8 || t.length > 280 || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^thinking about\b/i.test(t) || /^you are\b/i.test(t) || CHAT.test(t)) continue;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i);
     if (rem) t = rem[1].trim();
-    else if (t.endsWith("?") || !/\b(prefer(?:s|red)?|never |always |timezone|deploys?|flyctl|DSN|postgres:\/\/|credentials\.json|\.env|reviewers?|ran out of memory|bun test|is|are|needs?|uses?|note that|don'?t forget)\b/i.test(t)) continue;
+    else if (t.endsWith("?") || !/\b(prefer(?:s|red)?|never |always |timezone|deploys?|flyctl|DSN|postgres:\/\/|credentials\.json|\.env|reviewers?|ran out of memory|bun test|is|are|needs?|uses?|must |from now on|note that|don'?t forget)\b/i.test(t)) continue;
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
     const k = t.toLowerCase();
-    if (t.length >= 12 && !seen.has(k)) {
+    if (t.length >= 8 && !seen.has(k)) {
       seen.add(k);
       out.push(t);
     }
