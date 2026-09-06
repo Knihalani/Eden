@@ -354,9 +354,6 @@ Archive is CLI-only — a bug here never sits on the wrap path.
 `;
 }
 
-/**
- * CLI entry. Returns an exit code. Never throws into wrap.
- */
 export async function archiveCli(args: string[]): Promise<number> {
   try {
     const sub = args[0];
