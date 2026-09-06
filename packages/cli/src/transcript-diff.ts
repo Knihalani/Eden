@@ -111,11 +111,6 @@ export function applyOpenCodeAfter(
   return { visible: landed, additionalContext, droppedRewrite: false };
 }
 
-/**
- * Mutate an OpenCode after-hook `output` in place. Native: write the landed
- * string into `output.output`. MCP-shaped: leave `output.output` alone (host
- * drops that mutation) and set `output.inject` when that field exists.
- */
 export function applyOpenCodeHostOutput(
   output: { output?: unknown; inject?: unknown },
   tool: string,
