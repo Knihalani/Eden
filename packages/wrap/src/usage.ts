@@ -12,7 +12,6 @@ export type ChatUsage = {
   measured: boolean;
   output?: unknown;
   cached_tokens?: number;
-  /** Provider cache-write tokens. Stamped from the usage object; 0 is measured. */
   cache_write_tokens?: number;
   cache_input_tokens?: number;
 };
