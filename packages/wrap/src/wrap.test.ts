@@ -1071,7 +1071,6 @@ describe("online signal bus", () => {
     await tools.list_checks.execute({});
     await tools.get_ci_status.execute({});
     await tools.list_checks.execute({});
-    // Two stalled cycles: warnings exist, but reads are allowed through.
     expect(await tools.get_ci_status.execute({})).toEqual({ state: "pending" });
     ci = "success";
     expect(await tools.list_checks.execute({})).toEqual({ n: 2 });
