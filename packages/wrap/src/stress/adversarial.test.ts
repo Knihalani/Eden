@@ -175,7 +175,6 @@ d("adversarial: concurrency", () => {
   });
 });
 
-// ─── realistic simulation: CI-watcher agent ──────────────────────────────────
 d("simulation: ci watcher agent (realistic cadence)", () => {
   test("poll→detect→fix→verify cycles across 10 runs behave identically", async () => {
     for (let seed = 1; seed <= 10; seed++) {
