@@ -136,7 +136,6 @@ d("v2: redaction volume + variety", () => {
       expect(raw).not.toContain(`sk-live-${i}abcdef123456`);
       expect(raw).not.toContain(`pw-${i}-supersecret`);
     }
-    // Controls survive.
     expect(raw).toContain("plain value");
   });
 });
