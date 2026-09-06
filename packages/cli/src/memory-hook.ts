@@ -61,8 +61,8 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const prior = messagesFromTranscript(r.transcript_path ?? r.transcriptPath);
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
-      const extra = String(r.prompt ?? r.text ?? r.prompt_response ?? r.user_message ?? "");
-      mem.observe(prior.length ? prior : extra ? [{ role: "user", content: extra }] : []);
+      const extra = [r.prompt, r.text, r.user_message, r.prompt_response].filter((x) => typeof x === "string" && x).join("\n");
+      mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior);
       return stop ? null : additional(event, briefing(mem, extra));
     }
     const prompt = String(r.prompt ?? r.text ?? r.user_message ?? "");

@@ -2,7 +2,7 @@
 
 Passive memory for Claude Code. Durable facts from conversation are stored without `remember()` calls. Matching notes are injected on later prompts. Broken Eden never blocks the agent (`{}`).
 
-Store: `~/.eden/memory/memories.jsonl` (override with `EDEN_MEMORY_DIR`).
+Store: `~/.eden/memory/memories.jsonl` (override with `EDEN_MEMORY_DIR`; inject cap with `EDEN_MEMORY_CAP`).
 
 ## Install — pick one
 
