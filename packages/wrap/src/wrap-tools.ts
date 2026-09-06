@@ -1176,12 +1176,6 @@ export function wrapTools<T extends ToolsIn>(
                   armed.resolveSettled(false);
                 } catch { /* deferred already gone */ }
                 emit(run.events[0]?.args, owner);
-                // DIFFERENT from prefix steering, deliberately: the guard
-                // chose this program because the raw call was unacceptable
-                // (unverifiable finalize, over-budget). Falling back to that
-                // raw call would defeat the refusal, so a failed guard-steer
-                // ends the call — unless the stretch is reads, where a raw
-                // retry duplicates nothing and refuses nothing.
                 const touched = isDeopt(err) && !isEarlyDeopt(err);
                 if (!(replayableProgram(guard.program) && !touched)) {
                   return { eden: "halted", reason: guard.reason };
