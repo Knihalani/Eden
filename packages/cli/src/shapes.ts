@@ -1,11 +1,3 @@
-/**
- * Claude Code native tool-result shapes (Wave 5 / R1).
- *
- * `updatedToolOutput` is applied only when it matches the tool's native object.
- * A string rewrite for a built-in is silently dropped. Merge the sentinel into
- * the text-bearing field; never replace a structured result with a bare string.
- */
-
 export const HOOK_OUTPUT_CAP = 9_500;
 
 const DANGEROUS_KEY = /^(?:__proto__|constructor|prototype)$/;
