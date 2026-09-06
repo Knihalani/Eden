@@ -47,6 +47,43 @@ function convBlob(list: unknown[]): string {
   return parts.join("\n");
 }
 
+const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|please\b)/i;
+
+function extractDurable(blob: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (s: string) => {
+    const t = s.replace(/\s+/g, " ").trim().replace(/^[.\s]+|[.\s]+$/g, "");
+    if (t.length < 12 || t.length > 280) return;
+    const k = t.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(t);
+  };
+  for (const raw of blob.split(/(?<=[.!\n])\s+/)) {
+    const t = raw.trim();
+    if (!t) continue;
+    if (t.includes(MEMORY_MARK) || t.includes("Eden Know:")) continue;
+    if (/\bleftover intern firm\b/i.test(t)) continue;
+    if (/^thinking about\b/i.test(t)) continue;
+    if (CHAT.test(t)) continue;
+    const rem = t.match(/\bremember(?: that)?\s+(.+)/i);
+    if (rem) {
+      add(rem[1]);
+      continue;
+    }
+    if (t.endsWith("?")) continue;
+    if (
+      /\b(prefer(?:s|red)?|never |always |timezone|deploys?|flyctl|DSN|postgres:\/\/|credentials\.json|\.env|reviewers?|ran out of memory|bun test)\b/i.test(
+        t,
+      )
+    ) {
+      add(t);
+    }
+  }
+  return out;
+}
+
 function compile(rec: MemoryRecord): Compiled {
   const seen = new Set<string>();
   const needles: string[] = [];
@@ -123,6 +160,16 @@ export class AgentMemory {
     return true;
   }
 
+  observe(messages: unknown[]): MemoryRecord[] {
+    const blob = convBlob(Array.isArray(messages) ? messages : []);
+    const out: MemoryRecord[] = [];
+    for (const text of extractDurable(blob)) {
+      if (this.compiled.some((c) => c.rec.text.toLowerCase() === text.toLowerCase())) continue;
+      out.push(this.remember(text, { kind: "episode" }));
+    }
+    return out;
+  }
+
   private persist() {
     writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
     this.cache.clear();
@@ -184,6 +231,7 @@ export class AgentMemory {
         while (i < next.length && (next[i] as { role?: string })?.role === "system") i++;
         next.splice(i, 0, ...notes);
       }
+      this.observe(list);
       this.out.set(list, next);
       return next;
     } catch {
