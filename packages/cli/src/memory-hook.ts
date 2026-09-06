@@ -43,7 +43,7 @@ function briefing(mem: AgentMemory): string {
 }
 
 function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
-  const cwd = asRec(raw).cwd;
+  const cwd = raw.cwd ?? raw.directory;
   return openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), agent: process.env.EDEN_MEMORY_AGENT || undefined, project: typeof cwd === "string" && cwd ? cwd : process.env.EDEN_MEMORY_PROJECT || undefined });
 }
 
@@ -57,14 +57,14 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const event = EVENT_ALIASES[String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "")] ?? String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory(r);
-    const prior = messagesFromTranscript(r.transcript_path);
+    const prior = messagesFromTranscript(r.transcript_path ?? r.transcriptPath);
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
-      const extra = String(r.prompt ?? r.text ?? r.prompt_response ?? "");
+      const extra = String(r.prompt ?? r.text ?? r.prompt_response ?? r.user_message ?? "");
       mem.observe(prior.length ? prior : extra ? [{ role: "user", content: extra }] : []);
       return stop ? null : additional(event, briefing(mem));
     }
-    const prompt = String(r.prompt ?? r.text ?? "");
+    const prompt = String(r.prompt ?? r.text ?? r.user_message ?? "");
     const list = prompt ? [...prior, { role: "user", content: prompt }] : prior.length ? prior : [{ role: "user", content: "continue" }];
     return additional(event, notesFromInject(mem.inject(list)));
   } catch {
