@@ -10,8 +10,6 @@ export type OpenAiHandle = {
 
 async function wrapUp(base: string): Promise<boolean> {
   try {
-    // 80ms lost the race against a cold local wrap boot (bun install-on-run,
-    // first compile), so resolve() fell back to api.openai.com even though the
     // wrap came up a few hundred ms later. 1.5s is still well under any
     // caller's patience and covers a cold start.
     const r = await fetch(`${base.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(1500) });
