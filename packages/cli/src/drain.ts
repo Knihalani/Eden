@@ -7,7 +7,7 @@ import { refreshOptedInSurfaces, type ManifestTool } from "./manifest";
 function ingestible(row: Record<string, unknown>): boolean {
   const hook = String(row.hook || "");
   if (hook === "PreToolUse") return false;
-  if (hook === "SessionStart" || hook === "Stop" || hook === "UserPromptSubmit" || hook === "PreCompact") return false;
+  if (hook === "SessionStart" || hook === "Stop" || hook === "SessionEnd" || hook === "UserPromptSubmit" || hook === "PreCompact") return false;
   return Boolean(row.name);
 }
 
@@ -27,7 +27,6 @@ export function lastOutboxKind(outboxText: string, runId: string): string | unde
   return last;
 }
 
-/** Stop → true. turn_split / absent → false so a mid-session drain does not cluster. */
 export function stretchEndForRun(outboxText: string, runId: string): boolean {
   return lastOutboxKind(outboxText, runId) === "stretch_end";
 }
