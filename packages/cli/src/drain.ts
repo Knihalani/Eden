@@ -20,9 +20,7 @@ export function lastOutboxKind(outboxText: string, runId: string): string | unde
     try {
       const row = JSON.parse(line) as OutboxRow;
       if (row.run_id === runId && row.kind) last = row.kind;
-    } catch {
-      /* skip */
-    }
+    } catch {}
   }
   return last;
 }
@@ -66,9 +64,7 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
     try {
       const row = JSON.parse(line) as OutboxRow;
       if (row.run_id && row.kind === "stretch_end") runIds.add(row.run_id);
-    } catch {
-      /* skip */
-    }
+    } catch {}
   }
   for (const runId of runIds) {
     const path = eventsPath(runId);
@@ -112,9 +108,7 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
   }
   try {
     await refreshLiveTools(site, wrap, key, opts.workspace);
-  } catch {
-    /* keep the tool list we already have */
-  }
+  } catch {}
   if (existsSync(outboxPath())) {
     withFileLock(`${outboxPath()}.lock`, () => {
       const fresh = existsSync(outboxPath()) ? readFileSync(outboxPath(), "utf8") : "";
@@ -211,9 +205,7 @@ function persistLiveTools(tools: ManifestTool[], workspace?: string): void {
   writeFileAtomic(liveToolsPath(), JSON.stringify(tools, null, 2) + "\n");
   try {
     refreshOptedInSurfaces(tools, { workspace });
-  } catch {
-    /* SKILL.md / eden.tools.md are best-effort; live-tools already landed */
-  }
+  } catch {}
 }
 
 async function refreshLiveTools(site: string, wrap: string, key: string, workspace?: string): Promise<void> {

@@ -190,6 +190,8 @@ export class AgentMemory {
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
     const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages";
     const m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [];
+    const sys = body.systemInstruction ?? body.system_instruction;
+    if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys]);
     const next = this.inject(m);
     return next === m ? body : { ...body, [key]: next };
   }
