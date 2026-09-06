@@ -76,9 +76,7 @@ export function watchWarmEnabled(): boolean {
 export function bindWarmRunner(state: WrapState, runner: WarmRunner): void {
   try {
     storeOf(state).runner = runner;
-  } catch {
-    /* fail-open: missing runner means watchWarm is a no-op */
-  }
+  } catch {}
 }
 
 function bindingDependsOnStep(b: Binding): boolean {
@@ -237,9 +235,7 @@ export function claimWarm(state: WrapState, program: StretchProgram, input: Reco
       const match = wave.some((w) => w.tool === e.tool && eq(w.args, e.args));
       if (!match) e.discarded = true;
     }
-  } catch {
-    /* fail-open */
-  }
+  } catch {}
 }
 
 export function discardWarm(state: WrapState): void {
@@ -247,9 +243,7 @@ export function discardWarm(state: WrapState): void {
     const s = storeOf(state);
     for (const e of s.entries) e.discarded = true;
     s.entries = [];
-  } catch {
-    /* fail-open */
-  }
+  } catch {}
 }
 
 export function warmStats(state: WrapState): WarmStats {
@@ -322,9 +316,7 @@ export function withWarmLookup(
       try {
         const taken = await takeWarm(state, program, input, name, args);
         if (taken.hit) return taken.value;
-      } catch {
-        /* fail-open to real execute */
-      }
+      } catch {}
       return registry.execute(name, args, ctx);
     },
   };
