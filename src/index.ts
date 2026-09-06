@@ -117,7 +117,7 @@ export class AgentMemory {
 
   forget(id: string): boolean {
     const n = this.compiled.length;
-    this.compiled = this.compiled.filter((c) => c.rec.id !== id);
+    this.compiled = this.compiled.filter((c) => c.rec.id !== id && c.rec.text !== id);
     if (this.compiled.length === n) return false;
     this.persist();
     return true;
@@ -219,7 +219,7 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
         if (req.method === "POST") {
           const b = (await req.json()) as { text?: string; kind?: string; tags?: string[]; id?: string; agent?: string; messages?: unknown[]; q?: string; k?: number };
           if (p === "/remember") return Response.json(memory.remember(String(b.text || ""), b));
-          if (p === "/forget") return Response.json({ ok: memory.forget(String(b.id || "")) });
+          if (p === "/forget") return Response.json({ ok: memory.forget(String(b.id || b.text || "")) });
           if (p === "/inject") return Response.json({ messages: memory.inject(b.messages || []) });
           if (p === "/query") return Response.json(memory.query(String(b.q || ""), Number(b.k) || 5));
         }
