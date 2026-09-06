@@ -152,7 +152,6 @@ export function consumeChatUsage(state: { run: RunRecorder }): ChatUsage | null 
   return taken;
 }
 
-/** Additive cache-hit fields for traces/receipts. Write is not hidden when denom is 0. */
 export function cacheHitSpread(
   cached: number,
   write: number,
