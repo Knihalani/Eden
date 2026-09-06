@@ -97,11 +97,6 @@ describe("steer + inject", () => {
   });
 
   test("collapses a multi-call batch onto the compiled tool", () => {
-    // Precondition for the collapse: writeRecord names a LATER step of the
-    // matched sequence (lookupTicket → … → writeRecord → … → notify), so the
-    // compiled run performs it anyway and the sibling is absorbed. Siblings
-    // that are NOT steps of the matched program must survive — see the two
-    // tests below.
     const p = liveProgram();
     const out = steerToolCalls(
       [
