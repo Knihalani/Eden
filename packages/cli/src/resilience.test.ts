@@ -113,17 +113,12 @@ describe("hookd refuses drive-by callers", () => {
 
 describe("the hook never blocks the agent", () => {
   test("does not deny in favour of a tool with no name", async () => {
-    // drain writes `name: t.program?.name ?? t.name`, either of which may be
-    // undefined. The result was a hard deny on every Bash call instructing the
-    // agent to use "the Eden compiled tool null".
     writeFileSync(join(home, "live-tools.json"), JSON.stringify([{ sequence: ["Bash"] }]));
     const out = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "s1" });
     expect(out).toEqual({ ok: true });
   });
 
   test("survives a live-tools.json that is not an array", async () => {
-    // drain writes `json.tools ?? json`, so a site response without a `tools`
-    // key put an object here and `live.some(...)` threw on every PreToolUse.
     writeFileSync(join(home, "live-tools.json"), JSON.stringify({ knock: null }));
     await expect(
       respondToHook({ hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "s1" }),
