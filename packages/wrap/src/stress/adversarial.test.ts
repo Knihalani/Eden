@@ -80,7 +80,6 @@ d("adversarial: hostile outputs", () => {
       } catch {
         failed++;
       }
-      // Healthy unrelated work must ALWAYS succeed, even mid-fail-streak.
       const h = (await tools.healthy.execute({})) as { fine: boolean };
       expect(h.fine).toBe(true);
     }
