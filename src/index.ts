@@ -8,33 +8,13 @@ import { messageText } from "../packages/wrap/src/intent";
 export const MEMORY_MARK = "Eden Memory:";
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-
-export type MemoryRecord = {
-  id: string;
-  text: string;
-  kind: MemoryKind;
-  tags: string[];
-  agent?: string;
-  at: number;
-};
-
+export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; at: number };
 export type KnowSearch = {
   search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[];
   close?: () => void;
 };
-
-export type MemoryOptions = {
-  dir?: string;
-  know?: KnowSearch;
-  agent?: string;
-};
-
-export type QueryHit = {
-  text: string;
-  source: "memory" | "know";
-  url?: string;
-  id?: string;
-};
+export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string };
+export type QueryHit = { text: string; source: "memory" | "know"; url?: string; id?: string };
 
 type Compiled = { rec: MemoryRecord; needles: string[] };
 type Note = { role: "system"; content: string };
@@ -44,20 +24,8 @@ const STOP = new Set([
   "into", "about", "these", "then", "still", "has", "out", "please", "how", "should", "what",
   "why", "was", "are", "you", "your", "its", "our", "not", "never", "use", "used", "just",
   "last", "week", "down", "look", "next", "need", "before", "merge", "prefers", "user",
-  "memory", "ran", "fact", "such", "or", "no", "and", "app",
+  "memory", "ran", "fact", "such", "or", "no", "app",
 ]);
-
-function memDir(dir?: string): string {
-  return dir || join(homedir(), ".eden", "memory");
-}
-
-function fileOf(dir: string): string {
-  return join(dir, "memories.jsonl");
-}
-
-function nid(): string {
-  return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function tokList(s: string): string[] {
   return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
@@ -67,14 +35,13 @@ function compile(rec: MemoryRecord): Compiled {
   const seen = new Set<string>();
   const needles: string[] = [];
   const add = (w: string) => {
-    if (!w || seen.has(w)) return;
-    seen.add(w);
-    needles.push(w);
+    if (w && !seen.has(w)) {
+      seen.add(w);
+      needles.push(w);
+    }
   };
   for (const t of rec.tags) add(t.toLowerCase());
-  for (const w of tokList(rec.text)) {
-    if (w.length >= 4 && !STOP.has(w)) add(w);
-  }
+  for (const w of tokList(rec.text)) if (w.length >= 4 && !STOP.has(w)) add(w);
   return { rec, needles };
 }
 
@@ -86,25 +53,8 @@ function load(path: string): Compiled[] {
     if (!t) continue;
     try {
       const rec = JSON.parse(t) as MemoryRecord;
-      if (rec && rec.id && rec.text) out.push(compile(rec));
+      if (rec?.id && rec.text) out.push(compile(rec));
     } catch {}
-  }
-  return out;
-}
-
-function persistAll(path: string, rows: Compiled[]) {
-  writeFileSync(path, rows.map((c) => JSON.stringify(c.rec)).join("\n") + (rows.length ? "\n" : ""));
-}
-
-function hits(hay: Set<string>, compiled: Compiled[]): MemoryRecord[] {
-  const out: MemoryRecord[] = [];
-  for (const c of compiled) {
-    for (const n of c.needles) {
-      if (hay.has(n)) {
-        out.push(c.rec);
-        break;
-      }
-    }
   }
   return out;
 }
@@ -118,11 +68,11 @@ export class AgentMemory {
   private cache = new Map<string, Note[]>();
 
   constructor(opts: MemoryOptions = {}) {
-    this.dir = memDir(opts.dir);
+    this.dir = opts.dir || join(homedir(), ".eden", "memory");
     this.know = opts.know;
     this.agent = opts.agent;
     mkdirSync(this.dir, { recursive: true });
-    this.path = fileOf(this.dir);
+    this.path = join(this.dir, "memories.jsonl");
     this.compiled = load(this.path);
   }
 
@@ -132,7 +82,7 @@ export class AgentMemory {
 
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string } = {}): MemoryRecord {
     const rec: MemoryRecord = {
-      id: opts.id || nid(),
+      id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
       text: String(text || "").trim(),
       kind: opts.kind || "fact",
       tags: (opts.tags || []).map((t) => t.toLowerCase()),
@@ -144,7 +94,6 @@ export class AgentMemory {
     const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     if (i >= 0) this.compiled[i] = c;
     else this.compiled.push(c);
-    mkdirSync(this.dir, { recursive: true });
     appendFileSync(this.path, JSON.stringify(rec) + "\n");
     this.cache.clear();
     return rec;
@@ -154,25 +103,30 @@ export class AgentMemory {
     const n = this.compiled.length;
     this.compiled = this.compiled.filter((c) => c.rec.id !== id);
     if (this.compiled.length === n) return false;
-    persistAll(this.path, this.compiled);
+    writeFileSync(this.path, this.compiled.map((c) => JSON.stringify(c.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
     this.cache.clear();
     return true;
   }
 
   relevant(text: string, cap = 6): MemoryRecord[] {
     const hay = new Set(tokList(text));
-    const found = hits(hay, this.compiled);
-    return found.length > cap ? found.slice(0, cap) : found;
+    const out: MemoryRecord[] = [];
+    for (const c of this.compiled) {
+      for (const n of c.needles) {
+        if (hay.has(n)) {
+          out.push(c.rec);
+          break;
+        }
+      }
+      if (out.length >= cap) break;
+    }
+    return out;
   }
 
   query(q: string, k = 5): QueryHit[] {
     const qn = q.trim();
     const out: QueryHit[] = [];
-    if (qn) {
-      for (const m of this.relevant(qn, k)) {
-        out.push({ text: m.text, source: "memory", id: m.id });
-      }
-    }
+    if (qn) for (const m of this.relevant(qn, k)) out.push({ text: m.text, source: "memory", id: m.id });
     try {
       const card = knowQuery(qn, this.know);
       if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url });
@@ -217,8 +171,6 @@ export class AgentMemory {
     const messages = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
     return { ...body, messages: this.inject(messages) };
   }
-
-  close() {}
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory {
