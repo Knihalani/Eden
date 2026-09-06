@@ -989,8 +989,6 @@ export function wrapTools<T extends ToolsIn>(
             return undefined;
           }, undefined);
           if (fleetHit) {
-            // Head is not in rest. Wait for the leader, then skip the raw GET
-            // or the first fetch still duplicates across agents.
             const ok = await waitSettled(fleetHit.armed, wrapTimeoutMs(state.opts.timeoutMs));
             if (ok) {
               if (isReadName(name) && staleRead(state, args, fleetHit.armed)) {
