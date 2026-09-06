@@ -271,11 +271,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   );
 }
 
-/**
- * Run an Eden-side computation, degrading to `fallback` on any throw. Same
- * contract as the wrap-tools helper of the same name: nothing Eden computes
- * about a request may fail the request.
- */
 function safely<T>(fn: () => T, fallback: T): T {
   try {
     return fn();
