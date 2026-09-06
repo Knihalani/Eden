@@ -47,9 +47,7 @@ export function notesFromInject(injected: unknown[]): string {
 
 function briefing(mem: AgentMemory): string {
   const recs = mem.memories();
-  const constraints = recs.filter((r) => r.kind === "constraint").slice(-6);
-  const seen = new Set(constraints.map((r) => r.id));
-  const pick = [...constraints, ...recs.filter((r) => !seen.has(r.id)).slice(-6)];
+  const pick = [...recs.filter((r) => r.kind === "constraint").slice(-6), ...recs.filter((r) => r.kind !== "constraint").slice(-6)];
   return pick.length ? MEMORY_MARK + pick.map((m) => `\n- ${m.text}`).join("") : "";
 }
 
