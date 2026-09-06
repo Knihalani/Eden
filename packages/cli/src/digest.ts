@@ -1,9 +1,3 @@
-/**
- * Weekly digest CLI (Wave 8.4). Mirrors Home tiles. Opt-in. Never emails.
- *
- * Default off: `digest is off` and exit 0. Enable with EDEN_DIGEST=1 or
- * config `digest: true`. Fetch failure renders EMPTY_DIGEST zeros (fail-open).
- */
 import { writeFileSync } from "node:fs";
 import { providerCacheHitInput, refusalStatus, type RefusalCode } from "@eden/ir";
 import {
