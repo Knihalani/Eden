@@ -279,15 +279,6 @@ describe("wrap stops trusting an arming that has gone stale", () => {
   });
 
   test("eviction under pressure drops expired armings before live ones", async () => {
-    // Eviction was unconditionally oldest-first, so a burst of distinct inputs
-    // pushed out armings whose tails had not run yet — and each of those tails
-    // then executed for real against a tool the compiled program had already
-    // called.
-    //
-    // The long-tailed arming taken first is deliberately the *oldest* entry
-    // and still the most live one: its budget covers a hundred writes, while
-    // the short-tailed armings taken after it run out of budget within the
-    // same burst. Oldest-first eviction throws away exactly the wrong one.
     const c = counted(["start", "write", "lookupTicket", "notify"]);
     const tail = Array.from({ length: 100 }, () => "write");
     const long = program(
