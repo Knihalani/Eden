@@ -3,12 +3,6 @@ import { decideGuard } from "./guard";
 import { emptyRun } from "./types";
 import type { StretchProgram } from "@eden/ir";
 
-/**
- * The budget branch must steer only to a program that *fits* the time left.
- * `|| Boolean(p.manifest)` used to make the predicate always true, so the
- * branch steered to whichever manifest program came first — even one that
- * could not fit and would itself deopt on timeout.
- */
 function program(id: string, budgetMs: number): StretchProgram {
   return {
     id,
