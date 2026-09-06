@@ -75,8 +75,6 @@ describe("bash jail", () => {
   });
 
   test("env values carrying URL credentials are filtered, not just key names", async () => {
-    // A secret under an innocent key name (`EDEN_WEBHOOK_URL` matches none of
-    // the key patterns) used to reach the child shell verbatim.
     const prev = process.env.EDEN_TEST_WEBHOOK;
     process.env.EDEN_TEST_WEBHOOK = "https://user:hunter2secret@example.com/hook";
     try {
