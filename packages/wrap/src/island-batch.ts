@@ -56,13 +56,6 @@ function syncArgs(req: IslandReq): IslandReq {
   return rest;
 }
 
-/**
- * Coalesce waitable island misses onto the provider batch transport.
- *
- * n=1 after the coalesce window stays sync (the agent is blocked on that miss).
- * Batch transport errors fail open to the sync caller — never a 24h stall.
- * Pinned requests never fetch and never join a batch.
- */
 export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}): IslandCaller {
   const pending: Pending[] = [];
   let scheduled = false;
