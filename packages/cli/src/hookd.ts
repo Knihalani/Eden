@@ -33,9 +33,7 @@ export function hookdPidAlive(pid: number): boolean {
 export function clearHookdPid(): void {
   try {
     if (existsSync(hookdPidPath())) unlinkSync(hookdPidPath());
-  } catch {
-    /* best-effort */
-  }
+  } catch {}
 }
 
 export function parseHookdHealthPid(j: unknown): number | null {
@@ -72,9 +70,7 @@ export async function stopHookd(): Promise<number> {
   }
   try {
     process.kill(target, "SIGTERM");
-  } catch {
-    /* already gone */
-  }
+  } catch {}
   clearHookdPid();
   if (live) {
     const extra = recorded && recorded !== live ? `; pid file was ${recorded}` : "";
@@ -188,9 +184,7 @@ export async function startHookdBackground(): Promise<boolean> {
         if (spawned && readHookdPid() === spawned) clearHookdPid();
         try {
           if (spawned) process.kill(spawned, "SIGTERM");
-        } catch {
-          /* already gone */
-        }
+        } catch {}
         return false;
       }
       return true;
