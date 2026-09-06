@@ -58,8 +58,6 @@ function wrapTokenBlocked(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): b
 }
 
 function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string; fn: typeof fetch; timeout: number } {
-  // OPENAI_BASE_URL is the agent-facing pointer at this wrap. Upstream is
-  // OPENAI_API_BASE (or api.openai.com). Using BASE_URL here looped traffic.
   const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
   // Generous by default — completions and streams legitimately run minutes —
   // but bounded, so a hung upstream is an error the client can see rather than
