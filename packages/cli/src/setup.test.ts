@@ -32,12 +32,6 @@ describe("setup hookd", () => {
   });
 
   test("PreToolUse is a fast fail-open probe and never cold-spawns the CLI", () => {
-    // UPDATED BEHAVIOUR: this test previously encoded the blocking design —
-    // PreToolUse inherited the full Post/Stop chain (`--max-time 8` curl then
-    // a cold `bun <cli> hook` spawn) with no `|| echo '{}'` fail-open. That
-    // meant a tool call blocked up to 8s+ whenever hookd was down. PreToolUse
-    // now gets its own command: `curl --max-time 1 … || echo '{}'`, no bun
-    // spawn at all — ordinary tool calls never wait on Eden.
     const hooks = installedHooks(hookCommand("/abs/cli.ts", 8794));
     const pre = String(hooks.PreToolUse[0]!.hooks[0]!.command);
     expect(pre).toContain("--max-time 1");
