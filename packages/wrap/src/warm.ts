@@ -58,7 +58,6 @@ type Store = {
   entries: Entry[];
   stats: WarmStats;
   lastServedId: string | null;
-  /** fromProgramId → toProgramId → count. Watch-time "likely" is witnessed follows, not longest sequence. */
   follows: Map<string, Map<string, number>>;
 };
 
