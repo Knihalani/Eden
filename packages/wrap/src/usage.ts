@@ -25,13 +25,6 @@ export function parseUsage(raw: unknown): { prompt: number; completion: number }
   return { prompt: prompt ?? 0, completion: completion ?? 0 };
 }
 
-/**
- * Provider cache-hit fields (OpenAI + Anthropic dialects).
- *
- * Not folded into `parseUsage` / wrap billing — Arc 1 `cached_tokens` parsing
- * lands as a ledger line, not as a silent change to prompt/completion. Wave 1
- * only exposes the parser so the contract is test-pinned.
- */
 export type CacheTokenFields = {
   cached: number;
   cacheWrite?: number;
