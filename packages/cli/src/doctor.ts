@@ -85,7 +85,6 @@ export async function probeJson(
   }
 }
 
-/** Same split as wrap `surfaceMode()`. Empty is `jit` after soak PASS; unknown is `all`. */
 export function surfaceModeOf(raw: string | undefined = process.env.EDEN_SURFACE): "all" | "none" | "jit" | "jit-shadow" {
   const v = String(raw ?? "")
     .trim()
