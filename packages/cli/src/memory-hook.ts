@@ -58,9 +58,8 @@ function briefing(mem: AgentMemory): string {
 
 function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
   const cwd = asRec(raw).cwd;
-  const home = process.env.EDEN_HOME;
   return openMemory({
-    dir: process.env.EDEN_MEMORY_DIR || (home ? join(home, "memory") : undefined),
+    dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
     agent: process.env.EDEN_MEMORY_AGENT || undefined,
     project: typeof cwd === "string" && cwd ? cwd : process.env.EDEN_MEMORY_PROJECT || undefined,
   });
@@ -79,20 +78,15 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const prior = messagesFromTranscript(asRec(raw).transcript_path);
     if (event === "Stop" || event === "SessionEnd") {
       if (prior.length) mem.observe(prior);
-      mem.close();
       return null;
     }
     if (event === "SessionStart") {
       if (prior.length) mem.observe(prior);
-      const text = briefing(mem);
-      mem.close();
-      return additional(event, text);
+      return additional(event, briefing(mem));
     }
     const prompt = String(asRec(raw).prompt ?? "");
     const list = prompt ? [...prior, { role: "user", content: prompt }] : prior.length ? prior : [{ role: "user", content: "continue" }];
-    const notes = notesFromInject(mem.inject(list));
-    mem.close();
-    return additional(event, notes);
+    return additional(event, notesFromInject(mem.inject(list)));
   } catch {
     return null;
   }
