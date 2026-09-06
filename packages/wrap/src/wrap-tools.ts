@@ -1199,11 +1199,6 @@ export function wrapTools<T extends ToolsIn>(
           run.rawExecuted++;
           if (isMutating(name)) markDirty(state, args, [name]);
           noteJitUsed(state.jit, [name]);
-          // Redact here, not at flush. These stay buffered for up to 12 events,
-          // and holding live references to the caller's objects meant an agent
-          // loop that reuses one args record per turn rewrote already-recorded
-          // history — the witnesses programs get compiled from were of calls
-          // that never happened. It also kept arbitrary result graphs alive.
           run.events.push(
             tag({
               name,
