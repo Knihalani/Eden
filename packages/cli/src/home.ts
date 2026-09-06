@@ -155,15 +155,6 @@ export function writeConfig(c: Config): void {
   chmodQuietly(p, 0o600);
 }
 
-/**
- * Replace a file's contents without a window in which it is half-written.
- *
- * writeFileSync truncates first and writes second, so a crash, a full disk or
- * a power loss in between leaves the file empty or ending in a partial line —
- * and every file this module manages is JSONL that a reader has to parse.
- * Writing a sibling temp file and renaming makes the swap atomic: a reader
- * sees the old contents or the new ones, never a mixture.
- */
 export function writeFileAtomic(path: string, body: string): void {
   const tmp = `${path}.${process.pid}.tmp`;
   try {
@@ -213,7 +204,6 @@ function holderState(stamp: LockStamp | null): "alive" | "dead" | "unknown" {
   }
 }
 
-/** Identity of the file currently at `lockPath`, or null if it is gone. */
 function inodeAt(lockPath: string): number | null {
   try {
     return statSync(lockPath).ino;
