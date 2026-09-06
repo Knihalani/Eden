@@ -1,17 +1,63 @@
 export type Original = (name: string, args: Record<string, unknown>) => Promise<unknown> | unknown;
 
-type WrapResponse = { action: "play"; facts?: unknown; text?: string } | { action: "original" };
+export type WrapResponse = { action: "play"; facts?: unknown; text?: string } | { action: "original" };
 
-type Opts = { baseUrl?: string; apiKey?: string; runId?: string };
+/** Wire-protocol version; must match the server's X-Eden-Version gate. */
+export const EDEN_PROTOCOL_VERSION = 1;
+
+export type Opts = { baseUrl?: string; apiKey?: string; runId?: string };
 
 function cfg(opts?: Opts) {
+  const base = opts?.baseUrl || process.env.EDEN_BASE_URL || "http://127.0.0.1:8788";
+  const hosted = !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(base);
   return {
-    base: opts?.baseUrl || process.env.EDEN_BASE_URL || "http://127.0.0.1:8787",
-    key: opts?.apiKey || process.env.EDEN_API_KEY || "eden_dev",
+    // The wrap plane (`eden wrap`) defaults to 8788. 8787 is the dashboard —
+    // pointing here sent SDK traffic at a UI server.
+    base,
+    key: opts?.apiKey || process.env.EDEN_API_KEY || (hosted ? "" : "eden_dev"),
   };
 }
 
 const seqByRun = new Map<string, number>();
+
+/**
+ * Minimal credential scrubber for values this SDK posts. The server re-runs
+ * its full redactor at ingest — this exists so secrets do not even transit:
+ * a key that never leaves the machine cannot be logged in transit by anything
+ * between here and there.
+ *
+ * Deliberately narrower than @eden/ir's redact (which is 460 lines of
+ * cross-checked matchers). Covers the high-frequency families: secret-named
+ * keys and bearer/api-key shaped values.
+ */
+const SECRET_KEY =
+  /(pass(word|wd|phrase)?|secret|api[-_]?key|access[-_]?key|token|auth(orization)?|credential|cookie|jwt|bearer|private[-_]?key|session)/i;
+const SECRET_VALUE =
+  /(\bsk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{8,}|\bAKIA[0-9A-Z]{12,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{30,})/g;
+
+function scrub(value: unknown, depth = 0): unknown {
+  if (depth > 6) return value; // bounded: hostile graphs cannot recurse forever
+  if (typeof value === "string") {
+    // Always run the value-pattern replace (never .test() a /g/ regex — its
+    // lastIndex state makes matches alternate), then key=value text.
+    const scrubbed = value.replace(SECRET_VALUE, "[redacted]");
+    return scrubbed.includes("=") || scrubbed.includes(":")
+      ? scrubbed.replace(
+          /([\w.-]*(?:password|passwd|secret|api[_-]?key|token|authorization|credential)[\w.-]*)\s*[:=]\s*("?)[^\s",]+/gi,
+          (_m, k) => `${k}: [redacted]`,
+        )
+      : scrubbed;
+  }
+  if (Array.isArray(value)) return value.map((v) => scrub(v, depth + 1));
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = SECRET_KEY.test(k) ? "[redacted]" : scrub(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
 
 export async function runTool(
   name: string,
@@ -21,7 +67,11 @@ export async function runTool(
 ): Promise<unknown> {
   const { base, key } = cfg(opts);
   const runId = opts?.runId || `sdk-${Date.now()}`;
-  const headers = { Authorization: `Bearer ${key}`, "content-type": "application/json" };
+  const headers = {
+    Authorization: `Bearer ${key}`,
+    "content-type": "application/json",
+    "x-eden-version": String(EDEN_PROTOCOL_VERSION),
+  };
 
   const wrapRes = await fetch(`${base}/v1/wrap`, {
     method: "POST",
@@ -48,7 +98,7 @@ export async function runTool(
           event_id: crypto.randomUUID(),
           seq,
           name,
-          args,
+          args: scrub(args) as Record<string, unknown>,
           ok: true,
         },
       ],
@@ -72,6 +122,25 @@ export class Eden {
   }
   runTool(name: string, args: Record<string, unknown>, original: Original) {
     return runTool(name, args, original, this.opts);
+  }
+  /**
+   * World fact for this turn. Lazy: does not load the graph until called.
+   * Fail-open `{ unknown: true }`. Not a model-picked tool.
+   */
+  async know(query: string): Promise<{ fact: string; confidence?: number } | { unknown: true }> {
+    try {
+      // Specifier is a variable so bun does not auto-install Know at load time.
+      // resolve() probes node_modules only; a missing package must not hit the registry.
+      const spec = "@eden/know";
+      const { createRequire } = await import("node:module");
+      createRequire(import.meta.url).resolve(spec);
+      const { knowQuery } = (await import(spec)) as {
+        knowQuery: (q: string) => Promise<{ fact: string; confidence?: number } | { unknown: true }>;
+      };
+      return knowQuery(query);
+    } catch {
+      return { unknown: true };
+    }
   }
   end() {
     return endStretch(this.opts.runId!, this.opts);

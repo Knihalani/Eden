@@ -1,0 +1,107 @@
+/** CLI `run` flags and `tick()` fallbacks. Keep these in one place. */
+
+export function envNum(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export const DEFAULT_INTERVAL_SEC = 20;
+export const DEFAULT_CC = 120;
+export const DEFAULT_LIVE = 96;
+export const DEFAULT_NEWS = 16;
+/** CDX Range hits per tick (cheap RAM vs a full WET). */
+export const DEFAULT_CDX = 8;
+export const DEFAULT_WIKI = 0;
+export const DEFAULT_WIKI_GROW = 0;
+export const DEFAULT_RECRAWL = 48;
+export const DEFAULT_QUALITY = 16;
+/** Compact-publish when WAL is at least this and the last upload is old enough. */
+export const COMPACT_WAL_MIN = 64;
+export const DEFAULT_COMPACT_MS = 900_000;
+/** Run a full WET gunzip every N ticks when the last slice kept nothing. */
+export const DEFAULT_WET_EVERY = 3;
+
+/**
+ * Expensive gzip/range lanes: cadence `every`, but if the last run kept 0
+ * skip until `every * retryMul` so a dry WET does not tax the 1 GB box every third tick.
+ */
+export function expensiveLaneDue(tickN: number, every: number, lastKept: number, retryMul = 3): boolean {
+  const e = Math.max(1, every | 0);
+  if (tickN % e !== 0) return false;
+  if (lastKept > 0) return true;
+  return tickN % (e * Math.max(1, retryMul | 0)) === 0;
+}
+
+export function shardIndex(): number {
+  const raw = process.env.EDEN_KNOW_SHARD;
+  if (raw != null && raw !== "") return envNum("EDEN_KNOW_SHARD", 0);
+  const n = shardCount();
+  if (n <= 1) return 0;
+  const host = process.env.HOSTNAME || process.env.NF_POD_NAME || "";
+  const m = host.match(/(\d+)(?:-[a-z0-9]+)?$/i);
+  if (m) return Number(m[1]) % n;
+  return 0;
+}
+
+export function shardCount(): number {
+  return Math.max(1, envNum("EDEN_KNOW_SHARDS", 1) | 0);
+}
+
+/** Hash-partition a URL so N ingest boxes do not fetch the same page. */
+export function shardOwns(url: string, i = shardIndex(), n = shardCount()): boolean {
+  if (n <= 1) return true;
+  const shard = ((i % n) + n) % n;
+  let h = 2166136261;
+  for (let k = 0; k < url.length; k++) {
+    h ^= url.charCodeAt(k);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % n === shard;
+}
+
+/** Exclusive wet.paths slot for this box: shard 0 → 0,2,4… when n=2. */
+export function shardWetIndex(seq: number, i = shardIndex(), n = shardCount()): number {
+  const shards = Math.max(1, n | 0);
+  const shard = ((i % shards) + shards) % shards;
+  const s = Math.max(0, seq | 0);
+  if (shards <= 1) return s;
+  return shard + s * shards;
+}
+
+/** True when ingest should rewrite and upload the single `graph.kpk`. */
+export function compactDue(wal: number, lastMs: number, now = Date.now()): boolean {
+  if (wal < COMPACT_WAL_MIN) return false;
+  if (!lastMs) return true;
+  return now - lastMs >= envNum("EDEN_KNOW_COMPACT_MS", DEFAULT_COMPACT_MS);
+}
+
+/** Only shard 0 publishes `graph.kpk`. Followers ship overlay bytes instead. Does not touch WET_BYTES. */
+export function compactLeader(i = shardIndex(), n = shardCount()): boolean {
+  if (process.env.EDEN_KNOW_COMPACT === "0") return false;
+  if (process.env.EDEN_KNOW_COMPACT === "1") return true;
+  if (n <= 1) return true;
+  return (((i % n) + n) % n) === 0;
+}
+/** Consecutive latest-crawl WET files per tick (abort-early makes 2 cheap). */
+export const DEFAULT_CC_SLICES = 2;
+/** Parallel live fetches per tick (sqlite writes stay serial). */
+export const LIVE_CONCURRENCY = envNum("EDEN_KNOW_LIVE_CONC", 64);
+/** Cap concurrent fetches to one origin so RFC 9309 crawl-delay still means something. */
+export const LIVE_PER_HOST = 3;
+/** Skip catalog re-fetch when last success is newer than this. */
+export const CATALOG_REFRESH_MS = 6 * 3600_000;
+/** WET records scanned per kept record (was 8). */
+export const WET_SCAN_MULT = 40;
+/**
+ * Compressed WET prefix to fetch (HTTP Range bytes=0..n-1).
+ * Live CC-MAIN-2026-34 first WET is 63,890,507 bytes; 8 MiB covers a 2000-record scan window.
+ * Piece 2 compact/overlay must not change this cap.
+ */
+export const DEFAULT_WET_BYTES = 8_388_608;
+export const BASELINE_WET_FILE_BYTES = 63_890_507;
+
+export function wetByteCap(): number {
+  return Math.max(65_536, envNum("EDEN_KNOW_WET_BYTES", DEFAULT_WET_BYTES) | 0);
+}

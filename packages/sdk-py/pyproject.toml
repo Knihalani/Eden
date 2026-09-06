@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eden-agent"
+version = "0.1.0"
+description = "Pure-stdlib Python client for the Eden runtime: wrap tool calls onto compiled tools with fail-open fallback."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/KaiavN/Eden"
+Hosted = "https://useeden.vercel.app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["eden*"]

@@ -1,27 +1,138 @@
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { writeFileSync } from "node:fs";
-import { familyId, matchPrefix, parseNamedCli } from "@eden/core";
-import {
-  appendJsonl,
-  edenHome,
-  ensureHome,
-  eventsPath,
-  liveToolsPath,
-  outboxPath,
-  readJson,
-} from "./home";
+import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, withFileLockAsync, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
+import { redact, isStretchEnd, inDistribution, protocolHeaders } from "@eden/ir";
+import type { StretchProgram } from "@eden/ir";
+import { eligibleForTransparent, executeTransparent, inSessionBucket, postToolUseReplacement, type LiveTool } from "./transparent";
+import { applyHookOutput } from "./transcript-diff";
+import { appendLedgerRow, armRemainder, armRemainderFromBatch, claimRemainder, parseToolCalls, remainderDenyReason } from "./remainder";
+import { mapHostToolName } from "./shapes";
+import { memoryHookResponse } from "./memory-hook";
 
-type HookIn = {
+export type HookIn = {
   hook_event_name?: string;
   session_id?: string;
-  cwd?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
   tool_response?: unknown;
-  permissionDecision?: string;
+  tool_output?: unknown;
+  /** PostToolBatch: one entry per resolved call. Absent/garbage → fail-open `{}`. */
+  tool_calls?: unknown;
+  /** Claude Code project cwd. Remainder joins relative `file_path`/`path` against this. */
+  cwd?: string;
+  prompt?: string;
+  transcript_path?: string;
+  source?: string;
 };
 
-type LiveTool = { name: string; seen: string[]; required_k: number };
+export type HookHost = "claude" | "gemini" | "opencode" | "codex" | "unknown";
+
+const EVENT_ALIASES: Record<string, string> = {
+  PostToolUse: "PostToolUse",
+  AfterToolUse: "PostToolUse",
+  AfterTool: "PostToolUse",
+  post_tool: "PostToolUse",
+  "tool.execute.after": "PostToolUse",
+  PostToolBatch: "PostToolBatch",
+  AfterToolBatch: "PostToolBatch",
+  post_tool_batch: "PostToolBatch",
+  PreToolUse: "PreToolUse",
+  BeforeToolUse: "PreToolUse",
+  BeforeTool: "PreToolUse",
+  pre_tool: "PreToolUse",
+  "tool.execute.before": "PreToolUse",
+  Stop: "Stop",
+  SessionEnd: "Stop",
+  session_stop: "Stop",
+  SessionStart: "SessionStart",
+  session_start: "SessionStart",
+  UserPromptSubmit: "UserPromptSubmit",
+  user_prompt_submit: "UserPromptSubmit",
+  PreCompact: "PreCompact",
+  pre_compact: "PreCompact",
+};
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost {
+  if (
+    eventRaw === "AfterTool" ||
+    eventRaw === "BeforeTool" ||
+    eventRaw === "AfterToolUse" ||
+    eventRaw === "BeforeToolUse"
+  ) {
+    return "gemini";
+  }
+  if (
+    eventRaw === "post_tool" ||
+    eventRaw === "pre_tool" ||
+    eventRaw === "tool.execute.after" ||
+    eventRaw === "tool.execute.before" ||
+    typeof r.sessionID === "string"
+  ) {
+    return "opencode";
+  }
+  const tr = asRecord(r.tool_response);
+  if (typeof tr.llmContent === "string") return "gemini";
+  if (
+    eventRaw === "PostToolUse" ||
+    eventRaw === "PreToolUse" ||
+    eventRaw === "Stop" ||
+    eventRaw === "SessionStart" ||
+    eventRaw === "UserPromptSubmit" ||
+    eventRaw === "PreCompact" ||
+    eventRaw === "PostToolBatch"
+  ) {
+    return "claude";
+  }
+  return "unknown";
+}
+
+/**
+ * Map host-native hook payloads onto Claude-shaped {@link HookIn}.
+ * Gemini `tool_response.llmContent` becomes the original text; OpenCode
+ * `tool`/`args`/`sessionID` become `tool_name`/`tool_input`/`session_id`.
+ */
+export function normalizeHookIn(raw: unknown): { hook: HookIn; host: HookHost } {
+  const r = asRecord(raw);
+  const eventRaw = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
+  const hook_event_name = EVENT_ALIASES[eventRaw] ?? (eventRaw || undefined);
+  let host = detectHookHost(r, eventRaw);
+  const toolRaw = r.tool_name ?? r.tool ?? r.toolName;
+  const tool_name = typeof toolRaw === "string" && toolRaw ? mapHostToolName(toolRaw) : undefined;
+  const sessionRaw = r.session_id ?? r.sessionID ?? r.sessionId;
+  const session_id = typeof sessionRaw === "string" && sessionRaw ? sessionRaw : undefined;
+  const tool_input = asRecord(r.tool_input ?? r.args ?? r.parameters);
+  let tool_response: unknown = r.tool_response ?? r.tool_output ?? r.result;
+  if (tool_response === undefined && typeof r.output === "string") tool_response = r.output;
+  const tr = asRecord(tool_response);
+  if (typeof tr.llmContent === "string") {
+    if (host === "unknown") host = "gemini";
+    tool_response = tr.llmContent;
+  }
+  const cwdRaw = r.cwd;
+  const cwd = typeof cwdRaw === "string" && cwdRaw ? cwdRaw : undefined;
+  const promptRaw = r.prompt;
+  const prompt = typeof promptRaw === "string" ? promptRaw : undefined;
+  const transcriptRaw = r.transcript_path ?? r.transcriptPath;
+  const transcript_path = typeof transcriptRaw === "string" && transcriptRaw ? transcriptRaw : undefined;
+  return {
+    host,
+    hook: {
+      ...r,
+      hook_event_name,
+      session_id,
+      tool_name,
+      tool_input,
+      tool_response,
+      cwd,
+      prompt,
+      transcript_path,
+    },
+  };
+}
 
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
@@ -32,113 +143,429 @@ function readStdin(): Promise<string> {
   });
 }
 
-function cliFamily(name: string, args: Record<string, unknown>): string {
-  if (name === "Bash" || name === "bash") {
-    const parsed = parseNamedCli(String(args.command ?? ""));
-    if (parsed) return familyId(parsed);
-    const cmd = String(args.command ?? "");
-    return cmd.trim().split(/\s+/)[0]?.replace(/.*\//, "") || "Bash";
-  }
-  return name;
-}
-
-function fireDrain(): void {
-  const cli = join(import.meta.dir, "cli.ts");
-  Bun.spawn(["bun", cli, "drain"], { stdout: "ignore", stderr: "ignore", stdin: "ignore" });
-}
-
 export async function runHook(): Promise<void> {
   const raw = await readStdin();
-  let input: HookIn = {};
+  let body: HookIn = {};
   try {
-    input = JSON.parse(raw || "{}");
+    body = JSON.parse(raw || "{}") as HookIn;
   } catch {
-    process.stdout.write("{}\n");
-    return;
+    body = {}
   }
-  const event = input.hook_event_name || "PreToolUse";
-  const runId = input.session_id || "unknown";
-  ensureHome();
+  // The last line of defence for "a broken Eden never blocks the agent". Any
+  // throw in here — a stale lock, an unreadable home directory, a corrupt run
+  // log — used to exit non-zero with empty stdout. `{}` is the answer that
+  // lets the tool call proceed.
+  //
+  // The same defence against *hanging*: Claude Code waits on this process, so
+  // respondToHook is raced against a hard timeout. A wedged lock or a slow
+  // disk costs Eden its recording for one event; it never costs the agent its
+  // tool call.
+  const HOOK_TIMEOUT_MS = 2_500;
+  let out: Record<string, unknown> = { ok: true };
+  try {
+    out = await Promise.race([
+      respondToHook(body),
+      new Promise<Record<string, unknown>>((resolve) =>
+        setTimeout(() => resolve({ ok: true, eden_timeout: true }), HOOK_TIMEOUT_MS),
+      ),
+    ]);
+  } catch (err) {
+    process.stderr.write(`eden hook: ${(err as Error)?.message ?? String(err)}\n`);
+    out = {};
+  }
+  process.stdout.write(JSON.stringify(out));
+}
 
-  if (event === "PreToolUse") {
-    const live = readJson<LiveTool[]>(liveToolsPath(), []);
-    const statePath = eventsPath(runId) + ".seen";
-    const seen = readJson<string[]>(statePath, []);
-    const incoming = cliFamily(input.tool_name || "", input.tool_input || {});
-    const decision = matchPrefix(live, seen, incoming);
-    seen.push(incoming);
-    writeFileSync(statePath, JSON.stringify(seen));
-    if (decision.action === "deny") {
-      const already = readJson<{ steered?: boolean }>(eventsPath(runId) + ".steer", {});
-      if (already.steered) {
-        process.stdout.write("{}\n");
-        return;
+/**
+ * The lock a hook run takes around each session-file mutation.
+ *
+ * One-shot `eden hook` processes keep the sync {@link withFileLock}: the
+ * process exists for one event, has nothing else to serve, and spinning on
+ * sleepSync costs it nothing. hookd passes {@link withFileLockAsync} instead —
+ * sleepSync parks its whole event loop, so one contended lock stalled every
+ * other session's request behind it.
+ */
+export type HookLocker = <T>(lockPath: string, fn: () => T) => T | Promise<T>;
+
+function readConfigSafely(): { steer_hooks?: boolean } | null {
+  try {
+    return readConfig();
+  } catch {
+    return null;
+  }
+}
+
+function readJsonl(path: string): Array<Record<string, unknown>> {  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
       }
-      writeFileSync(eventsPath(runId) + ".steer", JSON.stringify({ steered: true }));
-      process.stdout.write(
-        JSON.stringify({
-          decision: "deny",
-          reason: decision.reason,
+    })
+    .filter((x): x is Record<string, unknown> => !!x);
+}
+
+/** Tools-only hook stretch. Real `usage` is attached at ingest from the chat proxy. */
+export function hookTraceBody(events: Array<Record<string, unknown>>): Record<string, unknown> {
+  const first = events[0]!;
+  const t0 = Number(first.ts ?? Date.now());
+  const t1 = Number(events.at(-1)?.ts ?? t0);
+  return {
+    events,
+    input: first.args ?? {},
+    output: lastOkResult(events),
+    llmCalls: 0,
+    duration_ms: Math.max(0, t1 - t0),
+    cost_cents: 0,
+    complete: true,
+  };
+}
+
+function lastOkResult(events: Array<Record<string, unknown>>): unknown {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]!;
+    if (ev.ok !== false && ev.result !== undefined) return ev.result;
+  }
+  return undefined;
+}
+
+function flushSession(session: string, events: Array<Record<string, unknown>>): void {
+  const cfg = readConfig();
+  if (!cfg || events.length < 2) return;
+  const path = eventsPath(session);
+  const flushedIds = events.map((e) => String(e.id ?? ""));
+  void fetch(`${wrapPlaneUrl(cfg.base_url)}/v1/traces`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${cfg.api_key}`, "content-type": "application/json", ...protocolHeaders() },
+    body: JSON.stringify({ id: crypto.randomUUID(), ...hookTraceBody(events) }),
+  })
+    .then((r) => {
+      if (r.ok) withFileLock(`${path}.lock`, () => applyFlushTruncate(path, flushedIds));
+    })
+    .catch(() => undefined);
+}
+
+/**
+ * Drop the events that were successfully uploaded, keeping everything else.
+ *
+ * Two failure modes this has to avoid, both of which lose events:
+ *  - An empty id set used to fall through to `rest = []`, i.e. "nothing was
+ *    confirmed sent, so delete the entire log". Callers happen to guard
+ *    against it today, but the safe reading of "no ids to drop" is to drop
+ *    nothing.
+ *  - Rewriting in place truncates first and writes after. A crash, a full
+ *    disk, or a power loss in between leaves the log empty or ending in half a
+ *    line, which `readJsonl` then cannot parse. Writing a sibling temp file
+ *    and renaming makes the replacement atomic: readers see either the old
+ *    file or the new one, never a partial one.
+ */
+/**
+ * Drop exactly the lines a caller has finished with, keeping anything that
+ * arrived since it read them.
+ *
+ * Matching on the raw line text rather than unlinking the file is what makes
+ * this safe against a hook appending during an in-flight upload: a line the
+ * caller never saw cannot be in `consumed`.
+ */
+export function dropConsumedLines(path: string, consumed: string[]): void {
+  if (!consumed.length || !existsSync(path)) return;
+  const drop = new Set(consumed);
+  const current = readFileSync(path, "utf8").split("\n").filter(Boolean);
+  const rest = current.filter((l) => !drop.has(l));
+  if (rest.length === current.length) return;
+  writeFileAtomic(path, rest.length ? rest.join("\n") + "\n" : "");
+  // The log just shrank behind the cursor's back; re-anchor it so the hot path
+  // does not act on a count that no longer describes the file.
+  setCursorLines(path, rest.length);
+}
+
+export function applyFlushTruncate(path: string, flushedIds: string[]): void {
+  const drop = new Set(flushedIds.filter(Boolean));
+  if (!drop.size) return;
+  const current = readJsonl(path);
+  const rest = current.filter((e) => !drop.has(String(e.id ?? "")));
+  if (rest.length === current.length) return;
+  writeFileAtomic(path, rest.length ? rest.map((e) => JSON.stringify(e)).join("\n") + "\n" : "");
+  setCursorLines(path, rest.length);
+}
+
+/**
+ * Flushed-cursor sidecar: `<session>.jsonl.cursor.json`.
+ *
+ * PostToolUse fires on every tool call and used to re-read and JSON-parse the
+ * *entire* session log synchronously just to learn its line count for the
+ * stretch-end check. The sidecar records how many lines have been appended,
+ * under the same file lock as the append itself, so the hot path touches only
+ * this tiny file; the full log is read where it is actually needed — at a
+ * stretch end, or once after the count has been invalidated (a lost or corrupt
+ * sidecar, or another writer having truncated the log).
+ *
+ * A cursor that has drifted high only makes the stretch-end check fire early,
+ * and the authoritative `events.length >= 2` guard in flushSession still runs
+ * on the real snapshot — so drift costs a redundant read, never a lost or
+ * duplicated event. "Every event flushed exactly once" stays owned by the id
+ * matching in applyFlushTruncate.
+ */
+function cursorPathFor(path: string): string {
+  return `${path}.cursor.json`;
+}
+
+function readCursorLines(path: string): number | null {
+  try {
+    const c = JSON.parse(readFileSync(cursorPathFor(path), "utf8")) as { lines?: unknown };
+    if (typeof c?.lines === "number" && Number.isInteger(c.lines) && c.lines >= 0) return c.lines;
+  } catch {
+    /* absent, corrupt, or half-written: fall through to a rebuild */
+  }
+  return null;
+}
+
+function setCursorLines(path: string, lines: number): void {
+  writeFileAtomic(cursorPathFor(path), JSON.stringify({ lines }));
+}
+
+function countSessionLines(path: string): number {
+  if (!existsSync(path)) return 0;
+  return readFileSync(path, "utf8").split("\n").filter(Boolean).length;
+}
+
+/**
+ * One appended event later. Must run under `${path}.lock`, alongside the
+ * append it counts, so the sidecar can never describe a line that was not
+ * written or miss one that was.
+ *
+ * A missing or invalid cursor is rebuilt from the real log once (the
+ * invalidation path) rather than silently restarting at zero, which would
+ * suppress stretch-end flushing until two more events happened by. The rebuild
+ * count is taken *before* the append so the fresh line itself is not counted
+ * twice.
+ */
+export function recordAppendedEvent(path: string, append: () => void): number {
+  const prev = readCursorLines(path);
+  const lines = (prev ?? countSessionLines(path)) + 1;
+  append();
+  setCursorLines(path, lines);
+  return lines;
+}
+
+export async function respondToHook(
+  raw: HookIn,
+  locker: HookLocker = withFileLock,
+): Promise<Record<string, unknown>> {
+  const { hook: body, host } = normalizeHookIn(raw);
+  ensureHome();
+  const session = body.session_id || "local";
+  const name = body.tool_name;
+  const cwd = typeof body.cwd === "string" && body.cwd ? body.cwd : undefined;
+  if (
+    body.hook_event_name === "UserPromptSubmit" ||
+    body.hook_event_name === "SessionStart" ||
+    body.hook_event_name === "PreCompact"
+  ) {
+    try {
+      const mem = memoryHookResponse(body as Record<string, unknown>);
+      if (mem) return { ok: true, ...mem };
+    } catch {
+      /* fall open */
+    }
+    return { ok: true };
+  }
+  if (body.hook_event_name === "PostToolUse" && name) {
+    const event = redact({
+      id: crypto.randomUUID(),
+      name,
+      args: body.tool_input ?? {},
+      result: body.tool_response ?? body.tool_output,
+      ok: (body as { is_error?: boolean }).is_error !== true,
+      ts: Date.now(),
+    }) as Record<string, unknown>;
+    const path = eventsPath(session);
+    // Append and count under one lock acquisition: the hot path never opens
+    // the session log itself, only the tiny cursor sidecar.
+    let lineCount = 0;
+    await locker(`${path}.lock`, () => {
+      lineCount = recordAppendedEvent(path, () => appendJsonl(path, event));
+    });
+    // Full read only at a stretch end; flushSession's own `events.length >= 2`
+    // guard on the real snapshot stays authoritative.
+    if (lineCount >= 2 && isStretchEnd(name)) {
+      const events = readJsonl(path);
+      if (events.length >= 2) flushSession(session, events);
+    }
+    // Transparent execution: this call matched a live read-only program's
+    // first step — serve the rest of the routine by replacing this call's
+    // output. Recording above already happened; every failure below falls
+    // open to `{ ok: true }` so the agent's own output stands.
+    try {
+      const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
+      const live = (Array.isArray(liveRaw) ? liveRaw : []) as LiveTool[];
+      const entry = live.find(
+        (t) =>
+          (t.sequence ?? [])[0] === name &&
+          inSessionBucket(t, body.session_id) &&
+          eligibleForTransparent(t, body.tool_input ?? {}),
+      );
+      if (entry) {
+        const receiptText = await executeTransparent(entry, body.tool_input ?? {});
+        if (receiptText !== null) {
+          // `name` (the real tool, e.g. Bash) selects the native result shape;
+          // the program name appears in the appended sentinel.
+          const replacement = postToolUseReplacement(
+            name,
+            body.tool_response ?? body.tool_output ?? "",
+            receiptText,
+            entry.name,
+          );
+          try {
+            await armRemainder(session, entry, body.tool_input ?? {}, locker, cwd);
+            appendLedgerRow({ session, class: "transparent", program: entry.name, programId: entry.id });
+            const original = body.tool_response ?? body.tool_output ?? "";
+            const applied = applyHookOutput(name, original, replacement);
+            if (applied.droppedRewrite) {
+              appendLedgerRow({ session, class: "host-drop", program: entry.name, programId: entry.id, tool: name });
+            }
+          } catch {
+            /* serve stands even if remainder/ledger fail */
+          }
+          return replacement;
+        }
+      }
+    } catch {
+      /* fall open */
+    }
+  }
+  // PostToolBatch fires once after a parallel batch resolves, before the next
+  // model call. Remainder is armed from the full set so sibling tails do not
+  // double-execute on the next PreToolUse. Never decision:block — that would
+  // halt the agentic loop; suppression is PreToolUse deny (already shipped).
+  if (body.hook_event_name === "PostToolBatch") {
+    try {
+      const parsed = parseToolCalls(body.tool_calls);
+      if (!parsed) return {};
+      const calls = parsed.map((c) => ({
+        tool_name: mapHostToolName(c.tool_name),
+        tool_input: c.tool_input,
+      }));
+      const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
+      const live = (Array.isArray(liveRaw) ? liveRaw : []) as Array<{
+        name?: string;
+        id?: string;
+        sequence?: string[];
+        envelope?: { inputs?: Record<string, unknown[]> } | null;
+      }>;
+      const events = readJsonl(eventsPath(session));
+      const servedHeads = new Set(events.map((e) => mapHostToolName(String(e.name ?? ""))));
+      const covered = await armRemainderFromBatch(session, calls, live, locker, { servedHeads, cwd });
+      if (!covered.length) return {};
+      const programs = [...new Set(covered)].join(", ");
+      const restNames = [...new Set(calls.map((c) => c.tool_name))].join(", ");
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PostToolBatch",
+          additionalContext: remainderDenyReason(programs, restNames),
+        },
+      };
+    } catch {
+      return {};
+    }
+  }
+  if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
+    try {
+      memoryHookResponse(body as Record<string, unknown>);
+    } catch {
+      /* observe is best-effort */
+    }
+    await locker(`${outboxPath()}.lock`, () =>
+      appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),
+    );
+    const path = eventsPath(session);
+    const events = readJsonl(path);
+    if (events.length >= 2) flushSession(session, events);
+  }
+  // readJson only guards against a parse error, not against the file holding
+  // something other than an array. drain writes `json.tools ?? json`, so a site
+  // response without a `tools` key — a proxy error page, a version skew — put
+  // an *object* here and `live.some(...)` then threw on every single PreToolUse.
+  const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
+  const live = (
+    Array.isArray(liveRaw) ? liveRaw : []
+  ) as Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>;
+  // Config is advisory here: a corrupt or half-written config.json must not
+  // stop the hook from answering (an answer of "allow" is always available).
+  const cfg = readConfigSafely();
+  if (body.hook_event_name === "PreToolUse" && name) {
+    // S1b remainder deny: already-served tail. Independent of MCP steer
+    // (EDEN_STEER_HOOKS stays default off). Fail-open on any throw.
+    try {
+      const claimed = await claimRemainder(session, name, body.tool_input ?? {}, locker, undefined, cwd);
+      if (claimed) {
+        try {
+          appendLedgerRow({
+            session,
+            class: "steered-skip",
+            program: claimed.program,
+            programId: claimed.programId,
+            tool: name,
+          });
+        } catch {
+          /* deny still stands */
+        }
+        const reason = remainderDenyReason(claimed.program, name);
+        const deny: Record<string, unknown> = {
           hookSpecificOutput: {
             hookEventName: "PreToolUse",
             permissionDecision: "deny",
-            permissionDecisionReason: decision.reason,
+            permissionDecisionReason: reason,
           },
-          systemMessage: `Eden: call ${decision.tool} instead of this stretch.`,
-        }) + "\n",
-      );
-      return;
+        };
+        // Gemini BeforeTool reads top-level decision/reason. Claude uses
+        // permissionDecision only — extra decision on Claude Pre is omitted.
+        if (host === "gemini") {
+          deny.decision = "deny";
+          deny.reason = reason;
+        }
+        return deny;
+      }
+    } catch {
+      /* fall open */
     }
-    process.stdout.write("{}\n");
-    return;
-  }
-
-  if (event === "PostToolUse" || event === "PostToolUseFailure") {
-    const statePath = eventsPath(runId) + ".seen";
-    const seen = readJson<string[]>(statePath, []);
-    appendJsonl(eventsPath(runId), {
-      event_id: crypto.randomUUID(),
-      hook: event,
-      seq: seen.length,
-      name: input.tool_name,
-      args: input.tool_input || {},
-      command: (input.tool_input as { command?: string })?.command,
-      ok: event !== "PostToolUseFailure",
-      ts: Date.now(),
-    });
-    process.stdout.write("{}\n");
-    return;
-  }
-
-  if (event === "Stop" || event === "UserPromptSubmit") {
-    appendJsonl(outboxPath(), {
-      run_id: runId,
-      kind: event === "Stop" ? "stretch_end" : "turn_split",
-      flushed: false,
-      ts: Date.now(),
-    });
-    if (event === "Stop") fireDrain();
-    process.stdout.write("{}\n");
-    return;
-  }
-
-  if (event === "SessionStart") {
-    const knockPath = join(edenHome(), "knock.json");
-    const knock = readJson<{ message?: string; shown?: number }>(knockPath, {});
-    let msg: string | undefined;
-    const shown = knock.shown ?? 0;
-    if (knock.message && shown < 2) {
-      msg = `Eden: a draft tool is ready. Run \`eden open\` or \`eden reject\`.\n${knock.message}`;
-      writeFileSync(knockPath, JSON.stringify({ ...knock, shown: shown + 1 }));
+    if (live.some((t) => t.name === name)) return { ok: true };
+    // Steering a raw call to the MCP tool is opt-in (steer_hooks in config, or
+    // EDEN_STEER_HOOKS=1). Default is observe: Eden records the pattern but
+    // never denies the agent's own call — if the MCP server is down, mid-restart,
+    // or the compiled tool deopts, a deny here would leave the agent stranded
+    // with no way to do the work at all. Remainder deny above is not this.
+    const steerHooks =
+      process.env.EDEN_STEER_HOOKS === "1" || cfg?.steer_hooks === true;
+    if (!steerHooks) return { ok: true };
+    const hits = live
+      .filter((t) => (t.sequence ?? [])[0] === name && inSessionBucket(t, body.session_id))
+      .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
+    const hit = hits[0];
+    // Never deny in favour of a tool we cannot name. drain writes
+    // `name: t.program?.name ?? t.name`, either of which may be undefined, and
+    // the result was a hard deny on every Bash call telling the agent to "use
+    // the Eden compiled tool null" — Eden bricking the user's agent, which is
+    // the one thing it must never do.
+    if (hit && typeof hit.name === "string" && hit.name.length > 0) {
+      if (hit.envelope?.inputs) {
+        const probe = {
+          contract: { envelope: hit.envelope, allowExact: false, witnesses: 1, minLlmReduction: 2 },
+        } as StretchProgram;
+        if (!inDistribution(probe, body.tool_input ?? {})) return { ok: true };
+      }
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: `Use the Eden compiled tool ${hit.name} via MCP instead of ${name}.`,
+        },
+      };
     }
-    fireDrain();
-    process.stdout.write(JSON.stringify(msg ? { systemMessage: msg } : {}) + "\n");
-    return;
   }
-
-  process.stdout.write("{}\n");
-}
-
-if (import.meta.main) {
-  await runHook();
+  return { ok: true };
 }

@@ -1,0 +1,12 @@
+{
+  "name": "eden",
+  "owner": { "name": "KaiavN" },
+  "metadata": { "description": "Eden plugins for Claude Code" },
+  "plugins": [
+    {
+      "name": "eden-memory",
+      "source": "./plugins/eden-memory",
+      "description": "Passive memory: store what is worth remembering from conversation and inject it later. No explicit remember() calls."
+    }
+  ]
+}

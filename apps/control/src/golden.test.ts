@@ -1,0 +1,1219 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { pushPrev, Store } from "./store";
+import { createHandler } from "./server";
+
+// Org binding: a DATABASE_URL in .env makes the control plane treat itself as
+// managed, where the permissive legacy fallback requires explicit opt-in.
+// These tests approve/pause without org bindings, so pin dev like
+// apps/site/src/validation.test.ts does.
+const PREV_DEV = process.env.EDEN_DEV;
+process.env.EDEN_DEV = "1";
+afterAll(() => {
+  process.env.EDEN_DEV = PREV_DEV;
+});
+import { compileTraces } from "@eden/compile";
+import { shadowProgram, replayRegistry } from "@eden/shadow";
+import { registryFrom } from "@eden/runtime";
+import { createState, wrapTools, steerToolCalls, codingRegistry } from "@eden/wrap";
+import {
+  createTicketShip,
+  runNaive,
+  ticketShipProgram,
+  toNaiveTrace,
+  underdeterminedSiblingTraces,
+  OOD_ID,
+  WITNESS_IDS,
+} from "../../../packages/runtime/src/ticketship";
+import type { StretchTrace } from "@eden/ir";
+
+async function naiveTraces(n: number, _skip = 0.2): Promise<StretchTrace[]> {
+  const out: StretchTrace[] = [];
+  for (let i = 0; i < n; i++) {
+    const world = createTicketShip({ llmMs: 0 });
+    const id = WITNESS_IDS[i % 3]!;
+    // Real per-event durations instead of the synthetic 200×llm fixture clock:
+    // tools cost 100ms each, the island draft 5_000ms, and the session total
+    // is their sum. The ship gate counts only measured numbers or absent ones,
+    // and these fixtures used to PASS on island tokens extrapolated from
+    // remaining LLM calls against a synthetic clock. skipVerifyP is 0 so every
+    // recording contains its verifyWrite event and can validate the candidate.
+    const run = await runNaive(world, id, { skipVerifyP: 0, seed: 7 + i });
+    const base = toNaiveTrace(`g${i}`, id, run);
+    const events = base.events.map((e) => ({ ...e, duration_ms: e.name === "draftReply" ? 5000 : 100 }));
+    out.push({ ...base, duration_ms: events.reduce((a, e) => a + (e.duration_ms ?? 0), 0), events });
+  }
+  return out;
+}
+
+function shipManifest(over: Record<string, unknown> = {}) {
+  return {
+    llmReduction: 5,
+    latencyReduction: 2,
+    costReduction: 2,
+    skipRateBefore: 0.1,
+    skipRateAfter: 0,
+    nShadow: 6,
+    tokensMeasured: true,
+    timeMeasured: false,
+    tokensSaved: 400,
+    timeSavedMs: null,
+    ...over,
+  };
+}
+
+function kubectlTrace(ns: string, id: string): StretchTrace {
+  return {
+    id,
+    events: [
+      { name: "Bash", args: { command: `kubectl get pods -n ${ns}` }, result: { pods: [] }, ok: true },
+      { name: "Bash", args: { command: `kubectl get svc -n ${ns}` }, result: { svc: [] }, ok: true },
+      { name: "Bash", args: { command: `kubectl get deployments -n ${ns}` }, result: { deployments: [] }, ok: true },
+    ],
+    input: { namespace: ns },
+    output: { ns },
+    llmCalls: 6,
+    duration_ms: 6000,
+    cost_cents: 6,
+    complete: true,
+  };
+}
+
+describe("control plane", () => {
+  test("empty inbox does not 500", async () => {
+    const store = new Store(":memory:");
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const inbox = await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }));
+    expect(inbox.status).toBe(200);
+    const health = await fetchHandler(new Request("http://x/health"));
+    const hj = (await health.json()) as { ok: boolean; traces?: number; registry?: boolean; island?: boolean };
+    expect(hj.ok).toBe(true);
+    expect(typeof hj.traces).toBe("number");
+    const page = await fetchHandler(new Request("http://x/"));
+    expect(page.status).toBe(404);
+    const live = await fetchHandler(new Request("http://x/live"));
+    expect(live.status).toBe(404);
+    expect(hj.registry).toBe(false);
+    expect(hj.island).toBe(false);
+    const opt = await fetchHandler(new Request("http://x/v1/tools", { method: "OPTIONS" }));
+    expect(opt.status).toBe(204);
+    const badJson = await fetchHandler(
+      new Request("http://x/v1/traces", { method: "POST", headers: { authorization: "Bearer eden_dev", "content-type": "application/json" }, body: "{" }),
+    );
+    expect(badJson.status).toBe(400);
+    const cands = await fetchHandler(new Request("http://x/v1/candidates", { headers: { authorization: "Bearer eden_dev" } }));
+    expect(cands.status).toBe(200);
+    const locked = createHandler({ store, token: "secret-token" });
+    const toolsNoAuth = await locked(new Request("http://x/v1/tools"));
+    expect(toolsNoAuth.status).toBe(401);
+    const statsNoAuth = await locked(new Request("http://x/v1/stats"));
+    expect(statsNoAuth.status).toBe(401);
+    const alias = await locked(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
+    );
+    expect(alias.status).toBe(401);
+    const ok = await locked(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer secret-token" }, body: "{}" }),
+    );
+    expect(ok.status).toBe(200);
+    const tracesNoAuth = await locked(new Request("http://x/v1/traces"));
+    expect(tracesNoAuth.status).toBe(401);
+    const tracesOk = await locked(new Request("http://x/v1/traces", { headers: { authorization: "Bearer secret-token" } }));
+    expect(tracesOk.status).toBe(200);
+    const tracesBody = (await tracesOk.json()) as { traces: unknown[] };
+    expect(Array.isArray(tracesBody.traces)).toBe(true);
+    const miss = await fetchHandler(new Request("http://x/v1/candidates/nope", { headers: { authorization: "Bearer eden_dev" } }));
+    expect(miss.status).toBe(404);
+  });
+
+  test("demo narrative end to end over HTTP: ingest → compile → approve → run → ood", async () => {
+    // This is the `bun run demo` story driven through the real server routes.
+    // It exists because the demo broke twice without any test noticing: the
+    // auth hardening made /v1/inbox require a credential the demo did not
+    // send, and the ship gate began (correctly) rejecting the demo's
+    // synthetic fixture clock. Both were product breaks invisible to a suite
+    // that built candidates by hand.
+    const world = createTicketShip({ llmMs: 0 });
+    const store = new Store(":memory:");
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      registry: registryFrom(world.tools),
+      island: world.island,
+      sandboxFor: (t) => replayRegistry(registryFrom(world.tools), t),
+    });
+    const auth = (path: string, init: RequestInit = {}) =>
+      new Request(`http://x${path}`, {
+        ...init,
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json", ...(init.headers ?? {}) },
+      });
+
+    const traces = await naiveTraces(10);
+    const posted = await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces }) }));
+    expect(posted.status).toBe(200);
+
+    const compiled = await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
+    expect(compiled.status).toBe(200);
+
+    const inbox = (await (
+      await fetchHandler(auth("/v1/inbox"))
+    ).json()) as {
+      candidates: Array<{ id: string; verdict: string; program: { name: string } | null; manifest: { llmReduction?: number } | null }>;
+    };
+    const pass = inbox.candidates.find((c) => c.verdict === "PASS" && c.program);
+    expect(pass).toBeTruthy();
+    expect(pass!.manifest?.llmReduction ?? 0).toBeGreaterThanOrEqual(2);
+
+    const approved = await fetchHandler(auth(`/v1/tools/${pass!.id}/approve`, { method: "POST", body: "{}" }));
+    expect(approved.status).toBe(200);
+
+    // In-envelope run: one island call instead of the naive eight.
+    const runOk = await fetchHandler(
+      auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: pass!.id, input: { id: "T-100" } }) }),
+    );
+    expect(runOk.status).toBe(200);
+    const okBody = (await runOk.json()) as { value?: unknown; stats?: { llmCalls?: number } };
+    expect(okBody.value).toEqual({ notified: true, id: "T-100" });
+    expect(okBody.stats?.llmCalls ?? 99).toBeLessThan(8);
+
+    // Out-of-distribution input refuses rather than guessing.
+    const runOod = await fetchHandler(
+      auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: pass!.id, input: { id: OOD_ID } }) }),
+    );
+    expect(runOod.status).toBe(409);
+    const oodBody = (await runOod.json()) as { error?: string };
+    expect(String(oodBody.error ?? "")).toMatch(/deopt|envelope/i);
+    expect(world.mutationsFor(OOD_ID).wrote).toBe(false);
+  });
+
+  test("replay sandbox shadows without a live registry", async () => {
+    const traces = await naiveTraces(6, 0);
+    const store = new Store(":memory:");
+    for (const t of traces) store.putTrace(t);
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      sandboxFor: (t) => replayRegistry(undefined, t),
+      island: createTicketShip({ llmMs: 0 }).island,
+    });
+    const compiled = await fetchHandler(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
+    );
+    expect(compiled.status).toBe(200);
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as { candidates: Array<{ verdict: string; refusal: { reason: string } | null; program: unknown }> };
+    const hit = inbox.candidates.find((c) => c.program);
+    expect(hit).toBeTruthy();
+    expect(hit!.refusal?.reason ?? "").not.toMatch(/no wrap registry/);
+    const one = await fetchHandler(
+      new Request(`http://x/v1/candidates/${store.candidates().find((c) => c.program)?.id}`, {
+        headers: { authorization: "Bearer eden_dev" },
+      }),
+    );
+    expect(one.status).toBe(200);
+  });
+
+  test("inbox shows refusal of under-determined sibling", async () => {
+    const store = new Store(":memory:");
+    for (const t of underdeterminedSiblingTraces(3)) store.putTrace(t);
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const compiled = await fetchHandler(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
+    );
+    expect(compiled.status).toBe(200);
+    const inbox = await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json() as { candidates: Array<{ id: string; refusal?: { reason: string } }> };
+    expect(inbox.candidates.some((c) => c.refusal?.reason)).toBe(true);
+    const page = await fetchHandler(new Request("http://x/"));
+    expect(page.status).toBe(404);
+    const again = await fetchHandler(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
+    );
+    expect(again.status).toBe(200);
+    const inbox2 = await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json() as { candidates: Array<{ id: string }> };
+    expect(inbox2.candidates[0]?.id).toBe(inbox.candidates[0]?.id);
+  });
+});
+
+describe("TicketShip golden", () => {
+  test("an MCP product-tool stretch compiles without any vendor knowledge", async () => {
+    // Notion-shaped verbs: no gh, no curl, no URL — the compiler must qualify
+    // this stretch by repetition alone. This is the shape every SaaS MCP
+    // server takes, so it is the generality case that matters most.
+    const mk = (id: string): StretchTrace => ({
+      id: `notion-${id}`,
+      events: [
+        { name: "mcp__notion__query_database", args: { database_id: "db_1", filter: JSON.stringify({ property: "Status", select: { name: "Blocked" } }) }, result: { results: [{ id }] }, ok: true },
+        { name: "mcp__notion__update_page", args: { page_id: id, properties: { Status: { select: { name: "In progress" } } } }, result: { id, archived: false }, ok: true },
+        { name: "mcp__notion__create_comment", args: { page_id: id, rich_text: "moved to in progress" }, result: { id: `c-${id}` }, ok: true },
+      ],
+      input: { pageId: id },
+      output: { moved: [id] },
+      llmCalls: 9,
+      duration_ms: 9000,
+      cost_cents: 9,
+      complete: true,
+    });
+    const traces = ["p-1", "p-2", "p-3"].map(mk);
+    const mined = compileTraces(traces);
+    expect(mined.refusals.length).toBe(0);
+    expect(mined.programs.length).toBe(1);
+    expect(mined.programs[0]!.sequence).toEqual([
+      "mcp__notion__query_database",
+      "mcp__notion__update_page",
+      "mcp__notion__create_comment",
+    ]);
+  });
+
+  test("a live raw shell call steers to its compiled stretch (generality)", async () => {
+    // The agent never learned about the compiled tool and starts typing the
+    // old kubectl loop by hand. The proxy must recognise the command's shape,
+    // recover the slot value from the witness envelope, and redirect — the
+    // same steer path URL-shaped tools already get.
+    const traces = [
+      kubectlTrace("dev", "k1"),
+      kubectlTrace("stage", "k2"),
+      kubectlTrace("prod", "k3"),
+    ];
+    const { programs } = compileTraces(traces);
+    expect(programs.length).toBe(1);
+    const program = {
+      ...programs[0]!,
+      manifest: {
+        name: "kubectl_bundle",
+        llmReduction: 5,
+        latencyReduction: 5,
+        costReduction: 5,
+        skipRateBefore: 0.2,
+        skipRateAfter: 0,
+        nShadow: 6,
+      },
+    };
+
+    const live = [program];
+    const calls = [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl get pods -n stage" }) } }];
+    const steered = steerToolCalls(calls, live);
+    expect(steered[0]!.function?.name).toBe(program.name);
+    const input = JSON.parse(steered[0]!.function!.arguments) as { namespace?: string };
+    expect(input.namespace).toBe("stage");
+
+    // Multi-slot recovery exists (G4) but depends on variation-driven slot
+    // abstraction for positional args (G13) — see generalization plan.
+
+    // Multi-slot steering: a compiled `kubectl logs <app> -n <ns>` stretch
+    // (G13) steers a live raw logs call by template recovery, and the two
+    // shell programs disambiguate — the pods call never lands on logs.
+    const logsTraces: StretchTrace[] = [
+      { id: "l1", events: [
+        { name: "Bash", args: { command: "kubectl logs api -n dev" }, result: { lines: 1 }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods -n dev" }, result: { pods: [] }, ok: true },
+        { name: "Bash", args: { command: "kubectl get svc -n dev" }, result: { svc: [] }, ok: true },
+      ], input: { app: "api", namespace: "dev" }, output: { ns: "dev" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
+      { id: "l2", events: [
+        { name: "Bash", args: { command: "kubectl logs web -n stage" }, result: { lines: 4 }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods -n stage" }, result: { pods: [] }, ok: true },
+        { name: "Bash", args: { command: "kubectl get svc -n stage" }, result: { svc: [] }, ok: true },
+      ], input: { app: "web", namespace: "stage" }, output: { ns: "stage" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
+      { id: "l3", events: [
+        { name: "Bash", args: { command: "kubectl logs jobs -n prod" }, result: { lines: 7 }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods -n prod" }, result: { pods: [] }, ok: true },
+        { name: "Bash", args: { command: "kubectl get svc -n prod" }, result: { svc: [] }, ok: true },
+      ], input: { app: "jobs", namespace: "prod" }, output: { ns: "prod" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
+    ];
+    const logsMined = compileTraces(logsTraces);
+    expect(logsMined.programs.length).toBe(1);
+    const logsProgram = {
+      ...logsMined.programs[0]!,
+      manifest: { name: "logs_bundle", llmReduction: 3, latencyReduction: 3, costReduction: 3, skipRateBefore: 0, skipRateAfter: 0, nShadow: 6 },
+    };
+    const both = [program, logsProgram];
+    const toLogs = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl logs web -n stage" }) } }],
+      both,
+    );
+    expect(toLogs[0]!.function?.name).toBe(logsProgram.name);
+    const logsInput = JSON.parse(toLogs[0]!.function!.arguments) as { app?: string; namespace?: string };
+    expect(logsInput.app).toBe("web");
+    expect(logsInput.namespace).toBe("stage");
+    const toPods = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl get pods -n stage" }) } }],
+      both,
+    );
+    expect(toPods[0]!.function?.name).toBe(program.name);
+
+    // An unseen value must not steer.
+    const unknown = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl get pods -n chaos" }) } }],
+      both,
+    );
+    expect(unknown[0]!.function?.name).toBe("Bash");
+  });
+
+  test("compile + shadow + approve + wrap 5x gates, steer, ood, fail-open", async () => {
+    const traces = await naiveTraces(10, 0.2);
+    const { programs, refusals } = compileTraces(traces);
+    expect(refusals).toEqual([]);
+    const program = programs[0]!;
+    expect(program.steps.some((s) => s.kind === "tool" && s.tool === "verifyWrite")).toBe(true);
+    const world = createTicketShip({ llmMs: 0 });
+    const sh = await shadowProgram(program, traces, {
+      registry: registryFrom(world.tools),
+      // A throwaway world per trace, so the program's writes land nowhere.
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(sh.verdict).toBe("PASS");
+    program.manifest = sh.manifest;
+
+    const store = new Store(":memory:");
+    for (const t of traces) store.putTrace(t);
+    store.putCandidate({
+      id: program.id,
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "PASS",
+      manifest: sh.manifest,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      registry: registryFrom(world.tools),
+      sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+    });
+    const approved = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/approve`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+    expect(approved.status).toBe(200);
+    expect(store.candidate(program.id)).toBeUndefined();
+
+    const liveWorld = createTicketShip({ llmMs: 200 });
+    const naiveWorld = createTicketShip({ llmMs: 200 });
+    const naive = await runNaive(naiveWorld, "T-100", { skipVerifyP: 0, seed: 1 });
+    const state = createState({ programs: store.livePrograms(), island: liveWorld.island, llmCents: 1 });
+    const tools = wrapTools(liveWorld.tools, state);
+    const compiled = await tools[program.name]!.execute({ id: "T-100" });
+    expect(compiled).toEqual({ notified: true, id: "T-100" });
+    expect(state.receipts[0]!.llmCalls).toBeLessThanOrEqual(naive.stats.llmCalls / 5);
+    expect(state.receipts[0]!.ms).toBeLessThanOrEqual(naive.stats.duration_ms / 5);
+    expect(state.receipts[0]!.cents).toBeLessThanOrEqual(naive.stats.cost_cents / 5);
+    expect(liveWorld.verified.has("T-100")).toBe(true);
+    expect(naive.stats.llmCalls).toBe(8);
+
+    const steered = steerToolCalls(
+      [{ function: { name: "lookupTicket", arguments: "{\"id\":\"T-101\"}" } }],
+      store.livePrograms(),
+    );
+    expect(steered[0]!.function?.name).toBe(program.name);
+
+    const oodWorld = createTicketShip({ llmMs: 0 });
+    const oodState = createState({ programs: store.livePrograms(), island: oodWorld.island, failOpen: true });
+    const oodTools = wrapTools(oodWorld.tools, oodState);
+    await oodTools.lookupTicket!.execute({ id: OOD_ID });
+    expect(oodWorld.mutationsFor(OOD_ID).wrote).toBe(false);
+
+    const server = Bun.serve({ port: 0, fetch: fetchHandler });
+    const health = await fetch(`${server.url}health`);
+    expect(health.ok).toBe(true);
+    server.stop();
+    const after = createState({ failOpen: true });
+    const still = wrapTools(createTicketShip({ llmMs: 0 }).tools, after);
+    const ping = await still.lookupTicket!.execute({ id: "T-100" });
+    expect((ping as { id: string }).id).toBe("T-100");
+
+    const rec = await fetchHandler(
+      new Request("http://x/v1/receipts", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ toolId: program.id, version: program.version, ms: 10, llmCalls: 1, cents: 1, ok: true }),
+      }),
+    );
+    expect(rec.status).toBe(200);
+    expect(store.receipts().length).toBeGreaterThan(0);
+
+    const paused = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/pause`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev" },
+        body: "{}",
+      }),
+    );
+    expect(paused.status).toBe(200);
+    expect(store.tool(program.id)?.state).toBe("paused");
+    const rolled = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/rollback`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev" },
+        body: "{}",
+      }),
+    );
+    expect(rolled.status).toBe(409);
+    expect(store.tool(program.id)?.state).toBe("paused");
+  });
+
+  test("INCONCLUSIVE cannot be approved", async () => {
+    const store = new Store(":memory:");
+    const program = ticketShipProgram();
+    store.putCandidate({
+      id: program.id,
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "INCONCLUSIVE",
+      manifest: null,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const approved = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/approve`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+    expect(approved.status).toBe(409);
+    const body = (await approved.json()) as { error: string };
+    expect(body.error).toMatch(/INCONCLUSIVE/);
+  });
+
+  test("POST traces auto-compiles once there are three repeats", async () => {
+    const store = new Store(":memory:");
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const traces = await naiveTraces(3, 0);
+    const res = await fetchHandler(
+      new Request("http://x/v1/traces", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ traces }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { candidates: unknown[] };
+    expect(inbox.candidates.length).toBeGreaterThanOrEqual(1);
+    const again = await fetchHandler(
+      new Request("http://x/v1/traces", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ traces }),
+      }),
+    );
+    expect(again.status).toBe(200);
+    expect(store.compiledCount()).toBe(store.traces().length);
+  });
+
+  test("no-repetition compiles nothing", async () => {
+    const store = new Store(":memory:");
+    for (let i = 0; i < 5; i++) {
+      store.putTrace({
+        id: `n${i}`,
+        llmCalls: 3,
+        duration_ms: 10,
+        cost_cents: 3,
+        input: { id: `z${i}` },
+        events: [
+          { name: `a${i}`, args: {}, result: {}, ok: true },
+          { name: `b${i}`, args: {}, result: {}, ok: true },
+          { name: `c${i}`, args: {}, result: {}, ok: true },
+        ],
+      });
+    }
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    await fetchHandler(new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }));
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { candidates: unknown[] };
+    expect(inbox.candidates).toEqual([]);
+  });
+
+  test("forged PASS shadow is ignored; server re-runs shadow", async () => {
+    const traces = await naiveTraces(6, 0);
+    const store = new Store(":memory:");
+    for (const t of traces) store.putTrace(t);
+    const program = ticketShipProgram();
+    store.putCandidate({
+      id: program.id,
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "pending",
+      manifest: null,
+      created_at: Date.now(),
+    });
+    const world = createTicketShip({ llmMs: 0 });
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      registry: registryFrom(world.tools),
+      sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+    });
+    const forged = await fetchHandler(
+      new Request(`http://x/v1/candidates/${program.id}/shadow`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ verdict: "PASS", manifest: { llmReduction: 99, latencyReduction: 99, costReduction: 99, skipRateBefore: 0, skipRateAfter: 0, nShadow: 99 } }),
+      }),
+    );
+    expect(forged.status).toBe(200);
+    const body = (await forged.json()) as { verdict: string };
+    expect(body.verdict).toBe("PASS");
+    expect(store.candidate(program.id)?.verdict).toBe("PASS");
+    expect(store.candidate(program.id)?.manifest?.nShadow).toBeGreaterThanOrEqual(3);
+    expect(store.candidate(program.id)?.manifest?.nShadow).not.toBe(99);
+  });
+
+  test("wrap-run executes a live program and GET program returns it", async () => {
+    const traces = await naiveTraces(6, 0);
+    const { programs } = compileTraces(traces);
+    const program = programs[0]!;
+    const world = createTicketShip({ llmMs: 0 });
+    const sh = await shadowProgram(program, traces, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    program.manifest = sh.manifest;
+    const store = new Store(":memory:");
+    store.putCandidate({
+      id: program.id,
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "PASS",
+      manifest: sh.manifest,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      registry: registryFrom(world.tools),
+      sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+    });
+    const approved = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/approve`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+    expect(approved.status).toBe(200);
+    const got = await fetchHandler(new Request(`http://x/v1/tools/${program.id}/program`, { headers: { authorization: "Bearer eden_dev" } }));
+    expect(got.status).toBe(200);
+    const rec = await fetchHandler(new Request(`http://x/v1/tools/${program.id}`, { headers: { authorization: "Bearer eden_dev" } }));
+    expect(rec.status).toBe(200);
+    expect(((await rec.json()) as { state: string }).state).toBe("live");
+    const liveProg = (await got.json()) as { name: string };
+    expect(liveProg.name).toBe(program.name);
+    const run = await fetchHandler(
+      new Request("http://x/v1/wrap-run", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ toolId: program.id, input: { id: "T-100" } }),
+      }),
+    );
+    expect(run.status).toBe(200);
+    const out = (await run.json()) as { value: { notified: boolean } };
+    expect(out.value.notified).toBe(true);
+    expect(world.verified.has("T-100")).toBe(true);
+    const oodRun = await fetchHandler(
+      new Request("http://x/v1/wrap-run", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ toolId: program.id, input: { id: OOD_ID } }),
+      }),
+    );
+    expect(oodRun.status).toBe(409);
+    const oodBody = (await oodRun.json()) as { deopt?: boolean; program?: string; early?: boolean };
+    expect(oodBody.deopt).toBe(true);
+    expect(oodBody.early).toBe(true);
+    expect(oodBody.program).toBe(program.name);
+    expect(store.receipts().some((r) => r.ok === 0)).toBe(true);
+    const timed = await fetchHandler(
+      new Request("http://x/v1/wrap-run?timeout=5000", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ toolId: program.id, input: { id: "T-101" } }),
+      }),
+    );
+    expect(timed.status).toBe(200);
+    const recs = await fetchHandler(new Request("http://x/v1/receipts", { headers: { authorization: "Bearer eden_dev" } }));
+    expect(recs.status).toBe(200);
+    const recBody = (await recs.json()) as { receipts: Array<{ ok: number }> };
+    expect(recBody.receipts.length).toBeGreaterThan(0);
+    const liveOnly = await fetchHandler(new Request("http://x/v1/tools?state=live", { headers: { authorization: "Bearer eden_dev" } }));
+    expect(((await liveOnly.json()) as { tools: unknown[] }).tools.length).toBe(1);
+    expect(store.receiptStats(program.id).fail).toBeGreaterThan(0);
+    const paused = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/pause`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+    expect(paused.status).toBe(200);
+    const pausedRun = await fetchHandler(
+      new Request("http://x/v1/wrap-run", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ toolId: program.id, input: { id: "T-102" } }),
+      }),
+    );
+    expect(pausedRun.status).toBe(409);
+    expect(((await pausedRun.json()) as { error?: string }).error).toBe("paused");
+    const resumed = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/resume`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+    expect(resumed.status).toBe(200);
+    const afterResume = await fetchHandler(
+      new Request("http://x/v1/wrap-run", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ toolId: program.id, input: { id: "T-102" } }),
+      }),
+    );
+    expect(afterResume.status).toBe(200);
+  });
+
+  test("duplicate traces do not inflate support", async () => {
+    const store = new Store(":memory:");
+    const traces = await naiveTraces(3, 0);
+    expect(store.putTrace(traces[0]!)).toBe(true);
+    expect(store.putTrace({ ...traces[0]!, id: "copy" })).toBe(false);
+    expect(store.traces().length).toBe(1);
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const res = await fetchHandler(
+      new Request("http://x/v1/traces", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ traces }),
+      }),
+    );
+    const body = (await res.json()) as { accepted: number; duplicates: number };
+    expect(body.accepted).toBe(2);
+    expect(body.duplicates).toBe(1);
+    expect(store.traces().length).toBe(3);
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { sig: string };
+    expect(inbox.sig.length).toBeGreaterThan(0);
+    const savings = await fetchHandler(new Request("http://x/v1/savings", { headers: { authorization: "Bearer eden_dev" } }));
+    expect(savings.status).toBe(200);
+    expect(await savings.json()).toEqual({
+      runs: 0,
+      fail: 0,
+      llmReductionMean: 0,
+      tokensSavedMean: 0,
+      timeSavedMsMean: 0,
+      live: 0,
+    });
+  });
+
+  test("EDEN_AUTO_APPROVE ships PASS candidates after compile", async () => {
+    process.env.EDEN_AUTO_APPROVE = "1";
+    try {
+      const traces = await naiveTraces(10, 0);
+      const store = new Store(":memory:");
+      const world = createTicketShip({ llmMs: 0 });
+      const fetchHandler = createHandler({
+        store,
+        token: "eden_dev",
+        registry: registryFrom(world.tools),
+        sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+        island: world.island,
+      });
+      const res = await fetchHandler(
+        new Request("http://x/v1/compile", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+          body: "{}",
+        }),
+      );
+      expect(res.status).toBe(200);
+      for (const t of traces) store.putTrace(t);
+      const compiled = await fetchHandler(
+        new Request("http://x/v1/compile", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+          body: "{}",
+        }),
+      );
+      const body = (await compiled.json()) as { shipped?: number; programs?: number };
+      expect(compiled.status).toBe(200);
+      expect(body.shipped).toBeGreaterThanOrEqual(1);
+      expect(store.liveCount()).toBeGreaterThanOrEqual(1);
+    } finally {
+      delete process.env.EDEN_AUTO_APPROVE;
+    }
+  });
+
+  test("EDEN_AUTO_APPROVE is scrubbed on a managed install unless EDEN_DEV=1", async () => {
+    const savedUrl = process.env.DATABASE_URL;
+    const savedDev = process.env.EDEN_DEV;
+    process.env.DATABASE_URL = "postgres://managed";
+    delete process.env.EDEN_DEV;
+    process.env.EDEN_AUTO_APPROVE = "1";
+    try {
+      const traces = await naiveTraces(10, 0);
+      const store = new Store(":memory:");
+      for (const t of traces) store.putTrace(t);
+      const world = createTicketShip({ llmMs: 0 });
+      const fetchHandler = createHandler({
+        store,
+        token: "k_managed",
+        registry: registryFrom(world.tools),
+        sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+        island: world.island,
+      });
+      const compiled = await fetchHandler(
+        new Request("http://x/v1/compile", {
+          method: "POST",
+          headers: { authorization: "Bearer k_managed", "content-type": "application/json" },
+          body: "{}",
+        }),
+      );
+      // Same compile, same PASS candidates — but nothing ships without a
+      // review: the env var was deleted before maybeAutoApprove looked at it.
+      const body = (await compiled.json()) as { shipped?: number; programs?: number };
+      expect(compiled.status).toBe(200);
+      expect(body.programs).toBeGreaterThanOrEqual(1);
+      expect(body.shipped).toBe(0);
+      expect(store.liveCount()).toBe(0);
+      expect(store.candidatesCount()).toBeGreaterThanOrEqual(1);
+      // And the trace-post path that compiles implicitly is covered by the
+      // same scrub, since it funnels through maybeAutoApprove too.
+    } finally {
+      if (savedUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = savedUrl;
+      if (savedDev === undefined) delete process.env.EDEN_DEV;
+      else process.env.EDEN_DEV = savedDev;
+      delete process.env.EDEN_AUTO_APPROVE;
+    }
+  });
+
+  test("concurrent trace posts compile under a single flight", async () => {
+    const store = new Store(":memory:");
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const traces = await naiveTraces(3, 0);
+    const req = () =>
+      fetchHandler(
+        new Request("http://x/v1/traces", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+          body: JSON.stringify({ traces }),
+        }),
+      );
+    const [a, b] = await Promise.all([req(), req()]);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(store.traces().length).toBe(3);
+    expect(store.compiledCount()).toBe(3);
+  });
+
+  test("uncovered tools stay pending with a reason and do not ship", async () => {
+    const traces = await naiveTraces(6, 0);
+    const store = new Store(":memory:");
+    for (const t of traces) store.putTrace(t);
+    const fetchHandler = createHandler({ store, token: "eden_dev", registry: codingRegistry() });
+    await fetchHandler(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
+    );
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as {
+      candidates: Array<{ id: string; program: unknown; verdict: string; refusal: { reason: string } | null }>;
+    };
+    const c = inbox.candidates.find((x) => x.program);
+    expect(c).toBeTruthy();
+    expect(c!.verdict).toBe("pending");
+    expect(c!.refusal?.reason).toMatch(/^uncovered:/);
+    const approve = await fetchHandler(
+      new Request(`http://x/v1/tools/${c!.id}/approve`, {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev" },
+        body: "{}",
+      }),
+    );
+    expect(approve.status).toBe(409);
+    const err = (await approve.json()) as { error: string };
+    expect(err.error).toMatch(/uncovered:/);
+  });
+
+  test("empty edits object ships without a registry", async () => {
+    const program = ticketShipProgram();
+    const manifest = shipManifest();
+    program.manifest = manifest;
+    const store = new Store(":memory:");
+    store.putCandidate({
+      id: "c1",
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "PASS",
+      manifest,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const approved = await fetchHandler(
+      new Request("http://x/v1/tools/c1/approve", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ edits: { name: undefined, drop: undefined } }),
+      }),
+    );
+    expect(approved.status).toBe(200);
+    expect(store.tool(program.id)?.state).toBe("live");
+    expect(store.tool(program.id)?.rollout).toBe("canary");
+  });
+
+  test("name-only edit ships without a registry", async () => {
+    const program = ticketShipProgram();
+    const manifest = shipManifest();
+    program.manifest = manifest;
+    const store = new Store(":memory:");
+    store.putCandidate({
+      id: "c2",
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "PASS",
+      manifest,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const approved = await fetchHandler(
+      new Request("http://x/v1/tools/c2/approve", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ edits: { name: "shipped_ticket" } }),
+      }),
+    );
+    expect(approved.status).toBe(200);
+    expect(store.tool(program.id)?.name).toBe("shipped_ticket");
+  });
+
+  test("structural drop without registry is refused", async () => {
+    const program = ticketShipProgram();
+    const manifest = shipManifest();
+    program.manifest = manifest;
+    const store = new Store(":memory:");
+    store.putCandidate({
+      id: "c3",
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "PASS",
+      manifest,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const approved = await fetchHandler(
+      new Request("http://x/v1/tools/c3/approve", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ edits: { drop: ["lookup"] } }),
+      }),
+    );
+    expect(approved.status).toBe(409);
+  });
+
+  test("empty bind path fails closed", async () => {
+    const program = ticketShipProgram();
+    const manifest = shipManifest();
+    program.manifest = manifest;
+    const store = new Store(":memory:");
+    store.putCandidate({
+      id: "c4",
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "PASS",
+      manifest,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const approved = await fetchHandler(
+      new Request("http://x/v1/tools/c4/approve", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ edits: { bind: [{ step: "write", field: "customer", path: "" }] } }),
+      }),
+    );
+    expect(approved.status).toBe(409);
+    const err = (await approved.json()) as { error: string };
+    expect(err.error).toMatch(/missing path/i);
+  });
+
+  test("inbox lists paused tools with receipt stats", async () => {
+    const program = ticketShipProgram();
+    const store = new Store(":memory:");
+    store.putTool({
+      id: "t1",
+      name: "paused_one",
+      version: "1",
+      program,
+      state: "paused",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+    store.putReceipt({ tool_id: "t1", version: "1", ms: 40, llm_calls: 0, cents: 0.1, ok: 1 });
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as {
+      live: Array<{ id: string; state: string; stats: { n: number } }>;
+    };
+    expect(inbox.live.some((t) => t.id === "t1" && t.state === "paused")).toBe(true);
+    expect(inbox.live.find((t) => t.id === "t1")?.stats.n).toBe(1);
+  });
+
+  test("re-mining a stretch updates the tool in place instead of duplicating it", async () => {
+    // program.id identifies the stretch; program.version identifies the
+    // compilation. When id was derived from the version, a new witness gave the
+    // same program a brand new id, so store.tool(id) missed, a second row was
+    // inserted for one stretch, and pushPrev() — the mechanism behind
+    // pause/rollback — could never accumulate anything.
+    const chain = ["lookup", "fetchDetails", "parseFields", "writeRecord", "verifyWrite", "notify"];
+    const evidence = (n: number): StretchTrace[] =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `ev-${i}`,
+        llmCalls: chain.length,
+        duration_ms: 60,
+        cost_cents: 6,
+        input: { id: `E-${i}` },
+        events: chain.map((name, j) => ({
+          name,
+          args: { id: `E-${i}` },
+          result: { ok: true, id: `E-${i}`, n: j },
+          ok: true,
+        })),
+      }));
+
+    const first = compileTraces(evidence(5)).programs[0]!;
+    const store = new Store(":memory:");
+    store.putTool({
+      id: first.id,
+      name: first.name,
+      version: first.version,
+      program: first,
+      state: "live",
+      prev: pushPrev(store.tool(first.id)),
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+
+    // Four more distinct witnesses: same stretch, wider envelope.
+    const second = compileTraces(evidence(9)).programs[0]!;
+    expect(second.id).toBe(first.id);
+    expect(second.version).not.toBe(first.version);
+    expect(second.contract.witnesses).toBeGreaterThan(first.contract.witnesses);
+
+    const existing = store.tool(second.id);
+    expect(existing).toBeDefined();
+    store.putTool({
+      id: second.id,
+      name: second.name,
+      version: second.version,
+      program: second,
+      state: "live",
+      prev: pushPrev(existing),
+      created_at: existing!.created_at,
+      updated_at: Date.now(),
+    });
+
+    const after = store.tool(second.id)!;
+    expect(after.version).toBe(second.version);
+    const stack = (Array.isArray(after.prev) ? after.prev : []) as Array<{ version: string }>;
+    expect(stack).toHaveLength(1);
+    expect(stack[0]!.version).toBe(first.version);
+  });
+});
+
+describe("the control plane is not reachable from a web page", () => {
+  /**
+   * eden wrap binds this on 127.0.0.1:8788, and /v1/wrap-run reaches the
+   * coding registry's Bash, Write and Edit executors. It used to answer every
+   * preflight with `access-control-allow-origin: *` and
+   * `allow-headers: authorization` — legal, because the credential is a bearer
+   * header rather than a cookie, and therefore a straight path from any page
+   * the user visited to command execution on their machine.
+   */
+  function handler() {
+    return createHandler({ store: new Store(":memory:"), token: "eden_dev" });
+  }
+
+  test("a preflight from a remote origin is not granted", async () => {
+    const res = await handler()(
+      new Request("http://x/v1/tools", { method: "OPTIONS", headers: { origin: "https://evil.example" } }),
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe(null);
+  });
+
+  test("a preflight from a local page is granted, and only that origin", async () => {
+    const res = await handler()(
+      new Request("http://x/v1/tools", { method: "OPTIONS", headers: { origin: "http://localhost:3000" } }),
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+    expect(res.headers.get("vary")).toBe("origin");
+  });
+
+  test("no response ever carries a wildcard origin", async () => {
+    const h = handler();
+    for (const req of [
+      new Request("http://x/v1/tools", { method: "OPTIONS", headers: { origin: "https://evil.example" } }),
+      new Request("http://x/v1/inbox", { headers: { origin: "https://evil.example" } }),
+      new Request("http://x/v1/stats", { headers: { origin: "https://evil.example", authorization: "Bearer eden_dev" } }),
+    ]) {
+      expect((await h(req)).headers.get("access-control-allow-origin")).not.toBe("*");
+    }
+  });
+
+  test("/v1/inbox needs the key, like the endpoints whose data it repeats", async () => {
+    // It was exempt from auth while /v1/candidates and /v1/tools — both strict
+    // subsets of what it returns — required a key. Zero-credential exfiltration
+    // of every compiled program and the literal arguments mined into it.
+    const res = await handler()(new Request("http://x/v1/inbox"));
+    expect(res.status).toBe(401);
+  });
+
+  test("/v1/chat/completions needs the key before it spends the upstream one", async () => {
+    const res = await handler()(
+      new Request("http://x/v1/chat/completions", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  test("a handler with no token authorises nobody rather than everybody", () => {
+    // auth() returned true when the token was empty, and handleApi is a public
+    // export — so `{ token: "" }` was a wide-open API.
+    expect(() => createHandler({ store: new Store(":memory:"), token: "" })).toThrow(/needs a token/);
+    expect(() => createHandler({ store: new Store(":memory:") })).toThrow(/needs a token/);
+  });
+
+  test("a bare token, or a prefix of the real one, does not authenticate", async () => {
+    const h = createHandler({ store: new Store(":memory:"), token: "secret-token" });
+    for (const authorization of ["secret-token", "Bearer secret", "Bearer secret-token-more", "Bearer "]) {
+      expect((await h(new Request("http://x/v1/stats", { headers: { authorization } }))).status).toBe(401);
+    }
+    expect((await h(new Request("http://x/v1/stats", { headers: { authorization: "Bearer secret-token" } }))).status).toBe(200);
+  });
+
+  test("receipt fail rate auto-pauses a live tool", () => {
+    const program = ticketShipProgram();
+    const store = new Store(":memory:");
+    store.putTool({
+      id: "live_fail",
+      name: "live_fail",
+      version: "1",
+      program,
+      state: "live",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+    for (let i = 0; i < 4; i++) {
+      store.putReceipt({ tool_id: "live_fail", version: "1", ms: 10, llm_calls: 0, cents: 0, ok: 0 });
+    }
+    expect(store.tool("live_fail")?.state).toBe("paused");
+  });
+
+  test("early deopt receipts do not auto-pause a live tool", () => {
+    const program = ticketShipProgram();
+    const store = new Store(":memory:");
+    store.putTool({
+      id: "live_ood",
+      name: "live_ood",
+      version: "1",
+      program,
+      state: "live",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+    for (let i = 0; i < 4; i++) {
+      store.putReceipt({
+        tool_id: "live_ood",
+        version: "1",
+        ms: 1,
+        llm_calls: 0,
+        cents: 0,
+        ok: 0,
+        payload: JSON.stringify({ outcome: "deopt", early: true }),
+      });
+    }
+    expect(store.tool("live_ood")?.state).toBe("live");
+  });
+});
+
+describe("list endpoints limit param", () => {
+  function handler() {
+    const store = new Store(":memory:");
+    return { store, fetchHandler: createHandler({ store, token: "eden_dev" }) };
+  }
+
+  const auth = { authorization: "Bearer eden_dev" };
+
+  test("traces GET defaults to 100 and clamps over-cap requests", async () => {
+    const { store, fetchHandler } = handler();
+    for (let i = 0; i < 1100; i++) {
+      // Vary the events: putTrace dedupes on a content hash that ignores id.
+      store.putTrace({ id: `t${i}`, events: [{ name: `x${i}` }] } as unknown as StretchTrace);
+    }
+    const def = await fetchHandler(new Request("http://x/v1/traces", { headers: auth }));
+    expect(def.status).toBe(200);
+    expect(((await def.json()) as { traces: unknown[] }).traces.length).toBe(100);
+
+    const capped = await fetchHandler(new Request("http://x/v1/traces?limit=99999", { headers: auth }));
+    expect(((await capped.json()) as { traces: unknown[] }).traces.length).toBe(1000);
+
+    const exact = await fetchHandler(new Request("http://x/v1/traces?limit=7", { headers: auth }));
+    expect(((await exact.json()) as { traces: unknown[] }).traces.length).toBe(7);
+  });
+
+  test("receipts GET honours limit without breaking tool scoping", async () => {
+    const { store, fetchHandler } = handler();
+    for (let i = 0; i < 1100; i++) {
+      store.putReceipt({
+        tool_id: i % 2 === 0 ? "tool_a" : "tool_b",
+        version: "1",
+        ms: 1,
+        llm_calls: 0,
+        cents: 0,
+        ok: 1,
+        payload: "{}",
+      });
+    }
+    const def = await fetchHandler(new Request("http://x/v1/receipts", { headers: auth }));
+    expect(def.status).toBe(200);
+    expect(((await def.json()) as { receipts: unknown[] }).receipts.length).toBe(100);
+
+    const capped = await fetchHandler(new Request("http://x/v1/receipts?limit=5000", { headers: auth }));
+    expect(((await capped.json()) as { receipts: unknown[] }).receipts.length).toBe(1000);
+
+    // Scoping by tool still applies on top of the limit.
+    const scoped = await fetchHandler(new Request("http://x/v1/receipts?tool=tool_a&limit=3", { headers: auth }));
+    const rows = ((await scoped.json()) as { receipts: Array<{ tool_id: string }> }).receipts;
+    expect(rows.length).toBe(3);
+    for (const r of rows) expect(r.tool_id).toBe("tool_a");
+  });
+
+  test("garbage limit falls back to the default instead of erroring", async () => {
+    const { store, fetchHandler } = handler();
+    for (let i = 0; i < 3; i++) {
+      store.putTrace({ id: `g${i}`, events: [{ name: `x${i}` }] } as unknown as StretchTrace);
+    }
+    for (const bad of ["abc", "-5", "1e999"]) {
+      const res = await fetchHandler(new Request(`http://x/v1/traces?limit=${encodeURIComponent(bad)}`, { headers: auth }));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { traces: unknown[] };
+      // Non-numeric falls back to the default; non-numeric and infinite values
+      // are clamped rather than rejected.
+      if (bad === "-5") {
+        expect(body.traces.length).toBe(1); // clamped up to the minimum of 1
+      } else {
+        expect(body.traces.length).toBe(3);
+      }
+    }
+  });
+});

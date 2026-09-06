@@ -33,4 +33,24 @@ archived/**/__pycache__/
 backups/
 .deploy-sha
 packages/.tmp-eden-test/
+apps/site/scripts/bench-horizon-results.iter-*.json
+apps/site/scripts/bench-horizon-results.before*.json
+apps/site/scripts/pocs/
+
+
+# Throwaway probe scripts used while auditing; never part of the tree.
+.probe/
+.tmp-*
+
+# Local close-the-tree process (not product).
+.gauntlet/
+
+# Local audit dumps and generated docs caches — not the archived product tree.
+archived/.audit-*/
+archived/.claude/skills/
+archived/.eden/ci/
+archived/docs/.docusaurus/
+archived/**/*.bak
+archived/reports/dr-drill-*.json
+benchmarks/campaign/dbg*.ts
 

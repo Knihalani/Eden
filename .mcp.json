@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "eden": {
+      "command": "bun",
+      "args": [
+        "/Users/kaiavnihalani/Downloads/Eden/packages/cli/src/cli.ts",
+        "mcp"
+      ]
+    }
+  }
+}
