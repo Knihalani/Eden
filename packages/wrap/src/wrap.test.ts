@@ -960,13 +960,8 @@ describe("the proxy speaks the protocol its clients read", () => {
   });
 
   test("a client that asked for no tools is not given any", async () => {
-    // injectTools returned the compiled tools whenever `tools` was not an
-    // array, so a plain completion came back with tools attached and its reply
-    // steered into a tool_calls response the caller had no handler for.
     const p = liveProgram();
     expect(injectTools(undefined, [p])).toBeUndefined();
-    // An empty array is different: the client opted into function calling and
-    // simply has none of its own, which is who compiled tools are for.
     expect(Array.isArray(injectTools([], [p]))).toBe(true);
     expect((injectTools([], [p]) as unknown[]).length).toBe(1);
   });
