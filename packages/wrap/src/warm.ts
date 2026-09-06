@@ -1,15 +1,3 @@
-/**
- * Watch-time warming (Wave 14.1).
- *
- * While the *current* compiled stretch runs, fill the cache for the next
- * likely program's **first-wave read-only** tools. A miss discards; the agent
- * never sees an unconfirmed result. Mutating tools are never pre-executed.
- * Errors fail open (prime directive). Kill switch: `EDEN_WATCH_WARM=0`.
- *
- * Distinct from Wave 13 `turnBoundary` (that *starts* the whole next stretch
- * during think). Distinct from playback `warmWorkspaceBundle` (scored warming
- * at MCP init). This hook is `runCompiled` start: current still running.
- */
 import type { Binding, Step, StretchProgram, ToolRegistry } from "@eden/ir";
 import { eq, isMutating, isReadName, isBarrierName, mayServe } from "@eden/ir";
 import { evalArgs } from "@eden/runtime";
