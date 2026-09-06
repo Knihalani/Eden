@@ -82,7 +82,6 @@ export async function handleMcp(msg: Rpc, ctx: {
   }
   if (msg.method === "tools/list") {
     try {
-      // Still fetch so a 401 is a JSON-RPC error, not an empty catalog.
       await ctx.programs();
       ctx.send(msg.id, { tools: [] });
     } catch (err) {
