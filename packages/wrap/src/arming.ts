@@ -14,9 +14,7 @@ export const ARM_TTL_MS = 60_000;
 export const ARM_SLACK_CALLS = 32;
 /** Per-session capacity. Bursts past this fail open (A3). */
 export const ARM_MAX_PER_SESSION = 64;
-/** Process-wide ceiling across sessions. Configurable; never steals live work. */
 export const ARM_MAX_GLOBAL = 4_096;
-/** @deprecated name kept so existing comments/tests still grep. Alias of per-session. */
 export const ARM_MAX_ENTRIES = ARM_MAX_PER_SESSION;
 
 export function armMaxPerSession(explicit?: number): number {

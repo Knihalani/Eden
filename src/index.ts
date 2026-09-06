@@ -217,10 +217,11 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
         const u = new URL(req.url);
         const p = u.pathname;
         if (req.method === "POST") {
-          const b = (await req.json()) as { text?: string; kind?: string; tags?: string[]; id?: string; agent?: string; messages?: unknown[] };
+          const b = (await req.json()) as { text?: string; kind?: string; tags?: string[]; id?: string; agent?: string; messages?: unknown[]; q?: string; k?: number };
           if (p === "/remember") return Response.json(memory.remember(String(b.text || ""), b));
           if (p === "/forget") return Response.json({ ok: memory.forget(String(b.id || "")) });
           if (p === "/inject") return Response.json({ messages: memory.inject(b.messages || []) });
+          if (p === "/query") return Response.json(memory.query(String(b.q || ""), Number(b.k) || 5));
         }
         if (req.method === "GET" && p === "/query") return Response.json(memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || 5));
         if (req.method === "GET" && p === "/memories") return Response.json(memory.memories());
