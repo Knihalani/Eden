@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
@@ -86,10 +87,13 @@ function briefing(mem: AgentMemory): string {
   return MEMORY_MARK + pick.map((m) => `\n- ${m.text}`).join("");
 }
 
-function hookMemory(): AgentMemory {
+function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
+  const cwd = asRec(raw).cwd;
+  const home = process.env.EDEN_HOME;
   return openMemory({
-    dir: process.env.EDEN_MEMORY_DIR || undefined,
+    dir: process.env.EDEN_MEMORY_DIR || (home ? join(home, "memory") : undefined),
     agent: process.env.EDEN_MEMORY_AGENT || undefined,
+    project: typeof cwd === "string" && cwd ? cwd : process.env.EDEN_MEMORY_PROJECT || undefined,
   });
 }
 
@@ -111,7 +115,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
   try {
     const event = EVENT_ALIASES[String(asRec(raw).hook_event_name ?? "")] ?? String(asRec(raw).hook_event_name ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
-    const mem = hookMemory();
+    const mem = hookMemory(asRec(raw));
     const prior = messagesFromTranscript(asRec(raw).transcript_path);
     if (event === "Stop" || event === "SessionEnd") {
       if (prior.length) mem.observe(prior);
