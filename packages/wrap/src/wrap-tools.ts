@@ -421,7 +421,6 @@ export async function runCompiled(
       throw new DeoptError("no island caller");
     });
   try {
-    // Inside the try so an envelope miss still writes a deopt receipt (51).
     if (!mayServe(program, input)) throw new DeoptError("input not in witness envelope");
     const baseReg =
       registry ??
