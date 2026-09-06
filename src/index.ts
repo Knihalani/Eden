@@ -96,6 +96,7 @@ export class AgentMemory {
     this.agent = opts.agent;
     this.project = opts.project;
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
+    try { chmodSync(this.dir, 0o700); } catch {}
     this.compiled = load((this.path = join(this.dir, "memories.jsonl")));
   }
 
