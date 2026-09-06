@@ -74,7 +74,6 @@ export type EdenOpts = {
    * tails stay session-scoped. Default: `EDEN_FLEET` or empty (no sharing).
    */
   fleetId?: string;
-  /** Stable agent identity for attribution. Default: `EDEN_AGENT` or sessionId. */
   agentId?: string;
   parentRunId?: string;
   spanId?: string;
@@ -97,7 +96,6 @@ export type RunRecorder = {
   prompt_tokens: number;
   completion_tokens: number;
   measured: boolean;
-  /** Provider cache-read tokens. Separate from billed prompt+completion. */
   cached_tokens: number;
   /** Provider cache-write tokens. Separate line; 0 is measured. */
   cache_write_tokens: number;
