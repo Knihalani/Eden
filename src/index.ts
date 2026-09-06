@@ -36,8 +36,8 @@ function convBlob(list: unknown[]): string {
     } else if (Array.isArray(c)) {
       for (const b of c) {
         if (b && typeof b === "object") {
-          const x = b as { text?: string; content?: unknown; alt?: string; name?: string; caption?: string; title?: string; filename?: string };
-          const t = x.text || (typeof x.content === "string" ? x.content : "") || (typeof x.alt === "string" ? x.alt : "") || (typeof x.name === "string" ? x.name : "") || (typeof x.caption === "string" ? x.caption : "") || (typeof x.title === "string" ? x.title : "") || (typeof x.filename === "string" ? x.filename : "");
+          const x = b as { text?: string; content?: unknown; alt?: string; name?: string; caption?: string; title?: string; filename?: string; url?: string };
+          const t = x.text || (typeof x.content === "string" ? x.content : "") || (typeof x.alt === "string" ? x.alt : "") || (typeof x.name === "string" ? x.name : "") || (typeof x.caption === "string" ? x.caption : "") || (typeof x.title === "string" ? x.title : "") || (typeof x.filename === "string" ? x.filename : "") || (typeof x.url === "string" ? x.url : "");
           if (t) parts.push(t);
         }
       }
