@@ -8,11 +8,6 @@ import {
 } from "./anthropic";
 import { createState } from "./wrap-tools";
 
-/**
- * Anthropic Messages API dialect (G7): steering tool_use blocks through the
- * same pipeline as the OpenAI dialect, under the same prime-directive rules.
- */
-
 function liveProgram(): StretchProgram {
   return {
     id: "p_test",
