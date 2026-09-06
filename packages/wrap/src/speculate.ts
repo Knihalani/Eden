@@ -148,7 +148,6 @@ export function discardSpeculation(state: WrapState): void {
   }
 }
 
-/** Stamp the stretch that the agent just confirmed, so the wrap hook does not restart it. */
 export function markStretchServed(
   state: WrapState,
   program: StretchProgram,
