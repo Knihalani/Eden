@@ -54,7 +54,6 @@ export type Armed = {
   resolveSettled: (ok: boolean) => void;
   headErr?: unknown;
   closed: boolean;
-  /** Cheap identity for fast reject before extractInput. Canonical form of the arming input (id / ticket_id / orderId). */
   hintId: unknown;
   /**
    * True only when every sequence name is a read and none is a mutation.
