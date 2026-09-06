@@ -133,9 +133,6 @@ export function openaiIsland(opts: {
               { role: "user", content: JSON.stringify(input) },
             ],
           }),
-          // Per-attempt budget, not shared across attempts: one slow call
-          // must not consume every retry's window. A non-numeric
-          // EDEN_ISLAND_MS must fall back to the default, not hand NaN to
           // AbortSignal.timeout (which throws synchronously and used to be
           // retried as a "transient" failure forever).
           signal: signal
