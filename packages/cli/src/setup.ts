@@ -139,7 +139,6 @@ export function applyCodexToml(existing: string, hookCmd: string, preCmd: string
   return existing.replace(/\n*$/, "\n") + codexTomlSection(hookCmd, preCmd);
 }
 
-/** OpenCode: one plugin module — the rewriter. Recording still goes to hookd. */
 export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")): string {
   const port = Number(process.env.EDEN_HOOKD_PORT || 8794);
   return [
@@ -207,7 +206,7 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     "  }",
     "}",
     "",
-    "export const EdenRecorderPlugin = async ({ project }) => ({",
+    "export const EdenRecorderPlugin = async ({ project, directory }) => ({",
     "  \"tool.execute.before\": async (input, output) => {",
     "    try { pending.set(input?.callID, output?.args) } catch { /* fail-open */ }",
     "    let hook = null",
@@ -245,21 +244,21 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     "    try {",
     "      const t = event?.type",
     "      const session_id = event?.properties?.sessionID || event?.properties?.sessionId",
-    "      if (t === \"session.created\") await send({ hook_event_name: \"SessionStart\", session_id, cwd: project?.directory }, true)",
-    "      else if (t === \"session.idle\" || t === \"session.deleted\") await send({ hook_event_name: \"Stop\", session_id, cwd: project?.directory }, true)",
+    "      if (t === \"session.created\") await send({ hook_event_name: \"SessionStart\", session_id, cwd: project?.directory || directory }, true)",
+    "      else if (t === \"session.idle\" || t === \"session.deleted\") await send({ hook_event_name: \"Stop\", session_id, cwd: project?.directory || directory }, true)",
     "    } catch {}",
     "  },",
     "  \"chat.message\": async (input, output) => {",
     "    try {",
     "      const prompt = (output?.parts || []).map((p) => p && p.text).filter(Boolean).join(\"\\n\")",
-    "      const hook = await send({ hook_event_name: \"UserPromptSubmit\", session_id: input?.sessionID, prompt, cwd: project?.directory }, true)",
+    "      const hook = await send({ hook_event_name: \"UserPromptSubmit\", session_id: input?.sessionID, prompt, cwd: project?.directory || directory }, true)",
     "      const extra = hook?.hookSpecificOutput?.additionalContext || hook?.additional_context",
     "      if (typeof extra === \"string\" && extra) output.parts.push({ type: \"text\", text: extra })",
     "    } catch {}",
     "  },",
     "  \"experimental.session.compacting\": async (input, output) => {",
     "    try {",
-    "      const hook = await send({ hook_event_name: \"PreCompact\", session_id: input?.sessionID, cwd: project?.directory }, true)",
+    "      const hook = await send({ hook_event_name: \"PreCompact\", session_id: input?.sessionID, cwd: project?.directory || directory }, true)",
     "      const extra = hook?.hookSpecificOutput?.additionalContext || hook?.additional_context",
     "      if (typeof extra === \"string\" && extra) output.context.push(extra)",
     "    } catch {}",
