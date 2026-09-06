@@ -1,31 +1,19 @@
 import type { StretchProgram } from "@eden/ir";
 import { redact } from "@eden/ir";
 import { compiledSchema, steerToolCalls } from "./steer";
-import { noteJitUsed, selectForRequest } from "./intent";
+import { noteJitUsed, selectForRequest, messageText } from "./intent";
 import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { withKnowFactsAnthropic } from "./know-inject";
+import { MEMORY_MARK, openMemory } from "../../../src/index";
 
-/**
- * Anthropic Messages API dialect (G7).
- *
- * Claude Code and Claude-API-native agents talk this protocol natively.
- * Without this handler they'd need an OpenAI-compatibility shim. This handler
- * mirrors proxy.ts's steering pipeline but speaks Anthropic's wire format:
- *
- * - Tools use `{ name, description, input_schema }` (not `function.parameters`)
- * - Tool requests are `content[].{ type: "tool_use", id, name, input }` blocks
- *   where `input` is already-parsed JSON (not a string)
- * - Tool results go back as user-message `tool_result` blocks matched by
- *   `tool_use_id`; errors are explicit via `is_error: true`
- * - System prompt is a top-level `system` field, not a system message
- *
- * The same prime-directive rules as the OpenAI proxy apply: a tripped kill
- * switch only loses Eden its steering privilege (never a 409), a non-JSON or
- * failed upstream body passes through verbatim, and nothing Eden computes
- * about a response may fail the response.
- */
+let wrapMem: ReturnType<typeof openMemory> | undefined;
+function wrapMemory() {
+  return (wrapMem ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR }));
+}
+
+/** Anthropic Messages API dialect (G7). */
 
 export interface AnthropicProxyOpts {
   state: WrapState;
@@ -326,6 +314,16 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
 
   applyCacheBreakpoints(body);
   body = withKnowFactsAnthropic(body) as AnthropicRequest;
+  try {
+    const sys = typeof body.system === "string" ? body.system : (body.system ?? []).map((b) => b.text || "").join("\n");
+    const mems = wrapMemory().relevant(`${sys}\n${messageText(body.messages ?? [])}`);
+    if (mems.length) {
+      const extra = { type: "text" as const, text: `${MEMORY_MARK}\n${mems.map((m) => `- ${m.text}`).join("\n")}` };
+      body = typeof body.system === "string"
+        ? { ...body, system: [{ type: "text", text: body.system }, extra] }
+        : { ...body, system: [...(Array.isArray(body.system) ? body.system : []), extra] };
+    }
+  } catch {}
 
   const fn = opts.fetch ?? fetch;
   const anthropicKey = req.headers.get("x-api-key") || process.env.ANTHROPIC_API_KEY || "";
