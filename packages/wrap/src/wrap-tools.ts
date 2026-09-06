@@ -89,10 +89,6 @@ export type WrapState = {
   spanId?: string;
   region?: string;
   capacityMisses: number;
-  /**
-   * Entity ids written this session. Compiled/cache hits for a dirty id miss
-   * and force execute so a sibling read cannot see a pre-write value.
-   */
   dirtyEntities: Set<string>;
   dirtyAt: Map<string, number>;
   jit: JitGuard;
