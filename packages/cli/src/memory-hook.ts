@@ -36,12 +36,9 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
 
 export function notesFromInject(injected: unknown[]): string {
   return injected
-    .map((m) => {
-      const o = asRec(m);
-      const c = o.role === "system" && typeof o.content === "string" ? o.content : "";
-      return c.includes(MEMORY_MARK) || c.includes("Eden Know:") ? c : "";
-    })
-    .filter(Boolean)
+    .map((m) => asRec(m))
+    .filter((o) => o.role === "system" && typeof o.content === "string" && (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:")))
+    .map((o) => String(o.content))
     .join("\n\n");
 }
 
