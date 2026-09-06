@@ -356,7 +356,6 @@ describe("wrap follows a program that has been rebuilt or pulled back", () => {
     await tools.flow!.execute({ id: "T-1" });
     expect(c.calls).toEqual(["lookupTicket"]);
 
-    // Same id, different steps — what pullLive installs after a rebuild.
     state.programs = [program(["repair"], [{ id: "repair", kind: "tool", tool: "repair", args: idArg }], "flow")];
 
     await tools.flow!.execute({ id: "T-1" });
