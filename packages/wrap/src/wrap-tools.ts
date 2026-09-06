@@ -506,8 +506,6 @@ function emitTrace(
           continue;
         }
         const rec = id != null ? owner.invocations.get(id) : undefined;
-        // Unknown id: either an untagged legacy path or an evicted ancient
-        // invocation — both long finished, safe to attribute here.
         if (!rec || (rec.done && rec.finishedAt <= owner.startedAt)) mine.push(ev);
         else rest.push(ev);
       }
