@@ -559,11 +559,6 @@ function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, e
   const prompt = agentP + islandP;
   const completion = agentC + islandC;
   const trace: StretchTrace = {
-    // Events were redacted at push time, so what is buffered is already a
-    // snapshot: holding the caller's live objects until flush meant a caller
-    // that reuses its args record between turns rewrote the history the
-    // compiler learns from, and moved the redaction window to the wrong
-    // moment.
     id: crypto.randomUUID(),
     events,
     input: (redact(input ?? events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
