@@ -81,9 +81,6 @@ export function decideGuard(args: {
   const elapsed = now - run.t0;
   const cap = forecastTimeoutMs(opts);
   const remaining = cap - elapsed;
-  // Only the program this run is actually on — never max(all live budget.ms).
-  // A stretch that matches no live sequence is unique-work and must not take
-  // a budget halt because some other live tool has a large predicted ms.
   const onPath = [...run.events, { name }];
   const matches = matchingRunPrograms(live, onPath);
   const on = matches[0];
