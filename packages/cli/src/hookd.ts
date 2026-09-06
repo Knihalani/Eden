@@ -128,11 +128,8 @@ function looksBrowserDriven(req: Request): boolean {
   return site !== null && site !== "none";
 }
 
-/** The names a caller that really means "this machine" will have used. */
 function hostIsLoopback(req: Request): boolean {
   const raw = req.headers.get("host");
-  // No Host at all is HTTP/1.0 or a raw socket, not a browser; a browser
-  // always sends one. Bun also fills req.url from it, so absence is benign.
   if (!raw) return true;
   const host = raw.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
   return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1";
@@ -149,8 +146,6 @@ export async function handleHookd(req: Request): Promise<Response> {
   if (looksBrowserDriven(req) || !hostIsLoopback(req)) {
     return Response.json({}, { status: 403 });
   }
-  // Only the hook endpoint accepts a payload. Anything else is a caller that
-  // has the wrong idea about this server, and answering it invites confusion.
   if (path !== "/hook" && path !== "/") {
     return Response.json({}, { status: 404 });
   }
