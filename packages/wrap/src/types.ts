@@ -65,12 +65,6 @@ export type EdenOpts = {
   spanId?: string;
   region?: string;
   killAfterWarning?: boolean;
-  /**
-   * Opt-in hard enforcement. Default (false) is strict fail-safe: Eden never
-   * refuses, blocks, or halts a call — guards record warnings and steer where
-   * safe, but the agent's own call always goes through. Setting this lets
-   * guards halt loops, cap spend, and refuse unverifiable writes.
-   */
   enforce?: boolean;
 };
 
