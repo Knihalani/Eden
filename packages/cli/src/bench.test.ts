@@ -32,8 +32,6 @@ describe("eden bench", () => {
     expect(traces.length).toBe(9);
     const report = await collectBench(traces);
 
-    // The compiled side pays one island cent where the recording paid eight
-    // LLM calls' worth, and every block agrees, so this is a WIN.
     expect(report.verdict).toBe("WIN");
     expect(report.n).toBe(9);
     expect(report.p_value).toBeLessThan(0.05);
@@ -41,8 +39,6 @@ describe("eden bench", () => {
     expect(report.ci.lo).toBeLessThanOrEqual(report.ci.point!);
     expect(report.ci.hi).toBeGreaterThanOrEqual(report.ci.point!);
 
-    // Tokens were scraped on the naive side but the island half is scaled,
-    // not metered — measured AND estimated at once.
     expect(report.tokens.measured).toBe(true);
     expect(report.tokens.estimated).toBe(true);
     expect(report.tokens.delta).toBeLessThan(0);

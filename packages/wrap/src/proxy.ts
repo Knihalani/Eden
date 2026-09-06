@@ -18,7 +18,7 @@ export type ProxyOpts = {
 function corsOrigin(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
   if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin)) {
-    return { "access-control-allow-origin": origin, vary: "origin" };
+    return { "access-control-allow-origin": origin, vary: "origin", "access-control-expose-headers": "content-type" };
   }
   return {};
 }
