@@ -85,8 +85,6 @@ export function applyCacheBreakpoints(body: AnthropicRequest): void {
       lastMsg.content = [{ type: "text", text: lastMsg.content, cache_control: { type: "ephemeral" } }];
     } else if (Array.isArray(lastMsg.content) && lastMsg.content.length > 0) {
       const lastBlock = lastMsg.content[lastMsg.content.length - 1]!;
-      // tool_result blocks carry results the next turn depends on verbatim;
-      // they are as append-only-stable as anything else at the tail.
       (lastBlock as { cache_control?: { type: "ephemeral" } }).cache_control = { type: "ephemeral" };
     }
   }
