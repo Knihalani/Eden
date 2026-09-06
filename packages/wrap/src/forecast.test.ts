@@ -43,7 +43,6 @@ function program(over: Partial<StretchProgram> = {}): StretchProgram {
   } as unknown as StretchProgram;
 }
 
-/** Ticketship-like 3-step live program. Head is lookupTicket — wrap's real first-tool path. */
 function ticketHeadProgram(over: Partial<StretchProgram> = {}): StretchProgram {
   return program({
     id: "p_ticket",
