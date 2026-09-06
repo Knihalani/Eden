@@ -101,8 +101,6 @@ function sleep(ms: number): Promise<void> {
 
 function callerAborted(err: unknown, signal?: AbortSignal): boolean {
   if (!signal?.aborted) return false;
-  // Match by name first: providers raise AbortError ("This operation was
-  // aborted") with messages that do not contain the word "abort".
   if (err instanceof Error && err.name === "AbortError") return true;
   return err instanceof Error && /abort/i.test(err.message);
 }
