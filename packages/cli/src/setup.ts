@@ -372,9 +372,6 @@ export async function setup(args: string[]): Promise<void> {
   }
   writeFileAtomic(mcpPath, JSON.stringify(mcp, null, 2));
 
-  // Other agents: install where they are actually present (their config dirs
-  // existing is the detection signal), or force with --all-agents. A missing
-  // agent's config is never created out of thin air.
   const allAgents = args.includes("--all-agents");
   const agents: string[] = [];
   const geminiDir = join(homedir(), ".gemini");

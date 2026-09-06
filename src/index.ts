@@ -146,7 +146,7 @@ export class AgentMemory {
     return this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project)).map((c) => ({ rec: c.rec, n: c.needles.reduce((a, x) => a + (hay.has(x) ? 1 : 0), 0) })).filter((x) => x.n).sort((a, b) => Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.n - a.n || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
-  query(q: string, k = 5): QueryHit[] {
+  query(q: string, k = Number(process.env.EDEN_MEMORY_CAP) || 6): QueryHit[] {
     const qn = q.trim();
     const out: QueryHit[] = qn ? this.relevant(qn, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
     try { const card = knowQuery(qn, this.know); if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url }); } catch {}
@@ -203,10 +203,10 @@ export function host(opts: MemoryOptions & { port?: number } = {}) {
         if (req.method === "DELETE") return Response.json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
         if (req.method === "POST") {
           const b = (await req.json()) as { text?: string; id?: string; messages?: unknown[]; q?: string; k?: number };
-          const run = ({ "/observe": () => memory.observe(b.messages || []), "/remember": () => memory.remember(String(b.text || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || []) }), "/query": () => memory.query(String(b.q || ""), Number(b.k) || 5) } as Record<string, () => unknown>)[p];
+          const run = ({ "/observe": () => memory.observe(b.messages || []), "/remember": () => memory.remember(String(b.text || ""), b), "/forget": () => ({ ok: memory.forget(String(b.id || b.text || "")) }), "/inject": () => ({ messages: memory.inject(b.messages || []) }), "/query": () => memory.query(String(b.q || ""), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p];
           if (run) return Response.json(run());
         } else {
-          const run = ({ "/health": () => ({ ok: true }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || 5), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "") : memory.memories().slice().sort((a, b) => b.at - a.at)) } as Record<string, () => unknown>)[p];
+          const run = ({ "/health": () => ({ ok: true }), "/query": () => memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6), "/memories": () => (u.searchParams.get("q") ? memory.query(u.searchParams.get("q") || "", Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6) : memory.memories().slice().sort((a, b) => b.at - a.at)) } as Record<string, () => unknown>)[p];
           if (run) return Response.json(run());
         }
         return new Response("eden memory\n");
