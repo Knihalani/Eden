@@ -28,7 +28,6 @@ function program(id: string, budgetMs: number): StretchProgram {
 
 function run() {
   const r = emptyRun();
-  // The budget branch is only reached after a first warning.
   r.firstWarningAt = 0;
   // Pin the run's clock origin. emptyRun stamps t0 from performance.now(),
   // so with a literal `now` below this test only passed while the

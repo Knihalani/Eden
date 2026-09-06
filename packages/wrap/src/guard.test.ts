@@ -114,7 +114,6 @@ describe("guard loop branch", () => {
   });
 
   test("the incoming call must be part of the warned n-gram", () => {
-    // An unrelated tool arriving after a loop warning elsewhere proceeds.
     const run = runWithLoopWarning([{ name: "a" }, { name: "b" }], ["a", "b"]);
     const d = decideGuard({ name: "unrelated", run, live: [], opts, now: performance.now() });
     expect(d).toBeNull();
