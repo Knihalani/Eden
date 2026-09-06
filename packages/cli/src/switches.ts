@@ -55,7 +55,6 @@ export const PATH_ALLOWLIST = new Set([
   "EDEN_WRAP_URL",
 ]);
 
-/** Must have a §15 row. Wave 16–19 plus the human-gate hatch. */
 export const WAVE_16_19_SWITCHES = [
   "EDEN_NET_ALLOW",
   "EDEN_WEBHOOK_RAW",
@@ -70,7 +69,6 @@ export function edenNamesIn(text: string): string[] {
   return [...out].sort();
 }
 
-/** Strip comments so a “there is no EDEN_BUDGET_HALT” note is not a switch. */
 function withoutComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
