@@ -13,7 +13,6 @@ export type Receipt = {
   stepsRun?: number;
   skipped?: string[];
   outcome?: "ok" | "deopt" | "failed" | "skipped" | "degraded";
-  /** Product copy for canvas (capacity fail-open, etc.). Not a deopt. */
   reason?: string;
   tokens?: number;
   tokensSaved?: number | null;
