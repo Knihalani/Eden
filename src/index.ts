@@ -151,18 +151,13 @@ export class AgentMemory {
 
   relevant(text: string, cap = 6): MemoryRecord[] {
     const hay = new Set(tokList(text));
-    const hit = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project) && c.needles.some((n) => hay.has(n))).map((c) => c.rec);
-    hit.sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at);
-    return hit.slice(0, cap);
+    return this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project) && c.needles.some((n) => hay.has(n))).map((c) => c.rec).sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at).slice(0, cap);
   }
 
   query(q: string, k = 5): QueryHit[] {
     const qn = q.trim();
     const out: QueryHit[] = qn ? this.relevant(qn, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
-    try {
-      const card = knowQuery(qn, this.know);
-      if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url });
-    } catch {}
+    try { const card = knowQuery(qn, this.know); if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url }); } catch {}
     return out.slice(0, k);
   }
 
