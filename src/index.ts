@@ -169,12 +169,18 @@ export class AgentMemory {
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
     const messages = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
-    return { ...body, messages: this.inject(messages) };
+    const next = this.inject(messages);
+    return next === messages ? body : { ...body, messages: next };
   }
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory {
   return new AgentMemory(opts);
+}
+
+let proc: AgentMemory | undefined;
+export function processMemory(): AgentMemory {
+  return (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR }));
 }
 
 export function host(opts: MemoryOptions & { port?: number } = {}) {
