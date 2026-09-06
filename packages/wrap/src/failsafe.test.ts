@@ -182,9 +182,6 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
   });
 
   test("mutating stretch that deopts mid-run surfaces a structured deopt, not a raw re-run", async () => {
-    // The counterpart guarantee: for a partially-executed MUTATING stretch we
-    // must NOT silently replay raw — a duplicated write is worse than a
-    // structured, recoverable error the agent can read and act on.
     const p = twoStepProgram("mut", "write_stretch", "writeRecord", "notify");
     const state = createState({ programs: [p] });
     let writes = 0;
