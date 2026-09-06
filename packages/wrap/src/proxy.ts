@@ -208,10 +208,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   if (!upstreamRes.ok) {
     return new Response(upstreamRes.body, { status: upstreamRes.status, headers: { "content-type": "application/json" } });
   }
-  // Read once as text so a malformed upstream body can be handed back verbatim
-  // rather than turned into an Eden-shaped 500. Everything below — usage
-  // recording, steering — is a bonus on top of a response that already
-  // succeeded; none of it may fail the response.
   const text = await upstreamRes.text();
   let json: {
     choices?: Array<{ message?: { tool_calls?: unknown; content?: unknown } }>;
