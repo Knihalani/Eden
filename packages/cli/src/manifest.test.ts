@@ -35,7 +35,6 @@ describe("filesystem manifest (surfacing via the repo, not a transport)", () => 
     expect(md).toContain("- defer_loading: true");
     expect(md).toContain("eden run <name> --issue <id>");
     expect(md).toContain("Summarize review/state/files for one or more PRs");
-    // Progressive disclosure: whole manifest is small even with programs.
     expect(md.length).toBeLessThan(2000);
   });
 
@@ -87,7 +86,6 @@ describe("skill-native surface (SKILL.md)", () => {
     expect(fm!.description).not.toMatch(/<[^>]+>/);
     expect(fm!.description).not.toMatch(/\b(anthropic|claude)\b/i);
     expect(fm!.name).not.toMatch(/\b(anthropic|claude)\b/i);
-    // Third person: not an instruction to "you".
     expect(fm!.description).not.toMatch(/^(You |Use this )/);
   });
 

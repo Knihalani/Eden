@@ -44,11 +44,8 @@ describe("transparent execution (surfacing without a surface)", () => {
     process.env.EDEN_TRANSPARENT = "1"; // config-independent eligibility check
     expect(eligibleForTransparent(readOnlyTool, { issue: "101" })).toBe(true);
     expect(eligibleForTransparent(readOnlyTool, { issue: "101", file_path: "/repo/pr.ts" })).toBe(true);
-    // unknown read-only ⇒ fail closed
     expect(eligibleForTransparent({ ...readOnlyTool, read_only: undefined }, { issue: "101" })).toBe(false);
-    // single-step programs have no remainder to serve
     expect(eligibleForTransparent({ ...readOnlyTool, sequence: ["Bash"] }, { issue: "101" })).toBe(false);
-    // out-of-distribution input never triggers
     expect(eligibleForTransparent(readOnlyTool, { issue: "999" })).toBe(false);
   });
 
