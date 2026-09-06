@@ -1243,9 +1243,6 @@ export function wrapTools<T extends ToolsIn>(
     };
   }
 
-  // drops the client's duplicate, so the compiled tool wins there. The local
-  // Proxy used to do the opposite — raw wins — so the same agent executed
-  // different logic depending on how it was connected. Compiled wins now,
   // with a one-time warning; the compiled artifact passed human approval and
   // shadow validation, its ad-hoc namesake did not.
   const warnedCollisions = new Set<string>();
