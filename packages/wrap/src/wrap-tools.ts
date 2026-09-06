@@ -871,14 +871,6 @@ export function wrapTools<T extends ToolsIn>(
       if (rec.done) invocations.delete(id);
     }
   };
-  // `rest` counts how many raw calls of each tool the compiled run has already
-  // performed on the caller's behalf, so a sequence that calls one tool twice
-  // suppresses both raw repeats rather than only the first.
-  //
-  // Session-partitioned store (Wave 4.2): hosted dispatch shares one store
-  // keyed by session. Per-session cap fail-opens (A3). In-flight heads do not
-  // TTL-expire. Scan is newest-first and skips extractInput when identity
-  // cannot match (4.3).
   const store = state.arming;
   const session = state.sessionId;
   const fleetId = state.fleetId;
