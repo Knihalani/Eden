@@ -33,11 +33,6 @@ export function doctorPayload(checks: DoctorCheck[]): { checks: DoctorCheck[]; f
   return { checks, funnel: funnelSnapshot(checks) };
 }
 
-/**
- * Same split as wrap's `EDEN_NET_ALLOW` hatch: comma-separated binary names.
- * Empty/unset is refuse (count 0), never “all hosts.” Array, not an object —
- * hostile `__proto__` stays a listed name.
- */
 export function parseNetAllow(raw: string | undefined): string[] {
   return (raw ?? "")
     .split(",")
