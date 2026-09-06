@@ -117,7 +117,6 @@ d("adversarial: hostile payloads", () => {
     const malicious = JSON.parse('{"__proto__": {"isAdmin": true}, "id": "T-1"}');
     const out = (await tools.save.execute(malicious)) as { got: string[] };
     expect(out.got).toContain("id");
-    // The prototype of newly-created objects must stay clean.
     const victim: Record<string, unknown> = {};
     expect((victim as { isAdmin?: boolean }).isAdmin).toBeUndefined();
   });
