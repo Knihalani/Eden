@@ -312,12 +312,8 @@ describe("phase 1: sibling work is never lost (C3)", () => {
       tools.notify_done.execute({ id: "T-100" }) as Promise<unknown>,
     ]);
     expect(head).toMatchObject({ eden: "deopt" });
-    // The compiled run DID complete the write before notify failed — the
-    // sibling must claim it, not repeat it.
     expect(writeSib).toEqual({ eden: "steered", skipped: "write_report" });
     expect(writes).toBe(1);
-    // Notify never completed anywhere; mutating + failed attempt -> honest
-    // structured result. No false "steered", no blind duplicate.
     expect(notifySib).toMatchObject({ eden: "deopt" });
     expect(notifies).toBe(1);
   });
