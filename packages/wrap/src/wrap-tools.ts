@@ -812,15 +812,6 @@ function tagInvocation(ev: TraceEvent, selfId: number, agentId?: string): TraceE
   return ev;
 }
 
-/**
- * Run an Eden-side computation, degrading to `fallback` if it throws.
- *
- * This is the mechanical form of the prime directive: nothing Eden computes
- * about a call — matching, envelopes, arming, guards, telemetry — is allowed
- * to make the call itself fail. A corrupt program, a bad envelope shape, a bug
- * in our own bookkeeping: the agent's tool call still executes exactly as if
- * Eden were absent.
- */
 function safely<T>(fn: () => T, fallback: T, onErr?: (err: unknown) => void): T {
   try {
     return fn();
