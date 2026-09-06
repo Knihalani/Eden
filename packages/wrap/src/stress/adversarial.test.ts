@@ -218,7 +218,6 @@ d("simulation: ci watcher agent (realistic cadence)", () => {
   });
 });
 
-// ─── memory soak signal (short version here; long soak in stress runner) ─────
 d("adversarial: memory signals", () => {
   test("2000 recorded calls — trace buffer stays bounded", async () => {
     const state = createState({ programs: [] });
