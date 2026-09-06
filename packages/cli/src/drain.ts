@@ -116,26 +116,13 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
     // removed nothing, and the row was immortal — every later drain re-POSTed
     // stretch_end for a run that was still live, and the outbox grew forever.
     if (stretch_end) dropRuns.add(runId);
-    // Remove exactly the events that were sent, under the lock, rather than
-    // unlinking the file. The read, the POST and the delete all happened
-    // outside the lock, so any PostToolUse hook that fired during the request
-    // window had its event written into a file that was then destroyed.
     const sentIds = events.map((e) => String(e.event_id ?? "")).filter(Boolean);
     try {
-      // Remove exactly the lines this drain consumed, under the lock. The old
-      // fallback for "nothing had an id" unlinked the whole file, and it sat
-      // *outside* the lock — so a PostToolUse hook that correctly took the
-      // lock and appended during the in-flight POST had its event destroyed.
-      // Matching on the raw lines we read keeps anything appended since.
       withFileLock(`${path}.lock`, () => {
         if (sentIds.length) applyFlushTruncate(path, sentIds);
         dropConsumedLines(path, lines);
       });
-    } catch {
-      // Contended or unwritable: leave the file alone. Re-sending is
-      // harmless now that event_id makes ingest idempotent; losing events
-      // is not.
-    }
+    } catch {}
   }
   try {
     await refreshLiveTools(site, wrap, key, opts.workspace);
