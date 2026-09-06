@@ -274,7 +274,6 @@ export class SseUsageParser {
   }
 }
 
-/** Pass bytes through while scraping usage. Flush runs when the client finishes reading. */
 export function tapSseUsage(stream: ReadableStream<Uint8Array>, run: RunRecorder): ReadableStream<Uint8Array> {
   const parser = new SseUsageParser();
   const reader = stream.getReader();
