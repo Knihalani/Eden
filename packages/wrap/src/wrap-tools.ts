@@ -520,11 +520,6 @@ function emitTrace(
    } catch {
     /* observing a call must never fail it */
   } finally {
-    // A window with NO loop-family warning means the agent did varied,
-    // non-repeating work — that is what earns a fresh ceiling. Windows that
-    // carry repeat warnings keep accumulating toward the executed-call cap
-    // across flushes, or a 12-event flush cadence would reset the ceiling
-    // mid-thrash forever.
     const hadLoopWarning =
       run.warnings.some((w) => w.kind === "repeat_ngram" || w.kind === "repeat_visits") || false;
     if (!owner) run.events = [];
