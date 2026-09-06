@@ -484,7 +484,6 @@ describe("phase 2: branched programs steer end-to-end", () => {
     ]);
     const prog = mined.programs.find((p) => p.steps?.some((s) => s.kind === "branch"));
     if (!prog) throw new Error("no fork program mined");
-    // Shadow approval: without a manifest the program is correctly inert.
     const live = {
       ...prog,
       manifest: { llmReduction: 8, latencyReduction: 8, costReduction: 8, skipRateBefore: 0.2, skipRateAfter: 0, nShadow: 6 },
