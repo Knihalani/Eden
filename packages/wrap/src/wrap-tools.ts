@@ -65,7 +65,6 @@ export function maxRunSteps(): number {
   return MAX_RUN_STEPS;
 }
 
-/** Halt/block payload. `detail` only when decideGuard set it (budget copy, not fail_streak/warning/loop). */
 function guardRefuse(guard: { action: string; reason: string; detail?: string }): {
   eden: "halted" | "blocked";
   reason: string;
