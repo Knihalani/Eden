@@ -248,17 +248,7 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
   throw new Error(`could not acquire lock ${lockPath}`);
 }
 
-/**
- * Async twin of {@link withFileLock} for long-lived processes.
- *
- * The acquisition loop is byte-for-byte the same policy — stamped locks,
- * abandonment, inode-checked release — with one difference: it waits with
- * `await Bun.sleep(8)` instead of `Bun.sleepSync(8)`. `sleepSync` parks the
- * *entire event loop*, so in hookd's long-lived process one contended lock
- * stalled every other session's request for the whole wait window. One-shot
- * hook processes keep the sync {@link withFileLock}: they have nothing else to
- * serve and pay no cost for spinning.
- */
+/** Async twin of {@link withFileLock} for long-lived processes. */
 export async function withFileLockAsync<T>(lockPath: string, fn: () => T | Promise<T>): Promise<T> {
   mkdirSync(dirname(lockPath), { recursive: true });
   const t0 = Date.now();
