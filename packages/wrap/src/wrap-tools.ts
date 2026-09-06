@@ -865,9 +865,6 @@ export function wrapTools<T extends ToolsIn>(
       };
       if (run.warnings.length < MAX_WARNINGS) run.warnings.push(w);
       notifyHost(() => state.opts.onWarning?.(w));
-      // Canvas classifies receipts, not wrap warnings. A fail-open stretch
-      // still ran — ok, degraded — so the desk can say so without inventing
-      // a failure.
       const receipt: Receipt = {
         toolId: program.id,
         version: program.version,
