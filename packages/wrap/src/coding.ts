@@ -19,8 +19,6 @@ function networkAllow(): Set<string> {
 
 function bashJail(cwd: string, cmd: string): void {
   if (/[`$]|\$\(|\$\{/.test(cmd)) throw new Error("path outside workspace");
-  // Process substitution runs the inner command with no confinement at all,
-  // and its paths are invisible to the token scan below.
   if (/[<>]\(/.test(cmd)) throw new Error("path outside workspace");
   if (/(^|[;&|\n]|&&|\|\|)\s*cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s'"`])\.\.(\/|$)/.test(cmd)) {
     throw new Error("path outside workspace");
