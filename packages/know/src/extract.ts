@@ -1626,10 +1626,9 @@ export function wikiSubject(url: string, html: string, scan?: HtmlScan): string 
 /** Wikipedia infobox / wikitext capital. The prose regex misses most articles. */
 export function wikiCapital(url: string, html: string, _text: string, scan?: HtmlScan): Triple | undefined {
   const name = wikiSubject(url, html, scan);
-  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return undefined;
+  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return;
   const o = tidyCapital(wikiCapitalCell(html, scan?.tables) || "") || wikiCapitalFromWikitext(html);
-  if (!o) return undefined;
-  return { s: name, p: "capital", o, e: `capital of ${name} is ${o}`.slice(0, 280) };
+  return o ? { s: name, p: "capital", o, e: `capital of ${name} is ${o}`.slice(0, 280) } : undefined;
 }
 
 /** ISO 3166-1 alpha-2 from a country infobox. Same persistable `id` path as Wikidata P297. */
