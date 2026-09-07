@@ -2215,9 +2215,7 @@ function rfcEdgeInverses(edges: Triple[]): Triple[] {
     const verb = t.p === "obsoletes" ? "obsoleted by" : "updated by";
     for (const n of rfcNumsListed(t.o, "").slice(0, 8)) {
       const o = `${verb} ${t.s}`, k = `${n}\0${o}`;
-      if (o.length < 8 || o.length > 72 || seen.has(k)) continue;
-      seen.add(k);
-      out.push({ s: `RFC ${n}`, p: "is", o, e: (t.e || o).slice(0, 280) });
+      if (o.length >= 8 && o.length <= 72 && !seen.has(k)) { seen.add(k); out.push({ s: `RFC ${n}`, p: "is", o, e: (t.e || o).slice(0, 280) }); }
     }
   }
   return out;
