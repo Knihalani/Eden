@@ -1984,18 +1984,12 @@ function ianaRecordsFromBody(url: string, body: string): Triple[] {
 function mediaFromText(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
-  const head = text.slice(0, 48_000);
-  for (const m of head.matchAll(
-    /\b((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9][a-z0-9!#$&^_.+-]*)\b/gi,
-  )) {
+  for (const m of text.slice(0, 48_000).matchAll(/\b((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9][a-z0-9!#$&^_.+-]*)\b/gi)) {
     const typ = m[1]!.toLowerCase();
-    if (seen.has(typ)) continue;
-    if (!MEDIA_TAB.has(typ)) continue;
+    if (seen.has(typ) || !MEDIA_TAB.has(typ)) continue;
     seen.add(typ);
-    const sub = typ.split("/")[1] || "";
-    const o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
-    if (o.length < 2) continue;
-    out.push({ s: `IANA media ${typ}`, p: "is", o, e: m[0]!.slice(0, 280) });
+    const sub = typ.split("/")[1] || "", o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
+    if (o.length >= 2) out.push({ s: `IANA media ${typ}`, p: "is", o, e: m[0]!.slice(0, 280) });
   }
   return out.slice(0, 24);
 }
