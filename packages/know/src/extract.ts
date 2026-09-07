@@ -2670,19 +2670,17 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
   if (og.title && og.description && og.description.length <= 80 && (rfcUrl || tr)) out.push({ s: og.title.slice(0, 160), p: "is", o: og.description.slice(0, 80), e: og.description.slice(0, 280) });
   for (let i = 0, n = out.length; i < n; i++) { const inv = isoInverse(out[i]!); if (inv) out.push(inv); }
   const seen = new Set<string>();
-  const kept = out
-    .map(cleanTriple)
-    .filter((t): t is Triple => !!t && !junkGraphFact(t) && HOT_PRED.has(t.p))
-    .filter((t) => {
-      const k = t.p === "capital" ? `${t.s}\0${t.p}` : `${t.s}\0${t.p}\0${t.o}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-  const capitals = kept.filter((t) => t.p === "capital");
-  const rest = kept.filter((t) => t.p !== "capital");
-  const restCap = listPage ? 400 : 128;
-  return [...capitals.slice(0, 400), ...rest.slice(0, restCap)];
+  const capitals: Triple[] = [];
+  const rest: Triple[] = [];
+  for (const raw of out) {
+    const t = cleanTriple(raw);
+    if (!t || junkGraphFact(t) || !HOT_PRED.has(t.p)) continue;
+    const k = t.p === "capital" ? `${t.s}\0${t.p}` : `${t.s}\0${t.p}\0${t.o}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    (t.p === "capital" ? capitals : rest).push(t);
+  }
+  return [...capitals.slice(0, 400), ...rest.slice(0, listPage ? 400 : 128)];
 }
 
 const LINK_PREFER =
