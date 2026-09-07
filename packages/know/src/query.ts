@@ -231,15 +231,12 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   if (n.p === "about" || n.p === "date") return;
   if (n.p !== "capital" && n.p !== "is" && n.p !== "obsoletes" && n.p !== "updates" && looksLikeCode(`${n.o} ${n.e}`)) return;
   let fact = "";
-  if (n.p === "capital") {
-    fact = `The capital of ${countryForCard(n.s)} is ${n.o}.`;
-  }
+  if (n.p === "capital") fact = `The capital of ${countryForCard(n.s)} is ${n.o}.`;
   else if (/^RFC\s+\d/i.test(n.s) && n.p === "is") {
     if (/^(?:obsoleted|updated) by RFC\s+\d/i.test(n.o)) fact = `${n.s} is ${n.o}.`;
     else {
       const title = rfcTitle(n.o, n.e);
-      if (AREA_SET.has(title)) fact = `${n.s} is ${articleFor(title)} ${title} RFC.`;
-      else fact = `${n.s} is ${title}.`;
+      fact = AREA_SET.has(title) ? `${n.s} is ${articleFor(title)} ${title} RFC.` : `${n.s} is ${title}.`;
     }
   }
   else if (/^W3C\s+/i.test(n.s) && n.p === "is") fact = `${n.s} is ${n.o}.`;
