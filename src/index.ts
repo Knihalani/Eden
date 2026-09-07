@@ -40,9 +40,8 @@ function convBlob(list: unknown[]): string {
   for (const m of list) {
     if (!m || typeof m !== "object") continue;
     const o = m as Record<string, unknown>;
-    const c = o.content;
+    const c = o.content ?? o.llmContent;
     if (typeof c === "string" && c) parts.push(c);
-    else if (typeof o.llmContent === "string" && o.llmContent) parts.push(o.llmContent);
     else if (Array.isArray(c) || Array.isArray(o.parts) || (c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).parts))) {
       for (const b of (Array.isArray(c) ? c : Array.isArray(o.parts) ? o.parts as unknown[] : (c as Record<string, unknown>).parts as unknown[])) {
         if (b && typeof b === "object") {
