@@ -2051,11 +2051,8 @@ export function rfcStatusFromXml(xml: string, num: string): Triple[] {
 
 /** Header `Category:` / `Status:` / `STD n` — not the “Status of This Memo” boilerplate paragraph. */
 export function rfcStatusFromText(num: string, html: string, text: string): Triple[] {
-  const head = `${html.slice(0, 2500)}\n${text.slice(0, 2500)}`;
-  const out: Triple[] = [];
-  const cat =
-    head.match(/\bCategory:\s*([A-Za-z][A-Za-z \-]{1,40})/i)?.[1] ||
-    head.match(/\bStatus:\s*(Internet Standard|Proposed Standard|Draft Standard|Best Current Practice|Informational|Experimental|Historic)\b/i)?.[1];
+  const head = `${html.slice(0, 2500)}\n${text.slice(0, 2500)}`, out: Triple[] = [];
+  const cat = head.match(/\bCategory:\s*([A-Za-z][A-Za-z \-]{1,40})/i)?.[1] || head.match(/\bStatus:\s*(Internet Standard|Proposed Standard|Draft Standard|Best Current Practice|Informational|Experimental|Historic)\b/i)?.[1];
   const o = cat ? rfcStatusObject(cat) : undefined;
   if (o) out.push({ s: `RFC ${num}`, p: "is", o, e: (cat || o).slice(0, 280) });
   const std = head.match(/\bSTD\s+(\d{1,4})\b/i)?.[1];
