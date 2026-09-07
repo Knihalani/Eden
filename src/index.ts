@@ -17,20 +17,13 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
 const FOLD: Record<string, string> = {
-  timezone: "tz",
   hours: "tz",
-  tz: "tz",
   cache: "redis",
-  redis: "redis",
   container: "image",
-  image: "image",
   images: "image",
   docker: "image",
-  prod: "prod",
   production: "prod",
   standup: "stand",
-  stand: "stand",
-  k8s: "k8s",
   kubernetes: "k8s",
 };
 
