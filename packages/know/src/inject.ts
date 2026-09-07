@@ -82,8 +82,7 @@ function boundMention(text: string, token: string): boolean {
 }
 
 function rfcRelationQuestion(text: string): boolean {
-  if (text.indexOf("obsolet") < 0 && text.indexOf("update") < 0 && text.indexOf("successor") < 0 && text.indexOf("replac") < 0) return false;
-  return /\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b/i.test(text);
+  return (text.indexOf("obsolet") >= 0 || text.indexOf("update") >= 0 || text.indexOf("successor") >= 0 || text.indexOf("replac") >= 0) && /\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b/i.test(text);
 }
 
 export function subjectMentioned(text: string, fact: string): boolean {
