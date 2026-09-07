@@ -56,8 +56,10 @@ const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>(), out: string[] = [];
-  const label = blob.trim().match(SPEAKER_LABEL)?.[1];
-  for (const raw of blob.split(/(?<=[.!\n])\s+/)) {
+  const whole = blob.trim().replace(/\s+/g, " ");
+  const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?");
+  const label = whole.match(SPEAKER_LABEL)?.[1];
+  for (const raw of labeledWhole ? [whole] : blob.split(/(?<=[.!\n])\s+/)) {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo|btw,|fwiw,)\s+/i, "");
     if (t.length < 8 || t.length > 400 || t.startsWith("{") || t.startsWith("[") || t.startsWith("```") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function |npm |pnpm |bun |git |cd |curl |yarn |npx |sudo |echo |cat |ls )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|we will|look at|can you|could you|would you|tell me|fix the|add the|we need to|we're|cool, |nice, |great, |awesome, |perfect, )\b/i.test(t) || /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9]/.test(t) || CHAT.test(t)) continue;
     if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
