@@ -230,26 +230,16 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   if (n.p === "capital") fact = `The capital of ${countryForCard(n.s)} is ${n.o}.`;
   else if (/^RFC\s+\d/i.test(n.s) && n.p === "is") {
     if (/^(?:obsoleted|updated) by RFC\s+\d/i.test(n.o)) fact = `${n.s} is ${n.o}.`;
-    else {
-      const title = rfcTitle(n.o, n.e);
-      fact = AREA_SET.has(title) ? `${n.s} is ${articleFor(title)} ${title} RFC.` : `${n.s} is ${title}.`;
-    }
-  }
-  else if (/^W3C\s+/i.test(n.s) && n.p === "is") fact = `${n.s} is ${n.o}.`;
-  else if (/^IANA\s+media\s+/i.test(n.s) && n.p === "is") {
-    const media = n.s.replace(/^IANA\s+media\s+/i, "");
-    fact = `${media} is ${articleFor(n.o)} ${n.o} media type.`;
-  } else if (/^SPDX\s+/i.test(n.s) && n.p === "is") {
+    else { const title = rfcTitle(n.o, n.e); fact = AREA_SET.has(title) ? `${n.s} is ${articleFor(title)} ${title} RFC.` : `${n.s} is ${title}.`; }
+  } else if (/^W3C\s+/i.test(n.s) && n.p === "is") fact = `${n.s} is ${n.o}.`;
+  else if (/^IANA\s+media\s+/i.test(n.s) && n.p === "is") fact = `${n.s.replace(/^IANA\s+media\s+/i, "")} is ${articleFor(n.o)} ${n.o} media type.`;
+  else if (/^SPDX\s+/i.test(n.s) && n.p === "is") {
     const id = n.s.replace(/^SPDX\s+/i, "");
-    fact =
-      tautology(n.o, `${id} license`) || tautology(n.o, id) ? `${id} is an SPDX license.` : `${id} is ${n.o}.`;
-  } else if (/^IANA\s+method\s+/i.test(n.s) && n.p === "is") {
-    fact = `${n.s.replace(/^IANA\s+method\s+/i, "")} is ${n.o}.`;
-  } else if (/^IANA\s+http\s+/i.test(n.s) && n.p === "is") {
-    fact = `HTTP ${n.s.replace(/^IANA\s+http\s+/i, "")} is ${n.o}.`;
-  } else if (/^IANA\s+protocol\s+/i.test(n.s) && n.p === "is") {
-    fact = `${n.o} is protocol ${n.s.replace(/^IANA\s+protocol\s+/i, "")}.`;
-  } else if (/^IANA\s+scheme\s+/i.test(n.s) && n.p === "is") {
+    fact = tautology(n.o, `${id} license`) || tautology(n.o, id) ? `${id} is an SPDX license.` : `${id} is ${n.o}.`;
+  } else if (/^IANA\s+method\s+/i.test(n.s) && n.p === "is") fact = `${n.s.replace(/^IANA\s+method\s+/i, "")} is ${n.o}.`;
+  else if (/^IANA\s+http\s+/i.test(n.s) && n.p === "is") fact = `HTTP ${n.s.replace(/^IANA\s+http\s+/i, "")} is ${n.o}.`;
+  else if (/^IANA\s+protocol\s+/i.test(n.s) && n.p === "is") fact = `${n.o} is protocol ${n.s.replace(/^IANA\s+protocol\s+/i, "")}.`;
+  else if (/^IANA\s+scheme\s+/i.test(n.s) && n.p === "is") {
     const sch = n.s.replace(/^IANA\s+scheme\s+/i, "");
     fact = n.o.trim().toLowerCase() === sch.toLowerCase() ? `${sch} is a URI scheme.` : `${sch} is ${n.o}.`;
   } else if (/^IANA\s+rel\s+/i.test(n.s) && n.p === "is") {
@@ -262,10 +252,8 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   } else if (/^IANA\s+header\s+/i.test(n.s) && n.p === "is") {
     const h = n.s.replace(/^IANA\s+header\s+/i, "");
     fact = tautology(n.o, `${h} http field header`) ? `${h} is an HTTP header.` : `${h} is ${n.o}.`;
-  } else if (/^IANA\s+dns\s+/i.test(n.s) && n.p === "is") {
-    const rr = n.s.replace(/^IANA\s+dns\s+/i, "");
-    fact = `${rr} is ${articleFor(n.o)} ${n.o} record.`;
-  } else if (/^IANA\s+well-known\s+/i.test(n.s) && n.p === "is") {
+  } else if (/^IANA\s+dns\s+/i.test(n.s) && n.p === "is") fact = `${n.s.replace(/^IANA\s+dns\s+/i, "")} is ${articleFor(n.o)} ${n.o} record.`;
+  else if (/^IANA\s+well-known\s+/i.test(n.s) && n.p === "is") {
     const wk = n.s.replace(/^IANA\s+well-known\s+/i, "");
     fact = n.o.trim().toLowerCase() === wk.toLowerCase() ? `${wk} is a well-known URI.` : `${wk} is ${n.o}.`;
   } else if (/^(IANA|WHATWG|Unicode)\s+/i.test(n.s) && n.p === "is") fact = `${n.s} is ${n.o}.`;
