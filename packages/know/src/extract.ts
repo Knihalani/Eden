@@ -524,15 +524,10 @@ export function qualityHost(url: string): boolean {
 
 /** What occupies the on-disk graph. Frozen encyclopedia stays out. */
 export function persistable(url: string, t: Triple): boolean {
-  if (junkGraphFact(t) || frozenEncyclopedia(t)) return false;
-  if (!HOT_PRED.has(t.p) || looksLikeCode(`${t.o} ${t.e}`)) return false;
-  if (t.p === "is") {
-    return t.s.length >= 2 && t.s.length <= 96 && t.o.length >= 8 && t.o.length <= 72 && t.s.toLowerCase() !== t.o.toLowerCase();
-  }
-  if (t.p === "obsoletes" && /^RFC\s+\d/i.test(t.s) && /RFC\s+\d/i.test(t.o)) return true;
-  if (t.p === "updates" && /^RFC\s+\d/i.test(t.s) && /RFC\s+\d/i.test(t.o)) return true;
-  if ((t.p === "id" || t.p === "version") && qualityHost(url) && t.o.length <= 48) return true;
-  return false;
+  if (junkGraphFact(t) || frozenEncyclopedia(t) || !HOT_PRED.has(t.p) || looksLikeCode(`${t.o} ${t.e}`)) return false;
+  if (t.p === "is") return t.s.length >= 2 && t.s.length <= 96 && t.o.length >= 8 && t.o.length <= 72 && t.s.toLowerCase() !== t.o.toLowerCase();
+  if ((t.p === "obsoletes" || t.p === "updates") && /^RFC\s+\d/i.test(t.s) && /RFC\s+\d/i.test(t.o)) return true;
+  return (t.p === "id" || t.p === "version") && qualityHost(url) && t.o.length <= 48;
 }
 
 /** JSON-LD name / @value / language map / wiki @id. Never `[object Object]`. */
