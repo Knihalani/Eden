@@ -2651,9 +2651,8 @@ export function techniquesFromProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
   const add = (t: Triple) => {
-    if (out.length >= 16) return;
     const k = `${t.s}\0${t.p}\0${t.o}`;
-    if (seen.has(k)) return;
+    if (out.length >= 16 || seen.has(k)) return;
     seen.add(k);
     out.push(t);
   };
@@ -2675,10 +2674,8 @@ export function techniquesFromProse(text: string): Triple[] {
   ];
   for (const re of pats) {
     for (const m of head.matchAll(re)) {
-      const s = tidyToolName(m[1]!);
-      if (!s) continue;
-      const o = tidyTechniqueObject(m[2]!);
-      if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+      const s = tidyToolName(m[1]!), o = s && tidyTechniqueObject(m[2]!);
+      if (s && o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
     }
   }
   return out;
