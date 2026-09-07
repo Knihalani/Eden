@@ -444,10 +444,8 @@ function buildTyped(t: string): FactCard | undefined {
     if (reason) return keep(t, internFact(code, `HTTP ${code} is ${reason}.`));
   }
 
-  const media = mediaWant(t);
-  if (media) {
-    const sub = media.split("/")[1] || "";
-    if (!aliasableMediaSubtype(sub)) return;
+  const media = mediaWant(t), sub = media?.split("/")[1] || "";
+  if (media && aliasableMediaSubtype(sub)) {
     const obj = MEDIA_SUBTYPE_OBJECT[sub.toLowerCase()] || sub;
     return keep(t, internFact(t, `${media} is ${articleFor(obj)} ${obj} media type.`));
   }
