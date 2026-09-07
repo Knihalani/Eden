@@ -2786,7 +2786,6 @@ function tidyTechniqueObject(raw: string): string | undefined {
   return o;
 }
 
-/** Tool/docs + forum techniques. Packed as `is` / `used for`. */
 export function techniquesFromProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
@@ -2837,7 +2836,6 @@ function tidySoftwareObject(raw: string): string | undefined {
   return o;
 }
 
-/** GitHub README / tool docs `is` from OG description or the first “X is a runtime” sentence. */
 export function softwareLeadIs(url: string, html: string, text: string, scan?: HtmlScan): Triple | undefined {
   if (!toolDocsUrl(url)) return undefined;
   const name = softwareName(url, scan);
