@@ -2029,13 +2029,7 @@ function isoFromText(url: string, html: string, text: string): Triple | undefine
 
 /** xml2rfc: `<rfc number="9110" docName="..." obsoletes="..." updates="...">` plus `<title>`. */
 export function rfcXmlNumber(xml: string): string | undefined {
-  return (
-    xml.match(/<rfc\b[^>]*\bnumber\s*=\s*["'](\d{3,5})["']/i)?.[1] ||
-    xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']RFC["'][^>]*\bvalue\s*=\s*["'](\d{3,5})["']/i)?.[1] ||
-    xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{3,5})["'][^>]*\bname\s*=\s*["']RFC["']/i)?.[1] ||
-    xml.match(/<docName>\s*rfc0*(\d{3,5})\s*<\/docName>/i)?.[1] ||
-    xml.match(/<rfc\b[^>]*\bdocName\s*=\s*["']rfc0*(\d{3,5})["']/i)?.[1]
-  );
+  return xml.match(/<rfc\b[^>]*\bnumber\s*=\s*["'](\d{3,5})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']RFC["'][^>]*\bvalue\s*=\s*["'](\d{3,5})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{3,5})["'][^>]*\bname\s*=\s*["']RFC["']/i)?.[1] || xml.match(/<docName>\s*rfc0*(\d{3,5})\s*<\/docName>/i)?.[1] || xml.match(/<rfc\b[^>]*\bdocName\s*=\s*["']rfc0*(\d{3,5})["']/i)?.[1];
 }
 
 export function rfcTitleFromXml(xml: string): string | undefined {
