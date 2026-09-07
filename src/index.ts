@@ -150,8 +150,7 @@ export class AgentMemory {
 
   notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
     if (text) return this.relevant(text, k);
-    const recs = this.memories();
-    return [...recs.filter((r) => r.kind === "constraint").slice(-k), ...recs.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k);
+    return ((recs) => [...recs.filter((r) => r.kind === "constraint").slice(-k), ...recs.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(this.memories());
   }
 
   query(q: string, k = Number(process.env.EDEN_MEMORY_CAP) || 6): QueryHit[] {
