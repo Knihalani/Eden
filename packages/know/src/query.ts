@@ -85,14 +85,9 @@ export function citeableUrl(raw?: string): string | undefined {
   try { const p = new URL(u); if ((p.protocol === "http:" || p.protocol === "https:") && p.hostname.includes(".")) return u; } catch {}
 }
 
-function rfcPageUrl(s: string): string | undefined {
-  const m = /^RFC\s+(\d{1,5})$/i.exec(s.trim());
-  if (!m) return;
-  return `https://www.rfc-editor.org/rfc/rfc${Number(m[1])}.html`;
-}
-
 function sourceOf(raw: Hit, s: string): string | undefined {
-  return citeableUrl(raw.url) || rfcPageUrl(s);
+  const m = /^RFC\s+(\d{1,5})$/i.exec(s.trim());
+  return citeableUrl(raw.url) || (m ? `https://www.rfc-editor.org/rfc/rfc${Number(m[1])}.html` : undefined);
 }
 
 let extractMod: typeof import("./extract") | undefined;
