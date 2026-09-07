@@ -450,14 +450,11 @@ function buildTyped(t: string): FactCard | undefined {
 
   if (n === 3 && t >= "100" && t <= "599" && t === String(+t)) {
     const reason = HTTP_REASON[+t];
-    if (!reason) return;
-    return keep(t, internFact(t, `HTTP ${t} is ${reason}.`));
+    if (reason) return keep(t, internFact(t, `HTTP ${t} is ${reason}.`));
   }
   if (n >= 7 && n <= 8 && /^HTTP\s*[1-5]\d{2}$/i.test(t)) {
-    const code = t.replace(/\D/g, "");
-    const reason = HTTP_REASON[+code];
-    if (!reason) return;
-    return keep(t, internFact(code, `HTTP ${code} is ${reason}.`));
+    const code = t.replace(/\D/g, ""), reason = HTTP_REASON[+code];
+    if (reason) return keep(t, internFact(code, `HTTP ${code} is ${reason}.`));
   }
 
   const media = mediaWant(t);
