@@ -288,10 +288,7 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
   let i = 0;
   while (i < n) {
     const lt = html.indexOf("<", i);
-    if (lt < 0) {
-      parts.push(html.slice(i));
-      break;
-    }
+    if (lt < 0) { parts.push(html.slice(i)); break; }
     if (lt > i) parts.push(html.slice(i, lt));
     if (html.charCodeAt(lt + 1) === 33 && html.startsWith("<!--", lt)) {
       const end = html.indexOf("-->", lt + 4);
