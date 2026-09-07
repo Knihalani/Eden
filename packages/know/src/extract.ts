@@ -2007,22 +2007,16 @@ function spdxFromText(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
   const add = (raw: string, ev: string) => {
+    const lc = raw.toLowerCase();
     let id = "";
-    for (const k of SPDX_KEEP) {
-      if (k.toLowerCase() === raw.toLowerCase()) {
-        id = k;
-        break;
-      }
-    }
+    for (const k of SPDX_KEEP) if (k.toLowerCase() === lc) { id = k; break; }
     if (!id || seen.has(id)) return;
-    seen.add(id);
     const o = spdxObjectName(id);
     if (o.length < 2) return;
-    out.push({ s: `SPDX ${id}`, p: "is", o, e: ev.slice(0, 280) });
+    seen.add(id); out.push({ s: `SPDX ${id}`, p: "is", o, e: ev.slice(0, 280) });
   };
   const head = text.slice(0, 48_000);
-  for (const m of head.matchAll(/SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)/gi)) add(m[1]!, m[0]!);
-  for (const m of head.matchAll(/\bSPDX\s+([A-Za-z0-9.+-]+)/gi)) add(m[1]!, m[0]!);
+  for (const re of [/SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)/gi, /\bSPDX\s+([A-Za-z0-9.+-]+)/gi]) for (const m of head.matchAll(re)) add(m[1]!, m[0]!);
   return out.slice(0, 16);
 }
 
