@@ -1837,51 +1837,41 @@ function structuredCountryCapitals(html: string, slices?: string[]): Triple[] {
   return out;
 }
 
+function pushIs(out: Triple[], s: string, o: string) {
+  if (o.length >= 8 && o.length <= 72) out.push({ s, p: "is", o, e: o.slice(0, 280) });
+}
+
 function extrasFromPairs(name: string, pairs: { label: string; data: string }[]): Triple[] {
   const out: Triple[] = [];
   for (const { label, data } of pairs) {
     if (isLanguageLabel(label)) {
-      const official = !/^national\s+languages?\b/.test(label.replace(/\s+/g, " ").trim());
+      const official = !/^national\s+languages?\b/.test(lab(label));
       for (const lang of namedEntities(data).slice(0, 4)) {
-        const o = official ? `an official language of ${name}` : `a national language of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: lang, p: "is", o, e: o.slice(0, 280) });
+        pushIs(out, lang, official ? `an official language of ${name}` : `a national language of ${name}`);
       }
     } else if (isCurrencyLabel(label)) {
       const cur = namedEntities(data)[0];
-      if (cur) {
-        const o = `the currency of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: cur, p: "is", o, e: o.slice(0, 280) });
-      }
+      if (cur) pushIs(out, cur, `the currency of ${name}`);
       const code = stripMarkup(data).match(/\(([A-Z]{3})\)/)?.[1];
       if (code && !/^(THE|AND|FOR|GDP|ISO|UTC|USA|UN|NEW)$/.test(code)) {
         out.push({ s: name, p: "id", o: code, e: `${name} currency ${code}`.slice(0, 280) });
       }
     } else if (isLargestCityLabel(label) && !CONTINENT.test(name)) {
       const city = tidyCapital(data);
-      if (city) {
-        const o = `the largest city of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: city, p: "is", o, e: o.slice(0, 280) });
-      }
+      if (city) pushIs(out, city, `the largest city of ${name}`);
     } else if (isMottoLabel(label)) {
       const motto = namedEntities(data)[0] || tidyProper(data);
-      if (motto && !junkMotto(motto)) {
-        const o = `the motto of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: motto, p: "is", o, e: o.slice(0, 280) });
-      }
+      if (motto && !junkMotto(motto)) pushIs(out, motto, `the motto of ${name}`);
     } else if (isOfficialNameLabel(label)) {
       const official = tidyProper(data) || namedEntities(data)[0];
       if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) {
-        const o = `the official name of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: official, p: "is", o, e: o.slice(0, 280) });
+        pushIs(out, official, `the official name of ${name}`);
       }
     } else if (isCapitalLabel(label) && !CONTINENT.test(name)) {
       const city = tidyCapital(data);
       if (city) {
         out.push({ s: name, p: "capital", o: city, e: `capital of ${name} is ${city}`.slice(0, 280) });
-        if (/\blargest city\b/.test(label)) {
-          const o = `the largest city of ${name}`;
-          if (o.length >= 8 && o.length <= 72) out.push({ s: city, p: "is", o, e: o.slice(0, 280) });
-        }
+        if (/\blargest city\b/.test(label)) pushIs(out, city, `the largest city of ${name}`);
       }
     } else if (isIsoLabel(label)) {
       const iso = tidyIso(data);
@@ -1893,10 +1883,7 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       }
     } else if (isDemonymLabel(label)) {
       const dem = namedEntities(data)[0];
-      if (dem) {
-        const o = `a demonym of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: dem, p: "is", o, e: o.slice(0, 280) });
-      }
+      if (dem) pushIs(out, dem, `a demonym of ${name}`);
     } else if (isTldLabel(label)) {
       const tld = stripMarkup(data).match(/\.[a-z0-9-]{2,24}/i)?.[0]?.toLowerCase();
       if (tld && tld.length >= 3 && tld.length <= 24) {
@@ -1910,10 +1897,7 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       if (area) out.push({ s: name, p: "id", o: area, e: `${name} area ${area}`.slice(0, 280) });
     } else if (isLegislatureLabel(label)) {
       const body = namedEntities(data)[0];
-      if (body) {
-        const o = `the legislature of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: body, p: "is", o, e: o.slice(0, 280) });
-      }
+      if (body) pushIs(out, body, `the legislature of ${name}`);
     } else if (isGovernmentLabel(label)) {
       const gov = tidyGov(data);
       if (gov) out.push({ s: name, p: "is", o: gov, e: gov.slice(0, 280) });
@@ -1941,15 +1925,11 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
             : /president/i.test(label)
               ? "the president of"
               : "the head of state of";
-        const o = `${role} ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: person, p: "is", o, e: o.slice(0, 280) });
+        pushIs(out, person, `${role} ${name}`);
       }
     } else if (isAnthemLabel(label)) {
       const anthem = namedEntities(data)[0];
-      if (anthem) {
-        const o = `the anthem of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: anthem, p: "is", o, e: o.slice(0, 280) });
-      }
+      if (anthem) pushIs(out, anthem, `the anthem of ${name}`);
     }
   }
   return out;
@@ -1964,8 +1944,7 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
     const wt = html.match(/\|\s*official_languages?\s*=\s*([^\n]+)/i)?.[1];
     if (wt) {
       for (const lang of namedEntities(wt).slice(0, 4)) {
-        const o = `an official language of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: lang, p: "is", o, e: o.slice(0, 280) });
+        pushIs(out, lang, `an official language of ${name}`);
       }
     }
   }
@@ -1973,10 +1952,7 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
     const wt = html.match(/\|\s*currency\s*=\s*([^\n]+)/i)?.[1];
     if (wt) {
       const cur = namedEntities(wt)[0];
-      if (cur) {
-        const o = `the currency of ${name}`;
-        if (o.length >= 8 && o.length <= 72) out.push({ s: cur, p: "is", o, e: o.slice(0, 280) });
-      }
+      if (cur) pushIs(out, cur, `the currency of ${name}`);
     }
   }
   if (!out.some((t) => t.p === "id" && /^\d/.test(t.o))) {
@@ -1992,10 +1968,7 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
   if (!out.some((t) => /legislature of/i.test(t.o))) {
     const wt = html.match(/\|\s*legislature\s*=\s*([^\n]+)/i)?.[1];
     const body = wt ? namedEntities(wt)[0] : undefined;
-    if (body) {
-      const o = `the legislature of ${name}`;
-      if (o.length >= 8 && o.length <= 72) out.push({ s: body, p: "is", o, e: o.slice(0, 280) });
-    }
+    if (body) pushIs(out, body, `the legislature of ${name}`);
   }
   if (!out.some((t) => t.s === name && t.p === "is" && /republic|monarchy|federation|state|kingdom/i.test(t.o))) {
     const wt = html.match(/\|\s*government_type\s*=\s*([^\n]+)/i)?.[1];
@@ -2006,17 +1979,13 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
     const wt = html.match(/\|\s*(?:conventional_long_name|official_name)\s*=\s*([^\n]+)/i)?.[1];
     const official = wt ? tidyProper(wt) || namedEntities(wt)[0] : undefined;
     if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) {
-      const o = `the official name of ${name}`;
-      if (o.length >= 8 && o.length <= 72) out.push({ s: official, p: "is", o, e: o.slice(0, 280) });
+      pushIs(out, official, `the official name of ${name}`);
     }
   }
   if (!out.some((t) => /motto of/i.test(t.o))) {
     const wt = html.match(/\|\s*(?:national_motto|motto)\s*=\s*([^\n]+)/i)?.[1];
     const motto = wt ? namedEntities(wt)[0] || tidyProper(wt) : undefined;
-    if (motto && !junkMotto(motto)) {
-      const o = `the motto of ${name}`;
-      if (o.length >= 8 && o.length <= 72) out.push({ s: motto, p: "is", o, e: o.slice(0, 280) });
-    }
+    if (motto && !junkMotto(motto)) pushIs(out, motto, `the motto of ${name}`);
   }
   return out;
 }
