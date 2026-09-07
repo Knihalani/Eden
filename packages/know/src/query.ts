@@ -81,17 +81,8 @@ export type FactCard = { fact: string; confidence: number; url?: string };
 /** Public page a card can name. Empty / relative / javascript stay off the cite. */
 export function citeableUrl(raw?: string): string | undefined {
   const u = (raw || "").trim();
-  if (u.length < 12 || u.length > 240) return;
-  if (!/^https?:\/\//i.test(u)) return;
-  if (/[\s<>"'\\]/.test(u)) return;
-  try {
-    const p = new URL(u);
-    if (p.protocol !== "http:" && p.protocol !== "https:") return;
-    if (!p.hostname.includes(".")) return;
-    return u;
-  } catch {
-    return;
-  }
+  if (u.length < 12 || u.length > 240 || !/^https?:\/\//i.test(u) || /[\s<>"'\\]/.test(u)) return;
+  try { const p = new URL(u); if ((p.protocol === "http:" || p.protocol === "https:") && p.hostname.includes(".")) return u; } catch {}
 }
 
 function rfcPageUrl(s: string): string | undefined {
