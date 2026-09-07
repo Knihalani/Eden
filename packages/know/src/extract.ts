@@ -2068,9 +2068,7 @@ export function shortTitle(s: string): string {
 }
 
 function rfcGistJunk(s: string): boolean {
-  return /table of contents|january 20|february 20|when server|status of this|copyright notice|this document specifies|this memo|internet society|network working group/i.test(
-    s,
-  );
+  return /table of contents|january 20|february 20|when server|status of this|copyright notice|this document specifies|this memo|internet society|network working group/i.test(s);
 }
 
 function innerText(raw: string): string {
