@@ -2695,13 +2695,8 @@ const LINK_PREFER =
 export function wikiGrowUrls(base: string, html: string): string[] {
   if (!/wikipedia\.org/i.test(base)) return [];
   let host = "en.wikipedia.org";
-  try {
-    host = new URL(base).host;
-  } catch {
-    /* keep en */
-  }
-  const listPage = /\/wiki\/(?:List_of_|Outline_of_)/i.test(base);
-  const cap = listPage ? 400 : 160;
+  try { host = new URL(base).host; } catch { /* keep en */ }
+  const cap = /\/wiki\/(?:List_of_|Outline_of_)/i.test(base) ? 400 : 160;
   const out: string[] = [];
   const seen = new Set<string>();
   const addSlug = (raw: string) => {
@@ -2709,11 +2704,7 @@ export function wikiGrowUrls(base: string, html: string): string[] {
     const slug = raw.replace(/ /g, "_");
     if (WIKI_LINK_SKIP.test(`/wiki/${slug}`)) return;
     let title = slug.replace(/_/g, " ");
-    try {
-      title = decodeURIComponent(title);
-    } catch {
-      /* keep */
-    }
+    try { title = decodeURIComponent(title); } catch { /* keep */ }
     if (wikiNsSkip(title) || !title.trim()) return;
     const url = canonicalUrl(`https://${host}/wiki/${slug}`);
     if (seen.has(url) || skipHost(url)) return;
