@@ -429,15 +429,10 @@ export function htmlAlternateHrefs(html: string): string[] {
 
 export function opinionTrash(text: string): boolean {
   const t = text.toLowerCase();
-  const rant = /sheeple|worst ever|wake up|donate now|only true path|be saved|cannot believe/.test(t);
-  const hasFact = /capital of|m\/s|rfc |etag|voted \d|shipped |released |perihelion|\d{4}/.test(t);
-  return rant && !hasFact;
+  return /sheeple|worst ever|wake up|donate now|only true path|be saved|cannot believe/.test(t) && !/capital of|m\/s|rfc |etag|voted \d|shipped |released |perihelion|\d{4}/.test(t);
 }
 
-export function englishEnough(text: string): boolean {
-  const letters = (text.match(/[A-Za-z]/g) || []).length;
-  return letters >= 40 && letters / Math.max(text.length, 1) > 0.35;
-}
+export function englishEnough(text: string): boolean { const letters = (text.match(/[A-Za-z]/g) || []).length; return letters >= 40 && letters / Math.max(text.length, 1) > 0.35; }
 
 export type Triple = { s: string; p: string; o: string; e: string };
 
