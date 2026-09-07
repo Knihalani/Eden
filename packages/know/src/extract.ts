@@ -1915,16 +1915,13 @@ function escapeRe(s: string): string {
 
 function wikiShortDescription(html: string): string | undefined {
   const i = html.search(/\bshortdescription\b/i);
-  if (i < 0) return undefined;
+  if (i < 0) return;
   const lt = html.lastIndexOf("<", i);
-  if (lt < 0) return undefined;
+  if (lt < 0) return;
   const gt = tagCloseGt(html, lt);
-  if (gt < 0) return undefined;
+  if (gt < 0) return;
   const name = tagNameAt(html, lt) || "div";
-  const end = closeTagFrom(html, gt + 1, `</${name}>`);
-  const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - name.length - 3)).replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
-    .trim();
+  const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, `</${name}>`) - name.length - 3)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
   return t.length >= 4 && t.length <= 80 ? t : undefined;
 }
 
