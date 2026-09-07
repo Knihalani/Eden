@@ -33,8 +33,7 @@ function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
   if (!m) FACT_MEMO.set(store, m = new Map());
   const k = q.toLowerCase();
   if (m.has(k)) return m.get(k);
-  const card = cardFromKnow(q, store);
-  return m.set(k, card), card;
+  return m.set(k, cardFromKnow(q, store)), m.get(k);
 }
 
 const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
