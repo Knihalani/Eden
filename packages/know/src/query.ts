@@ -225,21 +225,11 @@ function rankHits(q: string, hits: Hit[]): Hit[] {
   return list.sort((a, b) => score(a) - score(b));
 }
 
-function cardFromHit(
-  q: string,
-  raw: Hit,
-): FactCard | undefined {
+function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   const { looksLikeCode, decodeEntities } = extract();
-  const n = {
-    s: decodeEntities(raw.s),
-    p: raw.p,
-    o: decodeEntities(raw.o),
-    e: decodeEntities(raw.e),
-  };
-  if (n.p === "about" || n.p === "date") return undefined;
-  if (n.p !== "capital" && n.p !== "is" && n.p !== "obsoletes" && n.p !== "updates" && looksLikeCode(`${n.o} ${n.e}`)) {
-    return undefined;
-  }
+  const n = { s: decodeEntities(raw.s), p: raw.p, o: decodeEntities(raw.o), e: decodeEntities(raw.e) };
+  if (n.p === "about" || n.p === "date") return;
+  if (n.p !== "capital" && n.p !== "is" && n.p !== "obsoletes" && n.p !== "updates" && looksLikeCode(`${n.o} ${n.e}`)) return;
   let fact = "";
   if (n.p === "capital") {
     fact = `The capital of ${countryForCard(n.s)} is ${n.o}.`;
