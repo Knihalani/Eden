@@ -1904,13 +1904,9 @@ function defListPairs(html: string, dls?: string[]): { label: string; data: stri
 export function defListFacts(url: string, html: string, scan?: HtmlScan): Triple[] {
   const pairs = defListPairs(html, scan?.dls);
   if (!pairs.length) return [];
-  let name = wikiSubject(url, html, scan);
-  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) {
-    const country = pairs.find((p) => /^(country|nation|state)\b/.test(p.label));
-    name = country ? tidyCapital(country.data) : undefined;
-  }
-  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return [];
-  return extrasFromPairs(name, pairs);
+  const name = wikiSubject(url, html, scan);
+  const s = name && !wikiNsSkip(name) && !/^List of /i.test(name) ? name : tidyCapital(pairs.find((p) => /^(country|nation|state)\b/.test(p.label))?.data || "");
+  return s && !wikiNsSkip(s) && !/^List of /i.test(s) ? extrasFromPairs(s, pairs) : [];
 }
 
 function escapeRe(s: string): string {
