@@ -139,13 +139,12 @@ function rewriteQuery(q: string): string {
   const sax = /^(.+?)['\u2019]s capital$/i.exec(t)?.[1]?.replace(/\s+/g, " ").trim().replace(/^(the|a)\s+/i, "");
   if (sax && sax.length >= 2) return `capital of ${sax}`;
   const cs = t.includes("=") ? /^charset\s*=\s*["']?([a-z0-9][a-z0-9._:+-]{1,40})["']?$/i.exec(t)?.[1] : undefined;
-  if (cs) return /^utf8$/i.test(cs) ? "utf-8" : cs;
-  if (t.length <= 5 && /^utf8$/i.test(t)) return "utf-8";
-  const spdx = t.includes("SPDX") || t.includes("spdx") ? /^SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)$/i.exec(t)?.[1] : undefined;
+  if (cs || (t.length <= 5 && /^utf8$/i.test(t))) return cs ? (/^utf8$/i.test(cs) ? "utf-8" : cs) : "utf-8";
+  const spdx = (t.includes("SPDX") || t.includes("spdx")) && /^SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)$/i.exec(t)?.[1];
   if (spdx) return spdx;
-  const wk = t.includes("well-known") ? /(?:^|\/)\.well-known\/([a-z0-9][a-z0-9._-]{1,48})$/i.exec(t)?.[1] : undefined;
+  const wk = t.includes("well-known") && /(?:^|\/)\.well-known\/([a-z0-9][a-z0-9._-]{1,48})$/i.exec(t)?.[1];
   if (wk) return `IANA well-known ${wk.toLowerCase()}`;
-  const uri = t.includes("://") ? /^(https?|wss?|ftp|file|git|ssh|sftp):\/\/\S+$/i.exec(t)?.[1] : undefined;
+  const uri = t.includes("://") && /^(https?|wss?|ftp|file|git|ssh|sftp):\/\/\S+$/i.exec(t)?.[1];
   if (uri) return uri.toLowerCase();
   const used = /^what(?:'s| is)\s+([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
   return phraseExact(t) || (used ? `used for ${used[1]!.toLowerCase()}` : t);
