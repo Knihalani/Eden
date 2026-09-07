@@ -2110,31 +2110,23 @@ function rfcNumsListed(raw: string, self: string): string[] {
 }
 
 export function rfcEdgesFromText(num: string, text: string): Triple[] {
-  const head = text.slice(0, 3500);
-  const out: Triple[] = [];
+  const head = text.slice(0, 3500), out: Triple[] = [];
+  const emit = (nums: string[], pred: "obsoletes" | "updates") => {
+    if (!nums.length) return;
+    const o = nums.map((n) => `RFC ${n}`).join(", ");
+    if (o.length <= 72) out.push({ s: `RFC ${num}`, p: pred, o, e: "" });
+  };
   const take = (label: string, pred: "obsoletes" | "updates") => {
     const m = head.match(new RegExp(`\\b${label}:\\s*([0-9][0-9,\\s]{0,80})`, "i"));
-    if (!m) return;
-    const nums = rfcNumsListed(m[1]!, num).slice(0, 4);
-    if (!nums.length) return;
-    const o = nums.map((n) => `RFC ${n}`).join(", ");
-    if (o.length <= 72) out.push({ s: `RFC ${num}`, p: pred, o, e: "" });
+    if (m) emit(rfcNumsListed(m[1]!, num).slice(0, 4), pred);
   };
-  take("Obsoletes", "obsoletes");
-  take("Updates", "updates");
+  take("Obsoletes", "obsoletes"); take("Updates", "updates");
   const prose = (word: string, pred: "obsoletes" | "updates") => {
     if (out.some((t) => t.p === pred)) return;
-    const m = head.match(
-      new RegExp(`\\b${word}\\s+((?:RFC\\s*)?\\d{3,5}(?:\\s*(?:,|;|and|&)\\s*(?:RFC\\s*)?\\d{3,5}){0,8})`, "i"),
-    );
-    if (!m) return;
-    const nums = rfcNumsListed(m[1]!, num).slice(0, 4);
-    if (!nums.length) return;
-    const o = nums.map((n) => `RFC ${n}`).join(", ");
-    if (o.length <= 72) out.push({ s: `RFC ${num}`, p: pred, o, e: "" });
+    const m = head.match(new RegExp(`\\b${word}\\s+((?:RFC\\s*)?\\d{3,5}(?:\\s*(?:,|;|and|&)\\s*(?:RFC\\s*)?\\d{3,5}){0,8})`, "i"));
+    if (m) emit(rfcNumsListed(m[1]!, num).slice(0, 4), pred);
   };
-  prose("obsoletes", "obsoletes");
-  prose("updates", "updates");
+  prose("obsoletes", "obsoletes"); prose("updates", "updates");
   return out;
 }
 
