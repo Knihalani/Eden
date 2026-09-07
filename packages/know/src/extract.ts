@@ -1934,29 +1934,15 @@ function capitalProse(text: string): Triple[] {
       i += 8;
     }
   }
-  let i = 0;
-  while ((i = findAsciiCi(head, "'s capital", i)) >= 0) {
-    const before = head.slice(Math.max(0, i - 80), i);
-    const owner = before.match(NAME_TAIL_RE);
-    let j = skipWs(head, i + "'s capital".length);
-    if (startsAsciiCi(head, j, "city")) j = skipWs(head, j + 4);
-    if (owner && startsAsciiCi(head, j, "is ")) {
-      const city = takeProperAt(head, j + 3);
-      if (city) add(owner[1]!, city.name, head.slice(Math.max(0, i - 40), city.end));
+  for (const suffix of ["'s capital", "\u2019s capital"]) {
+    let i = 0;
+    while ((i = findAsciiCi(head, suffix, i)) >= 0) {
+      const owner = head.slice(Math.max(0, i - 80), i).match(NAME_TAIL_RE);
+      let j = skipWs(head, i + suffix.length);
+      if (startsAsciiCi(head, j, "city")) j = skipWs(head, j + 4);
+      if (owner && startsAsciiCi(head, j, "is ")) { const city = takeProperAt(head, j + 3); if (city) add(owner[1]!, city.name, head.slice(Math.max(0, i - 40), city.end)); }
+      i += 8;
     }
-    i += 8;
-  }
-  i = 0;
-  while ((i = findAsciiCi(head, "\u2019s capital", i)) >= 0) {
-    const before = head.slice(Math.max(0, i - 80), i);
-    const owner = before.match(NAME_TAIL_RE);
-    let j = skipWs(head, i + "\u2019s capital".length);
-    if (startsAsciiCi(head, j, "city")) j = skipWs(head, j + 4);
-    if (owner && startsAsciiCi(head, j, "is ")) {
-      const city = takeProperAt(head, j + 3);
-      if (city) add(owner[1]!, city.name, head.slice(Math.max(0, i - 40), city.end));
-    }
-    i += 8;
   }
   return out;
 }
