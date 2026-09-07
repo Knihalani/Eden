@@ -15,6 +15,7 @@ export type QueryHit = { text: string; source: "memory" | "know"; url?: string; 
 type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
+const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having"]);
 
 const FOLD: Record<string, string> = { hours: "tz", timezone: "tz", cache: "redis", container: "image", images: "image", docker: "image", production: "prod", standup: "stand", kubernetes: "k8s", stay: "live", stays: "live", staying: "live", moved: "live", moves: "live", moving: "live", checks: "ci" };
 
@@ -23,9 +24,28 @@ function tokList(s: string): string[] {
 }
 
 function queryHay(text: string): Set<string> {
-  const hay = new Set(tokList(text));
+  const hay = new Set(tokList(text).filter((w) => !QUERY_SKIP.has(w)));
   if (/\b(cheese|steak|steakhouse|restaurant|dinner|lunch|tasting|menu|eat|food|diet|allerg)\b/i.test(text)) hay.add("diet");
   return hay;
+}
+
+function proxBonus(hay: Set<string>, text: string): number {
+  const at = new Map<string, number[]>();
+  const dt = tokList(text);
+  for (let i = 0; i < dt.length; i++) {
+    const w = dt[i]!;
+    if (!hay.has(w) || w.length < 3 || STOP.has(w)) continue;
+    const a = at.get(w); if (a) a.push(i); else at.set(w, [i]);
+  }
+  const keys = [...at.keys()];
+  let n = 0;
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      const a = at.get(keys[i]!)!, b = at.get(keys[j]!)!;
+      loop: for (const x of a) for (const y of b) if (Math.abs(x - y) <= 6) { n++; break loop; }
+    }
+  }
+  return n;
 }
 
 function convBlob(list: unknown[]): string {
@@ -158,7 +178,7 @@ export class AgentMemory {
         const d = df.get(x) || 0;
         n += Math.log((N - d + 0.5) / (d + 0.5) + 1);
       }
-      return { rec: c.rec, n };
+      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) };
     }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
