@@ -1971,40 +1971,23 @@ function ianaRecordsFromBody(url: string, body: string): Triple[] {
   for (const m of body.matchAll(/<record\b[^>]*>([\s\S]*?)<\/record>/gi)) {
     const b = m[1]!;
     if (kind === "http") {
-      const value = xmlTag(b, "value");
-      const desc = xmlTag(b, "description");
-      if (/^\d{3}$/.test(value) && desc.length >= 2 && desc.length <= 72 && !skip.test(desc)) {
-        out.push({ s: `IANA http ${value}`, p: "is", o: desc, e: "" });
-      }
+      const value = xmlTag(b, "value"), desc = xmlTag(b, "description");
+      if (/^\d{3}$/.test(value) && desc.length >= 2 && desc.length <= 72 && !skip.test(desc)) out.push({ s: `IANA http ${value}`, p: "is", o: desc, e: "" });
     } else if (kind === "protocol") {
-      const value = xmlTag(b, "value");
-      const name = xmlTag(b, "name");
-      if (/^\d+$/.test(value) && name && !skip.test(name) && name.length <= 72) {
-        out.push({ s: `IANA protocol ${value}`, p: "is", o: name.slice(0, 72), e: "" });
-      }
+      const value = xmlTag(b, "value"), name = xmlTag(b, "name");
+      if (/^\d+$/.test(value) && name && !skip.test(name) && name.length <= 72) out.push({ s: `IANA protocol ${value}`, p: "is", o: name.slice(0, 72), e: "" });
     } else if (kind === "method") {
-      const value = xmlTag(b, "value") || xmlTag(b, "name");
-      const desc = xmlTag(b, "description") || xmlTag(b, "semantics");
-      if (/^[A-Z][A-Z0-9-]{0,24}$/.test(value) && desc.length >= 2 && desc.length <= 72) {
-        out.push({ s: `IANA method ${value}`, p: "is", o: desc, e: "" });
-      }
+      const value = xmlTag(b, "value") || xmlTag(b, "name"), desc = xmlTag(b, "description") || xmlTag(b, "semantics");
+      if (/^[A-Z][A-Z0-9-]{0,24}$/.test(value) && desc.length >= 2 && desc.length <= 72) out.push({ s: `IANA method ${value}`, p: "is", o: desc, e: "" });
     } else if (kind === "charset") {
       const name = (xmlTag(b, "preferred_alias") || xmlTag(b, "name")).toLowerCase();
-      if (/^(utf-8|us-ascii|iso-8859-\d+|windows-125\d)$/i.test(name)) {
-        out.push({ s: `IANA charset ${name}`, p: "is", o: name.toUpperCase() === "UTF-8" ? "UTF-8" : name, e: "" });
-      }
+      if (/^(utf-8|us-ascii|iso-8859-\d+|windows-125\d)$/i.test(name)) out.push({ s: `IANA charset ${name}`, p: "is", o: name.toUpperCase() === "UTF-8" ? "UTF-8" : name, e: "" });
     } else if (kind === "header") {
-      const name = xmlTag(b, "name");
-      const desc = xmlTag(b, "description") || xmlTag(b, "status") || `HTTP field ${name}`;
-      if (/^[A-Za-z][A-Za-z0-9-]*$/.test(name) && desc.length >= 2 && desc.length <= 72) {
-        out.push({ s: `IANA header ${name}`, p: "is", o: desc, e: "" });
-      }
+      const name = xmlTag(b, "name"), desc = xmlTag(b, "description") || xmlTag(b, "status") || `HTTP field ${name}`;
+      if (/^[A-Za-z][A-Za-z0-9-]*$/.test(name) && desc.length >= 2 && desc.length <= 72) out.push({ s: `IANA header ${name}`, p: "is", o: desc, e: "" });
     } else if (kind === "dns") {
-      const typ = xmlTag(b, "type");
-      const meaning = xmlTag(b, "meaning");
-      if (/^[A-Z][A-Z0-9-]{0,15}$/.test(typ) && meaning.length >= 2 && meaning.length <= 72) {
-        out.push({ s: `IANA dns ${typ}`, p: "is", o: meaning, e: "" });
-      }
+      const typ = xmlTag(b, "type"), meaning = xmlTag(b, "meaning");
+      if (/^[A-Z][A-Z0-9-]{0,15}$/.test(typ) && meaning.length >= 2 && meaning.length <= 72) out.push({ s: `IANA dns ${typ}`, p: "is", o: meaning, e: "" });
     }
     if (out.length >= 128) break;
   }
