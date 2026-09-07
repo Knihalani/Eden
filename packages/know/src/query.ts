@@ -305,10 +305,7 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
 
 export function formatCard(q: string, hits: Hit[]): FactCard | { unknown: true } {
   if (!q.trim()) return { unknown: true };
-  for (const raw of rankHits(q, hits)) {
-    const card = cardFromHit(q, raw);
-    if (card) return card;
-  }
+  for (const raw of rankHits(q, hits)) { const card = cardFromHit(q, raw); if (card) return card; }
   return { unknown: true };
 }
 
