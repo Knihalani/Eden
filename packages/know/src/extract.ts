@@ -1174,11 +1174,8 @@ function tidyIso(raw: string): string | undefined {
 }
 
 function tidyPopulation(raw: string): string | undefined {
-  const t = stripMarkup(raw).replace(/\([^)]*\)/g, " ");
-  const m = t.match(/(\d{1,3}(?:,\d{3}){1,4}|\d{4,12}|\d+(?:\.\d+)?\s*(?:million|billion))/i);
-  if (!m) return undefined;
-  const o = m[1]!.replace(/\s+/g, " ").trim();
-  return o.length >= 2 && o.length <= 48 ? o : undefined;
+  const o = stripMarkup(raw).replace(/\([^)]*\)/g, " ").match(/(\d{1,3}(?:,\d{3}){1,4}|\d{4,12}|\d+(?:\.\d+)?\s*(?:million|billion))/i)?.[1]?.replace(/\s+/g, " ").trim();
+  return o && o.length >= 2 && o.length <= 48 ? o : undefined;
 }
 
 function tidyArea(raw: string): string | undefined {
