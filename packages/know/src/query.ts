@@ -433,21 +433,13 @@ function buildTyped(t: string): FactCard | undefined {
 
   if (n >= 7 && n <= 10 && (t.startsWith("RFC ") || t.startsWith("rfc "))) {
     const rest = t.slice(4);
-    if (rest.length >= 3 && rest.length <= 5 && rest === String(+rest)) {
-      const num = +rest;
-      const hit = RFC_INTERN.get(num);
-      if (hit) {
-        INTERN.set(t, hit);
-        return hit;
-      }
-      const title = rfcTitleHot(num);
-      if (!title) return;
-      const card = Object.freeze({ fact: `RFC ${num} is ${title}.`, confidence: CONF });
-      RFC_INTERN.set(num, card);
-      INTERN.set(t, card);
-      return card;
-    }
-    return;
+    if (rest.length < 3 || rest.length > 5 || rest !== String(+rest)) return;
+    const num = +rest, hit = RFC_INTERN.get(num);
+    if (hit) return INTERN.set(t, hit), hit;
+    const title = rfcTitleHot(num);
+    if (!title) return;
+    const card = Object.freeze({ fact: `RFC ${num} is ${title}.`, confidence: CONF });
+    return RFC_INTERN.set(num, card), INTERN.set(t, card), card;
   }
 
   if (n >= 12 && t.slice(0, 11).toLowerCase() === "capital of ") {
