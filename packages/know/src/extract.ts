@@ -1691,22 +1691,13 @@ function attrOrInner(scope: string, key: string): string {
 function countryFactsFromScope(scope: string): Triple[] {
   const out: Triple[] = [];
   const country = tidyCapital(attrOrInner(scope, "name"));
-  const city =
-    tidyCapital(attrOrInner(scope, "capital")) ||
-    tidyCapital(
-      scope.match(
-        /(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?capital["'][\s\S]{0,400}?(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?name["'][^>]*>([\s\S]{1,60}?)</i,
-      )?.[1] || "",
-    );
+  const city = tidyCapital(attrOrInner(scope, "capital")) || tidyCapital(scope.match(/(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?capital["'][\s\S]{0,400}?(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?name["'][^>]*>([\s\S]{1,60}?)</i)?.[1] || "");
   if (country && city) out.push({ s: country, p: "capital", o: city, e: `capital of ${country} is ${city}`.slice(0, 280) });
   if (country) {
     const iso = tidyIso(attrOrInner(scope, "isoCode") || attrOrInner(scope, "iso3166Code") || attrOrInner(scope, "identifier"));
     if (iso) out.push({ s: country, p: "id", o: iso, e: `${country} ISO 3166-1 alpha-2 ${iso}`.slice(0, 280) });
     const lang = tidyProper(attrOrInner(scope, "officialLanguage"));
-    if (lang) {
-      const o = `an official language of ${country}`;
-      if (o.length >= 8 && o.length <= 72) out.push({ s: lang, p: "is", o, e: o.slice(0, 280) });
-    }
+    if (lang) pushIs(out, lang, `an official language of ${country}`);
     const pop = tidyPopulation(attrOrInner(scope, "population") || attrOrInner(scope, "census"));
     if (pop) out.push({ s: country, p: "id", o: pop, e: `${country} population ${pop}`.slice(0, 280) });
   }
