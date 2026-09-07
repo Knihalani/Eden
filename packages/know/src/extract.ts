@@ -1179,14 +1179,9 @@ function tidyPopulation(raw: string): string | undefined {
 }
 
 function tidyArea(raw: string): string | undefined {
-  const t = stripMarkup(raw)
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/km\s*[²2]/gi, "km2")
-    .replace(/km²/g, "km2");
-  const m = t.match(/([\d,]+(?:\.\d+)?)\s*(km2|sq\s*mi|km)\b/i);
-  if (!m) return undefined;
-  const unit = /sq/i.test(m[2]!) ? "sq mi" : "km2";
-  const o = `${m[1]} ${unit}`;
+  const m = stripMarkup(raw).replace(/\([^)]*\)/g, " ").replace(/km\s*[²2]/gi, "km2").replace(/km²/g, "km2").match(/([\d,]+(?:\.\d+)?)\s*(km2|sq\s*mi|km)\b/i);
+  if (!m) return;
+  const o = `${m[1]} ${/sq/i.test(m[2]!) ? "sq mi" : "km2"}`;
   return o.length <= 48 ? o : undefined;
 }
 
