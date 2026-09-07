@@ -519,15 +519,9 @@ export function qualityHost(url: string): boolean {
   const host = hostOf(url);
   if (!host) return false;
   let path = "";
-  try {
-    path = new URL(url).pathname.toLowerCase();
-  } catch {
-    return false;
-  }
+  try { path = new URL(url).pathname.toLowerCase(); } catch { return false; }
   for (const n of CATALOG_URL_NEEDLES) {
-    const needle = n.toLowerCase();
-    const slash = needle.indexOf("/");
-    const catalogHost = slash >= 0 ? needle.slice(0, slash) : needle;
+    const needle = n.toLowerCase(), slash = needle.indexOf("/"), catalogHost = slash >= 0 ? needle.slice(0, slash) : needle;
     if (host !== catalogHost && !host.endsWith(`.${catalogHost}`)) continue;
     if (slash < 0) return true;
     const prefix = needle.slice(slash);
