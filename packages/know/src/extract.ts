@@ -2683,14 +2683,12 @@ export function techniquesFromProse(text: string): Triple[] {
 
 function tidySoftwareObject(raw: string): string | undefined {
   let o = stripMarkup(raw).replace(/\s+/g, " ").trim();
-  if (!o) return undefined;
+  if (!o) return;
   o = (o.split(/(?<=\w)[.!](?:\s|$)/)[0] || o).trim();
   if (o.length > 72) o = o.slice(0, 72).replace(/\s+\S*$/, "").trim();
   o = o.replace(/[,;:\s]+$/g, "").trim();
-  if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return undefined;
-  if (!/^(a|an|the)\s/i.test(o) && /^(runtime|compiler|bundler|framework|library|language)\b/i.test(o)) {
-    o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o}`;
-  }
+  if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return;
+  if (!/^(a|an|the)\s/i.test(o) && /^(runtime|compiler|bundler|framework|library|language)\b/i.test(o)) o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o}`;
   return o;
 }
 
