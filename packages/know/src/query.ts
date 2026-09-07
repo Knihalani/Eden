@@ -399,20 +399,9 @@ function canonCountry(name: string): string | undefined {
 }
 
 function internFact(key: string, fact: string): FactCard {
-  let c = INTERN.get(key);
-  if (c) return c;
   const k = key.toLowerCase();
-  if (k !== key) {
-    c = INTERN.get(k);
-    if (c) {
-      INTERN.set(key, c);
-      return c;
-    }
-  }
-  c = Object.freeze({ fact, confidence: CONF });
-  INTERN.set(key, c);
-  if (k !== key) INTERN.set(k, c);
-  return c;
+  const c = INTERN.get(key) || INTERN.get(k) || Object.freeze({ fact, confidence: CONF });
+  return INTERN.set(key, c), k !== key && INTERN.set(k, c), c;
 }
 
 function keep(t: string, c: FactCard | undefined): FactCard | undefined {
