@@ -544,8 +544,7 @@ export function ldText(v: unknown, depth = 0): string {
 
 function ldTypes(o: Record<string, unknown>): string {
   const t = o["@type"] ?? o.type;
-  if (Array.isArray(t)) return t.map((x) => String(x)).join(" ");
-  return String(t ?? "");
+  return Array.isArray(t) ? t.map((x) => String(x)).join(" ") : String(t ?? "");
 }
 
 function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): void {
