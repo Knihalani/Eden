@@ -1122,14 +1122,8 @@ const COUNTRY_IS_HINT_RE = new RegExp(`\\b(${PROPER_NAME}) is a country\\b`, "iu
 
 /** Drop template CSS, refs, and parser-output chrome before reading a cell. */
 function stripCellChrome(raw: string): string {
-  if (raw.length < 12 || (raw.indexOf("<s") < 0 && raw.indexOf("<S") < 0 && !raw.includes("reference") && !raw.includes("cite-"))) {
-    return raw;
-  }
-  return raw
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<sup\b[^>]*\breference\b[^>]*>[\s\S]*?<\/sup>/gi, " ")
-    .replace(/<span\b[^>]*\bcite-bracket\b[^>]*>[\s\S]*?<\/span>/gi, " ");
+  if (raw.length < 12 || (raw.indexOf("<s") < 0 && raw.indexOf("<S") < 0 && !raw.includes("reference") && !raw.includes("cite-"))) return raw;
+  return raw.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<sup\b[^>]*\breference\b[^>]*>[\s\S]*?<\/sup>/gi, " ").replace(/<span\b[^>]*\bcite-bracket\b[^>]*>[\s\S]*?<\/span>/gi, " ");
 }
 
 function stripMarkup(raw: string): string {
