@@ -377,10 +377,7 @@ function buildTyped(t: string): FactCard | undefined {
   if (media && aliasableMediaSubtype(sub)) { const obj = MEDIA_SUBTYPE_OBJECT[sub.toLowerCase()] || sub; return keep(t, internFact(t, `${media} is ${articleFor(obj)} ${obj} media type.`)); }
 
   const up = t.toUpperCase();
-  if (METHOD_SET.has(up) && n <= 7) {
-    const obj = METHOD_OBJECT[up];
-    if (obj) return keep(t, internFact(up, `${up} is ${obj}.`));
-  }
+  if (METHOD_SET.has(up) && n <= 7) { const obj = METHOD_OBJECT[up]; if (obj) return keep(t, internFact(up, `${up} is ${obj}.`)); }
   if (HEADER_SET.has(t)) return keep(t, internFact(t, `${t} is an HTTP header.`));
   const spdx = SPDX_OBJECT[t] ? t : (ensureFlash(), SPDX_LC.get(t.toLowerCase()));
   if (spdx) return keep(t, internFact(spdx, `${spdx} is an SPDX license.`));
@@ -392,33 +389,15 @@ function buildTyped(t: string): FactCard | undefined {
     return keep(t, internFact(csKey, fact));
   }
 
-  if (PROTO_SET.has(up)) {
-    ensureFlash();
-    const num = PROTO_BY_NAME.get(up);
-    if (num !== undefined) return keep(t, internFact(up, `${up} is protocol ${num}.`));
-  }
+  if (PROTO_SET.has(up)) { ensureFlash(); const num = PROTO_BY_NAME.get(up); if (num !== undefined) return keep(t, internFact(up, `${up} is protocol ${num}.`)); }
   const scheme = t.toLowerCase();
-  if (SCHEME_SET.has(scheme) && Object.prototype.hasOwnProperty.call(SCHEME_OBJECT, scheme)) {
-    return keep(t, internFact(scheme, `${scheme} is ${SCHEME_OBJECT[scheme]}.`));
-  }
+  if (SCHEME_SET.has(scheme) && Object.prototype.hasOwnProperty.call(SCHEME_OBJECT, scheme)) return keep(t, internFact(scheme, `${scheme} is ${SCHEME_OBJECT[scheme]}.`));
 
-  if (n >= 9 && t.slice(0, 9).toLowerCase() === "iana dns ") {
-    const rr = t.slice(9).trim().toUpperCase(), obj = DNS_OBJECT[rr];
-    if (obj) return keep(t, internFact(`iana dns ${rr}`, `${rr} is ${articleFor(obj)} ${obj} record.`));
-  }
-  if (DNS_SET.has(up) && DNS_OBJECT[up]) {
-    const obj = DNS_OBJECT[up]!;
-    return keep(t, internFact(up, `${up} is ${articleFor(obj)} ${obj} record.`));
-  }
+  if (n >= 9 && t.slice(0, 9).toLowerCase() === "iana dns ") { const rr = t.slice(9).trim().toUpperCase(), obj = DNS_OBJECT[rr]; if (obj) return keep(t, internFact(`iana dns ${rr}`, `${rr} is ${articleFor(obj)} ${obj} record.`)); }
+  if (DNS_SET.has(up) && DNS_OBJECT[up]) { const obj = DNS_OBJECT[up]!; return keep(t, internFact(up, `${up} is ${articleFor(obj)} ${obj} record.`)); }
 
-  if (n >= 4 && t.slice(0, 4).toLowerCase() === "w3c ") {
-    const slug = t.slice(4).trim().toLowerCase(), obj = W3C_OBJECT[slug];
-    if (obj) return keep(t, internFact(`w3c ${slug}`, `W3C ${slug} is ${obj}.`));
-  }
-  if (n >= 7 && t.slice(0, 7).toLowerCase() === "whatwg ") {
-    const slug = t.slice(7).trim().toLowerCase(), obj = WHATWG_OBJECT[slug];
-    if (obj) return keep(t, internFact(`whatwg ${slug}`, `WHATWG ${slug} is ${obj}.`));
-  }
+  if (n >= 4 && t.slice(0, 4).toLowerCase() === "w3c ") { const slug = t.slice(4).trim().toLowerCase(), obj = W3C_OBJECT[slug]; if (obj) return keep(t, internFact(`w3c ${slug}`, `W3C ${slug} is ${obj}.`)); }
+  if (n >= 7 && t.slice(0, 7).toLowerCase() === "whatwg ") { const slug = t.slice(7).trim().toLowerCase(), obj = WHATWG_OBJECT[slug]; if (obj) return keep(t, internFact(`whatwg ${slug}`, `WHATWG ${slug} is ${obj}.`)); }
   if (n >= 15 && t.slice(0, 14).toLowerCase() === "unicode block ") {
     const raw = t.slice(14).trim();
     if (!BLOCK_LC.size) for (const name of Object.keys(UNICODE_BLOCK_OBJECT)) BLOCK_LC.set(name.toLowerCase(), name);
@@ -426,16 +405,9 @@ function buildTyped(t: string): FactCard | undefined {
     const obj = name && UNICODE_BLOCK_OBJECT[name];
     if (name && obj) return keep(t, internFact(`unicode block ${name}`, `Unicode Block ${name} is ${obj}.`));
   }
-  if (n >= 15 && t.slice(0, 14).toLowerCase() === "iana language ") {
-    const tag = t.slice(14).trim().toLowerCase(), obj = LANG_OBJECT[tag];
-    if (obj) return keep(t, internFact(`iana language ${tag}`, `IANA language ${tag} is ${obj}.`));
-  }
-  if (n >= 16 && t.slice(0, 16).toLowerCase() === "iana well-known ") {
-    const wk = t.slice(16).trim().toLowerCase(), obj = WELLKNOWN_OBJECT[wk];
-    if (obj) return keep(t, internFact(`iana well-known ${wk}`, `${wk} is ${obj}.`));
-  }
+  if (n >= 15 && t.slice(0, 14).toLowerCase() === "iana language ") { const tag = t.slice(14).trim().toLowerCase(), obj = LANG_OBJECT[tag]; if (obj) return keep(t, internFact(`iana language ${tag}`, `IANA language ${tag} is ${obj}.`)); }
+  if (n >= 16 && t.slice(0, 16).toLowerCase() === "iana well-known ") { const wk = t.slice(16).trim().toLowerCase(), obj = WELLKNOWN_OBJECT[wk]; if (obj) return keep(t, internFact(`iana well-known ${wk}`, `${wk} is ${obj}.`)); }
   if (n === 4 && SCRIPT_OBJECT[t]) return keep(t, internFact(t, `Unicode Script ${t} is ${SCRIPT_OBJECT[t]}.`));
-  return;
 }
 
 let packCache: typeof import("./cache") | undefined;
