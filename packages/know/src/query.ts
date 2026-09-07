@@ -136,31 +136,17 @@ function toks(s: string): string[] {
 function rewriteQuery(q: string): string {
   const t = q.trim();
   if (!t) return t;
-  const sax = /^(.+?)['\u2019]s capital$/i.exec(t);
-  if (sax) {
-    const name = sax[1]!.replace(/\s+/g, " ").trim().replace(/^(the|a)\s+/i, "");
-    if (name.length >= 2) return `capital of ${name}`;
-  }
-  if (t.includes("=")) {
-    const cs = /^charset\s*=\s*["']?([a-z0-9][a-z0-9._:+-]{1,40})["']?$/i.exec(t);
-    if (cs) {
-      const v = cs[1]!;
-      return /^utf8$/i.test(v) ? "utf-8" : v;
-    }
-  }
+  const sax = /^(.+?)['\u2019]s capital$/i.exec(t)?.[1]?.replace(/\s+/g, " ").trim().replace(/^(the|a)\s+/i, "");
+  if (sax && sax.length >= 2) return `capital of ${sax}`;
+  const cs = t.includes("=") ? /^charset\s*=\s*["']?([a-z0-9][a-z0-9._:+-]{1,40})["']?$/i.exec(t)?.[1] : undefined;
+  if (cs) return /^utf8$/i.test(cs) ? "utf-8" : cs;
   if (t.length <= 5 && /^utf8$/i.test(t)) return "utf-8";
-  if (t.includes("SPDX") || t.includes("spdx")) {
-    const spdx = /^SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)$/i.exec(t);
-    if (spdx) return spdx[1]!;
-  }
-  if (t.includes("well-known")) {
-    const wk = /(?:^|\/)\.well-known\/([a-z0-9][a-z0-9._-]{1,48})$/i.exec(t);
-    if (wk) return `IANA well-known ${wk[1]!.toLowerCase()}`;
-  }
-  if (t.includes("://")) {
-    const uri = /^(https?|wss?|ftp|file|git|ssh|sftp):\/\/\S+$/i.exec(t);
-    if (uri) return uri[1]!.toLowerCase();
-  }
+  const spdx = t.includes("SPDX") || t.includes("spdx") ? /^SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)$/i.exec(t)?.[1] : undefined;
+  if (spdx) return spdx;
+  const wk = t.includes("well-known") ? /(?:^|\/)\.well-known\/([a-z0-9][a-z0-9._-]{1,48})$/i.exec(t)?.[1] : undefined;
+  if (wk) return `IANA well-known ${wk.toLowerCase()}`;
+  const uri = t.includes("://") ? /^(https?|wss?|ftp|file|git|ssh|sftp):\/\/\S+$/i.exec(t)?.[1] : undefined;
+  if (uri) return uri.toLowerCase();
   const used = /^what(?:'s| is)\s+([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
   return phraseExact(t) || (used ? `used for ${used[1]!.toLowerCase()}` : t);
 }
