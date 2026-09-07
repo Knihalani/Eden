@@ -252,27 +252,15 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   else fact = capTokens(`${n.s} ${n.p} ${n.o}`, 32);
   if (fact.endsWith("..")) fact = fact.slice(0, -1);
   fact = capTokens(fact, MAX_TOKENS);
-  if (!fact.trim() || ENTITY.test(fact) || URLISH.test(fact)) return undefined;
+  if (!fact.trim() || ENTITY.test(fact) || URLISH.test(fact)) return;
   const blob = `${n.s} ${n.p} ${n.o} ${n.e}`.toLowerCase();
-  const blobToks = new Set(toks(blob));
+  const blobTokList = toks(blob), blobToks = new Set(blobTokList);
   const techniqueQ = q.trim().toLowerCase().startsWith("used for ");
   const qtoks = toks(q).filter((t) => !STOP.has(t) && !(techniqueQ && TECH_OPTIONAL.has(t)));
-  const queryHit =
-    !qtoks.length ||
-    qtoks.every(
-      (t) =>
-        blobToks.has(t) ||
-        (techniqueQ &&
-          t.length >= 4 &&
-          [...blobToks].some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4)),
-    );
-  const grounded = toks(fact)
-    .map((t) => t.replace(/^[.-]+|[.-]+$/g, ""))
-    .filter((t) => t.length > 1)
-    .every((t) => STOP.has(t) || CARD_GLUE.has(t) || blobToks.has(t) || blob.includes(t));
-  if (!grounded || !queryHit) return undefined;
-  const typed = n.p === "capital" || n.p === "is" || n.p === "obsoletes" || n.p === "updates";
-  const url = sourceOf(raw, n.s);
+  const queryHit = !qtoks.length || qtoks.every((t) => blobToks.has(t) || (techniqueQ && t.length >= 4 && blobTokList.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4)));
+  const grounded = toks(fact).map((t) => t.replace(/^[.-]+|[.-]+$/g, "")).filter((t) => t.length > 1).every((t) => STOP.has(t) || CARD_GLUE.has(t) || blobToks.has(t) || blob.includes(t));
+  if (!grounded || !queryHit) return;
+  const typed = n.p === "capital" || n.p === "is" || n.p === "obsoletes" || n.p === "updates", url = sourceOf(raw, n.s);
   return url ? { fact, confidence: typed ? 0.6 : 0.5, url } : { fact, confidence: typed ? 0.6 : 0.5 };
 }
 
