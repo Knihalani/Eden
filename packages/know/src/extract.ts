@@ -2158,6 +2158,7 @@ function extrasFromProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
   const add = (t: Triple) => {
+    if (t.o.length < 8 || t.o.length > 72) return;
     const k = `${t.s}\0${t.p}\0${t.o}`;
     if (seen.has(k)) return;
     seen.add(k);
@@ -2172,10 +2173,7 @@ function extrasFromProse(text: string): Triple[] {
     if (langM && country) {
       const lang = tidyProper(langM[1]!);
       const ctry = tidyCapital(country.name);
-      if (lang && ctry) {
-        const o = `an official language of ${ctry}`;
-        if (o.length >= 8 && o.length <= 72) add({ s: lang, p: "is", o, e: head.slice(Math.max(0, i - 40), country.end).slice(0, 280) });
-      }
+      if (lang && ctry) add({ s: lang, p: "is", o: `an official language of ${ctry}`, e: head.slice(Math.max(0, i - 40), country.end).slice(0, 280) });
     }
     i += 12;
   }
@@ -2188,10 +2186,7 @@ function extrasFromProse(text: string): Triple[] {
         const lang = takeProperAt(head, j + 3);
         const ctry = tidyCapital(country.name);
         const l = lang ? tidyProper(lang.name) : undefined;
-        if (l && ctry) {
-          const o = `an official language of ${ctry}`;
-          if (o.length >= 8 && o.length <= 72) add({ s: l, p: "is", o, e: head.slice(i, lang!.end).slice(0, 280) });
-        }
+        if (l && ctry) add({ s: l, p: "is", o: `an official language of ${ctry}`, e: head.slice(i, lang!.end).slice(0, 280) });
       }
     }
     i += 12;
@@ -2206,10 +2201,7 @@ function extrasFromProse(text: string): Triple[] {
         if (startsAsciiCi(head, j, "the ")) j += 4;
         const cur = tidyProper(head.slice(j, j + 48));
         const ctry = tidyCapital(country.name);
-        if (cur && ctry) {
-          const o = `the currency of ${ctry}`;
-          if (o.length >= 8 && o.length <= 72) add({ s: cur, p: "is", o, e: head.slice(i, j + cur.length).slice(0, 280) });
-        }
+        if (cur && ctry) add({ s: cur, p: "is", o: `the currency of ${ctry}`, e: head.slice(i, j + cur.length).slice(0, 280) });
       }
     }
     i += 10;
@@ -2222,8 +2214,7 @@ function extrasFromProse(text: string): Triple[] {
     const rest = head.slice(langsAreAt + "official languages are ".length, langsAreAt + 200);
     const cut = rest.split(".")[0] || rest;
     for (const lang of namedEntities(cut).slice(0, 4)) {
-      const o = `an official language of ${hint}`;
-      if (o.length >= 8 && o.length <= 72) add({ s: lang, p: "is", o, e: cut.slice(0, 280) });
+      add({ s: lang, p: "is", o: `an official language of ${hint}`, e: cut.slice(0, 280) });
     }
   }
   const TOOL_IS =
@@ -2232,8 +2223,7 @@ function extrasFromProse(text: string): Triple[] {
     const s = tidyProper(m[1]!);
     if (!s || /^(this|it|there|what|github|the)$/i.test(s)) continue;
     const kind = m[2]!.replace(/\s+/g, " ").trim().toLowerCase();
-    const o = /^[aeiou]/i.test(kind) ? `an ${kind}` : `a ${kind}`;
-    if (o.length >= 8 && o.length <= 72) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+    add({ s, p: "is", o: /^[aeiou]/i.test(kind) ? `an ${kind}` : `a ${kind}`, e: m[0]!.slice(0, 280) });
   }
   for (const t of techniquesFromProse(head)) add(t);
   return out;
