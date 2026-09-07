@@ -2030,15 +2030,10 @@ export function rfcEdgesFromXml(xml: string, num: string): Triple[] {
     const nums = [...raw.matchAll(/\b(\d{3,5})\b/g)].map((x) => x[1]!).filter((n) => n !== num).slice(0, 8);
     if (!nums.length) return;
     let o = "";
-    for (const n of nums) {
-      const next = o ? `${o}, RFC ${n}` : `RFC ${n}`;
-      if (next.length > 72) break;
-      o = next;
-    }
+    for (const n of nums) { const next = o ? `${o}, RFC ${n}` : `RFC ${n}`; if (next.length > 72) break; o = next; }
     if (o) out.push({ s: `RFC ${num}`, p: pred, o, e: "" });
   };
-  take("obsoletes", "obsoletes");
-  take("updates", "updates");
+  take("obsoletes", "obsoletes"); take("updates", "updates");
   return out;
 }
 
