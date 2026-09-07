@@ -474,13 +474,9 @@ export const CATALOG_URL_NEEDLES = [
 
 export function qualityUrlSql(col = "url"): string {
   const parts = CATALOG_URL_NEEDLES.map((n) => {
-    const needle = n.toLowerCase().replace(/'/g, "");
-    const slash = needle.indexOf("/");
-    const host = slash >= 0 ? needle.slice(0, slash) : needle;
-    const path = slash >= 0 ? needle.slice(slash) : "";
+    const needle = n.toLowerCase().replace(/'/g, ""), slash = needle.indexOf("/"), host = slash >= 0 ? needle.slice(0, slash) : needle, path = slash >= 0 ? needle.slice(slash) : "";
     const hostMatch = `(${col} = 'https://${host}' OR ${col} = 'http://${host}' OR ${col} LIKE 'https://${host}/%' OR ${col} LIKE 'http://${host}/%' OR ${col} LIKE 'https://${host}?%' OR ${col} LIKE 'http://${host}?%' OR ${col} LIKE 'https://%.${host}' OR ${col} LIKE 'http://%.${host}' OR ${col} LIKE 'https://%.${host}/%' OR ${col} LIKE 'http://%.${host}/%' OR ${col} LIKE 'https://%.${host}?%' OR ${col} LIKE 'http://%.${host}?%')`;
-    if (!path) return hostMatch;
-    return `(${hostMatch} AND (${col} LIKE '%${path}' OR ${col} LIKE '%${path}/%' OR ${col} LIKE '%${path}?%'))`;
+    return path ? `(${hostMatch} AND (${col} LIKE '%${path}' OR ${col} LIKE '%${path}/%' OR ${col} LIKE '%${path}?%'))` : hostMatch;
   });
   return `(${parts.join(" OR ")})`;
 }
