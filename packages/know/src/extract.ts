@@ -2702,16 +2702,13 @@ export function softwareLeadIs(url: string, html: string, text: string, scan?: H
 }
 
 function rfcEdgeInverses(edges: Triple[]): Triple[] {
-  const out: Triple[] = [];
-  const seen = new Set<string>();
+  const out: Triple[] = [], seen = new Set<string>();
   for (const t of edges) {
     if (t.p !== "obsoletes" && t.p !== "updates") continue;
     const verb = t.p === "obsoletes" ? "obsoleted by" : "updated by";
     for (const n of rfcNumsListed(t.o, "").slice(0, 8)) {
-      const o = `${verb} ${t.s}`;
-      if (o.length < 8 || o.length > 72) continue;
-      const k = `${n}\0${o}`;
-      if (seen.has(k)) continue;
+      const o = `${verb} ${t.s}`, k = `${n}\0${o}`;
+      if (o.length < 8 || o.length > 72 || seen.has(k)) continue;
       seen.add(k);
       out.push({ s: `RFC ${n}`, p: "is", o, e: (t.e || o).slice(0, 280) });
     }
