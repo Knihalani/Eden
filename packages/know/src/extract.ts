@@ -2663,20 +2663,14 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
   }
   for (const t of [wikiPage && !listPage ? wikiLeadIs(url, html, text, scan) : undefined, softwareLeadIs(url, html, text, scan)]) if (t) out.push(t);
   const rfcUrl = url.match(/rfc[-/_]?(\d{3,5})/i);
-  const xmlNum = isHtml ? rfcXmlNumber(html) : undefined;
-  const rfcNum = rfcUrl?.[1] || xmlNum;
+  const rfcNum = rfcUrl?.[1] || (isHtml ? rfcXmlNumber(html) : undefined);
   if (rfcNum) {
     const metas = scan?.metas ?? (isHtml ? namedMeta(html, ["citation_title", "dc.title"]) : {});
-    const line = text.match(new RegExp(`\\bRFC\\s*${rfcNum}\\s*[:\\-–]\\s*([A-Z][^\\n.]{8,70})`, "i"))?.[1];
-    const titled =
-      rfcTitleFromHtml(html, rfcNum, text, og.title || metas["citation_title"] || metas["dc.title"], scan) || line;
+    const titled = rfcTitleFromHtml(html, rfcNum, text, og.title || metas["citation_title"] || metas["dc.title"], scan) || text.match(new RegExp(`\\bRFC\\s*${rfcNum}\\s*[:\\-–]\\s*([A-Z][^\\n.]{8,70})`, "i"))?.[1];
     const o = shortTitle(titled || "Internet standard");
     if (!rfcGistJunk(o)) out.push({ s: `RFC ${rfcNum}`, p: "is", o, e: (titled || text).slice(0, 280) });
     const rfcEdges = [...rfcEdgesFromText(rfcNum, text), ...(isHtml ? rfcEdgesFromXml(html, rfcNum) : [])];
-    out.push(...rfcEdges);
-    out.push(...rfcEdgeInverses(rfcEdges));
-    if (isHtml) out.push(...rfcStatusFromXml(html, rfcNum));
-    out.push(...rfcStatusFromText(rfcNum, isHtml ? html : "", text));
+    out.push(...rfcEdges, ...rfcEdgeInverses(rfcEdges), ...(isHtml ? rfcStatusFromXml(html, rfcNum) : []), ...rfcStatusFromText(rfcNum, isHtml ? html : "", text));
   }
   if (findAsciiCi(text, "rfc", 0) >= 0) out.push(...rfcMentionsFromText(text));
   if (text.includes("/")) out.push(...mediaFromText(text));
