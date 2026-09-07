@@ -1870,11 +1870,8 @@ function wikiShortDescription(html: string): string | undefined {
 function shortDescObject(desc: string): string | undefined {
   let o = desc.replace(/\s+/g, " ").trim();
   if (/^country in /i.test(o)) o = `a ${o.charAt(0).toLowerCase()}${o.slice(1)}`;
-  else if (o.length >= 8 && !/^(a|an|the)\s/i.test(o)) {
-    o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o.charAt(0).toLowerCase()}${o.slice(1)}`;
-  }
-  if (o.length >= 8 && o.length <= 72 && !looksLikeCode(o)) return o;
-  return undefined;
+  else if (o.length >= 8 && !/^(a|an|the)\s/i.test(o)) o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o.charAt(0).toLowerCase()}${o.slice(1)}`;
+  return o.length >= 8 && o.length <= 72 && !looksLikeCode(o) ? o : undefined;
 }
 
 /** Wikipedia article `is` from short description / lead sentence. Persistable only. */
