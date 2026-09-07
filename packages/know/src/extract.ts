@@ -2693,21 +2693,18 @@ function tidySoftwareObject(raw: string): string | undefined {
 }
 
 export function softwareLeadIs(url: string, html: string, text: string, scan?: HtmlScan): Triple | undefined {
-  if (!toolDocsUrl(url)) return undefined;
+  if (!toolDocsUrl(url)) return;
   const name = softwareName(url, scan);
-  if (!name || name.length < 2 || name.length > 40) return undefined;
+  if (!name || name.length < 2 || name.length > 40) return;
   const metas = scan?.metas ?? (html ? namedMeta(html, ["description", "og:description"]) : {});
   const og = scan?.og ?? (html ? openGraph(html) : {});
-  const candidates = [og.description, metas["og:description"], metas.description, text].filter(
-    (s): s is string => typeof s === "string" && s.length >= 8,
-  );
-  for (const c of candidates) {
+  for (const c of [og.description, metas["og:description"], metas.description, text]) {
+    if (typeof c !== "string" || c.length < 8) continue;
     const o = tidySoftwareObject(c);
     if (!o || o.toLowerCase() === name.toLowerCase()) continue;
     const t: Triple = { s: name, p: "is", o, e: o.slice(0, 280) };
     if (persistable(url, t)) return t;
   }
-  return undefined;
 }
 
 function rfcEdgeInverses(edges: Triple[]): Triple[] {
