@@ -418,11 +418,8 @@ export function namedMeta(html: string, names: string[]): Record<string, string>
 
 export function htmlAlternateHrefs(html: string): string[] {
   const out: string[] = [];
-  const re = /<link\b([^>]+)>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    const tag = m[1]!;
-    const rel = tag.match(/\brel\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+  for (const m of html.matchAll(/<link\b([^>]+)>/gi)) {
+    const tag = m[1]!, rel = tag.match(/\brel\s*=\s*["']([^"']+)["']/i)?.[1] || "";
     if (!/\balternate\b/i.test(rel)) continue;
     const href = tag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1];
     if (href && !/action=edit|application\/x-wiki/i.test(tag)) out.push(href);
