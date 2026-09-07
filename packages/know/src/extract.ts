@@ -2692,19 +2692,8 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
   if (wikiPage && !listPage) {
     const wikiCap = wikiCapital(url, html, text, scan);
     if (wikiCap) out.push(wikiCap);
-    const wikiId = wikiIso(url, html, scan);
-    if (wikiId) {
-      out.push(wikiId);
-      const inv = isoInverse(wikiId);
-      if (inv) out.push(inv);
-    } else {
-      const fromText = isoFromText(url, html, text);
-      if (fromText) {
-        out.push(fromText);
-        const inv = isoInverse(fromText);
-        if (inv) out.push(inv);
-      }
-    }
+    const wikiId = wikiIso(url, html, scan) || isoFromText(url, html, text);
+    if (wikiId) out.push(wikiId);
   }
   if (isHtml && wantsCapitalTable(url, html, scan?.tables)) {
     out.push(...wikiCapitalTable(html, scan?.tables));
