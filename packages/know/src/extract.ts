@@ -2022,12 +2022,9 @@ function spdxFromText(text: string): Triple[] {
 
 function isoFromText(url: string, html: string, text: string): Triple | undefined {
   const name = wikiSubject(url, html);
-  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return undefined;
-  const raw =
-    text.match(/\bISO\s*3166(?:-1)?(?:-[12])?(?:[^A-Z]{0,48})(?:alpha-2)?[:\s]+([A-Z]{2})\b/i)?.[1] || "";
-  const o = tidyIso(raw);
-  if (!o) return undefined;
-  return { s: name, p: "id", o, e: `${name} ISO 3166-1 alpha-2 ${o}`.slice(0, 280) };
+  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return;
+  const o = tidyIso(text.match(/\bISO\s*3166(?:-1)?(?:-[12])?(?:[^A-Z]{0,48})(?:alpha-2)?[:\s]+([A-Z]{2})\b/i)?.[1] || "");
+  return o ? { s: name, p: "id", o, e: `${name} ISO 3166-1 alpha-2 ${o}`.slice(0, 280) } : undefined;
 }
 
 /** xml2rfc: `<rfc number="9110" docName="..." obsoletes="..." updates="...">` plus `<title>`. */
