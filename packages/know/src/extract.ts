@@ -2738,12 +2738,7 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
     }
     out.push(...extra);
   }
-  if (wikiPage && !listPage) {
-    const leadIs = wikiLeadIs(url, html, text, scan);
-    if (leadIs) out.push(leadIs);
-  }
-  const toolIs = softwareLeadIs(url, html, text, scan);
-  if (toolIs) out.push(toolIs);
+  for (const t of [wikiPage && !listPage ? wikiLeadIs(url, html, text, scan) : undefined, softwareLeadIs(url, html, text, scan)]) if (t) out.push(t);
   const rfcUrl = url.match(/rfc[-/_]?(\d{3,5})/i);
   const xmlNum = isHtml ? rfcXmlNumber(html) : undefined;
   const rfcNum = rfcUrl?.[1] || xmlNum;
