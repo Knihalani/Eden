@@ -443,10 +443,8 @@ function buildTyped(t: string): FactCard | undefined {
   }
 
   if (n >= 12 && t.slice(0, 11).toLowerCase() === "capital of ") {
-    const country = canonCountry(t.slice(11).trim());
-    if (!country) return;
-    const city = CAPITAL_OF[country];
-    if (!city) return;
+    const country = canonCountry(t.slice(11).trim()), city = country && CAPITAL_OF[country];
+    if (!country || !city) return;
     return keep(t, internFact(`capital of ${country}`, `The capital of ${countryForCard(country)} is ${city}.`));
   }
 
