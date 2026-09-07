@@ -163,6 +163,8 @@ function rewriteQuery(q: string): string {
   }
   const named = phraseExact(t);
   if (named) return named;
+  const used = /^what(?:'s| is)\s+([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
+  if (used) return `used for ${used[1]!.toLowerCase()}`;
   return t;
 }
 
@@ -445,6 +447,12 @@ function keep(t: string, c: FactCard | undefined): FactCard | undefined {
  * Extra tokens do not match a shape and stay unknown on knowQuery (pack path).
  * Does not open rfc-titles.bin — pack search covers RFCs the hot table lacks.
  */
+const HOT_TECH: Record<string, string> = {
+  jq: "jq is used for filtering JSON on the command line.",
+  ripgrep: "ripgrep is used for searching code quickly.",
+  bun: "Bun is used for running TypeScript services.",
+};
+
 export function flashCard(q: string): FactCard | undefined {
   if (!q.trim()) return;
   return buildTyped(rewriteQuery(q));
@@ -455,6 +463,12 @@ function buildTyped(t: string): FactCard | undefined {
   if (n < 2 || n > 80) return;
   const cached = INTERN.get(t);
   if (cached) return cached;
+
+  if (n >= 9 && t.slice(0, 9).toLowerCase() === "used for ") {
+    const tool = t.slice(9).trim().toLowerCase();
+    const fact = HOT_TECH[tool];
+    if (fact) return keep(t, internFact(`used for ${tool}`, fact));
+  }
 
   if (n >= 7 && n <= 10 && (t.startsWith("RFC ") || t.startsWith("rfc "))) {
     const rest = t.slice(4);
