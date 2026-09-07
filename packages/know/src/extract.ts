@@ -1143,20 +1143,10 @@ function stripMarkup(raw: string): string {
 }
 
 function consecutiveHeads(s: string): number {
-  let max = 0;
-  let run = 0;
+  let max = 0, run = 0;
   for (const w of s.split(/\s+/)) {
-    if (!w) continue;
-    if (/^(and|of|the|da|de|del|do|van|von|di|du|la|le|el|al)$/i.test(w)) {
-      run = 0;
-      continue;
-    }
-    if (/^\p{Lu}/u.test(w)) {
-      run++;
-      if (run > max) max = run;
-    } else {
-      run = 0;
-    }
+    if (!w || /^(and|of|the|da|de|del|do|van|von|di|du|la|le|el|al)$/i.test(w)) { run = 0; continue; }
+    if (/^\p{Lu}/u.test(w)) { if (++run > max) max = run; } else run = 0;
   }
   return max;
 }
