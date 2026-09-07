@@ -73,14 +73,10 @@ function boundMention(text: string, token: string): boolean {
   return new RegExp(`(?:^|[^A-Za-z0-9.+-])${pat}(?:[^A-Za-z0-9.+-]|$)`, "i").test(text);
 }
 
-function rfcRelationQuestion(text: string): boolean {
-  return (text.indexOf("obsolet") >= 0 || text.indexOf("update") >= 0 || text.indexOf("successor") >= 0 || text.indexOf("replac") >= 0) && /\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b/i.test(text);
-}
-
 export function subjectMentioned(text: string, fact: string): boolean {
   const subject = (/^(.+?) is used for /i.exec(fact)?.[1] || /^(RFC\s+\d{1,5})\s+(?:obsoletes|updates|is obsoleted by|is updated by)\b/i.exec(fact)?.[1] || "").trim();
   if (!subject || subject.length < 2) return false;
-  if (/^RFC\s+\d/i.test(subject)) return rfcRelationQuestion(text) ? false : new RegExp(`\\brfc[\\s#:-]*${subject.replace(/^RFC\s+/i, "")}\\b`, "i").test(text);
+  if (/^RFC\s+\d/i.test(subject)) return (text.indexOf("obsolet") >= 0 || text.indexOf("update") >= 0 || text.indexOf("successor") >= 0 || text.indexOf("replac") >= 0) && /\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b/i.test(text) ? false : new RegExp(`\\brfc[\\s#:-]*${subject.replace(/^RFC\s+/i, "")}\\b`, "i").test(text);
   return (TOOL_ALIASES[subject.toLowerCase()] || [subject]).some((a) => boundMention(text, a));
 }
 
