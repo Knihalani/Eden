@@ -2693,10 +2693,7 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
     if (label) out.push({ s: `W3C ${slug}`, p: "is", o: shortTitle(h1 || htmlTitle || abs || label), e: (htmlTitle || abs || label).slice(0, 280) });
   }
   if (og.title && og.description && og.description.length <= 80 && (rfcUrl || tr)) out.push({ s: og.title.slice(0, 160), p: "is", o: og.description.slice(0, 80), e: og.description.slice(0, 280) });
-  for (let i = 0, n = out.length; i < n; i++) {
-    const inv = isoInverse(out[i]!);
-    if (inv) out.push(inv);
-  }
+  for (let i = 0, n = out.length; i < n; i++) { const inv = isoInverse(out[i]!); if (inv) out.push(inv); }
   const seen = new Set<string>();
   const kept = out
     .map(cleanTriple)
