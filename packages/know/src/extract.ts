@@ -2703,17 +2703,12 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
     if (!scan || scan.dls.length) out.push(...defListFacts(url, html, scan));
   }
   if (!listPage) {
-    out.push(...capitalProse(text));
-    out.push(...extrasFromProse(text));
-    const extra: Triple[] = [];
-    for (const t of out) {
+    out.push(...capitalProse(text), ...extrasFromProse(text));
+    for (let i = 0, n = out.length; i < n; i++) {
+      const t = out[i]!;
       if (t.p !== "capital" || t.s.toLowerCase() === t.o.toLowerCase()) continue;
-      const o = `the capital of ${t.s}`;
-      if (o.length >= 8 && o.length <= 72) extra.push({ s: t.o, p: "is", o, e: t.e });
-      const inCountry = `a city in ${t.s}`;
-      if (inCountry.length >= 8 && inCountry.length <= 72) extra.push({ s: t.o, p: "is", o: inCountry, e: t.e });
+      for (const o of [`the capital of ${t.s}`, `a city in ${t.s}`]) if (o.length >= 8 && o.length <= 72) out.push({ s: t.o, p: "is", o, e: t.e });
     }
-    out.push(...extra);
   }
   for (const t of [wikiPage && !listPage ? wikiLeadIs(url, html, text, scan) : undefined, softwareLeadIs(url, html, text, scan)]) if (t) out.push(t);
   const rfcUrl = url.match(/rfc[-/_]?(\d{3,5})/i);
