@@ -88,9 +88,7 @@ export class AgentMemory {
   private path: string;
 
   constructor(opts: MemoryOptions = {}) {
-    this.know = opts.know;
-    this.agent = opts.agent;
-    this.project = opts.project;
+    this.know = opts.know; this.agent = opts.agent; this.project = opts.project;
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
     try { chmodSync(this.dir, 0o700); } catch {}
     this.compiled = load((this.path = join(this.dir, "memories.jsonl")));
@@ -103,8 +101,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string } = {}): MemoryRecord {
     const rec: MemoryRecord = { id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, text: String(text || "").trim(), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => t.toLowerCase()), agent: opts.agent || this.agent, project: opts.project || this.project, at: Date.now() };
     if (!rec.text) return rec;
-    const c = compile(rec);
-    const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
+    const c = compile(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     return this.compiled.push(c), this.persist(), rec;
   }
