@@ -1975,13 +1975,9 @@ function extrasFromProse(text: string): Triple[] {
     const rest = head.slice(langsAreAt + "official languages are ".length, langsAreAt + 200), cut = rest.split(".")[0] || rest;
     for (const lang of namedEntities(cut).slice(0, 4)) add({ s: lang, p: "is", o: `an official language of ${hint}`, e: cut.slice(0, 280) });
   }
-  const TOOL_IS =
-    /\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|all-in-one\s+|all in one\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi;
-  for (const m of head.matchAll(TOOL_IS)) {
+  for (const m of head.matchAll(/\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|all-in-one\s+|all in one\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi)) {
     const s = tidyProper(m[1]!);
-    if (!s || /^(this|it|there|what|github|the)$/i.test(s)) continue;
-    const kind = m[2]!.replace(/\s+/g, " ").trim().toLowerCase();
-    add({ s, p: "is", o: /^[aeiou]/i.test(kind) ? `an ${kind}` : `a ${kind}`, e: m[0]!.slice(0, 280) });
+    if (s && !/^(this|it|there|what|github|the)$/i.test(s)) { const kind = m[2]!.replace(/\s+/g, " ").trim().toLowerCase(); add({ s, p: "is", o: /^[aeiou]/i.test(kind) ? `an ${kind}` : `a ${kind}`, e: m[0]!.slice(0, 280) }); }
   }
   for (const t of techniquesFromProse(head)) add(t);
   return out;
