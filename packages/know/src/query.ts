@@ -110,25 +110,13 @@ function extract() {
 }
 
 function toks(s: string): string[] {
-  let expanded = s;
-  if (s.length < 96 && (s.includes("rfc") || s.includes("RFC") || s.includes("w3c") || s.includes("W3C") || /utf8/i.test(s))) {
-    expanded = s
-      .replace(/\b(rfc)(\d{1,5})\b/gi, "$1 $2")
-      .replace(/\b(w3c)([a-z0-9-]+)/gi, "$1 $2")
-      .replace(/\butf8\b/gi, "utf-8");
-  }
-  const parts = expanded
-    .toLowerCase()
-    .split(/[^a-z0-9+.-]+/)
-    .filter((t) => t.length > 1);
+  const expanded = s.length < 96 && (s.includes("rfc") || s.includes("RFC") || s.includes("w3c") || s.includes("W3C") || /utf8/i.test(s))
+    ? s.replace(/\b(rfc)(\d{1,5})\b/gi, "$1 $2").replace(/\b(w3c)([a-z0-9-]+)/gi, "$1 $2").replace(/\butf8\b/gi, "utf-8")
+    : s;
+  const parts = expanded.toLowerCase().split(/[^a-z0-9+.-]+/).filter((t) => t.length > 1);
   if (!expanded.includes("-")) return parts;
   const out: string[] = [];
-  for (const p of parts) {
-    out.push(p);
-    if (p.includes("-")) {
-      for (const bit of p.split("-")) if (bit.length > 1) out.push(bit);
-    }
-  }
+  for (const p of parts) { out.push(p); if (p.includes("-")) for (const bit of p.split("-")) if (bit.length > 1) out.push(bit); }
   return out;
 }
 
