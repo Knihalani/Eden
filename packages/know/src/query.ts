@@ -342,8 +342,7 @@ const HOT_TECH: Record<string, string> = {
 };
 
 export function flashCard(q: string): FactCard | undefined {
-  if (!q.trim()) return;
-  return buildTyped(rewriteQuery(q));
+  return q.trim() ? buildTyped(rewriteQuery(q)) : undefined;
 }
 
 function buildTyped(t: string): FactCard | undefined {
@@ -352,10 +351,7 @@ function buildTyped(t: string): FactCard | undefined {
   const cached = INTERN.get(t);
   if (cached) return cached;
 
-  if (n >= 9 && t.slice(0, 9).toLowerCase() === "used for ") {
-    const fact = HOT_TECH[t.slice(9).trim().toLowerCase()];
-    if (fact) return keep(t, internFact(t.toLowerCase(), fact));
-  }
+  if (n >= 9 && t.slice(0, 9).toLowerCase() === "used for ") { const fact = HOT_TECH[t.slice(9).trim().toLowerCase()]; if (fact) return keep(t, internFact(t.toLowerCase(), fact)); }
 
   if (n >= 7 && n <= 10 && (t.startsWith("RFC ") || t.startsWith("rfc "))) {
     const rest = t.slice(4);
@@ -374,20 +370,11 @@ function buildTyped(t: string): FactCard | undefined {
     return keep(t, internFact(`capital of ${country}`, `The capital of ${countryForCard(country)} is ${city}.`));
   }
 
-  if (n === 3 && t >= "100" && t <= "599" && t === String(+t)) {
-    const reason = HTTP_REASON[+t];
-    if (reason) return keep(t, internFact(t, `HTTP ${t} is ${reason}.`));
-  }
-  if (n >= 7 && n <= 8 && /^HTTP\s*[1-5]\d{2}$/i.test(t)) {
-    const code = t.replace(/\D/g, ""), reason = HTTP_REASON[+code];
-    if (reason) return keep(t, internFact(code, `HTTP ${code} is ${reason}.`));
-  }
+  if (n === 3 && t >= "100" && t <= "599" && t === String(+t)) { const reason = HTTP_REASON[+t]; if (reason) return keep(t, internFact(t, `HTTP ${t} is ${reason}.`)); }
+  if (n >= 7 && n <= 8 && /^HTTP\s*[1-5]\d{2}$/i.test(t)) { const code = t.replace(/\D/g, ""), reason = HTTP_REASON[+code]; if (reason) return keep(t, internFact(code, `HTTP ${code} is ${reason}.`)); }
 
   const media = mediaWant(t), sub = media?.split("/")[1] || "";
-  if (media && aliasableMediaSubtype(sub)) {
-    const obj = MEDIA_SUBTYPE_OBJECT[sub.toLowerCase()] || sub;
-    return keep(t, internFact(t, `${media} is ${articleFor(obj)} ${obj} media type.`));
-  }
+  if (media && aliasableMediaSubtype(sub)) { const obj = MEDIA_SUBTYPE_OBJECT[sub.toLowerCase()] || sub; return keep(t, internFact(t, `${media} is ${articleFor(obj)} ${obj} media type.`)); }
 
   const up = t.toUpperCase();
   if (METHOD_SET.has(up) && n <= 7) {
