@@ -28,19 +28,13 @@ function cardFromKnow(q: string, store?: KnowSearch): InjectCard | undefined {
 
 function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
   if (!injectWorthQuery(q)) return;
-  if (store) {
-    let m = FACT_MEMO.get(store);
-    if (!m) {
-      m = new Map();
-      FACT_MEMO.set(store, m);
-    }
-    const k = q.toLowerCase();
-    if (m.has(k)) return m.get(k);
-    const card = cardFromKnow(q, store);
-    m.set(k, card);
-    return card;
-  }
-  return cardFromKnow(q, store);
+  if (!store) return cardFromKnow(q, store);
+  let m = FACT_MEMO.get(store);
+  if (!m) FACT_MEMO.set(store, m = new Map());
+  const k = q.toLowerCase();
+  if (m.has(k)) return m.get(k);
+  const card = cardFromKnow(q, store);
+  return m.set(k, card), card;
 }
 
 const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
