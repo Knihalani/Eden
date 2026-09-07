@@ -1262,29 +1262,12 @@ function isCapitalLabel(label: string): boolean {
   return !!t && !/\b(country|continent)\b/.test(t) && (adaptCapitalLabel(t) || /^capital\b/.test(t) || /^official capital\b/.test(t));
 }
 
-function isIsoLabel(label: string): boolean {
-  return /iso\s*3166/.test(lab(label));
-}
-
-function isLanguageLabel(label: string): boolean {
-  return /^(official\s+languages?|national\s+languages?|working\s+languages?)\b/.test(lab(label));
-}
-
-function isCurrencyLabel(label: string): boolean {
-  return /^currency\b/.test(lab(label));
-}
-
-function isCallingLabel(label: string): boolean {
-  return /^(calling\s+code|telephone\s+code)\b/.test(lab(label));
-}
-
-function isDemonymLabel(label: string): boolean {
-  return /^(demonym|gentilic)\b/.test(lab(label));
-}
-
-function isTldLabel(label: string): boolean {
-  return /^(internet\s+tld|cctld|tld)\b/.test(lab(label));
-}
+const isIsoLabel = (s: string) => /iso\s*3166/.test(lab(s));
+const isLanguageLabel = (s: string) => /^(official\s+languages?|national\s+languages?|working\s+languages?)\b/.test(lab(s));
+const isCurrencyLabel = (s: string) => /^currency\b/.test(lab(s));
+const isCallingLabel = (s: string) => /^(calling\s+code|telephone\s+code)\b/.test(lab(s));
+const isDemonymLabel = (s: string) => /^(demonym|gentilic)\b/.test(lab(s));
+const isTldLabel = (s: string) => /^(internet\s+tld|cctld|tld)\b/.test(lab(s));
 
 function isPopulationLabel(label: string): boolean {
   const t = lab(label);
@@ -1296,37 +1279,14 @@ function isAreaLabel(label: string): boolean {
   return /^(area|area\s*km)\b/.test(t) && !/code|metro|urban|rank|water/.test(t);
 }
 
-function isLegislatureLabel(label: string): boolean {
-  return /^(legislature|parliament|congress|national assembly)\b/.test(lab(label));
-}
-
-function isGovernmentLabel(label: string): boolean {
-  return /^(government|government type|system of government|political system)\b/.test(lab(label));
-}
-
-function isTimezoneLabel(label: string): boolean {
-  return /^(time\s*zone|timezone|utc offset)\b/.test(lab(label));
-}
-
-function isDrivingLabel(label: string): boolean {
-  return /^(driving\s+side|drives\s+on)\b/.test(lab(label));
-}
-
-function isHeadLabel(label: string): boolean {
-  return /^(president|monarch|king|queen|head of state|head of government|prime minister)\b/.test(lab(label));
-}
-
-function isAnthemLabel(label: string): boolean {
-  return /^(anthem|national anthem)\b/.test(lab(label));
-}
-
-function isMottoLabel(label: string): boolean {
-  return /^(national\s+)?motto$/.test(lab(label));
-}
-
-function isOfficialNameLabel(label: string): boolean {
-  return /^(official name|conventional long name|long name)\b/.test(lab(label));
-}
+const isLegislatureLabel = (s: string) => /^(legislature|parliament|congress|national assembly)\b/.test(lab(s));
+const isGovernmentLabel = (s: string) => /^(government|government type|system of government|political system)\b/.test(lab(s));
+const isTimezoneLabel = (s: string) => /^(time\s*zone|timezone|utc offset)\b/.test(lab(s));
+const isDrivingLabel = (s: string) => /^(driving\s+side|drives\s+on)\b/.test(lab(s));
+const isHeadLabel = (s: string) => /^(president|monarch|king|queen|head of state|head of government|prime minister)\b/.test(lab(s));
+const isAnthemLabel = (s: string) => /^(anthem|national anthem)\b/.test(lab(s));
+const isMottoLabel = (s: string) => /^(national\s+)?motto$/.test(lab(s));
+const isOfficialNameLabel = (s: string) => /^(official name|conventional long name|long name)\b/.test(lab(s));
 
 function isLargestCityLabel(label: string): boolean {
   const t = lab(label);
