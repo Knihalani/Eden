@@ -484,8 +484,7 @@ function buildTyped(t: string): FactCard | undefined {
   if (PROTO_SET.has(up)) {
     ensureFlash();
     const num = PROTO_BY_NAME.get(up);
-    if (num === undefined) return;
-    return keep(t, internFact(up, `${up} is protocol ${num}.`));
+    if (num !== undefined) return keep(t, internFact(up, `${up} is protocol ${num}.`));
   }
   const scheme = t.toLowerCase();
   if (SCHEME_SET.has(scheme) && Object.prototype.hasOwnProperty.call(SCHEME_OBJECT, scheme)) {
