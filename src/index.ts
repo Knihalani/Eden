@@ -17,7 +17,7 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having"]);
 
-const FOLD: Record<string, string> = { hours: "tz", timezone: "tz", cache: "redis", container: "image", images: "image", docker: "image", production: "prod", standup: "stand", kubernetes: "k8s", stay: "live", stays: "live", staying: "live", moved: "live", moves: "live", moving: "live", checks: "ci" };
+const FOLD: Record<string, string> = { hours: "tz", timezone: "tz", cache: "redis", container: "image", images: "image", docker: "image", production: "prod", standup: "stand", kubernetes: "k8s", stay: "live", stays: "live", staying: "live", moved: "live", moves: "live", moving: "live", checks: "ci", represent: "mean", represents: "mean", representing: "mean", meaning: "mean" };
 
 function tokList(s: string): string[] {
   return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).map((w) => FOLD[w] ?? w);
@@ -33,6 +33,16 @@ function liteStem(w: string): string {
   if (w.endsWith("es") && w.length >= 7) return w.slice(0, -2);
   if (w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
   return w;
+}
+
+function titleBonus(query: string, note: string): number {
+  if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title)\b/i.test(query)) return 0;
+  return /"[^"]{3,80}"/.test(note) ? 2 : 0;
+}
+
+function favBonus(query: string, note: string): number {
+  if (!/\bfavorite\b/i.test(query)) return 0;
+  return /\b(loved|love|loves|fave|favourite)\b/i.test(note) ? 1 : 0;
 }
 
 function queryHay(text: string): Set<string> {
@@ -181,8 +191,15 @@ export class AgentMemory {
     const hay = queryHay(text);
     const hayStem = new Set([...hay].map(liteStem));
     const rows = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
+    const speakers = new Set<string>();
+    for (const c of rows) {
+      const m = c.rec.text.match(SPEAKER_LABEL);
+      if (!m) continue;
+      for (const w of tokList(m[1]!.replace(/:$/, ""))) speakers.add(w);
+    }
+    const prefs = new Set([...hay].filter((h) => h.length >= 8 && !speakers.has(h)).map((h) => h.slice(0, 5)));
     const N = rows.length || 1, df = new Map<string, number>();
-    const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x));
+    const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x)) || (x.length >= 8 && !speakers.has(x) && prefs.has(x.slice(0, 5)));
     for (const c of rows) {
       const seen = new Set<string>();
       for (const x of c.needles) if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); }
@@ -194,9 +211,11 @@ export class AgentMemory {
         if (!hit(x) || seen.has(x)) continue;
         seen.add(x);
         const d = df.get(x) || 0;
-        n += Math.log((N - d + 0.5) / (d + 0.5) + 1);
+        let idf = Math.log((N - d + 0.5) / (d + 0.5) + 1);
+        if (d / N < 0.04) idf *= 1.55;
+        n += idf;
       }
-      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) };
+      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) };
     }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
