@@ -1194,12 +1194,7 @@ function tidyGov(raw: string): string | undefined {
 }
 
 function isFileLinkAttrs(attrs: string): boolean {
-  return (
-    /wiki\/File:/i.test(attrs) ||
-    /(?:href|resource|src)\s*=\s*["'][^"']*File:/i.test(attrs) ||
-    /\bmw-file-description\b/i.test(attrs) ||
-    /#cite_/i.test(attrs)
-  );
+  return /wiki\/File:|(?:href|resource|src)\s*=\s*["'][^"']*File:|\bmw-file-description\b|#cite_/i.test(attrs);
 }
 
 /** First wiki link in a cell, skipping File: flags. Country/city names live in the link, not the flag span. */
