@@ -45,6 +45,22 @@ function favBonus(query: string, note: string): number {
   return /\b(loved|love|loves|fave|favourite)\b/i.test(note) ? 1 : 0;
 }
 
+
+function speakerBonus(query: string, note: string, speakers: Set<string>): number {
+  const q = new Set(tokList(query).filter((w) => speakers.has(w)));
+  if (!q.size) return 0;
+  const m = note.match(SPEAKER_LABEL);
+  if (!m) return 0;
+  const sp = tokList(m[1]!.replace(/:$/, ""));
+  return sp.some((w) => q.has(w)) ? 3 : 0;
+}
+
+
+function quantBonus(query: string, note: string): number {
+  if (!/\b(how long|how many|how old|years?|months?|weeks?|days?|age|since|married)\b/i.test(query)) return 0;
+  return /\b\d{1,4}\b/.test(note) ? 1.5 : 0;
+}
+
 function queryHay(text: string): Set<string> {
   const hay = new Set(tokList(text).filter((w) => !QUERY_SKIP.has(w)));
   if (/\b(cheese|steak|steakhouse|restaurant|dinner|lunch|tasting|menu|eat|food|diet|allerg)\b/i.test(text)) hay.add("diet");
@@ -215,7 +231,7 @@ export class AgentMemory {
         if (d / N < 0.04) idf *= 1.55;
         n += idf;
       }
-      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) };
+      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) };
     }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
