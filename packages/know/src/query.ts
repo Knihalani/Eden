@@ -312,7 +312,7 @@ function keep(t: string, c: FactCard | undefined): FactCard | undefined {
 const HOT_TECH: Record<string, string> = {
   jq: "jq is used for filtering JSON on the command line.",
   ripgrep: "ripgrep is used for searching code quickly.",
-  bun: "Bun is used for running TypeScript services.",
+  bun: "Bun is used for running JavaScript and TypeScript as a runtime toolkit.",
 };
 
 export function flashCard(q: string): FactCard | undefined {
