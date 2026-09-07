@@ -1853,22 +1853,14 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
   const out = extrasFromPairs(name, wikiInfoboxPairs(html, scan?.tables));
   if (!out.some((t) => /official language/i.test(t.o))) {
     const wt = html.match(/\|\s*official_languages?\s*=\s*([^\n]+)/i)?.[1];
-    if (wt) {
-      for (const lang of namedEntities(wt).slice(0, 4)) {
-        pushIs(out, lang, `an official language of ${name}`);
-      }
-    }
+    if (wt) for (const lang of namedEntities(wt).slice(0, 4)) pushIs(out, lang, `an official language of ${name}`);
   }
   if (!out.some((t) => /currency of/i.test(t.o))) {
-    const wt = html.match(/\|\s*currency\s*=\s*([^\n]+)/i)?.[1];
-    if (wt) {
-      const cur = namedEntities(wt)[0];
-      if (cur) pushIs(out, cur, `the currency of ${name}`);
-    }
+    const cur = namedEntities(html.match(/\|\s*currency\s*=\s*([^\n]+)/i)?.[1] || "")[0];
+    if (cur) pushIs(out, cur, `the currency of ${name}`);
   }
   if (!out.some((t) => t.p === "id" && /^\d/.test(t.o))) {
-    const wt = html.match(/\|\s*population_estimate\s*=\s*([^\n]+)/i)?.[1];
-    const pop = tidyPopulation(wt || "");
+    const pop = tidyPopulation(html.match(/\|\s*population_estimate\s*=\s*([^\n]+)/i)?.[1] || "");
     if (pop) out.push({ s: name, p: "id", o: pop, e: `${name} population ${pop}`.slice(0, 280) });
   }
   if (!out.some((t) => t.p === "id" && /km2|sq mi/.test(t.o))) {
@@ -1877,21 +1869,17 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
     if (area) out.push({ s: name, p: "id", o: area, e: `${name} area ${area}`.slice(0, 280) });
   }
   if (!out.some((t) => /legislature of/i.test(t.o))) {
-    const wt = html.match(/\|\s*legislature\s*=\s*([^\n]+)/i)?.[1];
-    const body = wt ? namedEntities(wt)[0] : undefined;
+    const body = namedEntities(html.match(/\|\s*legislature\s*=\s*([^\n]+)/i)?.[1] || "")[0];
     if (body) pushIs(out, body, `the legislature of ${name}`);
   }
   if (!out.some((t) => t.s === name && t.p === "is" && /republic|monarchy|federation|state|kingdom/i.test(t.o))) {
-    const wt = html.match(/\|\s*government_type\s*=\s*([^\n]+)/i)?.[1];
-    const gov = tidyGov(wt || "");
+    const gov = tidyGov(html.match(/\|\s*government_type\s*=\s*([^\n]+)/i)?.[1] || "");
     if (gov) out.push({ s: name, p: "is", o: gov, e: gov.slice(0, 280) });
   }
   if (!out.some((t) => /official name of/i.test(t.o))) {
     const wt = html.match(/\|\s*(?:conventional_long_name|official_name)\s*=\s*([^\n]+)/i)?.[1];
     const official = wt ? tidyProper(wt) || namedEntities(wt)[0] : undefined;
-    if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) {
-      pushIs(out, official, `the official name of ${name}`);
-    }
+    if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) pushIs(out, official, `the official name of ${name}`);
   }
   if (!out.some((t) => /motto of/i.test(t.o))) {
     const wt = html.match(/\|\s*(?:national_motto|motto)\s*=\s*([^\n]+)/i)?.[1];
