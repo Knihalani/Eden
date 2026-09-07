@@ -1580,46 +1580,29 @@ export function wikiSubject(url: string, html: string, scan?: HtmlScan): string 
   if (scan) {
     if (scan.mwTitle) candidates.push(scan.mwTitle);
     if (scan.displaytitle) candidates.push(scan.displaytitle);
-    if (scan.canonical) {
-      const n = wikiPageName(scan.canonical);
-      if (n) candidates.push(n);
-    }
-    if (html.includes("firstHeading")) {
-      const h1 = html.match(/id=["']firstHeading["'][^>]*>([\s\S]{2,80}?)<\/h1>/i)?.[1];
-      if (h1) candidates.push(h1);
-    }
-    if (html.includes("redirectText")) {
-      const redir = html.match(/class=["'][^"']*\bredirectText\b[^"']*["'][\s\S]{0,200}?<a\b[^>]*>([\s\S]{2,80}?)<\/a>/i)?.[1];
-      if (redir) candidates.push(redir);
-    }
+    const n = scan.canonical ? wikiPageName(scan.canonical) : undefined;
+    if (n) candidates.push(n);
+    const h1 = html.includes("firstHeading") ? html.match(/id=["']firstHeading["'][^>]*>([\s\S]{2,80}?)<\/h1>/i)?.[1] : undefined;
+    if (h1) candidates.push(h1);
+    const redir = html.includes("redirectText") ? html.match(/class=["'][^"']*\bredirectText\b[^"']*["'][\s\S]{0,200}?<a\b[^>]*>([\s\S]{2,80}?)<\/a>/i)?.[1] : undefined;
+    if (redir) candidates.push(redir);
     if (scan.og.title) candidates.push(scan.og.title);
     if (scan.metas["dc.title"]) candidates.push(scan.metas["dc.title"]);
     if (scan.metas["citation_title"]) candidates.push(scan.metas["citation_title"]);
   } else {
     const main = html.match(/<span\b[^>]*class="[^"]*\bmw-page-title-main\b[^"]*"[^>]*>([\s\S]{1,80}?)<\/span>/i)?.[1];
     if (main) candidates.push(main);
-    const dt =
-      html.match(/property=["']mw:PageProp\/displaytitle["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
-      html.match(/content=["']([^"']+)["'][^>]*property=["']mw:PageProp\/displaytitle["']/i)?.[1];
+    const dt = html.match(/property=["']mw:PageProp\/displaytitle["'][^>]*content=["']([^"']+)["']/i)?.[1] || html.match(/content=["']([^"']+)["'][^>]*property=["']mw:PageProp\/displaytitle["']/i)?.[1];
     if (dt) candidates.push(dt);
-    const canon =
-      html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] ||
-      html.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["']/i)?.[1];
-    if (canon) {
-      const n = wikiPageName(canon);
-      if (n) candidates.push(n);
-    }
+    const n = wikiPageName(html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] || html.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["']/i)?.[1] || "");
+    if (n) candidates.push(n);
     const h1 = html.match(/id=["']firstHeading["'][^>]*>([\s\S]{2,80}?)<\/h1>/i)?.[1];
     if (h1) candidates.push(h1);
     const redir = html.match(/class=["'][^"']*\bredirectText\b[^"']*["'][\s\S]{0,200}?<a\b[^>]*>([\s\S]{2,80}?)<\/a>/i)?.[1];
     if (redir) candidates.push(redir);
-    const metas = namedMeta(html, ["og:title", "dc.title", "citation_title"]);
-    for (const v of Object.values(metas)) candidates.push(v);
+    for (const v of Object.values(namedMeta(html, ["og:title", "dc.title", "citation_title"]))) candidates.push(v);
   }
-  for (const c of candidates) {
-    const t = wikiCleanTitle(c);
-    if (t) return t;
-  }
+  for (const c of candidates) { const t = wikiCleanTitle(c); if (t) return t; }
   return fromUrl;
 }
 
