@@ -1648,14 +1648,8 @@ export function wikiCapitalTable(html: string, tables?: { open: string; inner: s
       if (!physical.length) continue;
       const cells = hasSpan ? takeRow(physical, pending, colCount || physical.length) : physical.map((c) => c.inner);
       if (!cols) {
-        const ths = cells.map(headerLabel);
-        if (ths.length >= 2) {
-          cols = capitalColumns(ths);
-          if (cols) {
-            colCount = cells.length;
-            continue;
-          }
-        }
+        cols = cells.length >= 2 ? capitalColumns(cells.map(headerLabel)) : undefined;
+        if (cols) colCount = cells.length;
         continue;
       }
       if (cells.length <= Math.max(cols.country, cols.capital)) continue;
@@ -1663,24 +1657,14 @@ export function wikiCapitalTable(html: string, tables?: { open: string; inner: s
       const capital = tidyCapital(cellLead(cells[cols.capital] || ""));
       if (!country || !capital || seen.has(country)) continue;
       seen.add(country);
-      capitals.push({
-        s: country,
-        p: "capital",
-        o: capital,
-        e: `capital of ${country} is ${capital}`.slice(0, 280),
-      });
-      if (cols.continent != null && cells.length > cols.continent) {
-        const hit = continentIs(country, cellLead(cells[cols.continent]!));
-        if (hit) rest.push(hit);
-      }
+      capitals.push({ s: country, p: "capital", o: capital, e: `capital of ${country} is ${capital}`.slice(0, 280) });
+      if (cols.continent != null && cells.length > cols.continent) { const hit = continentIs(country, cellLead(cells[cols.continent]!)); if (hit) rest.push(hit); }
       if (cols.notes != null && cells.length > cols.notes) {
         const noteText = stripMarkup(cells[cols.notes]!);
         if (/^see also\b/i.test(noteText)) continue;
-        const noteCont =
-          cols.continent != null && cells.length > cols.continent ? cellLead(cells[cols.continent]!) : "";
+        const noteCont = cols.continent != null && cells.length > cols.continent ? cellLead(cells[cols.continent]!) : "";
         for (const t of capitalProse(noteText)) {
-          if (t.p !== "capital" || seen.has(t.s)) continue;
-          if (/melbourne|sydney/i.test(t.o) || /melbourne|sydney/i.test(t.s)) continue;
+          if (t.p !== "capital" || seen.has(t.s) || /melbourne|sydney/i.test(t.o) || /melbourne|sydney/i.test(t.s)) continue;
           seen.add(t.s);
           capitals.push(t);
           const hit = noteCont ? continentIs(t.s, noteCont) : undefined;
