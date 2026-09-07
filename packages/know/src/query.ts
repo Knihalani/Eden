@@ -152,13 +152,8 @@ function rewriteQuery(q: string): string {
 }
 
 function capTokens(s: string, n = MAX_TOKENS): string {
-  const parts = extract()
-    .decodeEntities(s)
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(/\s+/);
-  if (parts.length <= n) return parts.join(" ");
-  return parts.slice(0, n).join(" ");
+  const parts = extract().decodeEntities(s).replace(/\s+/g, " ").trim().split(/\s+/);
+  return (parts.length <= n ? parts : parts.slice(0, n)).join(" ");
 }
 
 function mediaWant(q: string): string | undefined {
