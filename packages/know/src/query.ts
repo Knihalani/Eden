@@ -163,14 +163,9 @@ function mediaWant(q: string): string | undefined {
 function rfcTitle(o: string, e: string): string {
   const { shortTitle } = extract();
   const clean = (s: string) => shortTitle(s.replace(/^RFC\s*\d+\s*[:\-–]\s*/i, ""));
-  const a = clean(o);
-  const b = clean(e);
-  const uri = (s: string) => /\(URI\)/i.test(s);
-  if (uri(a) && !uri(b)) return a;
-  if (uri(b) && !uri(a)) return b;
-  const wa = a.split(/\s+/).filter(Boolean).length;
-  const wb = b.split(/\s+/).filter(Boolean).length;
-  return wb > wa ? b : a;
+  const a = clean(o), b = clean(e), uri = (s: string) => /\(URI\)/i.test(s);
+  if (uri(a) !== uri(b)) return uri(a) ? a : b;
+  return b.split(/\s+/).filter(Boolean).length > a.split(/\s+/).filter(Boolean).length ? b : a;
 }
 
 function tautology(a: string, b: string): boolean {
