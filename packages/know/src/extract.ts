@@ -2781,14 +2781,7 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
     const titled =
       rfcTitleFromHtml(html, rfcNum, text, og.title || metas["citation_title"] || metas["dc.title"], scan) || line;
     const o = shortTitle(titled || "Internet standard");
-    if (!rfcGistJunk(o)) {
-      out.push({
-        s: `RFC ${rfcNum}`,
-        p: "is",
-        o,
-        e: (titled || text).slice(0, 280),
-      });
-    }
+    if (!rfcGistJunk(o)) out.push({ s: `RFC ${rfcNum}`, p: "is", o, e: (titled || text).slice(0, 280) });
     const rfcEdges = [...rfcEdgesFromText(rfcNum, text), ...(isHtml ? rfcEdgesFromXml(html, rfcNum) : [])];
     out.push(...rfcEdges);
     out.push(...rfcEdgeInverses(rfcEdges));
