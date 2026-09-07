@@ -114,9 +114,7 @@ export class AgentMemory {
     const c = compile(rec);
     const i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
-    this.compiled.push(c);
-    this.persist();
-    return rec;
+    return this.compiled.push(c), this.persist(), rec;
   }
 
   forget(id: string): boolean {
