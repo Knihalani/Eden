@@ -1886,32 +1886,18 @@ function startsAsciiCi(s: string, i: number, needleLc: string): boolean {
 function capitalProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
-  const add = (country: string, city: string, ev: string) => {
-    const s = tidyCapital(country);
-    const o = tidyCapital(city);
-    if (!s || !o || seen.has(s) || CONTINENT.test(s) || CONTINENT.test(o)) return;
-    seen.add(s);
-    out.push({ s, p: "capital", o, e: ev.slice(0, 280) });
-  };
+  const add = (country: string, city: string, ev: string) => { const s = tidyCapital(country), o = tidyCapital(city); if (!s || !o || seen.has(s) || CONTINENT.test(s) || CONTINENT.test(o)) return; seen.add(s); out.push({ s, p: "capital", o, e: ev.slice(0, 280) }); };
   const head = text.slice(0, 12_000);
   for (const needle of ["capital city of ", "capital of "]) {
     let i = 0;
     while ((i = findAsciiCi(head, needle, i)) >= 0) {
-      const afterOf = i + needle.length;
-      const country = takeProperAt(head, afterOf);
+      const afterOf = i + needle.length, country = takeProperAt(head, afterOf);
       if (country) {
         let j = skipWs(head, country.end);
-        if (startsAsciiCi(head, j, "is ")) {
-          const city = takeProperAt(head, j + 3);
-          if (city) add(country.name, city.name, head.slice(Math.max(0, i - 24), city.end));
-        }
+        if (startsAsciiCi(head, j, "is ")) { const city = takeProperAt(head, j + 3); if (city) add(country.name, city.name, head.slice(Math.max(0, i - 24), city.end)); }
       }
-      const before = head.slice(Math.max(0, i - 80), i);
-      const was = before.match(WAS_CAPITAL_RE);
-      if (was) {
-        const country2 = takeProperAt(head, afterOf);
-        if (country2) add(country2.name, was[1]!, `${was[1]} ${head.slice(i, country2.end)}`);
-      }
+      const was = head.slice(Math.max(0, i - 80), i).match(WAS_CAPITAL_RE);
+      if (was) { const country2 = takeProperAt(head, afterOf); if (country2) add(country2.name, was[1]!, `${was[1]} ${head.slice(i, country2.end)}`); }
       i += 8;
     }
   }
