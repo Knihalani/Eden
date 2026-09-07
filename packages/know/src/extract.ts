@@ -2048,16 +2048,8 @@ const RFC_CAT: Record<string, string> = {
 /** Map xml2rfc `category=` / `Category:` / `Status:` to a persistable RFC `is` object. Never the Status-of-This-Memo gist. */
 function rfcStatusObject(raw: string): string | undefined {
   const t = decodeEntities(raw).replace(/\s+/g, " ").trim().toLowerCase();
-  if (!t || t.length > 56) return undefined;
-  if (RFC_CAT[t]) return RFC_CAT[t];
-  if (/^std\b|standards?\s*track|internet\s+standard/.test(t)) return "an Internet Standard";
-  if (/proposed standard/.test(t)) return "a Proposed Standard";
-  if (/draft standard/.test(t)) return "a Draft Standard";
-  if (/best current practice|^bcp\b/.test(t)) return "a Best Current Practice";
-  if (/^info\b|informational/.test(t)) return "an Informational RFC";
-  if (/^exp\b|experimental/.test(t)) return "an Experimental RFC";
-  if (/historic/.test(t)) return "a Historic RFC";
-  return undefined;
+  if (!t || t.length > 56) return;
+  return RFC_CAT[t] || (/^std\b|standards?\s*track|internet\s+standard/.test(t) ? "an Internet Standard" : /proposed standard/.test(t) ? "a Proposed Standard" : /draft standard/.test(t) ? "a Draft Standard" : /best current practice|^bcp\b/.test(t) ? "a Best Current Practice" : /^info\b|informational/.test(t) ? "an Informational RFC" : /^exp\b|experimental/.test(t) ? "an Experimental RFC" : /historic/.test(t) ? "a Historic RFC" : undefined);
 }
 
 export function rfcStatusFromXml(xml: string, num: string): Triple[] {
