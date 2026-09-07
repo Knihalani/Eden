@@ -1987,17 +1987,8 @@ function rfcMentionsFromText(text: string): Triple[] {
 }
 
 function ianaKindFromUrl(url: string): string | undefined {
-  if (!/iana\.org/i.test(url)) return undefined;
-  if (/http-status-codes/i.test(url)) return "http";
-  if (/protocol-numbers/i.test(url)) return "protocol";
-  if (/media-types/i.test(url)) return "media";
-  if (/uri-schemes/i.test(url)) return "scheme";
-  if (/http-methods/i.test(url)) return "method";
-  if (/character-sets/i.test(url)) return "charset";
-  if (/http-fields|message-headers/i.test(url)) return "header";
-  if (/dns-parameters/i.test(url)) return "dns";
-  if (/well-known-uris/i.test(url)) return "wellknown";
-  return undefined;
+  if (!/iana\.org/i.test(url)) return;
+  return /http-status-codes/i.test(url) ? "http" : /protocol-numbers/i.test(url) ? "protocol" : /media-types/i.test(url) ? "media" : /uri-schemes/i.test(url) ? "scheme" : /http-methods/i.test(url) ? "method" : /character-sets/i.test(url) ? "charset" : /http-fields|message-headers/i.test(url) ? "header" : /dns-parameters/i.test(url) ? "dns" : /well-known-uris/i.test(url) ? "wellknown" : undefined;
 }
 
 function xmlTag(block: string, tag: string): string {
