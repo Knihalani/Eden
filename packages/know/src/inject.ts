@@ -78,17 +78,10 @@ function rfcRelationQuestion(text: string): boolean {
 }
 
 export function subjectMentioned(text: string, fact: string): boolean {
-  const used = /^(.+?) is used for /i.exec(fact);
-  const edge = /^(RFC\s+\d{1,5})\s+(?:obsoletes|updates|is obsoleted by|is updated by)\b/i.exec(fact);
-  const subject = (used?.[1] || edge?.[1] || "").trim();
+  const subject = (/^(.+?) is used for /i.exec(fact)?.[1] || /^(RFC\s+\d{1,5})\s+(?:obsoletes|updates|is obsoleted by|is updated by)\b/i.exec(fact)?.[1] || "").trim();
   if (!subject || subject.length < 2) return false;
-  if (/^RFC\s+\d/i.test(subject)) {
-    if (rfcRelationQuestion(text)) return false;
-    const n = subject.replace(/^RFC\s+/i, "");
-    return new RegExp(`\\brfc[\\s#:-]*${n}\\b`, "i").test(text);
-  }
-  const key = subject.toLowerCase();
-  return (TOOL_ALIASES[key] || [subject]).some((a) => boundMention(text, a));
+  if (/^RFC\s+\d/i.test(subject)) return rfcRelationQuestion(text) ? false : new RegExp(`\\brfc[\\s#:-]*${subject.replace(/^RFC\s+/i, "")}\\b`, "i").test(text);
+  return (TOOL_ALIASES[subject.toLowerCase()] || [subject]).some((a) => boundMention(text, a));
 }
 
 export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectCard | undefined {
