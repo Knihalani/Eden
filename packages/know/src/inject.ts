@@ -117,8 +117,7 @@ export function subjectMentioned(text: string, fact: string): boolean {
 export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectCard | undefined {
   if (process.env.EDEN_KNOW === "0") return undefined;
   try {
-    const text = input.text || "";
-    const hasRfc = text.indexOf("RFC") >= 0 || text.indexOf("rfc") >= 0;
+    const text = input.text || "", hasRfc = /rfc/i.test(text);
     const copula: string[] = [];
     if (hasRfc && text.indexOf(" is ") >= 0) {
       const re = /\bRFC\s+is\s+(\d{1,5})\b/gi;
