@@ -315,13 +315,7 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
       parts.push(" ");
       continue;
     }
-    if (
-      !isClose &&
-      (open.includes("mw-navigation") ||
-        open.includes('role="navigation"') ||
-        open.includes("role='navigation'") ||
-        (open.includes("class=") && /class=["'][^"']*\b(?:references|navbox|mw-jump-link|vector-menu)\b/i.test(open)))
-    ) {
+    if (!isClose && (open.includes("mw-navigation") || open.includes('role="navigation"') || open.includes("role='navigation'") || (open.includes("class=") && /class=["'][^"']*\b(?:references|navbox|mw-jump-link|vector-menu)\b/i.test(open)))) {
       i = closeTagFrom(html, gt + 1, `</${name}>`);
       parts.push(" ");
       continue;
