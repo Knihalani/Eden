@@ -176,8 +176,7 @@ function tautology(a: string, b: string): boolean {
 
 function articleFor(word: string): "a" | "an" {
   const w = word.trim();
-  if (/^(html|http|xml|svg|spdx|ip[46]?|iana)\b/i.test(w) || /^[aeiou]/i.test(w)) return "an";
-  return "a";
+  return /^(html|http|xml|svg|spdx|ip[46]?|iana)\b/i.test(w) || /^[aeiou]/i.test(w) ? "an" : "a";
 }
 
 function countryForCard(s: string): string {
