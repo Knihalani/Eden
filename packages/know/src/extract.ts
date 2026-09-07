@@ -2763,28 +2763,11 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
   const tr = url.match(/w3\.org\/TR\/([^/?#]+)/i);
   if (tr) {
     const slug = tr[1]!.replace(/\/+$/, "");
-    const htmlTitle = (scan?.title || html.match(/<title>([^<]{4,160})<\/title>/i)?.[1] || "")
-      .replace(/\s*[-–|]\s*W3C[\s\S]*$/i, "")
-      .trim();
-    const h1 = (scan?.h1[0] ? innerText(scan.h1[0]!) : "") ||
-      html
-        .match(/<h1[^>]*>([\s\S]{4,180}?)<\/h1>/i)?.[1]
-        ?.replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-    const abs =
-      html.match(/id=["']abstract["'][\s\S]{0,240}<p[^>]*>([^<]{16,140})/i)?.[1] ||
-      text.match(/Abstract\s+(.{16,140}?)(?:\s+Status|\s+This document)/i)?.[1];
-    const name = `W3C ${slug}`;
+    const htmlTitle = (scan?.title || html.match(/<title>([^<]{4,160})<\/title>/i)?.[1] || "").replace(/\s*[-–|]\s*W3C[\s\S]*$/i, "").trim();
+    const h1 = (scan?.h1[0] ? innerText(scan.h1[0]!) : "") || html.match(/<h1[^>]*>([\s\S]{4,180}?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const abs = html.match(/id=["']abstract["'][\s\S]{0,240}<p[^>]*>([^<]{16,140})/i)?.[1] || text.match(/Abstract\s+(.{16,140}?)(?:\s+Status|\s+This document)/i)?.[1];
     const label = shortTitle(h1 || htmlTitle || slug.replace(/-/g, " "));
-    if (label) {
-      out.push({
-        s: name,
-        p: "is",
-        o: shortTitle(h1 || htmlTitle || abs || label),
-        e: (htmlTitle || abs || label).slice(0, 280),
-      });
-    }
+    if (label) out.push({ s: `W3C ${slug}`, p: "is", o: shortTitle(h1 || htmlTitle || abs || label), e: (htmlTitle || abs || label).slice(0, 280) });
   }
   if (og.title && og.description && og.description.length <= 80 && (rfcUrl || tr)) {
     out.push({
