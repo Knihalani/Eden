@@ -186,12 +186,7 @@ function countryForCard(s: string): string {
 
 function rankHits(q: string, hits: Hit[]): Hit[] {
   const mediaQ = mediaWant(q);
-  let list = mediaQ
-    ? hits.filter((h) => {
-        const m = ianaMedia(h.s) || "";
-        return m === mediaQ || (mediaQ === "application/json" && m.endsWith("/json"));
-      })
-    : hits.slice();
+  const list = mediaQ ? hits.filter((h) => { const m = ianaMedia(h.s) || ""; return m === mediaQ || (mediaQ === "application/json" && m.endsWith("/json")); }) : hits.slice();
   if (mediaQ && !list.length) return [];
   const ql = q.trim().toLowerCase();
   const wantObs = /\bobsolet/.test(ql);
@@ -205,18 +200,13 @@ function rankHits(q: string, hits: Hit[]): Hit[] {
     if (techniqueQ && h.p === "is" && h.o.toLowerCase().startsWith("used for")) {
       const ot = toks(h.o);
       let n = 0;
-      for (const t of techRest) {
-        if (ot.includes(t)) n++;
-        else if (t.length >= 4 && ot.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4)) n++;
-      }
+      for (const t of techRest) if (ot.includes(t) || (t.length >= 4 && ot.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4))) n++;
       return -8 - n - Math.min(h.o.length, 80) / 80;
     }
     if (mediaQ && (ianaMedia(h.s) || "") === mediaQ) return 0;
     if (sl === ql || sl === `rfc ${ql.replace(/^rfc\s+/, "")}`) return h.p === "is" ? 0 : 0.4;
     if (sl === `iana method ${ql}` || sl === `iana http ${ql}` || sl === `iana header ${ql}` || sl === `iana charset ${ql}` || sl === `iana scheme ${ql}` || sl === `spdx ${ql}` || sl === `iana dns ${ql}` || sl === `iana well-known ${ql}` || (/^utf-?8$/i.test(ql) && sl === "iana charset utf-8")) return 0;
-    if (h.p === "capital") return 1;
-    if (h.p === "is") return 2;
-    return 3;
+    return h.p === "capital" ? 1 : h.p === "is" ? 2 : 3;
   };
   return list.sort((a, b) => score(a) - score(b));
 }
