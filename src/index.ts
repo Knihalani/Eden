@@ -80,8 +80,7 @@ function extractDurable(blob: string): string[] {
 }
 
 function compile(rec: MemoryRecord): Compiled {
-  const needles = [...new Set([...rec.tags.map((t) => t.toLowerCase()), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])];
-  return { rec, needles };
+  return { rec, needles: [...new Set([...rec.tags, ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] };
 }
 
 function load(path: string): Compiled[] {
