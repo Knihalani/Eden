@@ -212,12 +212,8 @@ function rankHits(q: string, hits: Hit[]): Hit[] {
       return -8 - n - Math.min(h.o.length, 80) / 80;
     }
     if (mediaQ && (ianaMedia(h.s) || "") === mediaQ) return 0;
-    if (sl === ql) return h.p === "is" ? 0 : 0.4;
-    if (sl === `iana method ${ql}` || sl === `iana http ${ql}` || sl === `iana header ${ql}`) return 0;
-    if (sl === `iana charset ${ql}` || sl === `iana scheme ${ql}` || sl === `spdx ${ql}`) return 0;
-    if (/^utf-?8$/i.test(ql) && sl === "iana charset utf-8") return 0;
-    if (sl === `iana dns ${ql}` || sl === `iana well-known ${ql}`) return 0;
-    if (sl === `rfc ${ql.replace(/^rfc\s+/, "")}`) return h.p === "is" ? 0 : 0.4;
+    if (sl === ql || sl === `rfc ${ql.replace(/^rfc\s+/, "")}`) return h.p === "is" ? 0 : 0.4;
+    if (sl === `iana method ${ql}` || sl === `iana http ${ql}` || sl === `iana header ${ql}` || sl === `iana charset ${ql}` || sl === `iana scheme ${ql}` || sl === `spdx ${ql}` || sl === `iana dns ${ql}` || sl === `iana well-known ${ql}` || (/^utf-?8$/i.test(ql) && sl === "iana charset utf-8")) return 0;
     if (h.p === "capital") return 1;
     if (h.p === "is") return 2;
     return 3;
