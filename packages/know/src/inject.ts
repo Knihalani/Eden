@@ -118,17 +118,12 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
   if (process.env.EDEN_KNOW === "0") return undefined;
   try {
     const text = input.text || "", hasRfc = /rfc/i.test(text);
-    const copula: string[] = [];
     if (hasRfc && text.indexOf(" is ") >= 0) {
       const re = /\bRFC\s+is\s+(\d{1,5})\b/gi;
       for (let m; (m = re.exec(text)); ) {
-        const q = hotStaleQuery(m[1]!);
-        if (q && !copula.includes(q)) copula.push(q);
+        const q = hotStaleQuery(m[1]!), card = q ? factFor(q, store) : undefined;
+        if (card && !subjectMentioned(text, card.fact)) return card;
       }
-    }
-    for (const cq of copula) {
-      const card = factFor(cq, store);
-      if (card && !subjectMentioned(text, card.fact)) return card;
     }
     const need = detectNeed(input, { skipIdent: true });
     const queries =
