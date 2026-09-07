@@ -2081,30 +2081,15 @@ export function rfcTitleFromHtml(html: string, num: string, text: string, ogTitl
   const rfcPrefix = new RegExp(`^RFC\\s*${num}\\s*[:\\-–]?\\s*`, "i");
   if (scan) {
     for (const s of scan.spanH1) candidates.push(innerText(s));
-    for (const h of scan.h1) {
-      let t = innerText(h).replace(rfcPrefix, "").trim();
-      if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t);
-    }
-    if (scan.title) {
-      const t = innerText(scan.title).replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim();
-      if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t);
-    }
+    for (const h of scan.h1) { const t = innerText(h).replace(rfcPrefix, "").trim(); if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t); }
+    if (scan.title) { const t = innerText(scan.title).replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim(); if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t); }
     if (scan.metas["citation_title"]) candidates.push(scan.metas["citation_title"]);
     if (scan.metas["dc.title"]) candidates.push(scan.metas["dc.title"]);
   } else {
-    for (const m of html.matchAll(/<span\b[^>]*class="[^"]*\bh1\b[^"]*"[^>]*>([\s\S]{4,200}?)<\/span>/gi)) {
-      candidates.push(innerText(m[1]!));
-    }
-    for (const m of html.matchAll(/<h1\b[^>]*>([\s\S]{2,240}?)<\/h1>/gi)) {
-      let t = innerText(m[1]!);
-      t = t.replace(rfcPrefix, "").trim();
-      if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t);
-    }
+    for (const m of html.matchAll(/<span\b[^>]*class="[^"]*\bh1\b[^"]*"[^>]*>([\s\S]{4,200}?)<\/span>/gi)) candidates.push(innerText(m[1]!));
+    for (const m of html.matchAll(/<h1\b[^>]*>([\s\S]{2,240}?)<\/h1>/gi)) { const t = innerText(m[1]!).replace(rfcPrefix, "").trim(); if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t); }
     const title = html.match(/<title\b[^>]*>([\s\S]{4,240}?)<\/title>/i)?.[1];
-    if (title) {
-      const t = innerText(title).replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim();
-      if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t);
-    }
+    if (title) { const t = innerText(title).replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim(); if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t); }
     const metas = namedMeta(html, ["citation_title", "dc.title", "dc.identifier"]);
     if (metas["citation_title"]) candidates.push(metas["citation_title"]);
     if (metas["dc.title"]) candidates.push(metas["dc.title"]);
@@ -2114,10 +2099,7 @@ export function rfcTitleFromHtml(html: string, num: string, text: string, ogTitl
   const colon = text.match(new RegExp(`\\bRFC\\s*${num}\\s*[:\\-–]\\s*([A-Z][^\\n.]{8,80})`, "i"));
   if (colon) candidates.push(colon[1]!.trim());
   if (ogTitle) candidates.push(ogTitle);
-  for (const c of candidates) {
-    const o = shortTitle(c);
-    if (o.length >= 8 && !rfcGistJunk(o) && !/^RFC\s*\d+$/i.test(o) && !/^Editor$/i.test(o)) return o;
-  }
+  for (const c of candidates) { const o = shortTitle(c); if (o.length >= 8 && !rfcGistJunk(o) && !/^RFC\s*\d+$/i.test(o) && !/^Editor$/i.test(o)) return o; }
   return undefined;
 }
 
