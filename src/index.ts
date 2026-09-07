@@ -139,7 +139,24 @@ export class AgentMemory {
   }
 
   relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
-    return ((hay) => this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project)).map((c) => ({ rec: c.rec, n: c.needles.reduce((a, x) => a + +hay.has(x), 0) })).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec))(queryHay(text));
+    const hay = queryHay(text);
+    const rows = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
+    const N = rows.length || 1, df = new Map<string, number>();
+    for (const c of rows) {
+      const seen = new Set<string>();
+      for (const x of c.needles) if (hay.has(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); }
+    }
+    return rows.map((c) => {
+      let n = 0;
+      const seen = new Set<string>();
+      for (const x of c.needles) {
+        if (!hay.has(x) || seen.has(x)) continue;
+        seen.add(x);
+        const d = df.get(x) || 0;
+        n += Math.log((N - d + 0.5) / (d + 0.5) + 1);
+      }
+      return { rec: c.rec, n };
+    }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
   notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
