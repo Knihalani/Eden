@@ -457,9 +457,8 @@ function buildTyped(t: string): FactCard | undefined {
   if (cached) return cached;
 
   if (n >= 9 && t.slice(0, 9).toLowerCase() === "used for ") {
-    const tool = t.slice(9).trim().toLowerCase();
-    const fact = HOT_TECH[tool];
-    if (fact) return keep(t, internFact(`used for ${tool}`, fact));
+    const fact = HOT_TECH[t.slice(9).trim().toLowerCase()];
+    if (fact) return keep(t, internFact(t.toLowerCase(), fact));
   }
 
   if (n >= 7 && n <= 10 && (t.startsWith("RFC ") || t.startsWith("rfc "))) {
