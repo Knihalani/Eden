@@ -1995,14 +1995,11 @@ function mediaFromText(text: string): Triple[] {
 }
 
 function mediaFromUrl(url: string): Triple[] {
-  const m = url.match(
-    /\/media-types\/((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9+.-]+)/i,
-  );
+  const m = url.match(/\/media-types\/((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9+.-]+)/i);
   if (!m) return [];
   const typ = m[1]!.toLowerCase();
   if (!MEDIA_TAB.has(typ)) return [];
-  const sub = typ.split("/")[1] || "";
-  const o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
+  const sub = typ.split("/")[1] || "", o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
   return [{ s: `IANA media ${typ}`, p: "is", o, e: typ }];
 }
 
