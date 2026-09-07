@@ -568,57 +568,35 @@ function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): voi
   const name = ldText(o.name ?? o.headline ?? o.alternateName).slice(0, 160);
   if (/Country|SovereignState|Nation\b/i.test(typ)) {
     const country = name;
-    const city = tidyCapital(ldText(o.capital));
-    if (country.length >= 2 && country.length <= 40 && city) {
-      into.push({ s: country, p: "capital", o: city, e: `capital of ${country} is ${city}`.slice(0, 280) });
-    }
     if (country.length >= 2 && country.length <= 40) {
+      const city = tidyCapital(ldText(o.capital));
+      if (city) into.push({ s: country, p: "capital", o: city, e: `capital of ${country} is ${city}`.slice(0, 280) });
       const iso = tidyIso(ldText(o.isoCode ?? o.iso3166 ?? o.iso3166Code));
       if (iso) into.push({ s: country, p: "id", o: iso, e: `${country} ISO 3166-1 alpha-2 ${iso}`.slice(0, 280) });
       const langs = o.officialLanguage;
-      const langNodes = Array.isArray(langs) ? langs : langs != null ? [langs] : [];
-      for (const node of langNodes.slice(0, 4)) {
+      for (const node of (Array.isArray(langs) ? langs : langs != null ? [langs] : []).slice(0, 4)) {
         const lang = tidyProper(ldText(node));
         if (!lang) continue;
         const oLang = `an official language of ${country}`;
-        if (oLang.length >= 8 && oLang.length <= 72) {
-          into.push({ s: lang, p: "is", o: oLang, e: oLang.slice(0, 280) });
-        }
+        if (oLang.length >= 8 && oLang.length <= 72) into.push({ s: lang, p: "is", o: oLang, e: oLang.slice(0, 280) });
       }
       const aka = tidyProper(ldText(o.alternateName ?? o.officialName ?? o.officialname));
       if (aka && aka.toLowerCase() !== country.toLowerCase()) {
         const oOff = `the official name of ${country}`;
-        if (oOff.length >= 8 && oOff.length <= 72) {
-          into.push({ s: aka, p: "is", o: oOff, e: oOff.slice(0, 280) });
-        }
+        if (oOff.length >= 8 && oOff.length <= 72) into.push({ s: aka, p: "is", o: oOff, e: oOff.slice(0, 280) });
       }
       const cur = tidyProper(ldText(o.currency));
       if (cur) {
         const oCur = `the currency of ${country}`;
-        if (oCur.length >= 8 && oCur.length <= 72) {
-          into.push({ s: cur, p: "is", o: oCur, e: oCur.slice(0, 280) });
-        }
+        if (oCur.length >= 8 && oCur.length <= 72) into.push({ s: cur, p: "is", o: oCur, e: oCur.slice(0, 280) });
       }
       const tel = ldText(o.telephone ?? o.telephonePrefix);
       if (tel) {
         const code = tel.replace(/[^\d+]/g, " ").trim().split(/\s+/)[0];
-        if (code && /^\+?\d{1,4}$/.test(code)) {
-          into.push({
-            s: country,
-            p: "id",
-            o: code.startsWith("+") ? code : `+${code}`,
-            e: `${country} calling code ${code}`.slice(0, 280),
-          });
-        }
+        if (code && /^\+?\d{1,4}$/.test(code)) into.push({ s: country, p: "id", o: code.startsWith("+") ? code : `+${code}`, e: `${country} calling code ${code}`.slice(0, 280) });
       }
       const desc = ldText(o.description ?? o.abstract);
-      if (
-        desc &&
-        desc.length >= 8 &&
-        desc.length <= 72 &&
-        !looksLikeCode(desc) &&
-        country.toLowerCase() !== desc.toLowerCase()
-      ) {
+      if (desc && desc.length >= 8 && desc.length <= 72 && !looksLikeCode(desc) && country.toLowerCase() !== desc.toLowerCase()) {
         into.push({ s: country, p: "is", o: desc.slice(0, 72), e: desc.slice(0, 280) });
       }
       const pop = tidyPopulation(ldText(o.population ?? o.populationEstimate ?? o.census));
@@ -629,16 +607,12 @@ function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): voi
       if (place) {
         const pretty = CONTINENT.test(place) ? place.replace(/\b[a-z]/g, (c) => c.toUpperCase()) : place;
         const oPlace = `a country in ${pretty}`;
-        if (oPlace.length >= 8 && oPlace.length <= 72) {
-          into.push({ s: country, p: "is", o: oPlace, e: oPlace.slice(0, 280) });
-        }
+        if (oPlace.length >= 8 && oPlace.length <= 72) into.push({ s: country, p: "is", o: oPlace, e: oPlace.slice(0, 280) });
       }
       const legis = tidyProper(ldText(o.legislature));
       if (legis) {
         const oLeg = `the legislature of ${country}`;
-        if (oLeg.length >= 8 && oLeg.length <= 72) {
-          into.push({ s: legis, p: "is", o: oLeg, e: oLeg.slice(0, 280) });
-        }
+        if (oLeg.length >= 8 && oLeg.length <= 72) into.push({ s: legis, p: "is", o: oLeg, e: oLeg.slice(0, 280) });
       }
       const geo = o.geo && typeof o.geo === "object" && !Array.isArray(o.geo) ? (o.geo as Record<string, unknown>) : undefined;
       const lat = ldText(o.latitude ?? geo?.latitude);
