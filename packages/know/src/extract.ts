@@ -1993,21 +1993,10 @@ function rfcMentionsFromText(text: string): Triple[] {
     if (seen.has(num)) return;
     const o = shortTitle(title.replace(/^RFC\s*\d+\s*[:\-–]?\s*/i, ""));
     if (o.length < 8 || rfcGistJunk(o) || /^RFC\s*\d+$/i.test(o) || /^Editor$/i.test(o)) return;
-    seen.add(num);
-    out.push({ s: `RFC ${num}`, p: "is", o, e: ev.slice(0, 280) });
+    seen.add(num); out.push({ s: `RFC ${num}`, p: "is", o, e: ev.slice(0, 280) });
   };
   const head = text.slice(0, 48_000);
-  for (const m of head.matchAll(/\bRFC\s*(\d{3,5})\s*[:\-–]\s*([A-Z][^\n.]{8,80})/g)) {
-    add(m[1]!, m[2]!, m[0]!);
-  }
-  for (const m of head.matchAll(
-    /\bRFC\s*(\d{3,5})\s+(?!is\b|was\b|defines\b|specifies\b|obsoletes\b|updates\b|and\b)([A-Z][A-Za-z][^.\n]{6,70})/g,
-  )) {
-    add(m[1]!, m[2]!, m[0]!);
-  }
-  for (const m of head.matchAll(/\bRFC\s*(\d{3,5})\s+\(([A-Z][^)]{8,80})\)/g)) {
-    add(m[1]!, m[2]!, m[0]!);
-  }
+  for (const re of [/\bRFC\s*(\d{3,5})\s*[:\-–]\s*([A-Z][^\n.]{8,80})/g, /\bRFC\s*(\d{3,5})\s+(?!is\b|was\b|defines\b|specifies\b|obsoletes\b|updates\b|and\b)([A-Z][A-Za-z][^.\n]{6,70})/g, /\bRFC\s*(\d{3,5})\s+\(([A-Z][^)]{8,80})\)/g]) for (const m of head.matchAll(re)) add(m[1]!, m[2]!, m[0]!);
   return out.slice(0, 64);
 }
 
