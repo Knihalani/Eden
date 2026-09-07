@@ -305,11 +305,7 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
     if (!isClose && (name === "script" || name === "style")) {
       const isLd = !textOnly && name === "script" && open.includes("ld+json");
       const end = closeTagFrom(html, gt + 1, `</${name}>`);
-      if (isLd) {
-        const raw = html.slice(gt + 1, Math.max(gt + 1, end - 9));
-        const parsed = parseLdJson(raw);
-        if (parsed !== undefined) jsonLd.push(parsed);
-      }
+      if (isLd) { const parsed = parseLdJson(html.slice(gt + 1, Math.max(gt + 1, end - 9))); if (parsed !== undefined) jsonLd.push(parsed); }
       i = end;
       parts.push(" ");
       continue;
