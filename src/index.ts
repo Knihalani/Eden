@@ -169,7 +169,7 @@ export class AgentMemory {
 
   relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
     const hay = new Set(tokList(text));
-    return this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project)).map((c) => ({ rec: c.rec, n: c.needles.reduce((a, x) => a + (hay.has(x) ? 1 : 0), 0) })).filter((x) => x.n).sort((a, b) => Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.n - a.n || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
+    return this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project)).map((c) => ({ rec: c.rec, n: c.needles.reduce((a, x) => a + (hay.has(x) ? 1 : 0), 0) })).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
   notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
