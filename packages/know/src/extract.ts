@@ -2014,12 +2014,11 @@ export function rfcXmlNumber(xml: string): string | undefined {
 }
 
 export function rfcTitleFromXml(xml: string): string | undefined {
-  if (!/<rfc\b/i.test(xml) && !/<docName[\s>]/i.test(xml)) return undefined;
+  if (!/<rfc\b/i.test(xml) && !/<docName[\s>]/i.test(xml)) return;
   const el = xml.match(/<title\b[^>]*>([\s\S]{4,240}?)<\/title>/i)?.[1];
-  if (!el) return undefined;
+  if (!el) return;
   const o = shortTitle(innerText(el).replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, ""));
-  if (o.length >= 8 && !rfcGistJunk(o) && !/^RFC\s*\d+$/i.test(o) && !/^Editor$/i.test(o)) return o;
-  return undefined;
+  return o.length >= 8 && !rfcGistJunk(o) && !/^RFC\s*\d+$/i.test(o) && !/^Editor$/i.test(o) ? o : undefined;
 }
 
 export function rfcEdgesFromXml(xml: string, num: string): Triple[] {
