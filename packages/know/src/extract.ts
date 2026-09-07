@@ -1957,23 +1957,18 @@ function shortDescObject(desc: string): string | undefined {
 /** Wikipedia article `is` from short description / lead sentence. Persistable only. */
 export function wikiLeadIs(url: string, html: string, text: string, scan?: HtmlScan): Triple | undefined {
   const name = wikiSubject(url, html, scan);
-  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return undefined;
+  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return;
   const tryObj = (oRaw: string): Triple | undefined => {
     const o = stripMarkup(oRaw).replace(/\s+/g, " ").trim();
-    if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return undefined;
-    if (/^the capital\b|^capital of\b|^official language/i.test(o)) return undefined;
-    if (/^(and largest city|ISO |Official |Currency|Capital)\b/i.test(o)) return undefined;
-    if (name.toLowerCase() === o.toLowerCase()) return undefined;
-    const t: Triple = { s: name, p: "is", o, e: o.slice(0, 280) };
-    return t;
+    if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return;
+    if (/^the capital\b|^capital of\b|^official language/i.test(o) || /^(and largest city|ISO |Official |Currency|Capital)\b/i.test(o) || name.toLowerCase() === o.toLowerCase()) return;
+    return { s: name, p: "is", o, e: o.slice(0, 280) };
   };
   const short = scan?.shortDescription || (html ? wikiShortDescription(html) : undefined);
   if (short) {
     const o = shortDescObject(short);
-    if (o) {
-      const hit = tryObj(o);
-      if (hit) return hit;
-    }
+    const hit = o ? tryObj(o) : undefined;
+    if (hit) return hit;
   }
   const metas = scan ? scan.metas : html ? namedMeta(html, ["description", "og:description", "dc.description"]) : {};
   const og = scan ? scan.og : html ? openGraph(html) : {};
@@ -1982,18 +1977,12 @@ export function wikiLeadIs(url: string, html: string, text: string, scan?: HtmlS
   );
   const nameRe = escapeRe(name);
   const lead = new RegExp(`(?:^|[.!?\\n]\\s+)${nameRe}\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`, "i");
-  const official = new RegExp(
-    `(?:^|[.!?\\n]\\s+)${nameRe},\\s+officially\\s+[^,.]{2,80},\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`,
-    "i",
-  );
+  const official = new RegExp(`(?:^|[.!?\\n]\\s+)${nameRe},\\s+officially\\s+[^,.]{2,80},\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`, "i");
   for (const c of candidates) {
     const blob = `. ${c.trim()}`;
-    const m = blob.match(official) || blob.match(lead);
-    if (!m) continue;
-    const hit = tryObj(m[1]!);
+    const hit = tryObj((blob.match(official) || blob.match(lead))?.[1] || "");
     if (hit) return hit;
   }
-  return undefined;
 }
 
 function findAsciiCi(hay: string, needleLc: string, from: number): number {
