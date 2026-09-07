@@ -1207,11 +1207,7 @@ function cellLead(raw: string): string {
 }
 
 function headerLabel(raw: string): string {
-  return decodeEntities(raw.replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^[•·*]+\s*/, "")
-    .toLowerCase();
+  return lab(decodeEntities(raw.replace(/<[^>]+>/g, " "))).replace(/^[•·*]+\s*/, "");
 }
 
 function lab(s: string): string { return s.replace(/\s+/g, " ").trim().toLowerCase(); }
