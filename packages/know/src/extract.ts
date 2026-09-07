@@ -497,20 +497,12 @@ export function qualityUrlSql(col = "url"): string {
  */
 export function frozenEncyclopedia(t: { s: string; p: string; o: string; e?: string }): boolean {
   if (t.p === "capital") return true;
-  if (t.p === "obsoletes" || t.p === "updates") return false;
-  if (t.p === "version") return false;
+  if (t.p === "obsoletes" || t.p === "updates" || t.p === "version") return false;
   if (t.p === "id") {
     const o = t.o.trim();
-    if (/^[A-Z]{2}$/.test(o)) return true;
-    if (/^\+\d{1,4}$/.test(o) || /^\.[A-Za-z]{2,8}$/.test(o)) return true;
-    if (/^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/.test(o)) return true;
-    if (/\b(ISO 3166|calling code|population | area |geo )/i.test(t.e || "")) return true;
-    return false;
+    return /^[A-Z]{2}$/.test(o) || /^\+\d{1,4}$/.test(o) || /^\.[A-Za-z]{2,8}$/.test(o) || /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/.test(o) || /\b(ISO 3166|calling code|population | area |geo )/i.test(t.e || "");
   }
-  if (t.p !== "is") return false;
-  if (/^used for /i.test(t.o)) return false;
-  if (/^(obsoleted|updated) by\b/i.test(t.o)) return false;
-  return true;
+  return t.p === "is" && !/^used for /i.test(t.o) && !/^(obsoleted|updated) by\b/i.test(t.o);
 }
 
 /** Catalog origin: hostname (or subdomain) of a needle, not a URI substring. `github.com/whatwg` also checks path. */
