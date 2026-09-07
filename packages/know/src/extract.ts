@@ -1705,21 +1705,14 @@ function countryFactsFromScope(scope: string): Triple[] {
 }
 
 function structuredCountryCapitals(html: string, slices?: string[]): Triple[] {
+  const out: Triple[] = [];
   if (slices) {
-    const out: Triple[] = [];
-    for (const scope of slices) {
-      if (!/Country/i.test(scope)) continue;
-      if (!/(?:itemtype|typeof)\s*=\s*["'][^"']*Country/i.test(scope)) continue;
-      out.push(...countryFactsFromScope(scope));
-    }
+    for (const scope of slices) if (/Country/i.test(scope) && /(?:itemtype|typeof)\s*=\s*["'][^"']*Country/i.test(scope)) out.push(...countryFactsFromScope(scope));
     return out;
   }
-  const out: Triple[] = [];
   const re = /(?:itemtype|typeof)\s*=\s*["'][^"']*Country[^"']*["']/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    out.push(...countryFactsFromScope(html.slice(Math.max(0, m.index - 120), m.index + 4000)));
-  }
+  while ((m = re.exec(html))) out.push(...countryFactsFromScope(html.slice(Math.max(0, m.index - 120), m.index + 4000)));
   return out;
 }
 
