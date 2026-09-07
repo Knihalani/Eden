@@ -2191,16 +2191,14 @@ function tidySoftwareObject(raw: string): string | undefined {
   if (o.length > 72) o = o.slice(0, 72).replace(/\s+\S*$/, "").trim();
   o = o.replace(/[,;:\s]+$/g, "").trim();
   if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return;
-  if (!/^(a|an|the)\s/i.test(o) && /^(runtime|compiler|bundler|framework|library|language)\b/i.test(o)) o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o}`;
-  return o;
+  return !/^(a|an|the)\s/i.test(o) && /^(runtime|compiler|bundler|framework|library|language)\b/i.test(o) ? `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o}` : o;
 }
 
 export function softwareLeadIs(url: string, html: string, text: string, scan?: HtmlScan): Triple | undefined {
   if (!toolDocsUrl(url)) return;
   const name = softwareName(url, scan);
   if (!name || name.length < 2 || name.length > 40) return;
-  const metas = scan?.metas ?? (html ? namedMeta(html, ["description", "og:description"]) : {});
-  const og = scan?.og ?? (html ? openGraph(html) : {});
+  const metas = scan?.metas ?? (html ? namedMeta(html, ["description", "og:description"]) : {}), og = scan?.og ?? (html ? openGraph(html) : {});
   for (const c of [og.description, metas["og:description"], metas.description, text]) {
     if (typeof c !== "string" || c.length < 8) continue;
     const o = tidySoftwareObject(c);
