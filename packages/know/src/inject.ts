@@ -68,9 +68,7 @@ const TOOL_ALIASES: Record<string, string[]> = {
 };
 
 function boundMention(text: string, token: string): boolean {
-  if (!token) return false;
-  const pat = token.replace(SUBJECT_ESC, "\\$&");
-  return new RegExp(`(?:^|[^A-Za-z0-9.+-])${pat}(?:[^A-Za-z0-9.+-]|$)`, "i").test(text);
+  return !!token && new RegExp(`(?:^|[^A-Za-z0-9.+-])${token.replace(SUBJECT_ESC, "\\$&")}(?:[^A-Za-z0-9.+-]|$)`, "i").test(text);
 }
 
 export function subjectMentioned(text: string, fact: string): boolean {
