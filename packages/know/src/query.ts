@@ -439,11 +439,6 @@ function keep(t: string, c: FactCard | undefined): FactCard | undefined {
   return c;
 }
 
-/**
- * O(1) typed flash from synth / names / rfcTitleHot. Exact identifier only.
- * Extra tokens do not match a shape and stay unknown on knowQuery (pack path).
- * Does not open rfc-titles.bin — pack search covers RFCs the hot table lacks.
- */
 const HOT_TECH: Record<string, string> = {
   jq: "jq is used for filtering JSON on the command line.",
   ripgrep: "ripgrep is used for searching code quickly.",
