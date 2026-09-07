@@ -548,10 +548,7 @@ export function knowQuery(q: string, store?: KnowSearch) {
   if (!hits.length && /^used for /i.test(nq)) {
     for (const alt of techniqueQueryFallbacks(nq)) {
       hits = searchHits(alt);
-      if (hits.length) {
-        query = alt;
-        break;
-      }
+      if (hits.length) { query = alt; break; }
     }
   }
   return formatCard(query, hits);
