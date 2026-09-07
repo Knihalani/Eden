@@ -401,11 +401,8 @@ export function jsonLdBlocks(html: string): unknown[] {
 
 export function openGraph(html: string): Record<string, string> {
   const og: Record<string, string> = {};
-  const re = /<meta[^>]+(?:property|name)=["']og:([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) og[m[1]!.toLowerCase()] = m[2]!;
-  const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']og:([^"']+)["'][^>]*>/gi;
-  while ((m = re2.exec(html))) og[m[2]!.toLowerCase()] = m[1]!;
+  for (const m of html.matchAll(/<meta[^>]+(?:property|name)=["']og:([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi)) og[m[1]!.toLowerCase()] = m[2]!;
+  for (const m of html.matchAll(/<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']og:([^"']+)["'][^>]*>/gi)) og[m[2]!.toLowerCase()] = m[1]!;
   return og;
 }
 
