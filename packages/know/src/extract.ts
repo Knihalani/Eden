@@ -2104,13 +2104,11 @@ export function rfcTitleFromHtml(html: string, num: string, text: string, ogTitl
 }
 
 function rfcNumsListed(raw: string, self: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+  const seen = new Set<string>(), out: string[] = [];
   for (const m of raw.matchAll(/\b(?:RFC\s*)?(\d{3,5})\b/gi)) {
     const n = m[1]!;
     if (n === self || seen.has(n)) continue;
-    seen.add(n);
-    out.push(n);
+    seen.add(n); out.push(n);
   }
   return out;
 }
