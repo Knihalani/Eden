@@ -2055,16 +2055,11 @@ function rfcStatusObject(raw: string): string | undefined {
 export function rfcStatusFromXml(xml: string, num: string): Triple[] {
   const out: Triple[] = [];
   const tag = xml.match(/<rfc\b([^>]*)>/i)?.[1] ?? "";
-  const cat = tag.match(/\bcategory\s*=\s*["']([^"']+)["']/i)?.[1];
-  const o = cat ? rfcStatusObject(cat) : undefined;
+  const cat = tag.match(/\bcategory\s*=\s*["']([^"']+)["']/i)?.[1], o = cat ? rfcStatusObject(cat) : undefined;
   if (o) out.push({ s: `RFC ${num}`, p: "is", o, e: `category ${cat}`.slice(0, 280) });
-  const std =
-    xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']STD["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] ||
-    xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']STD["']/i)?.[1];
+  const std = xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']STD["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']STD["']/i)?.[1];
   if (std) out.push({ s: `RFC ${num}`, p: "id", o: `STD ${std}`, e: `STD ${std}` });
-  const bcp =
-    xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']BCP["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] ||
-    xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']BCP["']/i)?.[1];
+  const bcp = xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']BCP["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']BCP["']/i)?.[1];
   if (bcp) out.push({ s: `RFC ${num}`, p: "id", o: `BCP ${bcp}`, e: `BCP ${bcp}` });
   return out;
 }
