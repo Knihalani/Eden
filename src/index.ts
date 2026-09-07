@@ -167,8 +167,7 @@ export class AgentMemory {
       if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
         const mems = this.notesFor(blob);
         if (mems.length) notes.push({ role: "system", content: MEMORY_MARK + mems.map((m) => `\n- ${m.text}`).join("") });
-        const card = injectFromRequest({ text: blob }, this.know);
-        if (card) notes.push({ role: "system", content: injectNote(card) });
+        const card = injectFromRequest({ text: blob }, this.know); if (card) notes.push({ role: "system", content: injectNote(card) });
       }
       this.observe(list);
       if (!notes.length) return list;
