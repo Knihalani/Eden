@@ -1176,11 +1176,8 @@ function tidyCapital(raw: string): string | undefined {
 }
 
 function tidyIso(raw: string): string | undefined {
-  const t = stripMarkup(raw).replace(/^ISO\s*3166(?:-[12])?:?\s*/i, "").trim();
-  const m = t.match(/\b([A-Za-z]{2})\b/);
-  if (!m) return undefined;
-  const o = m[1]!.toUpperCase();
-  return /^[A-Z]{2}$/.test(o) ? o : undefined;
+  const o = stripMarkup(raw).replace(/^ISO\s*3166(?:-[12])?:?\s*/i, "").trim().match(/\b([A-Za-z]{2})\b/)?.[1]?.toUpperCase();
+  return o && /^[A-Z]{2}$/.test(o) ? o : undefined;
 }
 
 function tidyPopulation(raw: string): string | undefined {
