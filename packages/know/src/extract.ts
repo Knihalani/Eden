@@ -1254,97 +1254,83 @@ function headerLabel(raw: string): string {
     .toLowerCase();
 }
 
+function lab(s: string): string { return s.replace(/\s+/g, " ").trim().toLowerCase(); }
+
 /** Infobox labels: "Capital", "Capital city", "Capital and largest city", infobox-label spans. */
 function isCapitalLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  if (!t || /\bcountry\b/.test(t) || /\bcontinent\b/.test(t)) return false;
-  if (adaptCapitalLabel(t)) return true;
-  return /^capital\b/.test(t) || /^official capital\b/.test(t);
+  const t = lab(label);
+  return !!t && !/\b(country|continent)\b/.test(t) && (adaptCapitalLabel(t) || /^capital\b/.test(t) || /^official capital\b/.test(t));
 }
 
 function isIsoLabel(label: string): boolean {
-  return /iso\s*3166/.test(label.replace(/\s+/g, " ").toLowerCase());
+  return /iso\s*3166/.test(lab(label));
 }
 
 function isLanguageLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(official\s+languages?|national\s+languages?|working\s+languages?)\b/.test(t);
+  return /^(official\s+languages?|national\s+languages?|working\s+languages?)\b/.test(lab(label));
 }
 
 function isCurrencyLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^currency\b/.test(t);
+  return /^currency\b/.test(lab(label));
 }
 
 function isCallingLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(calling\s+code|telephone\s+code)\b/.test(t);
+  return /^(calling\s+code|telephone\s+code)\b/.test(lab(label));
 }
 
 function isDemonymLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(demonym|gentilic)\b/.test(t);
+  return /^(demonym|gentilic)\b/.test(lab(label));
 }
 
 function isTldLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(internet\s+tld|cctld|tld)\b/.test(t);
+  return /^(internet\s+tld|cctld|tld)\b/.test(lab(label));
 }
 
 function isPopulationLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
+  const t = lab(label);
   return /^(population|pop\.|inhabitants)\b/.test(t) && !/density|growth|urban|rank/.test(t);
 }
 
 function isAreaLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
+  const t = lab(label);
   return /^(area|area\s*km)\b/.test(t) && !/code|metro|urban|rank|water/.test(t);
 }
 
 function isLegislatureLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(legislature|parliament|congress|national assembly)\b/.test(t);
+  return /^(legislature|parliament|congress|national assembly)\b/.test(lab(label));
 }
 
 function isGovernmentLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(government|government type|system of government|political system)\b/.test(t);
+  return /^(government|government type|system of government|political system)\b/.test(lab(label));
 }
 
 function isTimezoneLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(time\s*zone|timezone|utc offset)\b/.test(t);
+  return /^(time\s*zone|timezone|utc offset)\b/.test(lab(label));
 }
 
 function isDrivingLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(driving\s+side|drives\s+on)\b/.test(t);
+  return /^(driving\s+side|drives\s+on)\b/.test(lab(label));
 }
 
 function isHeadLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(president|monarch|king|queen|head of state|head of government|prime minister)\b/.test(t);
+  return /^(president|monarch|king|queen|head of state|head of government|prime minister)\b/.test(lab(label));
 }
 
 function isAnthemLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(anthem|national anthem)\b/.test(t);
+  return /^(anthem|national anthem)\b/.test(lab(label));
 }
 
 function isMottoLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(national\s+)?motto$/.test(t);
+  return /^(national\s+)?motto$/.test(lab(label));
 }
 
 function isOfficialNameLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(official name|conventional long name|long name)\b/.test(t);
+  return /^(official name|conventional long name|long name)\b/.test(lab(label));
 }
 
 function isLargestCityLabel(label: string): boolean {
-  const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  if (isCapitalLabel(t)) return false;
-  return /^(largest city|largest cities)\b/.test(t) && !/metro|urban|agglomeration/.test(t);
+  const t = lab(label);
+  return !isCapitalLabel(t) && /^(largest city|largest cities)\b/.test(t) && !/metro|urban|agglomeration/.test(t);
 }
 
 function continentIs(country: string, contRaw: string): Triple | undefined {
