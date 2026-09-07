@@ -157,17 +157,7 @@ function capTokens(s: string, n = MAX_TOKENS): string {
 }
 
 function mediaWant(q: string): string | undefined {
-  const direct = ianaMedia(q) || bareMediaType(q);
-  if (direct) return direct;
-  const t = q.trim();
-  if (t.length === 4) {
-    const a = t.charCodeAt(0) | 32;
-    const b = t.charCodeAt(1) | 32;
-    const c = t.charCodeAt(2) | 32;
-    const d = t.charCodeAt(3) | 32;
-    if (a === 106 && b === 115 && c === 111 && d === 110) return "application/json";
-  }
-  return undefined;
+  return ianaMedia(q) || bareMediaType(q) || (/^json$/i.test(q.trim()) ? "application/json" : undefined);
 }
 
 function rfcTitle(o: string, e: string): string {
