@@ -389,11 +389,9 @@ function ensureFlash() {
 
 function canonCountry(name: string): string | undefined {
   if (Object.prototype.hasOwnProperty.call(CAPITAL_OF, name)) return name;
-  if (!CAPITAL_NAME.size) {
-    for (const country of Object.keys(CAPITAL_OF)) {
-      const k = country.toLowerCase();
-      if (!CAPITAL_NAME.has(k)) CAPITAL_NAME.set(k, country);
-    }
+  if (!CAPITAL_NAME.size) for (const country of Object.keys(CAPITAL_OF)) {
+    const k = country.toLowerCase();
+    if (!CAPITAL_NAME.has(k)) CAPITAL_NAME.set(k, country);
   }
   return CAPITAL_NAME.get(name.toLowerCase());
 }
