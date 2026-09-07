@@ -1757,16 +1757,12 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
   for (const { label, data } of pairs) {
     if (isLanguageLabel(label)) {
       const official = !/^national\s+languages?\b/.test(lab(label));
-      for (const lang of namedEntities(data).slice(0, 4)) {
-        pushIs(out, lang, official ? `an official language of ${name}` : `a national language of ${name}`);
-      }
+      for (const lang of namedEntities(data).slice(0, 4)) pushIs(out, lang, official ? `an official language of ${name}` : `a national language of ${name}`);
     } else if (isCurrencyLabel(label)) {
       const cur = namedEntities(data)[0];
       if (cur) pushIs(out, cur, `the currency of ${name}`);
       const code = stripMarkup(data).match(/\(([A-Z]{3})\)/)?.[1];
-      if (code && !/^(THE|AND|FOR|GDP|ISO|UTC|USA|UN|NEW)$/.test(code)) {
-        out.push({ s: name, p: "id", o: code, e: `${name} currency ${code}`.slice(0, 280) });
-      }
+      if (code && !/^(THE|AND|FOR|GDP|ISO|UTC|USA|UN|NEW)$/.test(code)) out.push({ s: name, p: "id", o: code, e: `${name} currency ${code}`.slice(0, 280) });
     } else if (isLargestCityLabel(label) && !CONTINENT.test(name)) {
       const city = tidyCapital(data);
       if (city) pushIs(out, city, `the largest city of ${name}`);
@@ -1775,9 +1771,7 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       if (motto && !junkMotto(motto)) pushIs(out, motto, `the motto of ${name}`);
     } else if (isOfficialNameLabel(label)) {
       const official = tidyProper(data) || namedEntities(data)[0];
-      if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) {
-        pushIs(out, official, `the official name of ${name}`);
-      }
+      if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) pushIs(out, official, `the official name of ${name}`);
     } else if (isCapitalLabel(label) && !CONTINENT.test(name)) {
       const city = tidyCapital(data);
       if (city) {
@@ -1789,17 +1783,13 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       if (iso) out.push({ s: name, p: "id", o: iso, e: `${name} ISO 3166-1 alpha-2 ${iso}`.slice(0, 280) });
     } else if (isCallingLabel(label)) {
       const code = stripMarkup(data).replace(/[^\d+]/g, " ").trim().split(/\s+/)[0];
-      if (code && /^\+?\d{1,4}$/.test(code)) {
-        out.push({ s: name, p: "id", o: code.startsWith("+") ? code : `+${code}`, e: `${name} calling code ${code}`.slice(0, 280) });
-      }
+      if (code && /^\+?\d{1,4}$/.test(code)) out.push({ s: name, p: "id", o: code.startsWith("+") ? code : `+${code}`, e: `${name} calling code ${code}`.slice(0, 280) });
     } else if (isDemonymLabel(label)) {
       const dem = namedEntities(data)[0];
       if (dem) pushIs(out, dem, `a demonym of ${name}`);
     } else if (isTldLabel(label)) {
       const tld = stripMarkup(data).match(/\.[a-z0-9-]{2,24}/i)?.[0]?.toLowerCase();
-      if (tld && tld.length >= 3 && tld.length <= 24) {
-        out.push({ s: name, p: "id", o: tld, e: `${name} TLD ${tld}`.slice(0, 280) });
-      }
+      if (tld && tld.length >= 3 && tld.length <= 24) out.push({ s: name, p: "id", o: tld, e: `${name} TLD ${tld}`.slice(0, 280) });
     } else if (isPopulationLabel(label)) {
       const pop = tidyPopulation(data);
       if (pop) out.push({ s: name, p: "id", o: pop, e: `${name} population ${pop}`.slice(0, 280) });
@@ -1814,30 +1804,14 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       if (gov) out.push({ s: name, p: "is", o: gov, e: gov.slice(0, 280) });
     } else if (isTimezoneLabel(label)) {
       const tzRaw = stripMarkup(data).replace(/\s+/g, " ");
-      const tz =
-        tzRaw
-          .match(/\bUTC\s*[+\-−±]\s*\d{1,2}(?::\d{2})?\b/i)?.[0]
-          ?.replace(/\s+/g, "")
-          .replace("−", "-")
-          .replace("±", "+") || tzRaw.match(/\b([A-Z]{2,5})\b/)?.[1];
-      if (tz && tz.length <= 48 && !/^(THE|AND|UTC)$/i.test(tz)) {
-        out.push({ s: name, p: "id", o: tz, e: `${name} time zone ${tz}`.slice(0, 280) });
-      }
+      const tz = tzRaw.match(/\bUTC\s*[+\-−±]\s*\d{1,2}(?::\d{2})?\b/i)?.[0]?.replace(/\s+/g, "").replace("−", "-").replace("±", "+") || tzRaw.match(/\b([A-Z]{2,5})\b/)?.[1];
+      if (tz && tz.length <= 48 && !/^(THE|AND|UTC)$/i.test(tz)) out.push({ s: name, p: "id", o: tz, e: `${name} time zone ${tz}`.slice(0, 280) });
     } else if (isDrivingLabel(label)) {
       const side = stripMarkup(data).match(/\b(left|right)\b/i)?.[1]?.toLowerCase();
       if (side) out.push({ s: name, p: "id", o: side, e: `${name} drives on the ${side}`.slice(0, 280) });
     } else if (isHeadLabel(label)) {
       const person = namedEntities(data)[0];
-      if (person) {
-        const role = /prime minister/i.test(label)
-          ? "the prime minister of"
-          : /head of government/i.test(label)
-            ? "the head of government of"
-            : /president/i.test(label)
-              ? "the president of"
-              : "the head of state of";
-        pushIs(out, person, `${role} ${name}`);
-      }
+      if (person) pushIs(out, person, `${/prime minister/i.test(label) ? "the prime minister of" : /head of government/i.test(label) ? "the head of government of" : /president/i.test(label) ? "the president of" : "the head of state of"} ${name}`);
     } else if (isAnthemLabel(label)) {
       const anthem = namedEntities(data)[0];
       if (anthem) pushIs(out, anthem, `the anthem of ${name}`);
