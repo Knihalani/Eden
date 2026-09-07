@@ -322,67 +322,39 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
     }
 
     if (!textOnly && name === "table") {
-      if (!isClose) {
-        if (tableDepth === 0) {
-          tableOpen = open;
-          tableStart = gt + 1;
-        }
-        tableDepth++;
-      } else if (tableDepth > 0) {
-        tableDepth--;
-        if (tableDepth === 0) tables.push({ open: tableOpen, inner: html.slice(tableStart, lt) });
-      }
+      if (!isClose) { if (tableDepth === 0) { tableOpen = open; tableStart = gt + 1; } tableDepth++; }
+      else if (tableDepth > 0 && --tableDepth === 0) tables.push({ open: tableOpen, inner: html.slice(tableStart, lt) });
     }
     if (!textOnly && name === "dl") {
-      if (!isClose) {
-        if (dlDepth === 0) dlStart = gt + 1;
-        dlDepth++;
-      } else if (dlDepth > 0) {
-        dlDepth--;
-        if (dlDepth === 0) dls.push(html.slice(dlStart, lt));
-      }
+      if (!isClose) { if (dlDepth === 0) dlStart = gt + 1; dlDepth++; }
+      else if (dlDepth > 0 && --dlDepth === 0) dls.push(html.slice(dlStart, lt));
     }
     if (!textOnly && !isClose && name === "meta") {
-      const key = (attrGet(open, "name") || attrGet(open, "property")).toLowerCase();
-      const val = attrGet(open, "content");
+      const key = (attrGet(open, "name") || attrGet(open, "property")).toLowerCase(), val = attrGet(open, "content");
       if (key && val && metas[key] === undefined) metas[key] = val;
       if (key.startsWith("og:") && val) og[key.slice(3)] = val;
       if (key === "mw:pageprop/displaytitle" && val) displaytitle = val;
     }
     if (!textOnly && !isClose && name === "link") {
-      const rel = attrGet(open, "rel").toLowerCase();
-      const href = attrGet(open, "href");
+      const rel = attrGet(open, "rel").toLowerCase(), href = attrGet(open, "href");
       if (rel.includes("canonical") && href) canonical = href;
     }
     if (!isClose && name === "title" && !title) {
       const end = closeTagFrom(html, gt + 1, "</title>");
-      title = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - 8)).replace(/<[^>]+>/g, " "))
-        .replace(/\s+/g, " ")
-        .trim();
+      title = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - 8)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
       i = end;
       parts.push(" ");
       continue;
     }
-    if (!textOnly && !isClose && name === "h1") {
-      const end = closeTagFrom(html, gt + 1, "</h1>");
-      h1.push(html.slice(gt + 1, Math.max(gt + 1, end - 5)));
-    }
-    if (!textOnly && !isClose && name === "span" && /\bh1\b/.test(open) && open.includes("class=")) {
-      const end = closeTagFrom(html, gt + 1, "</span>");
-      spanH1.push(html.slice(gt + 1, Math.max(gt + 1, end - 7)));
-    }
+    if (!textOnly && !isClose && name === "h1") h1.push(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</h1>") - 5)));
+    if (!textOnly && !isClose && name === "span" && /\bh1\b/.test(open) && open.includes("class=")) spanH1.push(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</span>") - 7)));
     if (!textOnly && !isClose && !shortDescription && (name === "div" || name === "span") && open.includes("shortdescription")) {
       const end = closeTagFrom(html, gt + 1, `</${name}>`);
-      const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - name.length - 3)).replace(/<[^>]+>/g, " "))
-        .replace(/\s+/g, " ")
-        .trim();
+      const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - name.length - 3)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
       if (t.length >= 4 && t.length <= 80) shortDescription = t;
     }
     if (!textOnly && !isClose && name === "span" && open.includes("mw-page-title-main")) {
-      const end = closeTagFrom(html, gt + 1, "</span>");
-      const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - 7)).replace(/<[^>]+>/g, " "))
-        .replace(/\s+/g, " ")
-        .trim();
+      const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</span>") - 7)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
       if (t) mwTitle = t;
     }
     if (!textOnly && !isClose && (open.includes("itemscope") || open.includes("itemtype") || /typeof\s*=\s*["'][^"']*Country/i.test(open))) {
