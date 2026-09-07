@@ -119,19 +119,11 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
         if (card && !subjectMentioned(text, card.fact)) return card;
       }
     }
-    const need = detectNeed(input, { skipIdent: true });
-    const queries =
-      store && hasRfc && /\d/.test(text)
-        ? [...need.queries, ...successorQueries(text, store, need.queries)]
-        : need.queries;
-    for (let i = 0; i < queries.length && i < 8; i++) {
-      const q = queries[i]!;
+    const qs = detectNeed(input, { skipIdent: true }).queries;
+    for (const q of (store && hasRfc && /\d/.test(text) ? qs.concat(successorQueries(text, store, qs)) : qs).slice(0, 8)) {
       const card = factFor(q, store);
-      if (!card) continue;
-      if (subjectMentioned(text, card.fact)) continue;
-      return card;
+      if (card && !subjectMentioned(text, card.fact)) return card;
     }
-    return undefined;
   } catch {
     return undefined;
   }
