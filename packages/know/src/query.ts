@@ -510,30 +510,20 @@ function buildTyped(t: string): FactCard | undefined {
   }
   if (n >= 15 && t.slice(0, 14).toLowerCase() === "unicode block ") {
     const raw = t.slice(14).trim();
-    if (!BLOCK_LC.size) {
-      for (const name of Object.keys(UNICODE_BLOCK_OBJECT)) BLOCK_LC.set(name.toLowerCase(), name);
-    }
+    if (!BLOCK_LC.size) for (const name of Object.keys(UNICODE_BLOCK_OBJECT)) BLOCK_LC.set(name.toLowerCase(), name);
     const name = Object.prototype.hasOwnProperty.call(UNICODE_BLOCK_OBJECT, raw) ? raw : BLOCK_LC.get(raw.toLowerCase());
-    if (!name) return;
-    const obj = UNICODE_BLOCK_OBJECT[name];
-    if (!obj) return;
-    return keep(t, internFact(`unicode block ${name}`, `Unicode Block ${name} is ${obj}.`));
+    const obj = name && UNICODE_BLOCK_OBJECT[name];
+    if (name && obj) return keep(t, internFact(`unicode block ${name}`, `Unicode Block ${name} is ${obj}.`));
   }
   if (n >= 15 && t.slice(0, 14).toLowerCase() === "iana language ") {
-    const tag = t.slice(14).trim().toLowerCase();
-    const obj = LANG_OBJECT[tag];
-    if (!obj) return;
-    return keep(t, internFact(`iana language ${tag}`, `IANA language ${tag} is ${obj}.`));
+    const tag = t.slice(14).trim().toLowerCase(), obj = LANG_OBJECT[tag];
+    if (obj) return keep(t, internFact(`iana language ${tag}`, `IANA language ${tag} is ${obj}.`));
   }
   if (n >= 16 && t.slice(0, 16).toLowerCase() === "iana well-known ") {
-    const wk = t.slice(16).trim().toLowerCase();
-    const obj = WELLKNOWN_OBJECT[wk];
-    if (!obj) return;
-    return keep(t, internFact(`iana well-known ${wk}`, `${wk} is ${obj}.`));
+    const wk = t.slice(16).trim().toLowerCase(), obj = WELLKNOWN_OBJECT[wk];
+    if (obj) return keep(t, internFact(`iana well-known ${wk}`, `${wk} is ${obj}.`));
   }
-  if (n === 4 && SCRIPT_OBJECT[t]) {
-    return keep(t, internFact(t, `Unicode Script ${t} is ${SCRIPT_OBJECT[t]}.`));
-  }
+  if (n === 4 && SCRIPT_OBJECT[t]) return keep(t, internFact(t, `Unicode Script ${t} is ${SCRIPT_OBJECT[t]}.`));
   return;
 }
 
