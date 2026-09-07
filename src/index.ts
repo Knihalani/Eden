@@ -171,9 +171,8 @@ export class AgentMemory {
   }
 
   query(q: string, k = Number(process.env.EDEN_MEMORY_CAP) || 6): QueryHit[] {
-    const qn = q.trim();
-    const out: QueryHit[] = qn ? this.notesFor(qn, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
-    try { const card = knowQuery(qn, this.know); if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url }); } catch {}
+    const qn = q.trim(), out: QueryHit[] = qn ? this.notesFor(qn, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
+    if (qn && out.length < k) try { const card = knowQuery(qn, this.know); if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url }); } catch {}
     return out.slice(0, k);
   }
 
