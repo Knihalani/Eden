@@ -134,11 +134,8 @@ export function injectFromText(text: string, store?: KnowSearch): InjectCard | u
 }
 
 export function injectNote(card: InjectCard): string {
-  const fact = card.fact.trim();
-  const url = citeableUrl(card.url);
-  if (!url) return `${KNOW_INJECT_MARK} ${fact}`;
-  const sentence = fact.endsWith(".") ? fact : `${fact}.`;
-  return `${KNOW_INJECT_MARK} ${sentence} Source: ${url}`;
+  const fact = card.fact.trim(), url = citeableUrl(card.url);
+  return url ? `${KNOW_INJECT_MARK} ${fact.endsWith(".") ? fact : `${fact}.`} Source: ${url}` : `${KNOW_INJECT_MARK} ${fact}`;
 }
 
 export function alreadyInjected(blob: string): boolean {
