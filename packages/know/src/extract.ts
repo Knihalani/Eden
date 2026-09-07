@@ -2156,13 +2156,11 @@ function tidyToolName(raw: string): string | undefined {
 
 function tidyTechniqueObject(raw: string): string | undefined {
   let rest = stripMarkup(raw).replace(/\s+/g, " ").trim();
-  rest = (rest.split(/(?<=\w)[.!](?:\s|$)/)[0] || rest).trim();
-  rest = rest.replace(/^(to|for)\s+/i, "").replace(/[,;:\s]+$/g, "").trim();
+  rest = (rest.split(/(?<=\w)[.!](?:\s|$)/)[0] || rest).trim().replace(/^(to|for)\s+/i, "").replace(/[,;:\s]+$/g, "").trim();
   if (rest.length > 56) rest = rest.slice(0, 56).replace(/\s+\S*$/, "").trim();
-  if (rest.length < 4 || /^(this|it|that|them|you|your|their)\b/i.test(rest)) return undefined;
+  if (rest.length < 4 || /^(this|it|that|them|you|your|their)\b/i.test(rest)) return;
   const o = `used for ${rest}`;
-  if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return undefined;
-  return o;
+  return o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o) ? undefined : o;
 }
 
 export function techniquesFromProse(text: string): Triple[] {
