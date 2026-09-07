@@ -2018,13 +2018,7 @@ export function rfcEdgesFromXml(xml: string, num: string): Triple[] {
   return out;
 }
 
-const RFC_CAT: Record<string, string> = {
-  std: "an Internet Standard",
-  bcp: "a Best Current Practice",
-  info: "an Informational RFC",
-  exp: "an Experimental RFC",
-  historic: "a Historic RFC",
-};
+const RFC_CAT: Record<string, string> = { std: "an Internet Standard", bcp: "a Best Current Practice", info: "an Informational RFC", exp: "an Experimental RFC", historic: "a Historic RFC" };
 
 /** Map xml2rfc `category=` / `Category:` / `Status:` to a persistable RFC `is` object. Never the Status-of-This-Memo gist. */
 function rfcStatusObject(raw: string): string | undefined {
