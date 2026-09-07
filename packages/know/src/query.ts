@@ -468,16 +468,11 @@ function buildTyped(t: string): FactCard | undefined {
   const up = t.toUpperCase();
   if (METHOD_SET.has(up) && n <= 7) {
     const obj = METHOD_OBJECT[up];
-    if (!obj) return;
-    return keep(t, internFact(up, `${up} is ${obj}.`));
+    if (obj) return keep(t, internFact(up, `${up} is ${obj}.`));
   }
-  if (HEADER_SET.has(t)) {
-    return keep(t, internFact(t, `${t} is an HTTP header.`));
-  }
+  if (HEADER_SET.has(t)) return keep(t, internFact(t, `${t} is an HTTP header.`));
   const spdx = SPDX_OBJECT[t] ? t : (ensureFlash(), SPDX_LC.get(t.toLowerCase()));
-  if (spdx) {
-    return keep(t, internFact(spdx, `${spdx} is an SPDX license.`));
-  }
+  if (spdx) return keep(t, internFact(spdx, `${spdx} is an SPDX license.`));
 
   const csKey = t.toLowerCase() === "utf8" ? "utf-8" : t.toLowerCase();
   if (csKey === "utf-8" || Object.prototype.hasOwnProperty.call(CHARSET_OBJECT, csKey)) {
