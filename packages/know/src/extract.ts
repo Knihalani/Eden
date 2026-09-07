@@ -1881,20 +1881,14 @@ export function wikiLeadIs(url: string, html: string, text: string, scan?: HtmlS
     return { s: name, p: "is", o, e: o.slice(0, 280) };
   };
   const short = scan?.shortDescription || (html ? wikiShortDescription(html) : undefined);
-  if (short) {
-    const o = shortDescObject(short);
-    const hit = o ? tryObj(o) : undefined;
-    if (hit) return hit;
-  }
+  if (short) { const hit = tryObj(shortDescObject(short) || ""); if (hit) return hit; }
   const metas = scan ? scan.metas : html ? namedMeta(html, ["description", "og:description", "dc.description"]) : {};
   const og = scan ? scan.og : html ? openGraph(html) : {};
-  const candidates = [metas.description, metas["og:description"], metas["dc.description"], og.description, text].filter(
-    (s): s is string => typeof s === "string" && s.length >= 12,
-  );
   const nameRe = escapeRe(name);
   const lead = new RegExp(`(?:^|[.!?\\n]\\s+)${nameRe}\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`, "i");
   const official = new RegExp(`(?:^|[.!?\\n]\\s+)${nameRe},\\s+officially\\s+[^,.]{2,80},\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`, "i");
-  for (const c of candidates) {
+  for (const c of [metas.description, metas["og:description"], metas["dc.description"], og.description, text]) {
+    if (typeof c !== "string" || c.length < 12) continue;
     const blob = `. ${c.trim()}`;
     const hit = tryObj((blob.match(official) || blob.match(lead))?.[1] || "");
     if (hit) return hit;
