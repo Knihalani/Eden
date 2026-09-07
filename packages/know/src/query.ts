@@ -161,11 +161,8 @@ function rewriteQuery(q: string): string {
     const uri = /^(https?|wss?|ftp|file|git|ssh|sftp):\/\/\S+$/i.exec(t);
     if (uri) return uri[1]!.toLowerCase();
   }
-  const named = phraseExact(t);
-  if (named) return named;
   const used = /^what(?:'s| is)\s+([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
-  if (used) return `used for ${used[1]!.toLowerCase()}`;
-  return t;
+  return phraseExact(t) || (used ? `used for ${used[1]!.toLowerCase()}` : t);
 }
 
 function capTokens(s: string, n = MAX_TOKENS): string {
