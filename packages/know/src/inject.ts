@@ -92,24 +92,19 @@ export function subjectMentioned(text: string, fact: string): boolean {
 }
 
 export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectCard | undefined {
-  if (process.env.EDEN_KNOW === "0") return undefined;
+  if (process.env.EDEN_KNOW === "0") return;
   try {
     const text = input.text || "", hasRfc = /rfc/i.test(text);
-    if (hasRfc && text.indexOf(" is ") >= 0) {
-      const re = /\bRFC\s+is\s+(\d{1,5})\b/gi;
-      for (let m; (m = re.exec(text)); ) {
-        const q = hotStaleQuery(m[1]!), card = q ? factFor(q, store) : undefined;
-        if (card && !subjectMentioned(text, card.fact)) return card;
-      }
+    if (hasRfc && text.indexOf(" is ") >= 0) for (let m, re = /\bRFC\s+is\s+(\d{1,5})\b/gi; (m = re.exec(text)); ) {
+      const q = hotStaleQuery(m[1]!), card = q ? factFor(q, store) : undefined;
+      if (card && !subjectMentioned(text, card.fact)) return card;
     }
     const qs = detectNeed(input, { skipIdent: true }).queries;
     for (const q of (store && hasRfc && /\d/.test(text) ? qs.concat(successorQueries(text, store, qs)) : qs).slice(0, 8)) {
       const card = factFor(q, store);
       if (card && !subjectMentioned(text, card.fact)) return card;
     }
-  } catch {
-    return undefined;
-  }
+  } catch {}
 }
 
 export function injectFromText(text: string, store?: KnowSearch): InjectCard | undefined {
