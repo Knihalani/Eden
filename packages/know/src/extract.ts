@@ -535,26 +535,16 @@ export function ldText(v: unknown, depth = 0): string {
   if (v == null || depth > 5) return "";
   if (typeof v === "string" || typeof v === "number") return String(v).replace(/\s+/g, " ").trim();
   if (typeof v === "boolean") return "";
-  if (Array.isArray(v)) {
-    for (const x of v) {
-      const t = ldText(x, depth + 1);
-      if (t) return t;
-    }
-    return "";
-  }
+  if (Array.isArray(v)) { for (const x of v) { const t = ldText(x, depth + 1); if (t) return t; } return ""; }
   if (typeof v !== "object") return "";
   const o = v as Record<string, unknown>;
   if (o["@value"] != null) return ldText(o["@value"], depth + 1);
   if (typeof o.en === "string") return o.en.replace(/\s+/g, " ").trim();
   if (typeof o["en-US"] === "string") return String(o["en-US"]).replace(/\s+/g, " ").trim();
-  if (o.name != null) {
-    const n = ldText(o.name, depth + 1);
-    if (n) return n;
-  }
+  if (o.name != null) { const n = ldText(o.name, depth + 1); if (n) return n; }
   if (typeof o.headline === "string") return o.headline.replace(/\s+/g, " ").trim();
   if (typeof o["@id"] === "string") {
-    const id = o["@id"];
-    const wiki = wikiPageName(id);
+    const id = o["@id"], wiki = wikiPageName(id);
     if (wiki && !wikiNsSkip(wiki) && !/^Q\d+$/i.test(wiki)) return wiki;
     if (/\/entity\/Q\d+/i.test(id) || /^Q\d+$/i.test(id) || /^https?:/i.test(id)) return "";
   }
