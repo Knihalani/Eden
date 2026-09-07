@@ -2719,20 +2719,10 @@ export function extractLinks(base: string, htmlOrText: string): string[] {
       const u = new URL(href.replace(/[),.;]+$/, ""), base);
       if (u.protocol !== "http:" && u.protocol !== "https:") return;
       const hrefNoHash = canonicalUrl(u.href.split("#")[0]!);
-      if (
-        seen.has(hrefNoHash) ||
-        skipHost(hrefNoHash) ||
-        WIKI_LINK_SKIP.test(hrefNoHash) ||
-        /[?&]action=edit\b/i.test(hrefNoHash) ||
-        /\/w\/index\.php/i.test(hrefNoHash)
-      ) {
-        return;
-      }
+      if (seen.has(hrefNoHash) || skipHost(hrefNoHash) || WIKI_LINK_SKIP.test(hrefNoHash) || /[?&]action=edit\b/i.test(hrefNoHash) || /\/w\/index\.php/i.test(hrefNoHash)) return;
       seen.add(hrefNoHash);
       urls.push(hrefNoHash);
-    } catch {
-      /* skip */
-    }
+    } catch { /* skip */ }
   };
   for (const href of htmlAlternateHrefs(htmlOrText)) add(href);
   const abs = /https?:\/\/[^\s"'<>]+/gi;
@@ -2743,10 +2733,7 @@ export function extractLinks(base: string, htmlOrText: string): string[] {
   const prefer: string[] = [];
   const rest: string[] = [];
   for (const u of urls) (talkUrl(u) || githubToolUrl(u) || LINK_PREFER.test(u) ? prefer : rest).push(u);
-  const listPage = /\/wiki\/List_of_/i.test(base);
-  const talkIndex = talkUrl(base) || /\/(?:issues|discussions|questions\/tagged)(?:\/|$)/i.test(base);
-  const cap = listPage || talkIndex ? 400 : 160;
-  return [...prefer, ...rest].slice(0, cap);
+  return [...prefer, ...rest].slice(0, /\/wiki\/List_of_/i.test(base) || talkUrl(base) || /\/(?:issues|discussions|questions\/tagged)(?:\/|$)/i.test(base) ? 400 : 160);
 }
 
 export { ttlDaysFor, pageTtl, ttlDaysOnSkip, type TtlHints } from "./ttl";
