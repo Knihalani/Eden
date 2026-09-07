@@ -1,4 +1,4 @@
-import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { alreadyInjected, injectFromRequest, injectNote } from "../packages/know/src/inject";
@@ -153,9 +153,8 @@ export class AgentMemory {
 
   private persist() {
     if (this.compiled.length > 2000) { const keep = this.compiled.filter((c) => c.rec.kind === "constraint").sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => c.rec.kind !== "constraint").sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; }
-    writeFileSync(this.path + ".tmp", this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { flush: true });
+    writeFileSync(this.path + ".tmp", this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { flush: true, mode: 0o600 });
     renameSync(this.path + ".tmp", this.path);
-    try { chmodSync(this.path, 0o600); const fd = openSync(this.dir, "r"); fsyncSync(fd); closeSync(fd); } catch {}
   }
 
   relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
