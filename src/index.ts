@@ -167,11 +167,8 @@ export class AgentMemory {
       }
       this.observe(list);
       if (!notes.length) return list;
-      const next = list.slice();
-      let i = 0;
-      while (i < next.length && (next[i] as { role?: string })?.role === "system") i++;
-      next.splice(i, 0, ...notes);
-      return next;
+      const next = list.slice(), i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
+      return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
     } catch { return list; }
   }
 
