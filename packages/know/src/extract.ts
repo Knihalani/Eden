@@ -364,26 +364,7 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
     i = gt + 1;
     parts.push(BLOCK_PUNCT.has(name) ? ". " : " ");
   }
-  return {
-    text: decodeEntities(parts.join(""))
-      .replace(/\s+/g, " ")
-      .replace(/(?:\s*\.){2,}/g, ".")
-      .replace(/\s+\./g, ".")
-      .trim(),
-    jsonLd,
-    tables,
-    dls,
-    metas,
-    og,
-    title,
-    h1,
-    spanH1,
-    canonical,
-    displaytitle,
-    mwTitle,
-    itemSlices,
-    shortDescription,
-  };
+  return { text: decodeEntities(parts.join("")).replace(/\s+/g, " ").replace(/(?:\s*\.){2,}/g, ".").replace(/\s+\./g, ".").trim(), jsonLd, tables, dls, metas, og, title, h1, spanH1, canonical, displaytitle, mwTitle, itemSlices, shortDescription };
 }
 
 /** Tag-scan, not nested `[\s\S]*?` — µs/KB on wiki list pages. */
