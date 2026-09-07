@@ -2166,12 +2166,7 @@ function tidyTechniqueObject(raw: string): string | undefined {
 export function techniquesFromProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
-  const add = (t: Triple) => {
-    const k = `${t.s}\0${t.p}\0${t.o}`;
-    if (out.length >= 16 || seen.has(k)) return;
-    seen.add(k);
-    out.push(t);
-  };
+  const add = (t: Triple) => { const k = `${t.s}\0${t.p}\0${t.o}`; if (out.length >= 16 || seen.has(k)) return; seen.add(k); out.push(t); };
   const head = text.slice(0, 12_000);
   const pats = [
     /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
@@ -2188,11 +2183,9 @@ export function techniquesFromProse(text: string): Triple[] {
     /\b([A-Za-z][\w.+-]{1,40})\s+works(?:\s+(?:great|well|fine))?\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
     /\byou (?:should|can|want to)\s+use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
   ];
-  for (const re of pats) {
-    for (const m of head.matchAll(re)) {
-      const s = tidyToolName(m[1]!), o = s && tidyTechniqueObject(m[2]!);
-      if (s && o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-    }
+  for (const re of pats) for (const m of head.matchAll(re)) {
+    const s = tidyToolName(m[1]!), o = s && tidyTechniqueObject(m[2]!);
+    if (s && o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
   }
   return out;
 }
