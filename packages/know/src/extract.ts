@@ -1920,27 +1920,13 @@ function extrasFromProse(text: string): Triple[] {
   i = 0;
   while ((i = findAsciiCi(head, "official languages of ", i)) >= 0) {
     const country = takeProperAt(head, i + "official languages of ".length);
-    if (country) {
-      let j = skipWs(head, country.end);
-      if (startsAsciiCi(head, j, "is ")) {
-        const lang = takeProperAt(head, j + 3), ctry = tidyCapital(country.name), l = lang ? tidyProper(lang.name) : undefined;
-        if (l && ctry) add({ s: l, p: "is", o: `an official language of ${ctry}`, e: head.slice(i, lang!.end).slice(0, 280) });
-      }
-    }
+    if (country) { let j = skipWs(head, country.end); if (startsAsciiCi(head, j, "is ")) { const lang = takeProperAt(head, j + 3), ctry = tidyCapital(country.name), l = lang ? tidyProper(lang.name) : undefined; if (l && ctry) add({ s: l, p: "is", o: `an official language of ${ctry}`, e: head.slice(i, lang!.end).slice(0, 280) }); } }
     i += 12;
   }
   i = 0;
   while ((i = findAsciiCi(head, "currency of ", i)) >= 0) {
     const country = takeProperAt(head, i + "currency of ".length);
-    if (country) {
-      let j = skipWs(head, country.end);
-      if (startsAsciiCi(head, j, "is ")) {
-        j = skipWs(head, j + 3);
-        if (startsAsciiCi(head, j, "the ")) j += 4;
-        const cur = tidyProper(head.slice(j, j + 48)), ctry = tidyCapital(country.name);
-        if (cur && ctry) add({ s: cur, p: "is", o: `the currency of ${ctry}`, e: head.slice(i, j + cur.length).slice(0, 280) });
-      }
-    }
+    if (country) { let j = skipWs(head, country.end); if (startsAsciiCi(head, j, "is ")) { j = skipWs(head, j + 3); if (startsAsciiCi(head, j, "the ")) j += 4; const cur = tidyProper(head.slice(j, j + 48)), ctry = tidyCapital(country.name); if (cur && ctry) add({ s: cur, p: "is", o: `the currency of ${ctry}`, e: head.slice(i, j + cur.length).slice(0, 280) }); } }
     i += 10;
   }
   const hint = tidyCapital(head.match(CAPITAL_OF_HINT_RE)?.[1] || "") || tidyCapital(head.match(COUNTRY_IS_HINT_RE)?.[1] || "");
