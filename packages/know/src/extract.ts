@@ -1983,40 +1983,8 @@ function extrasFromProse(text: string): Triple[] {
   return out;
 }
 
-function spdxObjectName(id: string): string {
-  switch (id) {
-    case "MIT":
-      return "MIT License";
-    case "Apache-2.0":
-      return "Apache License 2.0";
-    case "BSD-2-Clause":
-      return "BSD 2-Clause License";
-    case "BSD-3-Clause":
-      return "BSD 3-Clause License";
-    case "ISC":
-      return "ISC License";
-    case "GPL-2.0-only":
-      return "GNU GPL v2";
-    case "GPL-3.0-only":
-      return "GNU GPL v3";
-    case "LGPL-3.0-only":
-      return "GNU LGPL v3";
-    case "MPL-2.0":
-      return "Mozilla Public License 2.0";
-    case "AGPL-3.0-only":
-      return "GNU AGPL v3";
-    case "Unlicense":
-      return "The Unlicense";
-    case "CC0-1.0":
-      return "CC0 1.0 Universal";
-    case "0BSD":
-      return "BSD Zero Clause License";
-    case "BlueOak-1.0.0":
-      return "Blue Oak Model License";
-    default:
-      return `${id} license`;
-  }
-}
+const SPDX_EXTRACT: Record<string, string> = { MIT: "MIT License", "Apache-2.0": "Apache License 2.0", "BSD-2-Clause": "BSD 2-Clause License", "BSD-3-Clause": "BSD 3-Clause License", ISC: "ISC License", "GPL-2.0-only": "GNU GPL v2", "GPL-3.0-only": "GNU GPL v3", "LGPL-3.0-only": "GNU LGPL v3", "MPL-2.0": "Mozilla Public License 2.0", "AGPL-3.0-only": "GNU AGPL v3", Unlicense: "The Unlicense", "CC0-1.0": "CC0 1.0 Universal", "0BSD": "BSD Zero Clause License", "BlueOak-1.0.0": "Blue Oak Model License" };
+function spdxObjectName(id: string): string { return SPDX_EXTRACT[id] ?? `${id} license`; }
 
 function rfcMentionsFromText(text: string): Triple[] {
   const out: Triple[] = [];
