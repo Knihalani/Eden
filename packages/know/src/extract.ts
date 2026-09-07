@@ -2221,9 +2221,7 @@ function rfcEdgeInverses(edges: Triple[]): Triple[] {
   return out;
 }
 
-function isCapitalListUrl(url: string): boolean {
-  return /\/wiki\/List_of_[^/?#]*capital/i.test(url);
-}
+function isCapitalListUrl(url: string): boolean { return /\/wiki\/List_of_[^/?#]*capital/i.test(url); }
 
 function wantsCapitalTable(url: string, html: string, tables?: { open: string; inner: string }[]): boolean {
   if (isCapitalListUrl(url)) return true;
@@ -2240,21 +2238,13 @@ function wantsCapitalTable(url: string, html: string, tables?: { open: string; i
 }
 
 export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean, scanIn?: HtmlScan): Triple[] {
-  const html = isHtml ? htmlOrText : "";
-  const scan = isHtml ? scanIn ?? scanHtml(htmlOrText) : undefined;
-  const text = scan ? scan.text : htmlOrText.replace(/\s+/g, " ").trim();
-  const og = scan ? scan.og : {};
-  const ld = scan ? scan.jsonLd : [];
-  const out: Triple[] = [];
+  const html = isHtml ? htmlOrText : "", scan = isHtml ? scanIn ?? scanHtml(htmlOrText) : undefined, text = scan ? scan.text : htmlOrText.replace(/\s+/g, " ").trim(), og = scan ? scan.og : {}, ld = scan ? scan.jsonLd : [], out: Triple[] = [];
   for (const block of ld) walkLd(block, out, text.slice(0, 280));
   if (isHtml) out.push(...structuredCountryCapitals(html, scan?.itemSlices));
-  const listPage = isCapitalListUrl(url) || /\/wiki\/List_of_/i.test(url);
-  const wikiPage = /wikipedia\.org|wikidata\.org/i.test(url);
+  const listPage = isCapitalListUrl(url) || /\/wiki\/List_of_/i.test(url), wikiPage = /wikipedia\.org|wikidata\.org/i.test(url);
   if (wikiPage && !listPage) {
-    const wikiCap = wikiCapital(url, html, text, scan);
-    if (wikiCap) out.push(wikiCap);
-    const wikiId = wikiIso(url, html, scan) || isoFromText(url, html, text);
-    if (wikiId) out.push(wikiId);
+    const wikiCap = wikiCapital(url, html, text, scan); if (wikiCap) out.push(wikiCap);
+    const wikiId = wikiIso(url, html, scan) || isoFromText(url, html, text); if (wikiId) out.push(wikiId);
   }
   if (isHtml && wantsCapitalTable(url, html, scan?.tables)) {
     out.push(...wikiCapitalTable(html, scan?.tables));
