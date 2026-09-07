@@ -601,7 +601,7 @@ function sharedStore(): KnowSearch {
 export function knowQuery(q: string, store?: KnowSearch) {
   if (!q.trim()) return { unknown: true };
   const nq = rewriteQuery(q), flash = buildTyped(nq);
-  if (flash || (!store && q.includes("?"))) return flash || { unknown: true };
+  if (flash || (!store && /^(what|how|why|where|when|who|can |could |please )\b/i.test(q.trim()))) return flash || { unknown: true };
   const s = store ?? sharedStore();
   const searchHits = (query: string) => {
     let hits = s.search(query, 8).filter((h) => h.p !== "about" && h.p !== "date");
@@ -612,8 +612,7 @@ export function knowQuery(q: string, store?: KnowSearch) {
     }
     return hits;
   };
-  let query = nq;
-  let hits = searchHits(query);
+  let query = nq, hits = searchHits(query);
   if (!hits.length && /^used for /i.test(nq)) {
     for (const alt of techniqueQueryFallbacks(nq)) {
       hits = searchHits(alt);
