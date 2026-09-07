@@ -2063,13 +2063,8 @@ export function rfcStatusFromText(num: string, html: string, text: string): Trip
 }
 
 export function shortTitle(s: string): string {
-  const c = decodeEntities(s)
-    .replace(/\b(Light|Dark|Auto)\b/gi, " ")
-    .replace(/\s+RF\.?$/i, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const cut = c.split(/\s+RFC\s+\d/i)[0]!.trim();
-  return cut.split(/\s+/).slice(0, 20).join(" ").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim();
+  const c = decodeEntities(s).replace(/\b(Light|Dark|Auto)\b/gi, " ").replace(/\s+RF\.?$/i, " ").replace(/\s+/g, " ").trim();
+  return c.split(/\s+RFC\s+\d/i)[0]!.trim().split(/\s+/).slice(0, 20).join(" ").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim();
 }
 
 function rfcGistJunk(s: string): boolean {
