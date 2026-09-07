@@ -2798,108 +2798,28 @@ export function techniquesFromProse(text: string): Triple[] {
     out.push(t);
   };
   const head = text.slice(0, 12_000);
-  const USED =
-    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(USED)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const USE_X = /\b[Uu]se\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/g;
-  for (const m of head.matchAll(USE_X)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const REC =
-    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:the\s+)?(?:recommended|standard|usual|preferred|common)\s+(?:way|tool|method)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(REC)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const INSTEAD =
-    /\binstead of\s+[A-Za-z][\w.+-]{0,40}.{0,40}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(INSTEAD)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const DONT =
-    /\bdon(?:['’])?t use\s+[A-Za-z][\w.+-]{0,40}.{0,48}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(DONT)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const I_USED =
-    /\b(?:I|we|you)\s+(?:just\s+)?used\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(I_USED)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const FIXED =
-    /\b(?:fixed|solved|resolved)\b[\s\S]{0,48}?\busing\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(FIXED)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const TRY =
-    /\btry(?:ing)?\s+(?:using\s+)?([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(TRY)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const SWITCH =
-    /\bswitch(?:ed)? to\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(SWITCH)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const REPLACE =
-    /\breplace(?:d)?\s+[A-Za-z][\w.+-]{0,40}.{0,24}?with\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(REPLACE)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const ANSWER =
-    /\b(?:the )?(?:answer|fix|workaround) is (?:to )?use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(ANSWER)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const WORKS =
-    /\b([A-Za-z][\w.+-]{1,40})\s+works(?:\s+(?:great|well|fine))?\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(WORKS)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
-  const SHOULD =
-    /\byou (?:should|can|want to)\s+use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
-  for (const m of head.matchAll(SHOULD)) {
-    const s = tidyToolName(m[1]!);
-    if (!s) continue;
-    const o = tidyTechniqueObject(m[2]!);
-    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  const pats = [
+    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\b[Uu]se\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/g,
+    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:the\s+)?(?:recommended|standard|usual|preferred|common)\s+(?:way|tool|method)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\binstead of\s+[A-Za-z][\w.+-]{0,40}.{0,40}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\bdon(?:['’])?t use\s+[A-Za-z][\w.+-]{0,40}.{0,48}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\b(?:I|we|you)\s+(?:just\s+)?used\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\b(?:fixed|solved|resolved)\b[\s\S]{0,48}?\busing\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\btry(?:ing)?\s+(?:using\s+)?([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\bswitch(?:ed)? to\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\breplace(?:d)?\s+[A-Za-z][\w.+-]{0,40}.{0,24}?with\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\b(?:the )?(?:answer|fix|workaround) is (?:to )?use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\b([A-Za-z][\w.+-]{1,40})\s+works(?:\s+(?:great|well|fine))?\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    /\byou (?:should|can|want to)\s+use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+  ];
+  for (const re of pats) {
+    for (const m of head.matchAll(re)) {
+      const s = tidyToolName(m[1]!);
+      if (!s) continue;
+      const o = tidyTechniqueObject(m[2]!);
+      if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+    }
   }
   return out;
 }
