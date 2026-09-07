@@ -1162,16 +1162,9 @@ function consecutiveHeads(s: string): number {
 }
 
 function tidyCapital(raw: string): string | undefined {
-  const t = stripMarkup(raw)
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const m = t.match(PROPER_NAME_RE);
-  const o = (m?.[1] || t.split(/[,;]/)[0] || "").trim().replace(/[.,]+$/g, "");
-  if (o.length < 2 || o.length > 48) return undefined;
-  if (NAME_JUNK.test(o)) return undefined;
-  if (CONTINENT.test(o)) return undefined;
-  if (/^flag of /i.test(o) || consecutiveHeads(o) >= 4) return undefined;
+  const t = stripMarkup(raw).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  const o = (t.match(PROPER_NAME_RE)?.[1] || t.split(/[,;]/)[0] || "").trim().replace(/[.,]+$/g, "");
+  if (o.length < 2 || o.length > 48 || NAME_JUNK.test(o) || CONTINENT.test(o) || /^flag of /i.test(o) || consecutiveHeads(o) >= 4) return;
   return o;
 }
 
