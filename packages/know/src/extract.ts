@@ -1634,22 +1634,14 @@ export function wikiCapital(url: string, html: string, _text: string, scan?: Htm
 /** ISO 3166-1 alpha-2 from a country infobox. Same persistable `id` path as Wikidata P297. */
 export function wikiIso(url: string, html: string, scan?: HtmlScan): Triple | undefined {
   const name = wikiSubject(url, html, scan);
-  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return undefined;
+  if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return;
   let raw: string | undefined;
   for (const { label, data } of wikiInfoboxPairs(html, scan?.tables)) {
-    if (isIsoLabel(label)) {
-      raw = data;
-      break;
-    }
+    if (isIsoLabel(label)) { raw = data; break; }
   }
-  if (!raw) {
-    raw =
-      html.match(/"iso3166code"\s*:\s*\{\s*"wt"\s*:\s*"((?:\\.|[^"\\]){2,12})"/i)?.[1] ||
-      html.match(/\|\s*iso(?:_?3166_?code|code)\s*=\s*([A-Za-z]{2})\b/i)?.[1];
-  }
+  if (!raw) raw = html.match(/"iso3166code"\s*:\s*\{\s*"wt"\s*:\s*"((?:\\.|[^"\\]){2,12})"/i)?.[1] || html.match(/\|\s*iso(?:_?3166_?code|code)\s*=\s*([A-Za-z]{2})\b/i)?.[1];
   const o = tidyIso(raw || "");
-  if (!o) return undefined;
-  return { s: name, p: "id", o, e: `${name} ISO 3166-1 alpha-2 ${o}`.slice(0, 280) };
+  return o ? { s: name, p: "id", o, e: `${name} ISO 3166-1 alpha-2 ${o}`.slice(0, 280) } : undefined;
 }
 
 /**
