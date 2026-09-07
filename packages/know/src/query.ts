@@ -421,13 +421,10 @@ export function knowQuery(q: string, store?: KnowSearch) {
   if (flash || (!store && /^(what|how|why|where|when|who|can |could |please )\b/i.test(q.trim()))) return flash || { unknown: true };
   const s = store ?? sharedStore();
   const searchHits = (query: string) => {
-    let hits = s.search(query, 8).filter((h) => h.p !== "about" && h.p !== "date");
-    if (/\b(obsoletes|obsoleted|updates|updated)\b/i.test(query)) {
-      const want = /\bupdates?\b/i.test(query) && !/\bobsolet/i.test(query) ? "updates" : "obsoletes";
-      const edge = hits.find((h) => h.p === want) || hits.find((h) => h.p === "is" && /obsoleted by|updated by/i.test(h.o));
-      if (edge) hits = [edge, ...hits.filter((h) => h !== edge)];
-    }
-    return hits;
+    const hits = s.search(query, 8).filter((h) => h.p !== "about" && h.p !== "date");
+    if (!/\b(obsoletes|obsoleted|updates|updated)\b/i.test(query)) return hits;
+    const want = /\bupdates?\b/i.test(query) && !/\bobsolet/i.test(query) ? "updates" : "obsoletes", edge = hits.find((h) => h.p === want) || hits.find((h) => h.p === "is" && /obsoleted by|updated by/i.test(h.o));
+    return edge ? [edge, ...hits.filter((h) => h !== edge)] : hits;
   };
   let query = nq, hits = searchHits(query);
   if (!hits.length && /^used for /i.test(nq)) for (const alt of techniqueQueryFallbacks(nq)) { hits = searchHits(alt); if (hits.length) { query = alt; break; } }
