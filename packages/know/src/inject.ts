@@ -40,19 +40,14 @@ function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
 const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
 
 function successorQueries(text: string, store: KnowSearch, already: string[]): string[] {
-  const have = new Set(already.map((q) => q.toLowerCase()));
-  const out: string[] = [];
+  const have = new Set(already.map((q) => q.toLowerCase())), out: string[] = [];
   const re = /\bRFC[\s#:-]*(\d{1,5})\b/gi;
-  let m: RegExpExecArray | null;
-  let n = 0;
-  while ((m = re.exec(text)) && n < 4) {
+  for (let m, n = 0; (m = re.exec(text)) && n < 4; ) {
     const num = m[1]!;
     if (isHotStaleRfc(num) || isHotSuccessorRfc(num)) continue;
     n++;
     try {
-      const hits = store.search(`RFC ${num}`, 3);
-      const subj = new RegExp(`^RFC\\s*${num}$`, "i");
-      const inObj = new RegExp(`RFC\\s*${num}\\b`, "i");
+      const hits = store.search(`RFC ${num}`, 3), subj = new RegExp(`^RFC\\s*${num}$`, "i"), inObj = new RegExp(`RFC\\s*${num}\\b`, "i");
       for (const h of hits) {
         let q = "";
         if (h.p === "is" && subj.test(h.s.trim())) {
@@ -62,10 +57,7 @@ function successorQueries(text: string, store: KnowSearch, already: string[]): s
           const src = /^RFC\s+(\d{1,5})/i.exec(h.s);
           if (src) q = `RFC ${src[1]} ${h.p}`;
         }
-        if (q && !have.has(q.toLowerCase()) && !out.some((x) => x.toLowerCase() === q.toLowerCase())) {
-          out.push(q);
-          break;
-        }
+        if (q && !have.has(q.toLowerCase()) && !out.some((x) => x.toLowerCase() === q.toLowerCase())) { out.push(q); break; }
       }
     } catch {}
   }
