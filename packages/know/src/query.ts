@@ -492,10 +492,8 @@ function buildTyped(t: string): FactCard | undefined {
   }
 
   if (n >= 9 && t.slice(0, 9).toLowerCase() === "iana dns ") {
-    const rr = t.slice(9).trim().toUpperCase();
-    const obj = DNS_OBJECT[rr];
-    if (!obj) return;
-    return keep(t, internFact(`iana dns ${rr}`, `${rr} is ${articleFor(obj)} ${obj} record.`));
+    const rr = t.slice(9).trim().toUpperCase(), obj = DNS_OBJECT[rr];
+    if (obj) return keep(t, internFact(`iana dns ${rr}`, `${rr} is ${articleFor(obj)} ${obj} record.`));
   }
   if (DNS_SET.has(up) && DNS_OBJECT[up]) {
     const obj = DNS_OBJECT[up]!;
@@ -503,16 +501,12 @@ function buildTyped(t: string): FactCard | undefined {
   }
 
   if (n >= 4 && t.slice(0, 4).toLowerCase() === "w3c ") {
-    const slug = t.slice(4).trim().toLowerCase();
-    const obj = W3C_OBJECT[slug];
-    if (!obj) return;
-    return keep(t, internFact(`w3c ${slug}`, `W3C ${slug} is ${obj}.`));
+    const slug = t.slice(4).trim().toLowerCase(), obj = W3C_OBJECT[slug];
+    if (obj) return keep(t, internFact(`w3c ${slug}`, `W3C ${slug} is ${obj}.`));
   }
   if (n >= 7 && t.slice(0, 7).toLowerCase() === "whatwg ") {
-    const slug = t.slice(7).trim().toLowerCase();
-    const obj = WHATWG_OBJECT[slug];
-    if (!obj) return;
-    return keep(t, internFact(`whatwg ${slug}`, `WHATWG ${slug} is ${obj}.`));
+    const slug = t.slice(7).trim().toLowerCase(), obj = WHATWG_OBJECT[slug];
+    if (obj) return keep(t, internFact(`whatwg ${slug}`, `WHATWG ${slug} is ${obj}.`));
   }
   if (n >= 15 && t.slice(0, 14).toLowerCase() === "unicode block ") {
     const raw = t.slice(14).trim();
