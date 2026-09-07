@@ -2232,17 +2232,11 @@ function wantsCapitalTable(url: string, html: string, tables?: { open: string; i
       if (/\binfobox\b|\bsidebar\b/i.test(t.open)) continue;
       const first = rowInners(t.inner)[0];
       if (!first) continue;
-      const ths = cellsIn(first).map((c) => headerLabel(c.inner));
-      if (capitalColumns(ths)) return true;
+      if (capitalColumns(cellsIn(first).map((c) => headerLabel(c.inner)))) return true;
     }
     return false;
   }
-  const thCap = /<th\b[^>]*>[\s\S]{0,160}?\b(?:capitals?|city\/town|cities|city|towns|town|seat)\b/i.test(html);
-  const thCountry =
-    /<th\b[^>]*>[\s\S]{0,160}?\b(?:country|countries|territory|territories|nation|nations|sovereign|state)\b/i.test(
-      html,
-    );
-  return thCap && thCountry;
+  return /<th\b[^>]*>[\s\S]{0,160}?\b(?:capitals?|city\/town|cities|city|towns|town|seat)\b/i.test(html) && /<th\b[^>]*>[\s\S]{0,160}?\b(?:country|countries|territory|territories|nation|nations|sovereign|state)\b/i.test(html);
 }
 
 export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean, scanIn?: HtmlScan): Triple[] {
