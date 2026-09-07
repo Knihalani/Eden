@@ -16,16 +16,7 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
-const FOLD: Record<string, string> = {
-  hours: "tz",
-  cache: "redis",
-  container: "image",
-  images: "image",
-  docker: "image",
-  production: "prod",
-  standup: "stand",
-  kubernetes: "k8s",
-};
+const FOLD: Record<string, string> = { hours: "tz", cache: "redis", container: "image", images: "image", docker: "image", production: "prod", standup: "stand", kubernetes: "k8s" };
 
 function tokList(s: string): string[] {
   return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).map((w) => FOLD[w] ?? w);
