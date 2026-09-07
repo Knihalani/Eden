@@ -2145,15 +2145,13 @@ function softwareName(url: string, scan?: HtmlScan): string | undefined {
   return tidyProper((h1 || title).replace(/\s*[-–|].*$/, "").trim());
 }
 
-const TOOL_SKIP =
-  /^(this|it|there|what|which|that|and|github|the|a|an|you|we|they|use|used|using|cookie|cookies|here|only|data|system|software|example|project|plugin|service|information|program)$/i;
+const TOOL_SKIP = /^(this|it|there|what|which|that|and|github|the|a|an|you|we|they|use|used|using|cookie|cookies|here|only|data|system|software|example|project|plugin|service|information|program)$/i;
 
 function tidyToolName(raw: string): string | undefined {
   const proper = tidyProper(raw);
   if (proper && !TOOL_SKIP.test(proper)) return proper;
   const t = stripMarkup(raw).replace(/\s+/g, " ").trim();
-  if (!/^[A-Za-z][\w.+-]{1,24}$/.test(t) || TOOL_SKIP.test(t)) return undefined;
-  return t;
+  return /^[A-Za-z][\w.+-]{1,24}$/.test(t) && !TOOL_SKIP.test(t) ? t : undefined;
 }
 
 function tidyTechniqueObject(raw: string): string | undefined {
