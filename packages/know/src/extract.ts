@@ -408,17 +408,10 @@ export function openGraph(html: string): Record<string, string> {
 
 /** DC.Title / citation_title / displaytitle — both attribute orders. */
 export function namedMeta(html: string, names: string[]): Record<string, string> {
-  const want = new Set(names.map((n) => n.toLowerCase()));
-  const out: Record<string, string> = {};
-  const re = /<meta\b([^>]+)>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    const tag = m[1]!;
-    const key = tag.match(/(?:name|property)\s*=\s*["']([^"']+)["']/i)?.[1];
-    const val = tag.match(/content\s*=\s*["']([^"']*)["']/i)?.[1];
-    if (!key || val == null) continue;
-    const k = key.toLowerCase();
-    if (want.has(k) && out[k] === undefined) out[k] = decodeEntities(val);
+  const want = new Set(names.map((n) => n.toLowerCase())), out: Record<string, string> = {};
+  for (const m of html.matchAll(/<meta\b([^>]+)>/gi)) {
+    const tag = m[1]!, key = tag.match(/(?:name|property)\s*=\s*["']([^"']+)["']/i)?.[1], val = tag.match(/content\s*=\s*["']([^"']*)["']/i)?.[1];
+    if (key && val != null) { const k = key.toLowerCase(); if (want.has(k) && out[k] === undefined) out[k] = decodeEntities(val); }
   }
   return out;
 }
