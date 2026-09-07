@@ -600,9 +600,8 @@ function sharedStore(): KnowSearch {
 
 export function knowQuery(q: string, store?: KnowSearch) {
   if (!q.trim()) return { unknown: true };
-  const nq = rewriteQuery(q);
-  const flash = buildTyped(nq);
-  if (flash) return flash;
+  const nq = rewriteQuery(q), flash = buildTyped(nq);
+  if (flash || (!store && q.includes("?"))) return flash || { unknown: true };
   const s = store ?? sharedStore();
   const searchHits = (query: string) => {
     let hits = s.search(query, 8).filter((h) => h.p !== "about" && h.p !== "date");
