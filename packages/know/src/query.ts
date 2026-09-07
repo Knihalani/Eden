@@ -461,8 +461,7 @@ function buildTyped(t: string): FactCard | undefined {
 
   const csKey = t.toLowerCase() === "utf8" ? "utf-8" : t.toLowerCase();
   if (csKey === "utf-8" || Object.prototype.hasOwnProperty.call(CHARSET_OBJECT, csKey)) {
-    const shown = csKey === "utf-8" ? "UTF-8" : t;
-    const obj = CHARSET_OBJECT[csKey] || shown;
+    const shown = csKey === "utf-8" ? "UTF-8" : t, obj = CHARSET_OBJECT[csKey] || shown;
     const fact = tautology(obj, csKey) || obj.toLowerCase() === csKey || shown === obj ? `${shown} is a charset.` : `${shown} is ${obj}.`;
     return keep(t, internFact(csKey, fact));
   }
