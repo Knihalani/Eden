@@ -373,21 +373,9 @@ export function htmlToText(html: string): string {
 }
 
 function parseLdJson(raw: string): unknown | undefined {
-  let s = decodeEntities(raw)
-    .replace(/^\s*<!\[CDATA\[/i, "")
-    .replace(/\]\]>\s*$/i, "")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .trim();
-  if (!s) return undefined;
-  for (const candidate of [s, s.replace(/,\s*([}\]])/g, "$1")]) {
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      /* try next */
-    }
-  }
-  return undefined;
+  const s = decodeEntities(raw).replace(/^\s*<!\[CDATA\[/i, "").replace(/\]\]>\s*$/i, "").replace(/<!--[\s\S]*?-->/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").trim();
+  if (!s) return;
+  for (const candidate of [s, s.replace(/,\s*([}\]])/g, "$1")]) try { return JSON.parse(candidate); } catch {}
 }
 
 export function jsonLdBlocks(html: string): unknown[] {
