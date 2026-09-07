@@ -1,5 +1,5 @@
 /** Hot RFC titles for wrap + gold. No zlib / RT11 — first inject must not parse rfc-titles.bin. */
-const RFC_HOT_D = [20, 15, 733, 23, 1, 80, 87, 75, 1, 2226, 725, 641, 1828, 1804, 741, 110, 1, 198] as const;
+const RFC_HOT_D = [20, 15, 733, 23, 1, 80, 87, 75, 1, 2226, 725, 641, 1828, 1804, 187, 554, 110, 1, 198] as const;
 const RFC_HOT_T = `ASCII format for network interchange
 Network Meeting
 User Datagram Protocol
@@ -14,6 +14,7 @@ Uniform Resource Identifier (URI): Generic Syntax
 The application/json Media Type for JavaScript Object Notation (JSON)
 The WebSocket Protocol
 The JavaScript Object Notation (JSON) Data Interchange Format
+The Transport Layer Security (TLS) Protocol Version 1.3
 QUIC: A UDP-Based Multiplexed and Secure Transport
 HTTP Semantics
 HTTP Caching
