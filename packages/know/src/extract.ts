@@ -2136,18 +2136,13 @@ function softwareName(url: string, scan?: HtmlScan): string | undefined {
     const host = u.hostname.replace(/^www\./, "").toLowerCase();
     if (host === "github.com" || host === "raw.githubusercontent.com") {
       const repo = u.pathname.split("/").filter(Boolean)[1];
-      if (!repo) return undefined;
+      if (!repo) return;
       const decoded = decodeURIComponent(repo);
-      if (/[A-Z.]/.test(decoded) || decoded.includes("-")) return decoded;
-      return decoded.charAt(0).toUpperCase() + decoded.slice(1);
+      return /[A-Z.]/.test(decoded) || decoded.includes("-") ? decoded : decoded.charAt(0).toUpperCase() + decoded.slice(1);
     }
-  } catch {
-    /* fall through */
-  }
-  const title = (scan?.og.title || scan?.title || "").replace(/\s+/g, " ").trim();
-  const h1 = scan?.h1[0] ? innerText(scan.h1[0]!) : "";
-  const raw = (h1 || title).replace(/\s*[-–|].*$/, "").trim();
-  return tidyProper(raw);
+  } catch {}
+  const title = (scan?.og.title || scan?.title || "").replace(/\s+/g, " ").trim(), h1 = scan?.h1[0] ? innerText(scan.h1[0]!) : "";
+  return tidyProper((h1 || title).replace(/\s*[-–|].*$/, "").trim());
 }
 
 const TOOL_SKIP =
