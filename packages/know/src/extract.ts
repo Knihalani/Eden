@@ -2337,7 +2337,7 @@ function extrasFromProse(text: string): Triple[] {
     }
   }
   const TOOL_IS =
-    /\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi;
+    /\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|all-in-one\s+|all in one\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi;
   for (const m of head.matchAll(TOOL_IS)) {
     const s = tidyProper(m[1]!);
     if (!s || /^(this|it|there|what|github|the)$/i.test(s)) continue;
