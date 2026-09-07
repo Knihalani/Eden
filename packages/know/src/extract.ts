@@ -386,20 +386,13 @@ export function jsonLdBlocks(html: string): unknown[] {
     const mark = html.indexOf("ld+json", from);
     if (mark < 0) break;
     const lt = html.lastIndexOf("<script", mark);
-    if (lt < 0 || lt < from) {
-      from = mark + 7;
-      continue;
-    }
+    if (lt < 0 || lt < from) { from = mark + 7; continue; }
     const gt = html.indexOf(">", mark);
     if (gt < 0) break;
     const open = html.slice(lt, gt + 1);
-    if (!/type\s*=\s*["']application\/ld\+json/i.test(open)) {
-      from = mark + 7;
-      continue;
-    }
+    if (!/type\s*=\s*["']application\/ld\+json/i.test(open)) { from = mark + 7; continue; }
     const end = closeTagFrom(html, gt + 1, "</script>");
-    const raw = html.slice(gt + 1, Math.max(gt + 1, end - 9));
-    const parsed = parseLdJson(raw);
+    const parsed = parseLdJson(html.slice(gt + 1, Math.max(gt + 1, end - 9)));
     if (parsed !== undefined) out.push(parsed);
     from = end;
   }
