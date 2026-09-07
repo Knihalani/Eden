@@ -1678,14 +1678,10 @@ export function wikiCapitalTable(html: string, tables?: { open: string; inner: s
 
 function attrOrInner(scope: string, key: string): string {
   const k = `(?:[\\w.]+:|https?:\\/\\/schema\\.org\\/)?${key}`;
-  const quoted = scope.match(new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*content\\s*=\\s*["']([^"']+)["']`, "i"))?.[1];
-  if (quoted) return quoted;
-  const rev = scope.match(new RegExp(`content\\s*=\\s*["']([^"']+)["'][^>]*(?:itemprop|property)\\s*=\\s*["']${k}["']`, "i"))?.[1];
-  if (rev) return rev;
-  const nested = scope.match(
-    new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*>\\s*(?:<[^>]+>)*\\s*([A-Z][^<]{1,60})`, "i"),
-  )?.[1];
-  return nested?.trim() || "";
+  return scope.match(new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*content\\s*=\\s*["']([^"']+)["']`, "i"))?.[1]
+    || scope.match(new RegExp(`content\\s*=\\s*["']([^"']+)["'][^>]*(?:itemprop|property)\\s*=\\s*["']${k}["']`, "i"))?.[1]
+    || scope.match(new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*>\\s*(?:<[^>]+>)*\\s*([A-Z][^<]{1,60})`, "i"))?.[1]?.trim()
+    || "";
 }
 
 function countryFactsFromScope(scope: string): Triple[] {
