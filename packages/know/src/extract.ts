@@ -1186,17 +1186,10 @@ function tidyArea(raw: string): string | undefined {
 }
 
 function tidyGov(raw: string): string | undefined {
-  let t = stripMarkup(raw)
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (t.length < 6 || t.length > 60) return undefined;
-  if (/^(government|republic|none|n\/a|country|state)$/i.test(t)) return undefined;
+  let t = stripMarkup(raw).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  if (t.length < 6 || t.length > 60 || /^(government|republic|none|n\/a|country|state)$/i.test(t)) return;
   t = t.charAt(0).toLowerCase() + t.slice(1);
-  if (!/^(a|an|the)\s/i.test(t)) {
-    const an = /^[aeiou]/i.test(t) && !/^(uni|u[bcdfghjklmnpqrstvwxyz])/i.test(t);
-    t = `${an ? "an" : "a"} ${t}`;
-  }
+  if (!/^(a|an|the)\s/i.test(t)) t = `${/^[aeiou]/i.test(t) && !/^(uni|u[bcdfghjklmnpqrstvwxyz])/i.test(t) ? "an" : "a"} ${t}`;
   return t.length >= 8 && t.length <= 72 ? t : undefined;
 }
 
