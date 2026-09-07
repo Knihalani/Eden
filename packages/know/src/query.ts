@@ -405,8 +405,7 @@ function internFact(key: string, fact: string): FactCard {
 }
 
 function keep(t: string, c: FactCard | undefined): FactCard | undefined {
-  if (c) INTERN.set(t, c);
-  return c;
+  return c && (INTERN.set(t, c), c);
 }
 
 const HOT_TECH: Record<string, string> = {
