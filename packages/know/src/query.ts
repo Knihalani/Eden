@@ -121,7 +121,8 @@ function rewriteQuery(q: string): string {
   const uri = t.includes("://") && /^(https?|wss?|ftp|file|git|ssh|sftp):\/\/\S+$/i.exec(t)?.[1];
   if (uri) return uri.toLowerCase();
   const used = /^what(?:'s| is)\s+([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
-  return phraseExact(t) || (used ? `used for ${used[1]!.toLowerCase()}` : t);
+  const usedBare = /^([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
+  return phraseExact(t) || (used ? `used for ${used[1]!.toLowerCase()}` : usedBare ? `used for ${usedBare[1]!.toLowerCase()}` : t);
 }
 
 function capTokens(s: string, n = MAX_TOKENS): string {
