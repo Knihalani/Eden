@@ -36,8 +36,14 @@ function liteStem(w: string): string {
 }
 
 function titleBonus(query: string, note: string): number {
-  if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title)\b/i.test(query)) return 0;
-  return /"[^"]{3,80}"/.test(note) ? 2 : 0;
+  if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title|series|watch(?:ed)?|read(?:ing)?)\b/i.test(query)) return 0;
+  if (!/"[^"]{3,80}"/.test(note)) return 0;
+  let n = 2;
+  if (/\b(called|named|titled|title)\b/i.test(query) && /\b(called|named|titled)\b/i.test(note)) n += 2;
+  if (/\b(book|novel|series|read(?:ing)?)\b/i.test(query) && /\b(book|read(?:ing)?|novel)\b/i.test(note)) n += 1.5;
+  if (/\b(movie|watch(?:ed)?|film|show)\b/i.test(query) && /\b(watch(?:ed)?|movie|film|show)\b/i.test(note)) n += 1.5;
+  if (/\b(piece|dance|song|track|album|poem)\b/i.test(query) && /\b(piece|dance|song|track|album|poem|perform)\b/i.test(note)) n += 1.5;
+  return n;
 }
 
 function favBonus(query: string, note: string): number {
@@ -70,7 +76,11 @@ function retrieveText(text: string): string {
     .replace(/\b(once|one time)\b/gi, "$& 1")
     .replace(/\b(thrice|three times)\b/gi, "$& 3")
     .replace(/\b(four times)\b/gi, "$& 4")
-    .replace(/\b(five times)\b/gi, "$& 5");
+    .replace(/\b(five times)\b/gi, "$& 5")
+    .replace(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b/gi, (m) => {
+      const map: Record<string, string> = { zero: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10", eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17", eighteen: "18", nineteen: "19", twenty: "20", thirty: "30", forty: "40", fifty: "50", sixty: "60", seventy: "70", eighty: "80", ninety: "90" };
+      return `${m} ${map[m.toLowerCase()] ?? ""}`.trim();
+    });
 }
 
 
@@ -79,9 +89,31 @@ function howBonus(query: string, note: string): number {
   return /\b(by |through |using |via |with my |with our |carving|priorit|practice|routine|habit|steps?|process)\b/i.test(note) ? 1.5 : 0;
 }
 
+
+function intentBonus(query: string, note: string): number {
+  if (!/\b(interested|pursuing|plans?|excited|looking|keen|researching|want to)\b/i.test(query)) return 0;
+  return /\b(looking into|keen|excited|want to|interested|plan(?:s|ning|ned)?|research(?:ing|ed)?|pursue|pursuing)\b/i.test(note) ? 3 : 0;
+}
+
+
+function whereBonus(query: string, note: string): number {
+  if (!/\b(where|which city|which town|which country|which state)\b/i.test(query)) return 0;
+  return /\b(in |at |to |from |visited|trip to|live(?:s|d)? in|moved to|based in|city|town|mountains?|park)\b/i.test(note) ? 2.5 : 0;
+}
+
 function queryHay(text: string): Set<string> {
   const hay = new Set(tokList(text).filter((w) => !QUERY_SKIP.has(w)));
   if (/\b(cheese|steak|steakhouse|restaurant|dinner|lunch|tasting|menu|eat|food|diet|allerg)\b/i.test(text)) hay.add("diet");
+  if (/\bchildhood\b/i.test(text)) { hay.add("child"); hay.add("kid"); }
+  if (/\b(where|which city|which town|which country)\b/i.test(text) && /\b(move|moved|from|live|lived|visit|visited|trip)\b/i.test(text)) {
+    hay.add("country"); hay.add("city"); hay.add("town");
+  }
+  if (/\bpet\b/i.test(text)) { hay.add("dog"); hay.add("cat"); hay.add("guinea"); hay.add("pig"); hay.add("puppy"); hay.add("kitten"); }
+  if (/\b(shoes?|sneakers)\b/i.test(text)) { hay.add("running"); hay.add("run"); }
+  if (/\b(church|window)\b/i.test(text) && /\b(make|made|creat|built|craft)\b/i.test(text)) { hay.add("glass"); hay.add("stained"); }
+  if (/\bplans?\b/i.test(text) && /\b(summer|adopt|future|year)\b/i.test(text)) {
+    hay.add("adoption"); hay.add("adopt"); hay.add("agency");
+  }
   return hay;
 }
 
@@ -249,7 +281,7 @@ export class AgentMemory {
         if (d / N < 0.04) idf *= 1.55;
         n += idf;
       }
-      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) };
+      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) };
     }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
