@@ -61,6 +61,24 @@ function quantBonus(query: string, note: string): number {
   return /\b\d{1,4}\b/.test(note) ? 1.5 : 0;
 }
 
+
+function retrieveText(text: string): string {
+  return text
+    .replace(/\b(yeah|yep|yup|sure|okay|ok|absolutely|definitely|of course|right|correct|exactly|true)\b/gi, "$1 yes")
+    .replace(/\b(nope|nah|no way|wrong|false|never)\b/gi, "$1 no")
+    .replace(/\b(twice|two times)\b/gi, "$& 2")
+    .replace(/\b(once|one time)\b/gi, "$& 1")
+    .replace(/\b(thrice|three times)\b/gi, "$& 3")
+    .replace(/\b(four times)\b/gi, "$& 4")
+    .replace(/\b(five times)\b/gi, "$& 5");
+}
+
+
+function howBonus(query: string, note: string): number {
+  if (!/\bhow\b/i.test(query) || /\bhow (?:long|many|old|much)\b/i.test(query)) return 0;
+  return /\b(by |through |using |via |with my |with our |carving|priorit|practice|routine|habit|steps?|process)\b/i.test(note) ? 1.5 : 0;
+}
+
 function queryHay(text: string): Set<string> {
   const hay = new Set(tokList(text).filter((w) => !QUERY_SKIP.has(w)));
   if (/\b(cheese|steak|steakhouse|restaurant|dinner|lunch|tasting|menu|eat|food|diet|allerg)\b/i.test(text)) hay.add("diet");
@@ -231,13 +249,14 @@ export class AgentMemory {
         if (d / N < 0.04) idf *= 1.55;
         n += idf;
       }
-      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) };
+      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) };
     }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
   notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
-    if (text) return this.relevant(text, k);
-    return ((recs) => [...recs.filter((r) => r.kind === "constraint").slice(-k), ...recs.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(this.memories());
+    const map = (recs: MemoryRecord[]) => recs.map((r) => ({ ...r, text: retrieveText(r.text) }));
+    if (text) return map(this.relevant(text, k));
+    return map(((recs) => [...recs.filter((r) => r.kind === "constraint").slice(-k), ...recs.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(this.memories()));
   }
 
   query(q: string, k = Number(process.env.EDEN_MEMORY_CAP) || 6): QueryHit[] {
