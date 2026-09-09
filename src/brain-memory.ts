@@ -45,6 +45,19 @@ function formatTurn(t: BrainTurn): string {
   return `${sp}:${date} ${t.text}`.replace(/\s+/g, " ").trim();
 }
 
+/** Strip `Speaker: [date] ` prefix from a note, collapse whitespace. */
+function noteBody(note: string): string {
+  return note
+    .replace(/^[A-Za-z][A-Za-z0-9 /._-]{0,32}:\s*/, "")
+    .replace(/^\[[^\]]*\]\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function bodyKey(body: string): string {
+  return body.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24);
+}
+
 function bm25(query: string, docs: string[], k: number): string[] {
   const N = docs.length || 1;
   const dl = docs.map((d) => Math.max(1, toks(d).length));
@@ -76,6 +89,50 @@ function bm25(query: string, docs: string[], k: number): string[] {
     .map((x) => x.d);
 }
 
+function uniq(list: string[]): string[] {
+  return [...new Set(list)];
+}
+
+type Bm25Index = { tfs: Map<string, number>[]; df: Map<string, number>; dl: number[]; avgdl: number; N: number };
+
+function bm25Index(tokLists: string[][]): Bm25Index {
+  const N = tokLists.length || 1;
+  const dl = tokLists.map((t) => Math.max(1, t.length));
+  const avgdl = dl.reduce((a, b) => a + b, 0) / N;
+  const df = new Map<string, number>();
+  const tfs = tokLists.map((ts) => {
+    const m = new Map<string, number>();
+    for (const w of ts) m.set(w, (m.get(w) || 0) + 1);
+    for (const w of m.keys()) df.set(w, (df.get(w) || 0) + 1);
+    return m;
+  });
+  return { tfs, df, dl, avgdl, N };
+}
+
+function bm25Scores(query: string, ix: Bm25Index): number[] {
+  const q = toks(query);
+  const k1 = 1.5, b = 0.75;
+  const out = new Array<number>(ix.tfs.length).fill(0);
+  for (const w of q) {
+    const d = ix.df.get(w) || 0;
+    if (!d) continue;
+    const idf = Math.log((ix.N - d + 0.5) / (d + 0.5) + 1);
+    for (let i = 0; i < ix.tfs.length; i++) {
+      const n = ix.tfs[i]!.get(w) || 0;
+      if (!n) continue;
+      out[i] += idf * ((n * (k1 + 1)) / (n + k1 * (1 - b + b * (ix.dl[i]! / ix.avgdl))));
+    }
+  }
+  return out;
+}
+
+function topK(docs: string[], scores: number[], k: number): string[] {
+  const idx: number[] = [];
+  for (let i = 0; i < scores.length; i++) if (scores[i]! > 0) idx.push(i);
+  idx.sort((a, b) => scores[b]! - scores[a]!);
+  return idx.slice(0, k).map((i) => docs[i]!);
+}
+
 function rrfFuse(lists: string[][], k: number, rrfK = 60): string[] {
   const score = new Map<string, number>();
   for (const list of lists) {
@@ -92,6 +149,11 @@ export class BrainMemory {
   private ctx: number[][] = [];
   private profiles = new Map<string, string[]>();
   private sal: number[] = [];
+  private bodyIndex = new Map<string, number[]>();
+  private canonCache = new Map<string, string>();
+  private epiIx: Bm25Index | null = null;
+  private noteSets: Set<string>[] = [];
+  private epiPos = new Map<string, number>();
   private semantic: AgentMemory;
   private dir: string;
 
@@ -103,6 +165,8 @@ export class BrainMemory {
   ingestTurns(turns: BrainTurn[]) {
     this.turns = turns.map((t, i) => ({ ...t, at: t.at ?? i, speaker: t.speaker || "speaker", date: t.date || "" }));
     this.episodic = this.turns.map(formatTurn);
+    this.epiPos = new Map(this.episodic.map((e, i) => [e, i]));
+    this.buildBodyIndex();
     this.buildGraph();
     this.buildTemporal();
     this.buildProfiles();
@@ -123,9 +187,44 @@ export class BrainMemory {
     );
   }
 
+  /** Episodic pattern completion: index turn bodies so a trimmed cortical note can be re-bound to its full episode. */
+  private buildBodyIndex() {
+    this.bodyIndex.clear();
+    this.canonCache.clear();
+    for (let i = 0; i < this.turns.length; i++) {
+      const key = bodyKey(this.turns[i]!.text || "");
+      if (!key) continue;
+      const list = this.bodyIndex.get(key);
+      if (list) list.push(i);
+      else this.bodyIndex.set(key, [i]);
+    }
+  }
+
+  /** Map a semantic note back to the episodic turn it was distilled from (full turn wins: more context, one node id). */
+  private canon(note: string): string {
+    const hit = this.canonCache.get(note);
+    if (hit !== undefined) return hit;
+    let out = note;
+    const body = noteBody(note);
+    const cands = this.bodyIndex.get(bodyKey(body));
+    if (cands) {
+      for (const i of cands) {
+        const full = (this.turns[i]!.text || "").replace(/\s+/g, " ").trim();
+        if (full === body || full.startsWith(body) || full.includes(body)) {
+          out = this.episodic[i]!;
+          break;
+        }
+      }
+    }
+    this.canonCache.set(note, out);
+    return out;
+  }
+
   private buildGraph() {
     this.graph.clear();
     this.noteToks = this.episodic.map((n) => toks(n));
+    this.noteSets = this.noteToks.map((t) => new Set(t));
+    this.epiIx = bm25Index(this.noteToks);
     const link = (a: string, b: string, w = 1) => {
       if (a === b) return;
       if (!this.graph.has(a)) this.graph.set(a, new Map());
@@ -269,7 +368,7 @@ export class BrainMemory {
     };
     return this.episodic
       .map((d, i) => {
-        const hay = new Set(toks(d));
+        const hay = this.noteSets[i]!;
         let lex = 0;
         for (const w of qTok) if (hay.has(w)) lex += 1;
         for (const w of qDate) if (hay.has(w)) lex += 2;
@@ -281,6 +380,10 @@ export class BrainMemory {
       .map((x) => x.d);
   }
 
+  private epiBm25(q: string, k: number): string[] {
+    return topK(this.episodic, bm25Scores(q, this.epiIx!), k);
+  }
+
   private schemaRetrieve(q: string, k: number): string[] {
     const qNames = properNames(q).map((n) => n.toLowerCase());
     const profileHits: string[] = [];
@@ -288,14 +391,14 @@ export class BrainMemory {
       const lines = this.profiles.get(name);
       if (lines?.length) profileHits.push(...bm25(q, lines, 8));
     }
-    return rrfFuse([profileHits, bm25(q, this.episodic, 12)], k);
+    return rrfFuse([profileHits, this.epiBm25(q, 12)], k);
   }
 
   private salienceRetrieve(q: string, k: number): string[] {
     const qTok = toks(q);
     return this.episodic
       .map((d, i) => {
-        const hay = new Set(toks(d));
+        const hay = this.noteSets[i]!;
         let lex = 0;
         for (const w of qTok) if (hay.has(w)) lex += 1;
         return { d, s: lex + 0.35 * (this.sal[i] || 0) };
@@ -307,13 +410,33 @@ export class BrainMemory {
   }
 
   retrieve(q: string, k = 6): string[] {
+    if (!this.episodic.length) return this.retrieveCore(q, k);
+    return this.retrieveCore(q, k).map((d) => this.chunk(d));
+  }
+
+  /**
+   * Episodic chunk reconstruction: a hit is re-bound to its same-session dialogue
+   * neighbours (prev, hit, next). A query usually matches the turn that *asks*, while
+   * the answer lives in the reply — temporal-context binding returns the pair as one unit.
+   */
+  private chunk(d: string): string {
+    const i = this.epiPos.get(d);
+    if (i === undefined) return d;
+    const sess = this.turns[i]!.session;
+    const parts = [d];
+    if (i + 1 < this.turns.length && this.turns[i + 1]!.session === sess) parts.push(this.episodic[i + 1]!);
+    if (i > 0 && this.turns[i - 1]!.session === sess) parts.unshift(this.episodic[i - 1]!);
+    return parts.join("\n");
+  }
+
+  private retrieveCore(q: string, k = 6): string[] {
     if (!this.episodic.length) return this.semantic.notesFor(q, k).map((m) => m.text);
     const whenQ = /\b(when|date|year|month|ago|yesterday|last week|before|after)\b/i.test(q);
     // Date cues without "when" still get temporal enrichment (year/month in Q).
     const dateCue = /\b20\d{2}\b/.test(q) || /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(q);
-    const eden = this.semantic.notesFor(q, 20).map((m) => m.text);
+    const eden = uniq(this.semantic.notesFor(q, 20).map((m) => this.canon(m.text)));
     const qEp = whenQ || dateCue ? this.whenQuery(q) : q;
-    const epiBm25 = bm25(qEp, this.episodic, 24);
+    const epiBm25 = this.epiBm25(qEp, 24);
     if (whenQ) {
       const tcm = this.tcmRetrieve(qEp, 24);
       const dated = [...tcm, ...epiBm25].filter((n) => /\[[^\]]*\]/.test(n) || /\b20\d{2}\b/.test(n));
