@@ -1,0 +1,188 @@
+/**
+ * Episodic store (hippocampus): pattern-separated, time-indexed episodes with sparse
+ * high-dimensional keys — unigram stems, hashed bigrams, entity tags, time buckets — and
+ * attractor-style pattern completion (retrieve → re-cue from top hits → retrieve, with decay).
+ */
+import { codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stampToks, textTimeToks, type Stamp } from "./text";
+
+export type Episode = {
+  i: number;
+  speaker: string;
+  text: string;
+  date: string;
+  stamp: Stamp;
+  session: number;
+  at: number;
+  /** Rendered form returned to callers. */
+  render: string;
+  /** Sparse key: feature -> tf */
+  key: Map<string, number>;
+  /** Content stems in order (for bigrams / proximity). */
+  stems: string[];
+  grounded: string[];
+  isQuestion: boolean;
+};
+
+export type Cue = Map<string, number>;
+
+export function featurize(text: string, speaker: string, stamp: Stamp, grounded: string[]): { key: Map<string, number>; stems: string[] } {
+  const key = new Map<string, number>();
+  const bump = (f: string, w = 1) => key.set(f, (key.get(f) || 0) + w);
+  const stems = contentToks(text);
+  for (const s of stems) bump(s);
+  for (let i = 0; i + 1 < stems.length; i++) bump(`${stems[i]}_${stems[i + 1]}`, 0.6);
+  for (const n of properNames(text)) bump(`#${n}`, 1);
+  for (const c of codeToks(text)) bump(`#${c}`, 1);
+  if (speaker) bump(`@${speaker.toLowerCase()}`, 1);
+  for (const t of stampToks(stamp)) bump(t, 1);
+  for (const t of textTimeToks(text)) bump(t, 0.8);
+  for (const g of grounded) for (const t of textTimeToks(g)) bump(t, 0.5);
+  return { key, stems };
+}
+
+export type Hit = { i: number; s: number };
+
+export class EpisodicStore {
+  episodes: Episode[] = [];
+  /** feature -> [episode idx, tf][] */
+  private post = new Map<string, [number, number][]>();
+  private df = new Map<string, number>();
+  private len: number[] = [];
+  private avgLen = 1;
+  private renderPos = new Map<string, number>();
+
+  ingest(turns: { text: string; speaker?: string; date?: string; session?: number; at?: number }[]) {
+    this.episodes = [];
+    this.post.clear();
+    this.df.clear();
+    this.len = [];
+    this.renderPos.clear();
+    turns.forEach((t, i) => {
+      const speaker = t.speaker || "speaker";
+      const date = t.date || "";
+      const stamp = parseStamp(date);
+      const text = String(t.text || "").replace(/\s+/g, " ").trim();
+      const grounded = groundRelativeTime(text, stamp);
+      const { key, stems } = featurize(text, speaker, stamp, grounded);
+      const render = `${speaker}:${date ? ` [${date}]` : ""} ${text}${grounded.length ? ` {≈ ${grounded.join("; ")}}` : ""}`;
+      const ep: Episode = { i, speaker, text, date, stamp, session: t.session ?? 0, at: t.at ?? i, render, key, stems, grounded, isQuestion: /\?\s*$/.test(text) || /\?/.test(text) };
+      this.episodes.push(ep);
+      this.renderPos.set(render, i);
+      let l = 0;
+      for (const [f, tf] of key) {
+        l += tf;
+        const p = this.post.get(f);
+        if (p) p.push([i, tf]);
+        else this.post.set(f, [[i, tf]]);
+        this.df.set(f, (this.df.get(f) || 0) + 1);
+      }
+      this.len.push(Math.max(1, l));
+    });
+    this.avgLen = this.len.reduce((a, b) => a + b, 0) / Math.max(1, this.len.length);
+  }
+
+  size() {
+    return this.episodes.length;
+  }
+
+  indexOf(render: string): number | undefined {
+    return this.renderPos.get(render);
+  }
+
+  idf(f: string): number {
+    const d = this.df.get(f) || 0;
+    if (!d) return 0;
+    const N = this.episodes.length || 1;
+    return Math.log((N - d + 0.5) / (d + 0.5) + 1);
+  }
+
+  dfOf(f: string): number {
+    return this.df.get(f) || 0;
+  }
+
+  /** BM25-style sparse dot product between a cue and every episode. */
+  score(cue: Cue, k1 = 1.2, b = 0.5): Float64Array {
+    const out = new Float64Array(this.episodes.length);
+    for (const [f, w] of cue) {
+      if (!w) continue;
+      const p = this.post.get(f);
+      if (!p) continue;
+      const idf = this.idf(f);
+      for (const [i, tf] of p) {
+        out[i] += w * idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (this.len[i]! / this.avgLen))));
+      }
+    }
+    return out;
+  }
+
+  /** Build a cue from a query: stems + bigrams + entities + explicit time buckets. */
+  cueFor(q: string, opts: { entityW?: number; timeW?: number } = {}): Cue {
+    const cue: Cue = new Map();
+    const bump = (f: string, w: number) => cue.set(f, (cue.get(f) || 0) + w);
+    const stems = contentToks(q);
+    for (const s of stems) bump(s, 1);
+    for (let i = 0; i + 1 < stems.length; i++) bump(`${stems[i]}_${stems[i + 1]}`, 0.5);
+    for (const n of properNames(q)) {
+      bump(`#${n}`, opts.entityW ?? 1.5);
+      bump(`@${n}`, 0.6);
+    }
+    for (const c of codeToks(q)) bump(`#${c}`, 2);
+    for (const t of textTimeToks(q)) bump(t, opts.timeW ?? 1.5);
+    return cue;
+  }
+
+  topK(scores: Float64Array, k: number, min = 1e-9): Hit[] {
+    const idx: number[] = [];
+    for (let i = 0; i < scores.length; i++) if (scores[i]! > min) idx.push(i);
+    idx.sort((a, b) => scores[b]! - scores[a]!);
+    return idx.slice(0, k).map((i) => ({ i, s: scores[i]! }));
+  }
+
+  /**
+   * Pattern completion: iterative attractor retrieval. Round r re-cues with the rare
+   * features of the top-m hits (decayed), so partial cues converge to the episode that
+   * bridges to the answer (multi-hop) while common features are ignored.
+   */
+  complete(cue: Cue, opts: { rounds?: number; m?: number; decay?: number; maxDf?: number; scores?: Float64Array } = {}): Float64Array {
+    const rounds = opts.rounds ?? 2;
+    const m = opts.m ?? 3;
+    const decay = opts.decay ?? 0.35;
+    const maxDf = opts.maxDf ?? Math.max(4, Math.round(this.episodes.length * 0.02));
+    let cur: Cue = new Map(cue);
+    let acc = opts.scores ?? this.score(cue);
+    let s = acc;
+    for (let r = 1; r < rounds; r++) {
+      const top = this.topK(s, m);
+      if (!top.length) break;
+      const best = top[0]!.s || 1;
+      const next: Cue = new Map(cur);
+      let added = 0;
+      for (const h of top) {
+        const rel = h.s / best;
+        if (rel < 0.4) continue;
+        for (const [f, tf] of this.episodes[h.i]!.key) {
+          if (cue.has(f) || f.startsWith("t:") || f.startsWith("@")) continue;
+          if ((this.df.get(f) || 0) > maxDf || f.includes("_")) continue;
+          next.set(f, (next.get(f) || 0) + decay * rel * Math.min(1, tf));
+          added++;
+        }
+      }
+      if (!added) break;
+      cur = next;
+      s = this.score(cur);
+      const w = Math.pow(decay, r);
+      const merged = new Float64Array(acc.length);
+      for (let i = 0; i < acc.length; i++) merged[i] = acc[i]! + w * s[i]!;
+      acc = merged;
+    }
+    return acc;
+  }
+
+  /** Same-session neighbours (for dialogue chunk reconstruction). */
+  neighbours(i: number): { prev?: Episode; next?: Episode } {
+    const e = this.episodes[i]!;
+    const prev = i > 0 && this.episodes[i - 1]!.session === e.session ? this.episodes[i - 1] : undefined;
+    const next = i + 1 < this.episodes.length && this.episodes[i + 1]!.session === e.session ? this.episodes[i + 1] : undefined;
+    return { prev, next };
+  }
+}
