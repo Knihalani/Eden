@@ -265,7 +265,11 @@ export class AgentMemory {
     }
     const prefs = new Set([...hay].filter((h) => h.length >= 8 && !speakers.has(h)).map((h) => h.slice(0, 5)));
     const N = rows.length || 1, df = new Map<string, number>();
-    const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x)) || (x.length >= 8 && !speakers.has(x) && prefs.has(x.slice(0, 5)));
+    // Prefix hit only when stems agree — blocks activities→activist collisions.
+    const hit = (x: string) =>
+      hay.has(x) ||
+      hayStem.has(liteStem(x)) ||
+      (x.length >= 8 && !speakers.has(x) && prefs.has(x.slice(0, 5)) && hayStem.has(liteStem(x)));
     for (const c of rows) {
       const seen = new Set<string>();
       for (const x of c.needles) if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); }
