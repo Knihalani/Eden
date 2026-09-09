@@ -309,20 +309,29 @@ export class BrainMemory {
   retrieve(q: string, k = 6): string[] {
     if (!this.episodic.length) return this.semantic.notesFor(q, k).map((m) => m.text);
     const whenQ = /\b(when|date|year|month|ago|yesterday|last week|before|after)\b/i.test(q);
+    // Date cues without "when" still get temporal enrichment (year/month in Q).
+    const dateCue = /\b20\d{2}\b/.test(q) || /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(q);
     const eden = this.semantic.notesFor(q, 20).map((m) => m.text);
-    const qEp = whenQ ? this.whenQuery(q) : q;
+    const qEp = whenQ || dateCue ? this.whenQuery(q) : q;
     const epiBm25 = bm25(qEp, this.episodic, 24);
     if (whenQ) {
       const tcm = this.tcmRetrieve(qEp, 24);
       const dated = [...tcm, ...epiBm25].filter((n) => /\[[^\]]*\]/.test(n) || /\b20\d{2}\b/.test(n));
       const asa = this.asaRetrieve(q, 12);
-      return rrfFuse([dated, dated, tcm, epiBm25, asa, eden], k);
+      const fused = rrfFuse([dated, dated, tcm, epiBm25, asa, eden], k);
+      // Light Eden pin on when-path — keeps cortex gist without burying TCM.
+      const pin = eden.slice(0, 2).filter(Boolean);
+      if (pin.length) {
+        const rest = fused.filter((d) => !pin.includes(d));
+        return [...pin, ...rest].slice(0, k);
+      }
+      return fused;
     }
     const sch = this.schemaRetrieve(q, 12);
     const asa = this.asaRetrieve(q, 12);
     const fused = rrfFuse([eden, eden, epiBm25, sch, asa], k);
     // Pin Eden's top semantic hits so cortex gist is never buried by episodic noise.
-    const pin = eden.slice(0, 3).filter(Boolean);
+    const pin = eden.slice(0, 5).filter(Boolean);
     if (pin.length) {
       const rest = fused.filter((d) => !pin.includes(d));
       return [...pin, ...rest].slice(0, k);
