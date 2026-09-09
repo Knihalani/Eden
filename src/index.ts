@@ -274,7 +274,7 @@ export class AgentMemory {
       const seen = new Set<string>();
       for (const x of c.needles) if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); }
     }
-    return rows.map((c) => {
+    const scored = rows.map((c) => {
       let n = 0;
       const seen = new Set<string>();
       for (const x of c.needles) {
@@ -286,7 +286,16 @@ export class AgentMemory {
         n += idf;
       }
       return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) };
-    }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
+    });
+    // Dialogue context smoothing: a turn adjacent (in observation order) to a strong match
+    // inherits part of its score — replies rarely repeat the question's cue words.
+    const NBP = Number(process.env.EDEN_NBP ?? 0.4), NBN = Number(process.env.EDEN_NBN ?? 0.4);
+    const raw = scored.map((x) => x.n);
+    if (NBP > 0 || NBN > 0) for (let i = 0; i < scored.length; i++) {
+      const nb = Math.max(NBP * (raw[i - 1] ?? 0), NBN * (raw[i + 1] ?? 0));
+      if (nb > 0) scored[i]!.n += nb;
+    }
+    return scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
   notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
