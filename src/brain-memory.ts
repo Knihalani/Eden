@@ -126,13 +126,14 @@ export class BrainMemory {
   private buildGraph() {
     this.graph.clear();
     this.noteToks = this.episodic.map((n) => toks(n));
-    const link = (a: string, b: string) => {
+    const link = (a: string, b: string, w = 1) => {
       if (a === b) return;
       if (!this.graph.has(a)) this.graph.set(a, new Map());
       const m = this.graph.get(a)!;
-      m.set(b, (m.get(b) || 0) + 1);
+      m.set(b, (m.get(b) || 0) + w);
     };
-    for (const ts of this.noteToks) {
+    for (let ti = 0; ti < this.noteToks.length; ti++) {
+      const ts = this.noteToks[ti]!;
       const uniq = [...new Set(ts.filter((w) => w.length >= 3))];
       for (let i = 0; i < uniq.length; i++) {
         for (let j = i + 1; j < Math.min(i + 12, uniq.length); j++) {
@@ -140,7 +141,32 @@ export class BrainMemory {
           link(uniq[j]!, uniq[i]!);
         }
       }
+      // Entity hubs: speaker name strongly binds to turn content (cortical association).
+      const sp = (this.turns[ti]?.speaker || "").toLowerCase();
+      if (sp.length >= 3) {
+        for (const w of uniq) {
+          if (w === sp) continue;
+          link(sp, w, 3);
+          link(w, sp, 3);
+        }
+      }
     }
+  }
+
+  /** Temporal cue enrichment — months/years from the question + matching session stamps. */
+  private whenQuery(q: string): string {
+    const extra: string[] = [];
+    for (const y of q.match(/\b20\d{2}\b/g) || []) extra.push(y);
+    for (const m of q.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/gi) || []) {
+      extra.push(m.toLowerCase());
+    }
+    for (const t of this.turns) {
+      if (!t.date) continue;
+      const dt = t.date.toLowerCase();
+      if (extra.some((e) => e.length >= 3 && dt.includes(e))) extra.push(...dateTokens(t.date));
+    }
+    const u = [...new Set(extra)];
+    return u.length ? `${q} ${u.join(" ")}` : q;
   }
 
   private buildTemporal() {
@@ -192,11 +218,23 @@ export class BrainMemory {
   private asaRetrieve(q: string, k: number): string[] {
     const act = new Map<string, number>();
     for (const w of toks(q)) act.set(w, (act.get(w) || 0) + 1);
+    // Proper names / speakers get stronger seed activation (entity hubs).
+    for (const n of properNames(q)) act.set(n.toLowerCase(), (act.get(n.toLowerCase()) || 0) + 2);
     const spread = new Map(act);
     for (const [w, a] of act) {
       const nbr = this.graph.get(w);
       if (!nbr) continue;
-      for (const [v, wt] of nbr) spread.set(v, (spread.get(v) || 0) + a * Math.min(1, wt / 4) * 0.35);
+      for (const [v, wt] of nbr) spread.set(v, (spread.get(v) || 0) + a * Math.min(1.5, wt / 3) * 0.4);
+    }
+    // 2-hop from high-activation entity hubs only
+    const hubs = [...spread.entries()].filter(([w, a]) => a >= 1.2 && w.length >= 4).slice(0, 8);
+    for (const [w, a] of hubs) {
+      const nbr = this.graph.get(w);
+      if (!nbr) continue;
+      for (const [v, wt] of nbr) {
+        if (spread.has(v)) continue;
+        spread.set(v, a * Math.min(1, wt / 5) * 0.15);
+      }
     }
     return this.episodic
       .map((d, i) => {
@@ -272,18 +310,24 @@ export class BrainMemory {
     if (!this.episodic.length) return this.semantic.notesFor(q, k).map((m) => m.text);
     const whenQ = /\b(when|date|year|month|ago|yesterday|last week|before|after)\b/i.test(q);
     const eden = this.semantic.notesFor(q, 20).map((m) => m.text);
-    const epiBm25 = bm25(q, this.episodic, 20);
+    const qEp = whenQ ? this.whenQuery(q) : q;
+    const epiBm25 = bm25(qEp, this.episodic, 24);
     if (whenQ) {
-      // Temporal questions: prefer dated episodic evidence (TCM), then fuse.
-      const tcm = this.tcmRetrieve(q, 20);
+      const tcm = this.tcmRetrieve(qEp, 24);
       const dated = [...tcm, ...epiBm25].filter((n) => /\[[^\]]*\]/.test(n) || /\b20\d{2}\b/.test(n));
-      return rrfFuse([dated, tcm, epiBm25, eden], k);
+      const asa = this.asaRetrieve(q, 12);
+      return rrfFuse([dated, dated, tcm, epiBm25, asa, eden], k);
     }
-    // Default: Eden semantic leads (best @5 on multi-hop chat); episodic + schema as support.
     const sch = this.schemaRetrieve(q, 12);
-    const asa = this.asaRetrieve(q, 10);
-    // Double-weight Eden in RRF by including it twice — protects cat4/eng quality.
-    return rrfFuse([eden, eden, epiBm25, sch, asa], k);
+    const asa = this.asaRetrieve(q, 12);
+    const fused = rrfFuse([eden, eden, epiBm25, sch, asa], k);
+    // Pin Eden's top semantic hits so cortex gist is never buried by episodic noise.
+    const pin = eden.slice(0, 3).filter(Boolean);
+    if (pin.length) {
+      const rest = fused.filter((d) => !pin.includes(d));
+      return [...pin, ...rest].slice(0, k);
+    }
+    return fused;
   }
 
   /** Inject block for agent prompts. */
