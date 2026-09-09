@@ -15,7 +15,7 @@ export type QueryHit = { text: string; source: "memory" | "know"; url?: string; 
 type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
-const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having"]);
+const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having","where","when","who","whom","which"]);
 
 const FOLD: Record<string, string> = { hours: "tz", timezone: "tz", cache: "redis", container: "image", images: "image", docker: "image", production: "prod", standup: "stand", kubernetes: "k8s", stay: "live", stays: "live", staying: "live", moved: "live", moves: "live", moving: "live", checks: "ci", represent: "mean", represents: "mean", representing: "mean", meaning: "mean" };
 
@@ -222,6 +222,59 @@ function load(path: string): Compiled[] {
   return out;
 }
 
+/**
+ * Slot consolidation (episodic → semantic). Each labeled turn is mined for slot fillers and folded into one
+ * per-(speaker, slot) digest record that supersedes its previous version. Aggregate questions
+ * ("what activities…", "where has X…") are answered by the digest, not by any single turn.
+ */
+type Slot = "places" | "made" | "activities" | "names" | "titles";
+/** Query words that signal an aggregate question over a slot; used only as a gate (never as scored needles). */
+const SLOT_FRAME: Record<Slot, RegExp> = {
+  places: /\b(where|places?|visited|visits?|been to|travel(?:ed|led|s)?|trips?|camped|cities|city|countries|country|areas|locations|spots|destinations)\b/i,
+  made: /\b(made|make|makes|painted|paints?|built|cooked|baked|bought|wrote|created|crafted|drew|desserts?|dishes|meals|creations|pieces|projects|items|things)\b/i,
+  activities: /\b(activit(?:y|ies)|hobb(?:y|ies)|interests?|enjoys?|sports?|exercises?|pastimes?|instruments?|plays?|partake|participates?|does|done|do)\b/i,
+  names: /\b(who|names?|people|friends|met|pets?|dogs?|cats?|kids|children|family|artists?|bands?|members|colleagues|mentors?|characters)\b/i,
+  titles: /\b(books?|movies?|films?|songs?|albums?|shows?|series|novels?|titles?|titled|called|read|reading|watched|watching|poems?)\b/i,
+};
+const PLACE_LEX = new Set("beach beaches mountain mountains forest forests park parks lake lakes river rivers ocean sea coast island islands desert hills valley canyon trail trails museum museums gym church shelter studio school college university campus hospital office cafe coffee shop restaurant bar store shop market mall theater theatre cinema stadium arena festival concert camp campsite campground city town village downtown neighborhood library zoo aquarium garden gardens farm ranch cabin hotel airport station hometown country countryside apartment house home kitchen backyard rooftop pool club gallery bookstore bakery diner pub temple cathedral castle palace bridge harbor pier woods meadow field fields cliff cliffs waterfall spring springs bay cave caves resort spa lodge".split(" "));
+const ABSTRACT = new Set("difference impact progress sense decision effort change changes friends time money plans mistake mistakes choice choices point sure fun way ways list note promise peace most happen happens deal move moves memories memory living history career name names news friend appearance debut headway room space contribution contributions connection connections amends comeback breakthrough exception statement case start finish trip journey".split(" "));
+const DIGEST_BONUS = Number(process.env.EDEN_DIGEST_BONUS ?? 9);
+const SLOT_LABEL: Record<Slot, string> ={ places: "places", made: "made", activities: "activities", names: "names", titles: "titles" };
+const ING_SKIP = new Set("going being having getting doing something anything everything nothing morning evening during thing things amazing interesting exciting inspiring stunning boring feeling looking thinking coming trying making taking talking saying telling working starting sharing seeing hoping wishing sending giving bringing meeting keeping helping finding learning moving living loving growing wondering knowing planning turning putting happening according including following spending annoying rewarding frustrating challenging satisfying refreshing calming comforting encouraging uplifting disheartening heartwarming heartbreaking soaring touching bustling fulfilling surrounding evolving striving reminiscing pursuing spreading speaking understanding celebrating sticking letting trusting falling appreciating checking contacting reaching jumping throwing pouring stressing experimenting connecting cheering stepping wrapping winding hanging chatting tackling improving housing inviting gaining raising wagging chilling missing waiting hearing".split(" "));
+const PLACE_SKIP = new Set("and or but last next every each again yesterday today tomorrow tonight with for of on at in by like into after ago since until while when where soon later now then just also very really quite so too more most much many some any the a an my our his her their me you us them it there here order touch love least all fact life time end future moment way past beginning same world process day days week weeks weekend month months year years meantime morning evening night afternoon mind heart case point terms addition general spite front back top bottom middle side sight person turn charge control common return response".split(" "));
+const CAL = new Set("monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december mon tue wed thu fri sat sun jan feb mar apr jun jul aug sep sept oct nov dec".split(" "));
+
+function slotFillers(body: string): Partial<Record<Slot, string[]>> {
+  const out: Partial<Record<Slot, string[]>> = {};
+  const add = (s: Slot, v: string) => { const x = v.trim().replace(/[.,!?;:'"]+$/g, "").trim(); if (x.length >= 3 && x.length <= 40 && !/\d/.test(x)) (out[s] ??= []).push(x); };
+  const unquoted = body.replace(/["“][^"”]*["”]/g, " ");
+  // places: preposition + (det) + place-type noun, or preposition + Proper Noun
+  for (const m of unquoted.matchAll(/\b(?:at|in|near|around|across|from|to|into)\s+(?:the|a|an|my|our|his|her|their|some|this|that)\s+([a-z]+)(?:\s+([a-z]+))?\b/gi)) { const a = m[1]!.toLowerCase(), b = (m[2] || "").toLowerCase(); if (PLACE_LEX.has(a)) add("places", a); else if (PLACE_LEX.has(b)) add("places", `${a} ${b}`); }
+  for (const m of unquoted.matchAll(/\b(?:at|in|near|around|across|from|to|into|visited|visiting|visit)\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\b/g)) { const w = m[1]!; if (!CAL.has(w.toLowerCase()) && !/^(?:The|That|This|These|Those|What|When|Where|Which|How|Why|Who|But|And|Also|Just|Then|There|Here|Now|Yes|Yeah|Wow|Thanks|Hey|Congrats|Sounds|Glad|Good|Great|Awesome|Definitely|Sure|Okay|Hope|Love|Looking|Hopefully|Maybe|Anyway|Well|Cool|Nice|Happy|Sorry|Absolutely|Excited|Btw|Speaking)$/.test(w)) add("places", w); }
+  // made: concrete creation/acquisition verbs + object head (skip abstract heads)
+  for (const m of unquoted.matchAll(/\b(?:painted|baked|cooked|built|knitted|sewed|crafted|drew|bought|wrote|sculpted|brewed|grilled|roasted|whipped up|carved|designed|assembled)\s+(?:up\s+)?(?:a|an|the|some|this|these|my|our|another|new|few|couple of|lots of|fresh|homemade|delicious|yummy|beautiful|little|big|cute|tiny|small)?\s*(?:(?:a|an|the|some|my|our|new|homemade|delicious|yummy|beautiful|little|big|cute|tiny|small|fresh)\s+)?([a-z][a-z-]+(?:\s+[a-z][a-z-]+)?(?:(?:,\s*|\s+(?:and|or)\s+|,\s*(?:and|or)\s+)[a-z][a-z-]+(?:\s+[a-z][a-z-]+)?)*)\b/gi)) {
+    for (const part of m[1]!.toLowerCase().split(/\s*,\s*(?:and|or)\s+|\s*,\s*|\s+(?:and|or)\s+/)) {
+      const ws = part.trim().split(/\s+/).filter((t) => t && !PLACE_SKIP.has(t) && !/^(?:it|them|me|you|us|that|this|to|of|for|by|with|and|so|up|out|in|on|at|from|into|myself|ourselves|him|her)$/.test(t));
+      const h = ws.slice(0, 2).join(" ");
+      if (h && !ABSTRACT.has(ws[0]!) && !/^(?:[a-z]+ing|is|was|be|get|go|see|do|have|has|had|feel|felt|think|thought)$/.test(ws[0]!)) add("made", h);
+    }
+  }
+  // activities: gerunds/nouns only inside activity frames (go/love/enjoy/into/started/tried/play …)
+  for (const m of unquoted.matchAll(/\b(?:go|went|goes|been|love|loves|loved|enjoy|enjoys|enjoyed|into|started|start|tried|try|trying|took up|take up|practice|practicing|teach|teaching|learn|learning)\s+(?:some\s+|more\s+|a\s+bit\s+of\s+|a\s+lot\s+of\s+|the\s+)?([a-z]{4,}(?:\s+[a-z]{4,})?(?:(?:,\s*|\s+(?:and|or)\s+|,\s*(?:and|or)\s+)[a-z]{4,}(?:\s+[a-z]{4,})?)*)\b/gi)) {
+    for (const part of m[1]!.toLowerCase().split(/\s*,\s*(?:and|or)\s+|\s*,\s*|\s+(?:and|or)\s+/)) {
+    const ws = part.trim().split(/\s+/); const w = ws[0]!;
+    if (!w || STOP.has(w) || PLACE_SKIP.has(w) || ING_SKIP.has(w) || /^(?:that|this|about|with|being|having|what|when|where|hearing|seeing|talking|meeting|chatting|there|them|they|these|those|through|because|which|while|sure|forward|back|ahead|home|well|good|great|again|around|together|over|down|much|myself|yourself|ourselves)$/.test(w)) continue;
+    if (/ing$/.test(w) || ws.length === 1) add("activities", w); else add("activities", ws.join(" "));
+    }
+  }
+  for (const m of unquoted.matchAll(/\b([a-z]{4,})\s+(?:class|classes|lessons?|trip|trips|sessions?|club|group|workshop|workshops|tournaments?|competitions?|practice|routine|gear|shoes|boots|kit|equipment|studio|course|courses)\b/gi)) { const w = m[1]!.toLowerCase(); if (!ING_SKIP.has(w) && !STOP.has(w) && !PLACE_SKIP.has(w) && !/^(?:this|that|these|those|first|second|third|whole|entire|same|other|another|local|online|free|great|good|nice|fun|hard|tough|long|short|weekly|daily|regular|favorite|little|small|big)$/.test(w)) add("activities", w); }
+  for (const m of unquoted.matchAll(/\bplay(?:s|ed|ing)?\s+(?:the\s+)?([a-z]{4,})\b/gi)) { const w = m[1]!.toLowerCase(); if (!STOP.has(w) && !/^(?:with|around|along|some|more|again|together|games?|time|around)$/.test(w)) add("activities", w); }
+  // names: capitalized tokens not at sentence start, not calendar words
+  for (const m of unquoted.matchAll(/(?<=[^.!?\n]\s|,\s)([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\b/g)) { const w = m[1]!; if (!CAL.has(w.split(" ")[0]!.toLowerCase()) && !/^(?:The|That|This|These|Those|What|When|Where|Which|How|Why|Who|But|And|Also|Just|Then|There|Here|Now|Yes|Yeah|Wow|Thanks|Hey|Congrats|Sounds|Glad|Good|Great|Awesome|Definitely|Sure|Okay|Hope|Love|Looking|Hopefully|Maybe|Anyway|Well|Cool|Nice|Happy|Sorry|Absolutely|Excited|Btw|Speaking|Bet|Even|Let|Man|Guess|Long|Big|Check|Keep|Hang|Bye|Take|Have|Got|See|Talk|Thank|Miss|Best|Same|Haha|Lol|Omg|Aww|Ooh|Oh|Ahh|Hah|Yep|Yup|Nope|Nah|Right|Totally|Exactly|True|Agreed)$/.test(w)) add("names", w); }
+  for (const m of body.matchAll(/["“]([^"”]{3,60})["”]/g)) add("titles", m[1]!);
+  return out;
+}
+
 function subjectKey(text: string): string | null {
   const k = text.trim().match(/^(.{4,80}?)\s+(?:is|are|was|were|prefers?|uses?|lives in|live in|stays in|stay in|moved to|belongs to|owned by|ship from|ships from)\s+\S/i)?.[1]?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() ?? "";
   return k.length >= 4 ? k : null;
@@ -236,6 +289,7 @@ export class AgentMemory {
   private path: string;
   /** Tokens of the previously observed turn — inherited by the next stored statement as weak needles. */
   private carry: string[] = [];
+  private speakerNames = new Set<string>();
 
   constructor(opts: MemoryOptions = {}) {
     this.know = opts.know; this.agent = opts.agent; this.project = opts.project;
@@ -273,8 +327,30 @@ export class AgentMemory {
       const key = subjectKey(text);
       if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
       out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])) }));
+      if (process.env.EDEN_DIGEST !== "off") { const m = text.match(SPEAKER_LABEL); if (m) this.consolidate(m[1]!.replace(/:$/, ""), text.slice(m[1]!.length)); }
     }
     return out;
+  }
+
+  /** Fold one labeled turn into the speaker's slot digests (superseding records `digest:<speaker>:<slot>`). */
+  private consolidate(speaker: string, body: string) {
+    const sp = speaker.trim();
+    this.speakerNames.add(sp.toLowerCase());
+    const fillers = slotFillers(body.replace(/\s+/g, " "));
+    for (const slot of Object.keys(fillers) as Slot[]) {
+      let items = fillers[slot]!;
+      if (slot === "names") items = items.filter((n) => !this.speakerNames.has(n.toLowerCase()) && !this.speakerNames.has(n.split(" ")[0]!.toLowerCase()));
+      if (!items.length) continue;
+      const id = `digest:${sp.toLowerCase()}:${slot}`;
+      const prev = this.compiled.find((c) => c.rec.id === id);
+      const seen = new Set<string>(prev ? String(prev.rec.text.split(" — ")[1] || "").split(", ").map((x) => x.toLowerCase()) : []);
+      const list = prev ? String(prev.rec.text.split(" — ")[1] || "").split(", ").filter(Boolean) : [];
+      for (const it of items) { const k = it.toLowerCase(); if (!seen.has(k)) { seen.add(k); list.push(it); } }
+      const kept = list.slice(-60);
+      const text = `${sp}: ${SLOT_LABEL[slot]} — ${kept.join(", ")}`;
+      if (prev && prev.rec.text === text) continue;
+      this.remember(text, { id, kind: "digest", tags: [] });
+    }
   }
 
   private persist() {
@@ -284,7 +360,14 @@ export class AgentMemory {
   relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
     const hay = queryHay(text);
     const hayStem = new Set([...hay].map(liteStem));
-    const rows = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
+    // Digest gate: a slot digest competes only for aggregate questions about its speaker and slot.
+    const qTok = new Set(tokList(text));
+    const digestOk = (c: Compiled) => {
+      if (c.rec.kind !== "digest") return true;
+      const [, sp, slot] = c.rec.id.split(":");
+      return !!sp && !!slot && qTok.has(sp.split(" ")[0]!) && SLOT_FRAME[slot as Slot]?.test(text) === true;
+    };
+    const rows = this.compiled.filter((c) => !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project) && digestOk(c));
     const speakers = new Set<string>();
     for (const c of rows) {
       const m = c.rec.text.match(SPEAKER_LABEL);
@@ -303,7 +386,7 @@ export class AgentMemory {
       const seen = new Set<string>();
       for (const x0 of c.needles) { const x = key(x0); if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); } }
     }
-    const scored = rows.map((c) => {
+    return rows.map((c) => {
       let n = 0;
       const seen = new Set<string>();
       for (const x0 of c.needles) {
@@ -315,17 +398,8 @@ export class AgentMemory {
         if (d / N < 0.04) idf *= 1.55;
         n += x0 === x ? idf : idf * (x0.startsWith(CARRY_Q) ? CARRY_W : CARRY_W2);
       }
-      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) };
-    });
-    // Dialogue context smoothing: a turn adjacent (in observation order) to a strong match
-    // inherits part of its score — replies rarely repeat the question's cue words.
-    const NBP = Number(process.env.EDEN_NBP ?? 0.4), NBN = Number(process.env.EDEN_NBN ?? 0.4);
-    const raw = scored.map((x) => x.n);
-    if (NBP > 0 || NBN > 0) for (let i = 0; i < scored.length; i++) {
-      const nb = Math.max(NBP * (raw[i - 1] ?? 0), NBN * (raw[i + 1] ?? 0));
-      if (nb > 0) scored[i]!.n += nb;
-    }
-    return scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
+      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) + (c.rec.kind === "digest" ? DIGEST_BONUS : 0) };
+    }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
   }
 
   notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
