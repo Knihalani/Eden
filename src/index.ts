@@ -184,8 +184,32 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
+/**
+ * Context-carry: a stored statement inherits needles from the turn before it (the question it answers).
+ * Questions are never stored, so their frame would otherwise be lost. Two tiers:
+ *   "^word"  question-sentence tokens of the previous turn   (weight CARRY_W)
+ *   "~word"  remaining tokens of the previous turn            (weight CARRY_W2)
+ */
+const CARRY_Q = "^", CARRY_R = "~";
+const CARRY_W = Number(process.env.EDEN_CARRY_W ?? 1);
+const CARRY_W2 = Number(process.env.EDEN_CARRY_W2 ?? 0);
+const CARRY_MAX = 24;
+const isCarry = (t: string) => t.startsWith(CARRY_Q) || t.startsWith(CARRY_R);
+
+function carryTokens(text: string): string[] {
+  const label = text.match(SPEAKER_LABEL)?.[1];
+  const sp = new Set(label ? tokList(label.replace(/:$/, "")) : []);
+  const ok = (w: string, seen: Set<string>) => !(w.length < 3 || STOP.has(w) || QUERY_SKIP.has(w) || sp.has(w) || seen.has(w));
+  const seen = new Set<string>(), out: string[] = [];
+  for (const w of tokList((text.match(/[^.!?\n]*\?/g) ?? []).join(" "))) if (ok(w, seen) && out.length < CARRY_MAX) { seen.add(w); out.push(CARRY_Q + w); }
+  if (CARRY_W2 > 0) { let n = 0; for (const w of tokList(text)) if (ok(w, seen) && n < CARRY_MAX) { seen.add(w); out.push(CARRY_R + w); n++; } }
+  return out;
+}
+
 function compile(rec: MemoryRecord): Compiled {
-  return { rec, needles: [...new Set([...rec.tags, ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] };
+  const own = new Set([...rec.tags.filter((t) => !isCarry(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))]);
+  const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
+  return { rec, needles: [...own, ...carried] };
 }
 
 function load(path: string): Compiled[] {
@@ -210,6 +234,8 @@ export class AgentMemory {
   private project?: string;
   private compiled: Compiled[];
   private path: string;
+  /** Tokens of the previously observed turn — inherited by the next stored statement as weak needles. */
+  private carry: string[] = [];
 
   constructor(opts: MemoryOptions = {}) {
     this.know = opts.know; this.agent = opts.agent; this.project = opts.project;
@@ -240,11 +266,13 @@ export class AgentMemory {
     const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
     const blob = convBlob(list);
     const out: MemoryRecord[] = [];
+    const carry = process.env.EDEN_CARRY_MODE === "off" ? [] : this.carry;
+    this.carry = carryTokens(blob.trim().replace(/\s+/g, " ").slice(0, 2000));
     for (const text of extractDurable(blob)) {
       if (this.compiled.some((c) => (!this.project || c.rec.project === this.project) && c.rec.text.toLowerCase() === text.toLowerCase())) continue;
       const key = subjectKey(text);
       if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
-      out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", tags: tokList(text).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])) }));
+      out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])) }));
     }
     return out;
   }
@@ -270,20 +298,22 @@ export class AgentMemory {
       hay.has(x) ||
       hayStem.has(liteStem(x)) ||
       (x.length >= 8 && !speakers.has(x) && prefs.has(x.slice(0, 5)) && hayStem.has(liteStem(x)));
+    const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
     for (const c of rows) {
       const seen = new Set<string>();
-      for (const x of c.needles) if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); }
+      for (const x0 of c.needles) { const x = key(x0); if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); } }
     }
     const scored = rows.map((c) => {
       let n = 0;
       const seen = new Set<string>();
-      for (const x of c.needles) {
+      for (const x0 of c.needles) {
+        const x = key(x0);
         if (!hit(x) || seen.has(x)) continue;
         seen.add(x);
         const d = df.get(x) || 0;
         let idf = Math.log((N - d + 0.5) / (d + 0.5) + 1);
         if (d / N < 0.04) idf *= 1.55;
-        n += idf;
+        n += x0 === x ? idf : idf * (x0.startsWith(CARRY_Q) ? CARRY_W : CARRY_W2);
       }
       return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) };
     });
