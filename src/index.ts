@@ -101,6 +101,97 @@ function whereBonus(query: string, note: string): number {
   return /\b(in |at |to |from |visited|trip to|live(?:s|d)? in|moved to|based in|city|town|mountains?|park)\b/i.test(note) ? 2.5 : 0;
 }
 
+/**
+ * Redundancy-aware top-K selection. Plain top-N-by-score can crowd the cap with several near-duplicate
+ * records restating the same fact while a query that needs *coverage* of several distinct facts about the
+ * same subject (list/aggregate questions -- "What has Melanie painted?", "What activities has X done?")
+ * loses the long tail to those restatements. Walk the score-ordered pool and skip a candidate only when
+ * it's a near-duplicate (high token-Jaccard) of something already picked, so a genuinely distinct fact
+ * further down the ranking gets pulled forward into the cap instead of a third restatement of #1. Order is
+ * otherwise untouched, and skipped duplicates backfill the cap if too few distinct candidates exist, so
+ * this never returns fewer results than plain top-K would.
+ */
+/**
+ * Topic fusion: when more scored candidates share a single distinctive query term than the cap can hold
+ * (e.g. a dozen sentence-level records all mentioning "painting"), plain top-K crowds every slot with
+ * restatements of the same topic and starves other angles of the query, while an aggregate/list question
+ * ("What has Melanie painted?") needs the union of what each of those records says, not just the single
+ * best-scoring one. Pack the crowd's distinct text into one composite record instead -- this both recovers
+ * the union of evidence (helps aggregate answers) and frees the remaining cap slots for other needles.
+ */
+function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number, usedTerms: Set<string>): { rec: MemoryRecord; n: number }[] | null {
+  if (scored.length <= cap) return null;
+  let bestTerm = "", bestMembers: { rec: MemoryRecord; n: number }[] = [];
+  for (const term of hay) {
+    if (term.length < 3 || speakers.has(term) || usedTerms.has(term)) continue;
+    const members = scored.filter((x) => x.rec.kind !== "digest" && tokList(x.rec.text).includes(term));
+    if (members.length > bestMembers.length) { bestMembers = members; bestTerm = term; }
+  }
+  if (bestMembers.length <= cap) return null;
+  usedTerms.add(bestTerm);
+  const take = bestMembers.slice(0, 100);
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  let budget = 5000;
+  for (const m of take) {
+    const t = m.rec.text.replace(/^[A-Z][A-Za-z0-9 /._-]{1,32}:\s*/, "");
+    const dk = t.toLowerCase().slice(0, 40);
+    if (seen.has(dk)) continue;
+    seen.add(dk);
+    if (t.length > budget) continue;
+    parts.push(t);
+    budget -= t.length;
+  }
+  if (parts.length < 2) return null;
+  const label = take[0]!.rec.text.match(SPEAKER_LABEL)?.[1];
+  const fusedRec: MemoryRecord = {
+    id: `fuse:${bestTerm}:${take[0]!.rec.id}`,
+    text: (label ? `${label} ` : "") + parts.join(" | "),
+    kind: "fact",
+    tags: [],
+    at: Math.max(...take.map((x) => x.rec.at)),
+  };
+  const fusedN = Math.max(...take.map((x) => x.n)) + 0.5;
+  const memberIds = new Set(take.map((x) => x.rec.id));
+  const rest = scored.filter((x) => !memberIds.has(x.rec.id));
+  return [...rest, { rec: fusedRec, n: fusedN }].sort((a, b) => b.n - a.n);
+}
+
+function fuseIfCrowded(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number): { rec: MemoryRecord; n: number }[] {
+  const usedTerms = new Set<string>();
+  let cur = scored;
+  for (let round = 0; round < 1; round++) {
+    const next = fuseOnce(cur, hay, speakers, cap, usedTerms);
+    if (!next) break;
+    cur = next;
+  }
+  return cur;
+}
+
+function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
+  if (pool.length <= cap) return pool.map((x) => x.rec);
+  const toksOf = new Map<T, Set<string>>();
+  for (const c of pool) toksOf.set(c, new Set(tokList(c.rec.text)));
+  const jaccard = (a: Set<string>, b: Set<string>): number => {
+    let inter = 0;
+    for (const w of a) if (b.has(w)) inter++;
+    const uni = a.size + b.size - inter;
+    return uni ? inter / uni : 0;
+  };
+  const picked: T[] = [];
+  const skipped: T[] = [];
+  for (const cand of pool) {
+    if (picked.length >= cap) break;
+    const ct = toksOf.get(cand)!;
+    let dup = false;
+    for (const p of picked) if (jaccard(ct, toksOf.get(p)!) > 0.6) { dup = true; break; }
+    if (dup) skipped.push(cand);
+    else picked.push(cand);
+  }
+  for (const cand of skipped) { if (picked.length >= cap) break; picked.push(cand); }
+  return picked.map((x) => x.rec);
+}
+
 function queryHay(text: string): Set<string> {
   const hay = new Set(tokList(text).filter((w) => !QUERY_SKIP.has(w)));
   if (/\b(cheese|steak|steakhouse|restaurant|dinner|lunch|tasting|menu|eat|food|diet|allerg)\b/i.test(text)) hay.add("diet");
@@ -162,6 +253,28 @@ function convBlob(list: unknown[]): string {
 const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|please\b|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
+/**
+ * Narrative-fact fallback: the giant keyword allow-list below was hand-tuned against engineering/ops
+ * vocabulary (ci, deploy, k8s, ...) and systematically discards personal-narrative statements (hobbies,
+ * relationships, family, opinions) that dominate open-domain conversation memory. A sentence that reads
+ * like a real declarative clause -- has >=2 common function words/pronouns among >=4 tokens, isn't a
+ * question -- is durable enough to keep; junk/gibberish ("asdf qwerty") never clears this bar.
+ */
+const FUNC_WORD = new Set([
+  "i","we","you","he","she","they","my","our","your","his","her","their","me","us","him","them",
+  "is","are","was","were","am","be","been","being","has","have","had","having",
+  "do","does","did","will","would","can","could","should","must","might","may",
+  "the","a","an","and","but","of","to","in","on","at","for","with","from","by","as","that","this",
+  "these","those","it","its","because","if","so","also","when","who","which","not","no",
+]);
+function looksNarrative(t: string): boolean {
+  const toks = tokList(t);
+  if (toks.length < 4) return false;
+  let fw = 0;
+  for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return true;
+  return false;
+}
+
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>(), out: string[] = [];
   let whole = blob.trim().replace(/\s+/g, " ");
@@ -173,7 +286,7 @@ function extractDurable(blob: string): string[] {
     if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("```") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function |npm |pnpm |bun |git |cd |curl |yarn |npx |sudo |echo |cat |ls )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|we will|look at|can you|could you|would you|tell me|fix the|add the|we need to|we're|cool, |nice, |great, |awesome, |perfect, )\b/i.test(t) || /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9]/.test(t) || CHAT.test(t)) continue;
     if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1].trim();
-    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t |ran out|i want |fyi|also,|we should |make sure |stands for| aka |called |confirmed |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the|shipped |assigned |owned by|belongs to|due on|due by|deadline|blocked on|depends on|required |lives in|live in|stays in|stay in|moved to|based in|located |works (?:at|for)|work (?:on|at|for)|skip dairy|vegetarian|named |our dog|my dog|reports to|on-call|\bci\b|runs on|pagerduty|slack |cluster |namespace |region |vpc |timezone|branch |repo |org |team |channel |workspace |project |sprint |ticket |issue |hotfix |incident |sev[0-3]|p[0-3] |outage |pager |rollback |deployed |feature flag|kill switch|launchdarkly|maintenance |degraded |slo |sla |quota |budget |capacity |limit |rate.?limit|retr(?:y|ies|ied)|backoff|dri |owner |circuit.?breaker|webhook|endpoint|crontab|cronjob|version |k8s |kubernetes|configmap|helm |terraform|pulumi|cloudformation|iam |cdk |ansible|gcp |gcloud |azure |snowflake|bigquery|datadog|kafka|redshift|pubsub|rabbitmq|redis|postgres|elasticsearch|mongodb|mysql|dynamodb|sentry|grafana|prometheus|newrelic|honeycomb|otel|opentelemetry|jaeger|zipkin|cloudwatch|splunk|lambda|sqs|sns|cloudtrail|kinesis|ecs|step.?functions?|eks|fargate|rds|aurora|secrets.?manager|cloudfront|elasticache|alb|route.?53|api.?gateway|waf|ecr|nlb|elb|s3|kms|athena|glue|cognito|ebs|emr|sagemaker|bedrock|aws.?batch|eventbridge|codebuild|codepipeline|codedeploy|appconfig|amplify|appsync|xray|codecommit|codeartifact|efs|fsx|databricks|clickhouse|prestodb|trino|duckdb|flink|cassandra|neo4j|scylla|cockroach|vitess|tidb|spanner|cosmosdb|firestore|bigtable|memcached|consul|etcd|zookeeper|vault|nomad|istio|envoy|linkerd|traefik|kong|cilium|argocd|fluxcd|knative|calico|tekton|crossplane|kustomize|harbor|helmfile|thanos|mimir|cortex|fluentbit|fluentd|filebeat|logstash|opensearch|metricbeat|qdrant|weaviate|milvus|pinecone|typesense|meilisearch|pgvector|faiss|lancedb|chromadb|solr|nats|pulsar|mosquitto|emqx|airflow|dagster|prefect|temporal|flyte|kubeflow|mlflow|feast|wandb|dvc|huggingface|langsmith|llamaindex|ollama|vllm|sglang|tgi|tensorrt|triton|ggml|gguf|llamafile|exllamav2|awq|gptq|bitsandbytes|flashattn|deepspeed|fsdp|megatron|horovod|nccl|accelerate|xla|ship from|ships from)\b/i.test(t) || (/\b(is|are|was|were|needs?|uses?|will be|ha(?:s|ve) been)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+|\d{2,}/.test(t)) || /^[A-Z][A-Za-z0-9 /._-]{1,32}:\s+\S/.test(t) || /^\d+[.)]\s+.{8,}/.test(t) || /^[-*]\s+.{8,}/.test(t) || /"[^"]{4,80}"\s+(?:is|means|aka)/i.test(t) || /@[\w.-]+\.[a-z]{2,}/i.test(t) || /\b20\d{2}-\d{2}-\d{2}\b/.test(t) || /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(t) || /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(t) || /\$\d{2,}/.test(t) || /(?:~\/|\/(?:Users|home|opt|usr|var|etc)\/)[\w./-]+/.test(t) || /\b[A-Z][A-Z0-9_]{2,}=\S/.test(t) || /\bport\s+\d{2,5}\b/i.test(t) || /\b[\w.-]+\.(?:json|ya?ml|toml|env)\b/.test(t) || /\b[\w-]+\.(?:com|io|dev|internal|local)\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}\b/.test(t) || /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(t) || /\b[0-9a-f]{40}\b/.test(t) || /\b(?:\*|\d{1,2})(?:\s+(?:\*|\d{1,2})){4}\b/.test(t) || /\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/i.test(t) || /\bv\d+\.\d+\.\d+\b/i.test(t) || /\b[\w-]+\.[\w-]+\.svc(?:\.cluster\.local)?\b/.test(t) || /\barn:aws:[a-z0-9-]+:/i.test(t))) continue;
+    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t |ran out|i want |fyi|also,|we should |make sure |stands for| aka |called |confirmed |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the|shipped |assigned |owned by|belongs to|due on|due by|deadline|blocked on|depends on|required |lives in|live in|stays in|stay in|moved to|based in|located |works (?:at|for)|work (?:on|at|for)|skip dairy|vegetarian|named |our dog|my dog|reports to|on-call|\bci\b|runs on|pagerduty|slack |cluster |namespace |region |vpc |timezone|branch |repo |org |team |channel |workspace |project |sprint |ticket |issue |hotfix |incident |sev[0-3]|p[0-3] |outage |pager |rollback |deployed |feature flag|kill switch|launchdarkly|maintenance |degraded |slo |sla |quota |budget |capacity |limit |rate.?limit|retr(?:y|ies|ied)|backoff|dri |owner |circuit.?breaker|webhook|endpoint|crontab|cronjob|version |k8s |kubernetes|configmap|helm |terraform|pulumi|cloudformation|iam |cdk |ansible|gcp |gcloud |azure |snowflake|bigquery|datadog|kafka|redshift|pubsub|rabbitmq|redis|postgres|elasticsearch|mongodb|mysql|dynamodb|sentry|grafana|prometheus|newrelic|honeycomb|otel|opentelemetry|jaeger|zipkin|cloudwatch|splunk|lambda|sqs|sns|cloudtrail|kinesis|ecs|step.?functions?|eks|fargate|rds|aurora|secrets.?manager|cloudfront|elasticache|alb|route.?53|api.?gateway|waf|ecr|nlb|elb|s3|kms|athena|glue|cognito|ebs|emr|sagemaker|bedrock|aws.?batch|eventbridge|codebuild|codepipeline|codedeploy|appconfig|amplify|appsync|xray|codecommit|codeartifact|efs|fsx|databricks|clickhouse|prestodb|trino|duckdb|flink|cassandra|neo4j|scylla|cockroach|vitess|tidb|spanner|cosmosdb|firestore|bigtable|memcached|consul|etcd|zookeeper|vault|nomad|istio|envoy|linkerd|traefik|kong|cilium|argocd|fluxcd|knative|calico|tekton|crossplane|kustomize|harbor|helmfile|thanos|mimir|cortex|fluentbit|fluentd|filebeat|logstash|opensearch|metricbeat|qdrant|weaviate|milvus|pinecone|typesense|meilisearch|pgvector|faiss|lancedb|chromadb|solr|nats|pulsar|mosquitto|emqx|airflow|dagster|prefect|temporal|flyte|kubeflow|mlflow|feast|wandb|dvc|huggingface|langsmith|llamaindex|ollama|vllm|sglang|tgi|tensorrt|triton|ggml|gguf|llamafile|exllamav2|awq|gptq|bitsandbytes|flashattn|deepspeed|fsdp|megatron|horovod|nccl|accelerate|xla|ship from|ships from)\b/i.test(t) || (/\b(is|are|was|were|needs?|uses?|will be|ha(?:s|ve) been)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+|\d{2,}/.test(t)) || /^[A-Z][A-Za-z0-9 /._-]{1,32}:\s+\S/.test(t) || /^\d+[.)]\s+.{8,}/.test(t) || /^[-*]\s+.{8,}/.test(t) || /"[^"]{4,80}"\s+(?:is|means|aka)/i.test(t) || /@[\w.-]+\.[a-z]{2,}/i.test(t) || /\b20\d{2}-\d{2}-\d{2}\b/.test(t) || /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(t) || /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(t) || /\$\d{2,}/.test(t) || /(?:~\/|\/(?:Users|home|opt|usr|var|etc)\/)[\w./-]+/.test(t) || /\b[A-Z][A-Z0-9_]{2,}=\S/.test(t) || /\bport\s+\d{2,5}\b/i.test(t) || /\b[\w.-]+\.(?:json|ya?ml|toml|env)\b/.test(t) || /\b[\w-]+\.(?:com|io|dev|internal|local)\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}\b/.test(t) || /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(t) || /\b[0-9a-f]{40}\b/.test(t) || /\b(?:\*|\d{1,2})(?:\s+(?:\*|\d{1,2})){4}\b/.test(t) || /\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/i.test(t) || /\bv\d+\.\d+\.\d+\b/i.test(t) || /\b[\w-]+\.[\w-]+\.svc(?:\.cluster\.local)?\b/.test(t) || /\barn:aws:[a-z0-9-]+:/i.test(t) || looksNarrative(t))) continue;
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
     if (SPEAKER_LABEL.test(t)) {
       const sp = new Set(tokList((t.match(SPEAKER_LABEL)?.[1] || "").replace(/:$/, "")));
@@ -252,11 +365,11 @@ function slotFillers(body: string): Partial<Record<Slot, string[]>> {
   for (const m of unquoted.matchAll(/\b(?:at|in|near|around|across|from|to|into)\s+(?:the|a|an|my|our|his|her|their|some|this|that)\s+([a-z]+)(?:\s+([a-z]+))?\b/gi)) { const a = m[1]!.toLowerCase(), b = (m[2] || "").toLowerCase(); if (PLACE_LEX.has(a)) add("places", a); else if (PLACE_LEX.has(b)) add("places", `${a} ${b}`); }
   for (const m of unquoted.matchAll(/\b(?:at|in|near|around|across|from|to|into|visited|visiting|visit)\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\b/g)) { const w = m[1]!; if (!CAL.has(w.toLowerCase()) && !/^(?:The|That|This|These|Those|What|When|Where|Which|How|Why|Who|But|And|Also|Just|Then|There|Here|Now|Yes|Yeah|Wow|Thanks|Hey|Congrats|Sounds|Glad|Good|Great|Awesome|Definitely|Sure|Okay|Hope|Love|Looking|Hopefully|Maybe|Anyway|Well|Cool|Nice|Happy|Sorry|Absolutely|Excited|Btw|Speaking)$/.test(w)) add("places", w); }
   // made: concrete creation/acquisition verbs + object head (skip abstract heads)
-  for (const m of unquoted.matchAll(/\b(?:painted|baked|cooked|built|knitted|sewed|crafted|drew|bought|wrote|sculpted|brewed|grilled|roasted|whipped up|carved|designed|assembled)\s+(?:up\s+)?(?:a|an|the|some|this|these|my|our|another|new|few|couple of|lots of|fresh|homemade|delicious|yummy|beautiful|little|big|cute|tiny|small)?\s*(?:(?:a|an|the|some|my|our|new|homemade|delicious|yummy|beautiful|little|big|cute|tiny|small|fresh)\s+)?([a-z][a-z-]+(?:\s+[a-z][a-z-]+)?(?:(?:,\s*|\s+(?:and|or)\s+|,\s*(?:and|or)\s+)[a-z][a-z-]+(?:\s+[a-z][a-z-]+)?)*)\b/gi)) {
+  for (const m of unquoted.matchAll(/\b(?:painted|baked|cooked|built|knitted|sewed|crafted|drew|bought|wrote|sculpted|brewed|grilled|roasted|whipped up|carved|designed|assembled)\s+(?:up\s+)?(?:a|an|the|some|this|these|that|those|my|our|his|her|their|its|any|every|another|new|few|couple of|lots of|fresh|homemade|delicious|yummy|beautiful|little|big|cute|tiny|small)?\s*(?:(?:a|an|the|some|my|our|his|her|their|new|homemade|delicious|yummy|beautiful|little|big|cute|tiny|small|fresh)\s+)?([a-z][a-z-]+(?:\s+[a-z][a-z-]+){0,2}(?:(?:,\s*|\s+(?:and|or)\s+|,\s*(?:and|or)\s+)[a-z][a-z-]+(?:\s+[a-z][a-z-]+){0,2})*)\b/gi)) {
     for (const part of m[1]!.toLowerCase().split(/\s*,\s*(?:and|or)\s+|\s*,\s*|\s+(?:and|or)\s+/)) {
-      const ws = part.trim().split(/\s+/).filter((t) => t && !PLACE_SKIP.has(t) && !/^(?:it|them|me|you|us|that|this|to|of|for|by|with|and|so|up|out|in|on|at|from|into|myself|ourselves|him|her)$/.test(t));
-      const h = ws.slice(0, 2).join(" ");
-      if (h && !ABSTRACT.has(ws[0]!) && !/^(?:[a-z]+ing|is|was|be|get|go|see|do|have|has|had|feel|felt|think|thought)$/.test(ws[0]!)) add("made", h);
+      const ws = part.trim().split(/\s+/).filter((t) => t && !PLACE_SKIP.has(t) && !/^(?:it|them|me|you|us|that|this|those|these|to|of|for|by|with|and|so|up|out|in|on|at|from|into|myself|ourselves|him|her|last|next|ago|yesterday|today|recently|lately)$/.test(t));
+      const h = ws.slice(-2).join(" ");
+      if (h && !ABSTRACT.has(ws[ws.length - 1]!) && !/^(?:[a-z]+ing|is|was|be|get|go|see|do|have|has|had|feel|felt|think|thought)$/.test(ws[ws.length - 1]!)) add("made", h);
     }
   }
   // activities: gerunds/nouns only inside activity frames (go/love/enjoy/into/started/tried/play …)
@@ -357,7 +470,7 @@ export class AgentMemory {
     if (this.compiled.length > 2000) { const keep = this.compiled.filter((c) => c.rec.kind === "constraint").sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => c.rec.kind !== "constraint").sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; } writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { mode: 0o600 });
   }
 
-  relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
+  relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6, fuse = true): MemoryRecord[] {
     const hay = queryHay(text);
     const hayStem = new Set([...hay].map(liteStem));
     // Digest gate: a slot digest competes only for aggregate questions about its speaker and slot.
@@ -386,7 +499,7 @@ export class AgentMemory {
       const seen = new Set<string>();
       for (const x0 of c.needles) { const x = key(x0); if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); } }
     }
-    return rows.map((c) => {
+    const scored = rows.map((c) => {
       let n = 0;
       const seen = new Set<string>();
       for (const x0 of c.needles) {
@@ -399,12 +512,13 @@ export class AgentMemory {
         n += x0 === x ? idf : idf * (x0.startsWith(CARRY_Q) ? CARRY_W : CARRY_W2);
       }
       return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) + (c.rec.kind === "digest" ? DIGEST_BONUS : 0) };
-    }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, cap).map((x) => x.rec);
+    }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
+    return dedupSelect(fuse ? fuseIfCrowded(scored, hay, speakers, cap) : scored, cap);
   }
 
-  notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6): MemoryRecord[] {
+  notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6, opts: { fuse?: boolean } = {}): MemoryRecord[] {
     const map = (recs: MemoryRecord[]) => recs.map((r) => ({ ...r, text: retrieveText(r.text) }));
-    if (text) return map(this.relevant(text, k));
+    if (text) return map(this.relevant(text, k, opts.fuse !== false));
     return map(((recs) => [...recs.filter((r) => r.kind === "constraint").slice(-k), ...recs.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(this.memories()));
   }
 
