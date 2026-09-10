@@ -129,7 +129,7 @@ export class CLSController {
     const epi = this.norm(this.bindQA(epiRaw), n);
     const sem = this.norm(this.sem.lookup(q), n);
     const cortexMap = new Map<number, number>();
-    const notes = this.cortex.notesFor(q, 20);
+    const notes = this.cortex.notesFor(q, 20, { fuse: false });
     notes.forEach((m, r) => {
       const i = this.canon(m.text);
       if (i >= 0) cortexMap.set(i, Math.max(cortexMap.get(i) || 0, 1 / (1 + 0.35 * r)));
@@ -173,7 +173,7 @@ export class CLSController {
   }
 
   retrieve(q: string, k: number, opts: { full?: boolean } = {}): string[] {
-    if (!this.epi.size()) return this.cortex.notesFor(q, k).map((m) => m.text);
+    if (!this.epi.size()) return this.cortex.notesFor(q, k, { fuse: false }).map((m) => m.text);
     const fused = this.scores(q);
     const top = this.epi.topK(fused, k);
     return top.map((h) => this.chunk(this.epi.episodes[h.i]!, opts.full ?? true));
