@@ -12,7 +12,7 @@ export type KnowSearch = { search(q: string, k?: number): { s: string; p: string
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string };
 export type QueryHit = { text: string; source: "memory" | "know"; url?: string; id?: string };
 
-type Compiled = { rec: MemoryRecord; needles: string[] };
+type Compiled = { rec: MemoryRecord; needles: string[]; cues: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having","where","when","who","whom","which"]);
@@ -124,7 +124,7 @@ function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, 
   let bestTerm = "", bestMembers: { rec: MemoryRecord; n: number }[] = [];
   for (const term of hay) {
     if (term.length < 3 || speakers.has(term) || usedTerms.has(term)) continue;
-    const members = scored.filter((x) => x.rec.kind !== "digest" && tokList(x.rec.text).includes(term));
+    const members = scored.filter((x) => x.rec.kind !== "digest" && !cuesOf(x.rec).length && tokList(x.rec.text).includes(term));
     if (members.length > bestMembers.length) { bestMembers = members; bestTerm = term; }
   }
   if (bestMembers.length <= cap) return null;
@@ -319,11 +319,194 @@ function carryTokens(text: string): string[] {
   return out;
 }
 
-function compile(rec: MemoryRecord): Compiled {
-  const own = new Set([...rec.tags.filter((t) => !isCarry(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))]);
-  const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
-  return { rec, needles: [...own, ...carried] };
+/**
+ * Prospective memory (cue-triggered intentions). Rules ("always run the tests before committing") and
+ * decisions ("we chose sqlite over postgres for the cache because …") are intention-shaped: they are recalled
+ * by the situation that makes them applicable, which usually shares no words with the rule itself
+ * ("commit these changes" ↔ "…before committing"). At encode time each intention record derives TRIGGER
+ * CUES — engineering action/object clusters, path prefixes, and the alternatives/subject named in a
+ * decision — stored as a separate cue index (`!c:`, `!p:`, `!a:`, `!s:` tags). At retrieval a prospective
+ * pass stems the query, matches it against the cue index and reserves a small slice of the cap for the
+ * strongest triggered intentions that the lexical pass did not already surface.
+ */
+const CUE_TAG = "!";
+const isCue = (t: string) => t.startsWith(CUE_TAG);
+/** Max cap slots reserved for triggered intentions, and the trigger strength (in units of log(3) ≈ one cue shared by ≤ a third of intentions) required to claim one. */
+const PROSPECT_SLOTS = Number(process.env.EDEN_PROSPECT_SLOTS ?? 2);
+const PROSPECT_MIN = Number(process.env.EDEN_PROSPECT_MIN ?? 0.5);
+
+/** Porter-lite stemmer: steps 1a/1b/1c, a compact step 2/3/4 table, 5a/5b. commit/commits/committing/committed → commit. */
+function stem(word: string): string {
+  let w = word.toLowerCase();
+  if (w.length <= 3) return w;
+  const vowelAt = (s: string, i: number): boolean => { const c = s[i]!; return "aeiou".includes(c) || (c === "y" && i > 0 && !"aeiou".includes(s[i - 1]!)); };
+  const hasVowel = (s: string) => { for (let i = 0; i < s.length; i++) if (vowelAt(s, i)) return true; return false; };
+  const measure = (s: string) => { let m = 0, prevV = false; for (let i = 0; i < s.length; i++) { const v = vowelAt(s, i); if (!v && prevV) m++; prevV = v; } return m; };
+  const cvc = (s: string) => s.length >= 3 && !vowelAt(s, s.length - 1) && vowelAt(s, s.length - 2) && !vowelAt(s, s.length - 3) && !"wxy".includes(s[s.length - 1]!);
+  // 1a
+  if (w.endsWith("sses")) w = w.slice(0, -2); else if (w.endsWith("ies")) w = w.slice(0, -2); else if (!w.endsWith("ss") && w.endsWith("s")) w = w.slice(0, -1);
+  // 1b
+  if (w.endsWith("eed")) { if (measure(w.slice(0, -3)) > 0) w = w.slice(0, -1); }
+  else {
+    const m = w.match(/(ed|ing)$/);
+    if (m && hasVowel(w.slice(0, -m[1]!.length))) {
+      w = w.slice(0, -m[1]!.length);
+      if (/(at|bl|iz)$/.test(w)) w += "e";
+      else if (/([^aeiou])\1$/.test(w) && !/[lsz]$/.test(w)) w = w.slice(0, -1);
+      else if (measure(w) === 1 && cvc(w)) w += "e";
+    }
+  }
+  // 1c
+  if (w.endsWith("y") && hasVowel(w.slice(0, -1))) w = w.slice(0, -1) + "i";
+  // 2 + 3 (compact)
+  for (const [suf, rep] of [["ational", "ate"], ["tional", "tion"], ["ization", "ize"], ["ation", "ate"], ["izer", "ize"], ["ator", "ate"], ["alism", "al"], ["iveness", "ive"], ["fulness", "ful"], ["ousness", "ous"], ["aliti", "al"], ["iviti", "ive"], ["biliti", "ble"], ["icate", "ic"], ["ative", ""], ["alize", "al"], ["iciti", "ic"], ["ical", "ic"], ["ful", ""], ["ness", ""]] as const) {
+    if (w.endsWith(suf) && measure(w.slice(0, -suf.length)) > 0) { w = w.slice(0, -suf.length) + rep; break; }
+  }
+  // 4
+  for (const suf of ["ement", "ance", "ence", "able", "ible", "ment", "ant", "ent", "ism", "ate", "iti", "ous", "ive", "ize", "ion", "al", "er", "ic", "ou"]) {
+    if (w.endsWith(suf)) { const s = w.slice(0, -suf.length); if (measure(s) > 1 && (suf !== "ion" || /[st]$/.test(s))) w = s; break; }
+  }
+  // 5a / 5b
+  if (w.endsWith("e")) { const s = w.slice(0, -1); const m = measure(s); if (m > 1 || (m === 1 && !cvc(s))) w = s; }
+  if (w.endsWith("ll") && measure(w) > 1) w = w.slice(0, -1);
+  return w;
 }
+
+/** Curated engineering action lexicon: cluster → surface forms (verbs ↔ object nouns ↔ synonyms). Single words are stem-matched; phrases are matched on the raw text. */
+const CUE_LEX: Record<string, string> = {
+  commit: "commit committing committed commits checkin check-in",
+  pr: "pr prs pull-request merge-request push pushing pushed review reviewing rebase branch branches land",
+  test: "test tests testing tested spec specs e2e integration unit-test coverage fixture fixtures assert assertion assertions",
+  dependency: "dependency dependencies depend install installing installed library libraries package packages npm pnpm yarn lockfile vendor third-party",
+  log: "log logs logging logged logger console print printing printed debug debugging trace tracing stdout stderr verbose",
+  secret: "secret secrets env dotenv credential credentials api-key apikey token tokens password passwords 1password vault",
+  flag: "flag flags toggle toggles gate gating rollout canary experiment experiments percent hardcode hardcoded enable enabling disable disabling",
+  migration: "migration migrations migrate migrating schema column columns index indexes indices table tables alter",
+  codegen: "generated codegen generate generator autogenerated auto-generated scaffold",
+  pricing: "pricing price prices priced tier tiers billing invoice invoices cost costs finance discount discounts",
+  types: "type types typing typed typescript interface interfaces unknown cast casting narrow narrowing payload dto",
+  format: "format formatting formatter formatted indent indentation semicolon semicolons whitespace prettier lint linter linting style styling tabs spaces",
+  export: "export exports exporting exported import imports module modules barrel default-export named-export",
+  deploy: "deploy deploys deployment deployed release releases ship shipping production prod rollback",
+  error: "error errors exception exceptions throw throwing catch retry retries",
+  database: "db database databases sql query queries orm postgres sqlite mysql",
+  cache: "cache caches caching cached memoize memo redis lru",
+  api: "endpoint endpoints route routes api rest graphql handler handlers",
+  config: "config configuration configure configured settings setting",
+  docs: "readme docs documentation document comment comments jsdoc docstring",
+  naming: "naming rename renamed",
+  auth: "auth authentication authorization login permission permissions",
+  perf: "performance perf slow latency optimize optimization",
+};
+const CUE_WORD = new Map<string, string[]>();
+const CUE_PHRASE: [RegExp, string][] = [];
+for (const [cluster, forms] of Object.entries(CUE_LEX)) for (const f of forms.split(" ")) {
+  if (/^[a-z0-9-]+$/.test(f) && !f.includes("-")) { const s = stem(f); const a = CUE_WORD.get(s); if (a) { if (!a.includes(cluster)) a.push(cluster); } else CUE_WORD.set(s, [cluster]); }
+  else CUE_PHRASE.push([new RegExp("(?:^|[^a-z0-9])" + f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/-/g, "[ -]?") + "(?![a-z0-9])", "i"), cluster]);
+}
+// Phrases that are concatenated in CUE_LEX by whitespace splitting are re-added here explicitly.
+for (const [p, c] of [["pull request", "pr"], ["merge request", "pr"], ["api key", "secret"], ["turn on", "flag"], ["turn off", "flag"], ["\\d+\\s*%", "flag"], ["percent of", "flag"], ["\\.env", "secret"], ["unit test", "test"], ["default export", "export"], ["named export", "export"], ["third party", "dependency"], ["console\\.log", "log"]] as const) CUE_PHRASE.push([new RegExp("(?:^|[^a-z0-9])" + p + "(?![a-z0-9])", "i"), c]);
+
+const IMPERATIVE = /\b(always|never|must|do not|don'?t|should not|shouldn'?t|banned|forbidden|prohibited|not allowed|make sure|prefer|from now on|go(?:es)? through|only ever)\b/i;
+const DECISION = /\b(decided|decide|chose|chosen|picked|went with|going with|settled on|standardized on|switched to|opted for|instead of|over|rather than)\b/i;
+const CUE_STOP = new Set(["the", "a", "an", "our", "my", "your", "this", "that", "for", "of", "to", "in", "on", "with", "and", "or", "it", "its", "is", "are", "was", "were", "be", "we", "i", "you", "they", "as", "at", "by", "from", "new", "old", "one", "some", "all", "any", "not", "no", "yes", "use", "using", "used", "than", "then", "because", "since", "so", "but", "if", "when", "which", "what", "why", "how", "who", "where", "there", "here", "into", "out", "up", "down", "also", "just", "very", "more", "most", "well", "ok", "okay", "will", "would", "should", "could", "can", "do", "does", "did", "done", "let", "lets", "get", "got", "go", "keep", "make", "put", "set", "add", "have", "has", "had", "need", "needs", "want", "wants", "like", "thing", "things", "something", "everything", "anything", "stuff", "way", "please", "remember", "rule", "rules", "repo", "project", "codebase", "team", "going", "forward", "understood", "follow", "noted", "agreed", "sounds", "good", "thanks", "sure", "right", "first", "next", "last", "again", "still", "ever", "now", "today", "later", "before", "after", "under", "over", "instead", "rather", "without", "asking", "ask", "step", "them", "their", "me", "us", "him", "her", "his", "she", "he", "these", "those", "each", "every", "other", "another", "same", "own", "via", "per", "about", "around", "off", "on"]);
+
+function cueClusters(lower: string, toks: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const t of toks) { const cs = CUE_WORD.get(stem(t)); if (cs) for (const c of cs) out.add(c); }
+  for (const [re, c] of CUE_PHRASE) if (re.test(lower)) out.add(c);
+  return out;
+}
+/** Path prefixes / directory segments mentioned in text: "generated/", "tests/integration", "src/x/y.ts" → generated, tests, integration, tests/integration, src, x. */
+function pathCues(lower: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of lower.matchAll(/(?:^|[\s"'`(,:])((?:[a-z0-9_.-]+\/)+[a-z0-9_.-]*)/g)) {
+    const segs = m[1]!.split("/").filter((s) => s.length >= 3 && !/\./.test(s));
+    for (const s of segs) out.add(s);
+    if (segs.length >= 2) out.add(segs.slice(0, 2).join("/"));
+  }
+  return out;
+}
+const contentStems = (toks: string[]): string[] => { const out: string[] = []; for (const t of toks) { if (t.length < 3 || CUE_STOP.has(t) || STOP.has(t) || QUERY_SKIP.has(t) || /^\d+$/.test(t)) continue; const s = stem(t); if (s.length >= 2 && !out.includes(s)) out.push(s); } return out; };
+const bareToks = (s: string): string[] => s.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+
+/** Alternatives (X, Y) and subject (W) of a decision: "decided on X instead of Y for W because Z", "X over Y", "went with X rather than Y". */
+function decisionParts(lower: string): { alts: string[]; subj: string[] } | null {
+  const m = lower.match(/\b(?:decided (?:on|to use|to go with)|chose|picked|went with|going with|settled on|standardized on|switched to|opted for|would go with|i'?d go with|use|using)\s+(.{1,40}?)\s+(?:over|instead of|rather than|not|vs\.?|versus)\s+(.{1,40}?)(?=\s+(?:for|because|since|as|so|in|on)\b|[.,;:!?]|$)(?:\s+for\s+(.{1,60}?))?(?=\s+(?:because|since|as|so)\b|[.,;:!?]|$)/);
+  if (!m) return null;
+  const alts = [...contentStems(bareToks(m[1]!)), ...contentStems(bareToks(m[2]!))];
+  const subj = m[3] ? contentStems(bareToks(m[3]!)) : [];
+  return alts.length ? { alts, subj } : null;
+}
+/** Strip the conversational/speaker prefix ("One rule for this repo:", "Understood, I'll follow that:") to get the rule body. */
+function ruleBody(text: string): string {
+  let t = text;
+  for (let i = 0; i < 4; i++) { const n = t.replace(/^[^:]{1,60}:\s*/, ""); if (n === t) break; t = n; }
+  return t.replace(/^(?:one rule for this repo|going forward|please remember|remember|from now on|understood|noted|got it|i'?ll follow that|rule)[:,\s]+/i, "");
+}
+const IMPERATIVE_HEAD = /^(?:use|put|keep|run|log|open|write|avoid|wrap|prefix|place|store|route|pin|lock|gate|commit|name|only|no)\b/i;
+function isIntention(text: string): boolean {
+  const body = ruleBody(text);
+  return IMPERATIVE.test(body) || (IMPERATIVE_HEAD.test(body) && /\b(no|not|only|instead|before|after|under|through|via|with)\b/i.test(body)) || (DECISION.test(body) && /\b(over|instead of|rather than|vs\.?|versus|because|since)\b/i.test(body));
+}
+/** Derive the cue index for one record. Returns [] for records that are not intention-shaped. */
+function deriveCues(text: string): string[] {
+  if (!isIntention(text)) return [];
+  const body = ruleBody(text), lower = body.toLowerCase(), toks = bareToks(lower);
+  const out = new Set<string>();
+  for (const c of cueClusters(lower, toks)) out.add(CUE_TAG + "c:" + c);
+  // Exact action/object stems (a query sharing the very word outranks a synonym-only cluster match).
+  for (const s of contentStems(toks)) if (CUE_WORD.has(s)) out.add(CUE_TAG + "w:" + s);
+  for (const p of pathCues(lower)) out.add(CUE_TAG + "p:" + p);
+  const d = decisionParts(lower);
+  if (d) { for (const a of d.alts) out.add(CUE_TAG + "a:" + a); for (const s of d.subj) out.add(CUE_TAG + "s:" + s); }
+  else if (DECISION.test(lower)) for (const s of contentStems(toks).filter((s) => !CUE_WORD.has(s)).slice(0, 6)) out.add(CUE_TAG + "s:" + s);
+  return [...out];
+}
+/** Cues present in a query: clusters, path segments, and content stems (matched against decision alternatives/subjects). */
+function queryCues(text: string): { c: Set<string>; p: Set<string>; w: Set<string> } {
+  const lower = text.toLowerCase(), toks = bareToks(lower);
+  return { c: cueClusters(lower, toks), p: pathCues(lower), w: new Set(contentStems(toks)) };
+}
+
+const CUES = new WeakMap<MemoryRecord, string[]>();
+const cuesOf = (rec: MemoryRecord): string[] => CUES.get(rec) ?? [];
+
+function compile(rec: MemoryRecord): Compiled {
+  const own = new Set([...rec.tags.filter((t) => !isCarry(t) && !isCue(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))]);
+  const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
+  // Cue index: explicit `!` tags win (remember() callers may supply them); otherwise derived deterministically
+  // from the text at compile time, so the JSONL on disk stays byte-identical and old stores gain cues on load.
+  const stored = rec.tags.filter(isCue);
+  const cues = stored.length ? stored : deriveCues(rec.text);
+  CUES.set(rec, cues);
+  return { rec, needles: [...own, ...carried], cues };
+}
+
+/** Prospective pass: score intention records by cue overlap × cue idf (idf over intention records only). */
+function triggerScores(rows: Compiled[], text: string): { rec: MemoryRecord; t: number }[] {
+  const q = queryCues(text);
+  if (!q.c.size && !q.p.size && !q.w.size) return [];
+  const intents = rows.filter((c) => c.cues.length);
+  if (!intents.length) return [];
+  const df = new Map<string, number>();
+  for (const c of intents) for (const cue of c.cues) df.set(cue, (df.get(cue) || 0) + 1);
+  const N = intents.length;
+  const out: { rec: MemoryRecord; t: number }[] = [];
+  for (const c of intents) {
+    let t = 0;
+    for (const cue of c.cues) {
+      const k = cue[1], v = cue.slice(3);
+      const hit = k === "c" ? q.c.has(v) : k === "p" ? q.p.has(v) : q.w.has(v);
+      if (!hit) continue;
+      const idf = Math.log(1 + N / (df.get(cue) || 1));
+      t += idf * (k === "s" ? 0.6 : k === "w" ? 0.5 : k === "a" ? 1.2 : 1);
+    }
+    if (t > 0) out.push({ rec: c.rec, t });
+  }
+  return out.sort((a, b) => b.t - a.t || b.rec.at - a.rec.at);
+}
+const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
 function load(path: string): Compiled[] {
   if (!existsSync(path)) return [];
@@ -439,7 +622,8 @@ export class AgentMemory {
       if (this.compiled.some((c) => (!this.project || c.rec.project === this.project) && c.rec.text.toLowerCase() === text.toLowerCase())) continue;
       const key = subjectKey(text);
       if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
-      out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])) }));
+      const kind = /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact";
+      out.push(this.remember(text, { kind, tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])) }));
       if (process.env.EDEN_DIGEST !== "off") { const m = text.match(SPEAKER_LABEL); if (m) this.consolidate(m[1]!.replace(/:$/, ""), text.slice(m[1]!.length)); }
     }
     return out;
@@ -467,7 +651,7 @@ export class AgentMemory {
   }
 
   private persist() {
-    if (this.compiled.length > 2000) { const keep = this.compiled.filter((c) => c.rec.kind === "constraint").sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => c.rec.kind !== "constraint").sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; } writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { mode: 0o600 });
+    if (this.compiled.length > 2000) { const pin = (c: Compiled) => c.rec.kind === "constraint" || c.cues.length > 0; const keep = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => !pin(c)).sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; } writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { mode: 0o600 });
   }
 
   relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6, fuse = true): MemoryRecord[] {
@@ -513,11 +697,30 @@ export class AgentMemory {
       }
       return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) + (c.rec.kind === "digest" ? DIGEST_BONUS : 0) };
     }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
-    return dedupSelect(fuse ? fuseIfCrowded(scored, hay, speakers, cap) : scored, cap);
+    const lexical = dedupSelect(fuse ? fuseIfCrowded(scored, hay, speakers, cap) : scored, cap);
+    // Prospective pass: cue-triggered intentions get a reserved slice of the cap when the lexical pass missed them.
+    const triggered = triggerScores(rows, text);
+    if (!triggered.length) return lexical;
+    const reserve = Math.min(PROSPECT_SLOTS, Math.max(1, Math.floor(cap / 3)));
+    const strong = Math.log(1 + 2);
+    const picked: MemoryRecord[] = [];
+    for (const { rec, t } of triggered) {
+      if (picked.length >= reserve) break;
+      if (t < strong * PROSPECT_MIN) break;
+      if (lexical.slice(0, cap - reserve).some((l) => l.id === rec.id || jaccardText(l.text, rec.text) > 0.6)) continue;
+      if (picked.some((p) => jaccardText(p.text, rec.text) > 0.6)) continue;
+      picked.push(rec);
+    }
+    if (!picked.length) return lexical;
+    const out: MemoryRecord[] = [];
+    for (const l of lexical) { if (out.length >= cap - picked.length) break; if (!picked.some((p) => p.id === l.id || jaccardText(p.text, l.text) > 0.6)) out.push(l); }
+    return [...out, ...picked];
   }
 
   notesFor(text = "", k = Number(process.env.EDEN_MEMORY_CAP) || 6, opts: { fuse?: boolean } = {}): MemoryRecord[] {
-    const map = (recs: MemoryRecord[]) => recs.map((r) => ({ ...r, text: retrieveText(r.text) }));
+    // Intention records (rules/decisions with a cue index) are returned verbatim: the yes/no and numeral
+    // augmentation exists for answering questions from facts, and would corrupt "never console.log" or "zero ops".
+    const map = (recs: MemoryRecord[]) => recs.map((r) => ({ ...r, text: cuesOf(r).length ? r.text : retrieveText(r.text) }));
     if (text) return map(this.relevant(text, k, opts.fuse !== false));
     return map(((recs) => [...recs.filter((r) => r.kind === "constraint").slice(-k), ...recs.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(this.memories()));
   }
