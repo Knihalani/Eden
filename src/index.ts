@@ -7,12 +7,17 @@ import { knowQuery } from "../packages/know/src/query";
 export const MEMORY_MARK = "Eden Memory:";
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number };
+/**
+ * `ep`  episode id the record was stored in (Temporal Context Model binding; see EpisodeContext below).
+ * `ctx` drifting episode context at store time: token -> weight (0..1], excluding the record's own tokens.
+ * `sal` salience (0..1): causal / decision / constraint markers in the text (synaptic tagging).
+ */
+export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number };
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string };
 export type QueryHit = { text: string; source: "memory" | "know"; url?: string; id?: string };
 
-type Compiled = { rec: MemoryRecord; needles: string[]; cues: string[] };
+type Compiled = { rec: MemoryRecord; needles: string[]; cues: string[]; ctx: [string, number][]; sal: number };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having","where","when","who","whom","which"]);
@@ -123,11 +128,17 @@ function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, 
   if (scored.length <= cap) return null;
   let bestTerm = "", bestMembers: { rec: MemoryRecord; n: number }[] = [];
   for (const term of hay) {
-    if (term.length < 3 || speakers.has(term) || usedTerms.has(term)) continue;
+    if (term.length < 3 || STOP.has(term) || FUNC_WORD.has(term) || speakers.has(term) || usedTerms.has(term)) continue;
     const members = scored.filter((x) => x.rec.kind !== "digest" && !cuesOf(x.rec).length && tokList(x.rec.text).includes(term));
     if (members.length > bestMembers.length) { bestMembers = members; bestTerm = term; }
   }
   if (bestMembers.length <= cap) return null;
+  // Episode-dominated crowds (one bug/decision session restating itself) are served by context
+  // reinstatement, not by a composite: fusion is for cross-record aggregation of one topic.
+  const epCount = new Map<string, number>();
+  let epTop = 0;
+  for (const m of bestMembers.slice(0, cap * 2)) if (m.rec.ep) { const n = (epCount.get(m.rec.ep) || 0) + 1; epCount.set(m.rec.ep, n); if (n > epTop) epTop = n; }
+  if (epTop * 2 >= Math.min(bestMembers.length, cap * 2)) return null;
   usedTerms.add(bestTerm);
   const take = bestMembers.slice(0, 100);
   const seen = new Set<string>();
@@ -286,7 +297,7 @@ function extractDurable(blob: string): string[] {
     if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("```") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function |npm |pnpm |bun |git |cd |curl |yarn |npx |sudo |echo |cat |ls )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|we will|look at|can you|could you|would you|tell me|fix the|add the|we need to|we're|cool, |nice, |great, |awesome, |perfect, )\b/i.test(t) || /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9]/.test(t) || CHAT.test(t)) continue;
     if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
     const rem = t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1].trim();
-    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t |ran out|i want |fyi|also,|we should |make sure |stands for| aka |called |confirmed |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the|shipped |assigned |owned by|belongs to|due on|due by|deadline|blocked on|depends on|required |lives in|live in|stays in|stay in|moved to|based in|located |works (?:at|for)|work (?:on|at|for)|skip dairy|vegetarian|named |our dog|my dog|reports to|on-call|\bci\b|runs on|pagerduty|slack |cluster |namespace |region |vpc |timezone|branch |repo |org |team |channel |workspace |project |sprint |ticket |issue |hotfix |incident |sev[0-3]|p[0-3] |outage |pager |rollback |deployed |feature flag|kill switch|launchdarkly|maintenance |degraded |slo |sla |quota |budget |capacity |limit |rate.?limit|retr(?:y|ies|ied)|backoff|dri |owner |circuit.?breaker|webhook|endpoint|crontab|cronjob|version |k8s |kubernetes|configmap|helm |terraform|pulumi|cloudformation|iam |cdk |ansible|gcp |gcloud |azure |snowflake|bigquery|datadog|kafka|redshift|pubsub|rabbitmq|redis|postgres|elasticsearch|mongodb|mysql|dynamodb|sentry|grafana|prometheus|newrelic|honeycomb|otel|opentelemetry|jaeger|zipkin|cloudwatch|splunk|lambda|sqs|sns|cloudtrail|kinesis|ecs|step.?functions?|eks|fargate|rds|aurora|secrets.?manager|cloudfront|elasticache|alb|route.?53|api.?gateway|waf|ecr|nlb|elb|s3|kms|athena|glue|cognito|ebs|emr|sagemaker|bedrock|aws.?batch|eventbridge|codebuild|codepipeline|codedeploy|appconfig|amplify|appsync|xray|codecommit|codeartifact|efs|fsx|databricks|clickhouse|prestodb|trino|duckdb|flink|cassandra|neo4j|scylla|cockroach|vitess|tidb|spanner|cosmosdb|firestore|bigtable|memcached|consul|etcd|zookeeper|vault|nomad|istio|envoy|linkerd|traefik|kong|cilium|argocd|fluxcd|knative|calico|tekton|crossplane|kustomize|harbor|helmfile|thanos|mimir|cortex|fluentbit|fluentd|filebeat|logstash|opensearch|metricbeat|qdrant|weaviate|milvus|pinecone|typesense|meilisearch|pgvector|faiss|lancedb|chromadb|solr|nats|pulsar|mosquitto|emqx|airflow|dagster|prefect|temporal|flyte|kubeflow|mlflow|feast|wandb|dvc|huggingface|langsmith|llamaindex|ollama|vllm|sglang|tgi|tensorrt|triton|ggml|gguf|llamafile|exllamav2|awq|gptq|bitsandbytes|flashattn|deepspeed|fsdp|megatron|horovod|nccl|accelerate|xla|ship from|ships from)\b/i.test(t) || (/\b(is|are|was|were|needs?|uses?|will be|ha(?:s|ve) been)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+|\d{2,}/.test(t)) || /^[A-Z][A-Za-z0-9 /._-]{1,32}:\s+\S/.test(t) || /^\d+[.)]\s+.{8,}/.test(t) || /^[-*]\s+.{8,}/.test(t) || /"[^"]{4,80}"\s+(?:is|means|aka)/i.test(t) || /@[\w.-]+\.[a-z]{2,}/i.test(t) || /\b20\d{2}-\d{2}-\d{2}\b/.test(t) || /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(t) || /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(t) || /\$\d{2,}/.test(t) || /(?:~\/|\/(?:Users|home|opt|usr|var|etc)\/)[\w./-]+/.test(t) || /\b[A-Z][A-Z0-9_]{2,}=\S/.test(t) || /\bport\s+\d{2,5}\b/i.test(t) || /\b[\w.-]+\.(?:json|ya?ml|toml|env)\b/.test(t) || /\b[\w-]+\.(?:com|io|dev|internal|local)\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}\b/.test(t) || /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(t) || /\b[0-9a-f]{40}\b/.test(t) || /\b(?:\*|\d{1,2})(?:\s+(?:\*|\d{1,2})){4}\b/.test(t) || /\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/i.test(t) || /\bv\d+\.\d+\.\d+\b/i.test(t) || /\b[\w-]+\.[\w-]+\.svc(?:\.cluster\.local)?\b/.test(t) || /\barn:aws:[a-z0-9-]+:/i.test(t) || looksNarrative(t))) continue;
+    else if (t.endsWith("?") || !(/\b(prefer(?:s|red)?|never |always |must |from now on|note that|don'?t |ran out|i want |fyi|also,|we should |make sure |stands for| aka |called |confirmed |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the|shipped |assigned |owned by|belongs to|due on|due by|deadline|blocked on|depends on|required |lives in|live in|stays in|stay in|moved to|based in|located |works (?:at|for)|work (?:on|at|for)|skip dairy|vegetarian|named |our dog|my dog|reports to|on-call|\bci\b|runs on|pagerduty|slack |cluster |namespace |region |vpc |timezone|branch |repo |org |team |channel |workspace |project |sprint |ticket |issue |hotfix |incident |sev[0-3]|p[0-3] |outage |pager |rollback |deployed |feature flag|kill switch|launchdarkly|maintenance |degraded |slo |sla |quota |budget |capacity |limit |rate.?limit|retr(?:y|ies|ied)|backoff|dri |owner |circuit.?breaker|webhook|endpoint|crontab|cronjob|version |k8s |kubernetes|configmap|helm |terraform|pulumi|cloudformation|iam |cdk |ansible|gcp |gcloud |azure |snowflake|bigquery|datadog|kafka|redshift|pubsub|rabbitmq|redis|postgres|elasticsearch|mongodb|mysql|dynamodb|sentry|grafana|prometheus|newrelic|honeycomb|otel|opentelemetry|jaeger|zipkin|cloudwatch|splunk|lambda|sqs|sns|cloudtrail|kinesis|ecs|step.?functions?|eks|fargate|rds|aurora|secrets.?manager|cloudfront|elasticache|alb|route.?53|api.?gateway|waf|ecr|nlb|elb|s3|kms|athena|glue|cognito|ebs|emr|sagemaker|bedrock|aws.?batch|eventbridge|codebuild|codepipeline|codedeploy|appconfig|amplify|appsync|xray|codecommit|codeartifact|efs|fsx|databricks|clickhouse|prestodb|trino|duckdb|flink|cassandra|neo4j|scylla|cockroach|vitess|tidb|spanner|cosmosdb|firestore|bigtable|memcached|consul|etcd|zookeeper|vault|nomad|istio|envoy|linkerd|traefik|kong|cilium|argocd|fluxcd|knative|calico|tekton|crossplane|kustomize|harbor|helmfile|thanos|mimir|cortex|fluentbit|fluentd|filebeat|logstash|opensearch|metricbeat|qdrant|weaviate|milvus|pinecone|typesense|meilisearch|pgvector|faiss|lancedb|chromadb|solr|nats|pulsar|mosquitto|emqx|airflow|dagster|prefect|temporal|flyte|kubeflow|mlflow|feast|wandb|dvc|huggingface|langsmith|llamaindex|ollama|vllm|sglang|tgi|tensorrt|triton|ggml|gguf|llamafile|exllamav2|awq|gptq|bitsandbytes|flashattn|deepspeed|fsdp|megatron|horovod|nccl|accelerate|xla|ship from|ships from)\b/i.test(t) || (/\b(is|are|was|were|needs?|uses?|will be|ha(?:s|ve) been)\b/i.test(t) && /[A-Z][a-zA-Z]|:\/\/|\w+\.\w+|\d{2,}/.test(t)) || /^[A-Z][A-Za-z0-9 /._-]{1,32}:\s+\S/.test(t) || /^\d+[.)]\s+.{8,}/.test(t) || /^[-*]\s+.{8,}/.test(t) || /"[^"]{4,80}"\s+(?:is|means|aka)/i.test(t) || /@[\w.-]+\.[a-z]{2,}/i.test(t) || /\b20\d{2}-\d{2}-\d{2}\b/.test(t) || /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(t) || /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(t) || /\$\d{2,}/.test(t) || /(?:~\/|\/(?:Users|home|opt|usr|var|etc)\/)[\w./-]+/.test(t) || /\b[A-Z][A-Z0-9_]{2,}=\S/.test(t) || /\bport\s+\d{2,5}\b/i.test(t) || /\b[\w.-]+\.(?:json|ya?ml|toml|env)\b/.test(t) || /\b[\w-]+\.(?:com|io|dev|internal|local)\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b/.test(t) || /\b\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}\b/.test(t) || /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(t) || /\b[0-9a-f]{40}\b/.test(t) || /\b(?:\*|\d{1,2})(?:\s+(?:\*|\d{1,2})){4}\b/.test(t) || /\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/i.test(t) || /\bv\d+\.\d+\.\d+\b/i.test(t) || /\b[\w-]+\.[\w-]+\.svc(?:\.cluster\.local)?\b/.test(t) || /\barn:aws:[a-z0-9-]+:/i.test(t) || looksNarrative(t) || salience(t) > 0)) continue;
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
     if (SPEAKER_LABEL.test(t)) {
       const sp = new Set(tokList((t.match(SPEAKER_LABEL)?.[1] || "").replace(/:$/, "")));
@@ -472,6 +483,97 @@ function queryCues(text: string): { c: Set<string>; p: Set<string>; w: Set<strin
 const CUES = new WeakMap<MemoryRecord, string[]>();
 const cuesOf = (rec: MemoryRecord): string[] => CUES.get(rec) ?? [];
 
+/**
+ * Salience tagging (synaptic tagging / salience-gated consolidation): sentences carrying causal, decision
+ * or constraint markers are the ones a later session asks about ("why", "how did we fix", "what's the rule")
+ * yet they are usually short and share few tokens with the question. A salience weight in [0, 1] is stored
+ * on the record; it (a) exempts the sentence from the extraction drop gate and from eviction, and (b) adds
+ * a bounded boost at scoring so the causal sentence is not out-scored by the chattier investigation
+ * sentence of the same episode.
+ */
+const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
+const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
+function salience(text: string): number {
+  const t = text.replace(SPEAKER_LABEL, "");
+  return SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0;
+}
+const SAL_BOOST = Number(process.env.EDEN_SAL_BOOST ?? 0.5);
+
+/**
+ * Episode-context binding (Temporal Context Model, Howard & Kahana): a slowly drifting context vector is
+ * maintained across the turns of a session -- entity / code tokens, file paths, component names -- with the
+ * session's opening request pinned at a floor so it never decays away. Every record stored during the
+ * episode is bound to a snapshot of that context as weighted context needles ("ctx"), so a fix sentence
+ * stored eight turns after the symptom was reported still carries the symptom and component tokens. At
+ * retrieval the context needles score like own needles (idf-weighted, scaled by CTX_W, capped), and the
+ * top hits' episodes are *reinstated*: other records of the same episode that share cue overlap get a
+ * spread-activation bonus, completing the symptom -> cause -> fix -> file chain.
+ *
+ * Session boundaries are inferred from the message stream (the hook passes no session ids): a fresh window
+ * with no overlap against the previous one, or a substantive user turn whose content tokens barely overlap
+ * the live context, starts a new episode.
+ */
+const CTX_W = Number(process.env.EDEN_CTX_W ?? 0.8);
+const CTX_CAP = Number(process.env.EDEN_CTX_CAP ?? 9);
+const CTX_DECAY = 0.82;
+const CTX_OPEN_FLOOR = 0.55;
+const CTX_MAX = 28;
+const REINSTATE = Number(process.env.EDEN_REINSTATE ?? 2.5);
+/** Extra reinstatement weight for salient records: the causal sentence of a reinstated episode outranks its chatty siblings. */
+const SAL_REINSTATE = Number(process.env.EDEN_SAL_REINSTATE ?? 1);
+const CTX_SKIP = new Set("can you could would please look looking seeing since morning today prod production hmm sure thanks thank yeah yes nope okay cool great nice done let lets going want need think thought get got going make sure back again same before anymore also really pretty maybe still check double one sec moment file files thing things something anything stuff bit little lot lots way ways idea any what why how when where which who while there here this that these those with from into about into onto over under after around".split(" "));
+function ctxTokens(text: string): string[] {
+  const label = text.match(SPEAKER_LABEL)?.[1];
+  const sp = new Set(label ? tokList(label.replace(/:$/, "")) : []);
+  const seen = new Set<string>(), out: string[] = [];
+  for (const w of tokList(text)) {
+    if (w.length < 3 || seen.has(w) || sp.has(w) || STOP.has(w) || QUERY_SKIP.has(w) || FUNC_WORD.has(w) || CTX_SKIP.has(w) || CHAT.test(w)) continue;
+    seen.add(w); out.push(w);
+  }
+  return out;
+}
+
+class EpisodeContext {
+  id = "";
+  private w = new Map<string, number>();
+  private open = new Set<string>();
+  private turns = 0;
+  private seq = 0;
+  private fresh() { this.id = `e${Date.now().toString(36)}${(this.seq++).toString(36)}`; this.w = new Map(); this.open = new Set(); this.turns = 0; }
+  reset() { this.fresh(); }
+  /** Advance the context by one message; returns true when a new episode was opened. */
+  step(role: string, text: string): boolean {
+    const toks = ctxTokens(text);
+    let boundary = !this.id;
+    if (!boundary && role === "user" && toks.length >= 3 && this.w.size) {
+      let hit = 0;
+      for (const t of toks) if (this.w.has(t)) hit++;
+      if (hit / toks.length < 0.5) boundary = true;
+    }
+    if (boundary) this.fresh();
+    for (const [k, v] of this.w) {
+      const nv = v * CTX_DECAY;
+      if (this.open.has(k)) this.w.set(k, Math.max(nv, CTX_OPEN_FLOOR));
+      else if (nv < 0.08) this.w.delete(k);
+      else this.w.set(k, nv);
+    }
+    const add = this.turns === 0 ? 1 : role === "user" ? 0.8 : 0.6;
+    for (const t of toks) this.w.set(t, Math.min(1, (this.w.get(t) || 0) + add));
+    if (this.turns === 0) for (const t of toks) this.open.add(t);
+    this.turns++;
+    return boundary;
+  }
+  /** Weighted snapshot, excluding the record's own tokens, capped at CTX_MAX. */
+  snapshot(own: Set<string>): Record<string, number> | undefined {
+    if (!this.w.size) return undefined;
+    const rows = [...this.w].filter(([k]) => !own.has(k)).sort((a, b) => b[1] - a[1]).slice(0, CTX_MAX);
+    if (!rows.length) return undefined;
+    const out: Record<string, number> = {};
+    for (const [k, v] of rows) out[k] = Math.round(v * 100) / 100;
+    return out;
+  }
+}
+
 function compile(rec: MemoryRecord): Compiled {
   const own = new Set([...rec.tags.filter((t) => !isCarry(t) && !isCue(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))]);
   const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
@@ -480,7 +582,9 @@ function compile(rec: MemoryRecord): Compiled {
   const stored = rec.tags.filter(isCue);
   const cues = stored.length ? stored : deriveCues(rec.text);
   CUES.set(rec, cues);
-  return { rec, needles: [...own, ...carried], cues };
+  const ctx: [string, number][] = [];
+  if (rec.ctx) for (const k in rec.ctx) if (!own.has(k) && rec.ctx[k]! > 0) ctx.push([k, rec.ctx[k]!]);
+  return { rec, needles: [...own, ...carried], cues, ctx, sal: rec.sal ?? 0 };
 }
 
 /** Prospective pass: score intention records by cue overlap × cue idf (idf over intention records only). */
@@ -572,7 +676,8 @@ function slotFillers(body: string): Partial<Record<Slot, string[]>> {
 }
 
 function subjectKey(text: string): string | null {
-  const k = text.trim().match(/^(.{4,80}?)\s+(?:is|are|was|were|prefers?|uses?|lives in|live in|stays in|stay in|moved to|belongs to|owned by|ship from|ships from)\s+\S/i)?.[1]?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() ?? "";
+  // Chat prefixes ("FYI", "Noted:", "Heads up,") must not split one subject into several keys.
+  const k = text.trim().replace(/^(?:fyi|for reference|heads up|noted|got it|note|ok|okay|update|reminder)[:,]?\s+/i, "").match(/^(.{4,80}?)\s+(?:is|are|was|were|prefers?|uses?|lives in|live in|stays in|stay in|moved to|belongs to|owned by|ship from|ships from)\s+\S/i)?.[1]?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() ?? "";
   return k.length >= 4 ? k : null;
 }
 
@@ -586,6 +691,9 @@ export class AgentMemory {
   /** Tokens of the previously observed turn — inherited by the next stored statement as weak needles. */
   private carry: string[] = [];
   private speakerNames = new Set<string>();
+  /** Fingerprints of the last observed message window (the hook re-sends a sliding 40-message window). */
+  private lastWin: string[] = [];
+  private episode = new EpisodeContext();
 
   constructor(opts: MemoryOptions = {}) {
     this.know = opts.know; this.agent = opts.agent; this.project = opts.project;
@@ -598,9 +706,13 @@ export class AgentMemory {
     return this.compiled.map((c) => c.rec).filter((r) => !this.project || r.project === this.project);
   }
 
-  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string } = {}): MemoryRecord {
+  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; ep?: string; ctx?: Record<string, number>; sal?: number } = {}): MemoryRecord {
     const rec: MemoryRecord = { id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, text: String(text || "").trim(), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => t.toLowerCase()), agent: opts.agent || this.agent, project: opts.project || this.project, at: Date.now() };
     if (!rec.text) return rec;
+    if (opts.ep) rec.ep = opts.ep;
+    if (opts.ctx) rec.ctx = opts.ctx;
+    const sal = opts.sal ?? salience(rec.text);
+    if (sal > 0) rec.sal = sal;
     const c = compile(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     return this.compiled.push(c), this.persist(), rec;
@@ -612,19 +724,43 @@ export class AgentMemory {
     return this.compiled.length !== n && (this.persist(), true);
   }
 
+  /**
+   * Observe a message list. The CLI hook re-sends a sliding window of the last 40 turns after every
+   * assistant turn, so messages are matched against the previous window and only the new tail is
+   * processed -- each new message steps the episode context, inherits the previous turn's question frame,
+   * and is mined for durable sentences bound to the live episode context.
+   */
   observe(messages: unknown[]): MemoryRecord[] {
     const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
-    const blob = convBlob(list);
     const out: MemoryRecord[] = [];
-    const carry = process.env.EDEN_CARRY_MODE === "off" ? [] : this.carry;
-    this.carry = carryTokens(blob.trim().replace(/\s+/g, " ").slice(0, 2000));
-    for (const text of extractDurable(blob)) {
-      if (this.compiled.some((c) => (!this.project || c.rec.project === this.project) && c.rec.text.toLowerCase() === text.toLowerCase())) continue;
-      const key = subjectKey(text);
-      if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
-      const kind = /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact";
-      out.push(this.remember(text, { kind, tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])) }));
-      if (process.env.EDEN_DIGEST !== "off") { const m = text.match(SPEAKER_LABEL); if (m) this.consolidate(m[1]!.replace(/:$/, ""), text.slice(m[1]!.length)); }
+    const items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text);
+    const fps = items.map((i) => `${i.role}${i.text.slice(0, 400)}`);
+    let start = 0;
+    if (this.lastWin.length && fps.length) {
+      let found = -1;
+      for (let k = 0; k < this.lastWin.length && found < 0; k++) {
+        const len = Math.min(this.lastWin.length - k, fps.length);
+        let ok = true;
+        for (let i = 0; i < len; i++) if (this.lastWin[k + i] !== fps[i]) { ok = false; break; }
+        if (ok) found = len;
+      }
+      if (found >= 0) start = found;
+      else if (items.length > 1 && process.env.EDEN_CTX_MODE !== "off") this.episode.reset();
+    }
+    if (fps.length) this.lastWin = fps.slice(-80);
+    for (let i = start; i < items.length; i++) {
+      const it = items[i]!;
+      const carry = process.env.EDEN_CARRY_MODE === "off" ? [] : this.carry;
+      this.carry = carryTokens(it.text.slice(0, 2000));
+      if (process.env.EDEN_CTX_MODE !== "off") this.episode.step(it.role, it.text);
+      for (const text of extractDurable(it.text)) {
+        if (this.compiled.some((c) => (!this.project || c.rec.project === this.project) && c.rec.text.toLowerCase() === text.toLowerCase())) continue;
+        const key = subjectKey(text);
+        if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
+        const ownToks = new Set(tokList(text));
+        out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])), ep: process.env.EDEN_CTX_MODE !== "off" ? this.episode.id : undefined, ctx: process.env.EDEN_CTX_MODE !== "off" ? this.episode.snapshot(ownToks) : undefined, sal: salience(text) }));
+        if (process.env.EDEN_DIGEST !== "off") { const m = text.match(SPEAKER_LABEL); if (m) this.consolidate(m[1]!.replace(/:$/, ""), text.slice(m[1]!.length)); }
+      }
     }
     return out;
   }
@@ -651,7 +787,7 @@ export class AgentMemory {
   }
 
   private persist() {
-    if (this.compiled.length > 2000) { const pin = (c: Compiled) => c.rec.kind === "constraint" || c.cues.length > 0; const keep = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => !pin(c)).sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; } writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { mode: 0o600 });
+    if (this.compiled.length > 2000) { const pin = (c: Compiled) => c.rec.kind === "constraint" || c.cues.length > 0 || c.sal >= 1; const keep = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => !pin(c)).sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; } writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { mode: 0o600 });
   }
 
   relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6, fuse = true): MemoryRecord[] {
@@ -679,10 +815,13 @@ export class AgentMemory {
       hayStem.has(liteStem(x)) ||
       (x.length >= 8 && !speakers.has(x) && prefs.has(x.slice(0, 5)) && hayStem.has(liteStem(x)));
     const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
+    const ctxOn = process.env.EDEN_CTX_MODE !== "off";
     for (const c of rows) {
       const seen = new Set<string>();
       for (const x0 of c.needles) { const x = key(x0); if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); } }
+      if (ctxOn) for (const [x] of c.ctx) if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); }
     }
+    const idfOf = (x: string) => { const d = df.get(x) || 0; const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1); return d / N < 0.04 ? idf * 1.55 : idf; };
     const scored = rows.map((c) => {
       let n = 0;
       const seen = new Set<string>();
@@ -690,14 +829,25 @@ export class AgentMemory {
         const x = key(x0);
         if (!hit(x) || seen.has(x)) continue;
         seen.add(x);
-        const d = df.get(x) || 0;
-        let idf = Math.log((N - d + 0.5) / (d + 0.5) + 1);
-        if (d / N < 0.04) idf *= 1.55;
+        const idf = idfOf(x);
         n += x0 === x ? idf : idf * (x0.startsWith(CARRY_Q) ? CARRY_W : CARRY_W2);
       }
-      return { rec: c.rec, n: n + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) + (c.rec.kind === "digest" ? DIGEST_BONUS : 0) };
-    }).filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
-    const lexical = dedupSelect(fuse ? fuseIfCrowded(scored, hay, speakers, cap) : scored, cap);
+      // Episode-context needles: the record inherits its episode's cue overlap (bounded).
+      let cn = 0;
+      if (ctxOn) for (const [x, w] of c.ctx) { if (seen.has(x) || !hit(x)) continue; seen.add(x); cn += idfOf(x) * w; }
+      const base = n + Math.min(CTX_W * cn, CTX_CAP);
+      const sal = base > 0 ? SAL_BOOST * c.sal : 0;
+      return { rec: c.rec, n: base + sal + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) + (c.rec.kind === "digest" ? DIGEST_BONUS : 0), cue: base > 0, sal: c.sal };
+    });
+    // Context reinstatement: the top hits' episodes spread activation to their other cue-sharing records.
+    if (ctxOn && REINSTATE > 0) {
+      let a: typeof scored[number] | undefined, b: typeof scored[number] | undefined;
+      for (const x of scored) { if (!x.rec.ep || x.n <= 0) continue; if (!a || x.n > a.n) { b = a; a = x; } else if (!b || x.n > b.n) b = x; }
+      const eps = new Set([a?.rec.ep, b?.rec.ep].filter(Boolean));
+      if (eps.size) for (const x of scored) if (x.cue && x.rec.ep && eps.has(x.rec.ep)) x.n += REINSTATE * (1 + SAL_REINSTATE * x.sal);
+    }
+    const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
+    const lexical = dedupSelect(fuse ? fuseIfCrowded(ranked, hay, speakers, cap) : ranked, cap);
     // Prospective pass: cue-triggered intentions get a reserved slice of the cap when the lexical pass missed them.
     const triggered = triggerScores(rows, text);
     if (!triggered.length) return lexical;
