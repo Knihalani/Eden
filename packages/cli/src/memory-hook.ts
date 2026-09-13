@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd"]);
-const EVENT_ALIASES: Record<string, string> = { user_prompt_submit: "UserPromptSubmit", userPromptSubmit: "UserPromptSubmit", "user-prompt-submit": "UserPromptSubmit", prompt_submit: "UserPromptSubmit", userPrompt: "UserPromptSubmit", user_message: "UserPromptSubmit", prompt: "UserPromptSubmit", "chat.message": "UserPromptSubmit", "chat.updated": "UserPromptSubmit", "message.updated": "UserPromptSubmit", "message.created": "UserPromptSubmit", beforeSubmit: "UserPromptSubmit", composerSubmit: "UserPromptSubmit", "prompt.submit": "UserPromptSubmit", "prompt-submit": "UserPromptSubmit", "prompt.submitted": "UserPromptSubmit", session_start: "SessionStart", sessionStart: "SessionStart", "session-start": "SessionStart", "session.created": "SessionStart", sessionCreated: "SessionStart", "session-created": "SessionStart", session_end: "SessionEnd", sessionEnd: "SessionEnd", "session-end": "SessionEnd", "session.deleted": "SessionEnd", "session-deleted": "SessionEnd", pre_compact: "PreCompact", preCompact: "PreCompact", "pre-compact": "PreCompact", PreCompress: "PreCompact", precompress: "PreCompact", compact: "PreCompact", "experimental.session.compacting": "PreCompact", "session.compacted": "PreCompact", "context.compact": "PreCompact", session_stop: "Stop", stop: "Stop", AfterAgent: "Stop", afterAgent: "Stop", after_agent: "Stop", "after-agent": "Stop", agent_end: "Stop", turn_complete: "Stop", SubagentStop: "Stop", subagent_stop: "Stop", "subagent-stop": "Stop", afterAgentResponse: "Stop", AfterAgentResponse: "Stop", "session.idle": "Stop", "session-idle": "Stop", "message.completed": "Stop", "chat.completed": "Stop", "session.updated": "Stop", "session-updated": "Stop", session_update: "Stop", sessionUpdate: "Stop", "agent.completed": "Stop", beforeSubmitPrompt: "UserPromptSubmit", BeforeAgent: "UserPromptSubmit" };
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -50,10 +49,8 @@ function briefing(mem: AgentMemory, q = ""): string {
 }
 
 function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
-  const strip = (v: unknown) => typeof v === "string" && v ? (v.startsWith("file:") ? decodeURIComponent(v.replace(/^file:\/\//, "").replace(/^\/([A-Za-z]:)/, "$1")) : v) : undefined;
-  const folder0 = Array.isArray(raw.workspaceFolders) ? raw.workspaceFolders[0] : undefined;
-  const cwd = strip(raw.cwd) ?? strip(raw.directory) ?? strip(raw.workspace_root) ?? strip(raw.git_root) ?? strip(raw.workspaceRoot) ?? strip(raw.repo_root) ?? strip(raw.repoRoot) ?? strip(raw.workspaceFolder) ?? strip(raw.root) ?? strip(raw.folderUri) ?? strip(raw.workspacePath) ?? strip(raw.projectPath) ?? strip(raw.folderPath) ?? strip(raw.projectDir) ?? strip(asRec(raw.project).directory) ?? strip(asRec(raw.project).workspace_root) ?? strip(asRec(raw.project).workspaceRoot) ?? strip(typeof folder0 === "string" ? folder0 : asRec(folder0).path ?? asRec(folder0).uri ?? asRec(folder0).directory ?? asRec(folder0).folderUri) ?? strip(asRec(raw.workspace).path) ?? strip(asRec(raw.workspace).folder) ?? strip(asRec(raw.workspace).uri) ?? strip(asRec(raw.workspace).directory) ?? strip(asRec(raw.workspace).rootPath) ?? strip(asRec(raw.workspace).folderUri) ?? strip(asRec(raw.folder).path) ?? strip(asRec(raw.folder).uri) ?? strip(asRec(raw.repo).root) ?? strip(asRec(raw.repo).path) ?? strip(asRec(raw.git).root) ?? strip(asRec(raw.git).dir) ?? strip(asRec(raw.git).path) ?? strip(asRec(raw.vcs).root);
-  const agent = [process.env.EDEN_MEMORY_AGENT, raw.agent, raw.agent_id, raw.agentName, raw.agent_name, raw.agent_type, raw.agentType, raw.client, raw.editor, raw.host, raw.runtime, raw.app].find((x) => typeof x === "string" && x);
+  const cwd = typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined;
+  const agent = [process.env.EDEN_MEMORY_AGENT, raw.agent].find((x) => typeof x === "string" && x);
   return openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), agent: typeof agent === "string" ? agent : undefined, project: cwd || process.env.EDEN_MEMORY_PROJECT || undefined });
 }
 
@@ -64,7 +61,7 @@ function additional(event: string, text: string): Record<string, unknown> | null
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
     const r = asRec(raw);
-    const event = EVENT_ALIASES[String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "")] ?? String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
+    const event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const mem = hookMemory(r);
     const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : Array.isArray(r.contents) ? r.contents : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; })].slice(-40);
