@@ -41,8 +41,7 @@ function liteStem(w: string): string {
 }
 
 function titleBonus(query: string, note: string): number {
-  if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title|series|watch(?:ed)?|read(?:ing)?)\b/i.test(query)) return 0;
-  if (!/"[^"]{3,80}"/.test(note)) return 0;
+  if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title|series|watch(?:ed)?|read(?:ing)?)\b/i.test(query) || !/"[^"]{3,80}"/.test(note)) return 0;
   let n = 2;
   if (/\b(called|named|titled|title)\b/i.test(query) && /\b(called|named|titled)\b/i.test(note)) n += 2;
   if (/\b(book|novel|series|read(?:ing)?)\b/i.test(query) && /\b(book|read(?:ing)?|novel)\b/i.test(note)) n += 1.5;
@@ -50,26 +49,17 @@ function titleBonus(query: string, note: string): number {
   if (/\b(piece|dance|song|track|album|poem)\b/i.test(query) && /\b(piece|dance|song|track|album|poem|perform)\b/i.test(note)) n += 1.5;
   return n;
 }
-
 function favBonus(query: string, note: string): number {
-  if (!/\bfavorite\b/i.test(query)) return 0;
-  return /\b(loved|love|loves|fave|favourite)\b/i.test(note) ? 1 : 0;
+  return /\bfavorite\b/i.test(query) && /\b(loved|love|loves|fave|favourite)\b/i.test(note) ? 1 : 0;
 }
-
-
 function speakerBonus(query: string, note: string, speakers: Set<string>): number {
   const q = new Set(tokList(query).filter((w) => speakers.has(w)));
   if (!q.size) return 0;
   const m = note.match(SPEAKER_LABEL);
-  if (!m) return 0;
-  const sp = tokList(m[1]!.replace(/:$/, ""));
-  return sp.some((w) => q.has(w)) ? 3 : 0;
+  return m && tokList(m[1]!.replace(/:$/, "")).some((w) => q.has(w)) ? 3 : 0;
 }
-
-
 function quantBonus(query: string, note: string): number {
-  if (!/\b(how long|how many|how old|years?|months?|weeks?|days?|age|since|married)\b/i.test(query)) return 0;
-  return /\b\d{1,4}\b/.test(note) ? 1.5 : 0;
+  return /\b(how long|how many|how old|years?|months?|weeks?|days?|age|since|married)\b/i.test(query) && /\b\d{1,4}\b/.test(note) ? 1.5 : 0;
 }
 
 
@@ -93,93 +83,58 @@ function retrieveText(text: string): string {
   return t.replace(/\0EdenMask(\d+)\0/g, (_, i) => masks[Number(i)]!);
 }
 
-
 function howBonus(query: string, note: string): number {
-  if (!/\bhow\b/i.test(query) || /\bhow (?:long|many|old|much)\b/i.test(query)) return 0;
-  return /\b(by |through |using |via |with my |with our |carving|priorit|practice|routine|habit|steps?|process)\b/i.test(note) ? 1.5 : 0;
+  return /\bhow\b/i.test(query) && !/\bhow (?:long|many|old|much)\b/i.test(query) && /\b(by |through |using |via |with my |with our |carving|priorit|practice|routine|habit|steps?|process)\b/i.test(note) ? 1.5 : 0;
 }
 
-/** Coding-agent fix sentences — pinned so prospective cannot drop a true fix already in the cap. */
 function isFixAction(note: string): boolean {
-  if (note.length < 24) return false;
   const c0 = note.charCodeAt(0);
-  if (c0 !== 73 && c0 !== 87) return false;
-  return /\b(?:I|we) (?:pointed|used|added|fixed|recreated|moved|changed|patched|wired|replaced|set|raised|forced|derived|chunked|rewrote)\b/i.test(note)
+  return note.length >= 24 && (c0 === 73 || c0 === 87)
+    && /\b(?:I|we) (?:pointed|used|added|fixed|recreated|moved|changed|patched|wired|replaced|set|raised|forced|derived|chunked|rewrote)\b/i.test(note)
     && /\b(?:in|at|into)\s+[\w./-]+/i.test(note);
 }
-
-/** Print/debug policy queries share no needles with stored "never console.log" rules (print≠log). */
 function isLogPolicyQuery(q: string): boolean {
-  if (/\bprinters?\b/i.test(q)) return false;
-  return /\b(?:console\.log|\blogging\b|print(?:ing)?\b[^.\n]{0,80}\bdebug(?:ging)?|debug(?:ging)?\b[^.\n]{0,80}\bprint(?:ing)?)\b/i.test(q);
+  return !/\bprinters?\b/i.test(q) && /\b(?:console\.log|\blogging\b|print(?:ing)?\b[^.\n]{0,80}\bdebug(?:ging)?|debug(?:ging)?\b[^.\n]{0,80}\bprint(?:ing)?)\b/i.test(q);
 }
 function isNoPrintRule(note: string): boolean {
   return /\b(?:never|do not|don'?t)\b.{0,48}\b(?:console\.log|print(?:ing)?)\b/i.test(note);
 }
-
-/** CI-provider / staging-URL questions: pin concrete env facts over bugchain "CI" noise. */
-function envSlotKind(q: string): 0 | 1 | 2 {
-  const s = q.toLowerCase();
-  if (/\bci provider\b/.test(s) || /\bset up ci\b/.test(s) || /\bconfigure ci\b/.test(s) || s.includes("point the new script at ci")) return 1;
-  if (/\bstaging url\b/.test(s) || /\bset up staging\b/.test(s) || /\bconfigure staging\b/.test(s) || s.includes("point the new script at staging")) return 2;
-  return 0;
+function pinFront(recs: MemoryRecord[], hit: MemoryRecord | undefined, cap = recs.length): MemoryRecord[] {
+  if (!hit || recs[0]?.id === hit.id) return recs;
+  return [hit, ...recs.filter((r) => r.id !== hit.id)].slice(0, cap);
 }
-function pinEnvFact(kind: 0 | 1 | 2, recs: MemoryRecord[], pool: { rec: MemoryRecord }[], cap: number): MemoryRecord[] {
+function pinEnvFact(q: string, recs: MemoryRecord[], pool: { rec: MemoryRecord }[], cap: number): MemoryRecord[] {
+  const s = q.toLowerCase();
+  const kind = /\bci provider\b|\bset up ci\b|\bconfigure ci\b|point the new script at ci/.test(s) ? 1
+    : /\bstaging url\b|\bset up staging\b|\bconfigure staging\b|point the new script at staging/.test(s) ? 2 : 0;
   if (!kind) return recs;
   const ok = kind === 1
     ? (t: string) => { const s = t.toLowerCase(); return s.includes("circleci") || s.includes("github actions") || s.includes("buildkite"); }
     : (t: string) => { const s = t.toLowerCase(); return s.includes("staging.example") || s.includes("stg.example") || s.includes("staging-2.example") || (s.startsWith("staging:") && s.includes(".")); };
-  let hit = recs.find((r) => ok(r.text));
-  if (!hit) hit = pool.find((x) => ok(x.rec.text))?.rec;
-  if (!hit || recs[0]?.id === hit.id) return recs;
-  return [hit, ...recs.filter((r) => r.id !== hit.id)].slice(0, cap);
+  return pinFront(recs, recs.find((r) => ok(r.text)) ?? pool.find((x) => ok(x.rec.text))?.rec, cap);
 }
 
 function intentBonus(query: string, note: string): number {
-  if (!/\b(interested|pursuing|plans?|excited|looking|keen|researching|want to)\b/i.test(query)) return 0;
-  return /\b(looking into|keen|excited|want to|interested|plan(?:s|ning|ned)?|research(?:ing|ed)?|pursue|pursuing)\b/i.test(note) ? 3 : 0;
+  return /\b(interested|pursuing|plans?|excited|looking|keen|researching|want to)\b/i.test(query) && /\b(looking into|keen|excited|want to|interested|plan(?:s|ning|ned)?|research(?:ing|ed)?|pursue|pursuing)\b/i.test(note) ? 3 : 0;
 }
-
-
 function whereBonus(query: string, note: string): number {
-  if (!/\b(where|which city|which town|which country|which state)\b/i.test(query)) return 0;
-  return /\b(in |at |to |from |visited|trip to|live(?:s|d)? in|moved to|based in|city|town|mountains?|park)\b/i.test(note) ? 2.5 : 0;
+  return /\b(where|which city|which town|which country|which state)\b/i.test(query) && /\b(in |at |to |from |visited|trip to|live(?:s|d)? in|moved to|based in|city|town|mountains?|park)\b/i.test(note) ? 2.5 : 0;
 }
 
-/**
- * Redundancy-aware top-K selection. Plain top-N-by-score can crowd the cap with several near-duplicate
- * records restating the same fact while a query that needs *coverage* of several distinct facts about the
- * same subject (list/aggregate questions -- "What has Melanie painted?", "What activities has X done?")
- * loses the long tail to those restatements. Walk the score-ordered pool and skip a candidate only when
- * it's a near-duplicate (high token-Jaccard) of something already picked, so a genuinely distinct fact
- * further down the ranking gets pulled forward into the cap instead of a third restatement of #1. Order is
- * otherwise untouched, and skipped duplicates backfill the cap if too few distinct candidates exist, so
- * this never returns fewer results than plain top-K would.
- */
-/**
- * Topic fusion: when more scored candidates share a single distinctive query term than the cap can hold
- * (e.g. a dozen sentence-level records all mentioning "painting"), plain top-K crowds every slot with
- * restatements of the same topic and starves other angles of the query, while an aggregate/list question
- * ("What has Melanie painted?") needs the union of what each of those records says, not just the single
- * best-scoring one. Pack the crowd's distinct text into one composite record instead -- this both recovers
- * the union of evidence (helps aggregate answers) and frees the remaining cap slots for other needles.
- */
-function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number, usedTerms: Set<string>): { rec: MemoryRecord; n: number }[] | null {
+/** Pack a query-term crowd into one composite so top-K is not all restatements of one topic. */
+function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number): { rec: MemoryRecord; n: number }[] | null {
   if (scored.length <= cap) return null;
   let bestTerm = "", bestMembers: { rec: MemoryRecord; n: number }[] = [];
   for (const term of hay) {
-    if (term.length < 3 || STOP.has(term) || FUNC_WORD.has(term) || speakers.has(term) || usedTerms.has(term)) continue;
+    if (term.length < 3 || STOP.has(term) || FUNC_WORD.has(term) || speakers.has(term)) continue;
     const members = scored.filter((x) => x.rec.kind !== "digest" && !cuesOf(x.rec).length && tokList(x.rec.text).includes(term));
     if (members.length > bestMembers.length) { bestMembers = members; bestTerm = term; }
   }
   if (bestMembers.length <= cap) return null;
-  // Episode-dominated crowds (one bug/decision session restating itself) are served by context
-  // reinstatement, not by a composite: fusion is for cross-record aggregation of one topic.
   const epCount = new Map<string, number>();
   let epTop = 0;
   for (const m of bestMembers.slice(0, cap * 2)) if (m.rec.ep) { const n = (epCount.get(m.rec.ep) || 0) + 1; epCount.set(m.rec.ep, n); if (n > epTop) epTop = n; }
   if (epTop * 2 >= Math.min(bestMembers.length, cap * 2)) return null;
-  usedTerms.add(bestTerm);
   const take = bestMembers.slice(0, 100);
   const seen = new Set<string>();
   const parts: string[] = [];
@@ -206,17 +161,6 @@ function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, 
   const memberIds = new Set(take.map((x) => x.rec.id));
   const rest = scored.filter((x) => !memberIds.has(x.rec.id));
   return [...rest, { rec: fusedRec, n: fusedN }].sort((a, b) => b.n - a.n);
-}
-
-function fuseIfCrowded(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number): { rec: MemoryRecord; n: number }[] {
-  const usedTerms = new Set<string>();
-  let cur = scored;
-  for (let round = 0; round < 1; round++) {
-    const next = fuseOnce(cur, hay, speakers, cap, usedTerms);
-    if (!next) break;
-    cur = next;
-  }
-  return cur;
 }
 
 function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
@@ -687,7 +631,6 @@ const SLOT_FRAME: Record<Slot, RegExp> = {
 const PLACE_LEX = new Set("beach beaches mountain mountains forest forests park parks lake lakes river rivers ocean sea coast island islands desert hills valley canyon trail trails museum museums gym church shelter studio school college university campus hospital office cafe coffee shop restaurant bar store shop market mall theater theatre cinema stadium arena festival concert camp campsite campground city town village downtown neighborhood library zoo aquarium garden gardens farm ranch cabin hotel airport station hometown country countryside apartment house home kitchen backyard rooftop pool club gallery bookstore bakery diner pub temple cathedral castle palace bridge harbor pier woods meadow field fields cliff cliffs waterfall spring springs bay cave caves resort spa lodge".split(" "));
 const ABSTRACT = new Set("difference impact progress sense decision effort change changes friends time money plans mistake mistakes choice choices point sure fun way ways list note promise peace most happen happens deal move moves memories memory living history career name names news friend appearance debut headway room space contribution contributions connection connections amends comeback breakthrough exception statement case start finish trip journey".split(" "));
 const DIGEST_BONUS = Number(process.env.EDEN_DIGEST_BONUS ?? 9);
-const SLOT_LABEL: Record<Slot, string> ={ places: "places", made: "made", activities: "activities", names: "names", titles: "titles" };
 const ING_SKIP = new Set("going being having getting doing something anything everything nothing morning evening during thing things amazing interesting exciting inspiring stunning boring feeling looking thinking coming trying making taking talking saying telling working starting sharing seeing hoping wishing sending giving bringing meeting keeping helping finding learning moving living loving growing wondering knowing planning turning putting happening according including following spending annoying rewarding frustrating challenging satisfying refreshing calming comforting encouraging uplifting disheartening heartwarming heartbreaking soaring touching bustling fulfilling surrounding evolving striving reminiscing pursuing spreading speaking understanding celebrating sticking letting trusting falling appreciating checking contacting reaching jumping throwing pouring stressing experimenting connecting cheering stepping wrapping winding hanging chatting tackling improving housing inviting gaining raising wagging chilling missing waiting hearing".split(" "));
 const PLACE_SKIP = new Set("and or but last next every each again yesterday today tomorrow tonight with for of on at in by like into after ago since until while when where soon later now then just also very really quite so too more most much many some any the a an my our his her their me you us them it there here order touch love least all fact life time end future moment way past beginning same world process day days week weeks weekend month months year years meantime morning evening night afternoon mind heart case point terms addition general spite front back top bottom middle side sight person turn charge control common return response".split(" "));
 const CAL = new Set("monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december mon tue wed thu fri sat sun jan feb mar apr jun jul aug sep sept oct nov dec".split(" "));
@@ -834,7 +777,7 @@ export class AgentMemory {
       const list = prev ? String(prev.rec.text.split(" — ")[1] || "").split(", ").filter(Boolean) : [];
       for (const it of items) { const k = it.toLowerCase(); if (!seen.has(k)) { seen.add(k); list.push(it); } }
       const kept = list.slice(-60);
-      const text = `${sp}: ${SLOT_LABEL[slot]} — ${kept.join(", ")}`;
+      const text = `${sp}: ${slot} — ${kept.join(", ")}`;
       if (prev && prev.rec.text === text) continue;
       this.remember(text, { id, kind: "digest", tags: [] });
     }
@@ -861,13 +804,8 @@ export class AgentMemory {
       if (!m) continue;
       for (const w of tokList(m[1]!.replace(/:$/, ""))) speakers.add(w);
     }
-    const prefs = new Set([...hay].filter((h) => h.length >= 8 && !speakers.has(h)).map((h) => h.slice(0, 5)));
     const N = rows.length || 1, df = new Map<string, number>();
-    // Prefix hit only when stems agree — blocks activities→activist collisions.
-    const hit = (x: string) =>
-      hay.has(x) ||
-      hayStem.has(liteStem(x)) ||
-      (x.length >= 8 && !speakers.has(x) && prefs.has(x.slice(0, 5)) && hayStem.has(liteStem(x)));
+    const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x));
     const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
     const ctxOn = process.env.EDEN_CTX_MODE !== "off";
     for (const c of rows) {
@@ -904,21 +842,11 @@ export class AgentMemory {
       if (eps.size) for (const x of scored) if (x.cue && x.rec.ep && eps.has(x.rec.ep)) x.n += REINSTATE * (1 + SAL_REINSTATE * x.sal);
     }
     const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
-    let lexical = pinEnvFact(envSlotKind(text), dedupSelect(fuse ? fuseIfCrowded(ranked, hay, speakers, cap) : ranked, cap), ranked, cap);
-    // Fix-seeking: pin an action sentence already in the cap so prospective cannot drop it.
+    let lexical = pinEnvFact(text, dedupSelect(fuse ? fuseOnce(ranked, hay, speakers, cap) ?? ranked : ranked, cap), ranked, cap);
     if (/\b(?:how did we fix|what was the fix)\b/i.test(text)) {
-      let have: MemoryRecord | undefined;
-      let bugCue = false;
-      for (const l of lexical) {
-        if (!bugCue && /\b(?:root cause|stack trace|should be gone)\b/i.test(l.text)) bugCue = true;
-        if (!have && isFixAction(l.text)) have = l;
-        if (have && bugCue) break;
-      }
-      if (have && bugCue && lexical[0]?.id !== have.id) {
-        lexical = [have, ...lexical.filter((l) => l.id !== have.id)];
-      }
+      const have = lexical.find((l) => isFixAction(l.text));
+      if (have && lexical.some((l) => /\b(?:root cause|stack trace|should be gone)\b/i.test(l.text))) lexical = pinFront(lexical, have);
     }
-    // Log-policy: print/debug queries retrieve the no-print constraint even with zero needle overlap.
     if (isLogPolicyQuery(text)) {
       let have = lexical.find((l) => isNoPrintRule(l.text));
       if (!have) {
@@ -927,9 +855,9 @@ export class AgentMemory {
           if (!(c.cues.includes(CUE_TAG + "c:log-forbid") || (c.rec.kind === "constraint" && isNoPrintRule(c.rec.text)))) continue;
           if (!best || c.sal > best.sal || (c.sal === best.sal && c.rec.at > best.rec.at)) best = c;
         }
-        if (best) have = best.rec;
+        have = best?.rec;
       }
-      if (have) lexical = [have, ...lexical.filter((l) => l.id !== have.id)].slice(0, cap);
+      lexical = pinFront(lexical, have, cap);
     }
     // Prospective pass: cue-triggered intentions get a reserved slice of the cap when the lexical pass missed them.
     const triggered = triggerScores(rows, text);
