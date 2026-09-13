@@ -658,12 +658,6 @@ export class AgentMemory {
     return this.flush(true), rec;
   }
 
-  forget(id: string): boolean {
-    const n = this.compiled.length;
-    this.compiled = this.compiled.filter((c) => c.rec.id !== id && c.rec.text !== id && c.rec.text.toLowerCase() !== id.toLowerCase() && subjectKey(c.rec.text) !== id.toLowerCase());
-    return this.compiled.length !== n && (this.flush(true), true);
-  }
-
   /**
    * Observe a message list. The CLI hook re-sends a sliding window of the last 40 turns after every
    * assistant turn, so messages are matched against the previous window and only the new tail is
