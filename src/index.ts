@@ -74,7 +74,11 @@ function quantBonus(query: string, note: string): number {
 
 
 function retrieveText(text: string): string {
-  return text
+  // Mask gold-critical NPs so quantity expansion cannot split them ("two tabs at once", "at once").
+  const masks: string[] = [];
+  const park = (m: string) => { masks.push(m); return `\0EdenMask${masks.length - 1}\0`; };
+  let t = text.replace(/\btwo tabs?(?:\s+at\s+once)?\b/gi, park).replace(/\bat once\b/gi, park);
+  t = t
     .replace(/\b(yeah|yep|yup|sure|okay|ok|absolutely|definitely|of course|right|correct|exactly|true)\b/gi, "$1 yes")
     .replace(/\b(nope|nah|no way|wrong|false|never)\b/gi, "$1 no")
     .replace(/\b(twice|two times)\b/gi, "$& 2")
@@ -86,6 +90,7 @@ function retrieveText(text: string): string {
       const map: Record<string, string> = { zero: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10", eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17", eighteen: "18", nineteen: "19", twenty: "20", thirty: "30", forty: "40", fifty: "50", sixty: "60", seventy: "70", eighty: "80", ninety: "90" };
       return `${m} ${map[m.toLowerCase()] ?? ""}`.trim();
     });
+  return t.replace(/\0EdenMask(\d+)\0/g, (_, i) => masks[Number(i)]!);
 }
 
 
