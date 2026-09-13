@@ -17,7 +17,6 @@ export type Fact = {
   frames: Set<Frame>;
   at: number;
   supersededBy?: number;
-  supersedes?: number;
   changeSignal: boolean;
 };
 
@@ -88,7 +87,6 @@ export class SemanticStore {
       }
       if (best) {
         best.supersededBy = f.ep;
-        f.supersedes = best.ep;
       }
     }
     this.facts.push(f);
