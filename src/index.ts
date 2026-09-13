@@ -529,8 +529,6 @@ class EpisodeContext {
 function compile(rec: MemoryRecord): Compiled {
   const own = new Set([...rec.tags.filter((t) => !isCarry(t) && !isCue(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))]);
   const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
-  // Cue index: explicit `!` tags win (remember() callers may supply them); otherwise derived deterministically
-  // from the text at compile time, so the JSONL on disk stays byte-identical and old stores gain cues on load.
   const stored = rec.tags.filter(isCue);
   const cues = stored.length ? stored : deriveCues(rec.text);
   CUES.set(rec, cues);
@@ -785,28 +783,23 @@ export class AgentMemory {
     const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x));
     const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
     const ctxOn = process.env.EDEN_CTX_MODE !== "off";
-    for (const c of rows) {
-      const seen = new Set<string>();
-      for (const x0 of c.needles) { const x = key(x0); if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); } }
-      if (ctxOn) for (const [x] of c.ctx) if (hit(x) && !seen.has(x)) { seen.add(x); df.set(x, (df.get(x) || 0) + 1); }
-    }
-    const idfOf = (x: string) => { const d = df.get(x) || 0; const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1); return d / N < 0.04 ? idf * 1.55 : idf; };
-    const scored = rows.map((c) => {
-      let n = 0;
-      const seen = new Set<string>();
+    const bags = rows.map((c) => {
+      const seen = new Set<string>(), lex: [string, string][] = [], ctxh: [string, number][] = [];
       for (const x0 of c.needles) {
         const x = key(x0);
         if (!hit(x) || seen.has(x)) continue;
-        seen.add(x);
-        const idf = idfOf(x);
-        n += x0 === x ? idf : idf * (x0.startsWith(CARRY_Q) ? CARRY_W : CARRY_W2);
+        seen.add(x); lex.push([x, x0]); df.set(x, (df.get(x) || 0) + 1);
       }
-      // Episode-context needles: the record inherits its episode's cue overlap (bounded).
-      let cn = 0;
-      if (ctxOn) for (const [x, w] of c.ctx) { if (seen.has(x) || !hit(x)) continue; seen.add(x); cn += idfOf(x) * w; }
+      if (ctxOn) for (const [x, w] of c.ctx) if (!seen.has(x) && hit(x)) { seen.add(x); ctxh.push([x, w]); df.set(x, (df.get(x) || 0) + 1); }
+      return { c, lex, ctxh };
+    });
+    const idfOf = (x: string) => { const d = df.get(x) || 0; const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1); return d / N < 0.04 ? idf * 1.55 : idf; };
+    const scored = bags.map(({ c, lex, ctxh }) => {
+      let n = 0, cn = 0;
+      for (const [x, x0] of lex) { const idf = idfOf(x); n += x0 === x ? idf : idf * (x0.startsWith(CARRY_Q) ? CARRY_W : CARRY_W2); }
+      for (const [x, w] of ctxh) cn += idfOf(x) * w;
       const base = n + Math.min(CTX_W * cn, CTX_CAP);
       const sal = base > 0 ? SAL_BOOST * c.sal : 0;
-      // Hot path: skip answer-type bonuses when there is no lexical/context hit (digest still competes).
       let extras = c.rec.kind === "digest" ? DIGEST_BONUS : 0;
       if (base > 0) extras += proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text);
       return { rec: c.rec, n: base + sal + extras, cue: base > 0, sal: c.sal };
