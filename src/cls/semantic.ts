@@ -48,13 +48,11 @@ const RANK: ValueClass[] = ["time", "money", "weekday", "code", "date", "number"
 
 export class SemanticStore {
   facts: Fact[] = [];
-  byEp = new Map<number, Fact[]>();
   private byAnchor = new Map<string, Fact[]>();
   people = new Set<string>();
 
   compile(episodes: Episode[]) {
     this.facts = [];
-    this.byEp.clear();
     this.byAnchor.clear();
     this.people.clear();
     for (const e of episodes) if (e.speaker) this.people.add(e.speaker.toLowerCase());
@@ -90,9 +88,6 @@ export class SemanticStore {
       }
     }
     this.facts.push(f);
-    const l = this.byEp.get(f.ep);
-    if (l) l.push(f);
-    else this.byEp.set(f.ep, [f]);
     for (const a of f.anchors) {
       const l2 = this.byAnchor.get(a);
       if (l2) l2.push(f);
