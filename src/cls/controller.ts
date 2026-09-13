@@ -106,7 +106,7 @@ export class CLSController {
   scores(q: string): Float64Array {
     const n = this.epi.size();
     const temporal = this.temporal(q);
-    const cue: Cue = this.epi.cueFor(q, { timeW: temporal ? 2 : 1.5 });
+    const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5);
     const base = this.epi.score(cue);
     const epiRaw = this.epi.complete(cue, { rounds: 3, decay: 0.35, scores: base });
     const epi = this.norm(this.bindQA(epiRaw), n);
