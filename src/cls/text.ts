@@ -9,9 +9,6 @@ export const STOP = new Set(
   ),
 );
 
-/** Question words never carry retrieval mass but define the answer frame. */
-export const FRAME_WORDS = new Set("who whom whose where when which what how much many long old time day date year month week often".split(" "));
-
 export const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const MONTH_IDX = new Map<string, number>(MONTHS.flatMap((m, i) => [[m, i], [m.slice(0, 3), i]] as [string, number][]));
 MONTH_IDX.set("sept", 8);
