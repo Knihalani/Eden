@@ -105,7 +105,6 @@ export class SemanticStore {
 
   private compileEpisode(e: Episode): Fact[] {
     const out: Fact[] = [];
-    const sp = e.speaker.toLowerCase();
     for (const raw of e.text.split(/(?<=[.!?;])\s+/)) {
       const s = raw.trim();
       if (s.length < 6 || s.endsWith("?")) continue;
@@ -153,8 +152,7 @@ export class SemanticStore {
       if (!anchors.size) continue;
       const frames = new Set<Frame>(FRAME_OF[vclass]);
       if (/\b(room|gate|city|country|town|park|field|hotel|street|address|where|in|at)\b/.test(low) && (vclass === "code" || vclass === "proper")) frames.add("where");
-      out.push({ ep: e.i, subject: names.slice(0, 2), anchors, values, vclass, frames, at: e.at, changeSignal: CHANGE.test(text) && !/^(?:[A-Z][a-z]+\s+)?(?:has|have|had) (?:been|had)?\s*(?:great|good|fun)\b/.test(text) });
-      void sp;
+      out.push({ ep: e.i, subject: names.slice(0, 2), anchors, values, vclass, frames, at: e.i, changeSignal: CHANGE.test(text) && !/^(?:[A-Z][a-z]+\s+)?(?:has|have|had) (?:been|had)?\s*(?:great|good|fun)\b/.test(text) });
     }
     return out;
   }
