@@ -104,7 +104,7 @@ export class CLSController {
 
   /** Fused scores for every episode. */
   scores(q: string): Float64Array {
-    const n = this.epi.size();
+    const n = this.epi.episodes.length;
     const temporal = this.temporal(q);
     const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5);
     const base = this.epi.score(cue);
@@ -151,7 +151,7 @@ export class CLSController {
   }
 
   retrieve(q: string, k: number): string[] {
-    if (!this.epi.size()) return this.cortex.notesFor(q, k, { fuse: false }).map((m) => m.text);
+    if (!this.epi.episodes.length) return this.cortex.notesFor(q, k, { fuse: false }).map((m) => m.text);
     const fused = this.scores(q);
     const top = this.epi.topK(fused, k);
     return top.map((h) => this.chunk(this.epi.episodes[h.i]!));
