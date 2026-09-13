@@ -7,7 +7,6 @@
 import type { AgentMemory } from "../index";
 import { EpisodicStore, type Cue, type Episode } from "./episodic";
 import { SemanticStore } from "./semantic";
-import { MONTHS } from "./text";
 
 function bodyKey(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24);
@@ -71,7 +70,7 @@ export class CLSController {
 
   private temporal(q: string): boolean {
     const low = q.toLowerCase();
-    return /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after)\b/.test(low) || /\b20\d{2}\b/.test(low) || MONTHS.some((m) => new RegExp(`\\b${m}\\b`).test(low));
+    return /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(low) || /\b20\d{2}\b/.test(low);
   }
 
   private norm(v: Float64Array | Map<number, number>, n: number): Float64Array {
