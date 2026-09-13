@@ -7,7 +7,7 @@
 import type { AgentMemory } from "../index";
 import { EpisodicStore, type Cue, type Episode } from "./episodic";
 import { SemanticStore } from "./semantic";
-import { MONTHS, contentToks } from "./text";
+import { MONTHS } from "./text";
 
 const W = {
   epi: Number(process.env.CLS_W_EPI ?? 1.0),
@@ -152,24 +152,19 @@ export class CLSController {
     return fused;
   }
 
-  /** Compact answer unit: the episode plus provenance dialogue when the turn is a question / reply. */
-  chunk(e: Episode, full: boolean): string {
+  /** Compact answer unit: the episode plus same-session neighbours. */
+  chunk(e: Episode): string {
     const { prev, next } = this.epi.neighbours(e.i);
     const parts = [e.render];
-    if (full) {
-      if (next) parts.push(next.render);
-      if (prev) parts.unshift(prev.render);
-      return parts.join("\n");
-    }
-    if (next && e.isQuestion) parts.push(next.render);
-    if (prev && (prev.isQuestion || contentToks(e.text).length < 6)) parts.unshift(prev.render);
+    if (next) parts.push(next.render);
+    if (prev) parts.unshift(prev.render);
     return parts.join("\n");
   }
 
-  retrieve(q: string, k: number, opts: { full?: boolean } = {}): string[] {
+  retrieve(q: string, k: number): string[] {
     if (!this.epi.size()) return this.cortex.notesFor(q, k, { fuse: false }).map((m) => m.text);
     const fused = this.scores(q);
     const top = this.epi.topK(fused, k);
-    return top.map((h) => this.chunk(this.epi.episodes[h.i]!, opts.full ?? true));
+    return top.map((h) => this.chunk(this.epi.episodes[h.i]!));
   }
 }
