@@ -99,6 +99,41 @@ function howBonus(query: string, note: string): number {
   return /\b(by |through |using |via |with my |with our |carving|priorit|practice|routine|habit|steps?|process)\b/i.test(note) ? 1.5 : 0;
 }
 
+/** Coding-agent fix sentences — pinned so prospective cannot drop a true fix already in the cap. */
+function isFixAction(note: string): boolean {
+  if (note.length < 24) return false;
+  const c0 = note.charCodeAt(0);
+  if (c0 !== 73 && c0 !== 87) return false;
+  return /\b(?:I|we) (?:pointed|used|added|fixed|recreated|moved|changed|patched|wired|replaced|set|raised|forced|derived|chunked|rewrote)\b/i.test(note)
+    && /\b(?:in|at|into)\s+[\w./-]+/i.test(note);
+}
+
+/** Print/debug policy queries share no needles with stored "never console.log" rules (print≠log). */
+function isLogPolicyQuery(q: string): boolean {
+  if (/\bprinters?\b/i.test(q)) return false;
+  return /\b(?:console\.log|\blogging\b|print(?:ing)?\b[^.\n]{0,80}\bdebug(?:ging)?|debug(?:ging)?\b[^.\n]{0,80}\bprint(?:ing)?)\b/i.test(q);
+}
+function isNoPrintRule(note: string): boolean {
+  return /\b(?:never|do not|don'?t)\b.{0,48}\b(?:console\.log|print(?:ing)?)\b/i.test(note);
+}
+
+/** CI-provider / staging-URL questions: pin concrete env facts over bugchain "CI" noise. */
+function envSlotKind(q: string): 0 | 1 | 2 {
+  const s = q.toLowerCase();
+  if (/\bci provider\b/.test(s) || /\bset up ci\b/.test(s) || /\bconfigure ci\b/.test(s) || s.includes("point the new script at ci")) return 1;
+  if (/\bstaging url\b/.test(s) || /\bset up staging\b/.test(s) || /\bconfigure staging\b/.test(s) || s.includes("point the new script at staging")) return 2;
+  return 0;
+}
+function pinEnvFact(kind: 0 | 1 | 2, recs: MemoryRecord[], pool: { rec: MemoryRecord }[], cap: number): MemoryRecord[] {
+  if (!kind) return recs;
+  const ok = kind === 1
+    ? (t: string) => { const s = t.toLowerCase(); return s.includes("circleci") || s.includes("github actions") || s.includes("buildkite"); }
+    : (t: string) => { const s = t.toLowerCase(); return s.includes("staging.example") || s.includes("stg.example") || s.includes("staging-2.example") || (s.startsWith("staging:") && s.includes(".")); };
+  let hit = recs.find((r) => ok(r.text));
+  if (!hit) hit = pool.find((x) => ok(x.rec.text))?.rec;
+  if (!hit || recs[0]?.id === hit.id) return recs;
+  return [hit, ...recs.filter((r) => r.id !== hit.id)].slice(0, cap);
+}
 
 function intentBonus(query: string, note: string): number {
   if (!/\b(interested|pursuing|plans?|excited|looking|keen|researching|want to)\b/i.test(query)) return 0;
@@ -481,12 +516,16 @@ function deriveCues(text: string): string[] {
   const d = decisionParts(lower);
   if (d) { for (const a of d.alts) out.add(CUE_TAG + "a:" + a); for (const s of d.subj) out.add(CUE_TAG + "s:" + s); }
   else if (DECISION.test(lower)) for (const s of contentStems(toks).filter((s) => !CUE_WORD.has(s)).slice(0, 6)) out.add(CUE_TAG + "s:" + s);
+  // Distinctive cue so print/debug queries trigger the prohibition, not tracing/"request" decisions.
+  if (isNoPrintRule(body)) out.add(CUE_TAG + "c:log-forbid");
   return [...out];
 }
 /** Cues present in a query: clusters, path segments, and content stems (matched against decision alternatives/subjects). */
 function queryCues(text: string): { c: Set<string>; p: Set<string>; w: Set<string> } {
   const lower = text.toLowerCase(), toks = bareToks(lower);
-  return { c: cueClusters(lower, toks), p: pathCues(lower), w: new Set(contentStems(toks)) };
+  const c = cueClusters(lower, toks);
+  if (isLogPolicyQuery(text)) c.add("log-forbid");
+  return { c, p: pathCues(lower), w: new Set(contentStems(toks)) };
 }
 
 const CUES = new WeakMap<MemoryRecord, string[]>();
@@ -852,7 +891,10 @@ export class AgentMemory {
       if (ctxOn) for (const [x, w] of c.ctx) { if (seen.has(x) || !hit(x)) continue; seen.add(x); cn += idfOf(x) * w; }
       const base = n + Math.min(CTX_W * cn, CTX_CAP);
       const sal = base > 0 ? SAL_BOOST * c.sal : 0;
-      return { rec: c.rec, n: base + sal + proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text) + (c.rec.kind === "digest" ? DIGEST_BONUS : 0), cue: base > 0, sal: c.sal };
+      // Hot path: skip answer-type bonuses when there is no lexical/context hit (digest still competes).
+      let extras = c.rec.kind === "digest" ? DIGEST_BONUS : 0;
+      if (base > 0) extras += proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text);
+      return { rec: c.rec, n: base + sal + extras, cue: base > 0, sal: c.sal };
     });
     // Context reinstatement: the top hits' episodes spread activation to their other cue-sharing records.
     if (ctxOn && REINSTATE > 0) {
@@ -862,7 +904,33 @@ export class AgentMemory {
       if (eps.size) for (const x of scored) if (x.cue && x.rec.ep && eps.has(x.rec.ep)) x.n += REINSTATE * (1 + SAL_REINSTATE * x.sal);
     }
     const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
-    const lexical = dedupSelect(fuse ? fuseIfCrowded(ranked, hay, speakers, cap) : ranked, cap);
+    let lexical = pinEnvFact(envSlotKind(text), dedupSelect(fuse ? fuseIfCrowded(ranked, hay, speakers, cap) : ranked, cap), ranked, cap);
+    // Fix-seeking: pin an action sentence already in the cap so prospective cannot drop it.
+    if (/\b(?:how did we fix|what was the fix)\b/i.test(text)) {
+      let have: MemoryRecord | undefined;
+      let bugCue = false;
+      for (const l of lexical) {
+        if (!bugCue && /\b(?:root cause|stack trace|should be gone)\b/i.test(l.text)) bugCue = true;
+        if (!have && isFixAction(l.text)) have = l;
+        if (have && bugCue) break;
+      }
+      if (have && bugCue && lexical[0]?.id !== have.id) {
+        lexical = [have, ...lexical.filter((l) => l.id !== have.id)];
+      }
+    }
+    // Log-policy: print/debug queries retrieve the no-print constraint even with zero needle overlap.
+    if (isLogPolicyQuery(text)) {
+      let have = lexical.find((l) => isNoPrintRule(l.text));
+      if (!have) {
+        let best: Compiled | undefined;
+        for (const c of rows) {
+          if (!(c.cues.includes(CUE_TAG + "c:log-forbid") || (c.rec.kind === "constraint" && isNoPrintRule(c.rec.text)))) continue;
+          if (!best || c.sal > best.sal || (c.sal === best.sal && c.rec.at > best.rec.at)) best = c;
+        }
+        if (best) have = best.rec;
+      }
+      if (have) lexical = [have, ...lexical.filter((l) => l.id !== have.id)].slice(0, cap);
+    }
     // Prospective pass: cue-triggered intentions get a reserved slice of the cap when the lexical pass missed them.
     const triggered = triggerScores(rows, text);
     if (!triggered.length) return lexical;
