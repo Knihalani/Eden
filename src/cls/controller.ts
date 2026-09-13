@@ -46,10 +46,12 @@ export class CLSController {
       if (l) l.push(e.i);
       else this.bodyIndex.set(k, [e.i]);
     }
-    for (const e of this.epi.episodes) {
-      const dated = e.date ? `${e.speaker}: [${e.date}] ${e.text}` : `${e.speaker}: ${e.text}`;
-      this.cortex.observe([{ role: "user", content: dated }]);
-    }
+    this.cortex.quiet(() => {
+      for (const e of this.epi.episodes) {
+        const dated = e.date ? `${e.speaker}: [${e.date}] ${e.text}` : `${e.speaker}: ${e.text}`;
+        this.cortex.observe([{ role: "user", content: dated }]);
+      }
+    });
   }
 
   /** Map a cortex note back to its provenance episode (pattern completion from a trimmed cue). */
