@@ -9,17 +9,6 @@ import { EpisodicStore, type Cue, type Episode } from "./episodic";
 import { SemanticStore } from "./semantic";
 import { MONTHS } from "./text";
 
-const W = {
-  epi: Number(process.env.CLS_W_EPI ?? 1.0),
-  sem: Number(process.env.CLS_W_SEM ?? 0.6),
-  cortex: Number(process.env.CLS_W_CORTEX ?? 1.05),
-  agree: Number(process.env.CLS_W_AGREE ?? 0.15),
-  qa: Number(process.env.CLS_QA ?? 0.45),
-  rounds: Number(process.env.CLS_ROUNDS ?? 3),
-  decay: Number(process.env.CLS_DECAY ?? 0.35),
-  temporal: Number(process.env.CLS_TEMPORAL ?? 0.25),
-};
-
 function bodyKey(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24);
 }
@@ -106,8 +95,8 @@ export class CLSController {
       let v = s[i]!;
       const prev = i > 0 && eps[i - 1]!.session === eps[i]!.session ? eps[i - 1]! : undefined;
       const next = i + 1 < s.length && eps[i + 1]!.session === eps[i]!.session ? eps[i + 1]! : undefined;
-      if (prev && prev.isQuestion) v += W.qa * s[i - 1]!;
-      if (next && eps[i]!.isQuestion) v += W.qa * 0.6 * s[i + 1]!;
+      if (prev && prev.isQuestion) v += 0.45 * s[i - 1]!;
+      if (next && eps[i]!.isQuestion) v += 0.27 * s[i + 1]!;
       out[i] = v;
     }
     return out;
@@ -119,7 +108,7 @@ export class CLSController {
     const temporal = this.temporal(q);
     const cue: Cue = this.epi.cueFor(q, { timeW: temporal ? 2 : 1.5 });
     const base = this.epi.score(cue);
-    const epiRaw = this.epi.complete(cue, { rounds: W.rounds, decay: W.decay, scores: base });
+    const epiRaw = this.epi.complete(cue, { rounds: 3, decay: 0.35, scores: base });
     const epi = this.norm(this.bindQA(epiRaw), n);
     const sem = this.norm(this.sem.lookup(q), n);
     const cortexMap = new Map<number, number>();
@@ -134,10 +123,10 @@ export class CLSController {
       const a = epi[i]!, b = sem[i]!, c = cortex[i]!;
       if (!a && !b && !c) continue;
       const lanes = (a > 0 ? 1 : 0) + (b > 0 ? 1 : 0) + (c > 0 ? 1 : 0);
-      let v = W.epi * a + W.sem * b + W.cortex * c + W.agree * (lanes - 1);
+      let v = a + 0.6 * b + 1.05 * c + 0.15 * (lanes - 1);
       if (temporal) {
         const e = this.epi.episodes[i]!;
-        if (e.grounded.length || /\b20\d{2}\b/.test(e.text)) v *= 1 + W.temporal;
+        if (e.grounded.length || /\b20\d{2}\b/.test(e.text)) v *= 1.25;
       }
       fused[i] = v;
     }
