@@ -701,21 +701,21 @@ export class AgentMemory {
         if (ok) found = len;
       }
       if (found >= 0) start = found;
-      else if (items.length > 1 && process.env.EDEN_CTX_MODE !== "off") this.episode.reset();
+      else if (items.length > 1) this.episode.reset();
     }
     if (fps.length) this.lastWin = fps.slice(-80);
     for (let i = start; i < items.length; i++) {
       const it = items[i]!;
-      const carry = process.env.EDEN_CARRY_MODE === "off" ? [] : this.carry;
+      const carry = this.carry;
       this.carry = carryTokens(it.text.slice(0, 2000));
-      if (process.env.EDEN_CTX_MODE !== "off") this.episode.step(it.role, it.text);
+      this.episode.step(it.role, it.text);
       for (const text of extractDurable(it.text)) {
         if (this.compiled.some((c) => (!this.project || c.rec.project === this.project) && c.rec.text.toLowerCase() === text.toLowerCase())) continue;
         const key = subjectKey(text);
         if (key) this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
         const ownToks = new Set(tokList(text));
-        out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])), ep: process.env.EDEN_CTX_MODE !== "off" ? this.episode.id : undefined, ctx: process.env.EDEN_CTX_MODE !== "off" ? this.episode.snapshot(ownToks) : undefined, sal: salience(text) }));
-        if (process.env.EDEN_DIGEST !== "off") { const m = text.match(SPEAKER_LABEL); if (m) this.consolidate(m[1]!.replace(/:$/, ""), text.slice(m[1]!.length)); }
+        out.push(this.remember(text, { kind: /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", tags: carry.concat(tokList(text)).concat(([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : [])), ep: this.episode.id, ctx: this.episode.snapshot(ownToks), sal: salience(text) }));
+        const m = text.match(SPEAKER_LABEL); if (m) this.consolidate(m[1]!.replace(/:$/, ""), text.slice(m[1]!.length));
       }
     }
     return out;
@@ -777,7 +777,6 @@ export class AgentMemory {
     const N = rows.length || 1, df = new Map<string, number>();
     const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x));
     const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
-    const ctxOn = process.env.EDEN_CTX_MODE !== "off";
     const bags = rows.map((c) => {
       const seen = new Set<string>(), lex: string[] = [], ctxh: [string, number][] = [];
       for (const x0 of c.needles) {
@@ -785,7 +784,7 @@ export class AgentMemory {
         if (!hit(x) || seen.has(x)) continue;
         seen.add(x); lex.push(x); df.set(x, (df.get(x) || 0) + 1);
       }
-      if (ctxOn) for (const [x, w] of c.ctx) if (!seen.has(x) && hit(x)) { seen.add(x); ctxh.push([x, w]); df.set(x, (df.get(x) || 0) + 1); }
+      for (const [x, w] of c.ctx) if (!seen.has(x) && hit(x)) { seen.add(x); ctxh.push([x, w]); df.set(x, (df.get(x) || 0) + 1); }
       return { c, lex, ctxh };
     });
     const idfOf = (x: string) => { const d = df.get(x) || 0; const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1); return d / N < 0.04 ? idf * 1.55 : idf; };
@@ -800,7 +799,7 @@ export class AgentMemory {
       return { rec: c.rec, n: base + sal + extras, cue: base > 0, sal: c.sal };
     });
     // Context reinstatement: the top hits' episodes spread activation to their other cue-sharing records.
-    if (ctxOn && REINSTATE > 0) {
+    if (REINSTATE > 0) {
       let a: typeof scored[number] | undefined, b: typeof scored[number] | undefined;
       for (const x of scored) { if (!x.rec.ep || x.n <= 0) continue; if (!a || x.n > a.n) { b = a; a = x; } else if (!b || x.n > b.n) b = x; }
       const eps = new Set([a?.rec.ep, b?.rec.ep].filter(Boolean));
