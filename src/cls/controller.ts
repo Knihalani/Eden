@@ -9,8 +9,6 @@ import { EpisodicStore, type Cue, type Episode } from "./episodic";
 import { SemanticStore } from "./semantic";
 import { MONTHS, contentToks } from "./text";
 
-export type QueryKind = { temporal: boolean; semantic: boolean; frame: ReturnType<typeof SemanticStore.frameOf>; entities: string[] };
-
 const W = {
   epi: Number(process.env.CLS_W_EPI ?? 1.0),
   sem: Number(process.env.CLS_W_SEM ?? 0.6),
@@ -82,13 +80,9 @@ export class CLSController {
     return out;
   }
 
-  classify(q: string): QueryKind {
+  private temporal(q: string): boolean {
     const low = q.toLowerCase();
-    const temporal = /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after)\b/.test(low) || /\b20\d{2}\b/.test(low) || MONTHS.some((m) => new RegExp(`\\b${m}\\b`).test(low));
-    const frame = SemanticStore.frameOf(q);
-    const entities = (q.match(/\b[A-Z][a-z]{2,16}\b/g) ?? []).map((x) => x.toLowerCase());
-    const semantic = frame !== null || /\b(is|are|does|do|has|have)\b/.test(low);
-    return { temporal, semantic, frame, entities };
+    return /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after)\b/.test(low) || /\b20\d{2}\b/.test(low) || MONTHS.some((m) => new RegExp(`\\b${m}\\b`).test(low));
   }
 
   private norm(v: Float64Array | Map<number, number>, n: number): Float64Array {
@@ -122,8 +116,8 @@ export class CLSController {
   /** Fused scores for every episode. */
   scores(q: string): Float64Array {
     const n = this.epi.size();
-    const kind = this.classify(q);
-    const cue: Cue = this.epi.cueFor(q, { timeW: kind.temporal ? 2 : 1.5 });
+    const temporal = this.temporal(q);
+    const cue: Cue = this.epi.cueFor(q, { timeW: temporal ? 2 : 1.5 });
     const base = this.epi.score(cue);
     const epiRaw = W.rounds > 1 ? this.epi.complete(cue, { rounds: W.rounds, decay: W.decay, scores: base }) : base;
     const epi = this.norm(this.bindQA(epiRaw), n);
@@ -141,7 +135,7 @@ export class CLSController {
       if (!a && !b && !c) continue;
       const lanes = (a > 0 ? 1 : 0) + (b > 0 ? 1 : 0) + (c > 0 ? 1 : 0);
       let v = W.epi * a + W.sem * b + W.cortex * c + W.agree * (lanes - 1);
-      if (kind.temporal) {
+      if (temporal) {
         const e = this.epi.episodes[i]!;
         if (e.grounded.length || /\b20\d{2}\b/.test(e.text)) v *= 1 + W.temporal;
       }
