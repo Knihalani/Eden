@@ -12,7 +12,6 @@ export const STOP = new Set(
 export const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const MONTH_IDX = new Map<string, number>(MONTHS.flatMap((m, i) => [[m, i], [m.slice(0, 3), i]] as [string, number][]));
 MONTH_IDX.set("sept", 8);
-export const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 export function words(s: string): string[] {
   return s.toLowerCase().match(/[a-z0-9]+(?:[.'\-][a-z0-9]+)*/g) ?? [];
