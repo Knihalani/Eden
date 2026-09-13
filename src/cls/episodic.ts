@@ -78,21 +78,16 @@ export class EpisodicStore {
     return this.episodes.length;
   }
 
-  idf(f: string): number {
-    const d = this.df.get(f) || 0;
-    if (!d) return 0;
-    const N = this.episodes.length || 1;
-    return Math.log((N - d + 0.5) / (d + 0.5) + 1);
-  }
-
   /** BM25-style sparse dot product between a cue and every episode. */
   score(cue: Cue, k1 = 1.2, b = 0.5): Float64Array {
     const out = new Float64Array(this.episodes.length);
+    const N = this.episodes.length || 1;
     for (const [f, w] of cue) {
       if (!w) continue;
       const p = this.post.get(f);
       if (!p) continue;
-      const idf = this.idf(f);
+      const d = this.df.get(f) || 0;
+      const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1);
       for (const [i, tf] of p) {
         out[i] += w * idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (this.len[i]! / this.avgLen))));
       }
@@ -101,18 +96,18 @@ export class EpisodicStore {
   }
 
   /** Build a cue from a query: stems + bigrams + entities + explicit time buckets. */
-  cueFor(q: string, opts: { entityW?: number; timeW?: number } = {}): Cue {
+  cueFor(q: string, timeW = 1.5): Cue {
     const cue: Cue = new Map();
     const bump = (f: string, w: number) => cue.set(f, (cue.get(f) || 0) + w);
     const stems = contentToks(q);
     for (const s of stems) bump(s, 1);
     for (let i = 0; i + 1 < stems.length; i++) bump(`${stems[i]}_${stems[i + 1]}`, 0.5);
     for (const n of properNames(q)) {
-      bump(`#${n}`, opts.entityW ?? 1.5);
+      bump(`#${n}`, 1.5);
       bump(`@${n}`, 0.6);
     }
     for (const c of codeToks(q)) bump(`#${c}`, 2);
-    for (const t of textTimeToks(q)) bump(t, opts.timeW ?? 1.5);
+    for (const t of textTimeToks(q)) bump(t, timeW);
     return cue;
   }
 
