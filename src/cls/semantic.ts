@@ -3,7 +3,7 @@
  * (subject, attribute, value-class, value, time) tuples with supersession links
  * (newest wins), aliases (speaker ↔ I/my) and question-frame vocab attached.
  */
-import { contentToks, properNames, stem, WEEKDAYS } from "./text";
+import { contentToks, properNames, stem } from "./text";
 import type { Episode } from "./episodic";
 
 export type ValueClass = "time" | "money" | "weekday" | "date" | "number" | "person" | "code" | "proper" | "generic";
@@ -32,17 +32,6 @@ const FRAME_OF: Record<ValueClass, Frame[]> = {
   proper: ["where", "which", "who"],
   generic: ["what", "which"],
 };
-
-function classify(tok: string, text: string, people: Set<string>): ValueClass | null {
-  if (/^\d{1,2}:\d{2}$/.test(tok)) return "time";
-  if (/^\$\d/.test(tok) || /^\d+(\.\d+)?$/.test(tok) && new RegExp(`\\$\\s?${tok}\\b`).test(text)) return "money";
-  if (WEEKDAYS.includes(tok)) return "weekday";
-  if (/^20\d{2}$/.test(tok)) return "date";
-  if (/^\d+(\.\d+)?$/.test(tok)) return "number";
-  if (/^(?=.*\d)(?=.*[a-z])[a-z0-9-]{2,12}$/.test(tok)) return "code";
-  if (people.has(tok)) return "person";
-  return null;
-}
 
 const RANK: ValueClass[] = ["time", "money", "weekday", "code", "date", "number", "person", "proper", "generic"];
 
