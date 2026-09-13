@@ -39,26 +39,25 @@ function liteStem(w: string): string {
   if (w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
   return w;
 }
-function titleBonus(query: string, note: string): number {
-  if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title|series|watch(?:ed)?|read(?:ing)?)\b/i.test(query) || !/"[^"]{3,80}"/.test(note)) return 0;
-  let n = 2;
-  if (/\b(called|named|titled|title)\b/i.test(query) && /\b(called|named|titled)\b/i.test(note)) n += 2;
-  if (/\b(book|novel|series|read(?:ing)?)\b/i.test(query) && /\b(book|read(?:ing)?|novel)\b/i.test(note)) n += 1.5;
-  if (/\b(movie|watch(?:ed)?|film|show)\b/i.test(query) && /\b(watch(?:ed)?|movie|film|show)\b/i.test(note)) n += 1.5;
-  if (/\b(piece|dance|song|track|album|poem)\b/i.test(query) && /\b(piece|dance|song|track|album|poem|perform)\b/i.test(note)) n += 1.5;
+function noteBonus(note: string, hay: Set<string>, q: { title: boolean; called: boolean; book: boolean; movie: boolean; song: boolean; fav: boolean; qSp: Set<string>; quant: boolean; how: boolean; intent: boolean; where: boolean }): number {
+  let n = proxBonus(hay, note);
+  if (q.title && /"[^"]{3,80}"/.test(note)) {
+    n += 2;
+    if (q.called && /\b(called|named|titled)\b/i.test(note)) n += 2;
+    if (q.book && /\b(book|read(?:ing)?|novel)\b/i.test(note)) n += 1.5;
+    if (q.movie && /\b(watch(?:ed)?|movie|film|show)\b/i.test(note)) n += 1.5;
+    if (q.song && /\b(piece|dance|song|track|album|poem|perform)\b/i.test(note)) n += 1.5;
+  }
+  if (q.fav && /\b(loved|love|loves|fave|favourite)\b/i.test(note)) n += 1;
+  if (q.qSp.size) {
+    const m = note.match(SPEAKER_LABEL);
+    if (m && tokList(m[1]!.replace(/:$/, "")).some((w) => q.qSp.has(w))) n += 3;
+  }
+  if (q.quant && /\b\d{1,4}\b/.test(note)) n += 1.5;
+  if (q.how && /\b(by |through |using |via |with my |with our |carving|priorit|practice|routine|habit|steps?|process)\b/i.test(note)) n += 1.5;
+  if (q.intent && /\b(looking into|keen|excited|want to|interested|plan(?:s|ning|ned)?|research(?:ing|ed)?|pursue|pursuing)\b/i.test(note)) n += 3;
+  if (q.where && /\b(in |at |to |from |visited|trip to|live(?:s|d)? in|moved to|based in|city|town|mountains?|park)\b/i.test(note)) n += 2.5;
   return n;
-}
-function favBonus(query: string, note: string): number {
-  return /\bfavorite\b/i.test(query) && /\b(loved|love|loves|fave|favourite)\b/i.test(note) ? 1 : 0;
-}
-function speakerBonus(query: string, note: string, speakers: Set<string>): number {
-  const q = new Set(tokList(query).filter((w) => speakers.has(w)));
-  if (!q.size) return 0;
-  const m = note.match(SPEAKER_LABEL);
-  return m && tokList(m[1]!.replace(/:$/, "")).some((w) => q.has(w)) ? 3 : 0;
-}
-function quantBonus(query: string, note: string): number {
-  return /\b(how long|how many|how old|years?|months?|weeks?|days?|age|since|married)\b/i.test(query) && /\b\d{1,4}\b/.test(note) ? 1.5 : 0;
 }
 
 
@@ -80,10 +79,6 @@ function retrieveText(text: string): string {
       return `${m} ${map[m.toLowerCase()] ?? ""}`.trim();
     });
   return t.replace(/\0EdenMask(\d+)\0/g, (_, i) => masks[Number(i)]!);
-}
-
-function howBonus(query: string, note: string): number {
-  return /\bhow\b/i.test(query) && !/\bhow (?:long|many|old|much)\b/i.test(query) && /\b(by |through |using |via |with my |with our |carving|priorit|practice|routine|habit|steps?|process)\b/i.test(note) ? 1.5 : 0;
 }
 
 function isFixAction(note: string): boolean {
@@ -111,13 +106,6 @@ function pinEnvFact(q: string, recs: MemoryRecord[], pool: { rec: MemoryRecord }
     ? (t: string) => { const s = t.toLowerCase(); return s.includes("circleci") || s.includes("github actions") || s.includes("buildkite"); }
     : (t: string) => { const s = t.toLowerCase(); return s.includes("staging.example") || s.includes("stg.example") || s.includes("staging-2.example") || (s.startsWith("staging:") && s.includes(".")); };
   return pinFront(recs, recs.find((r) => ok(r.text)) ?? pool.find((x) => ok(x.rec.text))?.rec, cap);
-}
-
-function intentBonus(query: string, note: string): number {
-  return /\b(interested|pursuing|plans?|excited|looking|keen|researching|want to)\b/i.test(query) && /\b(looking into|keen|excited|want to|interested|plan(?:s|ning|ned)?|research(?:ing|ed)?|pursue|pursuing)\b/i.test(note) ? 3 : 0;
-}
-function whereBonus(query: string, note: string): number {
-  return /\b(where|which city|which town|which country|which state)\b/i.test(query) && /\b(in |at |to |from |visited|trip to|live(?:s|d)? in|moved to|based in|city|town|mountains?|park)\b/i.test(note) ? 2.5 : 0;
 }
 
 /** Pack a query-term crowd into one composite so top-K is not all restatements of one topic. */
@@ -772,6 +760,9 @@ export class AgentMemory {
       if (!m) continue;
       for (const w of tokList(m[1]!.replace(/:$/, ""))) speakers.add(w);
     }
+    const title = /\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title|series|watch(?:ed)?|read(?:ing)?)\b/i.test(text);
+    const qSp = new Set<string>(); for (const w of qTok) if (speakers.has(w)) qSp.add(w);
+    const qf = { title, called: title && /\b(called|named|titled|title)\b/i.test(text), book: title && /\b(book|novel|series|read(?:ing)?)\b/i.test(text), movie: title && /\b(movie|watch(?:ed)?|film|show)\b/i.test(text), song: title && /\b(piece|dance|song|track|album|poem)\b/i.test(text), fav: /\bfavorite\b/i.test(text), qSp, quant: /\b(how long|how many|how old|years?|months?|weeks?|days?|age|since|married)\b/i.test(text), how: /\bhow\b/i.test(text) && !/\bhow (?:long|many|old|much)\b/i.test(text), intent: /\b(interested|pursuing|plans?|excited|looking|keen|researching|want to)\b/i.test(text), where: /\b(where|which city|which town|which country|which state)\b/i.test(text) };
     const N = rows.length || 1, df = new Map<string, number>();
     const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x));
     const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
@@ -793,7 +784,7 @@ export class AgentMemory {
       const base = n + Math.min(CTX_W * cn, CTX_CAP);
       const sal = base > 0 ? SAL_BOOST * c.sal : 0;
       let extras = c.rec.kind === "digest" ? DIGEST_BONUS : 0;
-      if (base > 0) extras += proxBonus(hay, c.rec.text) + titleBonus(text, c.rec.text) + favBonus(text, c.rec.text) + speakerBonus(text, c.rec.text, speakers) + quantBonus(text, c.rec.text) + howBonus(text, c.rec.text) + intentBonus(text, c.rec.text) + whereBonus(text, c.rec.text);
+      if (base > 0) extras += noteBonus(c.rec.text, hay, qf);
       return { rec: c.rec, n: base + sal + extras, cue: base > 0, sal: c.sal };
     });
     // Context reinstatement: the top hits' episodes spread activation to their other cue-sharing records.
