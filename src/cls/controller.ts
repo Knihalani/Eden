@@ -47,10 +47,10 @@ export class CLSController {
       else this.bodyIndex.set(k, [e.i]);
     }
     this.cortex.quiet(() => {
-      for (const e of this.epi.episodes) {
-        const dated = e.date ? `${e.speaker}: [${e.date}] ${e.text}` : `${e.speaker}: ${e.text}`;
-        this.cortex.observe([{ role: "user", content: dated }]);
-      }
+      this.cortex.observe(this.epi.episodes.map((e) => ({
+        role: "user",
+        content: e.date ? `${e.speaker}: [${e.date}] ${e.text}` : `${e.speaker}: ${e.text}`,
+      })));
     });
   }
 
@@ -75,9 +75,7 @@ export class CLSController {
       }
     }
     if (out < 0) {
-      // Fallback: strongest lexical match on the body text.
-      const cue = this.epi.cueFor(body);
-      const top = this.epi.topK(this.epi.score(cue), 1);
+      const top = this.epi.topK(this.epi.score(this.epi.cueFor(body)), 1);
       if (top.length) out = top[0]!.i;
     }
     this.canonCache.set(note, out);
