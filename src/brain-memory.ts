@@ -11,7 +11,7 @@
  *                              (src/cls/controller.ts)
  *
  * BrainMemory itself is now a thin adapter that keeps the public API the benches use
- * (`ingestTurns` / `ingestTexts` / `retrieve` / `injectBlock` / `stored` / `close`).
+ * (`ingestTurns` / `ingestTexts` / `retrieve` / `stored` / `close`).
  */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,11 +30,9 @@ export type BrainTurn = {
 export class BrainMemory {
   private semantic: AgentMemory;
   private cls: CLSController;
-  private dir: string;
 
   constructor(opts: { dir?: string } = {}) {
-    this.dir = opts.dir || mkdtempSync(join(tmpdir(), "eden-brain-"));
-    this.semantic = openMemory({ dir: this.dir });
+    this.semantic = openMemory({ dir: opts.dir || mkdtempSync(join(tmpdir(), "eden-brain-")) });
     this.cls = new CLSController(this.semantic);
   }
 
@@ -63,13 +61,6 @@ export class BrainMemory {
     return this.cls.retrieve(q, k);
   }
 
-  /** Inject block for agent prompts. */
-  injectBlock(q: string, k = 6): string {
-    const notes = this.retrieve(q, k);
-    if (!notes.length) return "";
-    return `Eden Brain Memory:\n${notes.map((n) => `- ${n}`).join("\n")}`;
-  }
-
   stored(): string[] {
     return this.cls.epi.episodes.map((e) => e.render);
   }
@@ -77,8 +68,4 @@ export class BrainMemory {
   close() {
     this.semantic.close();
   }
-}
-
-export function openBrainMemory(opts: { dir?: string } = {}): BrainMemory {
-  return new BrainMemory(opts);
 }

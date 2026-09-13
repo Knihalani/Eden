@@ -74,10 +74,6 @@ export class EpisodicStore {
     this.avgLen = this.len.reduce((a, b) => a + b, 0) / Math.max(1, this.len.length);
   }
 
-  size() {
-    return this.episodes.length;
-  }
-
   /** BM25-style sparse dot product between a cue and every episode. */
   score(cue: Cue, k1 = 1.2, b = 0.5): Float64Array {
     const out = new Float64Array(this.episodes.length);
