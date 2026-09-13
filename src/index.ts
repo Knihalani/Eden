@@ -691,6 +691,9 @@ export class AgentMemory {
   /** Fingerprints of the last observed message window (the hook re-sends a sliding 40-message window). */
   private lastWin: string[] = [];
   private episode = new EpisodeContext();
+  /** Hippocampal write buffer: coalesce JSONL flushes across one observe()/episode. */
+  private batch = 0;
+  private dirty = false;
 
   constructor(opts: MemoryOptions = {}) {
     this.know = opts.know; this.agent = opts.agent; this.project = opts.project;
@@ -712,13 +715,14 @@ export class AgentMemory {
     if (sal > 0) rec.sal = sal;
     const c = compile(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
-    return this.compiled.push(c), this.persist(), rec;
+    this.compiled.push(c);
+    return this.flush(true), rec;
   }
 
   forget(id: string): boolean {
     const n = this.compiled.length;
     this.compiled = this.compiled.filter((c) => c.rec.id !== id && c.rec.text !== id && c.rec.text.toLowerCase() !== id.toLowerCase() && subjectKey(c.rec.text) !== id.toLowerCase());
-    return this.compiled.length !== n && (this.persist(), true);
+    return this.compiled.length !== n && (this.flush(true), true);
   }
 
   /**
@@ -728,6 +732,8 @@ export class AgentMemory {
    * and is mined for durable sentences bound to the live episode context.
    */
   observe(messages: unknown[]): MemoryRecord[] {
+    this.batch++;
+    try {
     const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
     const out: MemoryRecord[] = [];
     const items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text);
@@ -760,6 +766,10 @@ export class AgentMemory {
       }
     }
     return out;
+    } finally {
+      this.batch--;
+      this.flush(false);
+    }
   }
 
   /** Fold one labeled turn into the speaker's slot digests (superseding records `digest:<speaker>:<slot>`). */
@@ -783,8 +793,15 @@ export class AgentMemory {
     }
   }
 
+  private flush(mark: boolean) {
+    if (mark) this.dirty = true;
+    if (this.batch || !this.dirty) return;
+    this.persist();
+  }
+
   private persist() {
     if (this.compiled.length > 2000) { const pin = (c: Compiled) => c.rec.kind === "constraint" || c.cues.length > 0 || c.sal >= 1; const keep = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-2000); const rest = this.compiled.filter((c) => !pin(c)).sort((a, b) => a.rec.at - b.rec.at); this.compiled = [...keep, ...rest.slice(Math.max(0, rest.length - (2000 - keep.length)))]; } writeFileSync(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""), { mode: 0o600 });
+    this.dirty = false;
   }
 
   relevant(text: string, cap = Number(process.env.EDEN_MEMORY_CAP) || 6, fuse = true): MemoryRecord[] {
@@ -915,7 +932,13 @@ export class AgentMemory {
     const next = this.inject(m);
     return next === m ? body : { ...body, [key]: next };
   }
-  close() {}
+  /** One JSONL flush after many observes (CLS session ingest = massed hippocampal write). */
+  quiet(fn: () => void) {
+    this.batch++;
+    try { fn(); } finally { this.batch--; this.flush(false); }
+  }
+
+  close() { this.flush(false); }
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory {
@@ -927,32 +950,3 @@ export function processMemory(): AgentMemory {
   return process.argv.some((a) => a.endsWith(".test.ts")) ? openMemory({ dir: join(tmpdir(), "eden-m-" + Math.random().toString(36).slice(2)) }) : (proc ??= openMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), agent: process.env.EDEN_MEMORY_AGENT || undefined, project: process.env.EDEN_MEMORY_PROJECT || undefined }));
 }
 
-export function host(opts: MemoryOptions & { port?: number } = {}) {
-  const memory = openMemory(opts);
-  const server = Bun.serve({
-    hostname: process.env.EDEN_MEMORY_HOST || "127.0.0.1",
-    port: Number(opts.port ?? process.env.EDEN_MEMORY_PORT) || 8787,
-    async fetch(req) {
-      const origin = req.headers.get("origin") || "";
-      const cors = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin) ? { "access-control-allow-origin": origin, vary: "origin", "access-control-expose-headers": "content-type" } : {};
-      const json = (body: unknown, status = 200) => Response.json(body, { status, headers: cors });
-      try {
-        if (req.method === "HEAD") return new Response(null, { status: 200, headers: cors });
-        if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" } });
-        const u = new URL(req.url);
-        const p = u.pathname.replace(/\/+$/, "").replace(/^\/v1(?=\/)/, "") || "/";
-        if (req.method === "DELETE") return json({ ok: memory.forget(String(u.searchParams.get("id") || u.searchParams.get("q") || p.split("/").pop() || "")) });
-        if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
-          const b = (await req.json().catch(() => ({}))) as { text?: string; prompt?: string; input?: string; content?: string; query?: string; message?: string; body?: string; system?: string; systemInstruction?: unknown; system_instruction?: unknown; id?: string; messages?: unknown[]; conversation?: unknown[]; contents?: unknown[]; q?: string; k?: number };
-          const sys = b.systemInstruction ?? b.system_instruction, blob = String(b.text || b.prompt || b.input || b.content || b.query || b.message || b.body || b.system || (typeof sys === "string" ? sys : "") || ""), msgs = b.messages || b.conversation || b.contents || (blob ? [{ role: "user", content: blob }] : sys && typeof sys !== "string" ? [sys] : []);
-          const run = ({ "/observe": () => memory.observe(msgs), "/remember": () => memory.remember(blob, b), "/forget": () => ({ ok: memory.forget(String(b.id || blob)) }), "/inject": () => { const n = memory.inject(msgs); return Array.isArray(b.contents) && !b.messages ? { contents: n, messages: n } : { messages: n }; }, "/query": () => memory.query(String(b.q || blob), Number(b.k) || Number(process.env.EDEN_MEMORY_CAP) || 6) } as Record<string, () => unknown>)[p]; if (run) return json(run());
-        } else {
-          const q = u.searchParams.get("q") || u.searchParams.get("text") || u.searchParams.get("prompt") || u.searchParams.get("input") || u.searchParams.get("content") || u.searchParams.get("message") || u.searchParams.get("system") || u.searchParams.get("body") || u.searchParams.get("system_prompt") || "", k = Number(u.searchParams.get("k")) || Number(process.env.EDEN_MEMORY_CAP) || 6, health = () => ({ ok: true, n: memory.memories().length });
-          const run = ({ "/": health, "/health": health, "/query": () => memory.query(q, k), "/observe": () => memory.observe(q ? [{ role: "user", content: q }] : []), "/remember": () => memory.remember(q), "/forget": () => ({ ok: memory.forget(String(u.searchParams.get("id") || q)) }), "/inject": () => { const n = memory.inject(q ? [{ role: "user", content: q }] : []); return { messages: n, contents: n }; }, "/memories": () => (q ? memory.query(q, k) : memory.memories().slice().sort((a, b) => b.at - a.at).slice(0, Number(u.searchParams.get("limit") || u.searchParams.get("k")) || 500)) } as Record<string, () => unknown>)[p]; if (run) return json(run());
-        }
-        return new Response("eden memory\n", { headers: cors });
-      } catch (e) { return json({ error: String(e) }, 400); }
-    },
-  });
-  return { url: String(server.url), stop: () => server.stop(), memory };
-}
