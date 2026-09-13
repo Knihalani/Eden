@@ -17,15 +17,13 @@ export type Episode = {
   render: string;
   /** Sparse key: feature -> tf */
   key: Map<string, number>;
-  /** Content stems in order (for bigrams / proximity). */
-  stems: string[];
   grounded: string[];
   isQuestion: boolean;
 };
 
 export type Cue = Map<string, number>;
 
-export function featurize(text: string, speaker: string, stamp: Stamp, grounded: string[]): { key: Map<string, number>; stems: string[] } {
+export function featurize(text: string, speaker: string, stamp: Stamp, grounded: string[]): Map<string, number> {
   const key = new Map<string, number>();
   const bump = (f: string, w = 1) => key.set(f, (key.get(f) || 0) + w);
   const stems = contentToks(text);
@@ -37,7 +35,7 @@ export function featurize(text: string, speaker: string, stamp: Stamp, grounded:
   for (const t of stampToks(stamp)) bump(t, 1);
   for (const t of textTimeToks(text)) bump(t, 0.8);
   for (const g of grounded) for (const t of textTimeToks(g)) bump(t, 0.5);
-  return { key, stems };
+  return key;
 }
 
 export type Hit = { i: number; s: number };
@@ -49,25 +47,22 @@ export class EpisodicStore {
   private df = new Map<string, number>();
   private len: number[] = [];
   private avgLen = 1;
-  private renderPos = new Map<string, number>();
 
   ingest(turns: { text: string; speaker?: string; date?: string; session?: number; at?: number }[]) {
     this.episodes = [];
     this.post.clear();
     this.df.clear();
     this.len = [];
-    this.renderPos.clear();
     turns.forEach((t, i) => {
       const speaker = t.speaker || "speaker";
       const date = t.date || "";
       const stamp = parseStamp(date);
       const text = String(t.text || "").replace(/\s+/g, " ").trim();
       const grounded = groundRelativeTime(text, stamp);
-      const { key, stems } = featurize(text, speaker, stamp, grounded);
+      const key = featurize(text, speaker, stamp, grounded);
       const render = `${speaker}:${date ? ` [${date}]` : ""} ${text}${grounded.length ? ` {≈ ${grounded.join("; ")}}` : ""}`;
-      const ep: Episode = { i, speaker, text, date, stamp, session: t.session ?? 0, at: t.at ?? i, render, key, stems, grounded, isQuestion: /\?\s*$/.test(text) || /\?/.test(text) };
+      const ep: Episode = { i, speaker, text, date, stamp, session: t.session ?? 0, at: t.at ?? i, render, key, grounded, isQuestion: /\?\s*$/.test(text) || /\?/.test(text) };
       this.episodes.push(ep);
-      this.renderPos.set(render, i);
       let l = 0;
       for (const [f, tf] of key) {
         l += tf;
@@ -85,19 +80,11 @@ export class EpisodicStore {
     return this.episodes.length;
   }
 
-  indexOf(render: string): number | undefined {
-    return this.renderPos.get(render);
-  }
-
   idf(f: string): number {
     const d = this.df.get(f) || 0;
     if (!d) return 0;
     const N = this.episodes.length || 1;
     return Math.log((N - d + 0.5) / (d + 0.5) + 1);
-  }
-
-  dfOf(f: string): number {
-    return this.df.get(f) || 0;
   }
 
   /** BM25-style sparse dot product between a cue and every episode. */
