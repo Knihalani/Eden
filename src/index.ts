@@ -39,6 +39,7 @@ function liteStem(w: string): string {
   if (w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
   return w;
 }
+const stem = liteStem;
 
 function titleBonus(query: string, note: string): number {
   if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title|series|watch(?:ed)?|read(?:ing)?)\b/i.test(query) || !/"[^"]{3,80}"/.test(note)) return 0;
@@ -333,43 +334,6 @@ const isCue = (t: string) => t.startsWith(CUE_TAG);
 /** Max cap slots reserved for triggered intentions, and the trigger strength (in units of log(3) ≈ one cue shared by ≤ a third of intentions) required to claim one. */
 const PROSPECT_SLOTS = Number(process.env.EDEN_PROSPECT_SLOTS ?? 2);
 const PROSPECT_MIN = Number(process.env.EDEN_PROSPECT_MIN ?? 0.5);
-
-/** Porter-lite stemmer: steps 1a/1b/1c, a compact step 2/3/4 table, 5a/5b. commit/commits/committing/committed → commit. */
-function stem(word: string): string {
-  let w = word.toLowerCase();
-  if (w.length <= 3) return w;
-  const vowelAt = (s: string, i: number): boolean => { const c = s[i]!; return "aeiou".includes(c) || (c === "y" && i > 0 && !"aeiou".includes(s[i - 1]!)); };
-  const hasVowel = (s: string) => { for (let i = 0; i < s.length; i++) if (vowelAt(s, i)) return true; return false; };
-  const measure = (s: string) => { let m = 0, prevV = false; for (let i = 0; i < s.length; i++) { const v = vowelAt(s, i); if (!v && prevV) m++; prevV = v; } return m; };
-  const cvc = (s: string) => s.length >= 3 && !vowelAt(s, s.length - 1) && vowelAt(s, s.length - 2) && !vowelAt(s, s.length - 3) && !"wxy".includes(s[s.length - 1]!);
-  // 1a
-  if (w.endsWith("sses")) w = w.slice(0, -2); else if (w.endsWith("ies")) w = w.slice(0, -2); else if (!w.endsWith("ss") && w.endsWith("s")) w = w.slice(0, -1);
-  // 1b
-  if (w.endsWith("eed")) { if (measure(w.slice(0, -3)) > 0) w = w.slice(0, -1); }
-  else {
-    const m = w.match(/(ed|ing)$/);
-    if (m && hasVowel(w.slice(0, -m[1]!.length))) {
-      w = w.slice(0, -m[1]!.length);
-      if (/(at|bl|iz)$/.test(w)) w += "e";
-      else if (/([^aeiou])\1$/.test(w) && !/[lsz]$/.test(w)) w = w.slice(0, -1);
-      else if (measure(w) === 1 && cvc(w)) w += "e";
-    }
-  }
-  // 1c
-  if (w.endsWith("y") && hasVowel(w.slice(0, -1))) w = w.slice(0, -1) + "i";
-  // 2 + 3 (compact)
-  for (const [suf, rep] of [["ational", "ate"], ["tional", "tion"], ["ization", "ize"], ["ation", "ate"], ["izer", "ize"], ["ator", "ate"], ["alism", "al"], ["iveness", "ive"], ["fulness", "ful"], ["ousness", "ous"], ["aliti", "al"], ["iviti", "ive"], ["biliti", "ble"], ["icate", "ic"], ["ative", ""], ["alize", "al"], ["iciti", "ic"], ["ical", "ic"], ["ful", ""], ["ness", ""]] as const) {
-    if (w.endsWith(suf) && measure(w.slice(0, -suf.length)) > 0) { w = w.slice(0, -suf.length) + rep; break; }
-  }
-  // 4
-  for (const suf of ["ement", "ance", "ence", "able", "ible", "ment", "ant", "ent", "ism", "ate", "iti", "ous", "ive", "ize", "ion", "al", "er", "ic", "ou"]) {
-    if (w.endsWith(suf)) { const s = w.slice(0, -suf.length); if (measure(s) > 1 && (suf !== "ion" || /[st]$/.test(s))) w = s; break; }
-  }
-  // 5a / 5b
-  if (w.endsWith("e")) { const s = w.slice(0, -1); const m = measure(s); if (m > 1 || (m === 1 && !cvc(s))) w = s; }
-  if (w.endsWith("ll") && measure(w) > 1) w = w.slice(0, -1);
-  return w;
-}
 
 /** Curated engineering action lexicon: cluster → surface forms (verbs ↔ object nouns ↔ synonyms). Single words are stem-matched; phrases are matched on the raw text. */
 const CUE_LEX: Record<string, string> = {
