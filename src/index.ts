@@ -125,11 +125,19 @@ function whereBonus(query: string, note: string): number {
 /** Pack a query-term crowd into one composite so top-K is not all restatements of one topic. */
 function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number): { rec: MemoryRecord; n: number }[] | null {
   if (scored.length <= cap) return null;
-  let bestTerm = "", bestMembers: { rec: MemoryRecord; n: number }[] = [];
+  const groups = new Map<string, typeof scored>();
+  for (const x of scored) {
+    if (x.rec.kind === "digest" || cuesOf(x.rec).length) continue;
+    for (const term of new Set(tokList(x.rec.text))) {
+      if (term.length < 3 || STOP.has(term) || FUNC_WORD.has(term) || speakers.has(term) || !hay.has(term)) continue;
+      const g = groups.get(term);
+      if (g) g.push(x); else groups.set(term, [x]);
+    }
+  }
+  let bestTerm = "", bestMembers: typeof scored = [];
   for (const term of hay) {
-    if (term.length < 3 || STOP.has(term) || FUNC_WORD.has(term) || speakers.has(term)) continue;
-    const members = scored.filter((x) => x.rec.kind !== "digest" && !cuesOf(x.rec).length && tokList(x.rec.text).includes(term));
-    if (members.length > bestMembers.length) { bestMembers = members; bestTerm = term; }
+    const members = groups.get(term);
+    if (members && members.length > bestMembers.length) { bestMembers = members; bestTerm = term; }
   }
   if (bestMembers.length <= cap) return null;
   const epCount = new Map<string, number>();
@@ -137,31 +145,19 @@ function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, 
   for (const m of bestMembers.slice(0, cap * 2)) if (m.rec.ep) { const n = (epCount.get(m.rec.ep) || 0) + 1; epCount.set(m.rec.ep, n); if (n > epTop) epTop = n; }
   if (epTop * 2 >= Math.min(bestMembers.length, cap * 2)) return null;
   const take = bestMembers.slice(0, 100);
-  const seen = new Set<string>();
-  const parts: string[] = [];
+  const seen = new Set<string>(), parts: string[] = [];
   let budget = 5000;
   for (const m of take) {
     const t = m.rec.text.replace(/^[A-Z][A-Za-z0-9 /._-]{1,32}:\s*/, "");
     const dk = t.toLowerCase().slice(0, 40);
-    if (seen.has(dk)) continue;
-    seen.add(dk);
-    if (t.length > budget) continue;
-    parts.push(t);
-    budget -= t.length;
+    if (seen.has(dk) || t.length > budget) continue;
+    seen.add(dk); parts.push(t); budget -= t.length;
   }
   if (parts.length < 2) return null;
   const label = take[0]!.rec.text.match(SPEAKER_LABEL)?.[1];
-  const fusedRec: MemoryRecord = {
-    id: `fuse:${bestTerm}:${take[0]!.rec.id}`,
-    text: (label ? `${label} ` : "") + parts.join(" | "),
-    kind: "fact",
-    tags: [],
-    at: Math.max(...take.map((x) => x.rec.at)),
-  };
-  const fusedN = Math.max(...take.map((x) => x.n)) + 0.5;
+  const fusedRec: MemoryRecord = { id: `fuse:${bestTerm}:${take[0]!.rec.id}`, text: (label ? `${label} ` : "") + parts.join(" | "), kind: "fact", tags: [], at: Math.max(...take.map((x) => x.rec.at)) };
   const memberIds = new Set(take.map((x) => x.rec.id));
-  const rest = scored.filter((x) => !memberIds.has(x.rec.id));
-  return [...rest, { rec: fusedRec, n: fusedN }].sort((a, b) => b.n - a.n);
+  return [...scored.filter((x) => !memberIds.has(x.rec.id)), { rec: fusedRec, n: Math.max(...take.map((x) => x.n)) + 0.5 }].sort((a, b) => b.n - a.n);
 }
 
 function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
