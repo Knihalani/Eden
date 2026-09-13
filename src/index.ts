@@ -294,16 +294,12 @@ function extractDurable(blob: string): string[] {
 }
 
 /**
- * Context-carry: a stored statement inherits needles from the turn before it (the question it answers).
- * Questions are never stored, so their frame would otherwise be lost. Two tiers:
- *   "^word"  question-sentence tokens of the previous turn   (weight CARRY_W)
- *   "~word"  remaining tokens of the previous turn            (weight CARRY_W2)
+ * Context-carry: a stored statement inherits needles from the question it answers.
+ * "^word" tags the previous turn's question tokens (scored like own needles; remainder-carry is off).
  */
-const CARRY_Q = "^", CARRY_R = "~";
-const CARRY_W = Number(process.env.EDEN_CARRY_W ?? 1);
-const CARRY_W2 = Number(process.env.EDEN_CARRY_W2 ?? 0);
+const CARRY_Q = "^";
 const CARRY_MAX = 24;
-const isCarry = (t: string) => t.startsWith(CARRY_Q) || t.startsWith(CARRY_R);
+const isCarry = (t: string) => t.startsWith(CARRY_Q);
 
 function carryTokens(text: string): string[] {
   const label = text.match(SPEAKER_LABEL)?.[1];
@@ -311,7 +307,6 @@ function carryTokens(text: string): string[] {
   const ok = (w: string, seen: Set<string>) => !(w.length < 3 || STOP.has(w) || QUERY_SKIP.has(w) || sp.has(w) || seen.has(w));
   const seen = new Set<string>(), out: string[] = [];
   for (const w of tokList((text.match(/[^.!?\n]*\?/g) ?? []).join(" "))) if (ok(w, seen) && out.length < CARRY_MAX) { seen.add(w); out.push(CARRY_Q + w); }
-  if (CARRY_W2 > 0) { let n = 0; for (const w of tokList(text)) if (ok(w, seen) && n < CARRY_MAX) { seen.add(w); out.push(CARRY_R + w); n++; } }
   return out;
 }
 
@@ -784,11 +779,11 @@ export class AgentMemory {
     const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
     const ctxOn = process.env.EDEN_CTX_MODE !== "off";
     const bags = rows.map((c) => {
-      const seen = new Set<string>(), lex: [string, string][] = [], ctxh: [string, number][] = [];
+      const seen = new Set<string>(), lex: string[] = [], ctxh: [string, number][] = [];
       for (const x0 of c.needles) {
         const x = key(x0);
         if (!hit(x) || seen.has(x)) continue;
-        seen.add(x); lex.push([x, x0]); df.set(x, (df.get(x) || 0) + 1);
+        seen.add(x); lex.push(x); df.set(x, (df.get(x) || 0) + 1);
       }
       if (ctxOn) for (const [x, w] of c.ctx) if (!seen.has(x) && hit(x)) { seen.add(x); ctxh.push([x, w]); df.set(x, (df.get(x) || 0) + 1); }
       return { c, lex, ctxh };
@@ -796,7 +791,7 @@ export class AgentMemory {
     const idfOf = (x: string) => { const d = df.get(x) || 0; const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1); return d / N < 0.04 ? idf * 1.55 : idf; };
     const scored = bags.map(({ c, lex, ctxh }) => {
       let n = 0, cn = 0;
-      for (const [x, x0] of lex) { const idf = idfOf(x); n += x0 === x ? idf : idf * (x0.startsWith(CARRY_Q) ? CARRY_W : CARRY_W2); }
+      for (const x of lex) n += idfOf(x);
       for (const [x, w] of ctxh) cn += idfOf(x) * w;
       const base = n + Math.min(CTX_W * cn, CTX_CAP);
       const sal = base > 0 ? SAL_BOOST * c.sal : 0;
