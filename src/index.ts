@@ -39,8 +39,6 @@ function liteStem(w: string): string {
   if (w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
   return w;
 }
-const stem = liteStem;
-
 function titleBonus(query: string, note: string): number {
   if (!/\b(book|song|movie|album|show|poem|piece|novel|track|called|named|titled|title|series|watch(?:ed)?|read(?:ing)?)\b/i.test(query) || !/"[^"]{3,80}"/.test(note)) return 0;
   let n = 2;
@@ -355,7 +353,7 @@ const CUE_LEX: Record<string, string> = {
 const CUE_WORD = new Map<string, string[]>();
 const CUE_PHRASE: [RegExp, string][] = [];
 for (const [cluster, forms] of Object.entries(CUE_LEX)) for (const f of forms.split(" ")) {
-  if (/^[a-z0-9-]+$/.test(f) && !f.includes("-")) { const s = stem(f); const a = CUE_WORD.get(s); if (a) { if (!a.includes(cluster)) a.push(cluster); } else CUE_WORD.set(s, [cluster]); }
+  if (/^[a-z0-9-]+$/.test(f) && !f.includes("-")) { const s = liteStem(f); const a = CUE_WORD.get(s); if (a) { if (!a.includes(cluster)) a.push(cluster); } else CUE_WORD.set(s, [cluster]); }
   else CUE_PHRASE.push([new RegExp("(?:^|[^a-z0-9])" + f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/-/g, "[ -]?") + "(?![a-z0-9])", "i"), cluster]);
 }
 // Phrases that are concatenated in CUE_LEX by whitespace splitting are re-added here explicitly.
@@ -367,7 +365,7 @@ const CUE_STOP = new Set(["the", "a", "an", "our", "my", "your", "this", "that",
 
 function cueClusters(lower: string, toks: string[]): Set<string> {
   const out = new Set<string>();
-  for (const t of toks) { const cs = CUE_WORD.get(stem(t)); if (cs) for (const c of cs) out.add(c); }
+  for (const t of toks) { const cs = CUE_WORD.get(liteStem(t)); if (cs) for (const c of cs) out.add(c); }
   for (const [re, c] of CUE_PHRASE) if (re.test(lower)) out.add(c);
   return out;
 }
@@ -381,7 +379,7 @@ function pathCues(lower: string): Set<string> {
   }
   return out;
 }
-const contentStems = (toks: string[]): string[] => { const out: string[] = []; for (const t of toks) { if (t.length < 3 || CUE_STOP.has(t) || STOP.has(t) || QUERY_SKIP.has(t) || /^\d+$/.test(t)) continue; const s = stem(t); if (s.length >= 2 && !out.includes(s)) out.push(s); } return out; };
+const contentStems = (toks: string[]): string[] => { const out: string[] = []; for (const t of toks) { if (t.length < 3 || CUE_STOP.has(t) || STOP.has(t) || QUERY_SKIP.has(t) || /^\d+$/.test(t)) continue; const s = liteStem(t); if (s.length >= 2 && !out.includes(s)) out.push(s); } return out; };
 const bareToks = (s: string): string[] => s.toLowerCase().match(/[a-z0-9]+/g) ?? [];
 
 /** Alternatives (X, Y) and subject (W) of a decision: "decided on X instead of Y for W because Z", "X over Y", "went with X rather than Y". */

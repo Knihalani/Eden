@@ -10,9 +10,7 @@ export type Episode = {
   speaker: string;
   text: string;
   date: string;
-  stamp: Stamp;
   session: number;
-  at: number;
   /** Rendered form returned to callers. */
   render: string;
   /** Sparse key: feature -> tf */
@@ -61,7 +59,7 @@ export class EpisodicStore {
       const grounded = groundRelativeTime(text, stamp);
       const key = featurize(text, speaker, stamp, grounded);
       const render = `${speaker}:${date ? ` [${date}]` : ""} ${text}${grounded.length ? ` {≈ ${grounded.join("; ")}}` : ""}`;
-      const ep: Episode = { i, speaker, text, date, stamp, session: t.session ?? 0, at: t.at ?? i, render, key, grounded, isQuestion: /\?\s*$/.test(text) || /\?/.test(text) };
+      const ep: Episode = { i, speaker, text, date, session: t.session ?? 0, render, key, grounded, isQuestion: /\?/.test(text) };
       this.episodes.push(ep);
       let l = 0;
       for (const [f, tf] of key) {
