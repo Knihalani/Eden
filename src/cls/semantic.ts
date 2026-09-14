@@ -36,22 +36,19 @@ const RANK: ValueClass[] = ["time", "money", "weekday", "code", "number", "perso
 export class SemanticStore {
   facts: Fact[] = [];
   private byAnchor = new Map<string, Fact[]>();
-  people = new Set<string>();
 
   compile(episodes: Episode[]) {
     this.facts = [];
     this.byAnchor.clear();
-    this.people.clear();
-    for (const e of episodes) if (e.speaker) this.people.add(e.speaker.toLowerCase());
-    for (const e of episodes) for (const m of e.text.match(/\b(?:Dr|Mr|Mrs|Ms)\.?\s+([A-Z][a-z]{2,16})/g) ?? []) this.people.add(m.split(/\s+/).pop()!.toLowerCase());
-    // Names that appear as the subject of a fact-like sentence are people too.
-    for (const e of episodes) for (const m of e.text.match(/(?:^|[.!?]\s+)([A-Z][a-z]{2,16})(?:'s)?\s+(?:is|has|was|plays|works|lives|stays|took|switched|moved)\b/g) ?? []) {
-      const n = m.replace(/^[.!?\s]+/, "").split(/\s+|'/)[0]!.toLowerCase();
-      this.people.add(n);
-    }
+    const people = new Set<string>();
     for (const e of episodes) {
-      for (const f of this.compileEpisode(e)) this.add(f);
+      if (e.speaker) people.add(e.speaker.toLowerCase());
+      for (const m of e.text.match(/\b(?:Dr|Mr|Mrs|Ms)\.?\s+([A-Z][a-z]{2,16})/g) ?? []) people.add(m.split(/\s+/).pop()!.toLowerCase());
+      for (const m of e.text.match(/(?:^|[.!?]\s+)([A-Z][a-z]{2,16})(?:'s)?\s+(?:is|has|was|plays|works|lives|stays|took|switched|moved)\b/g) ?? []) {
+        people.add(m.replace(/^[.!?\s]+/, "").split(/\s+|'/)[0]!.toLowerCase());
+      }
     }
+    for (const e of episodes) for (const f of this.compileEpisode(e, people)) this.add(f);
   }
 
   private add(f: Fact) {
@@ -82,7 +79,7 @@ export class SemanticStore {
     }
   }
 
-  private compileEpisode(e: Episode): Fact[] {
+  private compileEpisode(e: Episode, people: Set<string>): Fact[] {
     const out: Fact[] = [];
     for (const raw of e.text.split(/(?<=[.!?;])\s+/)) {
       const s = raw.trim();
@@ -112,7 +109,7 @@ export class SemanticStore {
       for (const w of weekdays) cand.push({ v: w, c: "weekday" });
       for (const c of codes) cand.push({ v: c, c: "code" });
       for (const n of numbers) cand.push({ v: n, c: "number" });
-      for (const n of names) cand.push({ v: n, c: this.people.has(n) ? "person" : "proper" });
+      for (const n of names) cand.push({ v: n, c: people.has(n) ? "person" : "proper" });
       if (!cand.length) continue;
       let vclass: ValueClass = cand[0]!.c;
       for (const c of RANK) if (cand.some((x) => x.c === c)) { vclass = c; break; }
