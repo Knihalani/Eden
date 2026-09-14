@@ -185,8 +185,7 @@ export function groundRelativeTime(text: string, st: Stamp): string[] {
   // Bare month names in text: attach the stamp's year so "in June" reads "June 2023".
   const monthOnly = /\b(january|february|march|april|june|july|august|september|october|november|december)\b(?!,?\s+20\d{2})/g;
   while ((m = monthOnly.exec(low))) {
-    const mi = MONTH_IDX.get(m[1]!)!;
-    add(`${cap(m[1]!)} ${mi <= st.m + 1 ? st.y : st.y}`);
+    add(`${cap(m[1]!)} ${st.y}`);
   }
   return out.slice(0, 4);
 }

@@ -3,11 +3,11 @@
  * (subject, attribute, value-class, value, time) tuples with supersession links
  * (newest wins), aliases (speaker ↔ I/my) and question-frame vocab attached.
  */
-import { contentToks, properNames, stem } from "./text";
+import { codeToks, contentToks, properNames, stem } from "./text";
 import type { Episode } from "./episodic";
 
-export type ValueClass = "time" | "money" | "weekday" | "date" | "number" | "person" | "code" | "proper" | "generic";
-export type Frame = "when" | "who" | "where" | "howmuch" | "which" | "what";
+export type ValueClass = "time" | "money" | "weekday" | "number" | "person" | "code" | "proper";
+export type Frame = "when" | "who" | "where" | "howmuch" | "which";
 
 export type Fact = {
   ep: number;
@@ -24,16 +24,14 @@ const CHANGE = /\b(moved|move|moving|now|switched|switch|transferred|revised|ren
 const FRAME_OF: Record<ValueClass, Frame[]> = {
   time: ["when"],
   weekday: ["when"],
-  date: ["when"],
   money: ["howmuch"],
   number: ["howmuch"],
   person: ["who"],
   code: ["which", "where"],
   proper: ["where", "which", "who"],
-  generic: ["what", "which"],
 };
 
-const RANK: ValueClass[] = ["time", "money", "weekday", "code", "date", "number", "person", "proper", "generic"];
+const RANK: ValueClass[] = ["time", "money", "weekday", "code", "number", "person", "proper"];
 
 export class SemanticStore {
   facts: Fact[] = [];
@@ -94,7 +92,7 @@ export class SemanticStore {
       const text = s.replace(/\b(I|I'm|I've|my|me|mine)\b/g, (m) => (/^(my|mine)$/i.test(m) ? `${e.speaker}'s` : e.speaker));
       const low = text.toLowerCase();
       const names = properNames(text).filter((n) => !/^(gate|council|our|the|we|it|dr|there|this|that|they|he|she|inv)$/.test(n));
-      const codes = (text.match(/\b(?=[A-Za-z0-9-]*\d)(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9-]{2,12}\b/g) ?? []).map((x) => x.toLowerCase());
+      const codes = codeToks(text);
       const times = text.match(/\b\d{1,2}:\d{2}\b/g) ?? [];
       const money = (text.match(/\$\s?\d[\d,]*(?:\.\d+)?/g) ?? []).map((x) => x.replace(/\s|,/g, ""));
       const weekdays = (low.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g) ?? []);
@@ -116,7 +114,7 @@ export class SemanticStore {
       for (const n of numbers) cand.push({ v: n, c: "number" });
       for (const n of names) cand.push({ v: n, c: this.people.has(n) ? "person" : "proper" });
       if (!cand.length) continue;
-      let vclass: ValueClass = "generic";
+      let vclass: ValueClass = cand[0]!.c;
       for (const c of RANK) if (cand.some((x) => x.c === c)) { vclass = c; break; }
       const values = cand.filter((x) => x.c === vclass).map((x) => x.v);
       // Values are not anchors; the anchors must be the non-value identifiers.
@@ -172,7 +170,7 @@ export class SemanticStore {
       if (!entity && !s) continue;
       s += entity * 2;
       if (frame && f.frames.has(frame)) s *= 1.6;
-      else if (frame && frame !== "what" && frame !== "which") s *= 0.7;
+      else if (frame && frame !== "which") s *= 0.7;
       if (f.supersededBy !== undefined) s *= 0.25;
       out.set(f.ep, Math.max(out.get(f.ep) || 0, s));
     }
