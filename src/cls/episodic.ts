@@ -91,8 +91,18 @@ export class EpisodicStore {
     return out;
   }
 
-  /** Build a cue from a query: stems + bigrams + entities + explicit time buckets. */
-  cueFor(q: string, timeW = 1.5): Cue {
+  tagFrames(facts: { ep: number; frames: Iterable<string> }[]) {
+    for (const f of facts) for (const fr of f.frames) {
+      const feat = `f:${fr}`, ep = this.episodes[f.ep];
+      if (!ep || ep.key.has(feat)) continue;
+      ep.key.set(feat, 1);
+      const p = this.post.get(feat); if (p) p.push([f.ep, 1]); else this.post.set(feat, [[f.ep, 1]]);
+      this.df.set(feat, (this.df.get(feat) || 0) + 1); this.len[f.ep]! += 1;
+    }
+    this.avgLen = this.len.reduce((a, b) => a + b, 0) / Math.max(1, this.len.length);
+  }
+
+  cueFor(q: string, timeW = 1.5, frame?: string | null): Cue {
     const cue: Cue = new Map();
     const bump = (f: string, w: number) => cue.set(f, (cue.get(f) || 0) + w);
     const stems = contentToks(q);
@@ -104,6 +114,7 @@ export class EpisodicStore {
     }
     for (const c of codeToks(q)) bump(`#${c}`, 2);
     for (const t of textTimeToks(q)) bump(t, timeW);
+    if (frame) bump(`f:${frame}`, 2);
     return cue;
   }
 

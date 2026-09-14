@@ -147,30 +147,14 @@ export class SemanticStore {
     return null;
   }
 
-  /**
-   * Structured lookup: score episodes whose facts anchor on query entities and whose value
-   * class matches the question frame. Returns episode -> score.
-   */
   lookup(q: string): Map<number, number> {
     const out = new Map<number, number>();
-    const frame = SemanticStore.frameOf(q);
-    const qStems = new Set(contentToks(q).filter((s) => s.length >= 4 || /\d/.test(s)));
-    const qNames = properNames(q).map((n) => `#${n}`);
-    const qCodes = (q.match(/\b(?=[A-Za-z0-9-]*\d)(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9-]{2,12}\b/g) ?? []).map((x) => `#${x.toLowerCase()}`);
-    const cues = new Set<string>([...qStems, ...qNames, ...qCodes]);
+    const cues = new Set([...contentToks(q).filter((s) => s.length >= 4 || /\d/.test(s)), ...properNames(q).map((n) => `#${n}`), ...codeToks(q).map((c) => `#${c}`)]);
     if (!cues.size) return out;
     for (const f of this.facts) {
       let s = 0;
-      let entity = 0;
-      for (const a of f.anchors) {
-        if (!cues.has(a)) continue;
-        if (a.startsWith("#")) entity += 1;
-        else s += 0.5;
-      }
-      if (!entity && !s) continue;
-      s += entity * 2;
-      if (frame && f.frames.has(frame)) s *= 1.6;
-      else if (frame && frame !== "which") s *= 0.7;
+      for (const a of f.anchors) if (cues.has(a)) s += a.startsWith("#") ? 2 : 0.5;
+      if (!s) continue;
       if (f.supersededBy !== undefined) s *= 0.25;
       out.set(f.ep, Math.max(out.get(f.ep) || 0, s));
     }

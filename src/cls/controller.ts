@@ -23,6 +23,7 @@ export class CLSController {
   ingest(turns: { text: string; speaker?: string; date?: string; session?: number }[]) {
     this.epi.ingest(turns);
     this.sem.compile(this.epi.episodes);
+    this.epi.tagFrames(this.sem.facts);
     this.bodyIndex.clear();
     this.canonCache.clear();
     for (const e of this.epi.episodes) {
@@ -105,7 +106,7 @@ export class CLSController {
   scores(q: string): Float64Array {
     const n = this.epi.episodes.length;
     const temporal = this.temporal(q);
-    const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5);
+    const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5, SemanticStore.frameOf(q));
     const base = this.epi.score(cue);
     const epiRaw = this.epi.complete(cue, { rounds: 3, decay: 0.35, scores: base });
     const epi = this.norm(this.bindQA(epiRaw), n);
