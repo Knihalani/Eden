@@ -24,7 +24,6 @@ export type BrainTurn = {
   speaker?: string;
   date?: string;
   session?: number;
-  at?: number;
 };
 
 export class BrainMemory {
@@ -37,12 +36,11 @@ export class BrainMemory {
   }
 
   ingestTurns(turns: BrainTurn[]) {
-    const normalized = turns.map((t, i) => ({
+    const normalized = turns.map((t) => ({
       text: String(t.text || ""),
       speaker: t.speaker || "speaker",
       date: t.date || "",
       session: t.session ?? 0,
-      at: t.at ?? i,
     }));
     this.cls.ingest(normalized);
   }
@@ -50,9 +48,9 @@ export class BrainMemory {
   /** Ingest plain chat strings (`Speaker: text`) without dates. */
   ingestTexts(texts: string[]) {
     this.ingestTurns(
-      texts.map((raw, i) => {
+      texts.map((raw) => {
         const m = raw.match(/^([A-Za-z][A-Za-z0-9 /._-]{0,32}):\s*([\s\S]+)$/);
-        return m ? { speaker: m[1], text: m[2]!.trim(), at: i } : { speaker: "speaker", text: raw.trim(), at: i };
+        return m ? { speaker: m[1], text: m[2]!.trim() } : { speaker: "speaker", text: raw.trim() };
       }),
     );
   }

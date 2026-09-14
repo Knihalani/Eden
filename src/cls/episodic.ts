@@ -46,7 +46,7 @@ export class EpisodicStore {
   private len: number[] = [];
   private avgLen = 1;
 
-  ingest(turns: { text: string; speaker?: string; date?: string; session?: number; at?: number }[]) {
+  ingest(turns: { text: string; speaker?: string; date?: string; session?: number }[]) {
     this.episodes = [];
     this.post.clear();
     this.df.clear();

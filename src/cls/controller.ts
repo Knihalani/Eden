@@ -20,7 +20,7 @@ export class CLSController {
 
   constructor(private cortex: AgentMemory) {}
 
-  ingest(turns: { text: string; speaker?: string; date?: string; session?: number; at?: number }[]) {
+  ingest(turns: { text: string; speaker?: string; date?: string; session?: number }[]) {
     this.epi.ingest(turns);
     this.sem.compile(this.epi.episodes);
     this.bodyIndex.clear();
