@@ -307,7 +307,6 @@ function carryTokens(text: string): string[] {
  * strongest triggered intentions that the lexical pass did not already surface.
  */
 const CUE_TAG = "!";
-const isCue = (t: string) => t.startsWith(CUE_TAG);
 /** Max cap slots reserved for triggered intentions, and the trigger strength (in units of log(3) ≈ one cue shared by ≤ a third of intentions) required to claim one. */
 const PROSPECT_SLOTS = Number(process.env.EDEN_PROSPECT_SLOTS ?? 2);
 const PROSPECT_MIN = Number(process.env.EDEN_PROSPECT_MIN ?? 0.5);
@@ -508,10 +507,9 @@ class EpisodeContext {
 }
 
 function compile(rec: MemoryRecord): Compiled {
-  const own = new Set([...rec.tags.filter((t) => !isCarry(t) && !isCue(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))]);
+  const own = new Set([...rec.tags.filter((t) => !isCarry(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))]);
   const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
-  const stored = rec.tags.filter(isCue);
-  const cues = stored.length ? stored : deriveCues(rec.text);
+  const cues = deriveCues(rec.text);
   CUES.set(rec, cues);
   const ctx: [string, number][] = [];
   if (rec.ctx) for (const k in rec.ctx) if (!own.has(k) && rec.ctx[k]! > 0) ctx.push([k, rec.ctx[k]!]);
