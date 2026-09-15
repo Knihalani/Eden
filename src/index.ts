@@ -2,7 +2,6 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { alreadyInjected, injectFromRequest, injectNote } from "../packages/know/src/inject";
-import { knowQuery } from "../packages/know/src/query";
 
 export const MEMORY_MARK = "Eden Memory:";
 
@@ -15,7 +14,6 @@ export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "cons
 export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number };
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string };
-export type QueryHit = { text: string; source: "memory" | "know"; url?: string; id?: string };
 
 type Compiled = { rec: MemoryRecord; needles: string[]; cues: string[]; ctx: [string, number][]; sal: number };
 
@@ -748,12 +746,6 @@ export class AgentMemory {
     const map = (recs: MemoryRecord[]) => recs.map((r) => ({ ...r, text: cuesOf(r).length ? r.text : retrieveText(r.text) }));
     if (text) return map(this.relevant(text, k, opts.fuse !== false));
     return map(((recs) => [...recs.filter((r) => r.kind === "constraint").slice(-k), ...recs.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(this.memories()));
-  }
-
-  query(q: string, k = Number(process.env.EDEN_MEMORY_CAP) || 6): QueryHit[] {
-    const qn = q.trim(), out: QueryHit[] = qn ? this.notesFor(qn, k).map((m) => ({ text: m.text, source: "memory" as const, id: m.id })) : [];
-    if (qn && out.length < k) try { const card = knowQuery(qn, this.know); if (card && "fact" in card && card.fact) out.push({ text: card.fact, source: "know", url: card.url }); } catch {}
-    return out.slice(0, k);
   }
 
   inject(messages: unknown[]): unknown[] {
