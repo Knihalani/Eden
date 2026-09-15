@@ -130,16 +130,13 @@ export class EpisodicStore {
    * features of the top-m hits (decayed), so partial cues converge to the episode that
    * bridges to the answer (multi-hop) while common features are ignored.
    */
-  complete(cue: Cue, opts: { rounds?: number; m?: number; decay?: number; maxDf?: number; scores?: Float64Array } = {}): Float64Array {
-    const rounds = opts.rounds ?? 2;
-    const m = opts.m ?? 3;
-    const decay = opts.decay ?? 0.35;
-    const maxDf = opts.maxDf ?? Math.max(4, Math.round(this.episodes.length * 0.02));
+  complete(cue: Cue, scores: Float64Array): Float64Array {
+    const maxDf = Math.max(4, Math.round(this.episodes.length * 0.02));
     let cur: Cue = new Map(cue);
-    let acc = opts.scores ?? this.score(cue);
-    let s = acc;
-    for (let r = 1; r < rounds; r++) {
-      const top = this.topK(s, m);
+    let acc = scores;
+    let s = scores;
+    for (let r = 1; r < 3; r++) {
+      const top = this.topK(s, 3);
       if (!top.length) break;
       const best = top[0]!.s || 1;
       const next: Cue = new Map(cur);
@@ -150,14 +147,14 @@ export class EpisodicStore {
         for (const [f, tf] of this.episodes[h.i]!.key) {
           if (cue.has(f) || f.startsWith("t:") || f.startsWith("@")) continue;
           if ((this.df.get(f) || 0) > maxDf || f.includes("_")) continue;
-          next.set(f, (next.get(f) || 0) + decay * rel * Math.min(1, tf));
+          next.set(f, (next.get(f) || 0) + 0.35 * rel * Math.min(1, tf));
           added++;
         }
       }
       if (!added) break;
       cur = next;
       s = this.score(cur);
-      const w = Math.pow(decay, r);
+      const w = Math.pow(0.35, r);
       const merged = new Float64Array(acc.length);
       for (let i = 0; i < acc.length; i++) merged[i] = acc[i]! + w * s[i]!;
       acc = merged;
