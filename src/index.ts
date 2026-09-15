@@ -471,8 +471,8 @@ class EpisodeContext {
   private seq = 0;
   private fresh() { this.id = `e${Date.now().toString(36)}${(this.seq++).toString(36)}`; this.w = new Map(); this.open = new Set(); this.turns = 0; }
   reset() { this.fresh(); }
-  /** Advance the context by one message; returns true when a new episode was opened. */
-  step(role: string, text: string): boolean {
+  /** Advance the context by one message; a fresh window opens a new episode. */
+  step(role: string, text: string) {
     const toks = ctxTokens(text);
     let boundary = !this.id;
     if (!boundary && role === "user" && toks.length >= 3 && this.w.size) {
@@ -491,7 +491,6 @@ class EpisodeContext {
     for (const t of toks) this.w.set(t, Math.min(1, (this.w.get(t) || 0) + add));
     if (this.turns === 0) for (const t of toks) this.open.add(t);
     this.turns++;
-    return boundary;
   }
   /** Weighted snapshot, excluding the record's own tokens, capped at CTX_MAX. */
   snapshot(own: Set<string>): Record<string, number> | undefined {
