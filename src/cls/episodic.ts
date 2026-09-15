@@ -75,17 +75,16 @@ export class EpisodicStore {
   }
 
   /** BM25-style sparse dot product between a cue and every episode. */
-  score(cue: Cue, k1 = 1.2, b = 0.5): Float64Array {
+  score(cue: Cue): Float64Array {
     const out = new Float64Array(this.episodes.length);
     const N = this.episodes.length || 1;
     for (const [f, w] of cue) {
-      if (!w) continue;
       const p = this.post.get(f);
       if (!p) continue;
       const d = this.df.get(f) || 0;
       const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1);
       for (const [i, tf] of p) {
-        out[i] += w * idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (this.len[i]! / this.avgLen))));
+        out[i] += w * idf * ((tf * 2.2) / (tf + 1.2 * (0.5 + 0.5 * (this.len[i]! / this.avgLen))));
       }
     }
     return out;
