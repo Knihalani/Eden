@@ -15,7 +15,6 @@ export type Fact = {
   values: string[];
   vclass: ValueClass;
   frames: Set<Frame>;
-  at: number;
   supersededBy?: number;
   changeSignal: boolean;
 };
@@ -128,7 +127,7 @@ export class SemanticStore {
       if (!anchors.size) continue;
       const frames = new Set<Frame>(FRAME_OF[vclass]);
       if (/\b(room|gate|city|country|town|park|field|hotel|street|address|where|in|at)\b/.test(low) && (vclass === "code" || vclass === "proper")) frames.add("where");
-      out.push({ ep: e.i, anchors, values, vclass, frames, at: e.i, changeSignal: CHANGE.test(text) && !/^(?:[A-Z][a-z]+\s+)?(?:has|have|had) (?:been|had)?\s*(?:great|good|fun)\b/.test(text) });
+      out.push({ ep: e.i, anchors, values, vclass, frames, changeSignal: CHANGE.test(text) && !/^(?:[A-Z][a-z]+\s+)?(?:has|have|had) (?:been|had)?\s*(?:great|good|fun)\b/.test(text) });
     }
     return out;
   }
