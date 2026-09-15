@@ -108,7 +108,7 @@ export class CLSController {
     const temporal = this.temporal(q);
     const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5, SemanticStore.frameOf(q));
     const base = this.epi.score(cue);
-    const epiRaw = this.epi.complete(cue, { rounds: 3, decay: 0.35, scores: base });
+    const epiRaw = this.epi.complete(cue, base);
     const epi = this.norm(this.bindQA(epiRaw), n);
     const sem = this.norm(this.sem.lookup(q), n);
     const cortexMap = new Map<number, number>();
