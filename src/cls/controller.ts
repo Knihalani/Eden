@@ -138,11 +138,10 @@ export class CLSController {
 
   /** Compact answer unit: the episode plus same-session neighbours. */
   chunk(e: Episode): string {
-    const { prev, next } = this.epi.neighbours(e.i);
-    const parts = [e.render];
-    if (next) parts.push(next.render);
-    if (prev) parts.unshift(prev.render);
-    return parts.join("\n");
+    const eps = this.epi.episodes, i = e.i;
+    const prev = i > 0 && eps[i - 1]!.session === e.session ? eps[i - 1]!.render : "";
+    const next = i + 1 < eps.length && eps[i + 1]!.session === e.session ? eps[i + 1]!.render : "";
+    return [prev, e.render, next].filter(Boolean).join("\n");
   }
 
   retrieve(q: string, k: number): string[] {

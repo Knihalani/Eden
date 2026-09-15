@@ -160,12 +160,4 @@ export class EpisodicStore {
     }
     return acc;
   }
-
-  /** Same-session neighbours (for dialogue chunk reconstruction). */
-  neighbours(i: number): { prev?: Episode; next?: Episode } {
-    const e = this.episodes[i]!;
-    const prev = i > 0 && this.episodes[i - 1]!.session === e.session ? this.episodes[i - 1] : undefined;
-    const next = i + 1 < this.episodes.length && this.episodes[i + 1]!.session === e.session ? this.episodes[i + 1] : undefined;
-    return { prev, next };
-  }
 }
