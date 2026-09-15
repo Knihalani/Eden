@@ -69,11 +69,6 @@ export class CLSController {
     return out;
   }
 
-  private temporal(q: string): boolean {
-    const low = q.toLowerCase();
-    return /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(low) || /\b20\d{2}\b/.test(low);
-  }
-
   private norm(v: Float64Array | Map<number, number>, n: number): Float64Array {
     const out = new Float64Array(n);
     let max = 0;
@@ -105,7 +100,7 @@ export class CLSController {
   /** Fused scores for every episode. */
   scores(q: string): Float64Array {
     const n = this.epi.episodes.length;
-    const temporal = this.temporal(q);
+    const temporal = /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(q.toLowerCase()) || /\b20\d{2}\b/.test(q);
     const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5, SemanticStore.frameOf(q));
     const base = this.epi.score(cue);
     const epiRaw = this.epi.complete(cue, base);
