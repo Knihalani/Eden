@@ -118,11 +118,6 @@ function pinsFromRoot(root: string): MemoryRecord[] {
   return [...byId.values()];
 }
 
-function pinPacketRecord(r: MemoryRecord): MemoryRecord {
-  if (r.kind === "fact" || r.kind === "preference") return { ...r, kind: "constraint" };
-  return r;
-}
-
 function briefing(mem: AgentMemory, session = ""): string {
   const seen = new Set<string>();
   const lines: string[] = [];
@@ -133,7 +128,7 @@ function briefing(mem: AgentMemory, session = ""): string {
     Number(b.kind === "constraint") - Number(a.kind === "constraint") || (b.sal ?? 0) - (a.sal ?? 0) || b.at - a.at
   ).slice(0, 8);
   for (const raw of pins) {
-    const r = pinPacketRecord(raw);
+    const r = raw.kind === "fact" || raw.kind === "preference" ? { ...raw, kind: "constraint" } : raw;
     let text = r.text.trim();
     try {
       const cleaned = scrubTombstonedIdentity(text, mem.dir);
