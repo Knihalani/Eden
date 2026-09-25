@@ -226,19 +226,12 @@ function firstString(...vals: unknown[]): string | undefined {
   return undefined;
 }
 
-/**
- * Parent id from the hook payload. Child id suffixes it (`parent--child`).
- * SubagentStop, a distinct child id, or `EDEN_MEMORY_PARENT` opens the child file.
- * Fail-open: a bad id falls back to the parent session, not a throw.
- */
 function resolveHookSession(raw: Record<string, unknown>): { session?: string; child: boolean } {
   try {
     const parent = firstString(raw.session_id, raw.sessionID, raw.sessionId, raw.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION);
     const childId = firstString(raw.agent_id, raw.agentId, raw.subagent_id, raw.subagentId, raw.child_session_id, process.env.EDEN_MEMORY_CHILD);
     const event = String(raw.hook_event_name ?? raw.hookEventName ?? raw.event ?? "");
     const distinct = !!(childId && childId !== parent);
-    // Wrap child env is processMemory (EDEN_MEMORY_CHILD). Hook child is SubagentStop or a distinct child id.
-    // EDEN_MEMORY_PARENT alone must not suffix every Submit into parent--sub.
     const asChild = event === "SubagentStop" || distinct;
     if (!asChild) return { session: parent, child: false };
     const session = childSessionName(parent, childId || "sub");
