@@ -798,10 +798,6 @@ function howtoVerifyStem(verify?: string): string {
   return (cleaned.split(/[/\\]/).pop() ?? cleaned).trim();
 }
 
-function howtoKeepTok(t: string): boolean {
-  return t.length >= 2 && !STOP.has(t);
-}
-
 function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] {
   if (depth > 8 || v == null) return out;
   if (typeof v === "string") {
@@ -832,7 +828,7 @@ function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] 
 
 function addHowtoToks(out: Set<string>, text: string, dropStops: boolean) {
   for (const t of tokList(text)) {
-    if (dropStops && !howtoKeepTok(t)) continue;
+    if (dropStops && (t.length < 2 || STOP.has(t))) continue;
     out.add(t);
   }
   for (const p of pathCues(text.toLowerCase())) out.add(p);
