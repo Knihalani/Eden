@@ -800,8 +800,6 @@ function formatNote(r: MemoryRecord): MemoryRecord {
   let body = stripped;
   if (isProcedure) body = formatProcedureBody(body);
   else {
-    // ICL exemplars / narrative lanes must keep `label:` — never truncate the shot.
-    // Numbered fact lists stay whole so assemble can see serial 8, not only the first 1200 chars.
     const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || isNarrativeNote(r)
       || isFactList(r.text) || isFactList(body);
     const factish = r.kind === "fact" || r.kind === "preference" || /^\s*\[fact(?:\s*·[^\]]*)?\]/i.test(body);
@@ -809,10 +807,8 @@ function formatNote(r: MemoryRecord): MemoryRecord {
   }
   try {
     const tags = Array.isArray(r.tags) ? r.tags : [];
-    // ICL / trajectory / narrative chunks (episode + tag "chunk") must not be gist-capped.
     const skipGistCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body)
       || (r.kind === "episode" && tags.includes("chunk"));
-    // Kind / exact tag / [gist] prefix only — a session fact that merely says "gist" stays uncapped.
     const gistish = r.kind === "digest" || r.kind === "gist"
       || tags.some((t) => t === "gist" || t === "digest")
       || /^\s*\[gist(?:\s*·[^\]]*)?\]/i.test(body);
