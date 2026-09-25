@@ -893,10 +893,6 @@ function howtoVerifyStem(verify?: string): string {
   return (cleaned.split(/[/\\]/).pop() ?? cleaned).trim();
 }
 
-function howtoContentToks(s: string): string[] {
-  return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
-}
-
 function howtoKeepTok(t: string): boolean {
   return t.length >= 2 && !STOP.has(t);
 }
@@ -930,7 +926,7 @@ function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] 
 }
 
 function addHowtoToks(out: Set<string>, text: string, dropStops: boolean) {
-  for (const t of howtoContentToks(text)) {
+  for (const t of tokList(text)) {
     if (dropStops && !howtoKeepTok(t)) continue;
     out.add(t);
   }
