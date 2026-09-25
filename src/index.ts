@@ -28,7 +28,7 @@ import { logMemoryNotes } from "./memory-log";
 import { applyProvenanceLabel, noteKindToken, PACKET_LABEL_RE, stripPacketLabel } from "./memory-provenance";
 import { routeMemory, type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
-import { fatPacket, isMathChatterCue, memoryXFat, memoryXMathSilent, memoryXOn, retrieveX } from "./memory-x";
+import { fatPacket, isMathChatterCue, memoryXOn } from "./memory-x";
 
 export { isRecsysShot } from "./semantic-store";
 
@@ -2460,11 +2460,38 @@ export class AgentMemory {
       const pool = Math.min(18, Math.max(Math.floor(Number(k) || 0), 12));
       let recs: MemoryRecord[] = [];
       try {
-        recs = memoryXOn() ? retrieveX(this, text, pool, opts.fuse !== false) as MemoryRecord[] : this.relevant(text, pool, opts.fuse !== false);
+        recs = this.relevant(text, pool, opts.fuse !== false);
+        if (memoryXOn()) {
+          const extra: MemoryRecord[] = [];
+          try {
+            for (const row of this.semantic().live()) {
+              const s = String(row.s ?? "").trim();
+              const p = String(row.p ?? "").trim() || "is";
+              const o = String(row.o ?? "").trim();
+              if (!s || !o) continue;
+              extra.push({
+                id: `sem:${s}:${p}`,
+                text: `${s} ${p} ${o}`.replace(/\s+/g, " "),
+                kind: "fact",
+                lane: "chat",
+                tags: ["fact", "semantic", "x-identity"],
+                at: Number.isFinite(row.t) ? row.t : 0,
+              });
+            }
+          } catch {}
+          try {
+            for (const r of this.memories()) {
+              const tags = r.tags ?? [];
+              if (r.kind === "constraint" || tags.includes("pin") || tags.includes("always")) extra.push(r);
+            }
+          } catch {}
+          const seen = new Set(extra.map((e) => e.id));
+          recs = extra.concat(recs.filter((r) => r.id && !seen.has(r.id)));
+        }
       } catch {
         recs = this.relevant(text, pool, opts.fuse !== false);
       }
-      const mixed = (memoryXFat() ? fatPacket(recs, k) as MemoryRecord[] : this.mixPacketBudget(recs, k)).map(formatNote);
+      const mixed = (memoryXOn() ? fatPacket(recs, k) as MemoryRecord[] : this.mixPacketBudget(recs, k)).map(formatNote);
       try { return dropHarmed(this.dir, mixed); } catch { return mixed; }
     }
     const recs = this.memories().filter((r) => !isNarrativeNote(r) && r.lane !== "icl" && r.lane !== "trajectory");
@@ -2501,7 +2528,7 @@ export class AgentMemory {
         let silent = false;
         if (rankCue && retrieved.length) {
           try {
-            if (memoryXMathSilent()) {
+            if (memoryXOn()) {
               if (isMathChatterCue(rankCue)) {
                 memoryInjectSilent.n++;
                 silent = true;
