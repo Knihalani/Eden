@@ -1823,37 +1823,18 @@ export class AgentMemory {
     for (const w of hay) hayStem.add(stemOf(w));
     const hit = (x: string) => hay.has(x) || hayStem.has(stemOf(x));
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
-    const N = rows.length || 1, df = new Map<string, number>();
-    const bags: { c: Compiled; lex: string[] }[] = [];
-    for (const c of rows) {
-      let seen: Set<string> | undefined;
-      let lex: string[] | undefined;
-      for (const x of c.needles) {
-        if (!hit(x) || seen?.has(x)) continue;
-        if (!seen) seen = new Set();
-        seen.add(x);
-        (lex ??= []).push(x);
-        df.set(x, (df.get(x) || 0) + 1);
-      }
-      if (lex) bags.push({ c, lex });
-    }
-    const idfCache = new Map<string, number>();
-    const idfOf = (x: string) => {
-      const cached = idfCache.get(x);
-      if (cached !== undefined) return cached;
-      const d = df.get(x) || 0;
-      const idf = Math.log((N - d + 0.5) / (d + 0.5) + 1);
-      const v = d / N < 0.04 ? idf * 1.55 : idf;
-      idfCache.set(x, v);
-      return v;
-    };
     const scored: { rec: MemoryRecord; n: number }[] = [];
-    for (const { c, lex } of bags) {
+    for (const c of rows) {
       let n = 0;
-      for (const x of lex) n += idfOf(x);
-      scored.push({ rec: c.rec, n });
+      const seen = new Set<string>();
+      for (const x of c.needles) {
+        if (!hit(x) || seen.has(x)) continue;
+        seen.add(x);
+        n++;
+      }
+      if (n) scored.push({ rec: c.rec, n });
     }
-    const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
+    const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = dedupSelect(ranked, cap);
     lexical = mergeLiveConstraints(lexical, text, cap, rows);
     lexical = mergeRootIdentity(lexical, text, cap, this.dir);
