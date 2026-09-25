@@ -2528,21 +2528,11 @@ export class AgentMemory {
         let silent = false;
         if (rankCue && retrieved.length) {
           try {
-            if (memoryXOn()) {
-              if (isMathChatterCue(rankCue)) {
-                memoryInjectSilent.n++;
-                silent = true;
-              }
-            } else if (maxOnCueAboutness(retrieved, rankCue) < memoryMinAboutness()) {
+            if (isMathChatterCue(rankCue)) {
               memoryInjectSilent.n++;
               silent = true;
             }
-          } catch {
-            if (maxOnCueAboutness(retrieved, rankCue) < memoryMinAboutness()) {
-              memoryInjectSilent.n++;
-              silent = true;
-            }
-          }
+          } catch {}
         }
         let packet: MemoryRecord[] = [];
         try {
