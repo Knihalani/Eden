@@ -178,10 +178,6 @@ function wrapAuth(state: WrapState): string | undefined {
   return state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
 }
 
-function isEarlyDeopt(err: unknown): boolean {
-  return isReplaySafe(err);
-}
-
 function outboxOf(state: WrapState): OutboxJob[] {
   let q = outboxes.get(state);
   if (!q) {
@@ -672,7 +668,7 @@ function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, regist
             ? asToolDef(first!, tools[first!]!).execute(args)
             : { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
         }
-        if (!isEarlyDeopt(err) && !replayableProgram(p)) {
+        if (!isReplaySafe(err) && !replayableProgram(p)) {
           return { eden: "deopt", reason: (err as Error).message };
         }
         if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
@@ -1019,7 +1015,7 @@ export function wrapTools<T extends ToolsIn>(
             } catch {}
             if (state.opts.failOpen === false) throw err;
             void pullLive(state);
-            const touched = isDeopt(err) && !isEarlyDeopt(err);
+            const touched = isDeopt(err) && !isReplaySafe(err);
             const unknownState = !isDeopt(err);
             if ((touched || unknownState) && !replayableProgram(hit.p)) {
               return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
@@ -1163,7 +1159,7 @@ export function wrapTools<T extends ToolsIn>(
                   armed.resolveSettled(false);
                 } catch {}
                 emit(run.events[0]?.args, owner);
-                const touched = isDeopt(err) && !isEarlyDeopt(err);
+                const touched = isDeopt(err) && !isReplaySafe(err);
                 if (!(replayableProgram(guard.program) && !touched)) {
                   return { eden: "halted", reason: guard.reason };
                 }
