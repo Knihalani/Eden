@@ -650,17 +650,6 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
   }
 }
 
-function walLineCount(path: string): number {
-  try {
-    if (!existsSync(path)) return 0;
-    let n = 0;
-    for (const t of readFileSync(path, "utf8").split("\n")) if (t) n++;
-    return n;
-  } catch {
-    return 0;
-  }
-}
-
 function appendJsonl(path: string, blob: string): void {
   let prefix = "";
   try {
@@ -1470,7 +1459,12 @@ export class AgentMemory {
     try {
       withFileLock(`${this.path}.lock`, () => {
         let pending = this.compiled.filter((c) => this.walDirtyIds.has(c.rec.id));
-        const walN = walLineCount(wal);
+        let walN = 0;
+        try {
+          if (existsSync(wal)) {
+            for (const t of readFileSync(wal, "utf8").split("\n")) if (t) walN++;
+          }
+        } catch {}
         let snapshotMissing = false;
         try { snapshotMissing = !existsSync(this.path); } catch { snapshotMissing = true; }
         let compact = this.needCompact || snapshotMissing || this.compiled.length > cap || walN + pending.length >= MEMORY_WAL_COMPACT_LINES;
