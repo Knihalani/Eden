@@ -65,40 +65,6 @@ export function memoryMinAboutness(): number {
   }
 }
 
-/** Max on-cue aboutness. Hay overlap, plus a stamped ranker score if higher. Throw → 0.
- *  ICL BM25 can sit under EDEN_MEMORY_MIN (0.15) even when the shot matches the cue;
- *  lexical overlap is the silence gate, not the ranker scale. */
-export function maxOnCueAboutness(notes: { text?: string }[], cue: string): number {
-  try {
-    let max = 0;
-    const hay = queryHay(cue);
-    const hayStem = new Set<string>();
-    for (const w of hay) hayStem.add(liteStem(w));
-    const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x));
-    for (const note of notes) {
-      if (!note || typeof note !== "object") continue;
-      const mapped = onCueAboutness.get(note);
-      let overlap = 0;
-      if (hay.size) {
-        let hits = 0;
-        const seen = new Set<string>();
-        for (const x of tokList(String(note.text ?? ""))) {
-          if (seen.has(x)) continue;
-          seen.add(x);
-          if (hit(x)) hits++;
-        }
-        overlap = hits / Math.max(hay.size, 1);
-      }
-      const stamp = typeof mapped === "number" && Number.isFinite(mapped) ? mapped : 0;
-      const score = Math.max(stamp, overlap);
-      if (score > max) max = score;
-    }
-    return max;
-  } catch {
-    return 0;
-  }
-}
-
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
 /**
  * `ep`  episode id the record was stored in (Temporal Context Model binding; see EpisodeContext below).
