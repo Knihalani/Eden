@@ -1241,13 +1241,6 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
   }
 }
 
-/**
- * ICL lane (M19.2): atomic exemplars, no graph, no extract, diversity at k=10.
- * Caller already gated (ICL cue OR ICL-only store). MCC utterances after extract
- * have no `label:` — still retrieve from the index. Empty index → [] not a chat dump.
- * Chat/narrative/how-to are never mixed. Fail-open: throw → [].
- * k=min(10, cap). Empty cue → no dump. `dir` is memory root (howtoDir).
- */
 function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
