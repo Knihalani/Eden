@@ -1698,9 +1698,6 @@ export class AgentMemory {
         } catch {
           rankCue = cue;
         }
-        // Hop-enrich retrieved notes, then assemble (loser-scrub / live winner), then
-        // complete again so last hop is first among facts. Fail-open. EventQA / ICL
-        // skip complete() — those lanes are not a hop graph (skipNarrativeComplete).
         const retrieved = rankCue ? this.notesFor(rankCue) : [];
         let silent = false;
         if (rankCue && retrieved.length) {
@@ -1723,8 +1720,6 @@ export class AgentMemory {
                   const text = String(m?.text ?? "").trim();
                   if (!text) return;
                   if ((m as { lane?: string }).lane === "icl" || isIclExemplar(text)) return;
-                  // Do not drop a 512-token wiki chunk because some sentence has `?`.
-                  // extractTriple already rejects interrogative sentences after expandHopRows.
                   const id = String((m as { id?: string }).id ?? "") || `hop:${text.slice(0, 48)}`;
                   if (seen.has(id) || seen.has(text.slice(0, 96))) return;
                   seen.add(id);
@@ -1747,7 +1742,6 @@ export class AgentMemory {
               } catch {}
               try {
                 for (const m of this.memories()) {
-                  // Store-all novels stay out of the hop graph; 512-token chunks come from ChunkStore/retrieved.
                   if (isNarrativeNote(m) && !(m.tags ?? []).includes("chunk")) continue;
                   push(m);
                 }
@@ -1758,8 +1752,6 @@ export class AgentMemory {
             try { hopPool = dropHarmed(this.dir, hopStore); } catch { hopPool = hopStore; }
             hopped = completeNotes(rankCue, retrieved, hopPool);
             packet = hopped.length ? assembleNotes(hopped, this.dir) : [];
-            // Walk the full hop graph so a 3-hop last fact stays first, but do
-            // not pull store rows assemble just scrubbed (serial vs wall-clock).
             packet = completeNotes(rankCue, packet, hopPool, { pull: false });
           } else {
             packet = hopped.length ? assembleNotes(hopped, this.dir) : [];
@@ -1767,11 +1759,9 @@ export class AgentMemory {
         } catch {
           packet = !silent && retrieved.length ? assembleNotes(retrieved, this.dir) : [];
         }
-        // Packet-only leftover identity (miller+Alice). Not SF extract — M20.4 assembleNotes keeps the note.
         try { if (rankCue && !silent) packet = scrubNarrativeLeftovers(packet, this.semantic()); } catch {}
         packet = packet.map(formatNote);
         try { packet = dropHarmed(this.dir, packet); } catch {}
-        // Ids + ages on stderr only. Empty packet (M38 omit) logs nothing and adds no mark.
         try { logMemoryNotes(packet); } catch {}
         if (packet.length) notes.push({ role: "system", content: MEMORY_MARK + packet.map((m) => `\n- ${m.text}`).join("") });
         const card = injectFromRequest({ text: blob }, this.know); if (card) notes.push({ role: "system", content: injectNote(card) });
