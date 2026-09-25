@@ -198,24 +198,6 @@ function retrieveText(text: string): string {
   return t.replace(/\0EdenMask(\d+)\0/g, (_, i) => masks[Number(i)]!);
 }
 
-function isFixAction(note: string): boolean {
-  const c0 = note.charCodeAt(0);
-  return note.length >= 24 && (c0 === 73 || c0 === 87)
-    && /\b(?:I|we) (?:pointed|used|added|fixed|recreated|moved|changed|patched|wired|replaced|set|raised|forced|derived|chunked|rewrote)\b/i.test(note)
-    && /\b(?:in|at|into)\s+[\w./-]+/i.test(note);
-}
-function isLogPolicyQuery(q: string): boolean {
-  return !/\bprinters?\b/i.test(q) && /\b(?:console\.log|\blogging\b|print(?:ing)?\b[^.\n]{0,80}\bdebug(?:ging)?|debug(?:ging)?\b[^.\n]{0,80}\bprint(?:ing)?)\b/i.test(q);
-}
-function isNoPrintRule(note: string): boolean {
-  return /\b(?:never|do not|don'?t)\b.{0,48}\b(?:console\.log|print(?:ing)?)\b/i.test(note);
-}
-function pinFront(recs: MemoryRecord[], hit: MemoryRecord | undefined, cap = recs.length): MemoryRecord[] {
-  if (!hit || recs[0]?.id === hit.id) return recs;
-  return [hit, ...recs.filter((r) => r.id !== hit.id)].slice(0, cap);
-}
-
-/** Pack a query-term crowd into one composite so top-K is not all restatements of one topic. */
 function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number): { rec: MemoryRecord; n: number }[] | null {
   if (scored.length <= cap) return null;
   const groups = new Map<string, typeof scored>();
@@ -828,7 +810,6 @@ const CTX_DECAY = 0.82;
 const CTX_OPEN_FLOOR = 0.55;
 const CTX_MAX = 28;
 const REINSTATE = Number(process.env.EDEN_REINSTATE ?? 2.5);
-/** Extra reinstatement weight for salient records: the causal sentence of a reinstated episode outranks its chatty siblings. */
 const SAL_REINSTATE = Number(process.env.EDEN_SAL_REINSTATE ?? 1);
 const CTX_SKIP = new Set("can you could would please look looking seeing since morning today prod production hmm sure thanks thank yeah yes nope okay cool great nice done let lets going want need think thought get got going make sure back again same before anymore also really pretty maybe still check double one sec moment file files thing things something anything stuff bit little lot lots way ways idea any what why how when where which who while there here this that these those with from into about into onto over under after around".split(" "));
 function ctxTokens(text: string): string[] {
@@ -2092,22 +2073,6 @@ export class AgentMemory {
     }
     const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
     let lexical = dedupSelect(fuse ? fuseOnce(ranked, hay, speakers, cap) ?? ranked : ranked, cap);
-    if (/\b(?:how did we fix|what was the fix)\b/i.test(text)) {
-      const have = lexical.find((l) => isFixAction(l.text));
-      if (have && lexical.some((l) => /\b(?:root cause|stack trace|should be gone)\b/i.test(l.text))) lexical = pinFront(lexical, have);
-    }
-    if (isLogPolicyQuery(text)) {
-      let have = lexical.find((l) => isNoPrintRule(l.text));
-      if (!have) {
-        let best: Compiled | undefined;
-        for (const c of rows) {
-          if (!(c.rec.kind === "constraint" && isNoPrintRule(c.rec.text))) continue;
-          if (!best || c.sal > best.sal || (c.sal === best.sal && c.rec.at > best.rec.at)) best = c;
-        }
-        have = best?.rec;
-      }
-      lexical = pinFront(lexical, have, cap);
-    }
     lexical = mergeLiveConstraints(lexical, text, cap, rows);
     lexical = mergeRootIdentity(lexical, text, cap, this.dir);
     return suppressPacketNearDups(mergeExperienceLane(
