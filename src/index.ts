@@ -1062,10 +1062,6 @@ function isNarrativeNote(m: { lane?: string; tags?: string[] }): boolean {
   return m.lane === "narrative" || (m.tags ?? []).includes("chunk");
 }
 
-/**
- * Packet-only: drop superseded copulas from narrative notes using live SemanticStore.
- * Does not extract narrative as SF triples (M20.4 firewall). Fail-open: returns notes.
- */
 function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?: string[] }>(
   notes: T[],
   store: SemanticStore,
