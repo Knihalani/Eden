@@ -179,10 +179,6 @@ export function attachChatUsage(trace: StretchTrace, usage: ChatUsage | null): S
   };
 }
 
-export function usageWasApplied(before: StretchTrace, after: StretchTrace): boolean {
-  return before !== after;
-}
-
 export function withStreamUsage(body: Record<string, unknown>): Record<string, unknown> {
   const prev = body.stream_options;
   const opts = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
