@@ -285,17 +285,8 @@ function convBlob(list: unknown[]): string {
 
 /** This-turn rank cue: latest user text only. Not the conversation window, last-8, or transcript-40. */
 export function cueFor(list: unknown[]): string {
-  if (!Array.isArray(list) || !list.length) return "";
-  for (let i = list.length - 1; i >= 0; i--) {
-    const m = list[i];
-    if (!m || typeof m !== "object") continue;
-    const role = String((m as { role?: unknown }).role ?? "").toLowerCase();
-    if (role === "system") continue;
-    const text = convBlob([m]).trim();
-    if (!text || text.startsWith(MEMORY_MARK)) continue;
-    if (role === "user" || role === "human") return text;
-  }
-  return "";
+  const m = lastUserMessage(list);
+  return m && typeof m === "object" ? convBlob([m]).trim() : "";
 }
 
 const PLACE_PATH_KEYS = ["open_files", "openFiles", "files", "file_paths", "filePaths", "file_path", "filePath", "path", "filename", "file", "recently_viewed_files", "recentlyViewedFiles"] as const;
@@ -448,7 +439,6 @@ export function attachPlaceCues(cue: string, paths: Iterable<string>): string {
   return `${trimmed} ${names.join(" ")}`;
 }
 
-/** Same scan as cueFor: latest user/human message object, or undefined. */
 function lastUserMessage(list: unknown[]): unknown {
   if (!Array.isArray(list) || !list.length) return undefined;
   for (let i = list.length - 1; i >= 0; i--) {
