@@ -888,14 +888,6 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
   return howtoEmbedScore(q, [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" "));
 }
 
-function howtoGapReason(view: { gaps?: { reason?: string }[] }): string | undefined {
-  const gaps = view.gaps;
-  if (!Array.isArray(gaps) || !gaps.length) return undefined;
-  const raw = typeof gaps[0]?.reason === "string" ? gaps[0].reason.trim() : "";
-  if (!raw || HOWTO_GAP_CMD.test(raw)) return "missing step";
-  return raw;
-}
-
 function howtoPacketFiles(view: ReturnType<typeof retrieveHowTo>[number]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -939,7 +931,12 @@ function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): M
   let text = cue;
   if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" ");
   if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
-  const unknown = howtoGapReason(view);
+  const gaps = view.gaps;
+  let unknown: string | undefined;
+  if (Array.isArray(gaps) && gaps.length) {
+    const raw = typeof gaps[0]?.reason === "string" ? gaps[0].reason.trim() : "";
+    unknown = !raw || HOWTO_GAP_CMD.test(raw) ? "missing step" : raw;
+  }
   if (unknown) text = text ? `${text} · unknown: ${unknown}` : `unknown: ${unknown}`;
   return { id: view.id, kind: "procedure", tags: ["howto", "procedure"], text, at: view.t, sal: 0 };
 }
