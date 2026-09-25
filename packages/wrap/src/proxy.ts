@@ -82,7 +82,6 @@ function upstreamHeaders(url: string, key: string): Record<string, string> {
   return headers;
 }
 
-/** DeepSeek V4 Flash on NIM: `low` is invalid; `none` disables thinking. */
 function nimTuneBody(url: string, body: Record<string, unknown>): Record<string, unknown> {
   if (!isNvidiaUrl(url)) return body;
   const model = String(body.model || "");

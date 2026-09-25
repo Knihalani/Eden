@@ -1,18 +1,3 @@
-/**
- * BrainMemory — Complementary Learning Systems (CLS) rebuild.
- *
- * Two stores + a controller (src/cls/*):
- *   EPISODIC (hippocampus)  — sparse pattern-separated turn keys, attractor-style
- *                              pattern completion (src/cls/episodic.ts)
- *   SEMANTIC (neocortex)    — entity/attribute/value/time tuples with supersession,
- *                              aliases and question-frame vocab (src/cls/semantic.ts)
- *   CONTROLLER               — classifies the query, runs + fuses both stores plus the
- *                              existing Eden cortex lane, enforces the context budget
- *                              (src/cls/controller.ts)
- *
- * BrainMemory itself is now a thin adapter that keeps the public API the benches use
- * (`ingestTurns` / `ingestTexts` / `retrieve` / `stored` / `close`).
- */
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,7 +33,6 @@ export class BrainMemory {
     this.cls.ingest(normalized);
   }
 
-  /** Ingest plain chat strings (`Speaker: text`) without dates. */
   ingestTexts(texts: string[]) {
     this.ingestTurns(
       texts.map((raw) => {
