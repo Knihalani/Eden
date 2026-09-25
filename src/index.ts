@@ -1950,12 +1950,6 @@ export function openMemory(opts: MemoryOptions = {}): AgentMemory {
 
 let proc: AgentMemory | undefined;
 
-/**
- * Wrap singleton. No env → root jsonl (`jsonlDir === dir`).
- * `EDEN_MEMORY_SESSION` or `EDEN_MEMORY_PARENT` is the parent session.
- * `EDEN_MEMORY_CHILD` suffixes that name and sets `child`. Same `dir` (root stores).
- * A live proc with a different dir or session is closed and reopened.
- */
 export function processMemory(): AgentMemory {
   if (process.argv.some((a) => a.endsWith(".test.ts"))) {
     return openMemory({ dir: join(tmpdir(), "eden-m-" + Math.random().toString(36).slice(2)) });
