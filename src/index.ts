@@ -1810,18 +1810,7 @@ export class AgentMemory {
       return suppressPacketNearDups(mergeGistLane(mergeNarrativeLane([], text, cap, this.howtoDir, recs), text, cap, this.howtoDir));
     }
     const hay = queryHay(text);
-    const stemMemo = new Map<string, string>();
-    const stemOf = (w: string): string => {
-      if (w.length < 6) return w;
-      const prev = stemMemo.get(w);
-      if (prev !== undefined) return prev;
-      const s = liteStem(w);
-      stemMemo.set(w, s);
-      return s;
-    };
-    const hayStem = new Set<string>();
-    for (const w of hay) hayStem.add(stemOf(w));
-    const hit = (x: string) => hay.has(x) || hayStem.has(stemOf(x));
+    const hit = (x: string) => hay.has(x);
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
     const scored: { rec: MemoryRecord; n: number }[] = [];
     for (const c of rows) {
