@@ -485,7 +485,72 @@ function emitTrace(
       run.events = rest;
       events = mine;
     }
-    buildAndSendTrace(state, run, events, input);
+    let lastOk: unknown;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i]!;
+      if (ev.ok && !ev.skipped) {
+        lastOk = ev.result;
+        break;
+      }
+    }
+    const output = lastOk ?? run.output;
+    const classes = emptyTokenClasses();
+    const agentP = run.measured ? run.prompt_tokens : 0;
+    const agentC = run.measured ? run.completion_tokens : 0;
+    addTokenClass(classes, "frontier", agentP + agentC);
+    const islandP = run.island_measured ? run.island_prompt_tokens : 0;
+    const islandC = run.island_measured ? run.island_completion_tokens : 0;
+    const islandTok = islandP + islandC;
+    if (run.island_measured) {
+      const cls = run.island_memoized && islandTok === 0 ? "memoized" : "compiled";
+      addTokenClass(classes, cls, islandTok);
+    }
+    const cached = run.cached_tokens + (run.island_measured ? run.island_cached_tokens : 0);
+    const cacheWrite = run.cache_write_tokens + (run.island_measured ? run.island_cache_write_tokens : 0);
+    const cacheInput = run.cache_input_tokens + (run.island_measured ? run.island_cache_input_tokens : 0);
+    if (cached > 0) classes.providerCache = cached;
+    const measured = run.measured || run.island_measured;
+    const prompt = agentP + islandP;
+    const completion = agentC + islandC;
+    const trace: StretchTrace = {
+      id: crypto.randomUUID(),
+      events,
+      input: (redact(input ?? events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
+      output: output === undefined ? undefined : redact(output),
+      llmCalls: run.llmCalls,
+      duration_ms: performance.now() - run.t0,
+      cost_cents: run.cost,
+      complete: events.at(-1)?.ok,
+      ...(measured ? { prompt_tokens: prompt, completion_tokens: completion, tokenClasses: classes } : {}),
+      ...cacheHitSpread(cached, cacheWrite, cacheInput),
+      ...(run.warnings.length ? { warnings: run.warnings.slice() } : {}),
+      ...(run.firstWarningAt != null ? { firstWarningAt: run.firstWarningAt } : {}),
+      ...(run.evidence ? { evidence: run.evidence } : {}),
+      ...(events.some((e) => e.skipped) ? { skipped: events.filter((e) => e.skipped).map((e) => e.name) } : {}),
+    };
+    const nowBudget = {
+      duration_ms: trace.duration_ms,
+      llmCalls: trace.llmCalls,
+      ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+    };
+    const spent = postWarningSpend(nowBudget, run.warnBudget);
+    if (spent) trace.postWarning = spent;
+    trace.usable = usableTrace(trace);
+    trace.grounded = judgeGrounding(trace).grounded;
+    if (state.droppedPosts > 0) {
+      (trace as StretchTrace & { dropped_posts?: number }).dropped_posts = state.droppedPosts;
+    }
+    if (state.agentId) trace.agentId = state.agentId;
+    if (state.parentRunId) trace.parentRunId = state.parentRunId;
+    if (state.spanId) {
+      trace.spanId = state.spanId;
+      trace.spanName = state.parentRunId ? "invoke_agent" : "invoke_workflow";
+    }
+    if (state.fleetId) trace.fleetId = state.fleetId;
+    if (state.region) trace.region = state.region;
+    pushCapped(state.traces, trace);
+    notifyHost(() => state.opts.onTrace?.(trace));
+    post(state, "/v1/traces", trace);
    } catch {
   } finally {
     const hadLoopWarning =
@@ -503,75 +568,6 @@ function emitTrace(
       run.t0 = performance.now();
     }
   }
-}
-
-function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, events: TraceEvent[], input?: Record<string, unknown>): void {
-  let lastOk: unknown;
-  for (let i = events.length - 1; i >= 0; i--) {
-    const ev = events[i]!;
-    if (ev.ok && !ev.skipped) {
-      lastOk = ev.result;
-      break;
-    }
-  }
-  const output = lastOk ?? run.output;
-  const classes = emptyTokenClasses();
-  const agentP = run.measured ? run.prompt_tokens : 0;
-  const agentC = run.measured ? run.completion_tokens : 0;
-  addTokenClass(classes, "frontier", agentP + agentC);
-  const islandP = run.island_measured ? run.island_prompt_tokens : 0;
-  const islandC = run.island_measured ? run.island_completion_tokens : 0;
-  const islandTok = islandP + islandC;
-  if (run.island_measured) {
-    const cls = run.island_memoized && islandTok === 0 ? "memoized" : "compiled";
-    addTokenClass(classes, cls, islandTok);
-  }
-  const cached = run.cached_tokens + (run.island_measured ? run.island_cached_tokens : 0);
-  const cacheWrite = run.cache_write_tokens + (run.island_measured ? run.island_cache_write_tokens : 0);
-  const cacheInput = run.cache_input_tokens + (run.island_measured ? run.island_cache_input_tokens : 0);
-  if (cached > 0) classes.providerCache = cached;
-  const measured = run.measured || run.island_measured;
-  const prompt = agentP + islandP;
-  const completion = agentC + islandC;
-  const trace: StretchTrace = {
-    id: crypto.randomUUID(),
-    events,
-    input: (redact(input ?? events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
-    output: output === undefined ? undefined : redact(output),
-    llmCalls: run.llmCalls,
-    duration_ms: performance.now() - run.t0,
-    cost_cents: run.cost,
-    complete: events.at(-1)?.ok,
-    ...(measured ? { prompt_tokens: prompt, completion_tokens: completion, tokenClasses: classes } : {}),
-    ...cacheHitSpread(cached, cacheWrite, cacheInput),
-    ...(run.warnings.length ? { warnings: run.warnings.slice() } : {}),
-    ...(run.firstWarningAt != null ? { firstWarningAt: run.firstWarningAt } : {}),
-    ...(run.evidence ? { evidence: run.evidence } : {}),
-    ...(events.some((e) => e.skipped) ? { skipped: events.filter((e) => e.skipped).map((e) => e.name) } : {}),
-  };
-  const nowBudget = {
-    duration_ms: trace.duration_ms,
-    llmCalls: trace.llmCalls,
-    ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
-  };
-  const spent = postWarningSpend(nowBudget, run.warnBudget);
-  if (spent) trace.postWarning = spent;
-  trace.usable = usableTrace(trace);
-  trace.grounded = judgeGrounding(trace).grounded;
-  if (state.droppedPosts > 0) {
-    (trace as StretchTrace & { dropped_posts?: number }).dropped_posts = state.droppedPosts;
-  }
-  if (state.agentId) trace.agentId = state.agentId;
-  if (state.parentRunId) trace.parentRunId = state.parentRunId;
-  if (state.spanId) {
-    trace.spanId = state.spanId;
-    trace.spanName = state.parentRunId ? "invoke_agent" : "invoke_workflow";
-  }
-  if (state.fleetId) trace.fleetId = state.fleetId;
-  if (state.region) trace.region = state.region;
-  pushCapped(state.traces, trace);
-  notifyHost(() => state.opts.onTrace?.(trace));
-  post(state, "/v1/traces", trace);
 }
 
 function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
