@@ -834,10 +834,6 @@ function addHowtoToks(out: Set<string>, text: string, dropStops: boolean) {
   for (const p of pathCues(text.toLowerCase())) out.add(p);
 }
 
-function howtoHayText(row: { cue?: string; files?: string[]; verify?: string; steps?: { args?: Record<string, unknown> }[] }): string {
-  return [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" ");
-}
-
 function howtoEmbedScore(a: string, b: string): number {
   try {
     const fn = (globalThis as { edenHowtoEmbed?: (x: string, y: string) => number }).edenHowtoEmbed;
@@ -889,7 +885,7 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
   const stemHit = !!(stem && (qToks.has(stem) || [...qPlaces].includes(stem)));
   if (placeHit || stemHit) return Math.max(n, 1) + (placeHit ? 10 : 0) + (stemHit ? 5 : 0);
   if (n >= 2) return n;
-  return howtoEmbedScore(q, howtoHayText(row));
+  return howtoEmbedScore(q, [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" "));
 }
 
 function howtoGapReason(view: { gaps?: { reason?: string }[] }): string | undefined {
