@@ -2281,15 +2281,6 @@ export class AgentMemory {
       let recs: MemoryRecord[] = [];
       try {
         recs = this.relevant(text, pool, opts.fuse !== false);
-        const extra: MemoryRecord[] = [];
-        try {
-          for (const r of this.memories()) {
-            const tags = r.tags ?? [];
-            if (r.kind === "constraint" || tags.includes("pin") || tags.includes("always")) extra.push(r);
-          }
-        } catch {}
-        const seen = new Set(extra.map((e) => e.id));
-        recs = extra.concat(recs.filter((r) => r.id && !seen.has(r.id)));
       } catch {
         recs = this.relevant(text, pool, opts.fuse !== false);
       }
