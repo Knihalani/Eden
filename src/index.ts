@@ -151,18 +151,6 @@ function tokList(s: string): string[] {
   return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).map((w) => FOLD[w] ?? w);
 }
 
-function liteStem(w: string): string {
-  if (w.length < 6) return w;
-  if (w.endsWith("ies")) return w.slice(0, -3) + "y";
-  if (w.endsWith("ing") && w.length >= 8) return w.slice(0, -3);
-  if (w.endsWith("tion") && w.length >= 8) return w.slice(0, -4) + "t";
-  if (w.endsWith("ion") && w.length >= 8) return w.slice(0, -3);
-  if (w.endsWith("ed") && w.length >= 7) return w.slice(0, -2);
-  if (w.endsWith("es") && w.length >= 7) return w.slice(0, -2);
-  if (w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
-  return w;
-}
-
 function retrieveText(text: string): string {
   // Mask gold-critical NPs so quantity expansion cannot split them ("two tabs at once", "at once").
   const masks: string[] = [];
@@ -256,10 +244,9 @@ function nearDupStems(text: string): Set<string> {
   const content = new Set<string>();
   try {
     for (const w of tokList(String(text ?? ""))) {
-      const s = liteStem(w);
-      if (!s) continue;
-      all.add(s);
-      if (!STOP.has(w) && !STOP.has(s)) content.add(s);
+      if (!w) continue;
+      all.add(w);
+      if (!STOP.has(w)) content.add(w);
     }
   } catch {}
   return content.size ? content : all;
@@ -1810,14 +1797,13 @@ export class AgentMemory {
       return suppressPacketNearDups(mergeGistLane(mergeNarrativeLane([], text, cap, this.howtoDir, recs), text, cap, this.howtoDir));
     }
     const hay = queryHay(text);
-    const hit = (x: string) => hay.has(x);
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
     const scored: { rec: MemoryRecord; n: number }[] = [];
     for (const c of rows) {
       let n = 0;
       const seen = new Set<string>();
       for (const x of c.needles) {
-        if (!hit(x) || seen.has(x)) continue;
+        if (!hay.has(x) || seen.has(x)) continue;
         seen.add(x);
         n++;
       }
