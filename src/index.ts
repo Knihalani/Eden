@@ -969,17 +969,13 @@ function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): M
 
 function isIclCue(text: string): boolean {
   try {
-    // Official DetQA extract (`Now Answer the Question` + A./B./C./D. + trailing
-    // `Output:`) is book-QA, not MCC. `label:` still wins overlap (M30.3).
     if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false;
     if (encodeLane(text) === "icl") return true;
-    // Official MCC / store-all shots. Bare "label this PR" is chat, not ICL.
     if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true;
   } catch {}
   return false;
 }
 
-/** MCC ingest is ICL-only; queries are the utterance after the template strips `label:`. */
 function storeIsIclOnly(rows: { rec: { kind?: string; lane?: string; text?: string } }[]): boolean {
   try {
     const live = rows.filter((c) => c.rec.kind !== "digest");
