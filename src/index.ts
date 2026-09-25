@@ -779,22 +779,8 @@ function carryTokens(text: string): string[] {
   return out;
 }
 
-/**
- * Prospective memory (cue-triggered intentions). Rules ("always run the tests before committing") and
- * decisions ("we chose sqlite over postgres for the cache because …") are intention-shaped: they are recalled
- * by the situation that makes them applicable, which usually shares no words with the rule itself
- * ("commit these changes" ↔ "…before committing"). At encode time each intention record derives TRIGGER
- * CUES — engineering action/object clusters, path prefixes, and the alternatives/subject named in a
- * decision — stored as a separate cue index (`!c:`, `!p:`, `!a:`, `!s:` tags). At retrieval a prospective
- * pass stems the query, matches it against the cue index and reserves a small slice of the cap for the
- * strongest triggered intentions that the lexical pass did not already surface.
- */
 const CUE_TAG = "!";
-/** Max cap slots reserved for triggered intentions, and the trigger strength (in units of log(3) ≈ one cue shared by ≤ a third of intentions) required to claim one. */
-const PROSPECT_SLOTS = Number(process.env.EDEN_PROSPECT_SLOTS ?? 2);
-const PROSPECT_MIN = Number(process.env.EDEN_PROSPECT_MIN ?? 0.5);
 
-/** Curated engineering action lexicon: cluster → surface forms (verbs ↔ object nouns ↔ synonyms). Single words are stem-matched; phrases are matched on the raw text. */
 const CUE_LEX: Record<string, string> = {
   commit: "commit committing committed commits checkin check-in",
   pr: "pr prs pull-request merge-request push pushing pushed review reviewing rebase branch branches land",
@@ -900,15 +886,6 @@ function deriveCues(text: string): string[] {
   if (isNoPrintRule(body)) out.add(CUE_TAG + "c:log-forbid");
   return [...out];
 }
-/** Cues present in a query: clusters, path segments, and content stems (matched against decision alternatives/subjects). */
-function queryCues(text: string): { c: Set<string>; p: Set<string>; w: Set<string> } {
-  const lower = text.toLowerCase(), toks = bareToks(lower);
-  const c = cueClusters(lower, toks);
-  if (isLogPolicyQuery(text)) c.add("log-forbid");
-  if (/\bwhat should we use\b/i.test(text)) c.add("stack-use");
-  return { c, p: pathCues(lower), w: new Set(contentStems(toks)) };
-}
-
 const CUES = new WeakMap<MemoryRecord, string[]>();
 const cuesOf = (rec: MemoryRecord): string[] => CUES.get(rec) ?? [];
 
@@ -1015,29 +992,6 @@ function compile(rec: MemoryRecord): Compiled {
   return { rec, needles: [...own, ...carried], cues, ctx, sal: rec.sal ?? 0 };
 }
 
-/** Prospective pass: score intention records by cue overlap × cue idf (idf over intention records only). */
-function triggerScores(rows: Compiled[], text: string): { rec: MemoryRecord; t: number }[] {
-  const q = queryCues(text);
-  if (!q.c.size && !q.p.size && !q.w.size) return [];
-  const intents = rows.filter((c) => c.cues.length);
-  if (!intents.length) return [];
-  const df = new Map<string, number>();
-  for (const c of intents) for (const cue of c.cues) df.set(cue, (df.get(cue) || 0) + 1);
-  const N = intents.length;
-  const out: { rec: MemoryRecord; t: number }[] = [];
-  for (const c of intents) {
-    let t = 0;
-    for (const cue of c.cues) {
-      const k = cue[1], v = cue.slice(3);
-      const hit = k === "c" ? q.c.has(v) : k === "p" ? q.p.has(v) : q.w.has(v);
-      if (!hit) continue;
-      const idf = Math.log(1 + N / (df.get(cue) || 1));
-      t += idf * (k === "s" ? 0.6 : k === "w" ? 0.5 : k === "a" ? 1.2 : 1);
-    }
-    if (t > 0) out.push({ rec: c.rec, t });
-  }
-  return out.sort((a, b) => b.t - a.t || b.rec.at - a.rec.at);
-}
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
 /** Store size. Distinct from retrieve k (`EDEN_MEMORY_CAP`). */
@@ -1571,6 +1525,24 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
       if (out.some((p) => p.id === l.id)) continue;
       out.push(l);
     }
+    return out.length ? out : base;
+  } catch {
+    return lexical;
+  }
+}
+
+function mergeLiveConstraints(lexical: MemoryRecord[], text: string, cap: number, rows: Compiled[]): MemoryRecord[] {
+  try {
+    if (!String(text ?? "").trim()) return lexical;
+    const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
+    if (!k) return lexical;
+    const extras = rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec).sort((a, b) => b.at - a.at);
+    if (!extras.length) return lexical;
+    const base = Array.isArray(lexical) ? lexical : [];
+    const out: MemoryRecord[] = [];
+    const room = Math.max(k, 64);
+    for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); }
+    for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); }
     return out.length ? out : base;
   } catch {
     return lexical;
@@ -2239,26 +2211,7 @@ export class AgentMemory {
       }
       lexical = pinFront(lexical, have, cap);
     }
-    // Prospective pass: cue-triggered intentions get a reserved slice of the cap when the lexical pass missed them.
-    const triggered = triggerScores(rows, text);
-    if (triggered.length) {
-      const reserve = Math.min(PROSPECT_SLOTS, Math.max(1, Math.floor(cap / 3)));
-      const strong = Math.log(1 + 2);
-      const picked: MemoryRecord[] = [];
-      for (const { rec, t } of triggered) {
-        if (picked.length >= reserve) break;
-        if (t < strong * PROSPECT_MIN) break;
-        if (lexical.slice(0, cap - reserve).some((l) => l.id === rec.id || jaccardText(l.text, rec.text) > 0.6)) continue;
-        if (picked.some((p) => jaccardText(p.text, rec.text) > 0.6)) continue;
-        stampOnCue(rec, t);
-        picked.push(rec);
-      }
-      if (picked.length) {
-        const out: MemoryRecord[] = [];
-        for (const l of lexical) { if (out.length >= cap - picked.length) break; if (!picked.some((p) => p.id === l.id || jaccardText(p.text, l.text) > 0.6)) out.push(l); }
-        lexical = [...out, ...picked];
-      }
-    }
+    lexical = mergeLiveConstraints(lexical, text, cap, rows);
     lexical = mergeRootIdentity(lexical, text, cap, this.dir);
     return suppressPacketNearDups(mergeExperienceLane(
       mergeHowtoLane(mergeNarrativeLane(lexical, text, cap, this.howtoDir, recs), text, cap, this.howtoDir),
@@ -2268,8 +2221,6 @@ export class AgentMemory {
   }
 
   notesFor(text = "", k = memoryRetrieveCap(), opts: { fuse?: boolean } = {}): MemoryRecord[] {
-    // Intention records (rules/decisions with a cue index) are returned verbatim: the yes/no and numeral
-    // augmentation exists for answering questions from facts, and would corrupt "never console.log" or "zero ops".
     if (text) {
       const pool = Math.min(18, Math.max(Math.floor(Number(k) || 0), 12));
       let recs: MemoryRecord[] = [];
