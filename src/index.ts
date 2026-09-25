@@ -1343,8 +1343,6 @@ export class AgentMemory {
     try { chmodSync(this.dir, 0o700); } catch {}
     const session = memorySessionName(opts.session);
     this.session = session;
-    // Forget / prune follow this flag only. A parent id that happens to contain
-    // `--` (childSessionName's suffix) is still a parent unless the caller sets child.
     this.child = opts.child === true;
     if (session) {
       const sub = join(this.dir, session);
