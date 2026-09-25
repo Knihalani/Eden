@@ -1092,8 +1092,6 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
     if (!k) return lexical;
     const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
     const chat = Array.isArray(lexical) ? lexical.filter((l) => !isNarrativeNote(l)) : [];
-    // Empty chunk hits: do not dump the store-all 4k pack (Clerk cue must not
-    // surface miller/zebra). Chat facts stay. Throw still fail-opens to lexical.
     if (!Array.isArray(hits) || !hits.length) return chat;
     const chunks: MemoryRecord[] = [];
     for (const hit of hits) {
