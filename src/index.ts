@@ -125,11 +125,6 @@ export function childSessionName(parent?: string, child?: string): string | unde
   }
 }
 
-/**
- * True when the sanitized name contains `--`, the separator `childSessionName` writes.
- * Not a forget/prune gate: Claude session ids are UUIDs (single `-`). A parent opened
- * as `foo--bar` without `opts.child` still tombstones root. Hook and wrap set `child`.
- */
 export function isChildSession(session?: string): boolean {
   const s = memorySessionName(session);
   return !!s && s.includes("--");
