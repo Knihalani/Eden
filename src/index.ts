@@ -1310,16 +1310,21 @@ function rootIdentityText(s: string, p: string, o: string): string {
   return `${titled} ${pred} ${obj}`.replace(/\s+/g, " ").trim();
 }
 
-/**
- * M44.1: a new session's JSONL is empty; live facts live on the project root.
- * Merge live SemanticStore rows into retrieve. Fail-open: throw → lexical.
- */
+function prependFloor(extras: MemoryRecord[], lexical: MemoryRecord[], cap: number): MemoryRecord[] {
+  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
+  if (!k || !extras.length) return lexical;
+  extras.sort((a, b) => b.at - a.at);
+  const base = Array.isArray(lexical) ? lexical : [];
+  const out: MemoryRecord[] = [];
+  const room = Math.max(k, 64);
+  for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); }
+  for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); }
+  return out.length ? out : base;
+}
+
 function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
   try {
-    const q = String(text ?? "").trim();
-    if (!q) return lexical;
-    const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-    if (!k) return lexical;
+    if (!String(text ?? "").trim()) return lexical;
     const live = new SemanticStore(dir).live();
     if (!Array.isArray(live) || !live.length) return lexical;
     const extras: MemoryRecord[] = [];
@@ -1335,22 +1340,7 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
         at: Number.isFinite(row.t) ? row.t : 0,
       });
     }
-    if (!extras.length) return lexical;
-    extras.sort((a, b) => b.at - a.at);
-    const base = Array.isArray(lexical) ? lexical : [];
-    const out: MemoryRecord[] = [];
-    const room = Math.max(k, 64);
-    for (const r of extras) {
-      if (out.length >= room) break;
-      if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue;
-      out.push(r);
-    }
-    for (const l of base) {
-      if (out.length >= room) break;
-      if (out.some((p) => p.id === l.id)) continue;
-      out.push(l);
-    }
-    return out.length ? out : base;
+    return prependFloor(extras, lexical, cap);
   } catch {
     return lexical;
   }
@@ -1359,16 +1349,7 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
 function mergeLiveConstraints(lexical: MemoryRecord[], text: string, cap: number, rows: Compiled[]): MemoryRecord[] {
   try {
     if (!String(text ?? "").trim()) return lexical;
-    const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-    if (!k) return lexical;
-    const extras = rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec).sort((a, b) => b.at - a.at);
-    if (!extras.length) return lexical;
-    const base = Array.isArray(lexical) ? lexical : [];
-    const out: MemoryRecord[] = [];
-    const room = Math.max(k, 64);
-    for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); }
-    for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); }
-    return out.length ? out : base;
+    return prependFloor(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
   } catch {
     return lexical;
   }
@@ -1962,8 +1943,7 @@ export class AgentMemory {
       let seen: Set<string> | undefined;
       let lex: string[] | undefined;
       let ctxh: [string, number][] | undefined;
-      for (const x0 of c.needles) {
-        const x = key(x0);
+      for (const x of c.needles) {
         if (!hit(x) || seen?.has(x)) continue;
         if (!seen) seen = new Set();
         seen.add(x);
