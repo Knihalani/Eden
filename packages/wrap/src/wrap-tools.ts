@@ -195,10 +195,6 @@ export function pendingPosts(state: WrapState): number {
   return outboxOf(state).length;
 }
 
-function shouldRetryStatus(status: number): boolean {
-  return status === 429 || status >= 500;
-}
-
 function controlTimeoutMs(): number {
   const env = Number(process.env.EDEN_CONTROL_TIMEOUT_MS);
   return Number.isFinite(env) && env > 0 ? Math.min(120_000, env) : 10_000;
@@ -216,7 +212,7 @@ async function sendPost(state: WrapState, path: string, body: unknown): Promise<
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(controlTimeoutMs()),
     });
-    return r.ok || !shouldRetryStatus(r.status);
+    return r.ok || !(r.status === 429 || r.status >= 500);
   } catch {
     return false;
   }
