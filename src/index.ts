@@ -910,24 +910,24 @@ function howtoPacketFiles(view: ReturnType<typeof retrieveHowTo>[number]): strin
   return out;
 }
 
-function howtoPacketVerify(view: ReturnType<typeof retrieveHowTo>[number]): string {
-  if (typeof view.verify === "string" && view.verify.trim()) return view.verify.trim();
-  if (!Array.isArray(view.steps)) return "";
-  for (let i = view.steps.length - 1; i >= 0; i--) {
-    const args = view.steps[i]?.args;
-    if (!args) continue;
-    for (const k of ["command", "cmd", "script"] as const) {
-      const v = args[k];
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-  }
-  return "";
-}
-
 function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): MemoryRecord {
   const cue = typeof view.cue === "string" ? view.cue.trim() : "";
   const files = howtoPacketFiles(view);
-  const verify = howtoPacketVerify(view);
+  let verify = typeof view.verify === "string" ? view.verify.trim() : "";
+  if (!verify && Array.isArray(view.steps)) {
+    for (let i = view.steps.length - 1; i >= 0; i--) {
+      const args = view.steps[i]?.args;
+      if (!args) continue;
+      for (const k of ["command", "cmd", "script"] as const) {
+        const v = args[k];
+        if (typeof v === "string" && v.trim()) {
+          verify = v.trim();
+          break;
+        }
+      }
+      if (verify) break;
+    }
+  }
   let text = cue;
   if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" ");
   if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
