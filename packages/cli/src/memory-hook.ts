@@ -148,8 +148,6 @@ function briefing(mem: AgentMemory, session = ""): string {
     logged.push({ id: r.id, at: r.at });
   }
   try {
-    // Experience replay gists stay on disk for cue retrieve. SessionStart briefs
-    // pins + fact/session gists only — excludeSrc drops traj rows before the cap.
     let gistHarmed = new Set<string>();
     try { gistHarmed = loadHarmedIds(mem.dir); } catch { gistHarmed = new Set(); }
     const harmedText: string[] = [];
@@ -160,9 +158,6 @@ function briefing(mem: AgentMemory, session = ""): string {
         if (t.length >= 8) harmedText.push(t);
       }
     } catch {}
-    // Sleep gists have no note id. Skip a logged gist id, a harmed src, or any
-    // sentence that still quotes a harmed note. Other sentences stay (Start is
-    // not the math remain-silent path).
     const withoutHarmed = (text: string): string => {
       try {
         if (gistHarmed.has(`gist:${opaqueId(text)}`)) return "";
@@ -204,7 +199,6 @@ function briefing(mem: AgentMemory, session = ""): string {
         });
       } catch { line = `[gist] ${text}`; }
       lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
-      // Gists have no store id. Hash the text; do not log session, cwd, or the body.
       logged.push({ id: `gist:${opaqueId(text)}`, at: g.t });
     }
   } catch {}
