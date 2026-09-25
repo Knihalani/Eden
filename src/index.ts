@@ -961,18 +961,6 @@ function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?:
   }
 }
 
-function skipNarrativeComplete(mems: MemoryRecord[], cue: string): boolean {
-  try {
-    if (memoryLastRoute.route === "icl-index" || memoryLastRoute.route === "gist-chunk") return true;
-    if (isIclCue(cue)) return true;
-    if (isRecsysShot(cue)) return true;
-    if (isSummaryCue(cue)) return true;
-    if (isBookQaCue(cue)) return true;
-    if (Array.isArray(mems) && mems.length && mems.every((m) => m.lane === "icl" || isIclExemplar(m.text))) return true;
-  } catch {}
-  return false;
-}
-
 function rootIdentityText(s: string, p: string, o: string): string {
   let subj = String(s ?? "").trim();
   let obj = String(o ?? "").trim();
@@ -1604,7 +1592,16 @@ export class AgentMemory {
         let packet: MemoryRecord[] = [];
         try {
           let hopped = silent ? [] : retrieved;
-          if (!silent && rankCue && retrieved.length && !skipNarrativeComplete(retrieved, rankCue)) {
+          let skipHop = false;
+          try {
+            if (memoryLastRoute.route === "icl-index" || memoryLastRoute.route === "gist-chunk") skipHop = true;
+            else if (isIclCue(rankCue)) skipHop = true;
+            else if (isRecsysShot(rankCue)) skipHop = true;
+            else if (isSummaryCue(rankCue)) skipHop = true;
+            else if (isBookQaCue(rankCue)) skipHop = true;
+            else if (retrieved.every((m) => m.lane === "icl" || isIclExemplar(m.text))) skipHop = true;
+          } catch {}
+          if (!silent && rankCue && retrieved.length && !skipHop) {
             const hopStore = (() => {
               const out: MemoryRecord[] = [];
               const seen = new Set<string>();
