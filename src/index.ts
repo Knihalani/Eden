@@ -1403,7 +1403,6 @@ export class AgentMemory {
     return this.compiled.map((c) => c.rec).filter((r) => !this.project || r.project === this.project);
   }
 
-  /** Redact secrets + strip session/email/cwd before compile/persist. Never throws. */
   private persistText(text: string): string {
     let t = String(text ?? "");
     try {
@@ -1458,10 +1457,6 @@ export class AgentMemory {
     }
   }
 
-  /**
-   * Observe a message list. The CLI hook re-sends a sliding window of the last 40 turns after every
-   * assistant turn, so messages are matched against the previous window and only the new tail is processed.
-   */
   observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
     this.batch++;
@@ -1729,7 +1724,6 @@ export class AgentMemory {
     try { return dropHarmed(this.dir, emptyCue); } catch { return emptyCue; }
   }
 
-  /** Omit these ids on later inject. Root `this.dir` (shared with howto). Write no-op unless consent is on. */
   markHarmed(ids: Iterable<string>): void {
     try { persistHarmed(this.dir, ids); } catch {}
   }
@@ -1864,7 +1858,6 @@ export class AgentMemory {
       return body;
     }
   }
-  /** One JSONL flush after many observes (CLS session ingest = massed hippocampal write). */
   quiet(fn: () => void) {
     this.batch++;
     const sem = this.semantic();
