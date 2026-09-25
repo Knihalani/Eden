@@ -108,21 +108,6 @@ function stampIdentity(state: WrapState, receipt: Receipt): Receipt {
   return receipt;
 }
 
-function markShared(armed: Armed, agentId: string): number {
-  armed.agentIds ??= new Set();
-  if (agentId) armed.agentIds.add(agentId);
-  const n = armed.agentIds.size;
-  if (n >= 2) {
-    const line = sharedAcrossLine(n);
-    const rec = armedReceipts.get(armed);
-    if (rec) {
-      rec.sharedAcross = n;
-      if (!rec.reason?.includes(line)) rec.reason = rec.reason ? `${rec.reason} · ${line}` : line;
-    }
-  }
-  return n;
-}
-
 function inputAgrees(armed: Armed, cur: Record<string, unknown>): boolean {
   if (eq(cur, armed.input)) return true;
   const rec = armed.input as Record<string, unknown> | null;
@@ -859,8 +844,17 @@ export function wrapTools<T extends ToolsIn>(
   };
 
   const skipAsShared = (armed: Armed, toolName: string, selfId: number): void => {
-    const n = markShared(armed, state.agentId);
+    armed.agentIds ??= new Set();
+    if (state.agentId) armed.agentIds.add(state.agentId);
+    const n = armed.agentIds.size;
     const line = n >= 2 ? sharedAcrossLine(n) : undefined;
+    if (line) {
+      const rec = armedReceipts.get(armed);
+      if (rec) {
+        rec.sharedAcross = n;
+        if (!rec.reason?.includes(line)) rec.reason = rec.reason ? `${rec.reason} · ${line}` : line;
+      }
+    }
     run.events.push(
       tag(
         {
