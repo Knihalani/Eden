@@ -262,7 +262,6 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
 
   applyCacheBreakpoints(body);
-  // Tool-trace observe is encode-only, after notesFor, inside withKnowFactsAnthropic (M2.3).
   body = withKnowFactsAnthropic(body) as AnthropicRequest;
 
   const fn = opts.fetch ?? fetch;

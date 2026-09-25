@@ -54,20 +54,11 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
   return out;
 }
 
-/**
- * Default gate is envelope-exact (inDistribution). Soft (same keys/types,
- * novel value) serves only when the contract opted in. OOD never.
- */
 function inputServes(program: StretchProgram, input: Record<string, unknown>): boolean {
   if (inDistribution(program, input)) return true;
   return mayServe(program, input);
 }
 
-/**
- * The URL shape of a concrete URL: parameterized, host kept, path kept, and
- * the GitHub-specific placeholders collapsed to {id} — exactly how the mine
- * side collapses them, so both sides of a comparison land on one spelling.
- */
 function urlShape(url: string): string | null {
   const templated = parameterizeUrl(url);
   const m = templated.match(/^(https?:\/\/)([^/?#]+)([^?#]*)/i);
@@ -75,7 +66,6 @@ function urlShape(url: string): string | null {
   return `${m[2]!}${m[3] || "/"}`.replaceAll("{issue}", "{id}").replaceAll("{run_id}", "{id}");
 }
 
-/** `gh pr view 123` -> `gh.pr.view {id}`; numeric positionals become {id}. */
 function cliShape(command: string): string | null {
   const parsed = parseNamedCli(command);
   if (!parsed) return null;
@@ -83,11 +73,6 @@ function cliShape(command: string): string | null {
   return `${familyId(parsed)}${positionals.length ? ` ${positionals.join(" ")}` : ""}`;
 }
 
-/**
- * Every recognizable shape in one string: a bare URL, or URLs / a named CLI
- * call pulled out of a command string. Plain values (ticket ids, prose)
- * yield nothing, which is what makes this matcher fail closed.
- */
 function shapesOfString(s: string, into: Set<string>): void {
   if (/^https?:\/\//i.test(s)) {
     const sh = urlShape(s);
