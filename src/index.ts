@@ -721,7 +721,6 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
   }
 }
 
-/** Encode lane for observe. Chat still extractDurable; ICL/narrative/recsys store-all. Never throws. */
 export function encodeLane(text: string): MemoryLaneKind {
   try {
     const t = String(text ?? "").trim();
@@ -749,13 +748,12 @@ function extractDurable(blob: string): string[] {
   if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1))) whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
   const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?");
   const iclWhole = isIclExemplar(whole);
-  // `8. The chairperson is Bob` must stay one episode. `(?<=.)\s+` would split on the serial.
   const numberedWhole = /^\d+[.)]\s+\S/.test(whole);
   const label = whole.match(SPEAKER_LABEL)?.[1];
   for (const raw of labeledWhole || iclWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/)) {
-    let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo|btw,|fwiw,)\s+/i, "").replace(ACK_PREFIX, "");
+    let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "");
     t = t.replace(SECRET_INLINE, "[REDACTED]");
-    if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /\bleftover intern firm\b/i.test(t) || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|we will|look at|add the|we're|cool, |nice, |great, |awesome, |perfect, )\b/i.test(t) || CHAT.test(t)) continue;
+    if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|we will|look at|add the|we're|cool, |nice, |great, |awesome, |perfect, )\b/i.test(t) || CHAT.test(t)) continue;
     if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
     const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1]!.trim();
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
