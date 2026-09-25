@@ -1297,11 +1297,6 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   }
 }
 
-/**
- * Extra trajectory slices on inject (M24). Chat k stays `cap` (6–10).
- * Empty cue → no dump (SessionStart stays pins+gists). Fail-open.
- * `dir` is memory root (howtoDir), never jsonlDir.
- */
 function mergeExperienceLane(lexical: MemoryRecord[], text: string, dir: string): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
