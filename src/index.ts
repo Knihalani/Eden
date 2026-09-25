@@ -1277,7 +1277,6 @@ function mergeExperienceLane(lexical: MemoryRecord[], text: string, dir: string)
   }
 }
 
-/** Hierarchical extractive gists on summary / book-QA cues. Fail-open. k≤3. Gists then leftover chunks. */
 function mergeGistLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
