@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as doctorMod from "./doctor";
+import { applyCodexToml, geminiHookConfig, hookCommand, opencodePluginSource, preHookCommand, codexHooksJson } from "./setup";
 import {
   autoApproveCheck,
   collectDoctor,
@@ -22,6 +25,8 @@ import {
   surfaceCheck,
   surfaceModeOf,
   treeCheck,
+  memoryHooksCheck,
+  MEMORY_HOOK_EVENTS,
 } from "./doctor";
 import { renderTreeLetter } from "@eden/measure";
 
@@ -875,5 +880,272 @@ describe("doctor", () => {
     const out = await probeJson("http://127.0.0.1:9/health", () => new Promise(() => {}) as Promise<Response>, 50);
     expect(out).toBeNull();
     expect(Date.now() - t0).toBeLessThan(500);
+  });
+});
+
+describe("M13.3 memory hooks doctor", () => {
+  const edenHook = [{ hooks: [{ type: "command", command: "bun '/abs/cli.ts' hook || echo '{}'" }] }];
+
+  test("memoryHooksCheck lists installed events; half-wired is ok:false and names missing", () => {
+    expect(typeof memoryHooksCheck).toBe("function");
+
+    const plugin = JSON.parse(
+      readFileSync(join(import.meta.dir, "../../../plugins/eden-memory/hooks/hooks.json"), "utf8"),
+    ) as { hooks?: Record<string, unknown> };
+    const full = memoryHooksCheck({ hooks: plugin.hooks });
+    expect(full.name).toBe("memory");
+    expect(full.ok).toBe(true);
+    expect(full.detail).toContain("UserPromptSubmit");
+    expect(full.detail).toContain("Stop");
+    expect(full.detail).toContain("PostToolUse");
+    expect(full.detail).toContain("SubagentStop");
+    expect(full.detail).toMatch(/EDEN_MEMORY /);
+    expect(JSON.stringify(full)).not.toContain("/forget");
+    expect(formatDoctor([full])).not.toContain("/forget");
+
+    const half = memoryHooksCheck({ hooks: { UserPromptSubmit: edenHook } });
+    expect(half.ok).toBe(false);
+    expect(half.name).toBe("memory");
+    expect(half.detail).toContain("missing");
+    for (const ev of MEMORY_HOOK_EVENTS) {
+      if (ev === "UserPromptSubmit") continue;
+      expect(half.detail).toContain(ev);
+    }
+    expect(JSON.stringify(half)).not.toContain("/forget");
+
+    const empty = memoryHooksCheck({});
+    expect(empty.ok).toBe(false);
+    expect(empty.detail).toContain("none");
+    expect(empty.detail).toContain("UserPromptSubmit");
+
+    const onlySteer = memoryHooksCheck({ hooks: { PreToolUse: edenHook } });
+    expect(onlySteer.ok).toBe(false);
+    expect(onlySteer.detail).toContain("none");
+  });
+
+  test("doctor output has no /forget", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-m13-forget");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async () => new Response("no", { status: 404 })) as typeof fetch,
+      });
+      expect(formatDoctor(checks)).not.toContain("/forget");
+      expect(JSON.stringify(checks)).not.toContain("/forget");
+      expect(doctorHelp()).not.toContain("/forget");
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+type ExtraHostMemoryOpts = { homedir?: string };
+type ExtraHostCheck = { name: string; ok: boolean; detail: string };
+
+/** M14.2 — intended export: extra-host memory wiring (Codex / OpenCode / Gemini / Cursor). */
+function extraHostMemoryCheck(opts?: ExtraHostMemoryOpts): ExtraHostCheck[] {
+  const fn = (doctorMod as { extraHostMemoryCheck?: (o?: ExtraHostMemoryOpts) => unknown }).extraHostMemoryCheck;
+  expect(typeof fn).toBe("function");
+  let out: unknown;
+  expect(() => {
+    out = fn!(opts);
+  }).not.toThrow();
+  const rows = Array.isArray(out) ? out : out == null ? [] : [out];
+  expect(rows.length).toBeGreaterThan(0);
+  return rows.map((raw) => {
+    const c = raw && typeof raw === "object" ? (raw as { name?: unknown; ok?: unknown; detail?: unknown }) : {};
+    expect(typeof c.name).toBe("string");
+    expect(typeof c.ok).toBe("boolean");
+    expect(typeof c.detail).toBe("string");
+    return { name: String(c.name), ok: Boolean(c.ok), detail: String(c.detail) };
+  });
+}
+
+function extraHay(rows: ExtraHostCheck[]): string {
+  return rows.map((c) => `${c.name}\t${c.ok}\t${c.detail}`).join("\n");
+}
+
+function namedHost(rows: ExtraHostCheck[], host: RegExp): ExtraHostCheck[] {
+  return rows.filter((c) => host.test(`${c.name} ${c.detail}`));
+}
+
+describe("M14.2 extra-host memory doctor", () => {
+  const hookCmd = hookCommand("/abs/cli.ts", 8794);
+  const preCmd = preHookCommand(8794);
+
+  test("missing ~/.codex ~/.config/opencode ~/.gemini is skip named; cursor not invented", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-skip-"));
+    try {
+      const rows = extraHostMemoryCheck({ homedir: home });
+      const hay = extraHay(rows);
+
+      const codex = namedHost(rows, /codex/i);
+      expect(codex.length).toBeGreaterThan(0);
+      expect(codex.some((c) => /skip/i.test(c.detail))).toBe(true);
+
+      const opencode = namedHost(rows, /opencode/i);
+      expect(opencode.length).toBeGreaterThan(0);
+      expect(opencode.some((c) => /skip/i.test(c.detail))).toBe(true);
+
+      const gemini = namedHost(rows, /gemini/i);
+      expect(gemini.length).toBeGreaterThan(0);
+      expect(gemini.some((c) => /skip/i.test(c.detail))).toBe(true);
+
+      expect(hay).toMatch(/cursor/i);
+      expect(hay).toMatch(/skip|not invented|not-invented/i);
+      expect(namedHost(rows, /cursor/i).every((c) => /skip|not invented|not-invented/i.test(c.detail))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("codex home without PostToolUse is half-wired ok:false; live hooks.json does not crash", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-codex-"));
+    try {
+      mkdirSync(join(home, ".codex"), { recursive: true });
+      writeFileSync(join(home, ".codex", "config.toml"), "[features]\nhooks = true\n");
+      const half = extraHostMemoryCheck({ homedir: home });
+      const halfCodex = namedHost(half, /codex/i);
+      expect(halfCodex.some((c) => c.ok === false)).toBe(true);
+      expect(halfCodex.some((c) => /half-wired|PostToolUse|missing|post_tool/i.test(c.detail))).toBe(true);
+
+      writeFileSync(
+        join(home, ".codex", "hooks.json"),
+        JSON.stringify(codexHooksJson(hookCmd, preCmd), null, 2),
+      );
+      writeFileSync(join(home, ".codex", "config.toml"), applyCodexToml("", hookCmd, preCmd));
+      let wired: ExtraHostCheck[] = [];
+      expect(() => {
+        wired = extraHostMemoryCheck({ homedir: home });
+      }).not.toThrow();
+      const wiredCodex = namedHost(wired, /codex/i);
+      expect(wiredCodex.length).toBeGreaterThan(0);
+      expect(wiredCodex.every((c) => c.ok)).toBe(true);
+      expect(wiredCodex.some((c) => /ok/i.test(c.detail))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("stale [hooks.eden] post_tool is half-wired, not ok", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-codex-stale-"));
+    try {
+      mkdirSync(join(home, ".codex"), { recursive: true });
+      writeFileSync(
+        join(home, ".codex", "config.toml"),
+        "[features]\ncodex_hooks = true\n\n[hooks.eden]\npost_tool = [\"sh\", \"-c\", \"echo hi\"]\n",
+      );
+      const rows = extraHostMemoryCheck({ homedir: home });
+      const codex = namedHost(rows, /codex/i);
+      expect(codex.some((c) => c.ok === false)).toBe(true);
+      expect(codex.some((c) => /half-wired|stale|post_tool|PostToolUse/i.test(c.detail))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("OpenCode plugin missing vs present: skip/half-wired vs not a crash", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-oc-"));
+    try {
+      mkdirSync(join(home, ".config", "opencode"), { recursive: true });
+      const half = extraHostMemoryCheck({ homedir: home });
+      const halfOc = namedHost(half, /opencode/i);
+      expect(halfOc.some((c) => c.ok === false)).toBe(true);
+      expect(halfOc.some((c) => /half-wired|missing|plugin/i.test(c.detail))).toBe(true);
+
+      mkdirSync(join(home, ".config", "opencode", "plugin"), { recursive: true });
+      writeFileSync(join(home, ".config", "opencode", "plugin", "eden-recorder.js"), opencodePluginSource("/abs/cli.ts"));
+      let wired: ExtraHostCheck[] = [];
+      expect(() => {
+        wired = extraHostMemoryCheck({ homedir: home });
+      }).not.toThrow();
+      const wiredOc = namedHost(wired, /opencode/i);
+      expect(wiredOc.length).toBeGreaterThan(0);
+      expect(wiredOc.every((c) => c.ok || !/half-wired/i.test(c.detail))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("Gemini home without AfterTool is half-wired; valid settings do not crash", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-gem-"));
+    try {
+      mkdirSync(join(home, ".gemini"), { recursive: true });
+      writeFileSync(join(home, ".gemini", "settings.json"), "{}");
+      const half = extraHostMemoryCheck({ homedir: home });
+      const halfGem = namedHost(half, /gemini/i);
+      expect(halfGem.some((c) => c.ok === false)).toBe(true);
+      expect(halfGem.some((c) => /half-wired|missing|AfterTool/i.test(c.detail))).toBe(true);
+
+      writeFileSync(
+        join(home, ".gemini", "settings.json"),
+        JSON.stringify(geminiHookConfig({}, preCmd, hookCmd), null, 2),
+      );
+      let wired: ExtraHostCheck[] = [];
+      expect(() => {
+        wired = extraHostMemoryCheck({ homedir: home });
+      }).not.toThrow();
+      const wiredGem = namedHost(wired, /gemini/i);
+      expect(wiredGem.length).toBeGreaterThan(0);
+      expect(wiredGem.every((c) => c.ok || !/half-wired/i.test(c.detail))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("cursor still skip/not-invented even if ~/.cursor exists", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-cursor-"));
+    try {
+      mkdirSync(join(home, ".cursor"), { recursive: true });
+      writeFileSync(join(home, ".cursor", "hooks.json"), "{\"hooks\":{}}");
+      const rows = extraHostMemoryCheck({ homedir: home });
+      const cursor = namedHost(rows, /cursor/i);
+      expect(cursor.length).toBeGreaterThan(0);
+      expect(cursor.some((c) => /skip|not invented|not-invented/i.test(c.detail))).toBe(true);
+      expect(extraHay(rows)).not.toMatch(/cursorHookConfig/i);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("torn Codex toml / OpenCode plugin / Gemini settings do not throw", () => {
+    const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-torn-"));
+    try {
+      mkdirSync(join(home, ".codex"), { recursive: true });
+      mkdirSync(join(home, ".config", "opencode", "plugin"), { recursive: true });
+      mkdirSync(join(home, ".gemini"), { recursive: true });
+      writeFileSync(join(home, ".codex", "config.toml"), "not [ toml {{{");
+      writeFileSync(join(home, ".config", "opencode", "plugin", "eden-recorder.js"), "not js {{{");
+      writeFileSync(join(home, ".gemini", "settings.json"), "{");
+      expect(() => extraHostMemoryCheck({ homedir: home })).not.toThrow();
+      const rows = extraHostMemoryCheck({ homedir: home });
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((c) => typeof c.ok === "boolean")).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("M46.3 doctor mentions import", () => {
+  test("doctorHelp names eden memory import and invents no ghost API", () => {
+    const help = doctorHelp();
+    expect(help).toContain("eden memory import");
+    expect(help).not.toContain("/import");
+    expect(help).not.toContain("/forget");
+    expect(help).not.toContain("memory_search");
+  });
+
+  test("memoryHooksCheck empty detail names eden memory import", () => {
+    const empty = memoryHooksCheck({});
+    expect(empty.detail).toContain("eden memory import");
+    expect(empty.detail).toContain("EDEN_MEMORY");
+    expect(empty.detail).not.toContain("/forget");
+    for (const ev of MEMORY_HOOK_EVENTS) expect(empty.detail).toContain(ev);
   });
 });

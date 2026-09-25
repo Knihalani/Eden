@@ -14,12 +14,12 @@ const MONTH_IDX = new Map<string, number>(MONTHS.flatMap((m, i) => [[m, i], [m.s
 MONTH_IDX.set("sept", 8);
 
 export function words(s: string): string[] {
-  return s.toLowerCase().match(/[a-z0-9]+(?:[.'\-][a-z0-9]+)*/g) ?? [];
+  return String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:[.'\-][a-z0-9]+)*/g) ?? [];
 }
 
 /** Conservative stemmer: plural / -ing / -ed / -ly / trailing e. */
 export function stem(w0: string): string {
-  let w = w0;
+  let w = String(w0 ?? "");
   if (w.length < 4 || /\d/.test(w)) return w;
   if (w.endsWith("ies") && w.length > 4) w = w.slice(0, -3) + "y";
   else if (w.endsWith("sses")) w = w.slice(0, -2);
@@ -27,6 +27,8 @@ export function stem(w0: string): string {
   if (w.endsWith("ing") && w.length >= 6) w = w.slice(0, -3);
   else if (w.endsWith("ed") && w.length >= 5) w = w.slice(0, -2);
   else if (w.endsWith("ly") && w.length >= 5) w = w.slice(0, -2);
+  else if (w.endsWith("ship") && w.length >= 8) w = w.slice(0, -4);
+  else if (w.endsWith("hood") && w.length >= 8) w = w.slice(0, -4);
   if (w.length >= 4 && /([bdfglmnprt])\1$/.test(w)) w = w.slice(0, -1);
   if (w.length >= 4 && w.endsWith("e")) w = w.slice(0, -1);
   return w;
@@ -39,7 +41,7 @@ const CONTRACT: Record<string, string> = { "i'm": "i", "i've": "i", "i'd": "i", 
 export function contentToks(s: string): string[] {
   const out: string[] = [];
   for (const w0 of words(s)) {
-    const w = CONTRACT[w0] ?? w0;
+    const w = String(CONTRACT[w0] ?? w0);
     if (STOP.has(w)) continue;
     const base = w.replace(/'s$/, "");
     if (!base || STOP.has(base)) continue;
@@ -54,10 +56,14 @@ export function contentToks(s: string): string[] {
 }
 
 export function properNames(s: string): string[] {
+  const skip = new Set(["are", "the", "what", "when", "why", "how", "who", "where", "this", "that", "these", "those", "can", "could", "would", "will", "did", "does", "has", "have", "had", "but", "not", "and", "for", "you", "your", "please", "thanks", "there"]);
   const out: string[] = [];
   const re = /(?:^|[^A-Za-z])((?:Dr|Mr|Mrs|Ms|St)\.?\s+)?([A-Z][a-z]{2,16})/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(s))) out.push(m[2]!.toLowerCase());
+  while ((m = re.exec(s))) {
+    const n = m[2]!.toLowerCase();
+    if (!skip.has(n)) out.push(n);
+  }
   return out;
 }
 

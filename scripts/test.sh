@@ -12,6 +12,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Kept POSIX-ish: macOS still ships bash 3.2, which has no `mapfile`.
+# bun test treats a bare `src` argument as a substring filter (packages/*/src).
+# Root memory tests must be passed as files.
+src_tests=$(
+  find src -maxdepth 1 \( -name '*.test.ts' -o -name '*.test.tsx' \) -print 2>/dev/null \
+    | sort
+)
 dirs=$(
   find packages apps benchmarks \( -name '*.test.ts' -o -name '*.test.tsx' \) -print \
     | grep -v '/node_modules/' \
@@ -19,12 +25,13 @@ dirs=$(
     | sort -u
 )
 
-if [ -z "$dirs" ]; then
+if [ -z "$dirs" ] && [ -z "${src_tests:-}" ]; then
   echo "no test files found — check the discovery glob in scripts/test.sh" >&2
   exit 1
 fi
 
 echo "test dirs:" $dirs
+echo "src tests:" $src_tests
 
 # Python SDK tests live under packages/sdk-py. bun's discovery only finds
 # *.test.ts, so run them here when python3 exists; environments without
@@ -37,5 +44,5 @@ if command -v python3 >/dev/null 2>&1; then
   }
 fi
 
-# shellcheck disable=SC2086 # word splitting is intended: one argument per dir
-exec bun test "$@" $dirs
+# shellcheck disable=SC2086 # word splitting is intended: one argument per dir/file
+exec bun test "$@" $dirs $src_tests

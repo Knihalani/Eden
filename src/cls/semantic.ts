@@ -19,7 +19,7 @@ export type Fact = {
   changeSignal: boolean;
 };
 
-const CHANGE = /\b(moved|move|moving|now|switched|switch|transferred|revised|renegotiated|relocated|took over|change[ds]?|instead|new|updated|update|replaced|no longer|from now on|reassigned|rescheduled|swapped|became|becomes|will be|later|longer|anymore|instead of|is now|are now)\b/i;
+const CHANGE = /\b(moved|move|moving|now|switched|switch|transferred|revised|renegotiated|relocated|took over|change[ds]?|instead|new|updated|update|replaced|no longer|from now on|reassigned|rescheduled|swapped|became|becomes|will be|later|longer|anymore|instead of|is now|are now|upgraded|raised|migrated|chose|chosen)\b/i;
 const FRAME_OF: Record<ValueClass, Frame[]> = {
   time: ["when"],
   weekday: ["when"],
@@ -51,24 +51,23 @@ export class SemanticStore {
   }
 
   private add(f: Fact) {
-    // Supersession: an earlier fact sharing an anchor with the same value class is superseded
-    // when the newer sentence carries a change signal and a different value.
-    if (f.changeSignal && f.values.length) {
+    // Newest-wins: later fact with the same entity/attribute and a different value
+    // supersedes the earlier one. Change-signal sentences still supersede on a
+    // weaker overlap so "moved to X" beats "lives in Y".
+    if (f.values.length) {
       let best: Fact | undefined;
+      let bestShared = 0;
       for (const a of f.anchors) {
         for (const old of this.byAnchor.get(a) ?? []) {
-          if (old.ep === f.ep || old.supersededBy !== undefined) continue;
-          if (old.vclass !== f.vclass || !old.values.length) continue;
-          if (old.values.some((v) => f.values.includes(v))) continue;
-          let shared = 0;
-          for (const x of old.anchors) if (f.anchors.has(x)) shared++;
-          if (shared < 1) continue;
-          if (!best || shared > sharedCount(best, f)) best = old;
+          const shared = conflictShared(old, f);
+          if (shared <= 0) continue;
+          if (!best || shared > bestShared) {
+            best = old;
+            bestShared = shared;
+          }
         }
       }
-      if (best) {
-        best.supersededBy = f.ep;
-      }
+      if (best) best.supersededBy = f.ep;
     }
     this.facts.push(f);
     for (const a of f.anchors) {
@@ -158,8 +157,19 @@ export class SemanticStore {
   }
 }
 
-function sharedCount(a: Fact, b: Fact): number {
-  let n = 0;
-  for (const x of a.anchors) if (b.anchors.has(x)) n++;
-  return n;
+function conflictShared(old: Fact, f: Fact): number {
+  if (old.ep === f.ep || old.supersededBy !== undefined) return 0;
+  if (old.vclass !== f.vclass || !old.values.length) return 0;
+  if (old.values.some((v) => f.values.includes(v))) return 0;
+  let shared = 0;
+  let entity = 0;
+  for (const x of old.anchors) {
+    if (!f.anchors.has(x)) continue;
+    shared++;
+    if (x.startsWith("#")) entity++;
+  }
+  if (f.changeSignal && shared >= 1) return shared;
+  if (entity >= 1 && shared >= 2) return shared;
+  if (shared >= 3) return shared;
+  return 0;
 }

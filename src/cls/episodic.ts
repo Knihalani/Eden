@@ -1,9 +1,10 @@
 /**
  * Episodic store (hippocampus): pattern-separated, time-indexed episodes with sparse
  * high-dimensional keys — unigram stems, hashed bigrams, entity tags, time buckets — and
- * attractor-style pattern completion (retrieve → re-cue from top hits → retrieve, with decay).
+ * attractor-style retrieve. Multi-hop completion lives in `complete.ts` (graph / Self-Ask, last hop first).
  */
-import { codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stampToks, textTimeToks, type Stamp } from "./text";
+import { completeScores } from "./complete";
+import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stampToks, stem, textTimeToks, words, type Stamp } from "./text";
 
 export type Episode = {
   i: number;
@@ -20,6 +21,88 @@ export type Episode = {
 };
 
 export type Cue = Map<string, number>;
+
+/** Surface forms, then stemmed — cues and the index both run through `stem()`. */
+function stemExpand(raw: Record<string, string[]>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [k, alts] of Object.entries(raw)) {
+    const sk = stem(k);
+    const merged = new Set([...(out[sk] ?? []), ...alts.map(stem)]);
+    merged.delete(sk);
+    out[sk] = [...merged];
+  }
+  return out;
+}
+
+const EXPAND = stemExpand({
+  spouse: ["married", "wife", "husband"],
+  wife: ["married", "spouse"],
+  husband: ["married", "spouse"],
+  citizen: ["nationality"],
+});
+
+const QUERY_LIGHT = new Set(
+  ["country", "citizen", "author", "name", "city", "position", "sport", "nationality"].map(stem),
+);
+
+/**
+ * Rare cue tokens for AR CombMNZ / neighbor spread: proper names, codes,
+ * hyphenated or digit ids. Not stopwords or query-light ("the/what/country").
+ */
+export function rareCueToks(q: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (raw: string) => {
+    const t = String(raw ?? "").toLowerCase().trim();
+    if (!t || t.length < 2 || STOP.has(t) || QUERY_LIGHT.has(stem(t)) || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+  for (const n of properNames(q)) add(n);
+  for (const c of codeToks(q)) add(c);
+  for (const t of contentToks(q)) {
+    if (QUERY_LIGHT.has(t) || STOP.has(t)) continue;
+    if (/\d/.test(t) || t.includes("-")) add(t);
+  }
+  for (const t of [...out]) {
+    if (!t.includes("-")) continue;
+    for (const p of t.split("-")) {
+      if (p.length >= 4 || (/\d/.test(p) && /[a-z]/i.test(p))) add(p);
+    }
+  }
+  return out;
+}
+
+/** How many rare cue terms appear in `text` (token match, not substring — mill ≠ miller). */
+export function rareTermHits(text: string, terms: string[]): number {
+  if (!terms.length) return 0;
+  const hay = String(text ?? "").toLowerCase();
+  if (!hay) return 0;
+  const toks = new Set(contentToks(hay));
+  for (const w of words(hay)) toks.add(w);
+  let n = 0;
+  for (const t of terms) {
+    if (toks.has(t) || toks.has(stem(t))) n++;
+  }
+  return n;
+}
+
+/**
+ * Raw (not max-normed) episodic BM25-style scores for chunk texts.
+ * Fail-open: [] → zeros. Does not call complete().
+ */
+export function scoreChunksAsEpisodes(query: string, texts: string[]): Float64Array {
+  const n = texts.length;
+  const out = new Float64Array(n);
+  if (!n || !String(query ?? "").trim()) return out;
+  try {
+    const epi = new EpisodicStore();
+    epi.ingest(texts.map((text) => ({ text: String(text ?? ""), speaker: "nar", session: 0 })));
+    const scored = epi.score(epi.cueFor(query));
+    for (let i = 0; i < n; i++) out[i] = scored[i] || 0;
+  } catch {}
+  return out;
+}
 
 export function featurize(text: string, speaker: string, stamp: Stamp, grounded: string[]): Map<string, number> {
   const key = new Map<string, number>();
@@ -105,7 +188,8 @@ export class EpisodicStore {
     const cue: Cue = new Map();
     const bump = (f: string, w: number) => cue.set(f, (cue.get(f) || 0) + w);
     const stems = contentToks(q);
-    for (const s of stems) bump(s, 1);
+    for (const s of stems) bump(s, QUERY_LIGHT.has(s) ? 0.3 : 1);
+    for (const s of stems) for (const alt of EXPAND[s] ?? []) bump(alt, 0.7);
     for (let i = 0; i + 1 < stems.length; i++) bump(`${stems[i]}_${stems[i + 1]}`, 0.5);
     for (const n of properNames(q)) {
       bump(`#${n}`, 1.5);
@@ -125,39 +209,19 @@ export class EpisodicStore {
   }
 
   /**
-   * Pattern completion: iterative attractor retrieval. Round r re-cues with the rare
-   * features of the top-m hits (decayed), so partial cues converge to the episode that
-   * bridges to the answer (multi-hop) while common features are ignored.
+   * Pattern completion: graph / Self-Ask hops in `complete.ts`. Last hop first.
+   * `cue` is only used if the caller has no query string (controller passes `q`).
    */
   complete(cue: Cue, scores: Float64Array): Float64Array {
-    const maxDf = Math.max(4, Math.round(this.episodes.length * 0.02));
-    let cur: Cue = new Map(cue);
-    let acc = scores;
-    let s = scores;
-    for (let r = 1; r < 3; r++) {
-      const top = this.topK(s, 3);
-      if (!top.length) break;
-      const best = top[0]!.s || 1;
-      const next: Cue = new Map(cur);
-      let added = 0;
-      for (const h of top) {
-        const rel = h.s / best;
-        if (rel < 0.4) continue;
-        for (const [f, tf] of this.episodes[h.i]!.key) {
-          if (cue.has(f) || f.startsWith("t:") || f.startsWith("@")) continue;
-          if ((this.df.get(f) || 0) > maxDf || f.includes("_")) continue;
-          next.set(f, (next.get(f) || 0) + 0.35 * rel * Math.min(1, tf));
-          added++;
-        }
+    try {
+      const parts: string[] = [];
+      for (const f of cue.keys()) {
+        if (f.startsWith("#")) parts.push(f.slice(1));
+        else if (!f.includes(":") && !f.includes("_") && !f.startsWith("@")) parts.push(f);
       }
-      if (!added) break;
-      cur = next;
-      s = this.score(cur);
-      const w = Math.pow(0.35, r);
-      const merged = new Float64Array(acc.length);
-      for (let i = 0; i < acc.length; i++) merged[i] = acc[i]! + w * s[i]!;
-      acc = merged;
+      return completeScores(parts.join(" "), this.episodes, scores);
+    } catch {
+      return scores;
     }
-    return acc;
   }
 }

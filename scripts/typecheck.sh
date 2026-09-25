@@ -26,7 +26,7 @@ cd "$(dirname "$0")/.."
 # is ~17k source files of a prior product and carries its own tsconfigs.
 projects=$(
   find . \
-    \( -name node_modules -o -name .next -o -name dist -o -path ./archived \) -prune -o \
+    \( -name node_modules -o -name .next -o -name dist -o -path ./archived -o -path ./.claude -o -path ./.cursor-tmp \) -prune -o \
     -name tsconfig.json -print |
     sort
 )
