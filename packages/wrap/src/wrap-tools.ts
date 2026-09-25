@@ -523,7 +523,14 @@ function emitTrace(
 }
 
 function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, events: TraceEvent[], input?: Record<string, unknown>): void {
-  const lastOk = lastOkResult(events);
+  let lastOk: unknown;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]!;
+    if (ev.ok && !ev.skipped) {
+      lastOk = ev.result;
+      break;
+    }
+  }
   const output = lastOk ?? run.output;
   const classes = emptyTokenClasses();
   const agentP = run.measured ? run.prompt_tokens : 0;
@@ -636,14 +643,6 @@ function pauseLiveFor(state: WrapState, toolName: string): void {
     state.pausedIds.add(p.id);
     post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
   }
-}
-
-function lastOkResult(events: WrapState["run"]["events"]): unknown {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const ev = events[i]!;
-    if (ev.ok && !ev.skipped) return ev.result;
-  }
-  return undefined;
 }
 
 function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, registry: ToolRegistry): ToolDef {
