@@ -795,30 +795,16 @@ function formatProcedureBody(text: string): string {
   return t.slice(0, PROCEDURE_CHAR_CAP);
 }
 
-/** Cap [fact] body only. Keep an existing `[fact]` prefix; do not double-label. */
-function formatFactBody(text: string): string {
+function formatLabeledBody(text: string, re: RegExp, cap: number): string {
   const redacted = redact(String(text ?? ""));
   const t = typeof redacted === "string" ? redacted : String(text ?? "");
-  const labeled = t.match(/^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is);
+  const labeled = t.match(re);
   if (labeled) {
     const prefix = labeled[1]!;
     const rest = labeled[2]!;
-    return rest.length <= FACT_CHAR_CAP ? t : `${prefix}${rest.slice(0, FACT_CHAR_CAP)}`;
+    return rest.length <= cap ? t : `${prefix}${rest.slice(0, cap)}`;
   }
-  return t.length <= FACT_CHAR_CAP ? t : t.slice(0, FACT_CHAR_CAP);
-}
-
-/** Cap [gist] body only. Keep an existing `[gist]` prefix; do not double-label. */
-function formatGistBody(text: string): string {
-  const redacted = redact(String(text ?? ""));
-  const t = typeof redacted === "string" ? redacted : String(text ?? "");
-  const labeled = t.match(/^(\s*\[gist(?:\s*·[^\]]*)?\]\s*)(.*)$/is);
-  if (labeled) {
-    const prefix = labeled[1]!;
-    const rest = labeled[2]!;
-    return rest.length <= GIST_CHAR_CAP ? t : `${prefix}${rest.slice(0, GIST_CHAR_CAP)}`;
-  }
-  return t.length <= GIST_CHAR_CAP ? t : t.slice(0, GIST_CHAR_CAP);
+  return t.length <= cap ? t : t.slice(0, cap);
 }
 
 function formatNote(r: MemoryRecord): MemoryRecord {
@@ -833,7 +819,7 @@ function formatNote(r: MemoryRecord): MemoryRecord {
     const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || isNarrativeNote(r)
       || isFactList(r.text) || isFactList(body);
     const factish = r.kind === "fact" || r.kind === "preference" || /^\s*\[fact(?:\s*·[^\]]*)?\]/i.test(body);
-    if (!skipFactCap && factish) body = formatFactBody(body);
+    if (!skipFactCap && factish) body = formatLabeledBody(body, /^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is, FACT_CHAR_CAP);
   }
   try {
     const tags = Array.isArray(r.tags) ? r.tags : [];
@@ -844,7 +830,7 @@ function formatNote(r: MemoryRecord): MemoryRecord {
     const gistish = r.kind === "digest" || r.kind === "gist"
       || tags.some((t) => t === "gist" || t === "digest")
       || /^\s*\[gist(?:\s*·[^\]]*)?\]/i.test(body);
-    if (!skipGistCap && gistish) body = formatGistBody(body);
+    if (!skipGistCap && gistish) body = formatLabeledBody(body, /^(\s*\[gist(?:\s*·[^\]]*)?\]\s*)(.*)$/is, GIST_CHAR_CAP);
   } catch { /* fail-open: leave body */ }
   let labeled = body;
   try { labeled = applyProvenanceLabel(r, body); } catch {
