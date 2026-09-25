@@ -1579,8 +1579,9 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
     if (!q) return lexical;
     const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
     if (!k) return lexical;
+    const floorAll = (() => { try { return memoryXOn(); } catch { return false; } })();
     const hay = queryHay(q);
-    if (!hay.size) return lexical;
+    if (!hay.size && !floorAll) return lexical;
     const hayStem = new Set<string>();
     for (const w of hay) hayStem.add(liteStem(w));
     const live = new SemanticStore(dir).live();
@@ -1590,13 +1591,13 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
       const body = rootIdentityText(row.s, row.p, row.o);
       if (!body) continue;
       const score = rootIdentityAboutness(body, hay, hayStem);
-      if (!(score > 0)) continue;
+      if (!floorAll && !(score > 0)) continue;
       const rec: MemoryRecord = {
         id: `sem:${row.s}:${row.p}`,
         text: body,
         kind: "fact",
         lane: "chat",
-        tags: ["fact", "semantic"],
+        tags: ["fact", "semantic", "x-identity"],
         at: Number.isFinite(row.t) ? row.t : 0,
       };
       stampOnCue(rec, score);
@@ -1606,15 +1607,16 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
     extras.sort((a, b) => (onCueAboutness.get(b) ?? 0) - (onCueAboutness.get(a) ?? 0));
     const base = Array.isArray(lexical) ? lexical : [];
     const out: MemoryRecord[] = [];
+    const room = floorAll ? Math.max(k, 64) : k;
+    const same = (a: MemoryRecord, b: MemoryRecord) => a.id === b.id || (!floorAll && jaccardText(a.text, b.text) > 0.6);
     for (const r of extras) {
-      if (out.length >= k) break;
-      if (out.some((p) => p.id === r.id || jaccardText(p.text, r.text) > 0.6)) continue;
-      if (base.some((p) => p.id === r.id || jaccardText(p.text, r.text) > 0.6)) continue;
+      if (out.length >= room) break;
+      if (out.some((p) => same(p, r)) || base.some((p) => same(p, r))) continue;
       out.push(r);
     }
     for (const l of base) {
-      if (out.length >= k) break;
-      if (out.some((p) => p.id === l.id || jaccardText(p.text, l.text) > 0.6)) continue;
+      if (out.length >= room) break;
+      if (out.some((p) => same(p, l))) continue;
       out.push(l);
     }
     return out.length ? out : base;
@@ -2462,22 +2464,6 @@ export class AgentMemory {
         recs = this.relevant(text, pool, opts.fuse !== false);
         if (memoryXOn()) {
           const extra: MemoryRecord[] = [];
-          try {
-            for (const row of this.semantic().live()) {
-              const s = String(row.s ?? "").trim();
-              const p = String(row.p ?? "").trim() || "is";
-              const o = String(row.o ?? "").trim();
-              if (!s || !o) continue;
-              extra.push({
-                id: `sem:${s}:${p}`,
-                text: `${s} ${p} ${o}`.replace(/\s+/g, " "),
-                kind: "fact",
-                lane: "chat",
-                tags: ["fact", "semantic", "x-identity"],
-                at: Number.isFinite(row.t) ? row.t : 0,
-              });
-            }
-          } catch {}
           try {
             for (const r of this.memories()) {
               const tags = r.tags ?? [];
