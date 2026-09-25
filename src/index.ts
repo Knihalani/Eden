@@ -148,7 +148,16 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
     const stems: Set<string>[] = [];
     for (const cand of pool) {
       if (picked.length >= limit) break;
-      const lane = packetLane(cand.rec);
+      let lane = "chat";
+      try {
+        const rec = cand.rec;
+        const text = String(rec?.text ?? "");
+        if (rec?.lane === "icl" || isIclExemplar(text)) lane = "icl";
+        else if (rec?.kind === "procedure") lane = "procedure";
+        else if (rec?.lane === "trajectory") lane = "trajectory";
+        else if (rec?.kind === "gist" || rec?.kind === "digest") lane = "gist";
+        else if (rec?.lane === "narrative") lane = "narrative";
+      } catch {}
       const bag = nearDupStems(cand.rec.text);
       let dup = false;
       for (let i = 0; i < picked.length; i++) {
@@ -172,20 +181,6 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
     return picked.map((x) => x.rec);
   } catch {
     return prior();
-  }
-}
-
-function packetLane(rec: { lane?: string; kind?: string; text?: string }): string {
-  try {
-    const text = String(rec?.text ?? "");
-    if (rec?.lane === "icl" || isIclExemplar(text)) return "icl";
-    if (rec?.kind === "procedure") return "procedure";
-    if (rec?.lane === "trajectory") return "trajectory";
-    if (rec?.kind === "gist" || rec?.kind === "digest") return "gist";
-    if (rec?.lane === "narrative") return "narrative";
-    return "chat";
-  } catch {
-    return "chat";
   }
 }
 
