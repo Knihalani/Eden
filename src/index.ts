@@ -42,15 +42,6 @@ export const MEMORY_MIN_DEFAULT = 0.15;
 export const memoryLastRoute = { route: "chat-jsonl" as MemoryRoute };
 const MEMORY_X_FAT_CHARS = 2400;
 
-export function memoryXOn(): boolean {
-  try {
-    const raw = String(process.env.EDEN_MEMORY_X ?? "").trim().toLowerCase();
-    return raw !== "0" && raw !== "off" && raw !== "none";
-  } catch {
-    return true;
-  }
-}
-
 export function isMathChatterCue(cue: string): boolean {
   try {
     const t = String(cue ?? "").trim();
@@ -1575,9 +1566,7 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
     if (!q) return lexical;
     const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
     if (!k) return lexical;
-    const floorAll = (() => { try { return memoryXOn(); } catch { return false; } })();
     const hay = queryHay(q);
-    if (!hay.size && !floorAll) return lexical;
     const hayStem = new Set<string>();
     for (const w of hay) hayStem.add(liteStem(w));
     const live = new SemanticStore(dir).live();
@@ -1587,7 +1576,6 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
       const body = rootIdentityText(row.s, row.p, row.o);
       if (!body) continue;
       const score = rootIdentityAboutness(body, hay, hayStem);
-      if (!floorAll && !(score > 0)) continue;
       const rec: MemoryRecord = {
         id: `sem:${row.s}:${row.p}`,
         text: body,
@@ -1603,16 +1591,15 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
     extras.sort((a, b) => (onCueAboutness.get(b) ?? 0) - (onCueAboutness.get(a) ?? 0));
     const base = Array.isArray(lexical) ? lexical : [];
     const out: MemoryRecord[] = [];
-    const room = floorAll ? Math.max(k, 64) : k;
-    const same = (a: MemoryRecord, b: MemoryRecord) => a.id === b.id || (!floorAll && jaccardText(a.text, b.text) > 0.6);
+    const room = Math.max(k, 64);
     for (const r of extras) {
       if (out.length >= room) break;
-      if (out.some((p) => same(p, r)) || base.some((p) => same(p, r))) continue;
+      if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue;
       out.push(r);
     }
     for (const l of base) {
       if (out.length >= room) break;
-      if (out.some((p) => same(p, l))) continue;
+      if (out.some((p) => p.id === l.id)) continue;
       out.push(l);
     }
     return out.length ? out : base;
@@ -2319,17 +2306,15 @@ export class AgentMemory {
       let recs: MemoryRecord[] = [];
       try {
         recs = this.relevant(text, pool, opts.fuse !== false);
-        if (memoryXOn()) {
-          const extra: MemoryRecord[] = [];
-          try {
-            for (const r of this.memories()) {
-              const tags = r.tags ?? [];
-              if (r.kind === "constraint" || tags.includes("pin") || tags.includes("always")) extra.push(r);
-            }
-          } catch {}
-          const seen = new Set(extra.map((e) => e.id));
-          recs = extra.concat(recs.filter((r) => r.id && !seen.has(r.id)));
-        }
+        const extra: MemoryRecord[] = [];
+        try {
+          for (const r of this.memories()) {
+            const tags = r.tags ?? [];
+            if (r.kind === "constraint" || tags.includes("pin") || tags.includes("always")) extra.push(r);
+          }
+        } catch {}
+        const seen = new Set(extra.map((e) => e.id));
+        recs = extra.concat(recs.filter((r) => r.id && !seen.has(r.id)));
       } catch {
         recs = this.relevant(text, pool, opts.fuse !== false);
       }
