@@ -100,11 +100,6 @@ export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: s
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
-/**
- * Safe session subdirectory. Rejects `/`, `\`, and `..` traversal.
- * `--` is the child-session marker (a suffix, not a nested path) and is allowed.
- * Empty/unsafe → caller uses root jsonl.
- */
 export function memorySessionName(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const s = raw.trim();
