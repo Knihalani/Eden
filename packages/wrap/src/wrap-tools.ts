@@ -631,17 +631,14 @@ function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
   if (fresh.some((w) => w.kind === "fail_streak")) {
     run.tripped = true;
     const last = run.events.at(-1)?.name;
-    if (last) pauseLiveFor(state, last);
-  }
-}
-
-function pauseLiveFor(state: WrapState, toolName: string): void {
-  if (!enforcementEnabled(state.opts)) return;
-  for (const p of state.programs) {
-    if (!p.manifest || state.pausedIds.has(p.id)) continue;
-    if (!(p.sequence ?? []).includes(toolName)) continue;
-    state.pausedIds.add(p.id);
-    post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
+    if (last && enforcementEnabled(state.opts)) {
+      for (const p of state.programs) {
+        if (!p.manifest || state.pausedIds.has(p.id)) continue;
+        if (!(p.sequence ?? []).includes(last)) continue;
+        state.pausedIds.add(p.id);
+        post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
+      }
+    }
   }
 }
 
