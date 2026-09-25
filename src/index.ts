@@ -82,7 +82,6 @@ function fatPacket<T extends { text?: string }>(recs: T[], k: number): T[] {
   }
 }
 
-/** Floor for inject. Unset, empty, NaN, or negative → 0.15. Fail-open. */
 export function memoryMinAboutness(): number {
   try {
     const raw = process.env.EDEN_MEMORY_MIN;
@@ -261,7 +260,6 @@ function convBlob(list: unknown[]): string {
   return parts.join("\n");
 }
 
-/** This-turn rank cue: latest user text only. Not the conversation window, last-8, or transcript-40. */
 export function cueFor(list: unknown[]): string {
   const m = lastUserMessage(list);
   return m && typeof m === "object" ? convBlob([m]).trim() : "";
@@ -439,7 +437,6 @@ function stripWrapPlaceFields(body: Record<string, unknown>): Record<string, unk
 }
 
 const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
-/** Peel intentional memory wrappers before the chat-filler gate. Bare "Please fix…" is experience, not filler. */
 const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
@@ -464,9 +461,7 @@ function sentenceParts(t: string): string[] {
   return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
 }
 
-/** Numbered / copula fact lists stay chat so FC-SH overwrite still extractDurable. */
 function isFactList(t: string): boolean {
-  // Packet labels (`[fact] 1. …`) must not hide serials: inject formatNote runs after notesFor.
   const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l));
   if (numbered.length >= 2) return true;
   const sents = sentenceParts(t);
@@ -478,7 +473,6 @@ function isFactList(t: string): boolean {
   return copula >= 2 && copula * 2 >= sents.length;
 }
 
-/** EventQA-class prose: long or multi-sentence narrative, not ICL, not identity lists. */
 function isNarrativeProse(t: string): boolean {
   const text = t.trim();
   if (isIclExemplar(text) || isFactList(text)) return false;
@@ -548,7 +542,6 @@ export function encodeLane(text: string): MemoryLaneKind {
   }
 }
 
-/** Operator pin on the pre-strip utterance. Not "don't remember", "never remember", or "don't forget". */
 function isPinUtterance(text: string): boolean {
   if (/\b(?:don'?t|do not|never)\s+remember\b/i.test(text)) return false;
   if (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(text)) return true;
