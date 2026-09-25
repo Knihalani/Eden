@@ -626,8 +626,6 @@ const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|na
 /** Peel intentional memory wrappers before the chat-filler gate. Bare "Please fix…" is experience, not filler. */
 const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
-/** Compact env slots — allow lowercase heads ("the database: atlas_dev"). */
-const SLOT_LINE = /^[A-Za-z][A-Za-z0-9 /._-]{0,40}:\s+\S/;
 
 /**
  * Narrative-fact fallback: the giant keyword allow-list below was hand-tuned against engineering/ops
@@ -649,11 +647,6 @@ function looksNarrative(t: string): boolean {
   let fw = 0;
   for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return true;
   return false;
-}
-
-/** Hippocampus store-all: command lines, fences, and test output are episodes even without copula/keywords. */
-function looksExperience(t: string): boolean {
-  return t.includes("```") || /^(npm |pnpm |bun |git |cd |curl |yarn |npx |sudo |echo |cat |ls )\b/i.test(t) || /\bFAIL\b/.test(t);
 }
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
@@ -749,17 +742,6 @@ export function encodeLane(text: string): MemoryLaneKind {
   } catch {
     return "chat";
   }
-}
-
-/** Short hop facts (`X plays Y`, `X originated in Y`). Not "the team plays tonight". */
-function looksHopFact(t: string): boolean {
-  if (!t || t.length > 160 || /[?]/.test(t)) return false;
-  if (!/\b(?:plays|originated\s+in)\b/i.test(t)) return false;
-  const skip = new Set(["the", "a", "an", "this", "that", "our", "my", "his", "her"]);
-  return t.split(/\s+/).some((w) => {
-    const bare = w.replace(/[^A-Za-z]/g, "");
-    return /^[A-Z][a-z]{2,}$/.test(bare) && !skip.has(bare.toLowerCase());
-  });
 }
 
 /** Operator pin on the pre-strip utterance. Not "don't remember", "never remember", or "don't forget". */
