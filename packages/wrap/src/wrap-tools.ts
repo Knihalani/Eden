@@ -364,17 +364,13 @@ function compiledReceipt(
   return receipt;
 }
 
-function remainderSkipReason(program: string, tool: string): string {
-  return `Already served by ${program}. Do not re-run ${tool} — facts are in the last tool output or attached as context.`;
-}
-
 function stampRemainderSkip(state: WrapState, armed: Armed, toolName: string): void {
   const last = [...state.receipts].reverse().find((r) => r.toolId === armed.programId && r.ok);
   if (!last) return;
   const prog = state.programs.find((p) => p.id === armed.programId);
   const programName = prog?.name?.trim() || "this routine";
   last.skipped = [...new Set([...(last.skipped ?? []), toolName])];
-  last.reason = remainderSkipReason(programName, toolName);
+  last.reason = `Already served by ${programName}. Do not re-run ${toolName} — facts are in the last tool output or attached as context.`;
   const n = armed.agentIds?.size ?? 0;
   if (n >= 2) {
     const line = sharedAcrossLine(n);
