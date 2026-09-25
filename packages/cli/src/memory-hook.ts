@@ -298,15 +298,12 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const writes = consent === "on";
-    // Readonly: Submit/SessionStart still open the store to inject/brief. Write-only events do not.
     if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd")) return null;
     const mem = hookMemory(r);
     try {
     const sessionRaw0 = r.session_id ?? r.sessionID ?? r.sessionId;
     const session0 = typeof sessionRaw0 === "string" && sessionRaw0 ? sessionRaw0 : undefined;
     const sleepSession = mem.child && mem.session ? mem.session : session0;
-    // Idle check uses lastAt from the previous spawn (before this event observes).
-    // Stop/Start still own full consolidate below — do not skip them.
     if (writes && event !== "Stop" && event !== "SessionEnd" && event !== "SessionStart") {
       try { maybeIncrementalSleep(mem, { session: sleepSession }); } catch {}
     }
@@ -350,11 +347,9 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         try { consolidate(mem, { session: session || undefined, mode: "full" }); } catch {}
       }
       if (stop) return null;
-      // Pins + latest gists. Not inject aboutness, and not gated by EDEN_MEMORY_MIN.
       return additional(event, briefing(mem, session));
     }
     const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
-    // Rank from the prompt only (not transcript-40). Host open-file names ride as keys so pathCues can fire; bodies stay off content.
     let files: string[] = [];
     try {
       const got = placePathsFrom(r);
