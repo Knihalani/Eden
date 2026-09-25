@@ -6,6 +6,7 @@ import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { withKnowFactsAnthropic } from "./know-inject";
+import { stripUpstreamPlaceFields, withOpenFileHeaders } from "./tool-observe";
 
 export interface AnthropicProxyOpts {
   state: WrapState;
@@ -245,6 +246,12 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
       { status: 400 },
     );
   }
+  try {
+    const header = [req.headers.get("x-eden-open-files"), req.headers.get("x-open-files")].filter(Boolean).join(",");
+    body = withOpenFileHeaders(body as unknown as Record<string, unknown>, header) as unknown as AnthropicRequest;
+  } catch {
+    /* header parse fail-open */
+  }
 
   const live = filterCanary(opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest), opts.state.sessionId);
   const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
@@ -255,6 +262,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
 
   applyCacheBreakpoints(body);
+  // Tool-trace observe is encode-only, after notesFor, inside withKnowFactsAnthropic (M2.3).
   body = withKnowFactsAnthropic(body) as AnthropicRequest;
 
   const fn = opts.fetch ?? fetch;
@@ -270,7 +278,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
         "anthropic-version": version,
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(stripUpstreamPlaceFields(body as unknown as Record<string, unknown>)),
       signal: AbortSignal.timeout(upstreamTimeoutMs()),
     });
   } catch {

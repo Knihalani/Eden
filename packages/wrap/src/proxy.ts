@@ -6,6 +6,7 @@ import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { processMemory } from "../../../src/index";
+import { injectBodyThenObserveTools, stripUpstreamPlaceFields, withOpenFileHeaders } from "./tool-observe";
 
 export type ProxyOpts = {
   state: WrapState;
@@ -66,6 +67,39 @@ function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string
     fn: opts.state.opts.fetch ?? fetch,
     timeout: Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000,
   };
+}
+
+function isNvidiaUrl(url: string): boolean {
+  return /nvidia\.com/i.test(url);
+}
+
+function upstreamHeaders(url: string, key: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    authorization: key ? `Bearer ${key}` : "",
+    "content-type": "application/json",
+  };
+  if (isNvidiaUrl(url)) headers["NVCF-POLL-SECONDS"] = process.env.NVCF_POLL_SECONDS || "20";
+  return headers;
+}
+
+/** DeepSeek V4 Flash on NIM: `low` is invalid; `none` disables thinking. */
+function nimTuneBody(url: string, body: Record<string, unknown>): Record<string, unknown> {
+  if (!isNvidiaUrl(url)) return body;
+  const model = String(body.model || "");
+  if (!/deepseek-v4-flash/i.test(model)) return body;
+  const next: Record<string, unknown> = { ...body };
+  const effort = String(next.reasoning_effort || "").toLowerCase();
+  if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none";
+  const prev =
+    next.chat_template_kwargs && typeof next.chat_template_kwargs === "object"
+      ? { ...(next.chat_template_kwargs as Record<string, unknown>) }
+      : {};
+  if (next.reasoning_effort === "none") {
+    prev.thinking = false;
+    prev.reasoning_effort = "none";
+  }
+  next.chat_template_kwargs = prev;
+  return next;
 }
 
 export function noModelKey(): Response {
@@ -138,6 +172,12 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   } catch {
     return Response.json({ error: { message: "invalid json" } }, { status: 400 });
   }
+  try {
+    const header = [req.headers.get("x-eden-open-files"), req.headers.get("x-open-files")].filter(Boolean).join(",");
+    body = withOpenFileHeaders(body, header);
+  } catch {
+    /* header parse fail-open: inject the parsed JSON as-is */
+  }
   const live = filterCanary(programs(opts), opts.state.sessionId);
   safely(() => {
     const last = opts.state.run.events.at(-1);
@@ -172,8 +212,9 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     try {
       const upstreamRes = await fn(url, {
         method: "POST",
-        headers: { authorization: key ? `Bearer ${key}` : "", "content-type": "application/json" },
-        body: JSON.stringify(withStreamUsage(processMemory().injectBody(body))),
+        headers: upstreamHeaders(url, key),
+        // Live OpenAI path is processMemory().injectBody, then encode tool traces on the same instance.
+        body: JSON.stringify(withStreamUsage(nimTuneBody(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))))),
         signal: AbortSignal.timeout(timeout),
       });
       const src = upstreamRes.body;
@@ -190,15 +231,15 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit)) : body.tools),
     body.tools,
   );
-  const steeredBody = processMemory().injectBody({ ...body, stream: false, tools: injected });
+  const steeredBody = nimTuneBody(
+    url,
+    stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), { ...body, stream: false, tools: injected })),
+  );
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {
       method: "POST",
-      headers: {
-        authorization: key ? `Bearer ${key}` : "",
-        "content-type": "application/json",
-      },
+      headers: upstreamHeaders(url, key),
       body: JSON.stringify(steeredBody),
       signal: AbortSignal.timeout(timeout),
     });

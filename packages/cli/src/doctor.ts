@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { rolloutPartition, toolsInventoryLine } from "@eden/ir";
@@ -6,6 +6,7 @@ import { autoApproveCheck, renderTreeLetter, treeCheck, treeSnapshot } from "@ed
 export { autoApproveCheck, renderTreeLetter, treeCheck, treeSnapshot };
 import { liveToolsPath, readConfig, wrapPlaneUrl, keyFingerprint, edenHome } from "./home";
 import { hookdPidAlive, readHookdPid } from "./hookd";
+import { memoryConsent } from "../../../src/memory-consent";
 
 export type DoctorCheck = { name: string; ok: boolean; detail: string; count?: number | null };
 
@@ -120,6 +121,409 @@ export function netAllowCheck(raw: string | undefined = process.env.EDEN_NET_ALL
     return { name: "net-allow", ok: true, count: 0, detail: NET_ALLOW_EMPTY };
   }
   return { name: "net-allow", ok: true, count: names.length, detail: `EDEN_NET_ALLOW ${names.join(", ")}` };
+}
+
+/** Same 7 events as `memory-hook.ts` MEMORY_EVENTS. Compile PreToolUse / PostToolBatch are not memory. */
+export const MEMORY_HOOK_EVENTS = [
+  "UserPromptSubmit",
+  "SessionStart",
+  "PreCompact",
+  "Stop",
+  "SessionEnd",
+  "PostToolUse",
+  "SubagentStop",
+] as const;
+
+export type MemoryHookEvent = (typeof MEMORY_HOOK_EVENTS)[number];
+
+const MEMORY_HOOK_EVENT_SET = new Set<string>(MEMORY_HOOK_EVENTS);
+
+function asSettingsRec(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+/** Claude settings `{ hooks }` or a bare hooks map (`UserPromptSubmit: …`). */
+function hooksMapOf(settings: unknown): Record<string, unknown> {
+  const rec = asSettingsRec(settings);
+  const nested = rec.hooks;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) return asSettingsRec(nested);
+  if (MEMORY_HOOK_EVENTS.some((e) => e in rec)) return rec;
+  return {};
+}
+
+function hookCommandsOf(value: unknown): string[] {
+  const out: string[] = [];
+  const walk = (v: unknown): void => {
+    if (!v) return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+      return;
+    }
+    if (typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    if (typeof o.command === "string") out.push(o.command);
+    for (const x of Object.values(o)) walk(x);
+  };
+  walk(value);
+  return out;
+}
+
+const PLUGIN_MEMORY_CMD = /eden-memory|CLAUDE_PLUGIN_ROOT|scripts\/hook\.ts/;
+const SETUP_MEMORY_CMD = /\b(?:cli\.ts|eden\.js)\b['"]?\s+hook\b|(?:^|[\s'"/])eden['"]?\s+hook\b/;
+
+function isEdenMemoryCommand(command: string): boolean {
+  return PLUGIN_MEMORY_CMD.test(command) || SETUP_MEMORY_CMD.test(command);
+}
+
+function isSetupMemoryCommand(command: string): boolean {
+  return SETUP_MEMORY_CMD.test(command) && !PLUGIN_MEMORY_CMD.test(command);
+}
+
+function isPluginMemoryCommand(command: string): boolean {
+  return PLUGIN_MEMORY_CMD.test(command);
+}
+
+function eventsFromPluginHooksFile(path: string): string[] | undefined {
+  try {
+    const j = JSON.parse(readFileSync(path, "utf8")) as { hooks?: Record<string, unknown> };
+    if (!j.hooks || typeof j.hooks !== "object" || Array.isArray(j.hooks)) return undefined;
+    const events = Object.keys(j.hooks).filter((k) => MEMORY_HOOK_EVENT_SET.has(k));
+    return events.length ? events : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function pluginEnabledInSettings(settings: unknown): boolean {
+  const enabled = asSettingsRec(asSettingsRec(settings).enabledPlugins);
+  return Object.entries(enabled).some(([k, v]) => Boolean(v) && /eden-memory/i.test(k));
+}
+
+/** Installed eden-memory plugin events from ~/.claude (not the git checkout). */
+export function detectPluginMemoryEvents(
+  claudeDir = join(homedir(), ".claude"),
+  settings?: unknown,
+): string[] | undefined {
+  const queue = [join(claudeDir, "plugins")];
+  const seen = new Set<string>();
+  while (queue.length) {
+    const dir = queue.shift()!;
+    if (seen.has(dir) || !existsSync(dir)) continue;
+    seen.add(dir);
+    if (seen.size > 200) break;
+    const hooksPath = join(dir, "hooks", "hooks.json");
+    if (/eden-memory(?:$|[\\/])/i.test(dir) && existsSync(hooksPath)) {
+      const events = eventsFromPluginHooksFile(hooksPath);
+      if (events) return events;
+    }
+    const meta = join(dir, ".claude-plugin", "plugin.json");
+    if (existsSync(meta) && existsSync(hooksPath)) {
+      try {
+        const name = String((JSON.parse(readFileSync(meta, "utf8")) as { name?: string }).name ?? "");
+        if (name === "eden-memory") {
+          const events = eventsFromPluginHooksFile(hooksPath);
+          if (events) return events;
+        }
+      } catch {}
+    }
+    try {
+      for (const name of readdirSync(dir)) {
+        if (name === "node_modules" || name === ".git") continue;
+        const p = join(dir, name);
+        try {
+          if (statSync(p).isDirectory()) queue.push(p);
+        } catch {}
+      }
+    } catch {}
+  }
+  if (pluginEnabledInSettings(settings)) return [...MEMORY_HOOK_EVENTS];
+  return undefined;
+}
+
+function readClaudeSettingsFile(): unknown {
+  const settings = join(homedir(), ".claude", "settings.json");
+  if (!existsSync(settings)) return {};
+  try {
+    return JSON.parse(readFileSync(settings, "utf8")) as unknown;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Pure memory-hook health check. Pass Claude settings `{ hooks?: Record<string, unknown> }`.
+ * `pluginEvents` documents double-inject when the plugin is detected; omit when unknown.
+ */
+export function memoryHooksCheck(
+  settings: unknown,
+  opts?: { pluginEvents?: string[]; env?: string },
+): DoctorCheck {
+  const hooks = hooksMapOf(settings);
+  const settingsPresent = new Set<MemoryHookEvent>();
+  let settingsSetupSubmit = false;
+  let settingsPluginSubmit = false;
+  for (const event of MEMORY_HOOK_EVENTS) {
+    const cmds = hookCommandsOf(hooks[event]);
+    const eden = cmds.filter(isEdenMemoryCommand);
+    if (eden.length) settingsPresent.add(event);
+    if (event === "UserPromptSubmit") {
+      settingsSetupSubmit = eden.some(isSetupMemoryCommand);
+      settingsPluginSubmit = eden.some(isPluginMemoryCommand);
+    }
+  }
+  const pluginEvents = (opts?.pluginEvents ?? []).filter((e) => MEMORY_HOOK_EVENT_SET.has(e));
+  const pluginSubmit = pluginEvents.includes("UserPromptSubmit");
+  const present = new Set<MemoryHookEvent>(settingsPresent);
+  for (const e of pluginEvents) present.add(e as MemoryHookEvent);
+
+  const listed = MEMORY_HOOK_EVENTS.filter((e) => present.has(e));
+  const missing = MEMORY_HOOK_EVENTS.filter((e) => !present.has(e));
+  const encodeGap = settingsPresent.has("UserPromptSubmit") && settingsPresent.has("SessionStart") && !settingsPresent.has("PostToolUse");
+  const doubleInject =
+    (pluginSubmit && settingsSetupSubmit) || (settingsSetupSubmit && settingsPluginSubmit);
+  const rawEnv = opts && Object.prototype.hasOwnProperty.call(opts, "env") ? opts.env : process.env.EDEN_MEMORY;
+  const consent = memoryConsent(rawEnv);
+  const consentBit = `EDEN_MEMORY ${consent}`;
+
+  let ok = missing.length === 0 && listed.length === MEMORY_HOOK_EVENTS.length && !doubleInject && !encodeGap;
+  let detail: string;
+  if (listed.length === 0) {
+    ok = false;
+    detail = `memory hooks: none · run eden setup · eden memory import · ${MEMORY_HOOK_EVENTS.join(" ")} · ${consentBit}`;
+  } else {
+    detail = `memory hooks: ${listed.join(" ")}`;
+    if (missing.length) detail += ` · missing ${missing.join(" ")}`;
+    if (encodeGap) detail += " · encode gap";
+    if (doubleInject) detail += " · double inject · plugin and eden setup both attach UserPromptSubmit";
+    detail += ` · ${consentBit}`;
+  }
+
+  return { name: "memory", ok, detail, count: listed.length };
+}
+
+export type MemoryHostName = "codex" | "opencode" | "gemini" | "cursor";
+export type MemoryHostStatus = "ok" | "skip" | "half-wired" | "not installed" | "unreadable";
+
+export type MemoryHostVerdict = {
+  host: MemoryHostName;
+  status: MemoryHostStatus;
+  /** Doctor fragment, e.g. `codex: skip` or `codex: half-wired (no post_tool)`. */
+  detail: string;
+  ok: boolean;
+};
+
+const EDEN_HARNESS_CMD = /127\.0\.0\.1:\d+\/hook\b/;
+
+function isEdenHarnessCommand(command: string): boolean {
+  return isEdenMemoryCommand(command) || EDEN_HARNESS_CMD.test(command);
+}
+
+function readTextFile(path: string): { ok: true; text: string } | { ok: false; reason: "missing" | "unreadable" } {
+  try {
+    if (!existsSync(path)) return { ok: false, reason: "missing" };
+    return { ok: true, text: readFileSync(path, "utf8") };
+  } catch {
+    return { ok: false, reason: "unreadable" };
+  }
+}
+
+function hostVerdict(host: MemoryHostName, status: MemoryHostStatus, gap?: string): MemoryHostVerdict {
+  const ok = status === "ok" || status === "skip" || status === "not installed";
+  let detail = `${host}: ${status}`;
+  if (gap) detail += ` (${gap})`;
+  if (host === "codex" && status === "ok") detail += " (trust/hooks can fail silently)";
+  return { host, status, detail, ok };
+}
+
+/** Codex stdin events that observe tools / sleep / inject. */
+const CODEX_LIVE_EVENTS = ["PostToolUse", "SessionStart", "Stop", "SessionEnd", "UserPromptSubmit"] as const;
+
+function commandsFromUnknownHooks(value: unknown): string[] {
+  try {
+    return hookCommandsOf(value);
+  } catch {
+    return [];
+  }
+}
+
+function liveCodexEventsFromJson(raw: string): Set<string> {
+  const out = new Set<string>();
+  try {
+    const j = JSON.parse(raw) as { hooks?: unknown };
+    const hooks = asSettingsRec(j?.hooks);
+    for (const event of CODEX_LIVE_EVENTS) {
+      const cmds = commandsFromUnknownHooks(hooks[event]);
+      if (cmds.some(isEdenHarnessCommand)) out.add(event);
+    }
+  } catch {}
+  return out;
+}
+
+function liveCodexEventsFromToml(raw: string): Set<string> {
+  const out = new Set<string>();
+  try {
+    for (const event of CODEX_LIVE_EVENTS) {
+      const re = new RegExp(`\\[\\[hooks\\.${event}\\]\\]([\\s\\S]*?)(?=\\n\\[\\[|\\n\\[|# --- end eden-recorder|$)`);
+      const m = re.exec(raw);
+      if (!m) continue;
+      if (isEdenHarnessCommand(m[1] ?? "")) out.add(event);
+    }
+  } catch {}
+  return out;
+}
+
+function hasDeadCodexEdenTable(raw: string): boolean {
+  try {
+    return /\[hooks\.eden\]/.test(raw) || /(?:^|\n)\s*post_tool\s*=/.test(raw);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Codex `~/.codex`: skip if absent. Live schema is hooks.json / [[hooks.PostToolUse]]
+ * (stdin `hook_event_name: PostToolUse`). `[hooks.eden] post_tool` is dead — warn,
+ * do not certify ok. Trust/hooks can still fail silently after a live wire.
+ */
+export function inspectCodexMemory(home = homedir()): MemoryHostVerdict {
+  try {
+    const dir = join(home, ".codex");
+    if (!existsSync(dir)) return hostVerdict("codex", "skip");
+    const json = readTextFile(join(dir, "hooks.json"));
+    const toml = readTextFile(join(dir, "config.toml"));
+    if (json.reason === "unreadable" || toml.reason === "unreadable") {
+      return hostVerdict("codex", "unreadable");
+    }
+    const live = new Set<string>();
+    if (json.ok) for (const e of liveCodexEventsFromJson(json.text)) live.add(e);
+    if (toml.ok) for (const e of liveCodexEventsFromToml(toml.text)) live.add(e);
+    const dead = toml.ok && hasDeadCodexEdenTable(toml.text);
+    const hasPost = live.has("PostToolUse");
+    const hasStart = live.has("SessionStart");
+    const hasStop = live.has("Stop") || live.has("SessionEnd");
+    if (!hasPost) {
+      if (dead) {
+        return hostVerdict("codex", "half-wired", "stale post_tool schema, need PostToolUse");
+      }
+      return hostVerdict("codex", "half-wired", "home exists, no PostToolUse");
+    }
+    const gaps: string[] = [];
+    if (!hasStart) gaps.push("no SessionStart");
+    if (!hasStop) gaps.push("no Stop");
+    if (gaps.length) return hostVerdict("codex", "half-wired", gaps.join(", "));
+    return hostVerdict("codex", "ok");
+  } catch {
+    return hostVerdict("codex", "unreadable");
+  }
+}
+
+/**
+ * OpenCode `~/.config/opencode`: skip if absent. Need `plugin/eden-recorder.js`
+ * with PostToolUse / tool.execute.after. Torn JS → warning, no throw.
+ */
+export function inspectOpencodeMemory(home = homedir()): MemoryHostVerdict {
+  try {
+    const dir = join(home, ".config", "opencode");
+    if (!existsSync(dir)) return hostVerdict("opencode", "skip");
+    const plugin = join(dir, "plugin", "eden-recorder.js");
+    const file = readTextFile(plugin);
+    if (!file.ok) {
+      if (file.reason === "unreadable") return hostVerdict("opencode", "unreadable");
+      return hostVerdict("opencode", "half-wired", "no plugin/eden-recorder.js");
+    }
+    const src = file.text;
+    const hasAfter = /PostToolUse|tool\.execute\.after/.test(src);
+    if (!hasAfter) return hostVerdict("opencode", "half-wired", "plugin missing PostToolUse");
+    return hostVerdict("opencode", "ok");
+  } catch {
+    return hostVerdict("opencode", "unreadable");
+  }
+}
+
+/**
+ * Gemini `~/.gemini`: skip if absent. AfterTool / AfterToolUse must be the eden
+ * hook. Torn JSON → warning, no throw.
+ */
+export function inspectGeminiMemory(home = homedir()): MemoryHostVerdict {
+  try {
+    const dir = join(home, ".gemini");
+    if (!existsSync(dir)) return hostVerdict("gemini", "skip");
+    const file = readTextFile(join(dir, "settings.json"));
+    if (!file.ok) {
+      if (file.reason === "unreadable") return hostVerdict("gemini", "unreadable");
+      return hostVerdict("gemini", "half-wired", "no AfterTool/AfterToolUse");
+    }
+    let rec: Record<string, unknown> = {};
+    let hooks: Record<string, unknown> = {};
+    try {
+      rec = asSettingsRec(JSON.parse(file.text) as unknown);
+      hooks = hooksMapOf(rec);
+    } catch {
+      return hostVerdict("gemini", "unreadable");
+    }
+    const after = [
+      ...hookCommandsOf(hooks.AfterToolUse ?? rec.AfterToolUse),
+      ...hookCommandsOf(hooks.AfterTool ?? rec.AfterTool),
+    ];
+    if (!after.some(isEdenHarnessCommand)) {
+      return hostVerdict("gemini", "half-wired", "AfterTool/AfterToolUse not eden hook");
+    }
+    return hostVerdict("gemini", "ok");
+  } catch {
+    return hostVerdict("gemini", "unreadable");
+  }
+}
+
+/** Cursor is never invented by setup. Name the gap; do not inspect-to-install. */
+export function inspectCursorMemory(): MemoryHostVerdict {
+  return hostVerdict("cursor", "not installed", "not invented");
+}
+
+/** Unequal harness capture, named. Skip is honest. Half-wired / unreadable fail the check. */
+export function inspectMemoryHosts(home = homedir()): { ok: boolean; detail: string; hosts: MemoryHostVerdict[] } {
+  try {
+    const hosts: MemoryHostVerdict[] = [
+      inspectCodexMemory(home),
+      inspectOpencodeMemory(home),
+      inspectGeminiMemory(home),
+      inspectCursorMemory(),
+    ];
+    return {
+      ok: hosts.every((h) => h.ok),
+      detail: hosts.map((h) => h.detail).join(" · "),
+      hosts,
+    };
+  } catch {
+    const hosts = [
+      hostVerdict("codex", "unreadable"),
+      hostVerdict("opencode", "unreadable"),
+      hostVerdict("gemini", "unreadable"),
+      inspectCursorMemory(),
+    ];
+    return { ok: false, detail: hosts.map((h) => h.detail).join(" · "), hosts };
+  }
+}
+
+/**
+ * Per-host memory capture for `eden doctor`. Never throws (torn TOML/JS/JSON → warning).
+ * Skip if the host dir is absent. Cursor is named not-invented even when `~/.cursor` exists.
+ */
+export function extraHostMemoryCheck(opts?: { homedir?: string }): DoctorCheck[] {
+  try {
+    const home = opts?.homedir ?? homedir();
+    return inspectMemoryHosts(home).hosts.map((h) => ({
+      name: h.host,
+      ok: h.ok,
+      detail: h.detail,
+    }));
+  } catch {
+    return [
+      { name: "codex", ok: false, detail: "codex: unreadable" },
+      { name: "opencode", ok: false, detail: "opencode: unreadable" },
+      { name: "gemini", ok: false, detail: "gemini: unreadable" },
+      { name: "cursor", ok: true, detail: "cursor: not installed (not invented)" },
+    ];
+  }
 }
 
 function installState(): { ok: boolean; count: 0 | 1; fix: string } {
@@ -323,6 +727,28 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
     }
   } else health.push({ name: "live-tools", ok: false, detail: "none yet · approve is the gate" });
 
+  let memory: DoctorCheck;
+  try {
+    const claudeSettings = readClaudeSettingsFile();
+    memory = memoryHooksCheck(claudeSettings, {
+      pluginEvents: detectPluginMemoryEvents(join(homedir(), ".claude"), claudeSettings),
+      env: process.env.EDEN_MEMORY,
+    });
+  } catch {
+    memory = { name: "memory", ok: false, detail: "memory hooks: unreadable · run eden setup", count: 0 };
+  }
+  health.push(memory);
+  try {
+    health.push(...extraHostMemoryCheck());
+  } catch {
+    health.push(
+      { name: "codex", ok: false, detail: "codex: unreadable" },
+      { name: "opencode", ok: false, detail: "opencode: unreadable" },
+      { name: "gemini", ok: false, detail: "gemini: unreadable" },
+      { name: "cursor", ok: true, detail: "cursor: not installed (not invented)" },
+    );
+  }
+
   const recorded = recordState(tracesKnown, wrapUp, hookdUp);
   const knocked = existsSync(join(edenHome(), "knock.json")) ? 1 : 0;
   const install = installState();
@@ -386,6 +812,7 @@ export function doctorHelp(): string {
 NET_ALLOW empty refuses piped network binaries. A live hookd without a
 matching pid file is named orphan · eden hookd --stop. EDEN_AUTO_APPROVE=1
 prints as a bypass, never a default. Wave 21 honesty files shipped. Wave 22 stays Later.
+Memory hooks listed in health. Extra hosts named skip / half-wired / ok / not installed — unequal capture is not silent. Codex trust/hooks can fail silently. EDEN_MEMORY=0|readonly|on. Prune by deleting the store or EDEN_MEMORY=0. eden memory import observes existing transcripts locally (no cloud / no NVIDIA).
 `;
 }
 
@@ -399,7 +826,19 @@ export async function doctor(args: string[] = []): Promise<number> {
     else console.log(renderTreeLetter());
     return treeCheck().ok ? 0 : 1;
   }
-  const checks = await collectDoctor();
+  let checks: DoctorCheck[];
+  try {
+    checks = await collectDoctor();
+  } catch {
+    // Host configs (torn TOML/JS/JSON) must never throw the doctor process.
+    checks = [
+      {
+        name: "memory",
+        ok: false,
+        detail: "unreadable · doctor warning, agent still runs · cursor: not installed",
+      },
+    ];
+  }
   if (args.includes("--json")) console.log(JSON.stringify(doctorPayload(checks), null, 2));
   else console.log(formatDoctor(checks));
   return checks.filter((c) => REQUIRED.has(c.name)).every((c) => c.ok) ? 0 : 1;

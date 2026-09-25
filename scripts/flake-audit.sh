@@ -6,7 +6,7 @@
 # Usage:
 #   ./scripts/flake-audit.sh [--runs N] [--clock-jump] [--load] [--seed S]
 #
-# Defaults: N=20. Discovery matches scripts/test.sh (packages/apps/benchmarks
+# Defaults: N=20. Discovery matches scripts/test.sh (src/packages/apps/benchmarks
 # *.test.ts / *.test.tsx). Never sleeps to "wait for a flake to pass".
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -53,7 +53,7 @@ fi
 # Discover test files the same way scripts/test.sh discovers dirs, then keep
 # the file list so we can shuffle order across runs.
 files=$(
-  find packages apps benchmarks \( -name '*.test.ts' -o -name '*.test.tsx' \) -print \
+  find src packages apps benchmarks \( -name '*.test.ts' -o -name '*.test.tsx' \) -print \
     | grep -v '/node_modules/' \
     | sort
 )

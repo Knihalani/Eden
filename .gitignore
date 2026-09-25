@@ -53,4 +53,8 @@ archived/docs/.docusaurus/
 archived/**/*.bak
 archived/reports/dr-drill-*.json
 benchmarks/campaign/dbg*.ts
+benchmarks/lme-v2/.data/
+benchmarks/lme-v2/last-run.json
+benchmarks/lme-v2/RESULTS.smoke.md
+benchmarks/lme-v2/debug-sample.jsonl
 

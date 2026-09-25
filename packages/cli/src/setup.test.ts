@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { hookCommand, preHookCommand, installedHooks, mergeHooks, wrapMcpServer, geminiHookConfig, applyCodexToml, opencodePluginSource } from "./setup";
+import { hookCommand, preHookCommand, installedHooks, mergeHooks, wrapMcpServer, geminiHookConfig, applyCodexToml, codexHooksJson, opencodePluginSource } from "./setup";
 import * as setup from "./setup";
 import { wrapPlaneUrl, sitePlaneUrl } from "./home";
 import { remainderPath } from "./remainder";
+import { MEMORY_HOOK_EVENTS, memoryHooksCheck } from "./doctor";
 
 describe("setup hookd", () => {
   test("hooks fail-open through hookd then bun hook", () => {
@@ -37,7 +38,7 @@ describe("setup hookd", () => {
     expect(pre).toContain("--max-time 1");
     expect(pre).toContain("|| echo '{}'");
     expect(pre).not.toContain("bun ");
-    for (const event of ["PostToolUse", "PostToolBatch", "Stop", "SessionStart", "UserPromptSubmit", "PreCompact"] as const) {
+    for (const event of ["PostToolUse", "PostToolBatch", "Stop", "SessionStart", "SessionEnd", "UserPromptSubmit", "PreCompact", "SubagentStop"] as const) {
       const cmd = String(hooks[event]![0]!.hooks[0]!.command);
       expect(cmd).toContain("--max-time 8");
       expect(cmd).toContain("bun '/abs/cli.ts' hook");
@@ -154,11 +155,18 @@ describe("multi-agent installer", () => {
     const once = applyCodexToml("[model]\nname = \"x\"\n", post);
     expect(once).toContain('name = "x"');
     expect(once).toContain("eden-recorder");
-    expect(once).toContain("post_tool");
-    expect(once).toContain("pre_tool");
-    expect((once.match(/post_tool =/g) ?? []).length).toBe(1);
+    expect(once).toContain("hooks.json");
+    expect(once).toContain("PostToolUse");
+    expect(once).not.toContain("post_tool =");
+    expect(once).not.toContain("[hooks.eden]");
     const twice = applyCodexToml(once, post);
     expect(twice).toBe(once);
+    const stale = applyCodexToml(
+      "[model]\nname = \"x\"\n# --- eden-recorder ---\n[hooks.eden]\npost_tool = [\"sh\"]\n# --- end eden-recorder ---\n",
+      post,
+    );
+    expect(stale).not.toContain("[hooks.eden]");
+    expect(stale).not.toContain("post_tool =");
   });
 
   test("opencode plugin source is fail-open and rewrites output.output", () => {
@@ -203,16 +211,17 @@ describe("multi-agent installer", () => {
     expect(beforeTool).toBe(preCmd);
 
     const toml = applyCodexToml("", hookCmd, preCmd);
-    const postLine = toml.split("\n").find((l) => l.includes("post_tool ="));
-    expect(postLine).toBeTruthy();
-    expect(postLine!).toContain("EDEN_HOME");
-    expect(toml).toContain("export EDEN_HOME=");
-    const startLine = toml.split("\n").find((l) => l.includes("session_start ="));
-    const stopLine = toml.split("\n").find((l) => l.includes("session_stop ="));
-    expect(startLine!).toContain("EDEN_HOME");
-    expect(stopLine!).toContain("EDEN_HOME");
-    const preLine = toml.split("\n").find((l) => l.includes("pre_tool ="));
-    expect(preLine!).not.toContain("bun ");
+    expect(toml).toContain("hooks.json");
+    expect(toml).toContain("PostToolUse");
+    expect(toml).not.toContain("post_tool =");
+    expect(toml).not.toContain("[hooks.eden]");
+    const hooks = codexHooksJson(hookCmd, preCmd);
+    expect(JSON.stringify(hooks.hooks.PostToolUse)).toContain("EDEN_HOME");
+    expect(JSON.stringify(hooks.hooks.PostToolUse)).toContain("|| echo '{}'");
+    expect(JSON.stringify(hooks.hooks.SessionStart)).toContain("EDEN_HOME");
+    expect(JSON.stringify(hooks.hooks.Stop)).toContain("EDEN_HOME");
+    expect(JSON.stringify(hooks.hooks.PreToolUse)).not.toContain("bun ");
+    expect(JSON.stringify(hooks.hooks.PreToolUse)).toContain("echo '{}'");
 
     const src = opencodePluginSource(cli);
     expect(src).toContain("const EDEN_HOME =");
@@ -350,5 +359,174 @@ describe("multi-agent installer", () => {
       else process.env.EDEN_STEER_HOOKS = prevSteer;
       rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe("M49 memory hooks install without a wrap key", () => {
+  test("installedHooks contains all 7 MEMORY_HOOK_EVENTS and doctor lists them", () => {
+    const hookCmd = hookCommand("/abs/cli.ts");
+    const hooks = installedHooks(hookCmd);
+    for (const ev of MEMORY_HOOK_EVENTS) {
+      expect(ev in hooks).toBe(true);
+      expect(String(hooks[ev]![0]!.hooks[0]!.command)).toContain("bun '/abs/cli.ts' hook");
+    }
+    expect(MEMORY_HOOK_EVENTS).toHaveLength(7);
+    const check = memoryHooksCheck({ hooks });
+    expect(check.ok).toBe(true);
+    expect(check.count).toBe(7);
+    for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev);
+  });
+
+  test("setup source and installed hook commands have no Memorable, memory_search, or /forget", () => {
+    const src = readFileSync(join(import.meta.dir, "setup.ts"), "utf8");
+    const blob = src + JSON.stringify(installedHooks(hookCommand("/abs/cli.ts")));
+    expect(blob).not.toContain("Memorable");
+    expect(blob).not.toContain("memory_search");
+    expect(blob).not.toContain("/forget");
+  });
+
+  test("setup with no wrap key still writes the 7 events and does not touch the real home", async () => {
+    const prev = {
+      home: process.env.HOME,
+      eden: process.env.EDEN_HOME,
+      key: process.env.EDEN_API_KEY,
+      dev: process.env.EDEN_DEV,
+      token: process.env.EDEN_SETUP_TOKEN,
+      base: process.env.EDEN_BASE_URL,
+      wrap: process.env.EDEN_WRAP_URL,
+      site: process.env.EDEN_SITE_URL,
+      siteMcp: process.env.EDEN_SITE_MCP,
+      cwd: process.cwd(),
+      log: console.log,
+    };
+    const root = mkdtempSync(join(tmpdir(), "eden-setup-m49-"));
+    const home = join(root, "home");
+    const eden = join(root, "eden");
+    const cwd = join(root, "cwd");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(cwd, { recursive: true });
+    const realClaude = join(homedir(), ".claude", "settings.json");
+    const realBefore = existsSync(realClaude) ? statSync(realClaude).mtimeMs : null;
+    const lines: string[] = [];
+    console.log = (...args: unknown[]) => {
+      lines.push(args.map((a) => String(a)).join(" "));
+    };
+    process.env.HOME = home;
+    process.env.EDEN_HOME = eden;
+    delete process.env.EDEN_API_KEY;
+    delete process.env.EDEN_DEV;
+    delete process.env.EDEN_SETUP_TOKEN;
+    delete process.env.EDEN_BASE_URL;
+    delete process.env.EDEN_WRAP_URL;
+    delete process.env.EDEN_SITE_URL;
+    delete process.env.EDEN_SITE_MCP;
+    process.chdir(cwd);
+    try {
+      await setup.setup([]);
+      const settingsPath = join(home, ".claude", "settings.json");
+      expect(existsSync(settingsPath)).toBe(true);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as unknown;
+      const check = memoryHooksCheck(settings);
+      expect(check.ok).toBe(true);
+      expect(check.count).toBe(7);
+      for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev);
+      expect(existsSync(join(cwd, ".mcp.json"))).toBe(false);
+      expect(existsSync(join(eden, "config.json"))).toBe(false);
+      const written = readFileSync(settingsPath, "utf8") + lines.join("\n");
+      expect(written).not.toContain("Memorable");
+      expect(written).not.toContain("memory_search");
+      expect(written).not.toContain("/forget");
+      expect(lines.join("\n")).toContain("memory on by default");
+      const realAfter = existsSync(realClaude) ? statSync(realClaude).mtimeMs : null;
+      expect(realAfter).toBe(realBefore);
+    } finally {
+      console.log = prev.log;
+      process.chdir(prev.cwd);
+      const restore = (k: string, v: string | undefined) => {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      };
+      restore("HOME", prev.home);
+      restore("EDEN_HOME", prev.eden);
+      restore("EDEN_API_KEY", prev.key);
+      restore("EDEN_DEV", prev.dev);
+      restore("EDEN_SETUP_TOKEN", prev.token);
+      restore("EDEN_BASE_URL", prev.base);
+      restore("EDEN_WRAP_URL", prev.wrap);
+      restore("EDEN_SITE_URL", prev.site);
+      restore("EDEN_SITE_MCP", prev.siteMcp);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("setup --dev still writes the 7 events plus wrap config inside an isolated home", async () => {
+    const prev = {
+      home: process.env.HOME,
+      eden: process.env.EDEN_HOME,
+      key: process.env.EDEN_API_KEY,
+      dev: process.env.EDEN_DEV,
+      token: process.env.EDEN_SETUP_TOKEN,
+      cwd: process.cwd(),
+      log: console.log,
+    };
+    const root = mkdtempSync(join(tmpdir(), "eden-setup-m49-dev-"));
+    const home = join(root, "home");
+    const eden = join(root, "eden");
+    const cwd = join(root, "cwd");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(cwd, { recursive: true });
+    console.log = () => {};
+    process.env.HOME = home;
+    process.env.EDEN_HOME = eden;
+    delete process.env.EDEN_API_KEY;
+    delete process.env.EDEN_DEV;
+    delete process.env.EDEN_SETUP_TOKEN;
+    process.chdir(cwd);
+    try {
+      await setup.setup(["--dev"]);
+      const settings = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8")) as unknown;
+      const check = memoryHooksCheck(settings);
+      expect(check.ok).toBe(true);
+      expect(check.count).toBe(7);
+      for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev);
+      const cfg = JSON.parse(readFileSync(join(eden, "config.json"), "utf8")) as { api_key?: string };
+      expect(cfg.api_key).toBe("eden_dev");
+      expect(existsSync(join(cwd, ".mcp.json"))).toBe(true);
+      const mcp = readFileSync(join(cwd, ".mcp.json"), "utf8");
+      expect(mcp).not.toContain("Memorable");
+      expect(mcp).not.toContain("memory_search");
+      expect(mcp).not.toContain("/forget");
+    } finally {
+      console.log = prev.log;
+      process.chdir(prev.cwd);
+      const restore = (k: string, v: string | undefined) => {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      };
+      restore("HOME", prev.home);
+      restore("EDEN_HOME", prev.eden);
+      restore("EDEN_API_KEY", prev.key);
+      restore("EDEN_DEV", prev.dev);
+      restore("EDEN_SETUP_TOKEN", prev.token);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("M14 Codex PostToolUse fail-open / cursor not invented", () => {
+  test("codex hooks.json PostToolUse stays fail-open; cursor hooks are not invented", () => {
+    const hookCmd = hookCommand("/abs/cli.ts", 8794);
+    const preCmd = preHookCommand(8794);
+    expect(hookCmd).toContain("|| echo '{}'");
+    const hooks = JSON.stringify(codexHooksJson(hookCmd, preCmd));
+    expect(hooks).toContain("PostToolUse");
+    expect(hooks).toContain("|| echo '{}'");
+    expect(hooks).toContain("SessionStart");
+    expect(hooks).toContain("Stop");
+    expect(applyCodexToml("", hookCmd, preCmd)).not.toContain("post_tool =");
+
+    expect("cursorHookConfig" in setup).toBe(false);
+    expect(Object.keys(setup).filter((k) => /cursor/i.test(k))).toEqual([]);
+    expect(opencodePluginSource("/abs/cli.ts")).not.toContain("cursor");
   });
 });

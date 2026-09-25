@@ -24,6 +24,7 @@ record the agent
    hookd       Start the recording daemon for Claude Code hooks
    hook        Record a single tool call (called by hooks)
    drain       Flush pending recordings
+   memory      Import history (eden memory import <path>)
    mcp         Stdio MCP in front of wrap (empty catalog; dispatch ≤1)
 
 inspect
@@ -77,6 +78,7 @@ async function main(): Promise<void> {
   else if (cmd === "setup") { const { setup } = await import("./setup"); await setup(rest); }
   else if (cmd === "init") { const { init } = await import("./init"); process.exit(await init(rest)); }
   else if (cmd === "import") { const { importTraces } = await import("./import"); process.exit(await importTraces(rest)); }
+  else if (cmd === "memory") { const { memoryCli } = await import("./memory-import"); process.exit(await memoryCli(rest)); }
   else if (cmd === "runner") { const { runner } = await import("./runner"); await runner(rest); }
   else if (cmd === "drain") { const { drain } = await import("./drain"); await drain(); }
   else if (cmd === "hookd") { const { runHookd } = await import("./hookd"); await runHookd(rest); }

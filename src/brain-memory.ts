@@ -30,9 +30,12 @@ export class BrainMemory {
   private semantic: AgentMemory;
   private cls: CLSController;
 
-  constructor(opts: { dir?: string } = {}) {
+  constructor(opts: { dir?: string; cortex?: boolean; semantic?: boolean } = {}) {
     this.semantic = openMemory({ dir: opts.dir || mkdtempSync(join(tmpdir(), "eden-brain-")) });
-    this.cls = new CLSController(this.semantic);
+    this.cls = new CLSController(this.semantic, {
+      skipCortex: opts.cortex === false,
+      skipSemantic: opts.semantic === false,
+    });
   }
 
   ingestTurns(turns: BrainTurn[]) {
@@ -55,8 +58,8 @@ export class BrainMemory {
     );
   }
 
-  retrieve(q: string, k = 6): string[] {
-    return this.cls.retrieve(q, k);
+  retrieve(q: string, k = 6, opts?: { neighbors?: boolean; complete?: boolean; semantic?: boolean; recency?: boolean }): string[] {
+    return this.cls.retrieve(q, k, opts);
   }
 
   stored(): string[] {

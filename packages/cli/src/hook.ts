@@ -277,6 +277,11 @@ export async function respondToHook(
     } catch {}
     return { ok: true };
   }
+  if (body.hook_event_name === "PostToolUse") {
+    try {
+      memoryHookResponse(body as Record<string, unknown>);
+    } catch {}
+  }
   if (body.hook_event_name === "PostToolUse" && name) {
     const event = redact({
       id: crypto.randomUUID(),
@@ -360,7 +365,13 @@ export async function respondToHook(
   }
   if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
     try {
-      memoryHookResponse(body as Record<string, unknown>);
+      const orig = String((raw as Record<string, unknown>).hook_event_name ?? (raw as Record<string, unknown>).hookEventName ?? (raw as Record<string, unknown>).event ?? "");
+      const subagent = orig === "SubagentStop" || orig === "subagent_stop" || orig === "subagent-stop";
+      memoryHookResponse({
+        ...(raw as Record<string, unknown>),
+        ...(body as Record<string, unknown>),
+        hook_event_name: subagent ? "SubagentStop" : body.hook_event_name,
+      });
     } catch {}
     await locker(`${outboxPath()}.lock`, () =>
       appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),

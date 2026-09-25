@@ -3,8 +3,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { writeConfig, ensureHome, edenHome, resolveApiKey, readConfig, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
 
+/** Live `HOME` so a changed env (tests, redirected home) is not stuck on the cached `os.homedir()`. */
+function userHome(): string {
+  const home = process.env.HOME;
+  return home && home.length > 0 ? home : homedir();
+}
+
 function claudeSettingsDir(scope: "user" | "project"): string {
-  if (scope === "user") return join(homedir(), ".claude");
+  if (scope === "user") return join(userHome(), ".claude");
   return join(process.cwd(), ".claude");
 }
 
@@ -34,6 +40,14 @@ function edenHomeExport(): string {
   return `export EDEN_HOME=${shq(edenHome())}`;
 }
 
+/**
+ * Claude hooks `eden setup` writes.
+ *
+ * Memory events (fail-open; EDEN_MEMORY=0|readonly|on): UserPromptSubmit,
+ * SessionStart, PreCompact, Stop, SessionEnd, PostToolUse, SubagentStop.
+ * Compile-only (not memory): PreToolUse, PostToolBatch.
+ * Prune by deleting the store or EDEN_MEMORY=0 — operator-driven, not an HTTP route.
+ */
 export function installedHooks(hookCmd: string, preCmd: string = preHookCommand()) {
   return {
     PreToolUse: [{ hooks: [{ type: "command" as const, command: preCmd }] }],
@@ -106,32 +120,71 @@ export function geminiHookConfig(existing: unknown, preCmd: string, hookCmd: str
   };
 }
 
-export function codexTomlSection(hookCmd: string, preCmd: string = preHookCommand()): string {
+function hookHandler(command: string, timeout: number): { type: "command"; command: string; timeout: number } {
+  return { type: "command", command, timeout };
+}
+
+/**
+ * Current Codex schema (`~/.codex/hooks.json`): SessionStart / PostToolUse / Stop
+ * with `type = "command"`. The old `[hooks.eden] post_tool` table is dead — Codex
+ * never runs it. Fail-open: hookCmd already ends with `|| echo '{}'`.
+ * Trust is still operator `/hooks` (COMPETITORS: Codex hooks can fail silently).
+ */
+export function codexHooksJson(
+  hookCmd: string,
+  preCmd: string = preHookCommand(),
+): {
+  description: string;
+  hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ type: "command"; command: string; timeout: number }> }>>;
+} {
+  const allTools = (command: string, timeout: number) => [
+    { matcher: ".*", hooks: [hookHandler(command, timeout)] },
+  ];
+  const once = (command: string, timeout: number) => [
+    { hooks: [hookHandler(command, timeout)] },
+  ];
+  return {
+    description: "Eden memory (managed; re-run `eden setup`). Fail-open. Trust via /hooks.",
+    hooks: {
+      SessionStart: once(hookCmd, 10),
+      SessionEnd: once(hookCmd, 3),
+      UserPromptSubmit: once(hookCmd, 10),
+      PreCompact: once(hookCmd, 10),
+      PostToolUse: allTools(hookCmd, 10),
+      SubagentStop: once(hookCmd, 10),
+      Stop: once(hookCmd, 10),
+      PreToolUse: allTools(preCmd, 2),
+    },
+  };
+}
+
+/** Pointer only — live handlers live in hooks.json so we do not emit a second [hooks] table. */
+export function codexTomlSection(_hookCmd?: string, _preCmd?: string): string {
   return [
     "",
     "# --- eden-recorder (managed; re-run `eden setup` to refresh) ---",
-    "[features]",
-    "codex_hooks = true",
-    "",
-    "[hooks.eden]",
-    `session_start = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
-    `session_stop = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
-    `pre_tool = ["sh", "-c", ${JSON.stringify(preCmd)}]`,
-    `post_tool = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
+    "# Memory hooks: ~/.codex/hooks.json (PostToolUse / SessionStart / Stop).",
+    "# Codex ignores the old post_tool table. Trust via /hooks (can fail silently).",
     "# --- end eden-recorder ---",
     "",
   ].join("\n");
 }
 
 export function applyCodexToml(existing: string, hookCmd: string, preCmd: string = preHookCommand()): string {
+  const section = codexTomlSection(hookCmd, preCmd);
   const start = existing.indexOf("# --- eden-recorder");
   if (start >= 0) {
     const end = existing.indexOf("# --- end eden-recorder ---", start);
     if (end >= 0) {
-      return existing.slice(0, start) + codexTomlSection(hookCmd, preCmd).trimStart() + existing.slice(existing.indexOf("\n", end) + 1);
+      const after = existing.indexOf("\n", end);
+      const rest = after >= 0 ? existing.slice(after + 1) : "";
+      return existing.slice(0, start) + section.trimStart() + rest;
     }
+    // Torn managed section (start marker, no end): replace from the marker so
+    // re-run still completes session_start / session_stop / post_tool.
+    return existing.slice(0, start).replace(/\n*$/, "\n") + section.trimStart();
   }
-  return existing.replace(/\n*$/, "\n") + codexTomlSection(hookCmd, preCmd);
+  return existing.replace(/\n*$/, "\n") + section;
 }
 
 export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")): string {
@@ -301,30 +354,25 @@ function readSettings(path: string): Record<string, unknown> {
 export async function setup(args: string[]): Promise<void> {
   const sessionIdx = args.indexOf("--session");
   const token = sessionIdx >= 0 ? args[sessionIdx + 1] : process.env.EDEN_SETUP_TOKEN;
-  const wrap = wrapPlaneUrl(process.env.EDEN_WRAP_URL || process.env.EDEN_BASE_URL || readConfig()?.base_url);
-  const site = sitePlaneUrl(process.env.EDEN_SITE_URL || process.env.EDEN_BASE_URL);
-  let apiKey: string | undefined;
-  if (token) {
-    const res = await fetch(`${site}/v1/setup`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    if (res.ok) {
-      const j = (await res.json()) as { api_key?: unknown };
-      if (typeof j.api_key === "string" && j.api_key) apiKey = j.api_key;
-    }
-    if (!apiKey) throw new Error("eden setup --session could not exchange a token");
+  let savedBase: string | undefined;
+  try {
+    savedBase = readConfig()?.base_url;
+  } catch {
+    savedBase = undefined;
   }
-  if (!apiKey) {
+  const wrap = wrapPlaneUrl(process.env.EDEN_WRAP_URL || process.env.EDEN_BASE_URL || savedBase);
+  const site = sitePlaneUrl(process.env.EDEN_SITE_URL || process.env.EDEN_BASE_URL);
+
+  // Local key only. A missing wrap key must not block memory hooks. `--session`
+  // is exchanged after hooks are on disk so a 403 or a down host cannot skip them.
+  let apiKey: string | undefined;
+  if (!token) {
     try {
       apiKey = resolveApiKey(args);
     } catch {
-      throw new Error("eden setup needs --session, --key, EDEN_API_KEY, eden login, or --dev");
+      apiKey = undefined;
     }
   }
-  ensureHome();
-  writeConfig({ api_key: apiKey, base_url: wrap });
 
   const cliPath = installedCliPath();
   const hookCmd = hookCommand(cliPath);
@@ -339,31 +387,10 @@ export async function setup(args: string[]): Promise<void> {
   settings.hooks = mergeHooks(settings.hooks, installedHooks(hookCmd, preCmd));
   writeFileAtomic(settingsPath, JSON.stringify(settings, null, 2));
 
-  const mcpPath = join(process.cwd(), ".mcp.json");
-  let mcp: { mcpServers?: Record<string, unknown> } = {};
-  if (existsSync(mcpPath)) {
-    try {
-      mcp = JSON.parse(readFileSync(mcpPath, "utf8")) as { mcpServers?: Record<string, unknown> };
-    } catch {
-      mcp = {};
-    }
-  }
-  mcp.mcpServers = {
-    ...(mcp.mcpServers || {}),
-    eden: wrapMcpServer(cliPath),
-  };
-  if (process.env.EDEN_SITE_MCP === "1") {
-    mcp.mcpServers["eden-site"] = {
-      type: "http",
-      url: `${site}/mcp`,
-      headersHelper: headersCmd,
-    };
-  }
-  writeFileAtomic(mcpPath, JSON.stringify(mcp, null, 2));
-
   const allAgents = args.includes("--all-agents");
   const agents: string[] = [];
-  const geminiDir = join(homedir(), ".gemini");
+  // Already-wired hosts only (Gemini / Codex / OpenCode). Do not invent Cursor / Windsurf / Cline.
+  const geminiDir = join(userHome(), ".gemini");
   if (allAgents || existsSync(geminiDir)) {
     try {
       mkdirSync(geminiDir, { recursive: true });
@@ -373,18 +400,20 @@ export async function setup(args: string[]): Promise<void> {
       agents.push(`gemini → ${gPath}`);
     } catch {}
   }
-  const codexHome = join(homedir(), ".codex");
+  const codexHome = join(userHome(), ".codex");
   if (allAgents || existsSync(codexHome)) {
     try {
       mkdirSync(codexHome, { recursive: true });
       const cPath = join(codexHome, "config.toml");
       const existingToml = existsSync(cPath) ? readFileSync(cPath, "utf8") : "";
       writeFileAtomic(cPath, applyCodexToml(existingToml, hookCmd, preCmd));
-      agents.push(`codex → ${cPath}`);
+      const hooksPath = join(codexHome, "hooks.json");
+      writeFileAtomic(hooksPath, JSON.stringify(codexHooksJson(hookCmd, preCmd), null, 2));
+      agents.push(`codex → ${hooksPath}`);
     } catch {}
   }
-  const ocDir = join(homedir(), ".config", "opencode", "plugin");
-  if (allAgents || existsSync(join(homedir(), ".config", "opencode"))) {
+  const ocDir = join(userHome(), ".config", "opencode", "plugin");
+  if (allAgents || existsSync(join(userHome(), ".config", "opencode"))) {
     try {
       mkdirSync(ocDir, { recursive: true });
       const oPath = join(ocDir, "eden-recorder.js");
@@ -393,14 +422,64 @@ export async function setup(args: string[]): Promise<void> {
     } catch {}
   }
 
-  console.log("Eden setup complete.");
-  console.log(`  key stored in ${join(edenHome(), "config.json")}`);
-  console.log(`  wrap  ${wrap}`);
+  let sessionError: string | undefined;
+  if (token) {
+    try {
+      const res = await fetch(`${site}/v1/setup`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      if (res.ok) {
+        const j = (await res.json()) as { api_key?: unknown };
+        if (typeof j.api_key === "string" && j.api_key) apiKey = j.api_key;
+      }
+    } catch {
+      // Host down or refused. Hooks are already installed; wrap stays off.
+    }
+    if (!apiKey) sessionError = "eden setup --session could not exchange a token";
+  }
+
+  const mcpPath = join(process.cwd(), ".mcp.json");
+  if (apiKey) {
+    ensureHome();
+    writeConfig({ api_key: apiKey, base_url: wrap });
+    let mcp: { mcpServers?: Record<string, unknown> } = {};
+    if (existsSync(mcpPath)) {
+      try {
+        mcp = JSON.parse(readFileSync(mcpPath, "utf8")) as { mcpServers?: Record<string, unknown> };
+      } catch {
+        mcp = {};
+      }
+    }
+    mcp.mcpServers = {
+      ...(mcp.mcpServers || {}),
+      eden: wrapMcpServer(cliPath),
+    };
+    if (process.env.EDEN_SITE_MCP === "1") {
+      mcp.mcpServers["eden-site"] = {
+        type: "http",
+        url: `${site}/mcp`,
+        headersHelper: headersCmd,
+      };
+    }
+    writeFileAtomic(mcpPath, JSON.stringify(mcp, null, 2));
+  }
+
+  console.log(apiKey ? "Eden setup complete." : "Eden memory hooks installed.");
+  console.log("  memory on by default (EDEN_MEMORY unset = on; off and readonly still work)");
+  if (apiKey) {
+    console.log(`  key stored in ${join(edenHome(), "config.json")}`);
+    console.log(`  wrap  ${wrap}`);
+  } else {
+    console.log("  wrap and MCP skipped until a key (--key, EDEN_API_KEY, eden login, or --dev)");
+  }
   console.log(`  hooks → ${settingsPath}`);
-  console.log(`  mcp   → ${mcpPath} (stdio bun … mcp)`);
+  if (apiKey) console.log(`  mcp   → ${mcpPath} (stdio bun … mcp)`);
   for (const line of agents) console.log(`  ${line}`);
   if (!agents.length) {
     console.log("  other agents: none detected (re-run with --all-agents to install anyway)");
   }
   console.log(`  \`eden wrap\` (or \`eden hookd\`) keeps PreToolUse remainder warm; Stop with \`eden hookd --stop\`.`);
+  if (sessionError) throw new Error(sessionError);
 }

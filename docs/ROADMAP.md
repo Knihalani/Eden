@@ -25,6 +25,7 @@ Execution proceeds in **waves** (§4): batches of benchmarking / testing / optim
 | Horizon | Items |
 |---|---|
 | **Now** | Wave 22.2 shipped (default `jit`) |
+| **Now — Memory** | **`/memory-wave`**: next wave until CLOSED, every finding fixed. **M15** is next (official exams). **M16–M37** realize SOTA from the inject evidence (M37 is a scoreboard checkpoint). **M38–M49** make it actually help. **M50** ships Plan §7 + scoreboard + help ledger, then deletes itself. Status: `docs/MEMORY-WAVE-STATUS.md`. Competitors: `docs/MEMORY-COMPETITORS.md`. |
 | **Later — Wave 22.1** | Un-retire only when a live invoice file exists |
 
 ### Standing rules
@@ -35,6 +36,7 @@ Execution proceeds in **waves** (§4): batches of benchmarking / testing / optim
 4. Fail closed where deterministic gates exist; fail open to raw everywhere else.
 5. One language — canvas panel, Requests inbox, receipt drill-in.
 6. No bloat: no governance SKUs, no adapter markets, no unproven percentages.
+7. Agent memory is silent (same as compiled tools): encode and retrieve without a memory UI. One brain on wrap and hook. Execution: `docs/MEMORY-WAVES.md` (50 waves × 4 parallel parts). Locks: `docs/MEMORY-PLAN.md`. Autopsy: `docs/MEMORY-COMPETITORS.md`.
 
 ---
 
@@ -229,11 +231,64 @@ Wave 4 shipped concurrency matrix, multi-tenant arming, timeout-regime, idle-pat
 
 **Wave 8 shipped** production A/B (with retired live-invoice), whitepaper, case studies (customer-approved count 0), weekly digest. The negative-control table publishes alongside the wins.
 
+### Arc 9 — Agent memory (Complementary Learning Systems)
+
+Not DC%. Not the workbench rebuild. One silent memory for any long-running agent: encode as it happens, sleep into schemas, inject a labeled trace.
+
+| Doc | Role |
+|---|---|
+| `docs/MEMORY-PLAN.md` | Product locks (any-agent, silent inject, real sleep, silent procedures, SOTA bar ≥50) |
+| `docs/MEMORY-WAVES.md` | **Builder spec:** 50 waves × 4 parallel B/T/O/D parts, file:line owners, Report citations, Done-whens |
+| `docs/MEMORY-COMPETITORS.md` | 2026 field: take mechanisms that fit CLS, leave their products (2026-09-17) |
+| `benchmarks/memoryagentbench/SOTA-GAP-REPORT.md` | Autopsy: Table 3, competitors, product internals §§5–6, 2026 benches §11 |
+
+**Locks (do not reopen in a wave):** any long-running agent; silent inject (no Letta tools / no PreToolUse as default); real `sleep()`; one `AgentMemory` on wrap **and** hook; fail-open; no LoCoMo 92; bar is SOTA not BM25 41.5.
+
+**50 waves × 4 parts.** Inside a wave, parts are fully parallel (disjoint files or the `src/index.ts` line-range split in MEMORY-WAVES). Cross-wave DAG:
+
+```
+M1 check
+  ├── M2 encode ∥ M3 cue ∥ M4 hay ∥ M5 persist
+  └──► M6 check ► M7 sleep ► M8 assembly
+       ► M9–M14 how-to spine
+       ► M15 exams ► M16 evidence lock
+       ► M17 encode → M18 chunks ∥ M19 ICL
+       ► M20–M22 SF → M23–M26 experience/LME → M27–M31 AR/LRU
+       ► M32 TB Δ (measure) → M33 router → M34 quality → M35–M36 honesty
+       ► M37 SOTA re-bench (checkpoint; command stays)
+       ► M38–M49 help path (silence, continuity, pin/forget, first-session)
+       ► M50 ship: §7 + scoreboard + HELP.md
+```
+
+| Wave | Kind | Parts (all parallel) | Done when |
+|---|---|---|---|
+| **M1** | **B/T check** | Freeze inject API · protocol sheet (534k/262k/k=10) · characterization (red OK) · latency/swallow baselines | Dual-API banned; bugs pinned; no ranking change |
+| **M2** | **D debug** | `extractDurable` · hook PostToolUse observe · wrap tool observe · tool-trace fixture | `please`/tools stored |
+| **M3** | **D debug** | `cueFor(this turn)` · Anthropic retrieve-then-observe · hook prompt cue · identity tests | One causal order |
+| **M4** | **D debug** | Kill `queryHay` · kill `noteBonus`/`pinEnvFact` · `auth.ts` + Clerk · ranker tests | LoCoMo hay gone |
+| **M5** | **D debug** | lock+atomic · session `ep` · pin `sal=0.6` · ghost `/forget` | Hook processes share memory |
+| **M6** | **B check** | hook holdout · dual-API CI · fail-open struggle · remeasure vs M1.4 | RESULTS on **inject** |
+| **M7** | **D debug** | `sleep()` · Semantic LWW+tombstone · gists+SessionStart · tests | Old value absent from packet |
+| **M8** | **D debug** | assembler max(t) · fuse rewrite · complete/CAR · labeled packet | MH top-1 is last hop |
+| **M9** | **D debug** | wrap/hook traces keep order/exit · HowToStore shell · tests | Files/verify/exit reconstructable; chat-only zero how-to |
+| **M10** | **D debug** | sleep writes how-to · sibling revisions · stale prune | Failing verify does not promote |
+| **M11** | **D debug** | no invented steps · named gaps · omit stale place | How-to forgetting; no vendor graph product |
+| **M12** | **D debug** | aboutness ranker · `[procedure]` packet · no MCP | Schema rename still matches; silent |
+| **M13** | **D debug** | on/read-only/off · scrub · doctor | Disable cannot 500 the host |
+| **M14** | **D debug** | one HowToStore · wrap write / hook inject · half-wired hooks named | One brain, not a second store |
+| **M15** | **B check** | MAB Table 3 inject · LME-V2 Small · TB 2.1 Δ · protocol auditor | Four artifacts; no claims yet |
+| **M16–M36** | **SOTA path** | Full four-part tables in `docs/MEMORY-WAVES.md` (do not fork here) | Evidence lock → store-all → SF → experience/LME → AR/LRU → TB Δ → honesty |
+| **M37** | **check** | Plan §7 walkthrough still green · Table 3 four avgs+overall · LME+TB · honest claims | Scoreboard filed. Command **stays** |
+| **M38–M49** | **help path** | Full four-part tables in `docs/MEMORY-WAVES.md` (do not fork here) | Remain-silent (Start exempt) → identity proof → pin/forget → wrap+hook HELP.md → live coding → first session |
+| **M50** | **ship** | completeness · scoreboard · HELP.md · honest claims | Product that **actually helps**. Command deletes itself |
+
+Full owner files, Report §§, and anti-goals per part: **`docs/MEMORY-WAVES.md`**. Do not mix with `apps/web/REBUILD.md`. Do not score `BrainMemory` + `cortex: false` as the product. **M1–M14 closed. Next is M15.**
+
 ---
 
 ## 4. Execution waves — benchmarking, testing, optimization, debugging
 
-**Twenty-two waves.** Waves 1–21 shipped. Wave 22 is **Later**. The invariant: within a wave, every phase is fully parallel — zero inter-phase dependencies, zero shared merge points that gate execution, disjoint surfaces or an explicit ownership split. **Wave 18 was the exception** and is closed: `apps/web/REBUILD.md` rows 7–14 are live; 18.2 route tests are green; 15–52 stayed an in-tree review. Where two pieces of work were sequentially coupled (attribution→certification, cache→compression, dedupe→attribution), they are merged into one phase with one owner rather than left as a hidden chain. Cross-wave gates exist and are shown in §4.10; inside a wave, work never waits.
+**Twenty-two compile waves** (W1–W21 shipped; W22 Later) **plus fifty memory waves** (M1–M50, Arc 9; M1–M14 closed). Memory is a **separate wave family** — see `docs/MEMORY-WAVES.md`; it is not Wave 23 of this compile/DC% sequence. The invariant: within a wave, every phase is fully parallel — zero inter-phase dependencies, zero shared merge points that gate execution, disjoint surfaces or an explicit ownership split. **Wave 18 was the exception** and is closed: `apps/web/REBUILD.md` rows 7–14 are live; 18.2 route tests are green; 15–52 stayed an in-tree review. Where two pieces of work were sequentially coupled (attribution→certification, cache→compression, dedupe→attribution), they are merged into one phase with one owner rather than left as a hidden chain. Cross-wave gates exist and are shown in §4.10; inside a wave, work never waits.
 
 Arcs say *what*; waves say *in what order and what runs in parallel*. Every wave closes with the three-tier method of §0/§8: positive gates, negative gates, struggle probes. Every wave also carries one **rotation obligation** (see §4.9) so no phase ever tunes twice against the same fixture set. Wave-close acceptance may *use* artifacts built during the wave (e.g., the corpus from 3.1); it may not block their execution.
 
@@ -534,6 +589,123 @@ Parallelism: invoice file vs soak default — two owners, only if both have evid
 
 Rotation: invoice parse is not a campaign retune; soak PASS is not a bar move.
 
+### Memory waves M1–M50 — Arc 9
+
+Same B/T/O/D types as W1–W22. **Four parts per wave, all parallel.** File:line owners, Report citations, anti-goals: `docs/MEMORY-WAVES.md`. Locks: `docs/MEMORY-PLAN.md`. Autopsy: `benchmarks/memoryagentbench/SOTA-GAP-REPORT.md`. Competitors: `docs/MEMORY-COMPETITORS.md`. **M1–M14 closed. Next is M15.**
+
+`src/index.ts` split (M2–M5 parallel): M2 `extractDurable` ~255; M3 `inject`/`notesFor`/`convBlob` ~206,739–769; M4 `queryHay`/`noteBonus`/`pinEnvFact`/`pathCues`/`subjectKey`; M5 `persist`/`load`/`openMemory`. Do not cross those ranges.
+
+#### Wave M1 — Instrument *(check; no ranking change)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M1.1 Freeze inject API | T | `benchmarks/memoryagentbench/INJECT-API.md` | New benches cannot import `BrainMemory` as product |
+| M1.2 Protocol sheet | B | `PROTOCOL.md` — EventQA 534k, FC 262k, k=10, no label-strip | Runner using 64k/k=40 fails a test |
+| M1.3 Characterization | T | `src/memory-char.test.ts` | Today’s bugs pinned (please-drop, no `auth.ts`, Clerk delete, Anthropic order, sal 0.6, fuse 1.219). **Do not pass them here** |
+| M1.4 Baselines | B | `BASELINE.md` | inject p50/p95, persist bytes, swallow count dated |
+
+Parallelism: four new files. Report §0, §2, §5.4, Gate 0.
+
+#### Wave M2 — Encode *(debug)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M2.1 Stop dropping language | D | `src/index.ts` `extractDurable` | “Please fix the flake…” stored |
+| M2.2 Hook tools | D | `memory-hook.ts` `MEMORY_EVENTS`; `hook.ts` PostToolUse | PostToolUse/SubagentStop observed; stretch tests still green |
+| M2.3 Wrap tools | D | `proxy.ts` / `anthropic.ts` | Tool-result episode written; order unchanged (M3) |
+| M2.4 Tool-trace fixture | B | `benchmarks/memory-holdout/` | AMA-shaped fixture filed (FAIL OK) |
+
+Report §5 write failures, §4.12, §11.2 AMA-Bench.
+
+#### Wave M3 — Cue and causal order *(debug)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M3.1 This-turn cue | D | `convBlob` / `inject` / `notesFor` | 40-line blob does not become the query |
+| M3.2 Anthropic order | D | `know-inject.ts` `withKnowFactsAnthropic` | Retrieve then observe (match OpenAI) |
+| M3.3 Hook cue = prompt | D | `memory-hook.ts` | Rank query is the prompt |
+| M3.4 Identity tests | T | wrap + hook tests | Three hosts, one order |
+
+Report §5.3.
+
+#### Wave M4 — Ranker hygiene *(debug)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M4.1 Kill `queryHay` hay | D | `queryHay` ~171–184 | Restaurant query has no `diet` |
+| M4.2 Kill bonuses/pins | D | `noteBonus`, `pinEnvFact` | No CircleCI hard-pin; `watch` ≠ movie |
+| M4.3 Place + subject | D | `pathCues`, `subjectKey` | `auth.ts` is a key; Clerk survives “is failing” |
+| M4.4 Ranker tests | T | `src/memory-ranker.test.ts` | Binary IDF documented, not rewritten |
+
+Report §5.1.
+
+#### Wave M5 — Persist and session *(debug)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M5.1 Lock + atomic + store cap | D | `persist`/`load` | Cap ≠ `EDEN_MEMORY_CAP` (k); no torn JSONL |
+| M5.2 Session dir | D | `hookMemory` + `openMemory` opts | `ep` survives hook spawn |
+| M5.3 Pin sal / cues | D | pin predicate, `CUES` | `sal=0.6` pins or comment dies |
+| M5.4 Ghost `/forget` | D | plugin README | Handler exists or mentions gone |
+
+Report §5.2.
+
+#### Wave M6 — Product holdout *(check)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M6.1 Hook holdout | B | `benchmarks/memory-holdout/RESULTS.md` | Flake/ADR/file/version/junk/tools on **inject** |
+| M6.2 Dual-API CI | T | inject-only test | `BrainMemory` column banned |
+| M6.3 Fail-open struggle | D | persist/inject probes | Throw → pass-through; torn file heals |
+| M6.4 Remeasure | O | append `BASELINE.md` | vs M1.4; no k-hack |
+
+Report §5 holdout, Gate 1.
+
+#### Wave M7 — Sleep / replay *(debug)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M7.1 `sleep()` + Stop/End | D | `src/sleep.ts`; hook Stop/SessionEnd | Sleep fail-open; inject unblocked |
+| M7.2 Semantic LWW | D | `src/semantic-store.ts` (not copula compile) | Old fact **absent** from packet |
+| M7.3 Gists + SessionStart | D | `src/gist-store.ts`; Start briefing | Start ≠ eviction `slice(-k)` |
+| M7.4 Sleep tests | T | `src/sleep.test.ts` | ICL never compiled as facts |
+
+Report §4.9, §6.2, Gate 3.
+
+#### Wave M8 — Assembly and fuse *(debug)*
+
+| Part | Type | Owner | Done when |
+|---|---|---|---|
+| M8.1 Assembler | D | `src/assemble.ts` | Code `max(t)` per `(s,p)` |
+| M8.2 Fuse | D | `src/cls/controller.ts` `scores()` | Gold BM25 1.000 beats dead semantic 1.219 |
+| M8.3 complete/CAR | D | `src/cls/complete.ts` | 3-hop top-1 is last hop on inject |
+| M8.4 Labeled packet | T | `notesFor` format | `[rule]/[fact]/[episode]/[gist]` (`[procedure]` lands in M12) |
+
+Report §4.9, §6.1–6.3, [arxiv:2606.01435].
+
+#### Waves M9–M50
+
+Full four-part tables live in **`docs/MEMORY-WAVES.md`** (do not fork them here).
+
+| Wave | Kind | Closes when |
+|---|---|---|
+| **M9–M14** | D | How-to spine (closed) |
+| **M15** Official exams | B | MAB / LME-V2 / TB Δ + auditor |
+| **M16** Evidence lock | B | M15-EVIDENCE.md; red pins; no retune |
+| **M17–M19** Store-all | D | Extract tax gone; EventQA chunks; ICL atoms |
+| **M20–M22** SF | D | Candidates; max(serial); CAR hops |
+| **M23–M26** Experience | D/B | Files + silent slices + LME re-exam |
+| **M27–M31** AR/LRU/TTL | D/B | SH/MH, gists, Recsys |
+| **M32–M34** Δ / router / quality | B/O | TB Δ **measure**; lanes; persist. Silence **gate** is M38 |
+| **M35–M36** Honesty | B/T | Negative annex + walkthrough 1–10 |
+| **M37** Scoreboard checkpoint | check | Official inject scoreboard. Command stays |
+| **M38–M41** Silence / packet | D | Remain-silent (Start exempt), diverse packet, provenance, host pathCues |
+| **M42–M46** Continuity | D | Incremental sleep, pin/forget, identity proof, subagents, import |
+| **M47–M49** Help | B/T | HELP.md from wrap+hook, live coding holdout, first session |
+| **M50** Ship | ship | Plan §7 **and** inject scoreboard **and** help ledger. Deletes `/memory-wave` |
+
+Rotation: do not retune bakeoff rec5. Do not install `memorable-cli`.
+
 ### 4.9 Anti-overfit machinery (applies to every wave)
 
 1. **Rotation obligation.** Each wave derives at least one new world/scenario from a source that did not inform the previous wave's tuning (production traces, failure reports, or a harness behavior class). A scenario may be a primary tuning target at most once; afterwards it is measurement-only.
@@ -556,9 +728,12 @@ W10 ──► W11 ──► W12
 W10 ──► W16 ──► W17 ──► W19 ──► W20
               └──► W18 ──► W20
 W19 ──► W21 ──► W22
+
+Memory (Arc 9; independent of W22):
+M1 ──► M2 ∥ M3 ∥ M4 ∥ M5 ──► M6 ──► M7 ──► M8 ──► M9…M14 ──► M15 ──► M16…M36 ──► M37 check ──► M38…M49 help ──► M50 ship
 ```
 
-W1–W21 shipped. W22.2 shipped (default jit). W22.1 stays Later (no invoice file).
+W1–W21 shipped. W22.2 shipped (default jit). W22.1 stays Later (no invoice file). Memory M1–M14 closed; **M15 next**. Builder spec: `docs/MEMORY-WAVES.md`.
 
 ### 4.11 Modeled timeline *(labeled MODELED — sensitivity ±40% for staffing)*
 
@@ -574,7 +749,7 @@ Assumes two persistent lanes (wrap/runtime, compile/mining) plus one shared site
 | W20 close the tree | shipped | **Shipped.** Wave 16–20 leftover Open = 0 |
 | W21 honesty files | 2 d | **Shipped.** Cited file, Kind/Source, cases chrome, soak FAIL `precision=0.789 n=38` |
 | W22 un-retire | 1 d | **22.2 Shipped** (default jit). **22.1 Later** — only if an invoice file exists |
-| **Total remaining (modeled)** | | **W22 not on the clock** until evidence exists. |
+| **Total remaining (modeled)** | | **W22 not on the clock** until evidence exists. Memory M1–M50 not on this compile clock; see `docs/MEMORY-WAVES.md`. |
 
 Critical path after W21: W22.2 closed on soak PASS. W22.1 does not start until an invoice file exists.
 

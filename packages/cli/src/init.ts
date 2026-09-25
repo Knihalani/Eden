@@ -1,4 +1,5 @@
 import { doctor } from "./doctor";
+import { readConfig } from "./home";
 import { setup } from "./setup";
 import { startHookdBackground } from "./hookd";
 
@@ -8,6 +9,7 @@ Next steps:
   2. Point the agent at wrap:     OPENAI_BASE_URL=http://127.0.0.1:8788/v1
      Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth, not OpenAI.
      Claude Code hooks are already installed by this command.
+     Memory is on by default (EDEN_MEMORY). Import history: eden memory import <path>
      Custom agent SDK:            POST /v1/wrap then POST /v1/ingest
                                   (miss → original; wrap down → original)
 
@@ -67,7 +69,11 @@ export async function init(args: string[]): Promise<number> {
   console.log("eden init: setting up…\n");
   try {
     await setup(args);
-    console.log("✓ config written, hooks installed, MCP configured\n");
+    if (readConfig()?.api_key) {
+      console.log("✓ config written, hooks installed, MCP configured\n");
+    } else {
+      console.log("✓ memory hooks installed (wrap and MCP skipped until a key)\n");
+    }
   } catch (err) {
     const isDev = process.env.EDEN_DEV === "1" || args.includes("--dev");
     if (!isDev) throw err;
