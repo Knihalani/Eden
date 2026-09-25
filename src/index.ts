@@ -28,7 +28,7 @@ import { logMemoryNotes } from "./memory-log";
 import { applyProvenanceLabel, noteKindToken, PACKET_LABEL_RE, stripPacketLabel } from "./memory-provenance";
 import { routeMemory, type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
-import { fatPacket, isMathChatterCue, memoryXFat, memoryXMathSilent, memoryXNofilter, memoryXOn, retrieveX } from "./memory-x";
+import { fatPacket, isMathChatterCue, memoryXFat, memoryXMathSilent, memoryXOn, retrieveX } from "./memory-x";
 
 export { isRecsysShot } from "./semantic-store";
 
@@ -2210,8 +2210,7 @@ export class AgentMemory {
     for (const w of hay) hayStem.add(stemOf(w));
     const hit = (x: string) => hay.has(x) || hayStem.has(stemOf(x));
     const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
-    const skipProj = (() => { try { return memoryXNofilter(); } catch { return false; } })();
-    const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && !skipProj && c.rec.project !== this.project));
+    const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
     const speakers = new Set<string>();
     const N = rows.length || 1, df = new Map<string, number>();
     const bags: { c: Compiled; lex: string[]; ctxh: [string, number][] }[] = [];
