@@ -888,31 +888,26 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
   return howtoEmbedScore(q, [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" "));
 }
 
-function howtoPacketFiles(view: ReturnType<typeof retrieveHowTo>[number]): string[] {
+function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): MemoryRecord {
+  const cue = typeof view.cue === "string" ? view.cue.trim() : "";
   const seen = new Set<string>();
-  const out: string[] = [];
+  const files: string[] = [];
   const add = (f: unknown) => {
     if (typeof f !== "string") return;
     const s = f.trim();
     if (!s || seen.has(s)) return;
     seen.add(s);
-    out.push(s);
+    files.push(s);
   };
   if (Array.isArray(view.files)) for (const f of view.files) add(f);
-  if (out.length) return out;
-  if (!Array.isArray(view.steps)) return out;
-  for (const s of view.steps) {
-    if (Array.isArray(s?.files)) for (const f of s.files) add(f);
-    const args = s?.args;
-    if (!args) continue;
-    for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]);
+  if (!files.length && Array.isArray(view.steps)) {
+    for (const s of view.steps) {
+      if (Array.isArray(s?.files)) for (const f of s.files) add(f);
+      const args = s?.args;
+      if (!args) continue;
+      for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]);
+    }
   }
-  return out;
-}
-
-function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): MemoryRecord {
-  const cue = typeof view.cue === "string" ? view.cue.trim() : "";
-  const files = howtoPacketFiles(view);
   let verify = typeof view.verify === "string" ? view.verify.trim() : "";
   if (!verify && Array.isArray(view.steps)) {
     for (let i = view.steps.length - 1; i >= 0; i--) {
