@@ -294,7 +294,6 @@ const PLACE_DOTTED = /^[A-Za-z0-9_-]+(?:\.[A-Za-z][A-Za-z0-9]*)+$/;
 const PLACE_SEG = /^[A-Za-z0-9_.@+-]+$/;
 const PLACE_CAP = 8;
 
-/** Dotted basename, and every slash-segment is a path token. Code is not a path. */
 function placeLooksLikePath(s: string): boolean {
   const parts = s.split("/").filter(Boolean);
   if (!parts.length || !parts.every((p) => PLACE_SEG.test(p))) return false;
@@ -318,7 +317,6 @@ function placePush(out: string[], name: string): void {
   out.push(n);
 }
 
-/** Basename plus a short relative path. Absolute leftovers keep the dotted basename only. */
 function placeNamesFromString(raw: string, cwds: string[], out: string[]): void {
   let s = raw.trim();
   if (!s || s.length > 200 || /[\r\n]/.test(s) || PLACE_EMAIL.test(s) || /^cwd$/i.test(s)) return;
@@ -392,7 +390,6 @@ function placeScan(o: Record<string, unknown>, cwds: string[], out: string[], de
   }
 }
 
-/** Path names only. Never file bodies, cwd, emails, or transcript text. */
 export function placePathsFrom(raw: unknown): string[] {
   try {
     const out: string[] = [];
@@ -413,7 +410,6 @@ export function placePathsFrom(raw: unknown): string[] {
   }
 }
 
-/** Append unique pathCues-able names to this-turn cue. cueFor itself is unchanged. */
 export function attachPlaceCues(cue: string, paths: Iterable<string>): string {
   const base = typeof cue === "string" ? cue : "";
   const trimmed = base.trim();
@@ -621,7 +617,6 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-/** Path prefixes / directory segments mentioned in text: "generated/", "tests/integration", "src/x/y.ts" → generated, tests, integration, tests/integration, src, x. */
 export function pathCues(lower: string): Set<string> {
   const out = new Set<string>();
   lower = lower.toLowerCase();
