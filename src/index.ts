@@ -153,7 +153,15 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
       let dup = false;
       for (let i = 0; i < picked.length; i++) {
         if (lanes[i] !== lane) continue;
-        if (iclLabelsDiffer(cand.rec, picked[i]!.rec)) continue;
+        let la = "";
+        let lb = "";
+        try {
+          const ma = String(cand.rec?.text ?? "").match(/\blabel\s*:\s*(\S+)/i);
+          if (ma?.[1]) la = ma[1].replace(/[.,;:!?]+$/g, "").trim().toLowerCase();
+          const mb = String(picked[i]!.rec?.text ?? "").match(/\blabel\s*:\s*(\S+)/i);
+          if (mb?.[1]) lb = mb[1].replace(/[.,;:!?]+$/g, "").trim().toLowerCase();
+        } catch {}
+        if (la && lb && la !== lb) continue;
         if (stemJaccard(bag, stems[i]!) >= NEAR_DUP_J) { dup = true; break; }
       }
       if (dup) continue;
@@ -179,22 +187,6 @@ function packetLane(rec: { lane?: string; kind?: string; text?: string }): strin
   } catch {
     return "chat";
   }
-}
-
-function iclLabelKey(text: string): string {
-  try {
-    const m = String(text ?? "").match(/\blabel\s*:\s*(\S+)/i);
-    if (!m?.[1]) return "";
-    return m[1].replace(/[.,;:!?]+$/g, "").trim().toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-function iclLabelsDiffer(a: { text?: string }, b: { text?: string }): boolean {
-  const la = iclLabelKey(String(a?.text ?? ""));
-  const lb = iclLabelKey(String(b?.text ?? ""));
-  return !!la && !!lb && la !== lb;
 }
 
 function nearDupStems(text: string): Set<string> {
