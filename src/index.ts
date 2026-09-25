@@ -198,45 +198,6 @@ function retrieveText(text: string): string {
   return t.replace(/\0EdenMask(\d+)\0/g, (_, i) => masks[Number(i)]!);
 }
 
-function fuseOnce(scored: { rec: MemoryRecord; n: number }[], hay: Set<string>, speakers: Set<string>, cap: number): { rec: MemoryRecord; n: number }[] | null {
-  if (scored.length <= cap) return null;
-  const groups = new Map<string, typeof scored>();
-  for (const x of scored) {
-    for (const term of new Set(tokList(x.rec.text))) {
-      if (term.length < 3 || STOP.has(term) || FUNC_WORD.has(term) || speakers.has(term) || !hay.has(term)) continue;
-      const g = groups.get(term);
-      if (g) g.push(x); else groups.set(term, [x]);
-    }
-  }
-  let bestTerm = "", bestMembers: typeof scored = [];
-  for (const term of hay) {
-    const members = groups.get(term);
-    if (members && members.length > bestMembers.length) { bestMembers = members; bestTerm = term; }
-  }
-  if (bestMembers.length <= cap) return null;
-  const epCount = new Map<string, number>();
-  let epTop = 0;
-  for (const m of bestMembers.slice(0, cap * 2)) if (m.rec.ep) { const n = (epCount.get(m.rec.ep) || 0) + 1; epCount.set(m.rec.ep, n); if (n > epTop) epTop = n; }
-  if (epTop * 2 >= Math.min(bestMembers.length, cap * 2)) return null;
-  const take = bestMembers.slice(0, 100);
-  const seen = new Set<string>(), parts: string[] = [];
-  let budget = 5000;
-  for (const m of take) {
-    const t = m.rec.text.replace(/^[A-Z][A-Za-z0-9 /._-]{1,32}:\s*/, "");
-    const dk = t.toLowerCase().slice(0, 40);
-    if (seen.has(dk) || t.length > budget) continue;
-    seen.add(dk); parts.push(t); budget -= t.length;
-  }
-  if (parts.length < 2) return null;
-  const label = take[0]!.rec.text.match(SPEAKER_LABEL)?.[1];
-  const fusedRec: MemoryRecord = { id: `fuse:${bestTerm}:${take[0]!.rec.id}`, text: (label ? `${label} ` : "") + parts.join(" | "), kind: "fact", tags: [], at: Math.max(...take.map((x) => x.rec.at)) };
-  const fusedN = Math.max(...take.map((x) => x.n)) + 0.5;
-  stampOnCue(fusedRec, fusedN);
-  const memberIds = new Set(take.map((x) => x.rec.id));
-  return [...scored.filter((x) => !memberIds.has(x.rec.id)), { rec: fusedRec, n: fusedN }].sort((a, b) => b.n - a.n);
-}
-
-/** Near-dup line. ICL gold vs majority is ~0.76, so this stays at 0.8; different labels are exempt. */
 const NEAR_DUP_J = 0.8;
 
 function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
@@ -1519,8 +1480,7 @@ function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: 
   }
 }
 
-/** After lexical+prospective: at most one aboutness hit, reserved slot. Fail-open. Never fuseOnce.
- *  `dir` is howtoDir (memory root), never jsonlDir / session subdir. */
+/** After lexical: fail-open howto merge. `dir` is howtoDir (memory root), never jsonlDir / session subdir. */
 function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
@@ -1987,7 +1947,7 @@ export class AgentMemory {
     }
   }
 
-  relevant(text: string, cap = memoryRetrieveCap(), fuse = true): MemoryRecord[] {
+  relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
     let route: MemoryRoute = "chat-jsonl";
     try { route = routeMemory(text); } catch { route = "chat-jsonl"; }
     try { if (storeIsIclOnly(this.compiled)) route = "icl-index"; } catch {}
@@ -2071,8 +2031,8 @@ export class AgentMemory {
         stampOnCue(x.rec, x.n);
       }
     }
-    const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30, fuse ? 120 : 0));
-    let lexical = dedupSelect(fuse ? fuseOnce(ranked, hay, speakers, cap) ?? ranked : ranked, cap);
+    const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
+    let lexical = dedupSelect(ranked, cap);
     lexical = mergeLiveConstraints(lexical, text, cap, rows);
     lexical = mergeRootIdentity(lexical, text, cap, this.dir);
     return suppressPacketNearDups(mergeExperienceLane(
@@ -2082,14 +2042,14 @@ export class AgentMemory {
     ));
   }
 
-  notesFor(text = "", k = memoryRetrieveCap(), opts: { fuse?: boolean } = {}): MemoryRecord[] {
+  notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     if (text) {
       const pool = Math.min(18, Math.max(Math.floor(Number(k) || 0), 12));
       let recs: MemoryRecord[] = [];
       try {
-        recs = this.relevant(text, pool, opts.fuse !== false);
+        recs = this.relevant(text, pool);
       } catch {
-        recs = this.relevant(text, pool, opts.fuse !== false);
+        recs = this.relevant(text, pool);
       }
       const mixed = fatPacket(recs, k).map(formatNote);
       try { return dropHarmed(this.dir, mixed); } catch { return mixed; }
