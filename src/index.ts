@@ -155,7 +155,7 @@ export function isChildSession(session?: string): boolean {
   return !!s && s.includes("--");
 }
 
-type Compiled = { rec: MemoryRecord; needles: string[]; cues: string[]; ctx: [string, number][]; sal: number };
+type Compiled = { rec: MemoryRecord; needles: string[]; ctx: [string, number][]; sal: number };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having","where","when","who","whom","which"]);
@@ -795,8 +795,6 @@ export function pathCues(lower: string): Set<string> {
   }
   return out;
 }
-const CUES = new WeakMap<MemoryRecord, string[]>();
-const cuesOf = (rec: MemoryRecord): string[] => CUES.get(rec) ?? [];
 
 /**
  * Salience tagging (synaptic tagging / salience-gated consolidation): sentences carrying causal, decision
@@ -894,10 +892,9 @@ function compile(rec: MemoryRecord): Compiled {
     ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w)),
   ]);
   const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
-  const cues: string[] = [];
   const ctx: [string, number][] = [];
   if (rec.ctx) for (const k in rec.ctx) if (!own.has(k) && rec.ctx[k]! > 0) ctx.push([k, rec.ctx[k]!]);
-  return { rec, needles: [...own, ...carried], cues, ctx, sal: rec.sal ?? 0 };
+  return { rec, needles: [...own, ...carried], ctx, sal: rec.sal ?? 0 };
 }
 
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
@@ -1072,13 +1069,10 @@ function formatGistBody(text: string): string {
 
 function formatNote(r: MemoryRecord): MemoryRecord {
   const alreadyLabeled = (t: string) => PACKET_LABEL_RE.test(t);
-  const cues = cuesOf(r);
-  // Kind only — observe tokList can tag the word "procedure" on ordinary facts.
   const isProcedure = r.kind === "procedure";
-  // Already-labeled / constraint / procedure must not go through retrieveText (never→no / numeral).
   const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
   const stripped = stripPacketLabel(raw).body;
-  const skipRetrieve = alreadyLabeled(raw) || r.kind === "constraint" || isProcedure || cues.length > 0 || /^\s*\[rule(?:\s*·[^\]]*)?\]/i.test(raw) || isNarrativeNote(r) || r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(raw) || isIclExemplar(stripped);
+  const skipRetrieve = alreadyLabeled(raw) || r.kind === "constraint" || isProcedure || /^\s*\[rule(?:\s*·[^\]]*)?\]/i.test(raw) || isNarrativeNote(r) || r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(raw) || isIclExemplar(stripped);
   let body = skipRetrieve ? stripped : retrieveText(stripped);
   if (isProcedure) body = formatProcedureBody(body);
   else {
@@ -1108,7 +1102,6 @@ function formatNote(r: MemoryRecord): MemoryRecord {
     } catch { labeled = body; }
   }
   const copy = { ...r, text: labeled };
-  CUES.set(copy, cues);
   const about = onCueAboutness.get(r);
   if (about !== undefined) stampOnCue(copy, about);
   return copy;
@@ -1970,7 +1963,7 @@ export class AgentMemory {
         }
         let evicted = false;
         if (this.compiled.length > cap) {
-          const pin = (c: Compiled) => c.rec.kind === "constraint" || c.cues.length > 0 || c.sal >= 0.6 || (c.rec.tags ?? []).includes("pin");
+          const pin = (c: Compiled) => c.rec.kind === "constraint" || c.sal >= 0.6 || (c.rec.tags ?? []).includes("pin");
           const laneOf = (c: Compiled) => c.rec.lane || "chat";
           const durableLane = (c: Compiled) => laneOf(c) === "icl" || laneOf(c) === "narrative";
           const pins = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-cap);
