@@ -213,7 +213,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       const upstreamRes = await fn(url, {
         method: "POST",
         headers: upstreamHeaders(url, key),
-        // Live OpenAI path is processMemory().injectBody, then encode tool traces on the same instance.
         body: JSON.stringify(withStreamUsage(nimTuneBody(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))))),
         signal: AbortSignal.timeout(timeout),
       });
