@@ -769,10 +769,6 @@ const HOWTO_SCHEMA_KEYS = new Set(["command", "cmd", "script", "path", "file", "
 const HOWTO_EXACT = 1_000_000;
 const HOWTO_GAP_CMD = /\bpytest\b|\bnpm\b|\brm\s|\bcd\s|\bbash\s|[|;&]/i;
 
-function normHowtoCue(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 function howtoVerifyStem(verify?: string): string {
   if (!verify) return "";
   const first = verify.trim().toLowerCase().split(/\s+/)[0] ?? "";
@@ -831,7 +827,9 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
   const q = String(cue ?? "").trim();
   if (!q) return 0;
   const rowCue = typeof row.cue === "string" ? row.cue : "";
-  if (normHowtoCue(q) && normHowtoCue(q) === normHowtoCue(rowCue)) return HOWTO_EXACT;
+  const nq = q.toLowerCase().replace(/\s+/g, " ");
+  const nr = rowCue.trim().toLowerCase().replace(/\s+/g, " ");
+  if (nq && nq === nr) return HOWTO_EXACT;
   const qToks = new Set<string>();
   addHowtoToks(qToks, q, true);
   for (const v of howtoSchemaValues(q)) addHowtoToks(qToks, v, true);
