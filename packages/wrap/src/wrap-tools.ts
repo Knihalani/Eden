@@ -570,57 +570,6 @@ function emitTrace(
   }
 }
 
-function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
-  if (run.warnings.length >= MAX_WARNINGS) return;
-  if (run.events.length < 2 && state.programs.length === 0) {
-    if (run.firstWarningAt == null) {
-      const at = firstWarningIndex(run.events, run.warnings);
-      if (at != null) {
-        run.firstWarningAt = at;
-        run.warnBudget = {
-          duration_ms: Math.max(0, performance.now() - run.t0),
-          llmCalls: run.llmCalls,
-          ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
-        };
-      }
-    }
-    return;
-  }
-  const budget = {
-    duration_ms: Math.max(0, performance.now() - run.t0),
-    llmCalls: run.llmCalls,
-    ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
-  };
-  const required = state.programs.length === 0 ? [] : requiredChecks(liveOf(state), run.events);
-  const ledger = required.length === 0 ? undefined : evidenceLedger(run.events, required);
-  const fresh = takeSignals(run.events, budget, run.seenSignals, required, ledger);
-  for (const w of fresh) {
-    if (run.warnings.length >= MAX_WARNINGS) break;
-    run.warnings.push(w);
-    notifyHost(() => state.opts.onWarning?.(w));
-  }
-  run.evidence = ledger ?? EMPTY_LEDGER;
-  if (run.firstWarningAt == null) {
-    const at = firstWarningIndex(run.events, run.warnings);
-    if (at != null) {
-      run.firstWarningAt = at;
-      run.warnBudget = budget;
-    }
-  }
-  if (fresh.some((w) => w.kind === "fail_streak")) {
-    run.tripped = true;
-    const last = run.events.at(-1)?.name;
-    if (last && enforcementEnabled(state.opts)) {
-      for (const p of state.programs) {
-        if (!p.manifest || state.pausedIds.has(p.id)) continue;
-        if (!(p.sequence ?? []).includes(last)) continue;
-        state.pausedIds.add(p.id);
-        post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
-      }
-    }
-  }
-}
-
 function liveOf(state: WrapState): StretchProgram[] {
   return filterCanary(
     state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
@@ -741,7 +690,56 @@ export function wrapTools<T extends ToolsIn>(
   let calls = 0;
   let skipSeq = 0;
 
-  const note = (): void => safely(() => noteSignals(state, run), undefined);
+  const note = (): void => safely(() => {
+    if (run.warnings.length >= MAX_WARNINGS) return;
+    if (run.events.length < 2 && state.programs.length === 0) {
+      if (run.firstWarningAt == null) {
+        const at = firstWarningIndex(run.events, run.warnings);
+        if (at != null) {
+          run.firstWarningAt = at;
+          run.warnBudget = {
+            duration_ms: Math.max(0, performance.now() - run.t0),
+            llmCalls: run.llmCalls,
+            ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+          };
+        }
+      }
+      return;
+    }
+    const budget = {
+      duration_ms: Math.max(0, performance.now() - run.t0),
+      llmCalls: run.llmCalls,
+      ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+    };
+    const required = state.programs.length === 0 ? [] : requiredChecks(liveOf(state), run.events);
+    const ledger = required.length === 0 ? undefined : evidenceLedger(run.events, required);
+    const fresh = takeSignals(run.events, budget, run.seenSignals, required, ledger);
+    for (const w of fresh) {
+      if (run.warnings.length >= MAX_WARNINGS) break;
+      run.warnings.push(w);
+      notifyHost(() => state.opts.onWarning?.(w));
+    }
+    run.evidence = ledger ?? EMPTY_LEDGER;
+    if (run.firstWarningAt == null) {
+      const at = firstWarningIndex(run.events, run.warnings);
+      if (at != null) {
+        run.firstWarningAt = at;
+        run.warnBudget = budget;
+      }
+    }
+    if (fresh.some((w) => w.kind === "fail_streak")) {
+      run.tripped = true;
+      const last = run.events.at(-1)?.name;
+      if (last && enforcementEnabled(state.opts)) {
+        for (const p of state.programs) {
+          if (!p.manifest || state.pausedIds.has(p.id)) continue;
+          if (!(p.sequence ?? []).includes(last)) continue;
+          state.pausedIds.add(p.id);
+          post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
+        }
+      }
+    }
+  }, undefined);
   const emit = (
     input: Record<string, unknown> | undefined,
     owner?: { id: number; startedAt: number; invocations: Map<number, Invocation> },
