@@ -930,16 +930,6 @@ function isIclCue(text: string): boolean {
   return false;
 }
 
-function storeIsIclOnly(rows: { rec: { kind?: string; lane?: string; text?: string } }[]): boolean {
-  try {
-    const live = rows.filter((c) => c.rec.kind !== "digest");
-    if (live.length < 4) return false;
-    return live.every((c) => c.rec.lane === "icl" || isIclExemplar(String(c.rec.text ?? "")));
-  } catch {
-    return false;
-  }
-}
-
 function isNarrativeNote(m: { lane?: string; tags?: string[] }): boolean {
   return m.lane === "narrative" || (m.tags ?? []).includes("chunk");
 }
@@ -1535,7 +1525,10 @@ export class AgentMemory {
   relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
     let route: MemoryRoute = "chat-jsonl";
     try { route = routeMemory(text); } catch { route = "chat-jsonl"; }
-    try { if (storeIsIclOnly(this.compiled)) route = "icl-index"; } catch {}
+    try {
+      const live = this.compiled.filter((c) => c.rec.kind !== "digest");
+      if (live.length >= 4 && live.every((c) => c.rec.lane === "icl" || isIclExemplar(String(c.rec.text ?? "")))) route = "icl-index";
+    } catch {}
     memoryLastRoute.route = route;
     const recs = this.compiled.map((c) => c.rec);
     if (route === "icl-index") {
