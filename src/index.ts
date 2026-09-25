@@ -727,18 +727,13 @@ function load(path: string): Compiled[] {
 const STATUS_OBJECT = /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
 
 export function subjectKey(text: string): string | null {
-  // Chat prefixes + assistant "Understood, I'll follow that:" must not merge distinct rules.
-  // Bare "use" (as in "use two spaces") is not a copula — only "uses"/"using".
   const cleaned = text.trim()
     .replace(/^(?:fyi|for reference|heads up|noted|got it|note|ok|okay|update|reminder|understood(?:[,']?\s*I'?ll follow that)?|one rule(?: for this repo)?|going forward)[:,]?\s+/i, "")
     .replace(/^I'?ll follow that:\s*/i, "");
-  // Env acronym slot: "CI: X" / "CI is now Y" share one key so stale CI labels supersede.
-  // Status ("CI is failing") is not identity — leave the prior value until M7 tombstone.
   const ci = cleaned.match(/^ci(?:\s+is(?:\s+now)?|:)\s+(\S.*)$/i);
   if (ci) return STATUS_OBJECT.test(ci[1]!) ? null : "ci";
   const m = cleaned.match(/^(.{4,80}?)\s+(?:is now|are now|is|are|was|were|prefers?|uses\b|using\b|lives in|live in|stays in|stay in|moved to|belongs to|owned by|ship from|ships from)\s+(\S.*)$/i);
   if (!m) return null;
-  // Status/event objects are not identity: "Auth is failing" must not share "auth" with "Auth is Clerk".
   if (STATUS_OBJECT.test(m[2]!)) return null;
   const k = m[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return k.length >= 4 ? k : null;
