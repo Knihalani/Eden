@@ -752,8 +752,6 @@ function salience(text: string): number {
 }
 const SAL_BOOST = Number(process.env.EDEN_SAL_BOOST ?? 0.5);
 
-const CTX_W = Number(process.env.EDEN_CTX_W ?? 0.8);
-const CTX_CAP = Number(process.env.EDEN_CTX_CAP ?? 9);
 const CTX_DECAY = 0.82;
 const CTX_OPEN_FLOOR = 0.55;
 const CTX_MAX = 28;
@@ -1936,11 +1934,10 @@ export class AgentMemory {
     const hit = (x: string) => hay.has(x) || hayStem.has(stemOf(x));
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
     const N = rows.length || 1, df = new Map<string, number>();
-    const bags: { c: Compiled; lex: string[]; ctxh: [string, number][] }[] = [];
+    const bags: { c: Compiled; lex: string[] }[] = [];
     for (const c of rows) {
       let seen: Set<string> | undefined;
       let lex: string[] | undefined;
-      let ctxh: [string, number][] | undefined;
       for (const x of c.needles) {
         if (!hit(x) || seen?.has(x)) continue;
         if (!seen) seen = new Set();
@@ -1948,14 +1945,7 @@ export class AgentMemory {
         (lex ??= []).push(x);
         df.set(x, (df.get(x) || 0) + 1);
       }
-      for (const [x, w] of c.ctx) {
-        if (seen?.has(x) || !hit(x)) continue;
-        if (!seen) seen = new Set();
-        seen.add(x);
-        (ctxh ??= []).push([x, w]);
-        df.set(x, (df.get(x) || 0) + 1);
-      }
-      if (lex || ctxh) bags.push({ c, lex: lex ?? [], ctxh: ctxh ?? [] });
+      if (lex) bags.push({ c, lex });
     }
     const idfCache = new Map<string, number>();
     const idfOf = (x: string) => {
@@ -1967,15 +1957,13 @@ export class AgentMemory {
       idfCache.set(x, v);
       return v;
     };
-    const scored: { rec: MemoryRecord; n: number; sal: number }[] = [];
-    for (const { c, lex, ctxh } of bags) {
-      let n = 0, cn = 0;
+    const scored: { rec: MemoryRecord; n: number }[] = [];
+    for (const { c, lex } of bags) {
+      let n = 0;
       for (const x of lex) n += idfOf(x);
-      for (const [x, w] of ctxh) cn += idfOf(x) * w;
-      const base = n + Math.min(CTX_W * cn, CTX_CAP);
-      const sal = base > 0 ? SAL_BOOST * c.sal : 0;
-      scored.push({ rec: c.rec, n: base + sal, sal: c.sal });
-      stampOnCue(c.rec, base + sal);
+      const sal = n > 0 ? SAL_BOOST * c.sal : 0;
+      scored.push({ rec: c.rec, n: n + sal });
+      stampOnCue(c.rec, n + sal);
     }
     const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = dedupSelect(ranked, cap);
