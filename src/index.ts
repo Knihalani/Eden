@@ -1077,9 +1077,6 @@ function skipNarrativeComplete(mems: MemoryRecord[], cue: string): boolean {
   return false;
 }
 
-/** Root SemanticStore row → chat fact. Not a second dir scheme.
- *  is → `The database is sqlite.` / `Auth is Clerk.` (proper object keeps a bare subject).
- *  uses → `stack uses sqlite`. Identifiers scrubbed. */
 function rootIdentityText(s: string, p: string, o: string): string {
   let subj = String(s ?? "").trim();
   let obj = String(o ?? "").trim();
@@ -1093,7 +1090,6 @@ function rootIdentityText(s: string, p: string, o: string): string {
   if (pred === "uses") return `${subj} uses ${obj}`;
   const titled = subj.charAt(0).toUpperCase() + subj.slice(1);
   if (pred === "is") {
-    // "Clerk" / "Alice" stayed capitalized on put. "sqlite" did not.
     if (/^[A-Z]/.test(obj)) return `${titled} is ${obj}.`;
     return `The ${subj} is ${obj}.`;
   }
