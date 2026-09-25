@@ -28,7 +28,6 @@ import { logMemoryNotes } from "./memory-log";
 import { applyProvenanceLabel, noteKindToken, PACKET_LABEL_RE, stripPacketLabel } from "./memory-provenance";
 import { routeMemory, type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
-import { fatPacket, isMathChatterCue, memoryXOn } from "./memory-x";
 
 export { isRecsysShot } from "./semantic-store";
 
@@ -41,6 +40,56 @@ export const memoryInjectSwallows = { n: 0 };
 export const memoryInjectSilent = { n: 0 };
 export const MEMORY_MIN_DEFAULT = 0.15;
 export const memoryLastRoute = { route: "chat-jsonl" as MemoryRoute };
+const MEMORY_X_FAT_CHARS = 2400;
+
+export function memoryXOn(): boolean {
+  try {
+    const raw = String(process.env.EDEN_MEMORY_X ?? "").trim().toLowerCase();
+    return raw !== "0" && raw !== "off" && raw !== "none";
+  } catch {
+    return true;
+  }
+}
+
+export function isMathChatterCue(cue: string): boolean {
+  try {
+    const t = String(cue ?? "").trim();
+    if (!t) return false;
+    if (/\b(?:auth|sqlite|postgres|clerk|flake|commit|test|database|provider|session|file|src\/|\.ts|\.py|adr)\b/i.test(t)) {
+      return false;
+    }
+    const lower = t.toLowerCase();
+    if (/^(?:ok|okay|thanks|thank you|lol|lmao|asdf|qwerty|hi|hey|yo)\s*[.!?]?\s*$/i.test(lower)) return true;
+    if (/^\s*(?:what(?:'s| is)\s+)?\d+\s*(?:\+|plus|\-|minus|\*|x|×|times|\/|÷|divided by)\s*\d+\s*\??\s*$/i.test(lower)) {
+      return true;
+    }
+    if (/\b(?:times|plus|minus|divided by)\b/.test(lower) && /\d/.test(lower) && lower.split(/\s+/).length <= 8) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function fatPacket<T extends { text?: string }>(recs: T[], k: number): T[] {
+  try {
+    const list = Array.isArray(recs) ? recs : [];
+    const out: T[] = [];
+    let chars = 0;
+    const floor = Math.max(1, Math.floor(Number(k) || 6));
+    for (const r of list) {
+      const n = String(r.text ?? "").length;
+      if (out.length >= floor && chars + n > MEMORY_X_FAT_CHARS) continue;
+      out.push(r);
+      chars += n;
+      if (chars >= MEMORY_X_FAT_CHARS && out.length >= floor) break;
+    }
+    return out.length ? out : list.slice(0, floor);
+  } catch {
+    return Array.isArray(recs) ? recs : [];
+  }
+}
 
 /** On-cue aboutness stamped at retrieve. Not a published product score. */
 const onCueAboutness = new WeakMap<object, number>();
