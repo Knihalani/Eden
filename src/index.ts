@@ -149,26 +149,6 @@ function tokList(s: string): string[] {
   return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
 }
 
-function retrieveText(text: string): string {
-  // Mask gold-critical NPs so quantity expansion cannot split them ("two tabs at once", "at once").
-  const masks: string[] = [];
-  const park = (m: string) => { masks.push(m); return `\0EdenMask${masks.length - 1}\0`; };
-  let t = text.replace(/\btwo tabs?(?:\s+at\s+once)?\b/gi, park).replace(/\bat once\b/gi, park);
-  t = t
-    .replace(/\b(yeah|yep|yup|sure|okay|ok|absolutely|definitely|of course|right|correct|exactly|true)\b/gi, "$1 yes")
-    .replace(/\b(nope|nah|no way|wrong|false|never)\b/gi, "$1 no")
-    .replace(/\b(twice|two times)\b/gi, "$& 2")
-    .replace(/\b(once|one time)\b/gi, "$& 1")
-    .replace(/\b(thrice|three times)\b/gi, "$& 3")
-    .replace(/\b(four times)\b/gi, "$& 4")
-    .replace(/\b(five times)\b/gi, "$& 5")
-    .replace(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b/gi, (m) => {
-      const map: Record<string, string> = { zero: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10", eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17", eighteen: "18", nineteen: "19", twenty: "20", thirty: "30", forty: "40", fifty: "50", sixty: "60", seventy: "70", eighty: "80", ninety: "90" };
-      return `${m} ${map[m.toLowerCase()] ?? ""}`.trim();
-    });
-  return t.replace(/\0EdenMask(\d+)\0/g, (_, i) => masks[Number(i)]!);
-}
-
 const NEAR_DUP_J = 0.8;
 
 function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
@@ -885,12 +865,10 @@ function formatGistBody(text: string): string {
 }
 
 function formatNote(r: MemoryRecord): MemoryRecord {
-  const alreadyLabeled = (t: string) => PACKET_LABEL_RE.test(t);
   const isProcedure = r.kind === "procedure";
   const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
   const stripped = stripPacketLabel(raw).body;
-  const skipRetrieve = alreadyLabeled(raw) || r.kind === "constraint" || isProcedure || /^\s*\[rule(?:\s*·[^\]]*)?\]/i.test(raw) || isNarrativeNote(r) || r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(raw) || isIclExemplar(stripped);
-  let body = skipRetrieve ? stripped : retrieveText(stripped);
+  let body = stripped;
   if (isProcedure) body = formatProcedureBody(body);
   else {
     // ICL exemplars / narrative lanes must keep `label:` — never truncate the shot.
