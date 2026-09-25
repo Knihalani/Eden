@@ -72,7 +72,6 @@ function recordFromJsonlLine(raw: unknown): MemoryRecord | null {
   };
 }
 
-/** Snapshot then WAL. Last line for an id wins, including a non-pin rewrite. */
 function recordsInMemoryFile(path: string): MemoryRecord[] {
   const byId = new Map<string, MemoryRecord>();
   const order: string[] = [];
@@ -95,7 +94,6 @@ function recordsInMemoryFile(path: string): MemoryRecord[] {
   return order.map((id) => byId.get(id)!);
 }
 
-/** Pins from root memories.jsonl and each session subdir. No pins.jsonl. Fail-open. */
 function pinsFromRoot(root: string): MemoryRecord[] {
   const files: string[] = [];
   try {
@@ -120,13 +118,11 @@ function pinsFromRoot(root: string): MemoryRecord[] {
   return [...byId.values()];
 }
 
-/** Pin lane stays [rule]. A pin-tagged fact must not brief as [fact]. */
 function pinPacketRecord(r: MemoryRecord): MemoryRecord {
   if (r.kind === "fact" || r.kind === "preference") return { ...r, kind: "constraint" };
   return r;
 }
 
-/** SessionStart packet: pinned intentions + latest gists. Not notesFor("") last-k eviction. */
 function briefing(mem: AgentMemory, session = ""): string {
   const seen = new Set<string>();
   const lines: string[] = [];
