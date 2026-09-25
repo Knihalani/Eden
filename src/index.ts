@@ -106,11 +106,6 @@ export function memoryMinAboutness(): number {
 }
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-/**
- * `ep`  episode id the record was stored in (Temporal Context Model binding; see EpisodeContext below).
- * `ctx` drifting episode context at store time: token -> weight (0..1], excluding the record's own tokens.
- * `sal` salience (0..1): causal / decision / constraint markers in the text (synaptic tagging).
- */
 export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number; lane?: MemoryLaneKind };
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
@@ -155,7 +150,7 @@ export function isChildSession(session?: string): boolean {
   return !!s && s.includes("--");
 }
 
-type Compiled = { rec: MemoryRecord; needles: string[]; ctx: [string, number][]; sal: number };
+type Compiled = { rec: MemoryRecord; needles: string[]; sal: number };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having","where","when","who","whom","which"]);
@@ -752,69 +747,12 @@ function salience(text: string): number {
 }
 const SAL_BOOST = Number(process.env.EDEN_SAL_BOOST ?? 0.5);
 
-const CTX_DECAY = 0.82;
-const CTX_OPEN_FLOOR = 0.55;
-const CTX_MAX = 28;
-const CTX_SKIP = new Set("can you could would please look looking seeing since morning today prod production hmm sure thanks thank yeah yes nope okay cool great nice done let lets going want need think thought get got going make sure back again same before anymore also really pretty maybe still check double one sec moment file files thing things something anything stuff bit little lot lots way ways idea any what why how when where which who while there here this that these those with from into about into onto over under after around".split(" "));
-function ctxTokens(text: string): string[] {
-  const label = text.match(SPEAKER_LABEL)?.[1];
-  const sp = new Set(label ? tokList(label.replace(/:$/, "")) : []);
-  const seen = new Set<string>(), out: string[] = [];
-  for (const w of tokList(text)) {
-    if (w.length < 3 || seen.has(w) || sp.has(w) || STOP.has(w) || QUERY_SKIP.has(w) || FUNC_WORD.has(w) || CTX_SKIP.has(w) || CHAT.test(w)) continue;
-    seen.add(w); out.push(w);
-  }
-  return out;
-}
-
-class EpisodeContext {
-  id = "";
-  private w = new Map<string, number>();
-  private open = new Set<string>();
-  private turns = 0;
-  private seq = 0;
-  private fresh() { this.id = `e${Date.now().toString(36)}${(this.seq++).toString(36)}`; this.w = new Map(); this.open = new Set(); this.turns = 0; }
-  reset() { this.fresh(); }
-  /** Advance the context by one message; a fresh window opens a new episode. */
-  step(role: string, text: string) {
-    const toks = ctxTokens(text);
-    let boundary = !this.id;
-    if (!boundary && role === "user" && toks.length >= 3 && this.w.size) {
-      let hit = 0;
-      for (const t of toks) if (this.w.has(t)) hit++;
-      if (hit / toks.length < 0.5) boundary = true;
-    }
-    if (boundary) this.fresh();
-    for (const [k, v] of this.w) {
-      const nv = v * CTX_DECAY;
-      if (this.open.has(k)) this.w.set(k, Math.max(nv, CTX_OPEN_FLOOR));
-      else if (nv < 0.08) this.w.delete(k);
-      else this.w.set(k, nv);
-    }
-    const add = this.turns === 0 ? 1 : role === "user" ? 0.8 : 0.6;
-    for (const t of toks) this.w.set(t, Math.min(1, (this.w.get(t) || 0) + add));
-    if (this.turns === 0) for (const t of toks) this.open.add(t);
-    this.turns++;
-  }
-  /** Weighted snapshot, excluding the record's own tokens, capped at CTX_MAX. */
-  snapshot(own: Set<string>): Record<string, number> | undefined {
-    if (!this.w.size) return undefined;
-    const rows = [...this.w].filter(([k]) => !own.has(k)).sort((a, b) => b[1] - a[1]).slice(0, CTX_MAX);
-    if (!rows.length) return undefined;
-    const out: Record<string, number> = {};
-    for (const [k, v] of rows) out[k] = Math.round(v * 100) / 100;
-    return out;
-  }
-}
-
 function compile(rec: MemoryRecord): Compiled {
   const own = new Set([
     ...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)),
     ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w)),
   ]);
-  const ctx: [string, number][] = [];
-  if (rec.ctx) for (const k in rec.ctx) if (!own.has(k) && rec.ctx[k]! > 0) ctx.push([k, rec.ctx[k]!]);
-  return { rec, needles: [...own], ctx, sal: rec.sal ?? 0 };
+  return { rec, needles: [...own], sal: rec.sal ?? 0 };
 }
 
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
@@ -1568,7 +1506,6 @@ export class AgentMemory {
   private path: string;
   /** Fingerprints of the last observed message window (the hook re-sends a sliding 40-message window). */
   private lastWin: string[] = [];
-  private episode = new EpisodeContext();
   /** Hippocampal write buffer: coalesce JSONL flushes across one observe()/episode. */
   private batch = 0;
   private dirty = false;
@@ -1608,10 +1545,6 @@ export class AgentMemory {
     this.compiled = load(this.path);
     this.durableIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
-    for (let i = this.compiled.length - 1; i >= 0; i--) {
-      const ep = this.compiled[i]!.rec.ep;
-      if (ep) { this.episode.id = ep; break; }
-    }
     try { migrateSessionHowTo(this); } catch {}
   }
 
@@ -1643,12 +1576,10 @@ export class AgentMemory {
     return t;
   }
 
-  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; ep?: string; ctx?: Record<string, number>; sal?: number; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
+  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; sal?: number; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const rec: MemoryRecord = { id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => t.toLowerCase()), agent: opts.agent || this.agent, project: opaqueProject(opts.project || this.project), at: Date.now(), lane: opts.lane ?? "chat" };
     if (!rec.text) return rec;
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
-    if (opts.ep) rec.ep = opts.ep;
-    if (opts.ctx) rec.ctx = opts.ctx;
     const uttered = `${text ?? ""}\n${rec.text}`;
     const pin = opts.pin === true || isPinUtterance(uttered);
     let sal = opts.sal ?? salience(rec.text);
@@ -1678,9 +1609,7 @@ export class AgentMemory {
 
   /**
    * Observe a message list. The CLI hook re-sends a sliding window of the last 40 turns after every
-   * assistant turn, so messages are matched against the previous window and only the new tail is
-   * processed -- each new message steps the episode context, inherits the previous turn's question frame,
-   * and is mined for durable sentences bound to the live episode context.
+   * assistant turn, so messages are matched against the previous window and only the new tail is processed.
    */
   observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
@@ -1700,7 +1629,6 @@ export class AgentMemory {
         if (ok) found = len;
       }
       if (found >= 0) start = found;
-      else if (items.length > 1) this.episode.reset();
     }
     if (fps.length) this.lastWin = fps.slice(-80);
     let sem: SemanticStore | undefined;
@@ -1710,7 +1638,6 @@ export class AgentMemory {
     for (let i = start; i < items.length; i++) {
       const it = items[i]!;
       const safe = this.persistText(it.text);
-      this.episode.step(it.role, safe);
       const lane = encodeLane(it.text);
       if (lane === "icl" || lane === "narrative") {
         let text = safe;
@@ -1718,15 +1645,12 @@ export class AgentMemory {
           try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
         }
         if (text && !this.seenLower.has(text.toLowerCase())) {
-          const ownToks = new Set(tokList(text));
           const tags = tokList(text).concat([lane]);
           try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
           const rec = this.remember(text, {
             kind: lane === "narrative" ? "episode" : "fact",
             lane,
             tags,
-            ep: this.episode.id,
-            ctx: this.episode.snapshot(ownToks),
             sal: salience(text),
           });
           out.push(rec);
@@ -1798,9 +1722,8 @@ export class AgentMemory {
             this.rebuildSeen();
           }
         }
-        const ownToks = new Set(tokList(text));
         const pin = isPinUtterance(safe) || isPinUtterance(it.text);
-        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: tokList(text).concat(extraTags), ep: this.episode.id, ctx: this.episode.snapshot(ownToks), sal: pin ? Math.max(0.6, salience(text)) : salience(text), pin }));
+        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: tokList(text).concat(extraTags), sal: pin ? Math.max(0.6, salience(text)) : salience(text), pin }));
       }
     }
     if (items.length) {
