@@ -168,7 +168,6 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
   }
 }
 
-/** Packet bucket for near-dup. Jaccard never crosses lanes. */
 function packetLane(rec: { lane?: string; kind?: string; text?: string }): string {
   try {
     const text = String(rec?.text ?? "");
@@ -193,14 +192,12 @@ function iclLabelKey(text: string): string {
   }
 }
 
-/** Different ICL labels are not clones, even when the utterance overlaps. */
 function iclLabelsDiffer(a: { text?: string }, b: { text?: string }): boolean {
   const la = iclLabelKey(String(a?.text ?? ""));
   const lb = iclLabelKey(String(b?.text ?? ""));
   return !!la && !!lb && la !== lb;
 }
 
-/** Stem set for near-dup. STOP words drop when any content stem remains. */
 function nearDupStems(text: string): Set<string> {
   const all = new Set<string>();
   const content = new Set<string>();
