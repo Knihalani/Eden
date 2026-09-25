@@ -220,27 +220,8 @@ function stemJaccard(a: Set<string>, b: Set<string>): number {
 }
 
 function suppressPacketNearDups(recs: MemoryRecord[]): MemoryRecord[] {
-  try {
-    if (!Array.isArray(recs) || recs.length < 2) return recs;
-    const picked: { rec: MemoryRecord; stems: Set<string>; lane: string }[] = [];
-    const out: MemoryRecord[] = [];
-    for (const rec of recs) {
-      const lane = packetLane(rec);
-      const bag = nearDupStems(rec.text);
-      let dup = false;
-      for (const p of picked) {
-        if (p.lane !== lane) continue;
-        if (iclLabelsDiffer(rec, p.rec)) continue;
-        if (stemJaccard(bag, p.stems) >= NEAR_DUP_J) { dup = true; break; }
-      }
-      if (dup) continue;
-      picked.push({ rec, stems: bag, lane });
-      out.push(rec);
-    }
-    return out;
-  } catch {
-    return recs;
-  }
+  if (!Array.isArray(recs) || recs.length < 2) return recs;
+  return dedupSelect(recs.map((rec) => ({ rec, n: 0 })), recs.length);
 }
 
 export function queryHay(text: string): Set<string> {
