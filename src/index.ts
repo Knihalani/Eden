@@ -1347,44 +1347,29 @@ function mergeGistLane(lexical: MemoryRecord[], text: string, cap: number, dir: 
 
 export class AgentMemory {
   readonly dir: string;
-  /** Sanitized session name. Child episodes use a `--` suffix; root stores stay on `dir`. */
   readonly session?: string;
-  /** Child writer: episodic JSONL is the suffix file. Forget must not tombstone root unless the parent file already forgot. */
   readonly child: boolean;
-  /** Directory of memories.jsonl (session subdir when session is set). Traces live here too. */
   get jsonlDir(): string {
     return dirname(this.path);
   }
-  /**
-   * How-to jsonl directory: always the memory root (`this.dir`), like semantic/gists.
-   * Never the session jsonlDir. Wrap (no session) and hook (session_id) share one howto.jsonl.
-   */
   get howtoDir(): string {
     return this.dir;
   }
   private know?: KnowSearch;
   private agent?: string;
   private project?: string;
-  /** Raw session / cwd for scrub only — never written into JSONL. */
   private scrubSession?: string;
   private scrubCwd?: string;
   private compiled: Compiled[];
   private path: string;
-  /** Fingerprints of the last observed message window (the hook re-sends a sliding 40-message window). */
   private lastWin: string[] = [];
-  /** Hippocampal write buffer: coalesce JSONL flushes across one observe()/episode. */
   private batch = 0;
   private dirty = false;
-  /** Record ids already durable on JSONL+WAL. New/updated ids append to WAL until compact. */
   private durableIds = new Set<string>();
-  /** Ids that must be WAL-appended (or compacted) on next persist. */
   private walDirtyIds = new Set<string>();
-  /** Explicit removals that must survive a concurrent-WAL merge during compact. */
   private deletedIds = new Set<string>();
-  /** Drop/rewrite/eviction/close: rewrite JSONL snapshot and truncate WAL. */
   private needCompact = false;
   private sem?: SemanticStore;
-  /** Lowercased texts in the active project — O(1) observe dup skip (same set as linear scan). */
   private seenLower = new Set<string>();
 
   constructor(opts: MemoryOptions = {}) {
