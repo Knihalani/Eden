@@ -1374,8 +1374,6 @@ export class AgentMemory {
       if (typeof redacted === "string") t = redacted;
     } catch {}
     try {
-      // IR redact is key=value only — "password is hunter2" would otherwise persist.
-      // Do not use "auth is" / "token is": those eat Clerk facts and ordinary speech.
       t = t.replace(
         /\b((?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+)[^\s,.;]+/gi,
         "$1[REDACTED]",
