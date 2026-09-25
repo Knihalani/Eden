@@ -1,7 +1,5 @@
 import type { StretchProgram, ToolStep } from "@eden/ir";
 import { inDistribution, mayServe, asRecord, getPath, interpolateSlots, setKey, PTC_CALLERS } from "@eden/ir";
-// Core helpers via relative paths (the same pattern the tests use); wrap does
-// not declare a workspace dependency on core.
 import { parameterizeUrl, extractCommandUrls } from "../../core/src/urls";
 import { parseNamedCli, familyId } from "../../core/src/named-cli";
 import { commandShapeCached } from "../../core/src/shapes";
@@ -12,7 +10,6 @@ export type OpenAiToolCall = {
   function?: { name: string; arguments: string };
   name?: string;
   arguments?: unknown;
-  /** How this call was matched to a compiled program. Absent on untouched calls. */
   matched_by?: "name" | "argshape";
 };
 
@@ -36,9 +33,6 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
   const envKeys = Object.keys(program.contract.envelope?.inputs ?? {});
   const keys = [...new Set([...Object.keys(props), ...envKeys])];
   const out: Record<string, unknown> = {};
-  // setKey rather than `out[k] =`: a key named "__proto__" runs the inherited
-  // setter instead of defining a property, which both loses the input and
-  // installs it as the prototype of the args object handed to the tool.
   for (const k of keys) {
     if (k in args) setKey(out, k, args[k]);
     else {
@@ -106,17 +100,12 @@ function shapesOfString(s: string, into: Set<string>): void {
   }
   const cli = cliShape(s);
   if (cli) into.add(cli);
-  // Domain-general shell shapes: an unknown binary's command shape is its own
-  // signature, so a live `kubectl get pods -n prod` can match a compiled
-  // stretch without Eden knowing what kubectl is.
   const shape = commandShapeCached(s);
   if (shape && !NOISE_SHAPE.has(shape.name)) into.add(`cli:${shape.name}`);
 }
 
-/** Shape names that are too generic to steer on. */
 const NOISE_SHAPE = new Set(["echo", "ls", "cd", "pwd", "cat", "sleep", "true", "false"]);
 
-/** Sorted shape signature of a call's string arguments (top level + arrays). */
 export function argShapes(args: Record<string, unknown>): string[] {
   const shapes = new Set<string>();
   for (const v of Object.values(args)) {
@@ -126,12 +115,6 @@ export function argShapes(args: Record<string, unknown>): string[] {
   return [...shapes].sort();
 }
 
-/**
- * Shape signature of a live program's FIRST step: literal string bindings in
- * steps[0].args plus the string witness values from contract.envelope.inputs.
- * Empty when nothing identifiable is bound — such a program never matches by
- * arg shape.
- */
 export function programFirstStepShapes(p: StretchProgram): string[] {
   const strings: string[] = [];
   const step0 = p.steps[0] as ToolStep | undefined;
@@ -143,9 +126,6 @@ export function programFirstStepShapes(p: StretchProgram): string[] {
         const v = (b as { value?: unknown }).value;
         if (typeof v === "string") strings.push(v);
       } else if (bk === "transform") {
-        // Shell programs bind their command as a template
-        // ("kubectl get pods -n {namespace}"): the skeleton minus slots is a
-        // perfectly good shape signature.
         const expr = (b as { expr?: unknown }).expr;
         if (typeof expr === "string") strings.push(expr);
       }
@@ -159,31 +139,6 @@ export function programFirstStepShapes(p: StretchProgram): string[] {
   return [...shapes].sort();
 }
 
-/**
- * Recover a shell program's slot values from the raw call.
- *
- * A compiled kubectl stretch takes {namespace}, but the live call is
- * `Bash("kubectl get pods -n prod")` — no schema-shaped argument anywhere.
- * Fill the template's slots with witnessed values and accept the filling
- * that reproduces the command being run.
- *
- * Filling uses the SAME single-pass interpolateSlots() the runtime's
- * evalBinding uses for transform templates. The earlier multi-pass string
- * replace substituted a witness value containing another slot's placeholder
- * twice, validating a rendering the compiled program could never produce —
- * and steering onto it. (It also used interpolate(), which additionally
- * expands ${…} and empties unresolvable {…}; the runtime never does, so a
- * command containing literal shell expansions verified under one renderer
- * and executed under another.)
- *
- * Matching is restricted to the `command` argument: quantifying over all
- * string args let an incidental field carry the match while the actual
- * command was something else entirely.
- *
- * Multi-slot enumeration is capped (MAX_SLOT_COMBOS); past the cap the answer
- * is "cannot recover" — no steer beats a wrong or quadratic steer. Unseen
- * values fail closed: no recovery, no steer.
- */
 const MAX_SLOT_COMBOS = 200;
 
 export function recoverShellInput(
@@ -199,9 +154,6 @@ export function recoverShellInput(
     const t = b as { kind?: unknown; fn?: unknown; expr?: unknown };
     if (t.kind !== "transform" || t.fn !== "template" || typeof t.expr !== "string") continue;
     const expr = t.expr as string;
-    // Dotted paths ({db.host}) are legal slots — interpolate resolves them
-    // through getPath against a NESTED record, so recovery must build nested
-    // input, not flat keyed entries.
     const slots = [...new Set([...expr.matchAll(/\{([\w.]+)\}/g)].map((m) => m[1]!))];
     if (!slots.length || slots.length > 4) continue;
     const pools = slots.map((path) => {
@@ -211,8 +163,6 @@ export function recoverShellInput(
     if (pools.some((pool) => !pool.values.length)) continue;
     const total = pools.reduce((a, pool) => a * pool.values.length, 1);
     if (total > MAX_SLOT_COMBOS) continue;
-    // Ordinal-driven enumeration (no mutable counter array): index combo
-    // decomposes into one witness per slot, most-significant first.
     for (let combo = 0; combo < total; combo++) {
       let rest = combo;
       const input: Record<string, unknown> = {};
@@ -222,16 +172,12 @@ export function recoverShellInput(
         rest = Math.floor(rest / pool.values.length);
         setNested(input, pool.path.split("."), pool.values[idx]!);
       }
-      // Single pass, identical to the runtime's rendering — whatever this
-      // returns is exactly what the compiled run would execute. Nested
-      // records make dotted slots ({db.host}) resolve through getPath.
       if (interpolateSlots(expr, input) === live) return input;
     }
   }
   return null;
 }
 
-/** Build nested records so interpolate's getPath resolves dotted slots. */
 function setNested(obj: Record<string, unknown>, parts: string[], value: string): void {
   let cur: Record<string, unknown> = obj;
   for (let i = 0; i < parts.length - 1; i++) {
@@ -243,9 +189,6 @@ function setNested(obj: Record<string, unknown>, parts: string[], value: string)
   cur[parts.at(-1)!] = value;
 }
 
-/**
- * The first step's command template, when the program is a shell stretch.
- */
 export function firstCommandTemplate(p: StretchProgram): string | null {
   const step0 = p.steps[0] as ToolStep | undefined;
   if (!step0 || step0.kind !== "tool") return null;
@@ -257,11 +200,6 @@ export function firstCommandTemplate(p: StretchProgram): string | null {
   return null;
 }
 
-/**
- * Structural prefilter for a shell template against a live command: same
- * binary, same arity, same flag set. Slot positions make signature equality
- * impossible (`{app}` vs `web`), but structure survives abstraction.
- */
 export function templateFits(expr: string, live: string): boolean {
   const te = expr.split(/\s+/);
   const le = live.split(/\s+/);
@@ -284,10 +222,6 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
 
   type Hit = { p: StretchProgram; input: Record<string, unknown>; by: "name" | "argshape" };
   const hits: Hit[] = [];
-  // Gate one: name prefix. The original signal; cheap and unambiguous.
-  // Shell programs all share first-tool `Bash` — name alone would steer every
-  // kubectl/psql/terraform call onto whichever shell program was listed first.
-  // A command template must also structurally fit the live command.
   for (const p of live) {
     const seq = p.sequence ?? [];
     if (!seq.length || seq[0] !== name) continue;
@@ -305,9 +239,6 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
     if (!inputServes(p, input)) continue;
     hits.push({ p, input, by: "name" });
   }
-  // Gate two: argument shape, only when no name matched. Conservative on
-  // purpose — exact signature equality against the program's first step,
-  // never a fuzzy or partial match, and still behind inDistribution.
   if (!hits.length) {
     const sig = argShapes(callArgs(first));
     if (sig.length) {
@@ -316,10 +247,6 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
         let input: Record<string, unknown> | null = null;
         const tmpl = firstCommandTemplate(p);
         if (tmpl) {
-          // Shell programs bind their command as a template; the live call
-          // carries values where the template has slots, so signature
-          // equality can never fire. Prefilter on structure instead — same
-          // binary, same arity, same flags — then let slot recovery decide.
           const cmdLive = callArgs(first).command;
           if (typeof cmdLive !== "string" || !templateFits(tmpl, cmdLive)) continue;
           input = recoverShellInput(p, callArgs(first));
@@ -343,11 +270,6 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
     function: { name: hit.p.name, arguments: JSON.stringify(hit.input) },
     matched_by: hit.by,
   };
-  // The compiled run performs every later step of the matched sequence
-  // itself, so siblings naming those steps are absorbed. Every OTHER sibling
-  // — an unrelated webSearch next to a lookupTicket, say — is work the agent
-  // asked for and must survive: returning only the steered call silently
-  // dropped it.
   const laterSteps = new Set((hit.p.sequence ?? []).slice(1));
   return [steered, ...calls.slice(1).filter((c) => !laterSteps.has(callName(c)))];
 }
@@ -360,28 +282,11 @@ export function compiledSchema(program: StretchProgram) {
       description: program.description,
       parameters: program.inputSchema,
     },
-    /** PTC guidance — not a security wall. */
     allowed_callers: [...PTC_CALLERS],
-    /** Tool Search: catalog tools stay out of the initial prefix. */
     defer_loading: true as const,
   };
 }
 
-/**
- * Offer the compiled tools alongside whatever the client already asked for.
- *
- * A client that sent no `tools` field at all has not opted into function
- * calling and has no handler for a tool call, so it gets none back. This used
- * to return `extra` whenever `tools` was not an array, so a plain completion
- * request came back with compiled tools attached and its reply steered into a
- * tool_calls response the caller could do nothing with. An empty array is
- * different: the client asked for function calling and simply has no tools of
- * its own, which is exactly who compiled tools are for.
- *
- * `programs` is what the caller chose to surface — under Dispatch
- * (docs/dispatch.md) the handler runs selectSurfacePrograms() first, so this
- * function stays pure formatting and the surface policy has exactly one home.
- */
 export function injectTools(tools: unknown, programs: StretchProgram[]): unknown {
   if (!Array.isArray(tools)) return tools;
   const live = programs.filter((p) => p.manifest);
