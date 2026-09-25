@@ -741,6 +741,24 @@ function isPinUtterance(text: string): boolean {
   return false;
 }
 
+function observeAsserted(text: string): { s: string; p: string; o: string } | undefined {
+  const a = objectAsserted(text);
+  if (a) return a;
+  const raw = String(text ?? "").trim().replace(/\s+/g, " ").replace(/^\d+[.)]\s+/, "");
+  if (!raw || raw.endsWith("?")) return undefined;
+  const became = raw.match(/^(?:the\s+)?(.{1,80}?)\s+(?:became|becomes)\s+(\S.*)$/i);
+  if (became) {
+    const s = became[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const o = became[2]!.replace(/[.,;:!?]+$/g, "").trim();
+    if (s && o) return { s, p: "is", o };
+  }
+  const d = raw.match(/\b(?:decided|chose|picked|went with|going with|settled on|opted for)\s+(?:to\s+)?(?:use|go with)?\s*(.{1,40}?)\s+for\s+(.{1,40}?)(?=\s+(?:because|since|as|so)\b|[.,;:!?]|$)/i);
+  if (!d) return undefined;
+  const o = d[1]!.replace(/^(?:the|a|an)\s+/i, "").replace(/[.,;:!?]+$/g, "").trim();
+  const s = d[2]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return s && o ? { s, p: "is", o } : undefined;
+}
+
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>(), out: string[] = [];
   let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
@@ -796,14 +814,6 @@ export function pathCues(lower: string): Set<string> {
   return out;
 }
 
-/**
- * Salience tagging (synaptic tagging / salience-gated consolidation): sentences carrying causal, decision
- * or constraint markers are the ones a later session asks about ("why", "how did we fix", "what's the rule")
- * yet they are usually short and share few tokens with the question. A salience weight in [0, 1] is stored
- * on the record; it (a) exempts the sentence from the extraction drop gate and from eviction, and (b) adds
- * a bounded boost at scoring so the causal sentence is not out-scored by the chattier investigation
- * sentence of the same episode.
- */
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
 const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
 function salience(text: string): number {
@@ -812,20 +822,6 @@ function salience(text: string): number {
 }
 const SAL_BOOST = Number(process.env.EDEN_SAL_BOOST ?? 0.5);
 
-/**
- * Episode-context binding (Temporal Context Model, Howard & Kahana): a slowly drifting context vector is
- * maintained across the turns of a session -- entity / code tokens, file paths, component names -- with the
- * session's opening request pinned at a floor so it never decays away. Every record stored during the
- * episode is bound to a snapshot of that context as weighted context needles ("ctx"), so a fix sentence
- * stored eight turns after the symptom was reported still carries the symptom and component tokens. At
- * retrieval the context needles score like own needles (idf-weighted, scaled by CTX_W, capped), and the
- * top hits' episodes are *reinstated*: other records of the same episode that share cue overlap get a
- * spread-activation bonus, completing the symptom -> cause -> fix -> file chain.
- *
- * Session boundaries are inferred from the message stream (the hook passes no session ids): a fresh window
- * with no overlap against the previous one, or a substantive user turn whose content tokens barely overlap
- * the live context, starts a new episode.
- */
 const CTX_W = Number(process.env.EDEN_CTX_W ?? 0.8);
 const CTX_CAP = Number(process.env.EDEN_CTX_CAP ?? 9);
 const CTX_DECAY = 0.82;
@@ -1849,7 +1845,7 @@ export class AgentMemory {
       for (const raw of extractDurable(safe)) {
         let text = raw;
         try {
-          const asserted = objectAsserted(text);
+          const asserted = observeAsserted(text);
           if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) {
             text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`;
           }
@@ -1857,7 +1853,7 @@ export class AgentMemory {
         const extraTags = ([[/\bpull requests?\b/i, "pr"], [/\btimezone|pacific|utc\b/i, "tz"], [/@[\w.-]+\.[a-z]{2,}/i, "email"], [/\b(vegetarian|vegan|pescatarian|skip dairy|lactose|allerg|kosher|halal|gluten)\b/i, "diet"]] as const).flatMap(([re, t]) => re.test(text) ? [t] : []);
         text = this.persistText(text);
         try {
-          const fact = objectAsserted(text);
+          const fact = observeAsserted(text);
           if (fact && (isIclExemplar(raw) || isIclExemplar(it.text))) continue;
           if (fact) {
             const store = (sem ??= this.semantic());
