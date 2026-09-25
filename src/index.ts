@@ -660,8 +660,6 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-const CUE_STOP = new Set(["the", "a", "an", "our", "my", "your", "this", "that", "for", "of", "to", "in", "on", "with", "and", "or", "it", "its", "is", "are", "was", "were", "be", "we", "i", "you", "they", "as", "at", "by", "from", "new", "old", "one", "some", "all", "any", "not", "no", "yes", "use", "using", "used", "than", "then", "because", "since", "so", "but", "if", "when", "which", "what", "why", "how", "who", "where", "there", "here", "into", "out", "up", "down", "also", "just", "very", "more", "most", "well", "ok", "okay", "will", "would", "should", "could", "can", "do", "does", "did", "done", "let", "lets", "get", "got", "go", "keep", "make", "put", "set", "add", "have", "has", "had", "need", "needs", "want", "wants", "like", "thing", "things", "something", "everything", "anything", "stuff", "way", "please", "remember", "rule", "rules", "repo", "project", "codebase", "team", "going", "forward", "understood", "follow", "noted", "agreed", "sounds", "good", "thanks", "sure", "right", "first", "next", "last", "again", "still", "ever", "now", "today", "later", "before", "after", "under", "over", "instead", "rather", "without", "asking", "ask", "step", "them", "their", "me", "us", "him", "her", "his", "she", "he", "these", "those", "each", "every", "other", "another", "same", "own", "via", "per", "about", "around", "off", "on"]);
-
 /** Path prefixes / directory segments mentioned in text: "generated/", "tests/integration", "src/x/y.ts" → generated, tests, integration, tests/integration, src, x. */
 export function pathCues(lower: string): Set<string> {
   const out = new Set<string>();
@@ -925,7 +923,7 @@ function howtoContentToks(s: string): string[] {
 }
 
 function howtoKeepTok(t: string): boolean {
-  return t.length >= 2 && !STOP.has(t) && !CUE_STOP.has(t);
+  return t.length >= 2 && !STOP.has(t);
 }
 
 function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] {
