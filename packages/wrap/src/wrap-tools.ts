@@ -739,12 +739,6 @@ const EMPTY_LEDGER = Object.freeze({
   failed: Object.freeze([] as string[]),
 });
 
-function tagInvocation(ev: TraceEvent, selfId: number, agentId?: string): TraceEvent {
-  if (agentId) ev.agentId = agentId;
-  (ev as TaggedEvent)[INVOCATION] = selfId;
-  return ev;
-}
-
 function safely<T>(fn: () => T, fallback: T, onErr?: (err: unknown) => void): T {
   try {
     return fn();
@@ -783,7 +777,12 @@ export function wrapTools<T extends ToolsIn>(
   const store = state.arming;
   const session = state.sessionId;
   const fleetId = state.fleetId;
-  const tag = (ev: TraceEvent, selfId: number): TraceEvent => tagInvocation(ev, selfId, state.agentId || undefined);
+  const tag = (ev: TraceEvent, selfId: number): TraceEvent => {
+    const agentId = state.agentId || undefined;
+    if (agentId) ev.agentId = agentId;
+    (ev as TaggedEvent)[INVOCATION] = selfId;
+    return ev;
+  };
   const registry = registryFrom(
     Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, asToolDef(k, v).execute])),
   );
