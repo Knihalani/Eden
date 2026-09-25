@@ -625,40 +625,6 @@ function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
   }
 }
 
-function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, registry: ToolRegistry): ToolDef {
-  return {
-    description: p.description,
-    parameters: p.inputSchema,
-    inputSchema: p.inputSchema,
-    execute: async (args) => {
-      try {
-        safely(() => noteJitUsed(state.jit, [p.name, ...(p.sequence ?? []).slice(0, 1)]), undefined);
-        const input = safely(() => extractInput(p, args), args);
-        const taken = await safelyAsync(() => takeSpeculation(state, p, input), { hit: false as const });
-        const value = taken.hit ? taken.value : await runCompiled(state, p, args, tools, registry);
-        if (!taken.hit) markStretchServed(state, p, input);
-        return value;
-      } catch (err) {
-        if (state.opts.failOpen === false) throw err;
-        const first = (p.sequence ?? [])[0];
-        const canReplay = replayableProgram(p) && !!first && first in tools;
-        if (!isDeopt(err)) {
-          return canReplay
-            ? asToolDef(first!, tools[first!]!).execute(args)
-            : { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
-        }
-        if (!isReplaySafe(err) && !replayableProgram(p)) {
-          return { eden: "deopt", reason: (err as Error).message };
-        }
-        if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
-        return { eden: "deopt", reason: (err as Error).message };
-      } finally {
-        safely(() => turnBoundary(state, { lastTool: p.name, lastArgs: args, input: args }), null);
-      }
-    },
-  };
-}
-
 function liveOf(state: WrapState): StretchProgram[] {
   return filterCanary(
     state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
@@ -899,7 +865,37 @@ export function wrapTools<T extends ToolsIn>(
     if (!p) return undefined;
     const cached = compiledCache.get(p.id);
     if (cached && cached.program === p) return cached.def;
-    const def = compiledDef(state, p, tools, registry);
+    const def: ToolDef = {
+      description: p.description,
+      parameters: p.inputSchema,
+      inputSchema: p.inputSchema,
+      execute: async (args) => {
+        try {
+          safely(() => noteJitUsed(state.jit, [p.name, ...(p.sequence ?? []).slice(0, 1)]), undefined);
+          const input = safely(() => extractInput(p, args), args);
+          const taken = await safelyAsync(() => takeSpeculation(state, p, input), { hit: false as const });
+          const value = taken.hit ? taken.value : await runCompiled(state, p, args, tools, registry);
+          if (!taken.hit) markStretchServed(state, p, input);
+          return value;
+        } catch (err) {
+          if (state.opts.failOpen === false) throw err;
+          const first = (p.sequence ?? [])[0];
+          const canReplay = replayableProgram(p) && !!first && first in tools;
+          if (!isDeopt(err)) {
+            return canReplay
+              ? asToolDef(first!, tools[first!]!).execute(args)
+              : { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
+          }
+          if (!isReplaySafe(err) && !replayableProgram(p)) {
+            return { eden: "deopt", reason: (err as Error).message };
+          }
+          if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
+          return { eden: "deopt", reason: (err as Error).message };
+        } finally {
+          safely(() => turnBoundary(state, { lastTool: p.name, lastArgs: args, input: args }), null);
+        }
+      },
+    };
     compiledCache.set(p.id, { program: p, def });
     return def;
   };
