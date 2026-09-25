@@ -721,7 +721,6 @@ export {
   EXPERIENCE_SLICE_CHAR_CAP,
 };
 
-/** Slice how-to body; drop trailing · segments first; keep `verify:` when present. */
 function formatProcedureBody(text: string): string {
   const redacted = redact(String(text ?? ""));
   const t = typeof redacted === "string" ? redacted : String(text ?? "");
@@ -782,7 +781,6 @@ function formatNote(r: MemoryRecord): MemoryRecord {
   return copy;
 }
 
-/** Labeled packet line for hosts that format outside notesFor (SessionStart briefing). */
 export function formatPacketText(r: MemoryRecord): string {
   try { return formatNote(r).text; } catch { return String(r?.text ?? ""); }
 }
