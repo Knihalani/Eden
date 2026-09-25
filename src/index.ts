@@ -143,7 +143,6 @@ export function isChildSession(session?: string): boolean {
 type Compiled = { rec: MemoryRecord; needles: string[]; sal: number };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
-const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having","where","when","who","whom","which"]);
 
 function tokList(s: string): string[] {
   return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
@@ -263,7 +262,7 @@ function suppressPacketNearDups(recs: MemoryRecord[]): MemoryRecord[] {
 }
 
 export function queryHay(text: string): Set<string> {
-  return new Set(tokList(text).filter((w) => !QUERY_SKIP.has(w)));
+  return new Set(tokList(text));
 }
 
 const TOOL_ROLES = new Set(["tool", "function"]);
@@ -926,7 +925,7 @@ function howtoContentToks(s: string): string[] {
 }
 
 function howtoKeepTok(t: string): boolean {
-  return t.length >= 2 && !STOP.has(t) && !CUE_STOP.has(t) && !QUERY_SKIP.has(t);
+  return t.length >= 2 && !STOP.has(t) && !CUE_STOP.has(t);
 }
 
 function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] {
