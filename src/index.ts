@@ -1823,12 +1823,7 @@ export class AgentMemory {
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     if (text) {
       const pool = Math.min(18, Math.max(Math.floor(Number(k) || 0), 12));
-      let recs: MemoryRecord[] = [];
-      try {
-        recs = this.relevant(text, pool);
-      } catch {
-        recs = this.relevant(text, pool);
-      }
+      const recs = this.relevant(text, pool);
       const mixed = fatPacket(recs, k).map(formatNote);
       try { return dropHarmed(this.dir, mixed); } catch { return mixed; }
     }
