@@ -1064,7 +1064,6 @@ function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?:
   }
 }
 
-/** Skip GraphRAG/CAR hops on ICL, recsys, summary, and book-QA cues. EventQA miller may still hop. */
 function skipNarrativeComplete(mems: MemoryRecord[], cue: string): boolean {
   try {
     if (memoryLastRoute.route === "icl-index" || memoryLastRoute.route === "gist-chunk") return true;
