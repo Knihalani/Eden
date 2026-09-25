@@ -1391,8 +1391,6 @@ export class AgentMemory {
     }
     if (fps.length) this.lastWin = fps.slice(-80);
     let sem: SemanticStore | undefined;
-    // Facts asserted in this observe. A later sentence may replace them.
-    // keepLiveIdentity still refuses to clobber a value already on disk.
     const batchLive = new Map<string, string>();
     for (let i = start; i < items.length; i++) {
       const it = items[i]!;
@@ -1445,8 +1443,6 @@ export class AgentMemory {
               const obj = fact.o.trim().toLowerCase();
               const slot = `${fact.s}\0${fact.p}`;
               const fromBatch = batchLive.get(slot);
-              // Same transcript: postgres then sqlite. The later line wins.
-              // A stale replay must not replace a different object already stored.
               if (!(fromBatch && fromBatch !== obj)) {
                 if (live && live.o.trim().toLowerCase() !== obj) continue;
                 if (store.supersededObject(fact.o)) continue;
@@ -1462,8 +1458,6 @@ export class AgentMemory {
         } catch {}
         if (this.seenLower.has(text.toLowerCase())) continue;
         const key = subjectKey(text);
-        // "instead of" / "rather than" stays in JSONL until full sleep. Incremental
-        // rest must not drop a fact the open goal still references.
         const supersede = /\b(?:instead of|rather than)\b/i.test(raw);
         if (key && !supersede) {
           let removed = false;
