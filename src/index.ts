@@ -621,10 +621,6 @@ function compile(rec: MemoryRecord): Compiled {
 
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
-function storeCap(): number {
-  return Number(process.env.EDEN_MEMORY_STORE_CAP) || 2000;
-}
-
 export const MEMORY_WAL_SUFFIX = ".wal";
 export const MEMORY_WAL_COMPACT_LINES = 32;
 
@@ -1469,7 +1465,7 @@ export class AgentMemory {
 
   private persist() {
     try { if (memoryConsent() !== "on") return; } catch { return; }
-    const cap = storeCap();
+    const cap = Number(process.env.EDEN_MEMORY_STORE_CAP) || 2000;
     const wal = memoryWalPath(this.path);
     try {
       withFileLock(`${this.path}.lock`, () => {
