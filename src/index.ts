@@ -234,7 +234,6 @@ function convBlob(list: unknown[]): string {
   if (list.length === 1) {
     const o = list[0] as Record<string, unknown> | undefined;
     const role = String(o?.role ?? "").toLowerCase();
-    // Tool payloads belong on ExperienceStore + observeToolTraces, not extractDurable JSONL.
     if (TOOL_ROLES.has(role)) return "";
     if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content;
   }
@@ -599,7 +598,6 @@ export function pathCues(lower: string): Set<string> {
     for (const s of segs) out.add(s);
     if (segs.length >= 2) out.add(segs.slice(0, 2).join("/"));
   }
-  // Bare dotted filenames ("auth.ts", "hook.ts") are place cells even without a slash.
   for (const m of lower.matchAll(/(?:^|[\s"'`(,:])([a-z0-9_-]+(?:\.[a-z][a-z0-9]*)+)\b/g)) {
     if (m[1]!.length >= 3) out.add(m[1]!);
   }
@@ -1567,7 +1565,6 @@ export class AgentMemory {
     memoryLastRoute.route = route;
     const recs = this.compiled.map((c) => c.rec);
     if (route === "icl-index") {
-      // Second pass keeps unique labels (gold label: 7 stays). Same-label clones collapse.
       return suppressPacketNearDups(mergeIclLane([], text, cap, this.howtoDir, recs));
     }
     if (route === "gist-chunk") {
@@ -1705,7 +1702,6 @@ export class AgentMemory {
       return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
     } catch {
       memoryInjectSwallows.n++;
-      // Fail-open: retrieveExperience throw is caught in mergeExperienceLane; this catch stays pass-through.
       if (process.env.EDEN_MEMORY_SWALLOW === "1") console.error("eden-memory inject swallow", memoryInjectSwallows.n);
       return list;
     }
