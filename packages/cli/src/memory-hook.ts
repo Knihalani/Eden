@@ -260,7 +260,6 @@ function collapse(s: string): string {
   return s.replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim();
 }
 
-/** Durable one-liner so extractDurable keeps tool name + result (failure text included). AX trees stay on ExperienceStore, not this sentence. */
 function toolObserveText(r: Record<string, unknown>): string {
   const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
   const original = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
@@ -280,7 +279,6 @@ function toolObserveText(r: Record<string, unknown>): string {
   if (result.length > 360) result = result.slice(0, 360);
   const who = collapse(name || "subagent") || "subagent";
   if (!result) {
-    // Browser AX was stripped — still record a short episodic note, not the tree.
     try {
       const blob = typeof original === "string" ? original : original != null ? JSON.stringify(original) : "";
       if (/RootWebArea|\[landmark\]|accessibility_tree/i.test(blob)) return `The ${who} tool was called.`;
