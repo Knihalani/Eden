@@ -25,7 +25,6 @@ export const INTENT_MIN_SCORE = 3;
 export type RankedMatch = {
   program: StretchProgram;
   score: number;
-  /** Which evidence fired: "shape" | "template" | "witness" | "tokens". Best first. */
   via: "shape" | "template" | "witness" | "tokens";
 };
 
@@ -231,7 +230,6 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
 }
 
 export type SurfaceSelection = {
-  /** Programs whose schemas may be injected this request. */
   surface: StretchProgram[];
 };
 
