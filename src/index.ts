@@ -512,10 +512,6 @@ function isNarrativeProse(t: string): boolean {
   return sentenceParts(text).length >= 2 && text.length >= 150 && looksNarrative(text);
 }
 
-/**
- * System/live identity must not leftover inside store-all prose.
- * Drops conflicting copula sentences only. Does not extractDurable the novel.
- */
 function stripDeadObjects(text: string, store: SemanticStore): string {
   const raw = String(text ?? "");
   if (!raw) return raw;
