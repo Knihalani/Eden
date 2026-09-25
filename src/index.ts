@@ -265,15 +265,6 @@ function placeLooksLikePath(s: string): boolean {
   return PLACE_DOTTED.test(parts[parts.length - 1] ?? "");
 }
 
-function placeCwdList(): string[] {
-  const out: string[] = [];
-  try {
-    const n = process.cwd().trim().replace(/\\/g, "/").replace(/\/+$/, "");
-    if (n.length >= 2) out.push(n);
-  } catch {}
-  return out;
-}
-
 function placePush(out: string[], name: string): void {
   const n = name.trim();
   if (!n || n.length > 120 || /[\r\n]/.test(n) || PLACE_EMAIL.test(n)) return;
@@ -358,7 +349,11 @@ function placeScan(o: Record<string, unknown>, cwds: string[], out: string[], de
 export function placePathsFrom(raw: unknown): string[] {
   try {
     const out: string[] = [];
-    const cwds = placeCwdList();
+    const cwds: string[] = [];
+    try {
+      const n = process.cwd().trim().replace(/\\/g, "/").replace(/\/+$/, "");
+      if (n.length >= 2) cwds.push(n);
+    } catch {}
     if (typeof raw === "string") {
       placeAddValue(raw, cwds, out, 0);
       return out;
