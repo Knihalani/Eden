@@ -1748,10 +1748,6 @@ export class AgentMemory {
     const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages", m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [], sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
     try {
       const sysBlob = typeof sys === "string" ? sys : sys ? convBlob(Array.isArray(sys) ? sys : [sys]) : "";
-      // Rank/encode messages first. system* is this-request text: encode after retrieve so it cannot echo as memory.
-      // Skip-if-mark: MEMORY_MARK already in systemInstruction must not add a second packet into contents/messages.
-      // Body path headers rank via extraPaths. They are not copied onto the last user message.
-      // Skip-if-mark still observes the original messages. Silent identity returns `body`.
       let extra: string[] = [];
       try { extra = placePathsFrom(body); } catch { extra = []; }
       const next = alreadyInjected(sysBlob) || sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m, extra);
@@ -1760,7 +1756,6 @@ export class AgentMemory {
       return stripWrapPlaceFields({ ...body, [key]: next });
     } catch {
       memoryInjectSwallows.n++;
-      // Fail-open: experience retrieve miss/throw does not 500 the wrap body.
       if (process.env.EDEN_MEMORY_SWALLOW === "1") console.error("eden-memory inject swallow", memoryInjectSwallows.n);
       return body;
     }
