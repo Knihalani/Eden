@@ -726,19 +726,6 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-const CARRY_Q = "^";
-const CARRY_MAX = 24;
-const isCarry = (t: string) => t.startsWith(CARRY_Q);
-
-function carryTokens(text: string): string[] {
-  const label = text.match(SPEAKER_LABEL)?.[1];
-  const sp = new Set(label ? tokList(label.replace(/:$/, "")) : []);
-  const ok = (w: string, seen: Set<string>) => !(w.length < 3 || STOP.has(w) || QUERY_SKIP.has(w) || sp.has(w) || seen.has(w));
-  const seen = new Set<string>(), out: string[] = [];
-  for (const w of tokList((text.match(/[^.!?\n]*\?/g) ?? []).join(" "))) if (ok(w, seen) && out.length < CARRY_MAX) { seen.add(w); out.push(CARRY_Q + w); }
-  return out;
-}
-
 const CUE_STOP = new Set(["the", "a", "an", "our", "my", "your", "this", "that", "for", "of", "to", "in", "on", "with", "and", "or", "it", "its", "is", "are", "was", "were", "be", "we", "i", "you", "they", "as", "at", "by", "from", "new", "old", "one", "some", "all", "any", "not", "no", "yes", "use", "using", "used", "than", "then", "because", "since", "so", "but", "if", "when", "which", "what", "why", "how", "who", "where", "there", "here", "into", "out", "up", "down", "also", "just", "very", "more", "most", "well", "ok", "okay", "will", "would", "should", "could", "can", "do", "does", "did", "done", "let", "lets", "get", "got", "go", "keep", "make", "put", "set", "add", "have", "has", "had", "need", "needs", "want", "wants", "like", "thing", "things", "something", "everything", "anything", "stuff", "way", "please", "remember", "rule", "rules", "repo", "project", "codebase", "team", "going", "forward", "understood", "follow", "noted", "agreed", "sounds", "good", "thanks", "sure", "right", "first", "next", "last", "again", "still", "ever", "now", "today", "later", "before", "after", "under", "over", "instead", "rather", "without", "asking", "ask", "step", "them", "their", "me", "us", "him", "her", "his", "she", "he", "these", "those", "each", "every", "other", "another", "same", "own", "via", "per", "about", "around", "off", "on"]);
 
 /** Path prefixes / directory segments mentioned in text: "generated/", "tests/integration", "src/x/y.ts" → generated, tests, integration, tests/integration, src, x. */
@@ -826,13 +813,12 @@ class EpisodeContext {
 
 function compile(rec: MemoryRecord): Compiled {
   const own = new Set([
-    ...rec.tags.filter((t) => !isCarry(t) && t.length >= 3 && !STOP.has(t)),
+    ...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)),
     ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w)),
   ]);
-  const carried = rec.tags.filter((t) => isCarry(t) && !own.has(t.slice(1)));
   const ctx: [string, number][] = [];
   if (rec.ctx) for (const k in rec.ctx) if (!own.has(k) && rec.ctx[k]! > 0) ctx.push([k, rec.ctx[k]!]);
-  return { rec, needles: [...own, ...carried], ctx, sal: rec.sal ?? 0 };
+  return { rec, needles: [...own], ctx, sal: rec.sal ?? 0 };
 }
 
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
@@ -1603,8 +1589,6 @@ export class AgentMemory {
   private scrubCwd?: string;
   private compiled: Compiled[];
   private path: string;
-  /** Tokens of the previously observed turn — inherited by the next stored statement as weak needles. */
-  private carry: string[] = [];
   /** Fingerprints of the last observed message window (the hook re-sends a sliding 40-message window). */
   private lastWin: string[] = [];
   private episode = new EpisodeContext();
@@ -1749,8 +1733,6 @@ export class AgentMemory {
     for (let i = start; i < items.length; i++) {
       const it = items[i]!;
       const safe = this.persistText(it.text);
-      const carry = this.carry;
-      this.carry = carryTokens(safe.slice(0, 2000));
       this.episode.step(it.role, safe);
       const lane = encodeLane(it.text);
       if (lane === "icl" || lane === "narrative") {
@@ -1760,7 +1742,7 @@ export class AgentMemory {
         }
         if (text && !this.seenLower.has(text.toLowerCase())) {
           const ownToks = new Set(tokList(text));
-          const tags = carry.concat(tokList(text)).concat([lane]);
+          const tags = tokList(text).concat([lane]);
           try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
           const rec = this.remember(text, {
             kind: lane === "narrative" ? "episode" : "fact",
@@ -1841,7 +1823,7 @@ export class AgentMemory {
         }
         const ownToks = new Set(tokList(text));
         const pin = isPinUtterance(safe) || isPinUtterance(it.text);
-        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: carry.concat(tokList(text)).concat(extraTags), ep: this.episode.id, ctx: this.episode.snapshot(ownToks), sal: pin ? Math.max(0.6, salience(text)) : salience(text), pin }));
+        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: tokList(text).concat(extraTags), ep: this.episode.id, ctx: this.episode.snapshot(ownToks), sal: pin ? Math.max(0.6, salience(text)) : salience(text), pin }));
       }
     }
     if (items.length) {
@@ -1973,14 +1955,10 @@ export class AgentMemory {
     const hayStem = new Set<string>();
     for (const w of hay) hayStem.add(stemOf(w));
     const hit = (x: string) => hay.has(x) || hayStem.has(stemOf(x));
-    const key = (x: string) => (isCarry(x) ? x.slice(1) : x);
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
-    const speakers = new Set<string>();
     const N = rows.length || 1, df = new Map<string, number>();
     const bags: { c: Compiled; lex: string[]; ctxh: [string, number][] }[] = [];
     for (const c of rows) {
-      const m = c.rec.text.match(SPEAKER_LABEL);
-      if (m) for (const w of tokList(m[1]!.replace(/:$/, ""))) speakers.add(w);
       let seen: Set<string> | undefined;
       let lex: string[] | undefined;
       let ctxh: [string, number][] | undefined;
