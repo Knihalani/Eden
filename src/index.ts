@@ -753,7 +753,7 @@ function extractDurable(blob: string): string[] {
   for (const raw of labeledWhole || iclWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/)) {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "");
     t = t.replace(SECRET_INLINE, "[REDACTED]");
-    if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || /^(thinking about|you are|we are|this is|it is|that is|there (is|are)|i am going|i want to|this means|let me|i'll|let's|we will|look at|add the|we're|cool, |nice, |great, |awesome, |perfect, )\b/i.test(t) || CHAT.test(t)) continue;
+    if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || CHAT.test(t)) continue;
     if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
     const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1]!.trim();
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
@@ -766,10 +766,6 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-/**
- * Context-carry: a stored statement inherits needles from the question it answers.
- * "^word" tags the previous turn's question tokens (scored like own needles; remainder-carry is off).
- */
 const CARRY_Q = "^";
 const CARRY_MAX = 24;
 const isCarry = (t: string) => t.startsWith(CARRY_Q);
