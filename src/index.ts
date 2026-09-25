@@ -757,8 +757,6 @@ const CTX_CAP = Number(process.env.EDEN_CTX_CAP ?? 9);
 const CTX_DECAY = 0.82;
 const CTX_OPEN_FLOOR = 0.55;
 const CTX_MAX = 28;
-const REINSTATE = Number(process.env.EDEN_REINSTATE ?? 2.5);
-const SAL_REINSTATE = Number(process.env.EDEN_SAL_REINSTATE ?? 1);
 const CTX_SKIP = new Set("can you could would please look looking seeing since morning today prod production hmm sure thanks thank yeah yes nope okay cool great nice done let lets going want need think thought get got going make sure back again same before anymore also really pretty maybe still check double one sec moment file files thing things something anything stuff bit little lot lots way ways idea any what why how when where which who while there here this that these those with from into about into onto over under after around".split(" "));
 function ctxTokens(text: string): string[] {
   const label = text.match(SPEAKER_LABEL)?.[1];
@@ -1969,25 +1967,15 @@ export class AgentMemory {
       idfCache.set(x, v);
       return v;
     };
-    const scored: { rec: MemoryRecord; n: number; cue: boolean; sal: number }[] = [];
+    const scored: { rec: MemoryRecord; n: number; sal: number }[] = [];
     for (const { c, lex, ctxh } of bags) {
       let n = 0, cn = 0;
       for (const x of lex) n += idfOf(x);
       for (const [x, w] of ctxh) cn += idfOf(x) * w;
       const base = n + Math.min(CTX_W * cn, CTX_CAP);
       const sal = base > 0 ? SAL_BOOST * c.sal : 0;
-      scored.push({ rec: c.rec, n: base + sal, cue: base > 0, sal: c.sal });
+      scored.push({ rec: c.rec, n: base + sal, sal: c.sal });
       stampOnCue(c.rec, base + sal);
-    }
-    // Context reinstatement: the top hits' episodes spread activation to their other cue-sharing records.
-    if (REINSTATE > 0) {
-      let a: typeof scored[number] | undefined, b: typeof scored[number] | undefined;
-      for (const x of scored) { if (!x.rec.ep || x.n <= 0) continue; if (!a || x.n > a.n) { b = a; a = x; } else if (!b || x.n > b.n) b = x; }
-      const eps = new Set([a?.rec.ep, b?.rec.ep].filter(Boolean));
-      if (eps.size) for (const x of scored) if (x.cue && x.rec.ep && eps.has(x.rec.ep)) {
-        x.n += REINSTATE * (1 + SAL_REINSTATE * x.sal);
-        stampOnCue(x.rec, x.n);
-      }
     }
     const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = dedupSelect(ranked, cap);
