@@ -787,7 +787,6 @@ export function formatPacketText(r: MemoryRecord): string {
   try { return formatNote(r).text; } catch { return String(r?.text ?? ""); }
 }
 
-/** How-to aboutness: match values (cue, files, verify-stem, pathCues), not JSON key names. */
 const HOWTO_SCHEMA_KEYS = new Set(["command", "cmd", "script", "path", "file", "filepath", "filename"]);
 const HOWTO_EXACT = 1_000_000;
 const HOWTO_GAP_CMD = /\bpytest\b|\bnpm\b|\brm\s|\bcd\s|\bbash\s|[|;&]/i;
@@ -847,7 +846,6 @@ function howtoHayText(row: { cue?: string; files?: string[]; verify?: string; st
   return [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" ");
 }
 
-/** Optional local embed on lexical miss. Absent hook → 0 (degrade). No network, no new dep. */
 function howtoEmbedScore(a: string, b: string): number {
   try {
     const fn = (globalThis as { edenHowtoEmbed?: (x: string, y: string) => number }).edenHowtoEmbed;
@@ -859,7 +857,6 @@ function howtoEmbedScore(a: string, b: string): number {
   }
 }
 
-/** Exact cue, then lexical overlap (values + pathCues + verify-stem). Embed only on miss. */
 export function howtoAboutness(cue: string, row: { cue?: string; files?: string[]; verify?: string; steps?: { args?: Record<string, unknown> }[] }): number {
   const q = String(cue ?? "").trim();
   if (!q) return 0;
@@ -898,7 +895,6 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
   }
   const stem = howtoVerifyStem(typeof row.verify === "string" ? row.verify : undefined);
   const stemHit = !!(stem && (qToks.has(stem) || [...qPlaces].includes(stem)));
-  // Weak unigrams ("tests") must not dump a skill. Place cells / verify-stem / 2+ overlap.
   if (placeHit || stemHit) return Math.max(n, 1) + (placeHit ? 10 : 0) + (stemHit ? 5 : 0);
   if (n >= 2) return n;
   return howtoEmbedScore(q, howtoHayText(row));
