@@ -1276,7 +1276,3 @@ export function wrapTools<T extends ToolsIn>(
     },
   }) as { [K in keyof T]: ToolDef } & Record<string, ToolDef>;
 }
-
-export function recordTools(state: WrapState): StretchTrace[] {
-  return state.traces;
-}
