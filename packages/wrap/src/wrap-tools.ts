@@ -673,7 +673,7 @@ function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, regist
         if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
         return { eden: "deopt", reason: (err as Error).message };
       } finally {
-        afterTurn(state, args, p.name);
+        safely(() => turnBoundary(state, { lastTool: p.name, lastArgs: args, input: args }), null);
       }
     },
   };
@@ -760,10 +760,6 @@ async function safelyAsync<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   } catch {
     return fallback;
   }
-}
-
-function afterTurn(state: WrapState, args: Record<string, unknown>, name?: string): void {
-  safely(() => turnBoundary(state, { lastTool: name, lastArgs: args, input: args }), null);
 }
 
 function replayableProgram(p: StretchProgram): boolean {
@@ -1215,7 +1211,7 @@ export function wrapTools<T extends ToolsIn>(
         evictInvocations();
         try {
           const value = await runOne(args, selfId, rec.startedAt);
-          afterTurn(state, args, name);
+          safely(() => turnBoundary(state, { lastTool: name, lastArgs: args, input: args }), null);
           return value;
         } finally {
           rec.done = true;
