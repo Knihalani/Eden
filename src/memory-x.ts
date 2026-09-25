@@ -37,19 +37,16 @@ export function isMathChatterCue(cue: string): boolean {
   }
 }
 
-type FatRec = { id?: string; text?: string; kind?: string; tags?: string[] };
+type FatRec = { text?: string };
 
-/** Fat packet: identity/rules first, then the rest, up to MEMORY_X_FAT_CHARS. */
+/** Char budget after notesFor prepends identity. Keep at least `k` rows. */
 export function fatPacket<T extends FatRec>(recs: T[], k: number): T[] {
   try {
     const list = Array.isArray(recs) ? recs : [];
-    const ident = list.filter((r) => r.kind === "constraint" || (r.tags ?? []).includes("x-identity") || (r.tags ?? []).includes("semantic"));
-    const rest = list.filter((r) => !ident.includes(r));
-    const ordered = [...ident, ...rest];
     const out: T[] = [];
     let chars = 0;
     const floor = Math.max(1, Math.floor(Number(k) || 6));
-    for (const r of ordered) {
+    for (const r of list) {
       const n = String(r.text ?? "").length;
       if (out.length >= floor && chars + n > MEMORY_X_FAT_CHARS) continue;
       out.push(r);
