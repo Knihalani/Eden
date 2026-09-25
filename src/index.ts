@@ -1512,8 +1512,6 @@ export class AgentMemory {
         try { snapshotMissing = !existsSync(this.path); } catch { snapshotMissing = true; }
         let compact = this.needCompact || snapshotMissing || this.compiled.length > cap || walN + pending.length >= MEMORY_WAL_COMPACT_LINES;
         if (compact) {
-          // Re-read under the lock: this instance may predate another writer's WAL.
-          // Local dirty ids win, explicit local removals remain removed.
           const disk = load(this.path);
           const local = new Map(this.compiled.map((c) => [c.rec.id, c] as const));
           const merged: Compiled[] = [];
@@ -1563,8 +1561,6 @@ export class AgentMemory {
           const lines = (rows: Compiled[]) => rows.map((c) => JSON.stringify(c.rec)).join("\n") + "\n";
           appendJsonl(wal, lines(pending));
           try { chmodSync(wal, 0o600); } catch {}
-          // Fresh ids also append onto memories.jsonl. Hook spawns never close(),
-          // and load replaces these same ids from the WAL so the store does not double.
           const fresh = pending.filter((c) => !this.durableIds.has(c.rec.id));
           if (fresh.length) {
             appendJsonl(this.path, lines(fresh));
@@ -1576,7 +1572,6 @@ export class AgentMemory {
       });
       this.dirty = false;
     } catch {
-      // Keep dirty so a later flush retries. A lock/disk fault must not throw into inject.
     }
   }
 
