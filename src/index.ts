@@ -446,8 +446,12 @@ const FUNC_WORD = new Set([
   "the","a","an","and","but","of","to","in","on","at","for","with","from","by","as","that","this",
   "these","those","it","its","because","if","so","also","when","who","which","not","no",
 ]);
-function looksNarrative(t: string): boolean {
-  const toks = tokList(t);
+function isNarrativeProse(t: string): boolean {
+  const text = t.trim();
+  if (isIclExemplar(text) || isFactList(text)) return false;
+  if (text.length > 400) return true;
+  if (sentenceParts(text).length < 2 || text.length < 150) return false;
+  const toks = tokList(text);
   if (toks.length < 4) return false;
   let fw = 0;
   for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return true;
@@ -470,13 +474,6 @@ function isFactList(t: string): boolean {
     try { if (objectAsserted(s)) copula++; } catch {}
   }
   return copula >= 2 && copula * 2 >= sents.length;
-}
-
-function isNarrativeProse(t: string): boolean {
-  const text = t.trim();
-  if (isIclExemplar(text) || isFactList(text)) return false;
-  if (text.length > 400) return true;
-  return sentenceParts(text).length >= 2 && text.length >= 150 && looksNarrative(text);
 }
 
 function stripDeadObjects(text: string, store: SemanticStore): string {
