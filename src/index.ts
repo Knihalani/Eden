@@ -494,13 +494,6 @@ const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|na
 const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
-/**
- * Narrative-fact fallback: the giant keyword allow-list below was hand-tuned against engineering/ops
- * vocabulary (ci, deploy, k8s, ...) and systematically discards personal-narrative statements (hobbies,
- * relationships, family, opinions) that dominate open-domain conversation memory. A sentence that reads
- * like a real declarative clause -- has >=2 common function words/pronouns among >=4 tokens, isn't a
- * question -- is durable enough to keep; junk/gibberish ("asdf qwerty") never clears this bar.
- */
 const FUNC_WORD = new Set([
   "i","we","you","he","she","they","my","our","your","his","her","their","me","us","him","them",
   "is","are","was","were","am","be","been","being","has","have","had","having",
