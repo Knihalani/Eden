@@ -1,30 +1,10 @@
 /**
- * Product retrieve extras: identity floor, fat packet, math/chatter silence.
- * EDEN_MEMORY_X=0|off|none disables (kill switch). Fail-open: relevant() throw surfaces.
- * Not a memory_search tool. Not BrainMemory. No network embed.
+ * Product retrieve extras: fat packet + math/chatter silence.
+ * Identity floor lives on AgentMemory.notesFor. EDEN_MEMORY_X=0|off|none kills.
+ * Fail-open: relevant() throw surfaces. Not BrainMemory. No network embed.
  */
-import { SemanticStore } from "./semantic-store";
-
-/** Structural copy of product MemoryRecord — do not import src/index.ts (cycle). */
-type MemoryRecord = {
-  id: string;
-  text: string;
-  kind: string;
-  tags: string[];
-  at: number;
-  sal?: number;
-  lane?: string;
-  ep?: string;
-};
 
 export const MEMORY_X_FAT_CHARS = 2400;
-
-export type XMem = {
-  relevant(text: string, cap?: number, fuse?: boolean): MemoryRecord[];
-  memories(): MemoryRecord[];
-  dir: string;
-  howtoDir: string;
-};
 
 export function memoryXOn(): boolean {
   try {
@@ -33,18 +13,6 @@ export function memoryXOn(): boolean {
   } catch {
     return true;
   }
-}
-
-export function memoryXFat(): boolean {
-  return memoryXOn();
-}
-
-export function memoryXMathSilent(): boolean {
-  return memoryXOn();
-}
-
-export function memoryXNofilter(): boolean {
-  return false;
 }
 
 /** Pure arithmetic / thanks / asdf. Project words force not-math. */
@@ -69,60 +37,16 @@ export function isMathChatterCue(cue: string): boolean {
   }
 }
 
-function unionById(a: MemoryRecord[], b: MemoryRecord[]): MemoryRecord[] {
-  const out = a.slice();
-  const seen = new Set(a.map((r) => r.id));
-  for (const r of b) {
-    if (!r || !r.id || seen.has(r.id)) continue;
-    seen.add(r.id);
-    out.push(r);
-  }
-  return out;
-}
-
-function identityRows(mem: XMem): MemoryRecord[] {
-  const out: MemoryRecord[] = [];
-  try {
-    const live = new SemanticStore(mem.dir).live();
-    for (const row of live) {
-      const s = String(row.s ?? "").trim();
-      const p = String(row.p ?? "").trim() || "is";
-      const o = String(row.o ?? "").trim();
-      if (!s || !o) continue;
-      out.push({
-        id: `sem:${s}:${p}`,
-        text: `${s} ${p} ${o}`.replace(/\s+/g, " "),
-        kind: "fact",
-        lane: "chat",
-        tags: ["fact", "semantic", "x-identity"],
-        at: Number.isFinite(row.t) ? row.t : 0,
-      });
-    }
-  } catch {}
-  try {
-    for (const r of mem.memories()) {
-      const tags = r.tags ?? [];
-      if (r.kind === "constraint" || tags.includes("pin") || tags.includes("always")) out.push(r);
-    }
-  } catch {}
-  return out;
-}
-
-export function retrieveX(mem: XMem, text: string, cap: number, fuse = true): MemoryRecord[] {
-  const cue0 = String(text ?? "").trim();
-  if (!cue0) return mem.relevant(text, cap, fuse);
-  const recs = mem.relevant(cue0, cap, fuse);
-  return unionById(identityRows(mem), recs);
-}
+type FatRec = { id?: string; text?: string; kind?: string; tags?: string[] };
 
 /** Fat packet: identity/rules first, then the rest, up to MEMORY_X_FAT_CHARS. */
-export function fatPacket(recs: MemoryRecord[], k: number): MemoryRecord[] {
+export function fatPacket<T extends FatRec>(recs: T[], k: number): T[] {
   try {
     const list = Array.isArray(recs) ? recs : [];
     const ident = list.filter((r) => r.kind === "constraint" || (r.tags ?? []).includes("x-identity") || (r.tags ?? []).includes("semantic"));
     const rest = list.filter((r) => !ident.includes(r));
     const ordered = [...ident, ...rest];
-    const out: MemoryRecord[] = [];
+    const out: T[] = [];
     let chars = 0;
     const floor = Math.max(1, Math.floor(Number(k) || 6));
     for (const r of ordered) {
