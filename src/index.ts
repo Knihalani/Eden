@@ -720,7 +720,6 @@ function salience(text: string): number {
   const t = text.replace(SPEAKER_LABEL, "");
   return SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0;
 }
-const SAL_BOOST = Number(process.env.EDEN_SAL_BOOST ?? 0.5);
 
 function compile(rec: MemoryRecord): Compiled {
   const own = new Set([
@@ -1852,8 +1851,7 @@ export class AgentMemory {
     for (const { c, lex } of bags) {
       let n = 0;
       for (const x of lex) n += idfOf(x);
-      const sal = n > 0 ? SAL_BOOST * c.sal : 0;
-    scored.push({ rec: c.rec, n: n + sal });
+      scored.push({ rec: c.rec, n });
     }
     const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = dedupSelect(ranked, cap);
