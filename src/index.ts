@@ -114,11 +114,6 @@ export function memorySessionName(raw: unknown): string | undefined {
   return s;
 }
 
-/**
- * Episodic child file is `<parent>--<child>`, not `<parent>/<child>` (sanitizer rejects `/`).
- * Both segments pass `memorySessionName`. No parent → child alone. No child → parent alone.
- * Unit: a child opened on the same `dir` injects parent sqlite via `mergeRootIdentity(this.dir)` after the parent has slept. Child JSONL stays under the suffix.
- */
 export function childSessionName(parent?: string, child?: string): string | undefined {
   try {
     const p = memorySessionName(parent);
