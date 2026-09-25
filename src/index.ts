@@ -145,10 +145,8 @@ type Compiled = { rec: MemoryRecord; needles: string[]; sal: number };
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 const QUERY_SKIP = new Set(["recently","today","yesterday","currently","recent","now","also","really","kind","type","plans","favorite","thing","things","stuff","did","does","make","made","doing","having","where","when","who","whom","which"]);
 
-const FOLD: Record<string, string> = { hours: "tz", timezone: "tz", cache: "redis", container: "image", images: "image", docker: "image", files: "file", production: "prod", standup: "stand", kubernetes: "k8s", checks: "ci", watcher: "watch", watchers: "watch", represent: "mean", represents: "mean", representing: "mean", meaning: "mean" };
-
 function tokList(s: string): string[] {
-  return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).map((w) => FOLD[w] ?? w);
+  return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
 }
 
 function retrieveText(text: string): string {
