@@ -1192,11 +1192,6 @@ function mergeLiveConstraints(lexical: MemoryRecord[], text: string, cap: number
   }
 }
 
-/**
- * BM25 narrative lane (M18.2): 512-token chunks beat a 4k pack. k=min(10, cap).
- * Empty cue → no dump (Start stays pins+gists). ICL cues do not pull chunks.
- * Fail-open: throw → lexical unchanged. `dir` is memory root (howtoDir).
- */
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
