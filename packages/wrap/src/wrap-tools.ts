@@ -377,21 +377,6 @@ function stampRemainderSkip(state: WrapState, armed: Armed, toolName: string): v
   post(state, "/v1/receipts", last);
 }
 
-function creditIslandRun(run: RunRecorder, stats: RunStats): void {
-  if (stats.islandUsageMeasured) {
-    const first = !run.island_measured;
-    run.island_prompt_tokens += stats.islandPromptTokens;
-    run.island_completion_tokens += stats.islandCompletionTokens;
-    run.island_cached_tokens += stats.islandCachedTokens;
-    run.island_cache_write_tokens += stats.islandCacheWriteTokens ?? 0;
-    run.island_cache_input_tokens += stats.islandCacheInputTokens ?? 0;
-    run.island_measured = true;
-    run.island_memoized = first ? stats.islandMemoized : run.island_memoized && stats.islandMemoized;
-  } else if (stats.llmCalls === 0) {
-    run.island_measured = true;
-  }
-}
-
 export async function runCompiled(
   state: WrapState,
   program: StretchProgram,
@@ -421,7 +406,20 @@ export async function runCompiled(
     });
     const receipt = compiledReceipt(program, true, result.stats);
     stampIdentity(state, receipt);
-    creditIslandRun(state.run, result.stats);
+    const stats = result.stats;
+    const run = state.run;
+    if (stats.islandUsageMeasured) {
+      const first = !run.island_measured;
+      run.island_prompt_tokens += stats.islandPromptTokens;
+      run.island_completion_tokens += stats.islandCompletionTokens;
+      run.island_cached_tokens += stats.islandCachedTokens;
+      run.island_cache_write_tokens += stats.islandCacheWriteTokens ?? 0;
+      run.island_cache_input_tokens += stats.islandCacheInputTokens ?? 0;
+      run.island_measured = true;
+      run.island_memoized = first ? stats.islandMemoized : run.island_memoized && stats.islandMemoized;
+    } else if (stats.llmCalls === 0) {
+      run.island_measured = true;
+    }
     pushCapped(state.receipts, receipt);
     notifyHost(() => state.opts.onReceipt?.(receipt));
     post(state, "/v1/receipts", receipt);
