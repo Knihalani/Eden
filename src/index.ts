@@ -1537,28 +1537,9 @@ function rootIdentityText(s: string, p: string, o: string): string {
   return `${titled} ${pred} ${obj}`.replace(/\s+/g, " ").trim();
 }
 
-function rootIdentityAboutness(text: string, hay: Set<string>, hayStem: Set<string>): number {
-  if (!hay.size) return 0;
-  const hit = (x: string) => hay.has(x) || hayStem.has(liteStem(x));
-  let hits = 0;
-  let content = 0;
-  const seen = new Set<string>();
-  for (const x of tokList(text)) {
-    if (seen.has(x)) continue;
-    seen.add(x);
-    if (!hit(x)) continue;
-    hits++;
-    // "the"/"is" must not pull every copula onto "what is the …". A content token has to hit.
-    if (!STOP.has(x) && !STOP.has(liteStem(x))) content++;
-  }
-  if (!content) return 0;
-  return hits / Math.max(hay.size, 1);
-}
-
 /**
  * M44.1: a new session's JSONL is empty; live facts live on the project root.
- * Merge on-cue SemanticStore rows into retrieve. Empty/off-cue → no dump (M38).
- * ICL / gist-chunk callers must not invoke this. Fail-open: throw → lexical.
+ * Merge live SemanticStore rows into retrieve. Fail-open: throw → lexical.
  */
 function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
   try {
@@ -1566,29 +1547,23 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
     if (!q) return lexical;
     const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
     if (!k) return lexical;
-    const hay = queryHay(q);
-    const hayStem = new Set<string>();
-    for (const w of hay) hayStem.add(liteStem(w));
     const live = new SemanticStore(dir).live();
     if (!Array.isArray(live) || !live.length) return lexical;
     const extras: MemoryRecord[] = [];
     for (const row of live) {
       const body = rootIdentityText(row.s, row.p, row.o);
       if (!body) continue;
-      const score = rootIdentityAboutness(body, hay, hayStem);
-      const rec: MemoryRecord = {
+      extras.push({
         id: `sem:${row.s}:${row.p}`,
         text: body,
         kind: "fact",
         lane: "chat",
         tags: ["fact", "semantic", "x-identity"],
         at: Number.isFinite(row.t) ? row.t : 0,
-      };
-      stampOnCue(rec, score);
-      extras.push(rec);
+      });
     }
     if (!extras.length) return lexical;
-    extras.sort((a, b) => (onCueAboutness.get(b) ?? 0) - (onCueAboutness.get(a) ?? 0));
+    extras.sort((a, b) => b.at - a.at);
     const base = Array.isArray(lexical) ? lexical : [];
     const out: MemoryRecord[] = [];
     const room = Math.max(k, 64);
