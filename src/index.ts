@@ -140,7 +140,7 @@ export function isChildSession(session?: string): boolean {
   return !!s && s.includes("--");
 }
 
-type Compiled = { rec: MemoryRecord; needles: string[]; sal: number };
+type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
@@ -688,7 +688,7 @@ function compile(rec: MemoryRecord): Compiled {
     ...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)),
     ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w)),
   ]);
-  return { rec, needles: [...own], sal: rec.sal ?? 0 };
+  return { rec, needles: [...own] };
 }
 
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
@@ -783,28 +783,13 @@ export function subjectKey(text: string): string | null {
   return k.length >= 4 ? k : null;
 }
 
-/**
- * M34.3 inject packet budget. Named so Harbor Δ is not an unbounded slurries dump.
- *
- * Tokens with M32 (`benchmarks/terminal-bench/RESULTS.md`, 2026-09-21; note 2026-09-22):
- * inject on vs off prompt tokens 150854 → 178613 (+27759), total +26941.
- * Absolute % is terminus-2, not Eden.
- * Packet upper bound ≈ chat k(≤10) × ~300 tok + slice budget (≤10 slices × 300 tok) + procedure ≤300 tok.
- * Harbor prompt Δ +27759 is agent traces, not an excuse to dump 262k into inject.
- * No 89-task claim. No dual-API adapter column. Cap/name only — not a Harbor re-run.
- *
- * Chat default k stays 6 (`EDEN_MEMORY_CAP` may still override). Slice budget is extra, not MCC k=40.
- */
 export const PACKET_CHAT_K_MIN = 6;
 export const PACKET_CHAT_K_MAX = 10;
 export const PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
 export const PROCEDURE_TOKEN_CAP = 300;
-/** ~300 tokens as chars. Local so formatNote does not import howto-retrieve. */
 export const PROCEDURE_CHAR_CAP = PROCEDURE_TOKEN_CAP * 4;
-/** Packet [fact] body cap. Same 1200 as PROCEDURE_CHAR_CAP: a retrieved 262k haystack must not dump into inject. ICL / narrative lanes skip this cap (label-strip is banned). */
 export const FACT_CHAR_CAP = PROCEDURE_CHAR_CAP;
 
-/** Product chat retrieve k. Environment overrides stay inside the documented 6–10 packet band. */
 export function memoryRetrieveCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_CAP);
   if (!Number.isFinite(raw) || raw <= 0) return PACKET_CHAT_K_DEFAULT;
@@ -1709,7 +1694,7 @@ export class AgentMemory {
         }
         let evicted = false;
         if (this.compiled.length > cap) {
-          const pin = (c: Compiled) => c.rec.kind === "constraint" || c.sal >= 0.6 || (c.rec.tags ?? []).includes("pin");
+          const pin = (c: Compiled) => c.rec.kind === "constraint" || (c.rec.sal ?? 0) >= 0.6 || (c.rec.tags ?? []).includes("pin");
           const laneOf = (c: Compiled) => c.rec.lane || "chat";
           const durableLane = (c: Compiled) => laneOf(c) === "icl" || laneOf(c) === "narrative";
           const pins = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-cap);
