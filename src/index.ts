@@ -82,16 +82,6 @@ function fatPacket<T extends { text?: string }>(recs: T[], k: number): T[] {
   }
 }
 
-/** On-cue aboutness stamped at retrieve. Not a published product score. */
-const onCueAboutness = new WeakMap<object, number>();
-
-function stampOnCue(rec: object, n: number) {
-  try {
-    if (!rec || typeof rec !== "object" || !Number.isFinite(n)) return;
-    onCueAboutness.set(rec, n);
-  } catch {}
-}
-
 /** Floor for inject. Unset, empty, NaN, or negative → 0.15. Fail-open. */
 export function memoryMinAboutness(): number {
   try {
@@ -283,40 +273,25 @@ function stemJaccard(a: Set<string>, b: Set<string>): number {
   return uni ? inter / uni : 0;
 }
 
-function onCueScore(rec: object): number {
-  try {
-    const n = onCueAboutness.get(rec);
-    return typeof n === "number" && Number.isFinite(n) ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Per-lane near-dup on a merged packet. Highest on-cue score wins.
- * Survivors keep their original order. Fail-open returns `recs`.
- */
 function suppressPacketNearDups(recs: MemoryRecord[]): MemoryRecord[] {
   try {
     if (!Array.isArray(recs) || recs.length < 2) return recs;
-    const order = recs.map((rec, i) => ({ rec, i, n: onCueScore(rec) }));
-    order.sort((a, b) => b.n - a.n || a.i - b.i);
-    const kept = new Set<number>();
     const picked: { rec: MemoryRecord; stems: Set<string>; lane: string }[] = [];
-    for (const row of order) {
-      const lane = packetLane(row.rec);
-      const bag = nearDupStems(row.rec.text);
+    const out: MemoryRecord[] = [];
+    for (const rec of recs) {
+      const lane = packetLane(rec);
+      const bag = nearDupStems(rec.text);
       let dup = false;
       for (const p of picked) {
         if (p.lane !== lane) continue;
-        if (iclLabelsDiffer(row.rec, p.rec)) continue;
+        if (iclLabelsDiffer(rec, p.rec)) continue;
         if (stemJaccard(bag, p.stems) >= NEAR_DUP_J) { dup = true; break; }
       }
       if (dup) continue;
-      picked.push({ rec: row.rec, stems: bag, lane });
-      kept.add(row.i);
+      picked.push({ rec, stems: bag, lane });
+      out.push(rec);
     }
-    return recs.filter((_, i) => kept.has(i));
+    return out;
   } catch {
     return recs;
   }
@@ -960,8 +935,6 @@ function formatNote(r: MemoryRecord): MemoryRecord {
     } catch { labeled = body; }
   }
   const copy = { ...r, text: labeled };
-  const about = onCueAboutness.get(r);
-  if (about !== undefined) stampOnCue(copy, about);
   return copy;
 }
 
@@ -1318,7 +1291,6 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
         tags: ["chunk"],
         at: Number.isFinite(hit.t) ? hit.t : 0,
       };
-      if (typeof hit.score === "number") stampOnCue(rec, hit.score);
       chunks.push(rec);
     }
     if (!chunks.length) return chat;
@@ -1372,7 +1344,6 @@ function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: 
         tags: ["icl"],
         at: Number.isFinite(hit.t) ? hit.t : 0,
       };
-      if (typeof hit.score === "number") stampOnCue(rec, hit.score);
       out.push(rec);
     }
     return out;
@@ -1401,7 +1372,6 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
     if (!scored.length) return lexical;
     scored.sort((a, b) => b.n - a.n || (b.view.wins ?? 0) - (a.view.wins ?? 0) || b.view.t - a.view.t);
     const rec = howtoProcedureRecord(scored[0]!.view);
-    stampOnCue(rec, scored[0]!.n);
     const kept = lexical.filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
     return [...kept, rec];
   } catch {
@@ -1433,7 +1403,6 @@ function mergeExperienceLane(lexical: MemoryRecord[], text: string, dir: string)
         tags: ["experience", "trajectory"],
         at: Number.isFinite(hit.t) ? hit.t : 0,
       };
-      if (typeof hit.score === "number") stampOnCue(rec, hit.score);
       extra.push(rec);
     }
     if (!extra.length) return lexical;
@@ -1465,7 +1434,6 @@ function mergeGistLane(lexical: MemoryRecord[], text: string, cap: number, dir: 
         tags: ["gist"],
         at: h.t,
       };
-      if (typeof (h as { score?: number }).score === "number") stampOnCue(rec, (h as { score?: number }).score!);
       return rec;
     });
     const room = Math.max(0, cap - gists.length);
@@ -1885,8 +1853,7 @@ export class AgentMemory {
       let n = 0;
       for (const x of lex) n += idfOf(x);
       const sal = n > 0 ? SAL_BOOST * c.sal : 0;
-      scored.push({ rec: c.rec, n: n + sal });
-      stampOnCue(c.rec, n + sal);
+    scored.push({ rec: c.rec, n: n + sal });
     }
     const ranked = scored.filter((x) => x.n).sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = dedupSelect(ranked, cap);
