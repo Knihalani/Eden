@@ -1,8 +1,3 @@
-/**
- * Semantic store (neocortex): facts consolidated at write time into
- * (subject, attribute, value-class, value, time) tuples with supersession links
- * (newest wins), aliases (speaker ↔ I/my) and question-frame vocab attached.
- */
 import { codeToks, contentToks, properNames, stem } from "./text";
 import type { Episode } from "./episodic";
 
@@ -51,9 +46,6 @@ export class SemanticStore {
   }
 
   private add(f: Fact) {
-    // Newest-wins: later fact with the same entity/attribute and a different value
-    // supersedes the earlier one. Change-signal sentences still supersede on a
-    // weaker overlap so "moved to X" beats "lives in Y".
     if (f.values.length) {
       let best: Fact | undefined;
       let bestShared = 0;
@@ -82,7 +74,6 @@ export class SemanticStore {
     for (const raw of e.text.split(/(?<=[.!?;])\s+/)) {
       const s = raw.trim();
       if (s.length < 6 || s.endsWith("?")) continue;
-      // Only declarative sentences with a copula / relation verb become facts.
       if (!/\b(is|are|was|were|has|have|had|'s|moved|switched|transferred|works|lives|stays|staying|plays|took|leaves|departs|departing|revised|renegotiated|relocated|costs?|due|owns?|owned|named|called|prefers?|uses?)\b/i.test(s)) continue;
       const text = s.replace(/\b(I|I'm|I've|my|me|mine)\b/g, (m) => (/^(my|mine)$/i.test(m) ? `${e.speaker}'s` : e.speaker));
       const low = text.toLowerCase();
@@ -93,14 +84,11 @@ export class SemanticStore {
       const weekdays = (low.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g) ?? []);
       const numbers = (low.match(/(?<![\d:$.])\b\d{1,6}\b(?![:\d])/g) ?? []).filter((n) => !money.some((m) => m.includes(n)));
       const stems = contentToks(text);
-      // Anchors: the sentence's identifying nouns (rare-ish content stems ≥ 4 chars, names, codes).
       const anchors = new Set<string>();
       for (const st of stems) if (st.length >= 4 && !/^\d/.test(st) && !/^(gate|room|hotel|city|time|day|date|amount|term|practice|captain)$/.test(st)) anchors.add(st);
       for (const n of names) anchors.add(`#${n}`);
       for (const c of codes) anchors.add(`#${c}`);
-      // Sentence-level noun cues that name the attribute (keep short common attribute nouns too).
       for (const st of stems) if (/^(gate|room|hotel|practice|captain|plumber|doctor|flight|copay|invoice|collection|follow|term|rent|coach|jersey|dose|budget|deadline)/.test(st)) anchors.add(st);
-      // Values: entity-ish tokens by class, dominant class chosen by priority.
       const cand: { v: string; c: ValueClass }[] = [];
       for (const t of times) cand.push({ v: t, c: "time" });
       for (const m of money) cand.push({ v: m, c: "money" });
@@ -112,11 +100,8 @@ export class SemanticStore {
       let vclass: ValueClass = cand[0]!.c;
       for (const c of RANK) if (cand.some((x) => x.c === c)) { vclass = c; break; }
       const values = cand.filter((x) => x.c === vclass).map((x) => x.v);
-      // Values are not anchors; the anchors must be the non-value identifiers.
       for (const v of values) { anchors.delete(`#${v}`); anchors.delete(stem(v)); }
       if (vclass === "person" || vclass === "proper") {
-        // Subject entity stays an anchor when there are several names (P is seen by Dr. D): the
-        // first name is the subject unless the sentence is "<Name> took over as ...".
         const subj = names[0];
         if (subj && values.length > 1 && !/\b(took over|replaced|became)\b/i.test(text)) {
           anchors.add(`#${subj}`);
@@ -131,7 +116,6 @@ export class SemanticStore {
     return out;
   }
 
-  /** Query frame from wh-words. */
   static frameOf(q: string): Frame | null {
     const low = q.toLowerCase();
     if (/\b(when|what time|what day|which day|what date|which date|what year|what month)\b/.test(low)) return "when";

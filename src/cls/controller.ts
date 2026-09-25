@@ -1,9 +1,3 @@
-/**
- * CLS controller: classifies the query (episodic recall / semantic lookup / temporal),
- * runs the episodic + semantic stores and the Eden cortex lane, fuses them with a
- * calibrated (learned-free) combiner, applies supersession (newest wins) and returns
- * compact answer units with their provenance dialogue only when it helps.
- */
 import type { AgentMemory } from "../index";
 import { completeScores } from "./complete";
 import { EpisodicStore, rareCueToks, rareTermHits, scoreChunksAsEpisodes, type Cue, type Episode } from "./episodic";
@@ -46,7 +40,6 @@ export class CLSController {
     });
   }
 
-  /** Map a cortex note back to its provenance episode (pattern completion from a trimmed cue). */
   private canon(note: string): number {
     const hit = this.canonCache.get(note);
     if (hit !== undefined) return hit;
@@ -87,7 +80,6 @@ export class CLSController {
     return out;
   }
 
-  /** Dialogue binding: a reply inherits part of the question turn's activation and vice versa. */
   private bindQA(s: Float64Array): Float64Array {
     const eps = this.epi.episodes;
     const out = new Float64Array(s.length);
@@ -102,16 +94,10 @@ export class CLSController {
     return out;
   }
 
-  /**
-   * BM25 is the spine. Semantic and cortex are raw (not max-normed) multipliers, so a
-   * dead #entity / compiled-fact hit with mediocre BM25 cannot invent a 1.0 lane and
-   * beat the lexical winner.
-   */
   private fuseLane(a: number, bRaw: number, cRaw: number): number {
     return a * (1 + 0.15 * bRaw + 0.2 * cRaw);
   }
 
-  /** Non-entity cue overlap: when any episode matches, entity-only rows are gated off. */
   private lexicalHits(cue: Cue, q: string, n: number): { hit: boolean[]; active: boolean } {
     const names = new Set<string>();
     for (const x of properNames(q)) names.add(stem(x));
@@ -128,7 +114,6 @@ export class CLSController {
     return { hit, active };
   }
 
-  /** Fused scores for every episode. */
   scores(q: string, opts?: { complete?: boolean; semantic?: boolean; recency?: boolean }): Float64Array {
     const n = this.epi.episodes.length;
     const temporal = /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(q.toLowerCase()) || /\b20\d{2}\b/.test(q);
@@ -159,7 +144,6 @@ export class CLSController {
       }
       fused[i] = v * (opts?.recency === false ? 1 : 1 + 0.06 * (i / recencyDen));
     }
-    // Supersession: stale fact is a tombstone; activation moves to the successor (newest wins).
     if (opts?.semantic !== false && !this.opts.skipSemantic) {
       for (const f of this.sem.facts) {
         if (f.supersededBy === undefined) continue;
@@ -173,7 +157,6 @@ export class CLSController {
     return completeScores(q, this.epi.episodes, fused);
   }
 
-  /** Compact answer unit: the episode plus same-session neighbours. */
   chunk(e: Episode): string {
     const eps = this.epi.episodes, i = e.i;
     const prev = i > 0 && eps[i - 1]!.session === e.session ? eps[i - 1]!.render : "";
@@ -193,9 +176,8 @@ export class CLSController {
   }
 }
 
-/** Sequential same-src 1-hop (split 512-token needles). Must outrank the donor so inject Jaccard cannot drop the value chunk. */
 const AR_SPREAD_SEQ = 1.25;
-/** Adjacent chunks that share a rare query entity but are not the same src. */
+
 const AR_SPREAD_SHARED = 0.45;
 
 function arHitIndex<T extends { id?: string }>(hit: T, fallback: number): number {
@@ -216,9 +198,6 @@ function arAdjacentWeight<T extends { text: string; src?: string; id?: string }>
   cueTerms: string[],
 ): number {
   if (Math.abs(ia - ib) !== 1) return 0;
-  // Recipient must carry query signal. Pure filler neighbors of a needle stay down
-  // (inject Jaccard would otherwise drop the gold chunk). Split value chunks match
-  // leftover cue terms such as "special"/"magic"/"number".
   if (cueTerms.length && rareTermHits(b.text, cueTerms) < 1) return 0;
   const sa = typeof a.src === "string" ? a.src : "";
   const sb = typeof b.src === "string" ? b.src : "";
@@ -227,11 +206,6 @@ function arAdjacentWeight<T extends { text: string; src?: string; id?: string }>
   return 0;
 }
 
-/**
- * AR lane multi-hit fusion (M27.1): CombMNZ over rare cue terms + 1-hop neighbor
- * spread on the BM25 pool. BM25 is the spine; episodic IDF is raw (not max-normed).
- * Preserves original hit objects. Never returns more than k. Never throws. k default 10.
- */
 export function fuseArHits<T extends { text: string; score: number; id?: string; src?: string }>(
   query: string,
   hits: T[],
@@ -249,9 +223,6 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
 
     const rare = rareCueToks(q);
     const cueTerms = [...new Set([...rare, ...contentToks(q)])];
-    // BM25 tokList does not skip "for"/"do". Drop stopword-only filler so a Clerk
-    // cue cannot dump miller chunks. Split value chunks keep content cue terms
-    // ("special"/"magic"/"number") even with 0 rare entity hits.
     const pool = cueTerms.length ? raw.filter((h) => rareTermHits(h.text, cueTerms) >= 1) : raw;
     if (!pool.length) return [];
 
@@ -262,8 +233,6 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
     for (let i = 0; i < pool.length; i++) {
       const a = Number(pool[i]!.score) || 0;
       const hitsN = rareHits[i]!;
-      // CombMNZ: more rare cue terms → higher score. 0 rare hits keeps BM25
-      // inside the cue-gated pool (split value chunk).
       const comb = a * Math.max(1, hitsN);
       const bRaw = epiRaw[i] || 0;
       fused[i] = comb * (1 + 0.15 * bRaw);
