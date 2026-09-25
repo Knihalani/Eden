@@ -1218,7 +1218,6 @@ function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: 
   }
 }
 
-/** After lexical: fail-open howto merge. `dir` is howtoDir (memory root), never jsonlDir / session subdir. */
 function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
