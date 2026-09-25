@@ -649,14 +649,11 @@ function compile(rec: MemoryRecord): Compiled {
 
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
-/** Store size. Distinct from retrieve k (`EDEN_MEMORY_CAP`). */
 function storeCap(): number {
   return Number(process.env.EDEN_MEMORY_STORE_CAP) || 2000;
 }
 
-/** Append-only sibling of memories.jsonl. Compact under the same lock. */
 export const MEMORY_WAL_SUFFIX = ".wal";
-/** Compact when WAL has this many lines (or eviction / close / drop). */
 export const MEMORY_WAL_COMPACT_LINES = 32;
 
 export function memoryWalPath(path: string): string {
@@ -696,7 +693,6 @@ function walLineCount(path: string): number {
   }
 }
 
-/** Append JSONL; if the file has a torn last line (no trailing newline), start a new line first. */
 function appendJsonl(path: string, blob: string): void {
   let prefix = "";
   try {
