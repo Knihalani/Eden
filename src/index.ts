@@ -2306,7 +2306,6 @@ export class AgentMemory {
       }
     }
     lexical = mergeRootIdentity(lexical, text, cap, this.dir);
-    if (route === "sf-assemble") return suppressPacketNearDups(lexical);
     return suppressPacketNearDups(mergeExperienceLane(
       mergeHowtoLane(mergeNarrativeLane(lexical, text, cap, this.howtoDir, recs), text, cap, this.howtoDir),
       text,
