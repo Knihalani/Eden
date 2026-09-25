@@ -1,8 +1,3 @@
-/**
- * CLS text primitives — tokenisation, light stemming, entity / time features and
- * relative-time grounding shared by the episodic and semantic stores.
- */
-
 export const STOP = new Set(
   "the of is a an on to and in for this that with from into about these then still has out how what why was are you your its our not or no hey hi hello yeah yes ok okay thanks thank do does did be been being it it's i'm i've i'd i'll we've we're they're he's she's am were will would could should can just so very really too also there here their them they he she him her his my me we us at by as if than but".split(
     " ",
@@ -17,7 +12,6 @@ export function words(s: string): string[] {
   return String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:[.'\-][a-z0-9]+)*/g) ?? [];
 }
 
-/** Conservative stemmer: plural / -ing / -ed / -ly / trailing e. */
 export function stem(w0: string): string {
   let w = String(w0 ?? "");
   if (w.length < 4 || /\d/.test(w)) return w;
@@ -37,7 +31,6 @@ export function stem(w0: string): string {
 const NUMWORD: Record<string, string> = { zero: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10", eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17", eighteen: "18", nineteen: "19", twenty: "20", thirty: "30", forty: "40", fifty: "50", sixty: "60", seventy: "70", eighty: "80", ninety: "90" };
 const CONTRACT: Record<string, string> = { "i'm": "i", "i've": "i", "i'd": "i", "i'll": "i", "don't": "not", "doesn't": "not", "didn't": "not", "can't": "not", "won't": "not", "isn't": "not", "aren't": "not", "wasn't": "not", "haven't": "not", "hasn't": "not" };
 
-/** Content tokens (stemmed, stop-filtered). Numbers survive, number words are numeralised. */
 export function contentToks(s: string): string[] {
   const out: string[] = [];
   for (const w0 of words(s)) {
@@ -67,14 +60,12 @@ export function properNames(s: string): string[] {
   return out;
 }
 
-/** Codes such as B12 / 2A / INV-1234 / 10.8.0.0/16 — sparse identifiers with high retrieval value. */
 export function codeToks(s: string): string[] {
   return (s.match(/\b(?=[A-Za-z0-9-]*\d)(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9-]{2,12}\b/g) ?? []).map((x) => x.toLowerCase());
 }
 
 export type Stamp = { y: number; m: number; d: number } | null;
 
-/** Parse session stamps like "1:56 pm on 8 May, 2023" / "2026-03-02 09:00" / "May 2023". */
 export function parseStamp(date: string): Stamp {
   if (!date) return null;
   let m = date.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
@@ -108,13 +99,11 @@ export function shiftMonths(st: { y: number; m: number; d: number }, months: num
   return { y: Math.floor(total / 12), m: ((total % 12) + 12) % 12, d: st.d };
 }
 
-/** Time-bucket features for a stamp: year, month, year-month, day. */
 export function stampToks(st: Stamp): string[] {
   if (!st) return [];
   return [`t:y${st.y}`, `t:m${st.m}`, `t:${st.y}-${st.m}`, `t:d${st.d}`];
 }
 
-/** Time tokens present in free text (years, month names, weekdays). */
 export function textTimeToks(s: string): string[] {
   const out: string[] = [];
   const low = s.toLowerCase();
@@ -134,10 +123,6 @@ function num(s: string): number {
   return NUMWORD[x] ? +NUMWORD[x]! : +x;
 }
 
-/**
- * Relative-time grounding: resolve "last year" / "next month" / "two weeks ago" / "yesterday"
- * against the episode's session stamp and return absolute-date phrases to attach to the episode.
- */
 export function groundRelativeTime(text: string, st: Stamp): string[] {
   if (!st) return [];
   const out: string[] = [];
@@ -181,14 +166,12 @@ export function groundRelativeTime(text: string, st: Stamp): string[] {
     else if (u.startsWith("month")) add(`${fmtMY(shiftMonths(st, n))}`);
     else add(`${st.y + n}`);
   }
-  // "on Monday" / "next Friday" / "last Sunday" around the stamp.
   const wd = /\b(last|next|this|on)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g;
   while ((m = wd.exec(low))) {
     const which = m[1]!;
     const day = m[2]!;
     add(which === "last" ? `the ${cap(day)} before ${fmtDMY(st)}` : which === "next" ? `the ${cap(day)} after ${fmtDMY(st)}` : `${cap(day)} around ${fmtDMY(st)}`);
   }
-  // Bare month names in text: attach the stamp's year so "in June" reads "June 2023".
   const monthOnly = /\b(january|february|march|april|june|july|august|september|october|november|december)\b(?!,?\s+20\d{2})/g;
   while ((m = monthOnly.exec(low))) {
     add(`${cap(m[1]!)} ${st.y}`);

@@ -1,8 +1,3 @@
-/**
- * Episodic store (hippocampus): pattern-separated, time-indexed episodes with sparse
- * high-dimensional keys — unigram stems, hashed bigrams, entity tags, time buckets — and
- * attractor-style retrieve. Multi-hop completion lives in `complete.ts` (graph / Self-Ask, last hop first).
- */
 import { completeScores } from "./complete";
 import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stampToks, stem, textTimeToks, words, type Stamp } from "./text";
 
@@ -12,9 +7,9 @@ export type Episode = {
   text: string;
   date: string;
   session: number;
-  /** Rendered form returned to callers. */
+
   render: string;
-  /** Sparse key: feature -> tf */
+
   key: Map<string, number>;
   grounded: string[];
   isQuestion: boolean;
@@ -22,7 +17,6 @@ export type Episode = {
 
 export type Cue = Map<string, number>;
 
-/** Surface forms, then stemmed — cues and the index both run through `stem()`. */
 function stemExpand(raw: Record<string, string[]>): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const [k, alts] of Object.entries(raw)) {
@@ -45,10 +39,6 @@ const QUERY_LIGHT = new Set(
   ["country", "citizen", "author", "name", "city", "position", "sport", "nationality"].map(stem),
 );
 
-/**
- * Rare cue tokens for AR CombMNZ / neighbor spread: proper names, codes,
- * hyphenated or digit ids. Not stopwords or query-light ("the/what/country").
- */
 export function rareCueToks(q: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -73,7 +63,6 @@ export function rareCueToks(q: string): string[] {
   return out;
 }
 
-/** How many rare cue terms appear in `text` (token match, not substring — mill ≠ miller). */
 export function rareTermHits(text: string, terms: string[]): number {
   if (!terms.length) return 0;
   const hay = String(text ?? "").toLowerCase();
@@ -87,10 +76,6 @@ export function rareTermHits(text: string, terms: string[]): number {
   return n;
 }
 
-/**
- * Raw (not max-normed) episodic BM25-style scores for chunk texts.
- * Fail-open: [] → zeros. Does not call complete().
- */
 export function scoreChunksAsEpisodes(query: string, texts: string[]): Float64Array {
   const n = texts.length;
   const out = new Float64Array(n);
@@ -123,7 +108,7 @@ export type Hit = { i: number; s: number };
 
 export class EpisodicStore {
   episodes: Episode[] = [];
-  /** feature -> [episode idx, tf][] */
+
   private post = new Map<string, [number, number][]>();
   private df = new Map<string, number>();
   private len: number[] = [];
@@ -157,7 +142,6 @@ export class EpisodicStore {
     this.avgLen = this.len.reduce((a, b) => a + b, 0) / Math.max(1, this.len.length);
   }
 
-  /** BM25-style sparse dot product between a cue and every episode. */
   score(cue: Cue): Float64Array {
     const out = new Float64Array(this.episodes.length);
     const N = this.episodes.length || 1;
@@ -208,10 +192,6 @@ export class EpisodicStore {
     return idx.slice(0, k).map((i) => ({ i, s: scores[i]! }));
   }
 
-  /**
-   * Pattern completion: graph / Self-Ask hops in `complete.ts`. Last hop first.
-   * `cue` is only used if the caller has no query string (controller passes `q`).
-   */
   complete(cue: Cue, scores: Float64Array): Float64Array {
     try {
       const parts: string[] = [];
