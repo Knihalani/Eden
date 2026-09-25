@@ -1454,9 +1454,7 @@ export class AgentMemory {
             }
             const serial = String(text).trim().match(/^(\d+)[.)]\s+\S/);
             const serialT = serial && Number.isFinite(Number(serial[1])) ? Number(serial[1]) : undefined;
-            if (serialT == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) {
-              // Unnumbered wall-clock must not outrank a live serial.
-            } else {
+            if (serialT != null || !live || live.t >= 1e11 || batchLive.has(`${fact.s}\0${fact.p}`)) {
               store.put(fact.s, fact.p, fact.o, serialT ?? Date.now());
               batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase());
             }
