@@ -200,10 +200,6 @@ function firstString(...vals: unknown[]): string | undefined {
   return undefined;
 }
 
-function collapse(s: string): string {
-  return s.replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim();
-}
-
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
     const consent = memoryConsent();
@@ -260,9 +256,9 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
           result = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n") || flattenContent(redacted);
           if (!result) try { result = JSON.stringify(redacted); } catch { result = ""; }
         }
-        result = collapse(typeof redact(result) === "string" ? String(redact(result)) : result);
+        result = (typeof redact(result) === "string" ? String(redact(result)) : result).replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim();
         if (result.length > 360) result = result.slice(0, 360);
-        const who = collapse(name || "subagent") || "subagent";
+        const who = (name || "subagent").replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim() || "subagent";
         let text = "";
         if (!result) {
           try {
