@@ -77,9 +77,8 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
           const token = m[1]!;
           if (!token || token.includes("://")) continue;
           if (token === "/dev/null" || token.startsWith("/dev/fd")) continue;
-          const path = token.startsWith("~") ? token.slice(token.indexOf("/") + 1 || token.length) : token;
           if (token.startsWith("~")) throw new Error("path outside workspace");
-          confined(cwd, path);
+          confined(cwd, token);
         }
         const allow = new Set((process.env.EDEN_NET_ALLOW ?? "").split(",").map((s) => s.trim()).filter(Boolean));
         const segments = cmd.split(/\||&&/);
