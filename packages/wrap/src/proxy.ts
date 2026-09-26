@@ -272,8 +272,4 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   );
 }
 
-export function health(): Response {
-  return Response.json({ ok: true, service: "eden-wrap" });
-}
-
 export { compiledSchema };
