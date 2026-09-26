@@ -406,14 +406,10 @@ const FUNC_WORD = new Set([
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
-function sentenceParts(t: string): string[] {
-  return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
-}
-
 function isFactList(t: string): boolean {
   const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l));
   if (numbered.length >= 2) return true;
-  const sents = sentenceParts(t);
+  const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
   if (sents.length < 2) return false;
   let copula = 0;
   for (const s of sents) {
@@ -451,7 +447,7 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
   const raw = String(text ?? "").trim();
   if (!raw) return "";
   try {
-    const parts = sentenceParts(raw);
+    const parts = raw.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
     const units = parts.length ? parts : [raw];
     const kept: string[] = [];
     for (const s of units) {
@@ -479,7 +475,7 @@ export function encodeLane(text: string): MemoryLaneKind {
     if (isRecsysShot(t)) return "narrative";
     if (!isFactList(t)) {
       if (t.length > 400) return "narrative";
-      if (sentenceParts(t).length >= 2 && t.length >= 150) {
+      if (t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8).length >= 2 && t.length >= 150) {
         const toks = tokList(t);
         if (toks.length >= 4) {
           let fw = 0;
