@@ -40,23 +40,19 @@ const VOLATILE_TEXT = /(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})|(?:available skills)|(?
 
 type SystemBlock = { type: string; text?: string; cache_control?: { type: "ephemeral" } };
 
-export function applyCacheGuard(body: { system?: string | SystemBlock[] }): void {
-  if (!Array.isArray(body.system) || body.system.length < 2) return;
-  const stable: SystemBlock[] = [];
-  const volatile: SystemBlock[] = [];
-  for (const b of body.system) {
-    const copy = { ...b };
-    delete copy.cache_control;
-    if (VOLATILE_TEXT.test(copy.text ?? "")) volatile.push(copy);
-    else stable.push(copy);
-  }
-  if (!volatile.length || !stable.length) return;
-  body.system = [...stable, ...volatile];
-}
-
 export function applyCacheBreakpoints(body: AnthropicRequest): void {
   if (process.env.EDEN_PROMPT_CACHE === "0") return;
-  if (process.env.EDEN_CACHE_GUARD === "1") applyCacheGuard(body);
+  if (process.env.EDEN_CACHE_GUARD === "1" && Array.isArray(body.system) && body.system.length >= 2) {
+    const stable: SystemBlock[] = [];
+    const volatile: SystemBlock[] = [];
+    for (const b of body.system) {
+      const copy = { ...b };
+      delete copy.cache_control;
+      if (VOLATILE_TEXT.test(copy.text ?? "")) volatile.push(copy);
+      else stable.push(copy);
+    }
+    if (volatile.length && stable.length) body.system = [...stable, ...volatile];
+  }
   if (Array.isArray(body.tools) && body.tools.length > 0) {
     const last = body.tools[body.tools.length - 1]!;
     last.cache_control = { type: "ephemeral" };
