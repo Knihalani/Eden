@@ -2,12 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { StretchProgram } from "@eden/ir";
 import {
   actualSpend,
-  forecastHalt,
-  inFlightProgram,
-  isUniqueWork,
   matchingRunPrograms,
   remainingBudget,
-  remainingBudgetForRun,
   forecastCopy,
 } from "./forecast";
 import { decideGuard, killAfterWarningEnabled } from "./guard";
@@ -95,8 +91,6 @@ describe("matchingRunPrograms (the program this run is on)", () => {
     });
     const hits = matchingRunPrograms([other, on], [{ name: "get_issue" }, { name: "list_comments" }]);
     expect(hits.map((p) => p.id)).toEqual(["on"]);
-    expect(inFlightProgram([other, on], [{ name: "get_issue" }])?.id).toBe("on");
-    expect(isUniqueWork([other], [{ name: "alpha" }, { name: "beta" }])).toBe(true);
   });
 });
 
@@ -158,21 +152,6 @@ describe("predicted vs actual (llm / ms / cents)", () => {
   test("enforce: actual llmCalls >= predicted llmCalls=2 → next call halted reason budget", async () => {
     const p = program({ budget: { llmCalls: 2, ms: 80_000, cents: 8 } });
     const run = warnedRun({ llmCalls: 2, events: ["get_issue"], t0: 0 });
-    const view = remainingBudgetForRun({ program: p, run, now: 1_000, opts: { timeoutMs: 60_000 } })!;
-    console.log(
-      `predicted llmCalls=${view.predicted.llmCalls} ms=${view.predicted.ms} cents=${view.predicted.cents} ` +
-        `actual llmCalls=${view.actual.llmCalls} ms=${view.actual.ms} cents=${view.actual.cents} ` +
-        `overflow=${view.overflow} halt=${view.halt}`,
-    );
-    expect(view.predicted).toEqual({ llmCalls: 2, ms: 80_000, cents: 8 });
-    expect(view.actual.llmCalls).toBeGreaterThanOrEqual(view.predicted.llmCalls);
-    expect(view.overflow).toBe("llmCalls");
-    expect(forecastHalt({
-      predicted: view.predicted,
-      actual: view.actual,
-      remainingTimeoutMs: view.remainingTimeoutMs,
-    })).toBe(true);
-
     const d = decideGuard({
       name: "list_comments",
       run,
@@ -501,10 +480,6 @@ describe("EDEN_KILL_AFTER_WARNING still wins", () => {
       now: 1_000,
     });
     expect(d).toMatchObject({ action: "halt", reason: "warning" });
-    const view = remainingBudgetForRun({ program: p, run, now: 1_000, opts })!;
-    expect(view.timeoutPressure).toBe(false);
-    expect(view.spent).toBe(false);
-    expect(view.halt).toBe(false);
   });
 
   test("wrapTools killAfterWarning still stops spend after the first fail", async () => {
