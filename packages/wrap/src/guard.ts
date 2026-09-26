@@ -2,7 +2,6 @@ import { evidenceLedger, isCheckName, isReadName, isStretchEnd, latestRepeatStal
 import type { StretchProgram } from "@eden/ir";
 import {
   forecastCopy,
-  forecastTimeoutMs,
   matchingRunPrograms,
   remainingBudget,
   actualSpend,
@@ -68,7 +67,7 @@ export function decideGuard(args: {
     }
   }
   const elapsed = now - run.t0;
-  const cap = forecastTimeoutMs(opts);
+  const cap = ((o) => { const e = o?.timeoutMs; const env = Number(process.env.EDEN_TIMEOUT_MS); return Math.min(300_000, Math.max(1, e && e > 0 ? e : Number.isFinite(env) && env > 0 ? env : 60_000)); })(opts);
   const remaining = cap - elapsed;
   const onPath = [...run.events, { name }];
   const matches = matchingRunPrograms(live, onPath);
