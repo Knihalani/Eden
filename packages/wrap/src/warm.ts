@@ -1,4 +1,4 @@
-import type { Binding, StretchProgram } from "@eden/ir";
+import type { StretchProgram } from "@eden/ir";
 import { eq, isMutating, isReadName, isBarrierName, mayServe } from "@eden/ir";
 import { evalArgs } from "@eden/runtime";
 import { isProgramReadOnly, isSafeToWarm } from "./fleet";
@@ -75,12 +75,6 @@ export function bindWarmRunner(state: WrapState, runner: WarmRunner): void {
   } catch {}
 }
 
-function bindingDependsOnStep(b: Binding): boolean {
-  if (b.kind === "from") return true;
-  if (b.kind === "transform") return bindingDependsOnStep(b.of);
-  return false;
-}
-
 export function firstWaveReads(
   program: StretchProgram,
   input: Record<string, unknown>,
@@ -99,7 +93,11 @@ export function firstWaveReads(
   const scope = { input, results: new Map<string, unknown>() };
   for (const step of pending) {
     if (step.kind !== "tool") break;
-    if (isMutating(step.tool) || isBarrierName(step.tool) || !(step.readOnly === true || isReadName(step.tool)) || !Object.values(step.args).every((b) => !bindingDependsOnStep(b))) break;
+    if (isMutating(step.tool) || isBarrierName(step.tool) || !(step.readOnly === true || isReadName(step.tool)) || !Object.values(step.args).every((b) => {
+      let cur = b;
+      while (cur.kind === "transform") cur = cur.of;
+      return cur.kind !== "from";
+    })) break;
     try {
       const args = evalArgs(step.args, scope);
       wave.push({ tool: step.tool, args });
