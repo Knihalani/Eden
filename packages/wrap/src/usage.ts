@@ -276,21 +276,6 @@ export function tapSseUsage(stream: ReadableStream<Uint8Array>, run: RunRecorder
   });
 }
 
-export async function scrapeSseUsage(stream: ReadableStream<Uint8Array>, run: RunRecorder): Promise<void> {
-  const reader = tapSseUsage(stream, run).getReader();
-  try {
-    while (true) {
-      const { done } = await reader.read();
-      if (done) break;
-    }
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-    }
-  }
-}
-
 function coerceInt(v: unknown): number | undefined {
   if (typeof v === "number" && Number.isFinite(v) && v >= 0) return Math.floor(v);
   if (typeof v === "string" && v.trim() !== "") {
