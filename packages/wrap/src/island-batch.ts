@@ -256,7 +256,8 @@ function parseBatchResult(json: unknown, customId: string): IslandReply | undefi
   } catch {
     return undefined;
   }
-  const usageRaw = resultUsage(row);
+  const result = row.result && typeof row.result === "object" ? (row.result as Record<string, unknown>) : row;
+  const usageRaw = row.usage ?? result.usage ?? (result.message && typeof result.message === "object" ? (result.message as Record<string, unknown>).usage : undefined);
   const u = parseUsage(usageRaw);
   const cache = parseCacheTokens(usageRaw);
   const usage: IslandUsage = {
@@ -340,12 +341,4 @@ function messageText(message: Record<string, unknown>): string | undefined {
     if (typeof nested.content === "string") return nested.content;
   }
   return undefined;
-}
-
-function resultUsage(row: Record<string, unknown>): unknown {
-  if (row.usage) return row.usage;
-  const result = row.result && typeof row.result === "object" ? (row.result as Record<string, unknown>) : row;
-  if (result.usage) return result.usage;
-  const message = result.message && typeof result.message === "object" ? (result.message as Record<string, unknown>) : undefined;
-  return message?.usage;
 }
