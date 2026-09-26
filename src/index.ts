@@ -652,18 +652,6 @@ function formatProcedureBody(text: string): string {
   return t.slice(0, PROCEDURE_CHAR_CAP);
 }
 
-function formatLabeledBody(text: string, re: RegExp, cap: number): string {
-  const redacted = redact(String(text ?? ""));
-  const t = typeof redacted === "string" ? redacted : String(text ?? "");
-  const labeled = t.match(re);
-  if (labeled) {
-    const prefix = labeled[1]!;
-    const rest = labeled[2]!;
-    return rest.length <= cap ? t : `${prefix}${rest.slice(0, cap)}`;
-  }
-  return t.length <= cap ? t : t.slice(0, cap);
-}
-
 function formatNote(r: MemoryRecord): MemoryRecord {
   const isProcedure = r.kind === "procedure";
   const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
@@ -674,7 +662,7 @@ function formatNote(r: MemoryRecord): MemoryRecord {
     const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || r.lane === "narrative" || (r.tags ?? []).includes("chunk")
       || isFactList(r.text) || isFactList(body);
     const factish = r.kind === "fact" || r.kind === "preference" || /^\s*\[fact(?:\s*·[^\]]*)?\]/i.test(body);
-    if (!skipFactCap && factish) body = formatLabeledBody(body, /^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is, FACT_CHAR_CAP);
+    if (!skipFactCap && factish) body = ((text, re, cap) => { const redacted = redact(String(text ?? "")); const t = typeof redacted === "string" ? redacted : String(text ?? ""); const labeled = t.match(re); return labeled ? (labeled[2]!.length <= cap ? t : `${labeled[1]!}${labeled[2]!.slice(0, cap)}`) : (t.length <= cap ? t : t.slice(0, cap)); })(body, /^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is, FACT_CHAR_CAP);
   }
   try {
     const tags = Array.isArray(r.tags) ? r.tags : [];
@@ -683,7 +671,7 @@ function formatNote(r: MemoryRecord): MemoryRecord {
     const gistish = r.kind === "digest" || r.kind === "gist"
       || tags.some((t) => t === "gist" || t === "digest")
       || /^\s*\[gist(?:\s*·[^\]]*)?\]/i.test(body);
-    if (!skipGistCap && gistish) body = formatLabeledBody(body, /^(\s*\[gist(?:\s*·[^\]]*)?\]\s*)(.*)$/is, GIST_CHAR_CAP);
+    if (!skipGistCap && gistish) body = ((text, re, cap) => { const redacted = redact(String(text ?? "")); const t = typeof redacted === "string" ? redacted : String(text ?? ""); const labeled = t.match(re); return labeled ? (labeled[2]!.length <= cap ? t : `${labeled[1]!}${labeled[2]!.slice(0, cap)}`) : (t.length <= cap ? t : t.slice(0, cap)); })(body, /^(\s*\[gist(?:\s*·[^\]]*)?\]\s*)(.*)$/is, GIST_CHAR_CAP);
   } catch { /* fail-open: leave body */ }
   let labeled = body;
   try { labeled = applyProvenanceLabel(r, body); } catch {
