@@ -167,18 +167,7 @@ function parseBatchResult(json: unknown, customId: string): IslandReply | undefi
   const rows: Array<Record<string, unknown>> = Array.isArray(raw)
     ? raw.filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
     : typeof raw === "string"
-      ? raw
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .map((line) => {
-            try {
-              return JSON.parse(line) as unknown;
-            } catch {
-              return undefined;
-            }
-          })
-          .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
+      ? raw.split("\n").map((line) => { const t = line.trim(); if (!t) return undefined; try { return JSON.parse(t) as unknown; } catch { return undefined; } }).filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
       : [];
   const row = rows.find((r) => String(r.custom_id ?? "") === customId) ?? (rows.length === 1 && customId === "0" ? rows[0] : undefined);
   if (!row) return undefined;
