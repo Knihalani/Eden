@@ -97,13 +97,6 @@ function inputAgrees(armed: Armed, cur: Record<string, unknown>): boolean {
   return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k]));
 }
 
-function waitSettled(armed: Armed, timeoutMs: number): Promise<boolean> {
-  return Promise.race([
-    armed.settled,
-    new Promise<boolean>((r) => setTimeout(() => r(false), timeoutMs)),
-  ]);
-}
-
 export const DEFAULT_WRAP_TIMEOUT_MS = 60_000;
 
 export function wrapTimeoutMs(explicit?: number): number {
@@ -904,7 +897,10 @@ export function wrapTools<T extends ToolsIn>(
             return undefined;
           }, undefined);
           if (fleetHit) {
-            const ok = await waitSettled(fleetHit.armed, wrapTimeoutMs(state.opts.timeoutMs));
+            const ok = await Promise.race([
+              fleetHit.armed.settled,
+              new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
+            ]);
             if (ok) {
               if (isReadName(name) && staleRead(state, args, fleetHit.armed)) {
               } else {
@@ -995,7 +991,10 @@ export function wrapTools<T extends ToolsIn>(
             armed.fleetId === fleetId &&
             (armed.served?.has(name) === true || armed.head === name);
           if (!remaining && !fleetServed) continue;
-          const ok = await waitSettled(armed, wrapTimeoutMs(state.opts.timeoutMs));
+          const ok = await Promise.race([
+            armed.settled,
+            new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
+          ]);
           if (ok) {
             if (isReadName(name) && staleRead(state, args, armed)) continue;
             if (fleetServed && !remaining) {
