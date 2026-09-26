@@ -137,11 +137,6 @@ function isSafeToWarm(program: StretchProgram): boolean {
   return true;
 }
 
-function hintInput(currentInput: Record<string, unknown>, hint: WarmHint): Record<string, unknown> {
-  if (hint.input && typeof hint.input === "object") return hint.input;
-  return currentInput;
-}
-
 function followScore(s: Store, fromId: string, toId: string): number {
   return s.follows.get(fromId)?.get(toId) ?? 0;
 }
@@ -166,7 +161,7 @@ function pickNext(
   currentInput: Record<string, unknown>,
   hint: WarmHint,
 ): { program: StretchProgram; input: Record<string, unknown> } | null {
-  const raw = hintInput(currentInput, hint);
+  const raw = hint.input && typeof hint.input === "object" ? hint.input : currentInput;
   const named =
     hint.program == null
       ? undefined
