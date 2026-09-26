@@ -835,9 +835,8 @@ export function wrapTools<T extends ToolsIn>(
           } else if (!sessionArmed) {
           if (run.events.length) emit(run.events[0]?.args, owner);
           const pair = safely(() => armTail(hit.p, hit.input), null);
-          if (!pair) {
-          } else {
-          const { key: armKey, armed } = pair;
+          if (pair) {
+          const { armed } = pair;
           try {
             if (!isProgramReadOnly(hit.p)) discardSpeculation(state);
             const taken = await takeSpeculation(state, hit.p, hit.input).catch(() => ({ hit: false as const }));
