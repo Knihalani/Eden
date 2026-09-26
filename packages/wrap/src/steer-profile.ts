@@ -11,11 +11,6 @@ function pct(xs: number[], p: number): number {
   return s[i]!;
 }
 
-function tools(): Record<string, ToolDef> {
-  const mk = (name: string): ToolDef => ({ description: name, execute: async (a) => ({ name, id: a.id }) });
-  return { ping: { description: "ping", execute: async () => ({ pong: true }) }, lookup: mk("lookup"), fetch: mk("fetch"), write: mk("write"), audit: mk("audit") };
-}
-
 async function armHosted(w: number) {
   const sequence = ["lookup", "fetch", "write", "audit"];
   const p = withVersion({
@@ -38,7 +33,8 @@ async function armHosted(w: number) {
     contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
     manifest: { llmReduction: 5, latencyReduction: 2, costReduction: 5, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
   }) as StretchProgram;
-  const t = tools();
+  const mk = (name: string): ToolDef => ({ description: name, execute: async (a) => ({ name, id: a.id }) });
+  const t = { ping: { description: "ping", execute: async () => ({ pong: true }) }, lookup: mk("lookup"), fetch: mk("fetch"), write: mk("write"), audit: mk("audit") };
   const store = createArmingStore();
   const wraps: Array<ReturnType<typeof wrapTools>> = [];
   await Promise.all(
