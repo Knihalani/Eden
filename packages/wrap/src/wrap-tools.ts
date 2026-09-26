@@ -81,8 +81,6 @@ const outboxes = new WeakMap<WrapState, OutboxJob[]>();
 const flushers = new WeakMap<WrapState, ReturnType<typeof setTimeout>>();
 const armedReceipts = new WeakMap<Armed, Receipt>();
 
-export const DEFAULT_WRAP_TIMEOUT_MS = 60_000;
-
 export function wrapTimeoutMs(explicit?: number): number {
   const env = Number(process.env.EDEN_TIMEOUT_MS);
   return Math.min(300_000, Math.max(1, explicit && explicit > 0 ? explicit : Number.isFinite(env) && env > 0 ? env : 60_000));
