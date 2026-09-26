@@ -55,17 +55,8 @@ function briefing(mem: AgentMemory, session = ""): string {
   const lines: string[] = [];
   const logged: { id: string; at: number }[] = [];
   const files: string[] = [];
-  try {
-    const p = join(mem.dir, "memories.jsonl");
-    if (existsSync(p)) files.push(p);
-  } catch {}
-  try {
-    for (const ent of readdirSync(mem.dir, { withFileTypes: true })) {
-      if (!ent.isDirectory() || ent.name === "." || ent.name === ".." || ent.name.includes("..")) continue;
-      const p = join(mem.dir, ent.name, "memories.jsonl");
-      try { if (existsSync(p)) files.push(p); } catch {}
-    }
-  } catch {}
+  try { const p = join(mem.dir, "memories.jsonl"); if (existsSync(p)) files.push(p); } catch {}
+  try { for (const ent of readdirSync(mem.dir, { withFileTypes: true })) { if (!ent.isDirectory() || ent.name === "." || ent.name === ".." || ent.name.includes("..")) continue; const p = join(mem.dir, ent.name, "memories.jsonl"); try { if (existsSync(p)) files.push(p); } catch {} } } catch {}
   const byId = new Map<string, MemoryRecord>();
   for (const p of files) {
     const fileById = new Map<string, MemoryRecord>();
