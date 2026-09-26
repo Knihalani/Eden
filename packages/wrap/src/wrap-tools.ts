@@ -956,7 +956,6 @@ export function wrapTools<T extends ToolsIn>(
             structuredDeopt = reason;
             break;
           }
-          continue;
         }
         if (steeredSkip) {
           if (skipArmed) stampRemainderSkip(state, skipArmed, name);
