@@ -62,25 +62,6 @@ export function isMathChatterCue(cue: string): boolean {
   }
 }
 
-function fatPacket<T extends { text?: string }>(recs: T[], k: number): T[] {
-  try {
-    const list = Array.isArray(recs) ? recs : [];
-    const out: T[] = [];
-    let chars = 0;
-    const floor = Math.max(1, Math.floor(Number(k) || 6));
-    for (const r of list) {
-      const n = String(r.text ?? "").length;
-      if (out.length >= floor && chars + n > MEMORY_X_FAT_CHARS) continue;
-      out.push(r);
-      chars += n;
-      if (chars >= MEMORY_X_FAT_CHARS && out.length >= floor) break;
-    }
-    return out.length ? out : list.slice(0, floor);
-  } catch {
-    return Array.isArray(recs) ? recs : [];
-  }
-}
-
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
 export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number; lane?: MemoryLaneKind };
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
@@ -1388,7 +1369,24 @@ export class AgentMemory {
     if (text) {
       const pool = Math.min(18, Math.max(Math.floor(Number(k) || 0), 12));
       const recs = this.relevant(text, pool);
-      const mixed = fatPacket(recs, k).map(formatNote);
+      const mixed = ((list, cap) => {
+        try {
+          const rows = Array.isArray(list) ? list : [];
+          const out: MemoryRecord[] = [];
+          let chars = 0;
+          const floor = Math.max(1, Math.floor(Number(cap) || 6));
+          for (const r of rows) {
+            const n = String(r.text ?? "").length;
+            if (out.length >= floor && chars + n > MEMORY_X_FAT_CHARS) continue;
+            out.push(r);
+            chars += n;
+            if (chars >= MEMORY_X_FAT_CHARS && out.length >= floor) break;
+          }
+          return (out.length ? out : rows.slice(0, floor)).map(formatNote);
+        } catch {
+          return (Array.isArray(list) ? list : []).map(formatNote);
+        }
+      })(recs, k);
       try { return dropHarmed(this.dir, mixed); } catch { return mixed; }
     }
     const recs = this.memories().filter((r) => !(r.lane === "narrative" || (r.tags ?? []).includes("chunk")) && r.lane !== "icl" && r.lane !== "trajectory");
