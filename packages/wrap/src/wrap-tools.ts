@@ -116,10 +116,6 @@ export function createState(opts: EdenOpts = {}): WrapState {
   };
 }
 
-export function pendingPosts(state: WrapState): number {
-  return ((s, q = outboxes.get(s) ?? []) => (outboxes.set(s, q), q))(state).length;
-}
-
 async function sendPost(state: WrapState, path: string, body: unknown): Promise<boolean> {
   const base = state.opts.baseUrl;
   const key = state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
