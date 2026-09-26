@@ -37,25 +37,6 @@ export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Re
   return "";
 }
 
-function nimTuneBody(url: string, body: Record<string, unknown>): Record<string, unknown> {
-  if (!/nvidia\.com/i.test(url)) return body;
-  const model = String(body.model || "");
-  if (!/deepseek-v4-flash/i.test(model)) return body;
-  const next: Record<string, unknown> = { ...body };
-  const effort = String(next.reasoning_effort || "").toLowerCase();
-  if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none";
-  const prev =
-    next.chat_template_kwargs && typeof next.chat_template_kwargs === "object"
-      ? { ...(next.chat_template_kwargs as Record<string, unknown>) }
-      : {};
-  if (next.reasoning_effort === "none") {
-    prev.thinking = false;
-    prev.reasoning_effort = "none";
-  }
-  next.chat_template_kwargs = prev;
-  return next;
-}
-
 export async function handleChatCompletions(req: Request, opts: ProxyOpts): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" } });
   let body: Record<string, unknown>;
@@ -156,7 +137,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       const upstreamRes = await fn(url, {
         method: "POST",
         headers: upHeaders,
-        body: JSON.stringify((() => { const tuned = nimTuneBody(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))); const prev = tuned.stream_options; const so = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {}; return { ...tuned, stream_options: { ...so, include_usage: true } }; })()),
+        body: JSON.stringify((() => { const tuned = ((url: string, body: Record<string, unknown>) => { if (!/nvidia\.com/i.test(url)) return body; const model = String(body.model || ""); if (!/deepseek-v4-flash/i.test(model)) return body; const next: Record<string, unknown> = { ...body }; const effort = String(next.reasoning_effort || "").toLowerCase(); if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none"; const prev = next.chat_template_kwargs && typeof next.chat_template_kwargs === "object" ? { ...(next.chat_template_kwargs as Record<string, unknown>) } : {}; if (next.reasoning_effort === "none") { prev.thinking = false; prev.reasoning_effort = "none"; } next.chat_template_kwargs = prev; return next; })(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))); const prev = tuned.stream_options; const so = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {}; return { ...tuned, stream_options: { ...so, include_usage: true } }; })()),
         signal: AbortSignal.timeout(timeout),
       });
       const src = upstreamRes.body;
@@ -173,10 +154,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit)) : body.tools),
     body.tools,
   );
-  const steeredBody = nimTuneBody(
-    url,
-    stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), { ...body, stream: false, tools: injected })),
-  );
+  const steeredBody = ((url: string, body: Record<string, unknown>) => { if (!/nvidia\.com/i.test(url)) return body; const model = String(body.model || ""); if (!/deepseek-v4-flash/i.test(model)) return body; const next: Record<string, unknown> = { ...body }; const effort = String(next.reasoning_effort || "").toLowerCase(); if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none"; const prev = next.chat_template_kwargs && typeof next.chat_template_kwargs === "object" ? { ...(next.chat_template_kwargs as Record<string, unknown>) } : {}; if (next.reasoning_effort === "none") { prev.thinking = false; prev.reasoning_effort = "none"; } next.chat_template_kwargs = prev; return next; })(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), { ...body, stream: false, tools: injected })));
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {
