@@ -1,6 +1,6 @@
 import { IslandReply, unwrapIsland, type IslandCaller } from "@eden/ir";
 import { withIslandBatch } from "./island-batch";
-import { parseCacheTokens, parseUsage } from "./usage";
+import { islandUsage } from "./usage";
 
 export { withIslandBatch } from "./island-batch";
 
@@ -115,22 +115,7 @@ export function openaiIsland(opts: {
         const content = json.choices?.[0]?.message?.content || "{}";
         try {
           const parsed = JSON.parse(content);
-          const u = parseUsage(json.usage);
-          const cache = parseCacheTokens(json.usage);
-          const usage = u
-            ? {
-                prompt_tokens: u.prompt,
-                completion_tokens: u.completion,
-                ...(cache
-                  ? {
-                      cached_tokens: cache.cached,
-                      ...(cache.cacheWrite != null ? { cache_write_tokens: cache.cacheWrite } : {}),
-                      ...(cache.denom != null ? { cache_input_tokens: cache.denom } : {}),
-                    }
-                  : {}),
-              }
-            : undefined;
-          return new IslandReply(parsed, usage);
+          return new IslandReply(parsed, islandUsage(json.usage));
         } catch {
           throw new NonJsonReply();
         }

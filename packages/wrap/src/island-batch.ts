@@ -1,5 +1,5 @@
-import { IslandReply, type IslandCaller, type IslandUsage } from "@eden/ir";
-import { parseCacheTokens, parseUsage } from "./usage";
+import { IslandReply, type IslandCaller } from "@eden/ir";
+import { islandUsage } from "./usage";
 
 export const PROVIDER_BATCH_CENTS = 0.5;
 
@@ -224,19 +224,5 @@ function parseBatchResult(json: unknown, customId: string): IslandReply | undefi
   }
   const result = row.result && typeof row.result === "object" ? (row.result as Record<string, unknown>) : row;
   const usageRaw = row.usage ?? result.usage ?? (result.message && typeof result.message === "object" ? (result.message as Record<string, unknown>).usage : undefined);
-  const u = parseUsage(usageRaw);
-  const cache = parseCacheTokens(usageRaw);
-  const usage: IslandUsage = {
-    prompt_tokens: u?.prompt ?? 0,
-    completion_tokens: u?.completion ?? 0,
-    batched: true,
-    ...(cache
-      ? {
-          cached_tokens: cache.cached,
-          ...(cache.cacheWrite != null ? { cache_write_tokens: cache.cacheWrite } : {}),
-          ...(cache.denom != null ? { cache_input_tokens: cache.denom } : {}),
-        }
-      : {}),
-  };
-  return new IslandReply(parsed, usage);
+  return new IslandReply(parsed, islandUsage(usageRaw, true)!);
 }
