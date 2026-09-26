@@ -50,22 +50,17 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
   return out;
 }
 
-function urlShape(url: string): string | null {
-  const templated = parameterizeUrl(url);
-  const m = templated.match(/^(https?:\/\/)([^/?#]+)([^?#]*)/i);
-  if (!m) return null;
-  return `${m[2]!}${m[3] || "/"}`.replaceAll("{issue}", "{id}").replaceAll("{run_id}", "{id}");
-}
-
 function shapesOfString(s: string, into: Set<string>): void {
   if (/^https?:\/\//i.test(s)) {
-    const sh = urlShape(s);
-    if (sh) into.add(sh);
+    const templated = parameterizeUrl(s);
+    const m = templated.match(/^(https?:\/\/)([^/?#]+)([^?#]*)/i);
+    if (m) into.add(`${m[2]!}${m[3] || "/"}`.replaceAll("{issue}", "{id}").replaceAll("{run_id}", "{id}"));
     return;
   }
   for (const u of extractCommandUrls(s)) {
-    const sh = urlShape(u);
-    if (sh) into.add(sh);
+    const templated = parameterizeUrl(u);
+    const m = templated.match(/^(https?:\/\/)([^/?#]+)([^?#]*)/i);
+    if (m) into.add(`${m[2]!}${m[3] || "/"}`.replaceAll("{issue}", "{id}").replaceAll("{run_id}", "{id}"));
   }
   const parsed = parseNamedCli(s);
   if (parsed) {
