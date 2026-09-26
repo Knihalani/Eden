@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { inCanary, redact } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
-import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, DEFAULT_WRAP_TIMEOUT_MS, flushOutbox } from "../src/index";
+import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, flushOutbox } from "../src/index";
 import type { OpenAiHandle } from "../src/eden";
 import { createTicketShip, ticketShipProgram, OOD_ID, WITNESS_IDS } from "../../runtime/src/ticketship";
 
@@ -836,7 +836,6 @@ describe("wrapTimeoutMs", () => {
     const prev = process.env.EDEN_TIMEOUT_MS;
     delete process.env.EDEN_TIMEOUT_MS;
     expect(wrapTimeoutMs()).toBe(60_000);
-    expect(DEFAULT_WRAP_TIMEOUT_MS).toBe(60_000);
     expect(wrapTimeoutMs(12_000)).toBe(12_000);
     expect(wrapTimeoutMs(999_999)).toBe(300_000);
     process.env.EDEN_TIMEOUT_MS = "999999";
