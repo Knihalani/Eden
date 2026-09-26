@@ -22,10 +22,6 @@ function hasNgram(sequence: string[] | undefined, ngram: string[]): boolean {
   return false;
 }
 
-function matchingProgram(live: StretchProgram[], pred: (p: StretchProgram) => boolean): StretchProgram | undefined {
-  return live.filter((p) => p.manifest).find(pred);
-}
-
 export function requiredChecks(
   live: StretchProgram[],
   events: { name: string; skipped?: boolean }[],
@@ -62,7 +58,7 @@ export function decideGuard(args: {
   if (loop?.ngram && loop.ngram.includes(name)) {
     const allReads = loop.ngram.every((n) => isReadName(n));
     if (!allReads && latestRepeatStalled(run.events, loop.ngram)) {
-      const hit = matchingProgram(live, (p) => hasNgram(p.sequence, loop.ngram!));
+      const hit = live.filter((p) => p.manifest).find((p) => hasNgram(p.sequence, loop.ngram!));
       if (hit) return { action: "steer", program: hit, reason: "loop" };
       return { action: "halt", reason: "loop" };
     }
@@ -72,7 +68,7 @@ export function decideGuard(args: {
     const preview = evidenceLedger([...run.events, { name, args: {}, ok: true }], required);
     if (preview.absent.length) {
       const need = new Set(preview.absent);
-      const hit = matchingProgram(live, (p) => (p.sequence ?? []).some((n) => need.has(n)));
+      const hit = live.filter((p) => p.manifest).find((p) => (p.sequence ?? []).some((n) => need.has(n)));
       if (hit) return { action: "steer", program: hit, reason: "missing_evidence" };
       return { action: "block", reason: "missing_evidence" };
     }
@@ -92,7 +88,7 @@ export function decideGuard(args: {
   if (view.spent) return { action: "halt", reason: "budget", detail: forecastCopy(view) };
   if (run.firstWarningAt == null) return null;
   if (view.timeoutPressure) {
-    const hit = matchingProgram(matches, (p) => (p.budget?.ms ?? 0) <= remaining);
+    const hit = matches.filter((p) => p.manifest).find((p) => (p.budget?.ms ?? 0) <= remaining);
     if (hit) return { action: "steer", program: hit, reason: "budget" };
     return { action: "halt", reason: "budget", detail: forecastCopy(view) };
   }
