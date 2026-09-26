@@ -248,12 +248,6 @@ const PLACE_DOTTED = /^[A-Za-z0-9_-]+(?:\.[A-Za-z][A-Za-z0-9]*)+$/;
 const PLACE_SEG = /^[A-Za-z0-9_.@+-]+$/;
 const PLACE_CAP = 8;
 
-function placeLooksLikePath(s: string): boolean {
-  const parts = s.split("/").filter(Boolean);
-  if (!parts.length || !parts.every((p) => PLACE_SEG.test(p))) return false;
-  return PLACE_DOTTED.test(parts[parts.length - 1] ?? "");
-}
-
 function placePush(out: string[], name: string): void {
   const n = name.trim();
   if (!n || n.length > 120 || /[\r\n]/.test(n) || PLACE_EMAIL.test(n)) return;
@@ -283,9 +277,10 @@ function placeNamesFromString(raw: string, cwds: string[], out: string[]): void 
     if (PLACE_DOTTED.test(base)) placePush(out, base);
     return;
   }
-  if (!placeLooksLikePath(s)) return;
-  const base = s.split("/").filter(Boolean).pop() ?? "";
-  if (PLACE_DOTTED.test(base)) placePush(out, base);
+  const parts = s.split("/").filter(Boolean);
+  if (!parts.length || !parts.every((p) => PLACE_SEG.test(p)) || !PLACE_DOTTED.test(parts[parts.length - 1] ?? "")) return;
+  const base = parts[parts.length - 1] ?? "";
+  placePush(out, base);
   if (s.length <= 120 && s.includes("/") && s.toLowerCase() !== base.toLowerCase()) placePush(out, s);
 }
 
@@ -321,7 +316,8 @@ function placeScan(o: Record<string, unknown>, cwds: string[], out: string[], de
     try {
       for (const tok of pathCues(text.replace(PLACE_EMAIL, " "))) {
         if (out.length >= PLACE_CAP) break;
-        if (!placeLooksLikePath(tok)) continue;
+        const parts = tok.split("/").filter(Boolean);
+        if (!parts.length || !parts.every((p) => PLACE_SEG.test(p)) || !PLACE_DOTTED.test(parts[parts.length - 1] ?? "")) continue;
         placePush(out, tok);
       }
     } catch {}
