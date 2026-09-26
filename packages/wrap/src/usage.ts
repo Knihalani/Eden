@@ -254,28 +254,27 @@ export class SseUsageParser {
 export function tapSseUsage(stream: ReadableStream<Uint8Array>, run: RunRecorder): ReadableStream<Uint8Array> {
   const parser = new SseUsageParser();
   const reader = stream.getReader();
-  const finish = () => {
-    parser.end();
-    parser.commit(run);
-  };
   return new ReadableStream<Uint8Array>({
     async pull(ctl) {
       try {
         const { done, value } = await reader.read();
         if (done) {
-          finish();
+          parser.end();
+          parser.commit(run);
           ctl.close();
           return;
         }
         parser.pushBytes(value);
         ctl.enqueue(value);
       } catch (err) {
-        finish();
+        parser.end();
+        parser.commit(run);
         ctl.error(err);
       }
     },
     async cancel() {
-      finish();
+      parser.end();
+      parser.commit(run);
       try {
         await reader.cancel();
       } catch {
