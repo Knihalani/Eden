@@ -1,5 +1,4 @@
-import type { StretchProgram } from "@eden/ir";
-import { jitMax } from "@eden/ir";
+import { jitMax, type StretchProgram } from "@eden/ir";
 import { argShapes, firstCommandTemplate, programFirstStepShapes, templateFits } from "./steer";
 import { looksLikeDenseWitness } from "../../core/src/shapes";
 
