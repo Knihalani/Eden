@@ -944,39 +944,6 @@ function prependFloor(extras: MemoryRecord[], lexical: MemoryRecord[], cap: numb
   return out.length ? out : base;
 }
 
-function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
-  try {
-    if (!String(text ?? "").trim()) return lexical;
-    const live = new SemanticStore(dir).live();
-    if (!Array.isArray(live) || !live.length) return lexical;
-    const extras: MemoryRecord[] = [];
-    for (const row of live) {
-      let subj = String(row.s ?? "").trim();
-      let obj = String(row.o ?? "").trim();
-      const pred = String(row.p ?? "").trim().toLowerCase();
-      if (!subj || !obj || !pred) continue;
-      try {
-        subj = scrubMemoryText(subj);
-        obj = scrubMemoryText(obj);
-      } catch {}
-      if (!subj || !obj || subj === "[cwd]" || obj === "[cwd]" || subj === "[session]" || obj === "[session]" || subj === "[email]" || obj === "[email]") continue;
-      const titled = subj.charAt(0).toUpperCase() + subj.slice(1);
-      const body = pred === "uses" ? `${subj} uses ${obj}` : pred === "is" ? (/^[A-Z]/.test(obj) ? `${titled} is ${obj}.` : `The ${subj} is ${obj}.`) : `${titled} ${pred} ${obj}`.replace(/\s+/g, " ").trim();
-      extras.push({
-        id: `sem:${row.s}:${row.p}`,
-        text: body,
-        kind: "fact",
-        lane: "chat",
-        tags: ["fact", "semantic", "x-identity"],
-        at: Number.isFinite(row.t) ? row.t : 0,
-      });
-    }
-    return prependFloor(extras, lexical, cap);
-  } catch {
-    return lexical;
-  }
-}
-
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
@@ -1494,7 +1461,36 @@ export class AgentMemory {
         lexical = prependFloor(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
       }
     } catch {}
-    lexical = mergeRootIdentity(lexical, text, cap, this.dir);
+    try {
+      if (String(text ?? "").trim()) {
+        const live = new SemanticStore(this.dir).live();
+        if (Array.isArray(live) && live.length) {
+          const extras: MemoryRecord[] = [];
+          for (const row of live) {
+            let subj = String(row.s ?? "").trim();
+            let obj = String(row.o ?? "").trim();
+            const pred = String(row.p ?? "").trim().toLowerCase();
+            if (!subj || !obj || !pred) continue;
+            try {
+              subj = scrubMemoryText(subj);
+              obj = scrubMemoryText(obj);
+            } catch {}
+            if (!subj || !obj || subj === "[cwd]" || obj === "[cwd]" || subj === "[session]" || obj === "[session]" || subj === "[email]" || obj === "[email]") continue;
+            const titled = subj.charAt(0).toUpperCase() + subj.slice(1);
+            const body = pred === "uses" ? `${subj} uses ${obj}` : pred === "is" ? (/^[A-Z]/.test(obj) ? `${titled} is ${obj}.` : `The ${subj} is ${obj}.`) : `${titled} ${pred} ${obj}`.replace(/\s+/g, " ").trim();
+            extras.push({
+              id: `sem:${row.s}:${row.p}`,
+              text: body,
+              kind: "fact",
+              lane: "chat",
+              tags: ["fact", "semantic", "x-identity"],
+              at: Number.isFinite(row.t) ? row.t : 0,
+            });
+          }
+          lexical = prependFloor(extras, lexical, cap);
+        }
+      }
+    } catch {}
     return suppressPacketNearDups(mergeExperienceLane(
       mergeHowtoLane(mergeNarrativeLane(lexical, text, cap, this.howtoDir, recs), text, cap, this.howtoDir),
       text,
