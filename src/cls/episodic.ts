@@ -1,5 +1,5 @@
 import { completeScores } from "./complete";
-import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stampToks, stem, textTimeToks, words, type Stamp } from "./text";
+import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stem, textTimeToks, words, type Stamp } from "./text";
 
 export type Episode = {
   i: number;
@@ -93,7 +93,7 @@ export function featurize(text: string, speaker: string, stamp: Stamp, grounded:
   for (const n of properNames(text)) bump(`#${n}`, 1);
   for (const c of codeToks(text)) bump(`#${c}`, 1);
   if (speaker) bump(`@${speaker.toLowerCase()}`, 1);
-  for (const t of stampToks(stamp)) bump(t, 1);
+  for (const t of (stamp ? [`t:y${stamp.y}`, `t:m${stamp.m}`, `t:${stamp.y}-${stamp.m}`, `t:d${stamp.d}`] : [])) bump(t, 1);
   for (const t of textTimeToks(text)) bump(t, 0.8);
   for (const g of grounded) for (const t of textTimeToks(g)) bump(t, 0.5);
   return key;
