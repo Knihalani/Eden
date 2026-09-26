@@ -85,7 +85,10 @@ function bindingDependsOnStep(b: Binding): boolean {
   return false;
 }
 
-function bodyOwned(program: StretchProgram): Set<string> {
+export function firstWaveReads(
+  program: StretchProgram,
+  input: Record<string, unknown>,
+): Array<{ tool: string; args: Record<string, unknown> }> {
   const owned = new Set<string>();
   for (const s of program.steps ?? []) {
     if (s.kind === "loop") for (const id of s.body) owned.add(id);
@@ -95,14 +98,6 @@ function bodyOwned(program: StretchProgram): Set<string> {
       for (const c of s.cases ?? []) for (const id of c.steps) owned.add(id);
     }
   }
-  return owned;
-}
-
-export function firstWaveReads(
-  program: StretchProgram,
-  input: Record<string, unknown>,
-): Array<{ tool: string; args: Record<string, unknown> }> {
-  const owned = bodyOwned(program);
   const pending = (program.steps ?? []).filter((s) => !owned.has(s.id));
   const wave: Array<{ tool: string; args: Record<string, unknown> }> = [];
   const scope = { input, results: new Map<string, unknown>() };
