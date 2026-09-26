@@ -13,10 +13,6 @@ export type OpenAiToolCall = {
   matched_by?: "name" | "argshape";
 };
 
-function callName(c: OpenAiToolCall): string {
-  return c.function?.name || c.name || "";
-}
-
 function callArgs(c: OpenAiToolCall): Record<string, unknown> {
   if (c.function?.arguments) {
     try {
@@ -197,7 +193,7 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
   if (!calls.length || !programs.length) return calls;
   const live = programs.filter((p) => p.manifest);
   const first = calls[0]!;
-  const name = callName(first);
+  const name = first.function?.name || first.name || "";
   if (live.some((p) => p.name === name)) return calls;
 
   type Hit = { p: StretchProgram; input: Record<string, unknown>; by: "name" | "argshape" };
@@ -251,7 +247,7 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
     matched_by: hit.by,
   };
   const laterSteps = new Set((hit.p.sequence ?? []).slice(1));
-  return [steered, ...calls.slice(1).filter((c) => !laterSteps.has(callName(c)))];
+  return [steered, ...calls.slice(1).filter((c) => !laterSteps.has(c.function?.name || c.name || ""))];
 }
 
 export function compiledSchema(program: StretchProgram) {
