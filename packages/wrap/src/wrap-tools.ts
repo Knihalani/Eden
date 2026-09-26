@@ -518,10 +518,6 @@ async function safelyAsync<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-function replayableProgram(p: StretchProgram): boolean {
-  return (p.sequence ?? []).every((n) => isReadName(n));
-}
-
 export function wrapTools<T extends ToolsIn>(
   tools: T,
   state: WrapState,
@@ -853,13 +849,13 @@ export function wrapTools<T extends ToolsIn>(
         } catch (err) {
           if (state.opts.failOpen === false) throw err;
           const first = (p.sequence ?? [])[0];
-          const canReplay = replayableProgram(p) && !!first && first in tools;
+          const canReplay = (p.sequence ?? []).every((n) => isReadName(n)) && !!first && first in tools;
           if (!isDeopt(err)) {
             return canReplay
               ? asToolDef(first!, tools[first!]!).execute(args)
               : { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
           }
-          if (!isReplaySafe(err) && !replayableProgram(p)) {
+          if (!isReplaySafe(err) && !(p.sequence ?? []).every((n) => isReadName(n))) {
             return { eden: "deopt", reason: (err as Error).message };
           }
           if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
@@ -969,7 +965,7 @@ export function wrapTools<T extends ToolsIn>(
             void pullLive(state);
             const touched = isDeopt(err) && !isReplaySafe(err);
             const unknownState = !isDeopt(err);
-            if ((touched || unknownState) && !replayableProgram(hit.p)) {
+            if ((touched || unknownState) && !(hit.p.sequence ?? []).every((n) => isReadName(n))) {
               return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
             }
           }
@@ -1112,7 +1108,7 @@ export function wrapTools<T extends ToolsIn>(
                 } catch {}
                 emit(run.events[0]?.args, owner);
                 const touched = isDeopt(err) && !isReplaySafe(err);
-                if (!(replayableProgram(guard.program) && !touched)) {
+                if (!((guard.program.sequence ?? []).every((n) => isReadName(n)) && !touched)) {
                   return { eden: "halted", reason: guard.reason };
                 }
               }
