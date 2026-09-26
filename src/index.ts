@@ -315,17 +315,6 @@ function placeAddValue(v: unknown, cwds: string[], out: string[], depth: number)
   for (const k of PLACE_OBJ_KEYS) if (k in o) placeAddValue(o[k], cwds, out, depth + 1);
 }
 
-function placeAddGoal(text: string, out: string[]): void {
-  if (!text || text.length > 200 || /[\r\n]/.test(text)) return;
-  try {
-    for (const tok of pathCues(text.replace(PLACE_EMAIL, " "))) {
-      if (out.length >= PLACE_CAP) return;
-      if (!placeLooksLikePath(tok)) continue;
-      placePush(out, tok);
-    }
-  } catch {}
-}
-
 function placeScan(o: Record<string, unknown>, cwds: string[], out: string[], depth: number): void {
   if (depth > 1) return;
   if (typeof o.cwd === "string") {
@@ -333,7 +322,17 @@ function placeScan(o: Record<string, unknown>, cwds: string[], out: string[], de
     if (n.length >= 2 && !cwds.some((x) => x.toLowerCase() === n.toLowerCase())) cwds.push(n);
   }
   for (const k of PLACE_PATH_KEYS) if (k in o) placeAddValue(o[k], cwds, out, 0);
-  for (const k of PLACE_GOAL_KEYS) if (typeof o[k] === "string") placeAddGoal(o[k], out);
+  for (const k of PLACE_GOAL_KEYS) {
+    const text = o[k];
+    if (typeof text !== "string" || !text || text.length > 200 || /[\r\n]/.test(text)) continue;
+    try {
+      for (const tok of pathCues(text.replace(PLACE_EMAIL, " "))) {
+        if (out.length >= PLACE_CAP) break;
+        if (!placeLooksLikePath(tok)) continue;
+        placePush(out, tok);
+      }
+    } catch {}
+  }
   if (depth === 0) {
     for (const nest of ["context", "editor"] as const) {
       const child = o[nest];
