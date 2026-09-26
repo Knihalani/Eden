@@ -24,14 +24,6 @@ function corsOrigin(req: Request): Record<string, string> {
   return {};
 }
 
-function programs(opts: ProxyOpts): StretchProgram[] {
-  try {
-    return opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest);
-  } catch {
-    return [];
-  }
-}
-
 export function isWrapAuthToken(key: string): boolean {
   const t = key.trim();
   if (!t) return false;
@@ -157,7 +149,9 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   } catch {
     /* header parse fail-open: inject the parsed JSON as-is */
   }
-  const live = filterCanary(programs(opts), opts.state.sessionId);
+  let liveProgs: StretchProgram[] = [];
+  try { liveProgs = opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest); } catch {}
+  const live = filterCanary(liveProgs, opts.state.sessionId);
   safely(() => {
     const last = opts.state.run.events.at(-1);
     turnBoundary(opts.state, { lastTool: last?.name, lastArgs: last?.args, input: last?.args });
