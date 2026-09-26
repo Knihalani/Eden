@@ -86,13 +86,13 @@ export function recordCompletion(run: RunRecorder, json: Record<string, unknown>
     const choice = choices[0] as Record<string, unknown>;
     const message = choice.message;
     if (message && typeof message === "object") {
-      const text = contentText((message as Record<string, unknown>).content);
+      const text = ((c: unknown) => typeof c === "string" ? c : Array.isArray(c) ? (c.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") || undefined) : undefined)((message as Record<string, unknown>).content);
       if (text != null) out = text;
     }
     if (out == null) {
       const delta = choice.delta;
       if (delta && typeof delta === "object") {
-        const text = contentText((delta as Record<string, unknown>).content);
+        const text = ((c: unknown) => typeof c === "string" ? c : Array.isArray(c) ? (c.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") || undefined) : undefined)((delta as Record<string, unknown>).content);
         if (text != null) out = text;
       }
     }
@@ -289,15 +289,6 @@ export async function scrapeSseUsage(stream: ReadableStream<Uint8Array>, run: Ru
     } catch {
     }
   }
-}
-
-function contentText(content: unknown): string | undefined {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return undefined;
-  const parts = content
-    .map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : ""))
-    .join("");
-  return parts || undefined;
 }
 
 function coerceInt(v: unknown): number | undefined {
