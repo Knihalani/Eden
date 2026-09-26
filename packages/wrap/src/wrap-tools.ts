@@ -310,7 +310,7 @@ export async function runCompiled(
         ...(baseReg.has ? { has: (name: string) => baseReg.has!(name) } : {}),
         execute: async (name, args, ctx) => {
           try {
-            const taken = await takeWarm(state, program, input, name, args);
+            const taken = await takeWarm(state, program, name, args);
             if (taken.hit) return taken.value;
           } catch {}
           return baseReg.execute(name, args, ctx);

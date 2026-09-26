@@ -271,7 +271,7 @@ describe("watch-time warming", () => {
     const value = await runCompiled(state, next, { id: "T-200" }, defs);
     expect(value).toMatchObject({ id: "T-200" });
     expect(value).not.toMatchObject({ labels: expect.anything() });
-    const leaked = await takeWarm(state, next, { id: "T-100" }, "getLabels", { id: "T-100" });
+    const leaked = await takeWarm(state, next, "getLabels", { id: "T-100" });
     expect(leaked.hit).toBe(false);
   });
 
@@ -319,7 +319,7 @@ describe("watch-time warming", () => {
     bind(state, log);
     watchWarm(state, current, { input: { id: "T-100" } });
     discardWarm(state);
-    const taken = await takeWarm(state, next, { id: "T-100" }, "getLabels", { id: "T-100" });
+    const taken = await takeWarm(state, next, "getLabels", { id: "T-100" });
     expect(taken.hit).toBe(false);
   });
 

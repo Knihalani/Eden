@@ -121,7 +121,6 @@ export function discardWarm(state: WrapState): void {
 export async function takeWarm(
   state: WrapState,
   program: StretchProgram,
-  input: Record<string, unknown>,
   tool: string,
   args: Record<string, unknown>,
 ): Promise<WarmTake> {
