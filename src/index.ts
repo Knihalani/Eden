@@ -239,14 +239,6 @@ const PLACE_DOTTED = /^[A-Za-z0-9_-]+(?:\.[A-Za-z][A-Za-z0-9]*)+$/;
 const PLACE_SEG = /^[A-Za-z0-9_.@+-]+$/;
 const PLACE_CAP = 8;
 
-function placePush(out: string[], name: string): void {
-  const n = name.trim();
-  if (!n || n.length > 120 || /[\r\n]/.test(n) || PLACE_EMAIL.test(n)) return;
-  const key = n.toLowerCase();
-  if (out.some((x) => x.toLowerCase() === key) || out.length >= PLACE_CAP) return;
-  out.push(n);
-}
-
 function placeNamesFromString(raw: string, cwds: string[], out: string[]): void {
   let s = raw.trim();
   if (!s || s.length > 200 || /[\r\n]/.test(s) || PLACE_EMAIL.test(s) || /^cwd$/i.test(s)) return;
@@ -265,14 +257,14 @@ function placeNamesFromString(raw: string, cwds: string[], out: string[]): void 
     const parts = s.split("/").filter(Boolean);
     if (!parts.every((p) => PLACE_SEG.test(p))) return;
     const base = parts[parts.length - 1] ?? "";
-    if (PLACE_DOTTED.test(base)) placePush(out, base);
+    if (PLACE_DOTTED.test(base)) ((out, name) => { const n = name.trim(); if (!n || n.length > 120 || /[\r\n]/.test(n) || PLACE_EMAIL.test(n)) return; const key = n.toLowerCase(); if (out.some((x) => x.toLowerCase() === key) || out.length >= PLACE_CAP) return; out.push(n); })(out, base);
     return;
   }
   const parts = s.split("/").filter(Boolean);
   if (!parts.length || !parts.every((p) => PLACE_SEG.test(p)) || !PLACE_DOTTED.test(parts[parts.length - 1] ?? "")) return;
   const base = parts[parts.length - 1] ?? "";
-  placePush(out, base);
-  if (s.length <= 120 && s.includes("/") && s.toLowerCase() !== base.toLowerCase()) placePush(out, s);
+  ((out, name) => { const n = name.trim(); if (!n || n.length > 120 || /[\r\n]/.test(n) || PLACE_EMAIL.test(n)) return; const key = n.toLowerCase(); if (out.some((x) => x.toLowerCase() === key) || out.length >= PLACE_CAP) return; out.push(n); })(out, base);
+  if (s.length <= 120 && s.includes("/") && s.toLowerCase() !== base.toLowerCase()) ((out, name) => { const n = name.trim(); if (!n || n.length > 120 || /[\r\n]/.test(n) || PLACE_EMAIL.test(n)) return; const key = n.toLowerCase(); if (out.some((x) => x.toLowerCase() === key) || out.length >= PLACE_CAP) return; out.push(n); })(out, s);
 }
 
 function placeAddValue(v: unknown, cwds: string[], out: string[], depth: number): void {
@@ -309,7 +301,7 @@ function placeScan(o: Record<string, unknown>, cwds: string[], out: string[], de
         if (out.length >= PLACE_CAP) break;
         const parts = tok.split("/").filter(Boolean);
         if (!parts.length || !parts.every((p) => PLACE_SEG.test(p)) || !PLACE_DOTTED.test(parts[parts.length - 1] ?? "")) continue;
-        placePush(out, tok);
+        ((out, name) => { const n = name.trim(); if (!n || n.length > 120 || /[\r\n]/.test(n) || PLACE_EMAIL.test(n)) return; const key = n.toLowerCase(); if (out.some((x) => x.toLowerCase() === key) || out.length >= PLACE_CAP) return; out.push(n); })(out, tok);
       }
     } catch {}
   }
