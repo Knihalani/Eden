@@ -158,7 +158,16 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
         else if (rec?.kind === "gist" || rec?.kind === "digest") lane = "gist";
         else if (rec?.lane === "narrative") lane = "narrative";
       } catch {}
-      const bag = nearDupStems(cand.rec.text);
+      const bagAll = new Set<string>();
+      const bagContent = new Set<string>();
+      try {
+        for (const w of tokList(String(cand.rec.text ?? ""))) {
+          if (!w) continue;
+          bagAll.add(w);
+          if (!STOP.has(w)) bagContent.add(w);
+        }
+      } catch {}
+      const bag = bagContent.size ? bagContent : bagAll;
       let dup = false;
       for (let i = 0; i < picked.length; i++) {
         if (lanes[i] !== lane) continue;
@@ -182,19 +191,6 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
   } catch {
     return prior();
   }
-}
-
-function nearDupStems(text: string): Set<string> {
-  const all = new Set<string>();
-  const content = new Set<string>();
-  try {
-    for (const w of tokList(String(text ?? ""))) {
-      if (!w) continue;
-      all.add(w);
-      if (!STOP.has(w)) content.add(w);
-    }
-  } catch {}
-  return content.size ? content : all;
 }
 
 function stemJaccard(a: Set<string>, b: Set<string>): number {
