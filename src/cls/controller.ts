@@ -4,10 +4,6 @@ import { EpisodicStore, rareCueToks, rareTermHits, scoreChunksAsEpisodes, type C
 import { SemanticStore } from "./semantic";
 import { properNames, stem, contentToks } from "./text";
 
-function bodyKey(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24);
-}
-
 export class CLSController {
   readonly epi = new EpisodicStore();
   readonly sem = new SemanticStore();
@@ -25,7 +21,7 @@ export class CLSController {
     this.bodyIndex.clear();
     this.canonCache.clear();
     for (const e of this.epi.episodes) {
-      const k = bodyKey(e.text);
+      const k = e.text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24);
       if (!k) continue;
       const l = this.bodyIndex.get(k);
       if (l) l.push(e.i);
@@ -49,7 +45,7 @@ export class CLSController {
       .replace(/\s+/g, " ")
       .trim();
     let out = -1;
-    const cands = this.bodyIndex.get(bodyKey(body));
+    const cands = this.bodyIndex.get(body.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24));
     if (cands) {
       for (const i of cands) {
         const full = this.epi.episodes[i]!.text;
