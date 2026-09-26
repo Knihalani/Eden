@@ -247,7 +247,24 @@ async function pollUntilComplete(
 
 function parseBatchResult(json: unknown, customId: string): IslandReply | undefined {
   if (!json || typeof json !== "object") return undefined;
-  const rows = collectResultRows(json as Record<string, unknown>);
+  const obj = json as Record<string, unknown>;
+  const raw = obj.results ?? obj.requests;
+  const rows: Array<Record<string, unknown>> = Array.isArray(raw)
+    ? raw.filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
+    : typeof raw === "string"
+      ? raw
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            try {
+              return JSON.parse(line) as unknown;
+            } catch {
+              return undefined;
+            }
+          })
+          .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
+      : [];
   const row = rows.find((r) => String(r.custom_id ?? "") === customId) ?? (rows.length === 1 && customId === "0" ? rows[0] : undefined);
   if (!row) return undefined;
   let text: string | undefined;
@@ -307,26 +324,4 @@ function parseBatchResult(json: unknown, customId: string): IslandReply | undefi
       : {}),
   };
   return new IslandReply(parsed, usage);
-}
-
-function collectResultRows(obj: Record<string, unknown>): Array<Record<string, unknown>> {
-  const raw = obj.results ?? obj.requests;
-  if (Array.isArray(raw)) {
-    return raw.filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object");
-  }
-  if (typeof raw === "string") {
-    return raw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        try {
-          return JSON.parse(line) as unknown;
-        } catch {
-          return undefined;
-        }
-      })
-      .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object");
-  }
-  return [];
 }
