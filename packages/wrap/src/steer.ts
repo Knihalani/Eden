@@ -57,13 +57,6 @@ function urlShape(url: string): string | null {
   return `${m[2]!}${m[3] || "/"}`.replaceAll("{issue}", "{id}").replaceAll("{run_id}", "{id}");
 }
 
-function cliShape(command: string): string | null {
-  const parsed = parseNamedCli(command);
-  if (!parsed) return null;
-  const positionals = parsed.positionals.map((p) => (/^\d+$/.test(p) ? "{id}" : p));
-  return `${familyId(parsed)}${positionals.length ? ` ${positionals.join(" ")}` : ""}`;
-}
-
 function shapesOfString(s: string, into: Set<string>): void {
   if (/^https?:\/\//i.test(s)) {
     const sh = urlShape(s);
@@ -74,8 +67,11 @@ function shapesOfString(s: string, into: Set<string>): void {
     const sh = urlShape(u);
     if (sh) into.add(sh);
   }
-  const cli = cliShape(s);
-  if (cli) into.add(cli);
+  const parsed = parseNamedCli(s);
+  if (parsed) {
+    const positionals = parsed.positionals.map((p) => (/^\d+$/.test(p) ? "{id}" : p));
+    into.add(`${familyId(parsed)}${positionals.length ? ` ${positionals.join(" ")}` : ""}`);
+  }
   const shape = commandShapeCached(s);
   if (shape && !NOISE_SHAPE.has(shape.name)) into.add(`cli:${shape.name}`);
 }
