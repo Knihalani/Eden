@@ -239,7 +239,38 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     );
   }
   if (wantsStream) {
-    return new Response(safely(() => asStreamChunks(json as Record<string, unknown>), text), {
+    return new Response(safely(() => {
+      const j = json as {
+        id?: string;
+        created?: number;
+        model?: string;
+        usage?: unknown;
+        choices?: Array<{ index?: number; message?: Record<string, unknown>; finish_reason?: string }>;
+      };
+      const base = {
+        id: j.id ?? `chatcmpl-${Date.now()}`,
+        object: "chat.completion.chunk",
+        created: j.created ?? Math.floor(Date.now() / 1000),
+        model: j.model ?? "",
+      };
+      const lines: string[] = [];
+      const choices = j.choices?.length ? j.choices : [{ index: 0, message: {}, finish_reason: "stop" }];
+      for (const [i, c] of choices.entries()) {
+        const index = c.index ?? i;
+        const { role, content, tool_calls, ...rest } = (c.message ?? {}) as Record<string, unknown>;
+        const delta: Record<string, unknown> = { role: role ?? "assistant", ...rest };
+        if (content !== undefined && content !== null) delta.content = content;
+        if (Array.isArray(tool_calls)) {
+          delta.tool_calls = tool_calls.map((t, k) => ({ index: k, ...(t as Record<string, unknown>) }));
+        }
+        lines.push(`data: ${JSON.stringify({ ...base, choices: [{ index, delta, finish_reason: null }] })}\n\n`);
+        const finish: Record<string, unknown> = { ...base, choices: [{ index, delta: {}, finish_reason: c.finish_reason ?? "stop" }] };
+        if (j.usage != null && i === choices.length - 1) finish.usage = j.usage;
+        lines.push(`data: ${JSON.stringify(finish)}\n\n`);
+      }
+      lines.push("data: [DONE]\n\n");
+      return lines.join("");
+    }, text), {
       status: 200,
       headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", ...corsOrigin(req) },
     });
@@ -259,39 +290,6 @@ function safely<T>(fn: () => T, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function asStreamChunks(json: Record<string, unknown>): string {
-  const j = json as {
-    id?: string;
-    created?: number;
-    model?: string;
-    usage?: unknown;
-    choices?: Array<{ index?: number; message?: Record<string, unknown>; finish_reason?: string }>;
-  };
-  const base = {
-    id: j.id ?? `chatcmpl-${Date.now()}`,
-    object: "chat.completion.chunk",
-    created: j.created ?? Math.floor(Date.now() / 1000),
-    model: j.model ?? "",
-  };
-  const lines: string[] = [];
-  const choices = j.choices?.length ? j.choices : [{ index: 0, message: {}, finish_reason: "stop" }];
-  for (const [i, c] of choices.entries()) {
-    const index = c.index ?? i;
-    const { role, content, tool_calls, ...rest } = (c.message ?? {}) as Record<string, unknown>;
-    const delta: Record<string, unknown> = { role: role ?? "assistant", ...rest };
-    if (content !== undefined && content !== null) delta.content = content;
-    if (Array.isArray(tool_calls)) {
-      delta.tool_calls = tool_calls.map((t, k) => ({ index: k, ...(t as Record<string, unknown>) }));
-    }
-    lines.push(`data: ${JSON.stringify({ ...base, choices: [{ index, delta, finish_reason: null }] })}\n\n`);
-    const finish: Record<string, unknown> = { ...base, choices: [{ index, delta: {}, finish_reason: c.finish_reason ?? "stop" }] };
-    if (j.usage != null && i === choices.length - 1) finish.usage = j.usage;
-    lines.push(`data: ${JSON.stringify(finish)}\n\n`);
-  }
-  lines.push("data: [DONE]\n\n");
-  return lines.join("");
 }
 
 export function health(): Response {
