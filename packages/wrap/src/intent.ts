@@ -51,14 +51,6 @@ const STOP_TOKENS = new Set([
   "status",
 ]);
 
-function informativeTokens(s: string): string[] {
-  return s
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 4 && !STOP_TOKENS.has(t));
-}
-
 const MSG_TEXT_KEYS = new Set(["content", "text", "command", "url", "thinking", "reasoning_content", "reasoning"]);
 
 export function messageText(messages: readonly unknown[], maxMessages = 8): string {
@@ -198,8 +190,14 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
     let hits = 0;
     const lower = text.toLowerCase();
     const toks = new Set<string>();
-    for (const t of informativeTokens(p.name || "")) toks.add(t);
-    for (const n of p.sequence ?? []) for (const t of informativeTokens(n)) toks.add(t);
+    const toksOf = (s: string) =>
+      s
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length >= 4 && !STOP_TOKENS.has(t));
+    for (const t of toksOf(p.name || "")) toks.add(t);
+    for (const n of p.sequence ?? []) for (const t of toksOf(n)) toks.add(t);
     for (const t of toks) {
       if (lower.includes(t)) {
         hits++;
