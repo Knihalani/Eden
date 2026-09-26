@@ -1,5 +1,4 @@
-import type { StretchProgram, ToolStep } from "@eden/ir";
-import { inDistribution, mayServe, asRecord, getPath, interpolateSlots, setKey, PTC_CALLERS } from "@eden/ir";
+import { asRecord, getPath, inDistribution, interpolateSlots, mayServe, PTC_CALLERS, setKey, type StretchProgram, type ToolStep } from "@eden/ir";
 import { parameterizeUrl, extractCommandUrls } from "../../core/src/urls";
 import { parseNamedCli, familyId } from "../../core/src/named-cli";
 import { commandShapeCached } from "../../core/src/shapes";
