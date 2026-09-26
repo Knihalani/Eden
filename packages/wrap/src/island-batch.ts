@@ -1,5 +1,4 @@
-import type { IslandCaller } from "@eden/ir";
-import { IslandReply, type IslandUsage } from "@eden/ir";
+import { IslandReply, type IslandCaller, type IslandUsage } from "@eden/ir";
 import { parseCacheTokens, parseUsage } from "./usage";
 
 export const PROVIDER_BATCH_CENTS = 0.5;
