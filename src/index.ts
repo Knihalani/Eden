@@ -678,7 +678,7 @@ function formatNote(r: MemoryRecord): MemoryRecord {
   let body = stripped;
   if (isProcedure) body = formatProcedureBody(body);
   else {
-    const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || isNarrativeNote(r)
+    const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || r.lane === "narrative" || (r.tags ?? []).includes("chunk")
       || isFactList(r.text) || isFactList(body);
     const factish = r.kind === "fact" || r.kind === "preference" || /^\s*\[fact(?:\s*·[^\]]*)?\]/i.test(body);
     if (!skipFactCap && factish) body = formatLabeledBody(body, /^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is, FACT_CHAR_CAP);
@@ -867,10 +867,6 @@ function isIclCue(text: string): boolean {
   return false;
 }
 
-function isNarrativeNote(m: { lane?: string; tags?: string[] }): boolean {
-  return m.lane === "narrative" || (m.tags ?? []).includes("chunk");
-}
-
 function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?: string[] }>(
   notes: T[],
   store: SemanticStore,
@@ -880,7 +876,7 @@ function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?:
     const out: T[] = [];
     for (const n of notes) {
       if (!n || typeof n !== "object") continue;
-      if (!isNarrativeNote(n) && n.lane !== "trajectory") {
+      if (!(n.lane === "narrative" || (n.tags ?? []).includes("chunk")) && n.lane !== "trajectory") {
         out.push(n);
         continue;
       }
@@ -921,7 +917,7 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
     const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
     if (!k) return lexical;
     const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
-    const chat = Array.isArray(lexical) ? lexical.filter((l) => !isNarrativeNote(l)) : [];
+    const chat = Array.isArray(lexical) ? lexical.filter((l) => !(l.lane === "narrative" || (l.tags ?? []).includes("chunk"))) : [];
     if (!Array.isArray(hits) || !hits.length) return chat;
     const chunks: MemoryRecord[] = [];
     for (const hit of hits) {
@@ -1473,7 +1469,7 @@ export class AgentMemory {
       const mixed = fatPacket(recs, k).map(formatNote);
       try { return dropHarmed(this.dir, mixed); } catch { return mixed; }
     }
-    const recs = this.memories().filter((r) => !isNarrativeNote(r) && r.lane !== "icl" && r.lane !== "trajectory");
+    const recs = this.memories().filter((r) => !(r.lane === "narrative" || (r.tags ?? []).includes("chunk")) && r.lane !== "icl" && r.lane !== "trajectory");
     const emptyCue = ((rows) => [...rows.filter((r) => r.kind === "constraint").slice(-k), ...rows.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(recs).map(formatNote);
     try { return dropHarmed(this.dir, emptyCue); } catch { return emptyCue; }
   }
@@ -1552,7 +1548,7 @@ export class AgentMemory {
               } catch {}
               try {
                 for (const m of this.memories()) {
-                  if (isNarrativeNote(m) && !(m.tags ?? []).includes("chunk")) continue;
+                  if (m.lane === "narrative" && !(m.tags ?? []).includes("chunk")) continue;
                   push(m);
                 }
               } catch {}
