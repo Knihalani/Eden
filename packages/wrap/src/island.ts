@@ -64,11 +64,7 @@ export function withWitnessMemo(
 
 const ISLAND_BACKOFF_MS = 300;
 
-class NonJsonReply extends Error {
-  constructor() {
-    super("island returned non-JSON");
-  }
-}
+class NonJsonReply extends Error { constructor() { super("island returned non-JSON"); } }
 
 export function openaiIsland(opts: {
   model?: string;
