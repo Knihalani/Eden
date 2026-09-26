@@ -181,11 +181,6 @@ function completeReplies(json: unknown, reqs: IslandReq[]): IslandReply[] | unde
   return rows.every((row) => row) ? (rows as IslandReply[]) : undefined;
 }
 
-function pollDelayMs(): number {
-  const env = Number(process.env.EDEN_ISLAND_BATCH_POLL_MS);
-  return Number.isFinite(env) && env > 0 ? Math.min(2_000, env) : 20;
-}
-
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
@@ -237,7 +232,8 @@ async function pollUntilComplete(
   const headers = { authorization: key ? `Bearer ${key}` : "", "content-type": "application/json" };
   let empty = 0;
   while (!signal.aborted) {
-    await sleep(pollDelayMs(), signal);
+    const env = Number(process.env.EDEN_ISLAND_BATCH_POLL_MS);
+    await sleep(Number.isFinite(env) && env > 0 ? Math.min(2_000, env) : 20, signal);
     for (const url of [statusUrl, resultsUrl]) {
       let res: Response;
       try {
