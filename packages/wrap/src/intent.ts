@@ -17,11 +17,6 @@ export function surfaceMode(): SurfaceMode {
   return "all";
 }
 
-const SCORE_SHAPE = 4;
-const SCORE_TEMPLATE = 3;
-const SCORE_WITNESS = 3;
-export const INTENT_MIN_SCORE = 3;
-
 export type RankedMatch = {
   program: StretchProgram;
   score: number;
@@ -144,14 +139,14 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
             return false;
           }))
       ) {
-        score += SCORE_SHAPE;
+        score += 4;
         via = "shape";
       }
       const tmpl = firstCommandTemplate(p);
       if (!score && tmpl) {
         for (const line of cmdLines) {
           if (templateFits(tmpl, line)) {
-            score += SCORE_TEMPLATE;
+            score += 3;
             via = "template";
             break;
           }
@@ -166,7 +161,7 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
           }
         }
         if (env.some((w) => msgWitnesses.has(w))) {
-          score += SCORE_WITNESS;
+          score += 3;
           via = "witness";
         }
       }
@@ -191,7 +186,7 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
       }
     }
     score += Math.min(hits, 2);
-    if (score >= INTENT_MIN_SCORE) ranked.push({ program: p, score, via, idx: i });
+    if (score >= 3) ranked.push({ program: p, score, via, idx: i });
   }
   ranked.sort(
     (a, b) =>
