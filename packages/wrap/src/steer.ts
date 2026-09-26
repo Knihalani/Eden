@@ -168,8 +168,7 @@ export function templateFits(expr: string, live: string): boolean {
   const te = expr.split(/\s+/);
   const le = live.split(/\s+/);
   if (te.length !== le.length || !te.length) return false;
-  const bin = (s: string[]) => s[0]!.replace(/^\{|\}$/g, "");
-  if (bin(te) !== bin(le)) return false;
+  if (te[0]!.replace(/^\{|\}$/g, "") !== le[0]!.replace(/^\{|\}$/g, "")) return false;
   if (te[1] !== le[1] && !/^\{\w+\}$/.test(te[1] ?? "") && !/^\{\w+\}$/.test(le[1] ?? "")) return false;
   const tf = te.filter((w) => w.startsWith("-")).sort();
   const lf = le.filter((w) => w.startsWith("-")).sort();
