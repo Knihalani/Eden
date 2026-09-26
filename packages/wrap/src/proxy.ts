@@ -45,15 +45,6 @@ export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Re
   return "";
 }
 
-function upstreamHeaders(url: string, key: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    authorization: key ? `Bearer ${key}` : "",
-    "content-type": "application/json",
-  };
-  if (/nvidia\.com/i.test(url)) headers["NVCF-POLL-SECONDS"] = process.env.NVCF_POLL_SECONDS || "20";
-  return headers;
-}
-
 function nimTuneBody(url: string, body: Record<string, unknown>): Record<string, unknown> {
   if (!/nvidia\.com/i.test(url)) return body;
   const model = String(body.model || "");
@@ -170,12 +161,17 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   const key = resolveUpstreamKey(opts, req);
   const fn = opts.state.opts.fetch ?? fetch;
   const timeout = Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000;
+  const upHeaders: Record<string, string> = {
+    authorization: key ? `Bearer ${key}` : "",
+    "content-type": "application/json",
+  };
+  if (/nvidia\.com/i.test(url)) upHeaders["NVCF-POLL-SECONDS"] = process.env.NVCF_POLL_SECONDS || "20";
   const shouldSteer = steerable && live.length > 0 && clientOptedIn;
   if (wantsStream && !shouldSteer) {
     try {
       const upstreamRes = await fn(url, {
         method: "POST",
-        headers: upstreamHeaders(url, key),
+        headers: upHeaders,
         body: JSON.stringify(withStreamUsage(nimTuneBody(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))))),
         signal: AbortSignal.timeout(timeout),
       });
@@ -201,7 +197,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   try {
     upstreamRes = await fn(url, {
       method: "POST",
-      headers: upstreamHeaders(url, key),
+      headers: upHeaders,
       body: JSON.stringify(steeredBody),
       signal: AbortSignal.timeout(timeout),
     });
