@@ -208,36 +208,6 @@ function collapse(s: string): string {
   return s.replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim();
 }
 
-function toolObserveText(r: Record<string, unknown>): string {
-  const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
-  const original = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
-  let raw: unknown = original;
-  try {
-    raw = omitExperienceTree(original);
-  } catch {}
-  const redacted = raw == null || raw === "" ? "" : redact(raw);
-  let result = "";
-  if (typeof redacted === "string") result = redacted;
-  else if (redacted && typeof redacted === "object") {
-    const o = asRec(redacted);
-    result = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n") || flattenContent(redacted);
-    if (!result) try { result = JSON.stringify(redacted); } catch { result = ""; }
-  }
-  result = collapse(typeof redact(result) === "string" ? String(redact(result)) : result);
-  if (result.length > 360) result = result.slice(0, 360);
-  const who = collapse(name || "subagent") || "subagent";
-  if (!result) {
-    try {
-      const blob = typeof original === "string" ? original : original != null ? JSON.stringify(original) : "";
-      if (/RootWebArea|\[landmark\]|accessibility_tree/i.test(blob)) return `The ${who} tool was called.`;
-    } catch {}
-    return "";
-  }
-  const sentence = `The ${who} tool result is ${result}.`;
-  const safe = redact(sentence);
-  return typeof safe === "string" ? safe : sentence;
-}
-
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
     const consent = memoryConsent();
@@ -282,7 +252,32 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : Array.isArray(r.contents) ? r.contents : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; })].slice(-40);
     if (event === "PostToolUse" || event === "SubagentStop") {
       try {
-        const text = toolObserveText(r);
+        const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
+        const original = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
+        let rawObs: unknown = original;
+        try { rawObs = omitExperienceTree(original); } catch {}
+        const redacted = rawObs == null || rawObs === "" ? "" : redact(rawObs);
+        let result = "";
+        if (typeof redacted === "string") result = redacted;
+        else if (redacted && typeof redacted === "object") {
+          const o = asRec(redacted);
+          result = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n") || flattenContent(redacted);
+          if (!result) try { result = JSON.stringify(redacted); } catch { result = ""; }
+        }
+        result = collapse(typeof redact(result) === "string" ? String(redact(result)) : result);
+        if (result.length > 360) result = result.slice(0, 360);
+        const who = collapse(name || "subagent") || "subagent";
+        let text = "";
+        if (!result) {
+          try {
+            const blob = typeof original === "string" ? original : original != null ? JSON.stringify(original) : "";
+            if (/RootWebArea|\[landmark\]|accessibility_tree/i.test(blob)) text = `The ${who} tool was called.`;
+          } catch {}
+        } else {
+          const sentence = `The ${who} tool result is ${result}.`;
+          const safe = redact(sentence);
+          text = typeof safe === "string" ? safe : sentence;
+        }
         if (text) mem.observe([{ role: "user", content: text }]);
         else if (event === "SubagentStop" && prior.length) mem.observe(prior);
       } catch {}
