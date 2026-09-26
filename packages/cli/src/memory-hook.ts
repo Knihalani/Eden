@@ -200,10 +200,6 @@ function firstString(...vals: unknown[]): string | undefined {
   return undefined;
 }
 
-function additional(event: string, text: string): Record<string, unknown> | null {
-  return text ? { additional_context: text, hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
-}
-
 function collapse(s: string): string {
   return s.replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim();
 }
@@ -314,7 +310,8 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         try { consolidate(mem, { session: session || undefined, mode: "full" }); } catch {}
       }
       if (stop) return null;
-      return additional(event, briefing(mem, session));
+      const brief = briefing(mem, session);
+      return brief ? { additional_context: brief, hookSpecificOutput: { hookEventName: event, additionalContext: brief } } : null;
     }
     const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
     let files: string[] = [];
@@ -329,7 +326,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     if (writes) {
       try { maybeIncrementalSleep(mem, { session: sleepSession }); } catch {}
     }
-    return additional(event, notes);
+    return notes ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } } : null;
     } finally {
       try { mem.close(); } catch {}
     }
