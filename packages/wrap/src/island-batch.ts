@@ -44,12 +44,6 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
   const pending: Pending[] = [];
   let scheduled = false;
 
-  const flush = (): void => {
-    scheduled = false;
-    const items = pending.splice(0);
-    void settle(items);
-  };
-
   const settle = async (items: Pending[]): Promise<void> => {
     if (items.length === 0) return;
     if (items.length === 1) {
@@ -125,8 +119,8 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
       if (!scheduled) {
         scheduled = true;
         const ms = opts.coalesceMs ?? 0;
-        if (ms <= 0) queueMicrotask(flush);
-        else setTimeout(flush, ms);
+        if (ms <= 0) queueMicrotask(() => { scheduled = false; const items = pending.splice(0); void settle(items); });
+        else setTimeout(() => { scheduled = false; const items = pending.splice(0); void settle(items); }, ms);
       }
     });
   };
