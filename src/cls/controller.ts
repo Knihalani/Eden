@@ -168,10 +168,6 @@ export class CLSController {
   }
 }
 
-const AR_SPREAD_SEQ = 1.25;
-
-const AR_SPREAD_SHARED = 0.45;
-
 export function fuseArHits<T extends { text: string; score: number; id?: string; src?: string }>(
   query: string,
   hits: T[],
@@ -224,9 +220,9 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
         const sa = typeof aHit.src === "string" ? aHit.src : "";
         const sb = typeof bHit.src === "string" ? bHit.src : "";
         const w = sa && sb && sa === sb
-          ? AR_SPREAD_SEQ
+          ? 1.25
           : rare.length && rareTermHits(aHit.text, rare) > 0 && rareTermHits(bHit.text, rare) > 0
-            ? AR_SPREAD_SHARED
+            ? 0.45
             : 0;
         if (w <= 0) continue;
         spread[j] += w * fused[i]!;
