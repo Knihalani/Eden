@@ -852,15 +852,14 @@ function mergeExperienceLane(lexical: MemoryRecord[], text: string, dir: string)
     for (const hit of hits) {
       const body = String(hit?.text ?? "").trim();
       if (!body) continue;
-      const rec: MemoryRecord = {
+      extra.push({
         id: `exp:${hit.id}`,
         text: body,
         kind: "episode",
         lane: "trajectory",
         tags: ["experience", "trajectory"],
         at: Number.isFinite(hit.t) ? hit.t : 0,
-      };
-      extra.push(rec);
+      });
     }
     if (!extra.length) return lexical;
     const out = lexical.slice();
