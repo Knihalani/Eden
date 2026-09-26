@@ -90,10 +90,6 @@ export class CLSController {
     return out;
   }
 
-  private fuseLane(a: number, bRaw: number, cRaw: number): number {
-    return a * (1 + 0.15 * bRaw + 0.2 * cRaw);
-  }
-
   private lexicalHits(cue: Cue, q: string, n: number): { hit: boolean[]; active: boolean } {
     const names = new Set<string>();
     for (const x of properNames(q)) names.add(stem(x));
@@ -133,7 +129,7 @@ export class CLSController {
       const a = epi[i]!, bRaw = semRaw[i]!, cRaw = cortexMap.get(i) || 0;
       if (!a && !bRaw && !cRaw) continue;
       if (lexActive && !lexHit[i]) continue;
-      let v = this.fuseLane(a, bRaw, cRaw);
+      let v = a * (1 + 0.15 * bRaw + 0.2 * cRaw);
       if (temporal) {
         const e = this.epi.episodes[i]!;
         if (e.grounded.length || /\b20\d{2}\b/.test(e.text)) v *= 1.25;
