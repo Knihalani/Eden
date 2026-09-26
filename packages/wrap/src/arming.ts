@@ -190,12 +190,7 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
       return this.all(session, now).filter(([, armed]) => mightClaim(armed, name, args));
     },
     scanFleet(fleetId, name, args, now) {
-      if (!fleetId) return [];
-      const out: FleetHit[] = [];
-      for (const hit of walkFleet(fleetId, now)) {
-        if (mightClaim(hit.armed, name, args)) out.push(hit);
-      }
-      return out;
+      return this.allFleet(fleetId, now).filter((hit) => mightClaim(hit.armed, name, args));
     },
     all(session, now) {
       const b = sweepSession(session, now);
