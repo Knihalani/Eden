@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { inCanary, redact } from "@eden/ir";
-import type { StretchProgram } from "@eden/ir";
+import { inCanary, redact, type StretchProgram } from "@eden/ir";
 import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, flushOutbox } from "../src/index";
 import type { OpenAiHandle } from "../src/eden";
 import { createTicketShip, ticketShipProgram, OOD_ID, WITNESS_IDS } from "../../runtime/src/ticketship";
