@@ -1,7 +1,7 @@
 import type { StretchProgram } from "@eden/ir";
 import { compiledSchema, extractInput, injectTools, steerToolCalls } from "./steer";
 import { noteJitUsed, selectForRequest } from "./intent";
-import { recordCompletion, tapSseUsage, withStreamUsage } from "./usage";
+import { recordCompletion, tapSseUsage } from "./usage";
 import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
 import { safely, type WrapState } from "./wrap-tools";
@@ -156,7 +156,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       const upstreamRes = await fn(url, {
         method: "POST",
         headers: upHeaders,
-        body: JSON.stringify(withStreamUsage(nimTuneBody(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))))),
+        body: JSON.stringify((() => { const tuned = nimTuneBody(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))); const prev = tuned.stream_options; const so = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {}; return { ...tuned, stream_options: { ...so, include_usage: true } }; })()),
         signal: AbortSignal.timeout(timeout),
       });
       const src = upstreamRes.body;
