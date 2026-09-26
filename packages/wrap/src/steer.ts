@@ -107,43 +107,36 @@ export function recoverShellInput(
   p: StretchProgram,
   args: Record<string, unknown>,
 ): Record<string, unknown> | null {
-  const step0 = p.steps[0] as ToolStep | undefined;
-  if (!step0 || step0.kind !== "tool") return null;
+  const expr = firstCommandTemplate(p);
   const live = typeof args.command === "string" ? args.command : null;
-  if (!live) return null;
-  for (const [k, b] of Object.entries(step0.args ?? {})) {
-    if (k !== "command" || !b || typeof b !== "object") continue;
-    const t = b as { kind?: unknown; fn?: unknown; expr?: unknown };
-    if (t.kind !== "transform" || t.fn !== "template" || typeof t.expr !== "string") continue;
-    const expr = t.expr as string;
-    const slots = [...new Set([...expr.matchAll(/\{([\w.]+)\}/g)].map((m) => m[1]!))];
-    if (!slots.length || slots.length > 4) continue;
-    const pools = slots.map((path) => {
-      const w = p.contract.envelope?.inputs?.[path];
-      return { path, values: (Array.isArray(w) ? w : []).filter((v): v is string => typeof v === "string") };
-    });
-    if (pools.some((pool) => !pool.values.length)) continue;
-    const total = pools.reduce((a, pool) => a * pool.values.length, 1);
-    if (total > MAX_SLOT_COMBOS) continue;
-    for (let combo = 0; combo < total; combo++) {
-      let rest = combo;
-      const input: Record<string, unknown> = {};
-      for (let i = 0; i < pools.length; i++) {
-        const pool = pools[pools.length - 1 - i]!;
-        const idx = rest % pool.values.length;
-        rest = Math.floor(rest / pool.values.length);
-        const parts = pool.path.split(".");
-        let cur: Record<string, unknown> = input;
-        for (let j = 0; j < parts.length - 1; j++) {
-          const k = parts[j]!;
-          const next = cur[k];
-          if (!next || typeof next !== "object") cur[k] = {};
-          cur = cur[k] as Record<string, unknown>;
-        }
-        cur[parts.at(-1)!] = pool.values[idx]!;
+  if (!expr || !live) return null;
+  const slots = [...new Set([...expr.matchAll(/\{([\w.]+)\}/g)].map((m) => m[1]!))];
+  if (!slots.length || slots.length > 4) return null;
+  const pools = slots.map((path) => {
+    const w = p.contract.envelope?.inputs?.[path];
+    return { path, values: (Array.isArray(w) ? w : []).filter((v): v is string => typeof v === "string") };
+  });
+  if (pools.some((pool) => !pool.values.length)) return null;
+  const total = pools.reduce((a, pool) => a * pool.values.length, 1);
+  if (total > MAX_SLOT_COMBOS) return null;
+  for (let combo = 0; combo < total; combo++) {
+    let rest = combo;
+    const input: Record<string, unknown> = {};
+    for (let i = 0; i < pools.length; i++) {
+      const pool = pools[pools.length - 1 - i]!;
+      const idx = rest % pool.values.length;
+      rest = Math.floor(rest / pool.values.length);
+      const parts = pool.path.split(".");
+      let cur: Record<string, unknown> = input;
+      for (let j = 0; j < parts.length - 1; j++) {
+        const k = parts[j]!;
+        const next = cur[k];
+        if (!next || typeof next !== "object") cur[k] = {};
+        cur = cur[k] as Record<string, unknown>;
       }
-      if (interpolateSlots(expr, input) === live) return input;
+      cur[parts.at(-1)!] = pool.values[idx]!;
     }
+    if (interpolateSlots(expr, input) === live) return input;
   }
   return null;
 }
