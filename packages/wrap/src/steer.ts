@@ -187,16 +187,11 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
     const seq = p.sequence ?? [];
     if (!seq.length || seq[0] !== name) continue;
     const tmpl = firstCommandTemplate(p);
-    if (tmpl) {
-      const cmdLive = callArgs(first).command;
-      if (typeof cmdLive !== "string" || !templateFits(tmpl, cmdLive)) continue;
-      const recovered = recoverShellInput(p, callArgs(first));
-      const input = recovered ?? extractInput(p, callArgs(first));
-      if (!(inDistribution(p, input) || mayServe(p, input))) continue;
-      hits.push({ p, input, by: "name" });
-      continue;
-    }
-    const input = extractInput(p, callArgs(first));
+    const cmdLive = tmpl ? callArgs(first).command : undefined;
+    if (tmpl && (typeof cmdLive !== "string" || !templateFits(tmpl, cmdLive))) continue;
+    const input = tmpl
+      ? (recoverShellInput(p, callArgs(first)) ?? extractInput(p, callArgs(first)))
+      : extractInput(p, callArgs(first));
     if (!(inDistribution(p, input) || mayServe(p, input))) continue;
     hits.push({ p, input, by: "name" });
   }
