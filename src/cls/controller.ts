@@ -63,22 +63,6 @@ export class CLSController {
     return out;
   }
 
-  private lexicalHits(cue: Cue, q: string, n: number): { hit: boolean[]; active: boolean } {
-    const names = new Set<string>();
-    for (const x of properNames(q)) names.add(stem(x));
-    const hit = Array<boolean>(n).fill(false);
-    let active = false;
-    for (const [f] of cue) {
-      if (f.startsWith("#") || f.startsWith("@") || names.has(f)) continue;
-      for (let i = 0; i < n; i++) {
-        if (!this.epi.episodes[i]!.key.has(f)) continue;
-        hit[i] = true;
-        active = true;
-      }
-    }
-    return { hit, active };
-  }
-
   scores(q: string, opts?: { complete?: boolean; semantic?: boolean; recency?: boolean }): Float64Array {
     const n = this.epi.episodes.length;
     const temporal = /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(q.toLowerCase()) || /\b20\d{2}\b/.test(q);
@@ -108,7 +92,18 @@ export class CLSController {
       const i = this.canon(m.text);
       if (i >= 0) cortexMap.set(i, Math.max(cortexMap.get(i) || 0, 1 / (1 + 0.35 * r)));
     });
-    const { hit: lexHit, active: lexActive } = this.lexicalHits(cue, q, n);
+    const names = new Set<string>();
+    for (const x of properNames(q)) names.add(stem(x));
+    const lexHit = Array<boolean>(n).fill(false);
+    let lexActive = false;
+    for (const [f] of cue) {
+      if (f.startsWith("#") || f.startsWith("@") || names.has(f)) continue;
+      for (let i = 0; i < n; i++) {
+        if (!this.epi.episodes[i]!.key.has(f)) continue;
+        lexHit[i] = true;
+        lexActive = true;
+      }
+    }
     const fused = new Float64Array(n);
     const recencyDen = Math.max(1, n - 1);
     for (let i = 0; i < n; i++) {
