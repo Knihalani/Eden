@@ -12,8 +12,6 @@ export type SpeculateHint = {
 
 export type SpeculateHandle = {
   programId: string;
-  input: Record<string, unknown>;
-  startedAt: number;
 };
 
 export type SpeculateTake = { hit: true; value: unknown } | { hit: false };
@@ -26,7 +24,6 @@ type SpeculateRunner = {
 type Slot = {
   program: StretchProgram;
   input: Record<string, unknown>;
-  startedAt: number;
   discarded: boolean;
   promise: Promise<{ ok: true; value: unknown } | { ok: false }>;
 };
@@ -117,14 +114,12 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
     if (s.lastServed && s.lastServed.programId === program.id && eq(s.lastServed.input, input)) return null;
     const cur = s.slot;
     if (cur && !cur.discarded && cur.program.id === program.id && eq(cur.input, input)) {
-      return { programId: program.id, input, startedAt: cur.startedAt };
+      return { programId: program.id };
     }
     if (cur) cur.discarded = true;
-    const startedAt = performance.now();
     const slot: Slot = {
       program,
       input,
-      startedAt,
       discarded: false,
       promise: Promise.resolve()
         .then(() => runner.run(program, input))
@@ -134,7 +129,7 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
         ),
     };
     s.slot = slot;
-    return { programId: program.id, input, startedAt };
+    return { programId: program.id };
   } catch {
     return null;
   }
