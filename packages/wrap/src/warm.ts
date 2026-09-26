@@ -19,15 +19,6 @@ export type WarmHandle = {
 
 export type WarmTake = { hit: true; value: unknown } | { hit: false };
 
-export type WarmProgramStats = { lookups: number; hits: number };
-
-export type WarmStats = {
-  lookups: number;
-  hits: number;
-  mutatingExecutes: number;
-  byProgram: Record<string, WarmProgramStats>;
-};
-
 export type WarmRunner = {
   live: () => StretchProgram[];
   execute: (tool: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -44,7 +35,6 @@ type Entry = {
 type Store = {
   runner?: WarmRunner;
   entries: Entry[];
-  stats: WarmStats;
   lastServedId: string | null;
   follows: Map<string, Map<string, number>>;
 };
@@ -55,7 +45,7 @@ const MAX_ENTRIES = 64;
 function storeOf(state: WrapState): Store {
   let s = stores.get(state);
   if (!s) {
-    s = { entries: [], stats: { lookups: 0, hits: 0, mutatingExecutes: 0, byProgram: {} }, lastServedId: null, follows: new Map() };
+    s = { entries: [], lastServedId: null, follows: new Map() };
     stores.set(state, s);
   }
   return s;
@@ -137,23 +127,11 @@ export async function takeWarm(
 ): Promise<WarmTake> {
   try {
     const s = storeOf(state);
-    const wave = firstWaveReads(program, input);
-    const inWave = wave.some((w) => w.tool === tool && eq(w.args, args));
-    if (inWave) {
-      const ps = (s.stats.byProgram[program.id] ??= { lookups: 0, hits: 0 });
-      ps.lookups++;
-      s.stats.lookups++;
-    }
     if (!watchWarmEnabled()) return { hit: false };
     const entry = s.entries.findLast((e) => !e.discarded && e.programId === program.id && e.tool === tool && eq(e.args, args));
     if (!entry || entry.discarded) return { hit: false };
     const out = await entry.promise;
     if (entry.discarded || !out.ok) return { hit: false };
-    if (inWave) {
-      const ps = (s.stats.byProgram[program.id] ??= { lookups: 0, hits: 0 });
-      ps.hits++;
-      s.stats.hits++;
-    }
     return { hit: true, value: out.value };
   } catch {
     return { hit: false };
@@ -237,7 +215,6 @@ export function watchWarm(
         promise: Promise.resolve()
           .then(() => {
             if (isMutating(w.tool) || !isReadName(w.tool)) {
-              s.stats.mutatingExecutes++;
               return { ok: false as const };
             }
             return runner.execute(w.tool, w.args).then(
