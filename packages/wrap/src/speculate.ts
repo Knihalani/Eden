@@ -1,5 +1,4 @@
-import type { StretchProgram } from "@eden/ir";
-import { eq, mayServe } from "@eden/ir";
+import { eq, mayServe, type StretchProgram } from "@eden/ir";
 import { isSafeToWarm } from "./fleet";
 import { extractInput } from "./steer";
 import type { WrapState } from "./wrap-tools";
