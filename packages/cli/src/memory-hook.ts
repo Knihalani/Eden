@@ -275,8 +275,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const stop = event === "Stop" || event === "SessionEnd";
     if (stop || event === "SessionStart") {
       const extra = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.prompt_response, r.response, r.output, r.completion, r.result, r.answer, r.reply, r.last_user_message, r.user_text, r.assistant_message, r.last_assistant_message, r.final_response, r.assistant_text, r.content].filter((x) => typeof x === "string" && x).join("\n");
-      const sessionRaw = r.session_id ?? r.sessionID ?? r.sessionId;
-      const session = (mem.child && mem.session) || (typeof sessionRaw === "string" ? sessionRaw : "");
+      const session = (mem.child && mem.session) || session0 || "";
       if (writes) {
         if (stop && !prior.length && !extra) {
           try { consolidate(mem, { session: session || undefined, mode: "full" }); } catch {}
