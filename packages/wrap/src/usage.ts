@@ -1,4 +1,4 @@
-import { redact, type StretchTrace } from "@eden/ir";
+import { redact, type StretchTrace, type IslandUsage } from "@eden/ir";
 import type { RunRecorder } from "./types";
 
 const MAX_SSE_BUF = 256 * 1024;
@@ -55,6 +55,13 @@ export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
     ...(cacheWrite != null ? { cacheWrite } : {}),
     ...(denom != null ? { denom } : {}),
   };
+}
+
+export function islandUsage(raw: unknown, batched = false): IslandUsage | undefined {
+  const u = parseUsage(raw);
+  const cache = parseCacheTokens(raw);
+  if (!u && !batched) return undefined;
+  return { prompt_tokens: u?.prompt ?? 0, completion_tokens: u?.completion ?? 0, ...(batched ? { batched: true as const } : {}), ...(cache ? { cached_tokens: cache.cached, ...(cache.cacheWrite != null ? { cache_write_tokens: cache.cacheWrite } : {}), ...(cache.denom != null ? { cache_input_tokens: cache.denom } : {}) } : {}) };
 }
 
 export function recordCompletion(run: RunRecorder, json: Record<string, unknown>): void {
