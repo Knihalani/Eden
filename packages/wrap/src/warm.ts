@@ -217,15 +217,6 @@ function programStats(s: Store, programId: string): WarmProgramStats {
   return fresh;
 }
 
-function sameWarm(
-  entries: Entry[],
-  programId: string,
-  wave: Array<{ tool: string; args: Record<string, unknown> }>,
-): boolean {
-  if (!wave.length) return false;
-  return wave.every((w) => findEntry(entries, programId, w.tool, w.args));
-}
-
 export function claimWarm(state: WrapState, program: StretchProgram, input: Record<string, unknown>): void {
   try {
     const wave = firstWaveReads(program, input);
@@ -345,7 +336,7 @@ export function watchWarm(
     const { program, input } = picked;
     const wave = firstWaveReads(program, input);
     if (!wave.length) return null;
-    if (sameWarm(s.entries, program.id, wave)) {
+    if (wave.every((w) => findEntry(s.entries, program.id, w.tool, w.args))) {
       return { programId: program.id, input, tools: wave.map((w) => w.tool), startedAt: performance.now() };
     }
     const startedAt = performance.now();
