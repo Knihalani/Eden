@@ -27,7 +27,7 @@ import { type MemoryLaneKind } from "./memory-lanes";
 import { logMemoryNotes } from "./memory-log";
 import { applyProvenanceLabel, noteKindToken, PACKET_LABEL_RE, stripPacketLabel } from "./memory-provenance";
 import { routeMemory, type MemoryRoute } from "./memory-router";
-import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
+import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
 
 export { isRecsysShot } from "./semantic-store";
 
@@ -1170,7 +1170,7 @@ export class AgentMemory {
           }
         } catch {}
         if (this.seenLower.has(text.toLowerCase())) continue;
-        const key = subjectKey(text);
+        const key = isToolProse(text) ? null : subjectKey(text);
         const supersede = /\b(?:instead of|rather than)\b/i.test(raw);
         if (key && !supersede) {
           let removed = false;
