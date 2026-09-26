@@ -1,5 +1,4 @@
-import type { StretchProgram } from "@eden/ir";
-import { eq, isMutating, isReadName, isBarrierName, mayServe } from "@eden/ir";
+import { eq, isBarrierName, isMutating, isReadName, mayServe, type StretchProgram } from "@eden/ir";
 import { evalArgs } from "@eden/runtime";
 import { isProgramReadOnly, isSafeToWarm } from "./fleet";
 import { extractInput } from "./steer";
