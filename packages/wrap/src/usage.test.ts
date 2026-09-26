@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attachChatUsage, cacheHitDenomFromUsage, parseCacheTokens, parseUsage, peekChatUsage, recordCompletion } from "./usage";
+import { attachChatUsage, parseCacheTokens, parseUsage, peekChatUsage, recordCompletion } from "./usage";
 import { emptyRun } from "./types";
 import { providerCacheHitPct, type StretchTrace } from "@eden/ir";
 
@@ -54,14 +54,6 @@ describe("provider usage scrape", () => {
         cache_creation_input_tokens: 10,
       }),
     ).toEqual({ cached: 40, cacheWrite: 10, denom: 100 });
-    expect(cacheHitDenomFromUsage({ prompt_tokens: 2006, prompt_tokens_details: { cached_tokens: 1920 } })).toBe(2006);
-    expect(
-      cacheHitDenomFromUsage({
-        input_tokens: 50,
-        cache_read_input_tokens: 40,
-        cache_creation_input_tokens: 10,
-      }),
-    ).toBe(100);
   });
 
   test("recordCompletion counts a real LLM call and does not invent tokens", () => {
