@@ -1,5 +1,5 @@
 import { completeScores } from "./complete";
-import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stem, textTimeToks, type Stamp } from "./text";
+import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stem, textTimeToks } from "./text";
 
 export type Episode = {
   i: number;
@@ -84,21 +84,6 @@ export function scoreChunksAsEpisodes(query: string, texts: string[]): Float64Ar
   return out;
 }
 
-export function featurize(text: string, speaker: string, stamp: Stamp, grounded: string[]): Map<string, number> {
-  const key = new Map<string, number>();
-  const bump = (f: string, w = 1) => key.set(f, (key.get(f) || 0) + w);
-  const stems = contentToks(text);
-  for (const s of stems) bump(s);
-  for (let i = 0; i + 1 < stems.length; i++) bump(`${stems[i]}_${stems[i + 1]}`, 0.6);
-  for (const n of properNames(text)) bump(`#${n}`, 1);
-  for (const c of codeToks(text)) bump(`#${c}`, 1);
-  if (speaker) bump(`@${speaker.toLowerCase()}`, 1);
-  for (const t of (stamp ? [`t:y${stamp.y}`, `t:m${stamp.m}`, `t:${stamp.y}-${stamp.m}`, `t:d${stamp.d}`] : [])) bump(t, 1);
-  for (const t of textTimeToks(text)) bump(t, 0.8);
-  for (const g of grounded) for (const t of textTimeToks(g)) bump(t, 0.5);
-  return key;
-}
-
 export type Hit = { i: number; s: number };
 
 export class EpisodicStore {
@@ -120,7 +105,17 @@ export class EpisodicStore {
       const stamp = parseStamp(date);
       const text = String(t.text || "").replace(/\s+/g, " ").trim();
       const grounded = groundRelativeTime(text, stamp);
-      const key = featurize(text, speaker, stamp, grounded);
+      const key = new Map<string, number>();
+      const bump = (f: string, w = 1) => key.set(f, (key.get(f) || 0) + w);
+      const stems = contentToks(text);
+      for (const s of stems) bump(s);
+      for (let i = 0; i + 1 < stems.length; i++) bump(`${stems[i]}_${stems[i + 1]}`, 0.6);
+      for (const n of properNames(text)) bump(`#${n}`, 1);
+      for (const c of codeToks(text)) bump(`#${c}`, 1);
+      if (speaker) bump(`@${speaker.toLowerCase()}`, 1);
+      for (const t of (stamp ? [`t:y${stamp.y}`, `t:m${stamp.m}`, `t:${stamp.y}-${stamp.m}`, `t:d${stamp.d}`] : [])) bump(t, 1);
+      for (const t of textTimeToks(text)) bump(t, 0.8);
+      for (const g of grounded) for (const t of textTimeToks(g)) bump(t, 0.5);
       const render = `${speaker}:${date ? ` [${date}]` : ""} ${text}${grounded.length ? ` {≈ ${grounded.join("; ")}}` : ""}`;
       const ep: Episode = { i, speaker, text, date, session: t.session ?? 0, render, key, grounded, isQuestion: /\?/.test(text) };
       this.episodes.push(ep);
