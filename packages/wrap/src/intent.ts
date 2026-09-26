@@ -88,17 +88,6 @@ export function denseTokensFromText(text: string): Set<string> {
   return out;
 }
 
-export function envelopeDenseWitnesses(p: StretchProgram): string[] {
-  const out: string[] = [];
-  for (const vals of Object.values(p.contract.envelope?.inputs ?? {})) {
-    if (!Array.isArray(vals)) continue;
-    for (const v of vals) {
-      if (typeof v === "string" && looksLikeDenseWitness(v)) out.push(v);
-    }
-  }
-  return out;
-}
-
 export function githubBareUrls(text: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -174,7 +163,13 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
         }
       }
       if (!score) {
-        const env = envelopeDenseWitnesses(p);
+        const env: string[] = [];
+        for (const vals of Object.values(p.contract.envelope?.inputs ?? {})) {
+          if (!Array.isArray(vals)) continue;
+          for (const v of vals) {
+            if (typeof v === "string" && looksLikeDenseWitness(v)) env.push(v);
+          }
+        }
         if (env.some((w) => msgWitnesses.has(w))) {
           score += SCORE_WITNESS;
           via = "witness";
