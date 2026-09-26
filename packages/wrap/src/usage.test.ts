@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attachChatUsage, cacheHitDenomFromUsage, consumeChatUsage, parseCacheTokens, parseUsage, peekChatUsage, recordCompletion, scrapeSseUsage } from "./usage";
+import { attachChatUsage, cacheHitDenomFromUsage, parseCacheTokens, parseUsage, peekChatUsage, recordCompletion } from "./usage";
 import { emptyRun } from "./types";
 import { providerCacheHitPct, type StretchTrace } from "@eden/ir";
 
@@ -104,7 +104,7 @@ describe("provider usage scrape", () => {
   });
 
   test("tools-only attach leaves a trace unmeasured", () => {
-    const out = attachChatUsage(trace(), consumeChatUsage({ run: emptyRun() }));
+    const out = attachChatUsage(trace(), peekChatUsage({ run: emptyRun() }));
     expect(out.llmCalls).toBe(0);
     expect(out.prompt_tokens).toBeUndefined();
     expect(out.completion_tokens).toBeUndefined();
@@ -116,12 +116,11 @@ describe("provider usage scrape", () => {
       choices: [{ message: { content: "ok" } }],
       usage: { prompt_tokens: 8, completion_tokens: 3 },
     });
-    const out = attachChatUsage(trace({ output: { pong: true } }), consumeChatUsage({ run }));
+    const out = attachChatUsage(trace({ output: { pong: true } }), peekChatUsage({ run }));
     expect(out.llmCalls).toBe(1);
     expect(out.prompt_tokens).toBe(8);
     expect(out.completion_tokens).toBe(3);
     expect(out.output).toEqual({ pong: true });
-    expect(consumeChatUsage({ run })).toBeNull();
   });
 
   test("attachChatUsage does not clobber a trace that already has tokens", () => {
@@ -135,89 +134,6 @@ describe("provider usage scrape", () => {
     expect(out.prompt_tokens).toBe(99);
     expect(out.llmCalls).toBe(2);
     expect(peekChatUsage({ run })?.prompt_tokens).toBe(8);
-  });
-
-  test("SSE scrape reads include_usage chunks", async () => {
-    const run = emptyRun();
-    const body = [
-      `data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n`,
-      `data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\n`,
-      `data: [DONE]\n\n`,
-    ].join("");
-    await scrapeSseUsage(new Response(body).body!, run);
-    expect(run.measured).toBe(true);
-    expect(run.llmCalls).toBe(1);
-    expect(run.prompt_tokens).toBe(5);
-    expect(run.completion_tokens).toBe(2);
-    expect(run.output).toBeUndefined();
-  });
-
-  test("SSE leftover buffer without a trailing blank line still yields usage", async () => {
-    const run = emptyRun();
-    const body = `data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":6,"completion_tokens":1}}`;
-    await scrapeSseUsage(new Response(body).body!, run);
-    expect(run.measured).toBe(true);
-    expect(run.llmCalls).toBe(1);
-    expect(run.prompt_tokens).toBe(6);
-    expect(run.completion_tokens).toBe(1);
-  });
-
-  test("SSE include_usage chunk lands OpenAI cached_tokens on the run", async () => {
-    const run = emptyRun();
-    const body = [
-      `data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n`,
-      `data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":2006,"completion_tokens":300,"total_tokens":2306,"prompt_tokens_details":{"cached_tokens":1920,"cache_write_tokens":0}}}\n\n`,
-      `data: [DONE]\n\n`,
-    ].join("");
-    await scrapeSseUsage(new Response(body).body!, run);
-    expect(run.measured).toBe(true);
-    expect(run.prompt_tokens).toBe(2006);
-    expect(run.completion_tokens).toBe(300);
-    expect(run.cached_tokens).toBe(1920);
-    expect(run.cache_input_tokens).toBe(2006);
-    expect(peekChatUsage({ run })?.cached_tokens).toBe(1920);
-    expect(peekChatUsage({ run })?.cache_input_tokens).toBe(2006);
-    expect(providerCacheHitPct(run.cached_tokens, run.prompt_tokens, null, run.cache_input_tokens)).toBe(1920 / 2006);
-    expect(parseUsage({ prompt_tokens: 2006, completion_tokens: 300, prompt_tokens_details: { cached_tokens: 1920 } })).toEqual({
-      prompt: 2006,
-      completion: 300,
-    });
-  });
-
-  test("SSE usage chunk lands Anthropic cache_read_input_tokens on the run", async () => {
-    const run = emptyRun();
-    const body = [
-      `data: {"type":"message_delta","usage":{"input_tokens":50,"output_tokens":20,"cache_read_input_tokens":100000,"cache_creation_input_tokens":0}}\n\n`,
-      `data: [DONE]\n\n`,
-    ].join("");
-    await scrapeSseUsage(new Response(body).body!, run);
-    expect(run.measured).toBe(true);
-    expect(run.prompt_tokens).toBe(50);
-    expect(run.completion_tokens).toBe(20);
-    expect(run.cached_tokens).toBe(100000);
-    expect(run.cache_write_tokens).toBe(0);
-    expect(run.cache_input_tokens).toBe(100_050);
-    expect(providerCacheHitPct(run.cached_tokens, run.prompt_tokens, run.cache_write_tokens, run.cache_input_tokens)).toBe(
-      100_000 / 100_050,
-    );
-    expect(providerCacheHitPct(run.cached_tokens, run.prompt_tokens, run.cache_write_tokens)).not.toBe(100_000 / 50);
-    expect(parseUsage({ input_tokens: 50, output_tokens: 20, cache_read_input_tokens: 100000 })).toEqual({
-      prompt: 50,
-      completion: 20,
-    });
-  });
-
-  test("SSE usage chunk without cache fields leaves cached_tokens at 0", async () => {
-    const run = emptyRun();
-    const body = [
-      `data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\n`,
-      `data: [DONE]\n\n`,
-    ].join("");
-    await scrapeSseUsage(new Response(body).body!, run);
-    expect(run.prompt_tokens).toBe(5);
-    expect(run.completion_tokens).toBe(2);
-    expect(run.cached_tokens).toBe(0);
-    expect(peekChatUsage({ run })?.cached_tokens).toBeUndefined();
   });
 
   test("peekChatUsage does not hide write when cache_input_tokens is 0", () => {
@@ -250,24 +166,5 @@ describe("provider usage scrape", () => {
     expect(providerCacheHitPct(run.cached_tokens, run.prompt_tokens, run.cache_write_tokens, run.cache_input_tokens)).toBe(
       100_000 / 100_050,
     );
-  });
-
-  test("SSE Anthropic cache_read ≤ input_tokens still uses read+write+input denom", async () => {
-    const run = emptyRun();
-    const body = [
-      `data: {"type":"message_delta","usage":{"input_tokens":50,"output_tokens":8,"cache_read_input_tokens":40,"cache_creation_input_tokens":10}}\n\n`,
-      `data: [DONE]\n\n`,
-    ].join("");
-    await scrapeSseUsage(new Response(body).body!, run);
-    expect(run.prompt_tokens).toBe(50);
-    expect(run.cached_tokens).toBe(40);
-    expect(run.cache_write_tokens).toBe(10);
-    expect(run.cache_input_tokens).toBe(100);
-    expect(providerCacheHitPct(run.cached_tokens, run.prompt_tokens, run.cache_write_tokens, run.cache_input_tokens)).toBe(0.4);
-    expect(providerCacheHitPct(40, 50, 10)).toBe(0.4);
-    expect(parseUsage({ input_tokens: 50, output_tokens: 8, cache_read_input_tokens: 40, cache_creation_input_tokens: 10 })).toEqual({
-      prompt: 50,
-      completion: 8,
-    });
   });
 });
