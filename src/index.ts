@@ -25,10 +25,7 @@ import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore
 
 export { isRecsysShot } from "./semantic-store";
 
-export { memoryConsent, memoryWritesAllowed, type MemoryConsent } from "./memory-consent";
-export { dropHarmed, harmedPath, loadHarmedIds, markHarmed } from "./memory-harmed";
-export { applyProvenanceLabel, packetKindLabel, relativeMemoryAge, provenanceBracket, PACKET_LABEL_RE } from "./memory-provenance";
-export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
+export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
 export const memoryInjectSilent = { n: 0 };
