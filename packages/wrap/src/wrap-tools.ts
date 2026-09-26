@@ -749,16 +749,7 @@ export function wrapTools<T extends ToolsIn>(
         const live = state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId);
         const owner = { id: selfId, startedAt, invocations };
 
-        const prefixHits = live.length
-          ? safely(
-              () =>
-                live
-                  .filter((p) => (p.sequence ?? [])[0] === name)
-                  .map((p) => ({ p, input: extractInput(p, args) }))
-                  .filter(({ p, input }) => mayServe(p, input) && !(isReadName(name) && staleRead(state, input))),
-              NO_PREFIX,
-            )
-          : NO_PREFIX;
+        const prefixHits = live.length ? safely(() => live.filter((p) => (p.sequence ?? [])[0] === name).map((p) => ({ p, input: extractInput(p, args) })).filter(({ p, input }) => mayServe(p, input) && !(isReadName(name) && staleRead(state, input))), NO_PREFIX) : NO_PREFIX;
         prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
         const hit = prefixHits[0];
         if (hit) {
