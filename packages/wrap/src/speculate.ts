@@ -76,31 +76,6 @@ function isSafeToSpeculate(program: StretchProgram): boolean {
   return true;
 }
 
-function pick(
-  live: StretchProgram[],
-  hint: SpeculateHint,
-): { program: StretchProgram; input: Record<string, unknown> } | null {
-  const raw = hint.input && typeof hint.input === "object" ? hint.input : hint.lastArgs && typeof hint.lastArgs === "object" ? hint.lastArgs : undefined;
-  const named =
-    hint.program == null
-      ? undefined
-      : typeof hint.program === "string"
-        ? live.find((p) => p.id === hint.program || p.name === hint.program)
-        : hint.program;
-  const candidates = named
-    ? [named]
-    : live.filter((p) => isSafeToSpeculate(p)).sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
-  for (const program of candidates) {
-    if (!isSafeToSpeculate(program)) continue;
-    if (!named && hint.lastTool && (program.sequence ?? []).includes(hint.lastTool)) continue;
-    const input = raw ? extractInput(program, raw) : {};
-    if (!Object.keys(input).length) continue;
-    if (!mayServe(program, input)) continue;
-    return { program, input };
-  }
-  return null;
-}
-
 export function discardSpeculation(state: WrapState): void {
   try {
     const s = storeOf(state);
@@ -129,9 +104,29 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
     if (!runner) return null;
     const live = runner.live() ?? [];
     if (!live.length) return null;
-    const picked = pick(live, hint);
-    if (!picked) return null;
-    const { program, input } = picked;
+    const raw = hint.input && typeof hint.input === "object" ? hint.input : hint.lastArgs && typeof hint.lastArgs === "object" ? hint.lastArgs : undefined;
+    const named =
+      hint.program == null
+        ? undefined
+        : typeof hint.program === "string"
+          ? live.find((p) => p.id === hint.program || p.name === hint.program)
+          : hint.program;
+    const candidates = named
+      ? [named]
+      : live.filter((p) => isSafeToSpeculate(p)).sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
+    let program: StretchProgram | undefined;
+    let input: Record<string, unknown> | undefined;
+    for (const cand of candidates) {
+      if (!isSafeToSpeculate(cand)) continue;
+      if (!named && hint.lastTool && (cand.sequence ?? []).includes(hint.lastTool)) continue;
+      const next = raw ? extractInput(cand, raw) : {};
+      if (!Object.keys(next).length) continue;
+      if (!mayServe(cand, next)) continue;
+      program = cand;
+      input = next;
+      break;
+    }
+    if (!program || !input) return null;
     if (s.lastServed && s.lastServed.programId === program.id && eq(s.lastServed.input, input)) return null;
     const cur = s.slot;
     if (cur && !cur.discarded && cur.program.id === program.id && eq(cur.input, input)) {
