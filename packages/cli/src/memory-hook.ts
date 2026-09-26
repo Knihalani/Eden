@@ -259,14 +259,12 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
       } catch {}
       try {
-        const sessionRaw = r.session_id ?? r.sessionID ?? r.sessionId;
-        const session = typeof sessionRaw === "string" && sessionRaw ? sessionRaw : undefined;
         const cwd = typeof r.cwd === "string" && r.cwd.trim() ? r.cwd.trim() : undefined;
         const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
         const args = parseToolArgs(r.tool_input ?? r.tool_args ?? r.args ?? r.parameters ?? r.input);
         const result = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
         if (name || result != null) {
-          putExperienceFromTool(mem.dir, { session, cwd, name, args, result });
+          putExperienceFromTool(mem.dir, { session: session0, cwd, name, args, result });
         }
       } catch {}
       try {
