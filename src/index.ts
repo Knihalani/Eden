@@ -932,25 +932,6 @@ function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?:
   }
 }
 
-function rootIdentityText(s: string, p: string, o: string): string {
-  let subj = String(s ?? "").trim();
-  let obj = String(o ?? "").trim();
-  const pred = String(p ?? "").trim().toLowerCase();
-  if (!subj || !obj || !pred) return "";
-  try {
-    subj = scrubMemoryText(subj);
-    obj = scrubMemoryText(obj);
-  } catch {}
-  if (!subj || !obj || subj === "[cwd]" || obj === "[cwd]" || subj === "[session]" || obj === "[session]" || subj === "[email]" || obj === "[email]") return "";
-  if (pred === "uses") return `${subj} uses ${obj}`;
-  const titled = subj.charAt(0).toUpperCase() + subj.slice(1);
-  if (pred === "is") {
-    if (/^[A-Z]/.test(obj)) return `${titled} is ${obj}.`;
-    return `The ${subj} is ${obj}.`;
-  }
-  return `${titled} ${pred} ${obj}`.replace(/\s+/g, " ").trim();
-}
-
 function prependFloor(extras: MemoryRecord[], lexical: MemoryRecord[], cap: number): MemoryRecord[] {
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
   if (!k || !extras.length) return lexical;
@@ -970,8 +951,17 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
     if (!Array.isArray(live) || !live.length) return lexical;
     const extras: MemoryRecord[] = [];
     for (const row of live) {
-      const body = rootIdentityText(row.s, row.p, row.o);
-      if (!body) continue;
+      let subj = String(row.s ?? "").trim();
+      let obj = String(row.o ?? "").trim();
+      const pred = String(row.p ?? "").trim().toLowerCase();
+      if (!subj || !obj || !pred) continue;
+      try {
+        subj = scrubMemoryText(subj);
+        obj = scrubMemoryText(obj);
+      } catch {}
+      if (!subj || !obj || subj === "[cwd]" || obj === "[cwd]" || subj === "[session]" || obj === "[session]" || subj === "[email]" || obj === "[email]") continue;
+      const titled = subj.charAt(0).toUpperCase() + subj.slice(1);
+      const body = pred === "uses" ? `${subj} uses ${obj}` : pred === "is" ? (/^[A-Z]/.test(obj) ? `${titled} is ${obj}.` : `The ${subj} is ${obj}.`) : `${titled} ${pred} ${obj}`.replace(/\s+/g, " ").trim();
       extras.push({
         id: `sem:${row.s}:${row.p}`,
         text: body,
