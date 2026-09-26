@@ -423,17 +423,6 @@ const FUNC_WORD = new Set([
   "the","a","an","and","but","of","to","in","on","at","for","with","from","by","as","that","this",
   "these","those","it","its","because","if","so","also","when","who","which","not","no",
 ]);
-function isNarrativeProse(t: string): boolean {
-  const text = t.trim();
-  if (isIclExemplar(text) || isFactList(text)) return false;
-  if (text.length > 400) return true;
-  if (sentenceParts(text).length < 2 || text.length < 150) return false;
-  const toks = tokList(text);
-  if (toks.length < 4) return false;
-  let fw = 0;
-  for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return true;
-  return false;
-}
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
@@ -508,7 +497,16 @@ export function encodeLane(text: string): MemoryLaneKind {
     if (!t) return "chat";
     if (isIclExemplar(t)) return "icl";
     if (isRecsysShot(t)) return "narrative";
-    if (isNarrativeProse(t)) return "narrative";
+    if (!isFactList(t)) {
+      if (t.length > 400) return "narrative";
+      if (sentenceParts(t).length >= 2 && t.length >= 150) {
+        const toks = tokList(t);
+        if (toks.length >= 4) {
+          let fw = 0;
+          for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return "narrative";
+        }
+      }
+    }
     return "chat";
   } catch {
     return "chat";
