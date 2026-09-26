@@ -119,14 +119,6 @@ function findEntry(entries: Entry[], programId: string, tool: string, args: Reco
   return undefined;
 }
 
-function programStats(s: Store, programId: string): WarmProgramStats {
-  const cur = s.stats.byProgram[programId];
-  if (cur) return cur;
-  const fresh = { lookups: 0, hits: 0 };
-  s.stats.byProgram[programId] = fresh;
-  return fresh;
-}
-
 export function claimWarm(state: WrapState, program: StretchProgram, input: Record<string, unknown>): void {
   try {
     const wave = firstWaveReads(program, input);
@@ -185,7 +177,7 @@ export async function takeWarm(
     const wave = firstWaveReads(program, input);
     const inWave = wave.some((w) => w.tool === tool && eq(w.args, args));
     if (inWave) {
-      const ps = programStats(s, program.id);
+      const ps = (s.stats.byProgram[program.id] ??= { lookups: 0, hits: 0 });
       ps.lookups++;
       s.stats.lookups++;
     }
@@ -195,7 +187,7 @@ export async function takeWarm(
     const out = await entry.promise;
     if (entry.discarded || !out.ok) return { hit: false };
     if (inWave) {
-      const ps = programStats(s, program.id);
+      const ps = (s.stats.byProgram[program.id] ??= { lookups: 0, hits: 0 });
       ps.hits++;
       s.stats.hits++;
     }
