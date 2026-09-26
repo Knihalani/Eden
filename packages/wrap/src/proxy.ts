@@ -64,21 +64,17 @@ function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string
   };
 }
 
-function isNvidiaUrl(url: string): boolean {
-  return /nvidia\.com/i.test(url);
-}
-
 function upstreamHeaders(url: string, key: string): Record<string, string> {
   const headers: Record<string, string> = {
     authorization: key ? `Bearer ${key}` : "",
     "content-type": "application/json",
   };
-  if (isNvidiaUrl(url)) headers["NVCF-POLL-SECONDS"] = process.env.NVCF_POLL_SECONDS || "20";
+  if (/nvidia\.com/i.test(url)) headers["NVCF-POLL-SECONDS"] = process.env.NVCF_POLL_SECONDS || "20";
   return headers;
 }
 
 function nimTuneBody(url: string, body: Record<string, unknown>): Record<string, unknown> {
-  if (!isNvidiaUrl(url)) return body;
+  if (!/nvidia\.com/i.test(url)) return body;
   const model = String(body.model || "");
   if (!/deepseek-v4-flash/i.test(model)) return body;
   const next: Record<string, unknown> = { ...body };
