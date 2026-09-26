@@ -171,7 +171,7 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   if (reqs.some((_, i) => parseBatchResult(json, String(i)))) {
     return reqs.map((_, i) => parseBatchResult(json, String(i)));
   }
-  const id = batchId(json);
+  const id = json && typeof json === "object" && typeof (json as { id?: unknown }).id === "string" && (json as { id: string }).id.length > 0 ? (json as { id: string }).id : undefined;
   if (!id) return reqs.map((_, i) => parseBatchResult(json, String(i)));
   return pollUntilComplete(fn, opts, id, reqs, signal, key);
 }
@@ -179,12 +179,6 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
 function completeReplies(json: unknown, reqs: IslandReq[]): IslandReply[] | undefined {
   const rows = reqs.map((_, i) => parseBatchResult(json, String(i)));
   return rows.every((row) => row) ? (rows as IslandReply[]) : undefined;
-}
-
-function batchId(json: unknown): string | undefined {
-  if (!json || typeof json !== "object") return undefined;
-  const id = (json as { id?: unknown }).id;
-  return typeof id === "string" && id.length > 0 ? id : undefined;
 }
 
 function pollDelayMs(): number {
