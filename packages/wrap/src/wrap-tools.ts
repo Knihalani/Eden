@@ -418,22 +418,11 @@ type Invocation = {
 
 export { filterCanary } from "./canary";
 
-function entityKey(rec: Record<string, unknown> | undefined): string | undefined {
-  try {
-    if (!rec) return undefined;
-    const id = hintIdOf(rec);
-    if (id == null || id === "") return undefined;
-    return String(id);
-  } catch {
-    return undefined;
-  }
-}
-
 function markDirty(state: WrapState, rec: Record<string, unknown> | undefined, names?: string[]): void {
   try {
     const mutating = names ? names.some((n) => isMutating(n)) : true;
     if (!mutating) return;
-    const k = entityKey(rec);
+    const k = ((rec) => { try { if (!rec) return undefined; const id = hintIdOf(rec); if (id == null || id === "") return undefined; return String(id); } catch { return undefined; } })(rec);
     if (k) {
       state.dirtyEntities.add(k);
       state.dirtyAt.set(k, performance.now());
@@ -448,7 +437,7 @@ function staleRead(
   armed?: Armed,
 ): boolean {
   try {
-    const k = entityKey(rec);
+    const k = ((rec) => { try { if (!rec) return undefined; const id = hintIdOf(rec); if (id == null || id === "") return undefined; return String(id); } catch { return undefined; } })(rec);
     if (!k || !state.dirtyEntities.has(k)) return false;
     const writtenAt = state.dirtyAt.get(k);
     if (writtenAt == null) return true;
