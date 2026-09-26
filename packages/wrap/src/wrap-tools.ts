@@ -826,8 +826,7 @@ export function wrapTools<T extends ToolsIn>(
               new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
             ]);
             if (ok) {
-              if (isReadName(name) && staleRead(state, args, fleetHit.armed)) {
-              } else {
+              if (!(isReadName(name) && staleRead(state, args, fleetHit.armed))) {
               skipAsShared(fleetHit.armed, name, selfId);
               return { eden: "steered", skipped: name };
               }
