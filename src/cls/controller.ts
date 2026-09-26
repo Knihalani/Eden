@@ -57,11 +57,7 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
         const aHit = pool[i]!, bHit = pool[j]!;
         const sa = typeof aHit.src === "string" ? aHit.src : "";
         const sb = typeof bHit.src === "string" ? bHit.src : "";
-        const w = sa && sb && sa === sb
-          ? 1.25
-          : rare.length && rareTermHits(aHit.text, rare) > 0 && rareTermHits(bHit.text, rare) > 0
-            ? 0.45
-            : 0;
+        const w = sa && sb && sa === sb ? 1.25 : rareHits[j]! > 0 ? 0.45 : 0;
         if (w <= 0) continue;
         spread[j] += w * fused[i]!;
       }
