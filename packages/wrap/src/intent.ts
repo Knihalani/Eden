@@ -207,10 +207,7 @@ export function selectSurfacePrograms(opts: {
 }): SurfaceSelection {
   const { mode, live, onShadow } = opts;
   const msgs = opts.messages;
-  if (mode === "none") return { surface: [] };
-  if (mode !== "all" && !msgs?.length) {
-    return { surface: [] };
-  }
+  if (mode === "none" || (mode !== "all" && !msgs?.length)) return { surface: [] };
   if (mode === "all") return { surface: live };
   let ranked: RankedMatch[] = [];
   try {
