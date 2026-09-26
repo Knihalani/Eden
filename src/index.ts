@@ -38,7 +38,6 @@ export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
 export const memoryInjectSilent = { n: 0 };
-export const MEMORY_MIN_DEFAULT = 0.15;
 export const memoryLastRoute = { route: "chat-jsonl" as MemoryRoute };
 const MEMORY_X_FAT_CHARS = 2400;
 
@@ -79,18 +78,6 @@ function fatPacket<T extends { text?: string }>(recs: T[], k: number): T[] {
     return out.length ? out : list.slice(0, floor);
   } catch {
     return Array.isArray(recs) ? recs : [];
-  }
-}
-
-export function memoryMinAboutness(): number {
-  try {
-    const raw = process.env.EDEN_MEMORY_MIN;
-    if (raw == null || String(raw).trim() === "") return MEMORY_MIN_DEFAULT;
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n < 0) return MEMORY_MIN_DEFAULT;
-    return n;
-  } catch {
-    return MEMORY_MIN_DEFAULT;
   }
 }
 
