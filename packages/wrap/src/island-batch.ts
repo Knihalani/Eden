@@ -167,29 +167,18 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   }
   const id = json && typeof json === "object" && typeof (json as { id?: unknown }).id === "string" && (json as { id: string }).id.length > 0 ? (json as { id: string }).id : undefined;
   if (!id) return reqs.map((_, i) => parseBatchResult(json, String(i)));
-  return pollUntilComplete(fn, opts, id, reqs, signal, key);
-}
-
-async function pollUntilComplete(
-  fn: typeof fetch,
-  opts: IslandBatchOpts,
-  id: string,
-  reqs: IslandReq[],
-  signal: AbortSignal,
-  key: string,
-): Promise<Array<IslandReply | undefined>> {
   const statusUrl = `${islandBatchUrl(opts.baseURL)}/${encodeURIComponent(id)}`;
   const resultsUrl = `${statusUrl}/results`;
   const headers = { authorization: key ? `Bearer ${key}` : "", "content-type": "application/json" };
   let empty = 0;
   while (!signal.aborted) {
-    const env = Number(process.env.EDEN_ISLAND_BATCH_POLL_MS);
+    const pollEnv = Number(process.env.EDEN_ISLAND_BATCH_POLL_MS);
     await new Promise<void>((resolve, reject) => {
       if (signal.aborted) {
         reject(signal.reason ?? new Error("island aborted"));
         return;
       }
-      const t = setTimeout(resolve, Number.isFinite(env) && env > 0 ? Math.min(2_000, env) : 20);
+      const t = setTimeout(resolve, Number.isFinite(pollEnv) && pollEnv > 0 ? Math.min(2_000, pollEnv) : 20);
       const onAbort = () => {
         clearTimeout(t);
         reject(signal.reason ?? new Error("island aborted"));
@@ -197,25 +186,25 @@ async function pollUntilComplete(
       signal.addEventListener("abort", onAbort, { once: true });
     });
     for (const url of [statusUrl, resultsUrl]) {
-      let res: Response;
+      let pollRes: Response;
       try {
-        res = await fn(url, { method: "GET", headers, signal });
+        pollRes = await fn(url, { method: "GET", headers, signal });
       } catch {
         return reqs.map(() => undefined);
       }
-      if (!res.ok) {
+      if (!pollRes.ok) {
         empty++;
         if (empty >= 2) return reqs.map(() => undefined);
         continue;
       }
-      const text = await res.text();
+      const text = await pollRes.text();
       const trimmed = text.trim();
-      let json: unknown = {};
+      let pollJson: unknown = {};
       if (trimmed) {
         try {
-          json = JSON.parse(trimmed) as unknown;
+          pollJson = JSON.parse(trimmed) as unknown;
         } catch {
-          json = {
+          pollJson = {
             results: trimmed
               .split("\n")
               .map((line) => line.trim())
@@ -231,7 +220,7 @@ async function pollUntilComplete(
           };
         }
       }
-      const ready = ((rows) => (rows.every((row) => row) ? (rows as IslandReply[]) : undefined))(reqs.map((_, i) => parseBatchResult(json, String(i))));
+      const ready = ((rows) => (rows.every((row) => row) ? (rows as IslandReply[]) : undefined))(reqs.map((_, i) => parseBatchResult(pollJson, String(i))));
       if (ready) return ready;
     }
     empty++;
