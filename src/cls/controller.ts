@@ -56,7 +56,6 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
         const ia = idx[i]!, ib = idx[j]!;
         if (Math.abs(ia - ib) !== 1) continue;
         const aHit = pool[i]!, bHit = pool[j]!;
-        if (cueTerms.length && rareTermHits(bHit.text, cueTerms) < 1) continue;
         const sa = typeof aHit.src === "string" ? aHit.src : "";
         const sb = typeof bHit.src === "string" ? bHit.src : "";
         const w = sa && sb && sa === sb
