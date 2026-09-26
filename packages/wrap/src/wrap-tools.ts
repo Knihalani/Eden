@@ -633,7 +633,6 @@ export function wrapTools<T extends ToolsIn>(
       resolveSettled,
       closed: false,
       hintId: hintIdOf(input),
-      head: (program.sequence ?? [])[0],
       served: new Set(program.sequence ?? []),
     };
     const readOnly = isProgramReadOnly(program);
@@ -904,7 +903,7 @@ export function wrapTools<T extends ToolsIn>(
             armed.readOnly === true &&
             !!fleetId &&
             armed.fleetId === fleetId &&
-            (armed.served?.has(name) === true || armed.head === name);
+            (armed.served?.has(name) === true);
           if (!remaining && !fleetServed) continue;
           const ok = await Promise.race([
             armed.settled,
