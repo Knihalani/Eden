@@ -66,23 +66,6 @@ export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
   };
 }
 
-export function extractOutput(json: Record<string, unknown>): unknown {
-  const choices = json.choices;
-  if (!Array.isArray(choices) || !choices[0] || typeof choices[0] !== "object") return undefined;
-  const choice = choices[0] as Record<string, unknown>;
-  const message = choice.message;
-  if (message && typeof message === "object") {
-    const text = contentText((message as Record<string, unknown>).content);
-    if (text != null) return text;
-  }
-  const delta = choice.delta;
-  if (delta && typeof delta === "object") {
-    const text = contentText((delta as Record<string, unknown>).content);
-    if (text != null) return text;
-  }
-  return undefined;
-}
-
 export function recordCompletion(run: RunRecorder, json: Record<string, unknown>): void {
   run.llmCalls += 1;
   const usage = parseUsage(json.usage);
@@ -97,7 +80,23 @@ export function recordCompletion(run: RunRecorder, json: Record<string, unknown>
     if (cache.cacheWrite != null) run.cache_write_tokens += cache.cacheWrite;
     if (cache.denom != null) run.cache_input_tokens += cache.denom;
   }
-  const out = extractOutput(json);
+  let out: unknown;
+  const choices = json.choices;
+  if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
+    const choice = choices[0] as Record<string, unknown>;
+    const message = choice.message;
+    if (message && typeof message === "object") {
+      const text = contentText((message as Record<string, unknown>).content);
+      if (text != null) out = text;
+    }
+    if (out == null) {
+      const delta = choice.delta;
+      if (delta && typeof delta === "object") {
+        const text = contentText((delta as Record<string, unknown>).content);
+        if (text != null) out = text;
+      }
+    }
+  }
   if (out != null) run.output = redact(out);
 }
 
