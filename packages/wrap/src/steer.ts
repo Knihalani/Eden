@@ -142,23 +142,20 @@ export function recoverShellInput(
         const pool = pools[pools.length - 1 - i]!;
         const idx = rest % pool.values.length;
         rest = Math.floor(rest / pool.values.length);
-        setNested(input, pool.path.split("."), pool.values[idx]!);
+        const parts = pool.path.split(".");
+        let cur: Record<string, unknown> = input;
+        for (let j = 0; j < parts.length - 1; j++) {
+          const k = parts[j]!;
+          const next = cur[k];
+          if (!next || typeof next !== "object") cur[k] = {};
+          cur = cur[k] as Record<string, unknown>;
+        }
+        cur[parts.at(-1)!] = pool.values[idx]!;
       }
       if (interpolateSlots(expr, input) === live) return input;
     }
   }
   return null;
-}
-
-function setNested(obj: Record<string, unknown>, parts: string[], value: string): void {
-  let cur: Record<string, unknown> = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const k = parts[i]!;
-    const next = cur[k];
-    if (!next || typeof next !== "object") cur[k] = {};
-    cur = cur[k] as Record<string, unknown>;
-  }
-  cur[parts.at(-1)!] = value;
 }
 
 export function firstCommandTemplate(p: StretchProgram): string | null {
