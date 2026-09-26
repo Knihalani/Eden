@@ -231,7 +231,7 @@ function convBlob(list: unknown[]): string {
 }
 
 export function cueFor(list: unknown[]): string {
-  const m = lastUserMessage(list);
+  const m = Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined;
   return m && typeof m === "object" ? convBlob([m]).trim() : "";
 }
 
@@ -369,20 +369,6 @@ export function attachPlaceCues(cue: string, paths: Iterable<string>): string {
   if (!trimmed) return names.join(" ");
   if (!names.length) return base;
   return `${trimmed} ${names.join(" ")}`;
-}
-
-function lastUserMessage(list: unknown[]): unknown {
-  if (!Array.isArray(list) || !list.length) return undefined;
-  for (let i = list.length - 1; i >= 0; i--) {
-    const m = list[i];
-    if (!m || typeof m !== "object") continue;
-    const role = String((m as { role?: unknown }).role ?? "").toLowerCase();
-    if (role === "system") continue;
-    const text = convBlob([m]).trim();
-    if (!text || text.startsWith(MEMORY_MARK)) continue;
-    if (role === "user" || role === "human") return m;
-  }
-  return undefined;
 }
 
 const WRAP_PLACE_FIELDS = ["open_files", "openFiles", "files", "file_paths", "filePaths", "file_path", "filePath", "recently_viewed_files", "recentlyViewedFiles"] as const;
@@ -1453,7 +1439,7 @@ export class AgentMemory {
         const cue = cueFor(list);
         let rankCue = cue;
         try {
-          const fromMsg = placePathsFrom(lastUserMessage(list));
+          const fromMsg = placePathsFrom(Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined);
           const extra: string[] = [];
           if (extraPaths) for (const p of extraPaths) if (typeof p === "string") extra.push(p);
           rankCue = cue ? attachPlaceCues(cue, extra.length ? [...fromMsg, ...extra] : fromMsg) : "";
