@@ -132,12 +132,6 @@ export function peekChatUsage(state: { run: RunRecorder }): ChatUsage | null {
   };
 }
 
-export function consumeChatUsage(state: { run: RunRecorder }): ChatUsage | null {
-  const taken = peekChatUsage(state);
-  if (taken) resetUsage(state.run);
-  return taken;
-}
-
 export function cacheHitSpread(
   cached: number,
   write: number,
