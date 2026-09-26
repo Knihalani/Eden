@@ -36,33 +36,6 @@ export class CLSController {
     });
   }
 
-  private canon(note: string): number {
-    const hit = this.canonCache.get(note);
-    if (hit !== undefined) return hit;
-    const body = note
-      .replace(/^[A-Za-z][A-Za-z0-9 /._-]{0,32}:\s*/, "")
-      .replace(/^\[[^\]]*\]\s*/, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    let out = -1;
-    const cands = this.bodyIndex.get(body.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24));
-    if (cands) {
-      for (const i of cands) {
-        const full = this.epi.episodes[i]!.text;
-        if (full === body || full.startsWith(body) || full.includes(body)) {
-          out = i;
-          break;
-        }
-      }
-    }
-    if (out < 0) {
-      const top = this.epi.topK(this.epi.score(this.epi.cueFor(body)), 1);
-      if (top.length) out = top[0]!.i;
-    }
-    this.canonCache.set(note, out);
-    return out;
-  }
-
   scores(q: string, opts?: { complete?: boolean; semantic?: boolean; recency?: boolean }): Float64Array {
     const n = this.epi.episodes.length;
     const temporal = /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(q.toLowerCase()) || /\b20\d{2}\b/.test(q);
@@ -89,7 +62,31 @@ export class CLSController {
     const cortexMap = new Map<number, number>();
     const notes = this.opts.skipCortex ? [] : this.cortex.notesFor(q, 20, { fuse: false });
     notes.forEach((m, r) => {
-      const i = this.canon(m.text);
+      const note = m.text;
+      const cached = this.canonCache.get(note);
+      let i = cached !== undefined ? cached : -1;
+      if (cached === undefined) {
+        const body = note
+          .replace(/^[A-Za-z][A-Za-z0-9 /._-]{0,32}:\s*/, "")
+          .replace(/^\[[^\]]*\]\s*/, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        const cands = this.bodyIndex.get(body.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 24));
+        if (cands) {
+          for (const idx of cands) {
+            const full = this.epi.episodes[idx]!.text;
+            if (full === body || full.startsWith(body) || full.includes(body)) {
+              i = idx;
+              break;
+            }
+          }
+        }
+        if (i < 0) {
+          const top = this.epi.topK(this.epi.score(this.epi.cueFor(body)), 1);
+          if (top.length) i = top[0]!.i;
+        }
+        this.canonCache.set(note, i);
+      }
       if (i >= 0) cortexMap.set(i, Math.max(cortexMap.get(i) || 0, 1 / (1 + 0.35 * r)));
     });
     const names = new Set<string>();
