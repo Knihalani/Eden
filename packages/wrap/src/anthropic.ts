@@ -57,13 +57,6 @@ export function applyCacheGuard(body: { system?: string | SystemBlock[] }): void
   body.system = [...stable, ...volatile];
 }
 
-function lastStableSystemIndex(blocks: SystemBlock[]): number {
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    if (!isVolatilePrefixText(blocks[i]!.text ?? "")) return i;
-  }
-  return blocks.length - 1;
-}
-
 export function applyCacheBreakpoints(body: AnthropicRequest): void {
   if (process.env.EDEN_PROMPT_CACHE === "0") return;
   if (process.env.EDEN_CACHE_GUARD === "1") applyCacheGuard(body);
@@ -74,8 +67,8 @@ export function applyCacheBreakpoints(body: AnthropicRequest): void {
   if (typeof body.system === "string") {
     body.system = [{ type: "text", text: body.system, cache_control: { type: "ephemeral" } }];
   } else if (Array.isArray(body.system) && body.system.length > 0) {
-    const idx = lastStableSystemIndex(body.system);
-    const last = body.system[idx]!;
+    const found = body.system.findLastIndex((b) => !isVolatilePrefixText(b.text ?? ""));
+    const last = body.system[found >= 0 ? found : body.system.length - 1]!;
     last.cache_control = { type: "ephemeral" };
   }
   const msgs = body.messages;
