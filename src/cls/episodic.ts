@@ -1,5 +1,5 @@
 import { completeScores } from "./complete";
-import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stem, textTimeToks, words, type Stamp } from "./text";
+import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stem, textTimeToks, type Stamp } from "./text";
 
 export type Episode = {
   i: number;
@@ -63,7 +63,7 @@ export function rareTermHits(text: string, terms: string[]): number {
   const hay = String(text ?? "").toLowerCase();
   if (!hay) return 0;
   const toks = new Set(contentToks(hay));
-  for (const w of words(hay)) toks.add(w);
+  for (const w of (String(hay ?? "").toLowerCase().match(/[a-z0-9]+(?:[.'\-][a-z0-9]+)*/g) ?? [])) toks.add(w);
   let n = 0;
   for (const t of terms) {
     if (toks.has(t) || toks.has(stem(t))) n++;
