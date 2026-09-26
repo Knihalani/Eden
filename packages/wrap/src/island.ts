@@ -79,10 +79,6 @@ export function withPinnedIsland(
 
 export const ISLAND_RETRIES = 2;
 
-function islandTimeoutMs(): number {
-  const env = Number(process.env.EDEN_ISLAND_MS);
-  return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 30_000;
-}
 const ISLAND_BACKOFF_MS = 300;
 
 class NonJsonReply extends Error {
@@ -107,6 +103,8 @@ export function openaiIsland(opts: {
       if (signal?.aborted) throw lastErr ?? new Error("island aborted");
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, ISLAND_BACKOFF_MS * attempt));
       try {
+        const env = Number(process.env.EDEN_ISLAND_MS);
+        const timeoutMs = Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 30_000;
         const res = await fn(`${base}/chat/completions`, {
           method: "POST",
           headers: { authorization: key ? `Bearer ${key}` : "", "content-type": "application/json" },
@@ -120,8 +118,8 @@ export function openaiIsland(opts: {
             ],
           }),
           signal: signal
-            ? AbortSignal.any([signal, AbortSignal.timeout(islandTimeoutMs())])
-            : AbortSignal.timeout(islandTimeoutMs()),
+            ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+            : AbortSignal.timeout(timeoutMs),
         });
         if (!res.ok) {
           if (attempt < ISLAND_RETRIES && (res.status === 429 || res.status >= 500)) {
