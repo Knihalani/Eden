@@ -3,7 +3,7 @@ import { IslandReply, unwrapIsland } from "@eden/ir";
 import { withIslandBatch } from "./island-batch";
 import { parseCacheTokens, parseUsage } from "./usage";
 
-export { canUseProviderBatch, islandBatchEnabled, islandBatchUrl, PROVIDER_BATCH_CENTS, withIslandBatch } from "./island-batch";
+export { canUseProviderBatch, islandBatchUrl, PROVIDER_BATCH_CENTS, withIslandBatch } from "./island-batch";
 export type { IslandBatchOpts } from "./island-batch";
 
 export function islandUpstreamUrl(upstream?: string | null): string {

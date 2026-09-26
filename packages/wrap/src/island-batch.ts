@@ -4,8 +4,6 @@ import { parseCacheTokens, parseUsage } from "./usage";
 
 export const PROVIDER_BATCH_CENTS = 0.5;
 
-export const islandBatchEnabled = () => process.env.EDEN_ISLAND_BATCH !== "0";
-
 export type IslandBatchOpts = {
   fetch?: typeof fetch;
   baseURL?: string;
