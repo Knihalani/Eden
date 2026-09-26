@@ -96,12 +96,11 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
           ? live.find((p) => p.id === hint.program || p.name === hint.program)
           : hint.program;
     const candidates = named
-      ? [named]
+      ? isSafeToWarm(named) ? [named] : []
       : live.filter((p) => isSafeToWarm(p)).sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
     let program: StretchProgram | undefined;
     let input: Record<string, unknown> | undefined;
     for (const cand of candidates) {
-      if (!isSafeToWarm(cand)) continue;
       if (!named && hint.lastTool && (cand.sequence ?? []).includes(hint.lastTool)) continue;
       const next = raw ? extractInput(cand, raw) : {};
       if (!Object.keys(next).length) continue;
