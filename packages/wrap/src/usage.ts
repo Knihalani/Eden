@@ -1,5 +1,4 @@
-import { redact } from "@eden/ir";
-import type { StretchTrace } from "@eden/ir";
+import { redact, type StretchTrace } from "@eden/ir";
 import type { RunRecorder } from "./types";
 
 const MAX_SSE_BUF = 256 * 1024;
