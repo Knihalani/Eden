@@ -45,17 +45,6 @@ export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Re
   return "";
 }
 
-function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string; fn: typeof fetch; timeout: number } {
-  const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
-  const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
-  return {
-    url: `${base}/chat/completions`,
-    key: resolveUpstreamKey(opts, req),
-    fn: opts.state.opts.fetch ?? fetch,
-    timeout: Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000,
-  };
-}
-
 function upstreamHeaders(url: string, key: string): Record<string, string> {
   const headers: Record<string, string> = {
     authorization: key ? `Bearer ${key}` : "",
@@ -179,7 +168,12 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     }
     return noModelKey();
   }
-  const { url, key, fn, timeout } = upstreamChat(opts, req);
+  const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
+  const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
+  const url = `${base}/chat/completions`;
+  const key = resolveUpstreamKey(opts, req);
+  const fn = opts.state.opts.fetch ?? fetch;
+  const timeout = Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000;
   const shouldSteer = steerable && live.length > 0 && clientOptedIn;
   if (wantsStream && !shouldSteer) {
     try {
