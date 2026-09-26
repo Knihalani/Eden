@@ -56,7 +56,6 @@ export type WrapState = {
   programs: StretchProgram[];
   traces: StretchTrace[];
   receipts: Receipt[];
-  pulls?: number;
   run: RunRecorder;
   pausedIds: Set<string>;
   droppedPosts: number;
@@ -94,7 +93,6 @@ export function createState(opts: EdenOpts = {}): WrapState {
     programs: [...(opts.programs ?? [])],
     traces: [],
     receipts: [],
-    pulls: 0,
     run: emptyRun(),
     pausedIds: new Set(),
     droppedPosts: 0,
