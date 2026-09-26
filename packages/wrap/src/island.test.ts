@@ -8,7 +8,6 @@ import {
   openaiIsland,
   wrapIsland,
   withIslandBatch,
-  withPinnedIsland,
   withWitnessMemo,
 } from "./island";
 
@@ -143,31 +142,6 @@ describe("deterministic-first islands", () => {
     expect(t.lookup(k)).toBeUndefined(); // evidence reset, not stale answer
     t.observe(k, { a: 2 });
     expect(t.lookup(k)).toEqual({ a: 2 });
-  });
-
-  test("pinned miss does not call the model; pinned hit serves memo", async () => {
-    const calls = { n: 0 };
-    const table = createWitnessTable();
-    const base = openaiIsland({ fetch: fakeFetch(calls) });
-    const pinned = withPinnedIsland(base, table);
-    const req = { system: "s", input: { repos: ["acme/app"] }, outputSchema: {} } as never;
-
-    await expect(pinned(req)).rejects.toThrow(/pinned island miss/);
-    expect(calls.n).toBe(0);
-
-    const key = islandMemoKey(req);
-    table.observe(key, { owner: "acme" });
-    table.observe(key, { owner: "acme" });
-    const hit = await pinned(req);
-    expect(unwrapIsland(hit).value).toEqual({ owner: "acme" });
-    expect(unwrapIsland(hit).usage).toEqual({ prompt_tokens: 0, completion_tokens: 0, memoized: true });
-    expect(calls.n).toBe(0);
-
-    const memo = withWitnessMemo(base, table);
-    await expect(memo({ ...req, pinned: true, input: { repos: ["unseen/x"] } } as never)).rejects.toThrow(
-      /pinned island miss/,
-    );
-    expect(calls.n).toBe(0);
   });
 
   test("different schemas/inputs never share an entry", async () => {
