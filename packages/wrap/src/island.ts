@@ -2,8 +2,7 @@ import { IslandReply, unwrapIsland, type IslandCaller } from "@eden/ir";
 import { withIslandBatch } from "./island-batch";
 import { parseCacheTokens, parseUsage } from "./usage";
 
-export { canUseProviderBatch, islandBatchUrl, PROVIDER_BATCH_CENTS, withIslandBatch } from "./island-batch";
-export type { IslandBatchOpts } from "./island-batch";
+export { withIslandBatch } from "./island-batch";
 
 export function wrapIsland(opts: { apiKey?: string; upstream?: string; fetch?: typeof fetch } = {}): IslandCaller | undefined {
   const key = opts.apiKey || process.env.OPENAI_API_KEY;
