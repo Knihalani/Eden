@@ -52,10 +52,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   let liveProgs: StretchProgram[] = [];
   try { liveProgs = opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest); } catch {}
   const live = filterCanary(liveProgs, opts.state.sessionId);
-  safely(() => {
-    const last = opts.state.run.events.at(-1);
-    turnBoundary(opts.state, { lastTool: last?.name, lastArgs: last?.args, input: last?.args });
-  }, undefined);
   const steerable =
     !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   const wantsStream = Boolean(body.stream);
