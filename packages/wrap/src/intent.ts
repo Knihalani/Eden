@@ -344,13 +344,6 @@ function settleJit(jit: JitGuard, messages?: unknown[]): boolean {
   return jit.injections >= jitMax();
 }
 
-function recordJitInject(jit: JitGuard, program: StretchProgram): void {
-  jit.injections++;
-  jit.pendingName = program.name;
-  const seq0 = (program.sequence ?? [])[0];
-  jit.pendingAliases = seq0 && seq0 !== program.name ? [program.name, seq0] : [program.name];
-}
-
 export function selectForRequest(
   live: StretchProgram[],
   messages?: unknown[],
@@ -366,7 +359,12 @@ export function selectForRequest(
       messages,
       onShadow: (names) => console.error(`[eden] intent-shadow: would surface ${names.join(", ")}`),
     }).surface;
-    if (mode === "jit" && jit && selected[0]) recordJitInject(jit, selected[0]);
+    if (mode === "jit" && jit && selected[0]) {
+      jit.injections++;
+      jit.pendingName = selected[0].name;
+      const seq0 = (selected[0].sequence ?? [])[0];
+      jit.pendingAliases = seq0 && seq0 !== selected[0].name ? [selected[0].name, seq0] : [selected[0].name];
+    }
   } catch {
     selected = live;
   }
