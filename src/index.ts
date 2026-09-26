@@ -1497,9 +1497,8 @@ export class AgentMemory {
       let dirty = false;
       for (const k of WRAP_PLACE_FIELDS) if (k in merged) { dirty = true; break; }
       if (!dirty) return merged;
-      const out = { ...merged };
-      for (const k of WRAP_PLACE_FIELDS) delete out[k];
-      return out;
+      for (const k of WRAP_PLACE_FIELDS) delete merged[k];
+      return merged;
     } catch {
       memoryInjectSwallows.n++;
       if (process.env.EDEN_MEMORY_SWALLOW === "1") console.error("eden-memory inject swallow", memoryInjectSwallows.n);
