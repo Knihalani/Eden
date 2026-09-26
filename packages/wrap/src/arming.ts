@@ -125,16 +125,12 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
     if (!b.byKey.size) sessions.delete(session);
   };
 
-  const sweepBucket = (session: string, b: Bucket, now: number): void => {
-    for (const [key, a] of b.byKey) {
-      if (armExpired(a, now)) drop(session, b, key);
-    }
-  };
-
   const sweepSession = (session: string, now: number): Bucket | undefined => {
     const b = sessions.get(session);
     if (!b) return undefined;
-    sweepBucket(session, b, now);
+    for (const [key, a] of b.byKey) {
+      if (armExpired(a, now)) drop(session, b, key);
+    }
     return sessions.get(session);
   };
 
