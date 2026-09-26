@@ -484,13 +484,6 @@ export function encodeLane(text: string): MemoryLaneKind {
   }
 }
 
-function isPinUtterance(text: string): boolean {
-  if (/\b(?:don'?t|do not|never)\s+remember\b/i.test(text)) return false;
-  if (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(text)) return true;
-  if (/\balways\s+\S/i.test(text)) return true;
-  return false;
-}
-
 function observeAsserted(text: string): { s: string; p: string; o: string } | undefined {
   const a = objectAsserted(text);
   if (a) return a;
@@ -1155,7 +1148,7 @@ export class AgentMemory {
     if (!rec.text) return rec;
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const uttered = `${text ?? ""}\n${rec.text}`;
-    const pin = opts.pin === true || isPinUtterance(uttered);
+    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(uttered);
     let sal = opts.sal ?? ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(rec.text.replace(SPEAKER_LABEL, ""));
     if (pin) {
       sal = Math.max(sal, opts.pin === true || /\b(?:always|remember)\b/i.test(uttered) ? 1 : 0.6);
@@ -1280,7 +1273,7 @@ export class AgentMemory {
             this.rebuildSeen();
           }
         }
-        const pin = isPinUtterance(safe) || isPinUtterance(it.text);
+        const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(safe) || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(it.text);
         out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: tokList(text).concat(extraTags), sal: pin ? Math.max(0.6, ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, ""))) : ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")), pin }));
       }
     }
