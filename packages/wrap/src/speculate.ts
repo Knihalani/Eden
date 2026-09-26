@@ -132,14 +132,6 @@ export function markStretchServed(
   }
 }
 
-function sameStretch(
-  a: { programId: string; input: Record<string, unknown> } | null,
-  program: StretchProgram,
-  input: Record<string, unknown>,
-): boolean {
-  return !!a && a.programId === program.id && eq(a.input, input);
-}
-
 export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): SpeculateHandle | null {
   try {
     if (!speculateEnabled()) return null;
@@ -151,7 +143,7 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
     const picked = pick(live, hint);
     if (!picked) return null;
     const { program, input } = picked;
-    if (sameStretch(s.lastServed, program, input)) return null;
+    if (s.lastServed && s.lastServed.programId === program.id && eq(s.lastServed.input, input)) return null;
     const cur = s.slot;
     if (cur && !cur.discarded && cur.program.id === program.id && eq(cur.input, input)) {
       return { programId: program.id, input, startedAt: cur.startedAt };
