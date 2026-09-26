@@ -273,11 +273,7 @@ export function placePathsFrom(raw: unknown): string[] {
       const n = process.cwd().trim().replace(/\\/g, "/").replace(/\/+$/, "");
       if (n.length >= 2) cwds.push(n);
     } catch {}
-    if (typeof raw === "string") {
-      placeAddValue(raw, cwds, out, 0);
-      return out;
-    }
-    if (Array.isArray(raw)) {
+    if (typeof raw === "string" || Array.isArray(raw)) {
       placeAddValue(raw, cwds, out, 0);
       return out;
     }
