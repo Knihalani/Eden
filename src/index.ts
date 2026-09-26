@@ -882,17 +882,14 @@ function mergeGistLane(lexical: MemoryRecord[], text: string, cap: number, dir: 
     if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
     const hits = retrieveGists(dir, q, { k: Math.min(3, cap) });
     if (!hits.length) return lexical;
-    const gists: MemoryRecord[] = hits.map(h => {
-      const rec: MemoryRecord = {
-        id: h.id || `gist:${h.level}:${h.t}`,
-        text: h.text,
-        kind: "gist",
-        lane: "narrative",
-        tags: ["gist"],
-        at: h.t,
-      };
-      return rec;
-    });
+    const gists: MemoryRecord[] = hits.map((h): MemoryRecord => ({
+      id: h.id || `gist:${h.level}:${h.t}`,
+      text: h.text,
+      kind: "gist",
+      lane: "narrative",
+      tags: ["gist"],
+      at: h.t,
+    }));
     const room = Math.max(0, cap - gists.length);
     let rest = (lexical||[]).filter(l => !gists.some(g => g.id===l.id || jaccardText(g.text,l.text)>0.6));
     try {
