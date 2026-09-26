@@ -4,24 +4,14 @@ export function sharedAcrossLine(n: number): string {
   return `shared across ${n} agents`;
 }
 
-export function wrapFleetId(explicit?: string): string {
+function fromEnv(explicit: string | undefined, key: string, fallback = ""): string {
   if (typeof explicit === "string" && explicit.length > 0) return explicit;
-  const env = process.env.EDEN_FLEET;
-  return typeof env === "string" && env.length > 0 ? env : "";
+  const env = process.env[key];
+  return typeof env === "string" && env.length > 0 ? env : fallback;
 }
-
-export function wrapAgentId(explicit?: string, sessionId = ""): string {
-  if (typeof explicit === "string" && explicit.length > 0) return explicit;
-  const env = process.env.EDEN_AGENT;
-  if (typeof env === "string" && env.length > 0) return env;
-  return sessionId;
-}
-
-export function wrapRegion(explicit?: string): string {
-  if (typeof explicit === "string" && explicit.length > 0) return explicit;
-  const env = process.env.EDEN_REGION;
-  return typeof env === "string" && env.length > 0 ? env : "";
-}
+export const wrapFleetId = (explicit?: string): string => fromEnv(explicit, "EDEN_FLEET");
+export const wrapAgentId = (explicit?: string, sessionId = ""): string => fromEnv(explicit, "EDEN_AGENT", sessionId);
+export const wrapRegion = (explicit?: string): string => fromEnv(explicit, "EDEN_REGION");
 
 export function isProgramReadOnly(program: StretchProgram): boolean {
   const seq = program.sequence ?? [];
