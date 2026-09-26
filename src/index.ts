@@ -554,13 +554,12 @@ export function subjectKey(text: string): string | null {
 
 export const PACKET_CHAT_K_MIN = 6;
 export const PACKET_CHAT_K_MAX = 10;
-export const PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
 export const PROCEDURE_TOKEN_CAP = 300;
 export const PROCEDURE_CHAR_CAP = PROCEDURE_TOKEN_CAP * 4;
 
 export function memoryRetrieveCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_CAP);
-  if (!Number.isFinite(raw) || raw <= 0) return PACKET_CHAT_K_DEFAULT;
+  if (!Number.isFinite(raw) || raw <= 0) return PACKET_CHAT_K_MIN;
   return Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
 }
 
