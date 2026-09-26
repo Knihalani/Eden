@@ -112,13 +112,6 @@ export function textTimeToks(s: string): string[] {
 }
 
 const NUM = "(\\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|couple of|few)";
-function num(s: string): number {
-  const x = s.toLowerCase();
-  if (x === "a" || x === "an" || x === "one") return 1;
-  if (x === "couple of") return 2;
-  if (x === "few") return 3;
-  return NUMWORD[x] ? +NUMWORD[x]! : +x;
-}
 
 export function groundRelativeTime(text: string, st: Stamp): string[] {
   if (!st) return [];
@@ -145,7 +138,7 @@ export function groundRelativeTime(text: string, st: Stamp): string[] {
   let m: RegExpExecArray | null;
   const ago = new RegExp(`\\b${NUM} (day|days|week|weeks|month|months|year|years)\\s+(?:ago|back|earlier|before)\\b`, "g");
   while ((m = ago.exec(low))) {
-    const n = num(m[1]!);
+    const n = ((x) => x === "a" || x === "an" || x === "one" ? 1 : x === "couple of" ? 2 : x === "few" ? 3 : NUMWORD[x] ? +NUMWORD[x]! : +x)(m[1]!.toLowerCase());
     const u = m[2]!;
     if (!Number.isFinite(n)) continue;
     if (u.startsWith("day")) add(`${n} day${n > 1 ? "s" : ""} before ${fmtDMY(st)}: ${fmtDMY(shiftDays(st, -n))}`);
@@ -155,7 +148,7 @@ export function groundRelativeTime(text: string, st: Stamp): string[] {
   }
   const inN = new RegExp(`\\bin ${NUM} (day|days|week|weeks|month|months|year|years)\\b`, "g");
   while ((m = inN.exec(low))) {
-    const n = num(m[1]!);
+    const n = ((x) => x === "a" || x === "an" || x === "one" ? 1 : x === "couple of" ? 2 : x === "few" ? 3 : NUMWORD[x] ? +NUMWORD[x]! : +x)(m[1]!.toLowerCase());
     const u = m[2]!;
     if (!Number.isFinite(n)) continue;
     if (u.startsWith("day")) add(`${fmtDMY(shiftDays(st, n))}`);
