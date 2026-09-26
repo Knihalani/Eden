@@ -172,15 +172,6 @@ const AR_SPREAD_SEQ = 1.25;
 
 const AR_SPREAD_SHARED = 0.45;
 
-function arHitIndex<T extends { id?: string }>(hit: T, fallback: number): number {
-  const extra = hit as T & { i?: unknown };
-  if (typeof extra.i === "number" && Number.isInteger(extra.i) && extra.i >= 0) return extra.i;
-  const id = String(hit.id ?? "");
-  const m = id.match(/:(\d+)$/);
-  if (m) return Number(m[1]);
-  return fallback;
-}
-
 function arAdjacentWeight<T extends { text: string; src?: string; id?: string }>(
   a: T,
   b: T,
@@ -230,7 +221,14 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
       fused[i] = comb * (1 + 0.15 * bRaw);
     }
 
-    const idx = pool.map((h, i) => arHitIndex(h, i));
+    const idx = pool.map((h, i) => {
+      const extra = h as typeof h & { i?: unknown };
+      if (typeof extra.i === "number" && Number.isInteger(extra.i) && extra.i >= 0) return extra.i;
+      const id = String(h.id ?? "");
+      const m = id.match(/:(\d+)$/);
+      if (m) return Number(m[1]);
+      return i;
+    });
     const spread = Float64Array.from(fused);
     for (let i = 0; i < pool.length; i++) {
       if (rareHits[i]! < 1) continue;
