@@ -50,12 +50,6 @@ export function notesFromInject(injected: unknown[]): string {
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
 
-function isPinnedIntention(r: MemoryRecord): boolean {
-  if (!r.text) return false;
-  if (r.kind === "constraint") return true;
-  return (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
-}
-
 function briefing(mem: AgentMemory, session = ""): string {
   const seen = new Set<string>();
   const lines: string[] = [];
@@ -106,12 +100,12 @@ function briefing(mem: AgentMemory, session = ""): string {
     try { ingest(memoryWalPath(p)); } catch {}
     for (const id of order) {
       const rec = fileById.get(id);
-      if (!rec || !isPinnedIntention(rec)) continue;
+      if (!rec || !rec.text || (rec.kind !== "constraint" && !(rec.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t)))) continue;
       const prev = byId.get(rec.id);
       if (!prev || rec.at >= prev.at) byId.set(rec.id, rec);
     }
   }
-  let pinRows = [...mem.memories().filter(isPinnedIntention), ...byId.values()];
+  let pinRows = [...mem.memories().filter((r) => !!r.text && (r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t)))), ...byId.values()];
   try { pinRows = dropHarmed(mem.dir, pinRows); } catch {}
   const pins = pinRows.sort((a, b) =>
     Number(b.kind === "constraint") - Number(a.kind === "constraint") || (b.sal ?? 0) - (a.sal ?? 0) || b.at - a.at
