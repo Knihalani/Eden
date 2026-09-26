@@ -36,16 +36,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
 
   const settle = async (items: Pending[]): Promise<void> => {
     if (items.length === 0) return;
-    if (items.length === 1) {
-      const only = items[0]!;
-      try {
-        only.resolve(await base((({ wait: _wait, ...rest }) => rest)(only.req)));
-      } catch (err) {
-        only.reject(err);
-      }
-      return;
-    }
-    if (!canUseProviderBatch(opts)) {
+    if (items.length === 1 || !canUseProviderBatch(opts)) {
       await Promise.all(
         items.map(async (item) => {
           try {
