@@ -4,9 +4,7 @@ import { parseCacheTokens, parseUsage } from "./usage";
 
 export const PROVIDER_BATCH_CENTS = 0.5;
 
-export function islandBatchEnabled(): boolean {
-  return process.env.EDEN_ISLAND_BATCH !== "0";
-}
+export const islandBatchEnabled = () => process.env.EDEN_ISLAND_BATCH !== "0";
 
 export type IslandBatchOpts = {
   fetch?: typeof fetch;
@@ -113,7 +111,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
 
   return (req) => {
     if (req.pinned === true) return Promise.reject(new Error("pinned island miss"));
-    if (!islandBatchEnabled() || req.wait !== true) return base(syncArgs(req));
+    if (process.env.EDEN_ISLAND_BATCH === "0" || req.wait !== true) return base(syncArgs(req));
     if (req.signal?.aborted) return Promise.reject(new Error("island aborted"));
     return new Promise((resolve, reject) => {
       const item: Pending = { req, resolve, reject };
