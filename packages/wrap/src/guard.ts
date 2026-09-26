@@ -32,10 +32,7 @@ export function requiredChecks(
 
 export const killAfterWarningEnabled = (opts: EdenOpts) => opts.killAfterWarning != null ? opts.killAfterWarning : process.env.EDEN_KILL_AFTER_WARNING === "1";
 
-export function enforcementEnabled(opts: EdenOpts): boolean {
-  if (opts.enforce != null) return opts.enforce;
-  return process.env.EDEN_ENFORCE === "1";
-}
+export const enforcementEnabled = (opts: EdenOpts) => opts.enforce != null ? opts.enforce : process.env.EDEN_ENFORCE === "1";
 
 export function decideGuard(args: {
   name: string;
