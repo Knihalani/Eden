@@ -12,12 +12,6 @@ export function armMaxPerSession(explicit?: number): number {
   return Math.min(10_000, Math.max(1, Math.floor(raw)));
 }
 
-export function armMaxGlobal(explicit?: number): number {
-  const env = Number(process.env.EDEN_ARM_GLOBAL);
-  const raw = explicit && explicit > 0 ? explicit : Number.isFinite(env) && env > 0 ? env : ARM_MAX_GLOBAL;
-  return Math.min(1_000_000, Math.max(1, Math.floor(raw)));
-}
-
 export type Armed = {
   rest: Map<string, number>;
   input: Record<string, unknown>;
@@ -106,7 +100,9 @@ export function mightClaim(armed: Armed, name: string, args: Record<string, unkn
 
 export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: number }): ArmingStore {
   const perSessionMax = armMaxPerSession(opts?.perSessionMax);
-  const globalMax = armMaxGlobal(opts?.globalMax);
+  const envGlobal = Number(process.env.EDEN_ARM_GLOBAL);
+  const globalRaw = opts?.globalMax && opts.globalMax > 0 ? opts.globalMax : Number.isFinite(envGlobal) && envGlobal > 0 ? envGlobal : ARM_MAX_GLOBAL;
+  const globalMax = Math.min(1_000_000, Math.max(1, Math.floor(globalRaw)));
   const sessions = new Map<string, Bucket>();
   let global = 0;
   let admits = 0;
