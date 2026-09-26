@@ -141,20 +141,6 @@ export function githubResourceKey(shape: string): string | null {
   return `gh:${kind}${m[2]!.replaceAll("{issue}", "{id}")}`;
 }
 
-function githubShapeHit(msgShapes: Set<string>, progShapes: string[]): boolean {
-  if (progShapes.some((s) => msgShapes.has(s))) return true;
-  const msgGh = new Set<string>();
-  for (const s of msgShapes) {
-    const k = githubResourceKey(s);
-    if (k) msgGh.add(k);
-  }
-  if (!msgGh.size) return false;
-  return progShapes.some((s) => {
-    const k = githubResourceKey(s);
-    return Boolean(k && msgGh.has(k));
-  });
-}
-
 export function rankPrograms(messages: readonly unknown[], programs: StretchProgram[]): RankedMatch[] {
   const text = messageText(messages);
   if (!text) return [];
@@ -176,7 +162,16 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
     let via: RankedMatch["via"] = "tokens";
     try {
       const progShapes = programFirstStepShapes(p);
-      if (msgShapes.size && githubShapeHit(msgShapes, progShapes)) {
+      if (
+        msgShapes.size &&
+        (progShapes.some((s) => msgShapes.has(s)) ||
+          progShapes.some((s) => {
+            const k = githubResourceKey(s);
+            if (!k) return false;
+            for (const m of msgShapes) if (githubResourceKey(m) === k) return true;
+            return false;
+          }))
+      ) {
         score += SCORE_SHAPE;
         via = "shape";
       }
