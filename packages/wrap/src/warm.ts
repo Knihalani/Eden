@@ -128,20 +128,6 @@ export function discardWarm(state: WrapState): void {
   } catch {}
 }
 
-export function warmStats(state: WrapState): WarmStats {
-  try {
-    const s = storeOf(state).stats;
-    return {
-      lookups: s.lookups,
-      hits: s.hits,
-      mutatingExecutes: s.mutatingExecutes,
-      byProgram: { ...s.byProgram },
-    };
-  } catch {
-    return { lookups: 0, hits: 0, mutatingExecutes: 0, byProgram: {} };
-  }
-}
-
 export function warmHitRate(state: WrapState, programId?: string): { hits: number; lookups: number; rate: number } {
   try {
     const s = storeOf(state).stats;
