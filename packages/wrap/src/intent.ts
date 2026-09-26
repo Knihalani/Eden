@@ -78,16 +78,6 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
 const DENSE_EXTRACT =
   /[^\s]+@[^\s]+|s3:\/\/[^\s]+|arn:aws:[^\s]+|gid:\/\/[^\s]+|\+[1-9]\d{6,14}|[A-Za-z0-9_.:/-]{4,}/g;
 
-export function denseTokensFromText(text: string): Set<string> {
-  const out = new Set<string>();
-  const matches = text.match(DENSE_EXTRACT) ?? [];
-  for (const raw of matches) {
-    const t = raw.replace(/[.,;:!?)]+$/g, "");
-    if (looksLikeDenseWitness(t)) out.add(t);
-  }
-  return out;
-}
-
 export function githubBareUrls(text: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -130,7 +120,12 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
       for (const sh of argShapes({ v: u })) msgShapes.add(sh);
     }
   } catch {}
-  const msgWitnesses = denseTokensFromText(text);
+  const msgWitnesses = new Set<string>();
+  const matches = text.match(DENSE_EXTRACT) ?? [];
+  for (const raw of matches) {
+    const t = raw.replace(/[.,;:!?)]+$/g, "");
+    if (looksLikeDenseWitness(t)) msgWitnesses.add(t);
+  }
   const ranked: RankedInternal[] = [];
   for (let i = 0; i < programs.length; i++) {
     const p = programs[i]!;
