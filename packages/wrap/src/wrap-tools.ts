@@ -773,8 +773,7 @@ export function wrapTools<T extends ToolsIn>(
                 live
                   .filter((p) => (p.sequence ?? [])[0] === name)
                   .map((p) => ({ p, input: extractInput(p, args) }))
-                  .filter(({ p, input }) => mayServe(p, input))
-                  .filter(({ input }) => !(isReadName(name) && staleRead(state, input))),
+                  .filter(({ p, input }) => mayServe(p, input) && !(isReadName(name) && staleRead(state, input))),
               NO_PREFIX,
             )
           : NO_PREFIX;
