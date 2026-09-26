@@ -30,10 +30,7 @@ export function requiredChecks(
   return hit ? (hit.sequence ?? []).filter(isCheckName) : [];
 }
 
-export function killAfterWarningEnabled(opts: EdenOpts): boolean {
-  if (opts.killAfterWarning != null) return opts.killAfterWarning;
-  return process.env.EDEN_KILL_AFTER_WARNING === "1";
-}
+export const killAfterWarningEnabled = (opts: EdenOpts) => opts.killAfterWarning != null ? opts.killAfterWarning : process.env.EDEN_KILL_AFTER_WARNING === "1";
 
 export function enforcementEnabled(opts: EdenOpts): boolean {
   if (opts.enforce != null) return opts.enforce;
