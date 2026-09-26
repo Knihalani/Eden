@@ -136,27 +136,24 @@ function briefing(mem: AgentMemory, session = ""): string {
         if (t.length >= 8) harmedText.push(t);
       }
     } catch {}
-    const withoutHarmed = (text: string): string => {
-      try {
-        if (gistHarmed.has(`gist:${opaqueId(text)}`)) return "";
-        const parts = text.split(/(?<=[.!?])\s+/);
-        const kept = parts.filter((p) => {
-          const norm = p.replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!?]+$/g, "");
-          if (!norm) return false;
-          return !harmedText.some((t) => norm.includes(t) || t.includes(norm));
-        });
-        return kept.join(" ").trim();
-      } catch {
-        return text;
-      }
-    };
     for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) {
       try {
         const src = typeof g.src === "string" ? g.src : "";
         if (src && gistHarmed.has(src)) continue;
       } catch {}
       let text = g.text.trim();
-      try { text = withoutHarmed(text); } catch {}
+      try {
+        if (gistHarmed.has(`gist:${opaqueId(text)}`)) text = "";
+        else {
+          const parts = text.split(/(?<=[.!?])\s+/);
+          const kept = parts.filter((p) => {
+            const norm = p.replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!?]+$/g, "");
+            if (!norm) return false;
+            return !harmedText.some((t) => norm.includes(t) || t.includes(norm));
+          });
+          text = kept.join(" ").trim();
+        }
+      } catch {}
       if (!text) continue;
       try {
         const cleaned = scrubTombstonedIdentity(text, mem.dir);
