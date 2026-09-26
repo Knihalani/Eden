@@ -171,9 +171,8 @@ export function templateFits(expr: string, live: string): boolean {
   const bin = (s: string[]) => s[0]!.replace(/^\{|\}$/g, "");
   if (bin(te) !== bin(le)) return false;
   if (te[1] !== le[1] && !/^\{\w+\}$/.test(te[1] ?? "") && !/^\{\w+\}$/.test(le[1] ?? "")) return false;
-  const flags = (s: string[]) => s.filter((w) => w.startsWith("-")).sort();
-  const tf = flags(te);
-  const lf = flags(le);
+  const tf = te.filter((w) => w.startsWith("-")).sort();
+  const lf = le.filter((w) => w.startsWith("-")).sort();
   return tf.length === lf.length && tf.every((f, i) => f === lf[i]);
 }
 
