@@ -203,7 +203,6 @@ function compiledReceipt(
     skipped: string[];
     stepsRun?: number;
     early?: boolean;
-    deoptReason?: string;
     islandPromptTokens?: number;
     islandCompletionTokens?: number;
     islandCachedTokens?: number;
@@ -348,9 +347,6 @@ export async function runCompiled(
         llmCalls: isDeopt(err) ? err.llmCalls : 0,
         cents: isDeopt(err) ? err.cents : 0,
         skipped: [],
-        stepsRun: isDeopt(err) ? err.stepsRun : 0,
-        early: isDeopt(err) && isReplaySafe(err),
-        deoptReason: isDeopt(err) ? err.reason : undefined,
       },
       err,
     );
