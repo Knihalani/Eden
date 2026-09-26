@@ -127,20 +127,6 @@ function steerAnthropicToolUses
   });
 }
 
-function recordAnthropicCompletion(run: WrapState["run"], msg: AnthropicMessage): void {
-  run.llmCalls += 1;
-  const u = msg.usage;
-  if (u && (typeof u.input_tokens === "number" || typeof u.output_tokens === "number")) {
-    run.measured = true;
-    run.prompt_tokens += u.input_tokens ?? 0;
-    run.completion_tokens += u.output_tokens ?? 0;
-  }
-  const texts = (msg.content ?? [])
-    .filter((b) => b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text);
-  if (texts.length) run.output = redact(texts.join("\n"));
-}
-
 export function anthropicMessageToSse(msg: AnthropicMessage): string {
   const indexByBlock = new Map<AnthropicContentBlock, number>();
   let out = "";
@@ -286,7 +272,18 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
     });
   }
 
-  recordAnthropicCompletion(opts.state.run, msg);
+  const run = opts.state.run;
+  run.llmCalls += 1;
+  const u = msg.usage;
+  if (u && (typeof u.input_tokens === "number" || typeof u.output_tokens === "number")) {
+    run.measured = true;
+    run.prompt_tokens += u.input_tokens ?? 0;
+    run.completion_tokens += u.output_tokens ?? 0;
+  }
+  const texts = (msg.content ?? [])
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text);
+  if (texts.length) run.output = redact(texts.join("\n"));
   if (shouldSteer && msg.stop_reason === "tool_use" && Array.isArray(msg.content)) {
     try {
       msg.content = steerAnthropicToolUses(msg.content, live);
