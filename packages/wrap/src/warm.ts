@@ -108,15 +108,6 @@ export function firstWaveReads(
   return wave;
 }
 
-function findEntry(entries: Entry[], programId: string, tool: string, args: Record<string, unknown>): Entry | undefined {
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const e = entries[i]!;
-    if (e.discarded) continue;
-    if (e.programId === programId && e.tool === tool && eq(e.args, args)) return e;
-  }
-  return undefined;
-}
-
 export function claimWarm(state: WrapState, program: StretchProgram, input: Record<string, unknown>): void {
   try {
     const wave = firstWaveReads(program, input);
@@ -180,7 +171,7 @@ export async function takeWarm(
       s.stats.lookups++;
     }
     if (!watchWarmEnabled()) return { hit: false };
-    const entry = findEntry(s.entries, program.id, tool, args);
+    const entry = s.entries.findLast((e) => !e.discarded && e.programId === program.id && e.tool === tool && eq(e.args, args));
     if (!entry || entry.discarded) return { hit: false };
     const out = await entry.promise;
     if (entry.discarded || !out.ok) return { hit: false };
@@ -254,7 +245,7 @@ export function watchWarm(
     if (!program || !input) return null;
     const wave = firstWaveReads(program, input);
     if (!wave.length) return null;
-    if (wave.every((w) => findEntry(s.entries, program.id, w.tool, w.args))) {
+    if (wave.every((w) => s.entries.findLast((e) => !e.discarded && e.programId === program.id && e.tool === w.tool && eq(e.args, w.args)))) {
       return { programId: program.id, input, tools: wave.map((w) => w.tool), startedAt: performance.now() };
     }
     const startedAt = performance.now();
