@@ -100,7 +100,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
         }),
       );
     } catch (err) {
-      if (batchAborted(err, items)) {
+      if (items.some((item) => item.req.signal?.aborted) || (err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message)))) {
         for (const item of items) item.reject(err);
         return;
       }
@@ -137,12 +137,6 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
       }
     });
   };
-}
-
-function batchAborted(err: unknown, items: Pending[]): boolean {
-  if (items.some((item) => item.req.signal?.aborted)) return true;
-  if (err instanceof Error && err.name === "AbortError") return true;
-  return err instanceof Error && /abort/i.test(err.message);
 }
 
 async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Array<IslandReply | undefined>> {
