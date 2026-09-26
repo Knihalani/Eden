@@ -170,21 +170,6 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   return pollUntilComplete(fn, opts, id, reqs, signal, key);
 }
 
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason ?? new Error("island aborted"));
-      return;
-    }
-    const t = setTimeout(resolve, ms);
-    const onAbort = () => {
-      clearTimeout(t);
-      reject(signal.reason ?? new Error("island aborted"));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
 async function pollUntilComplete(
   fn: typeof fetch,
   opts: IslandBatchOpts,
@@ -199,7 +184,18 @@ async function pollUntilComplete(
   let empty = 0;
   while (!signal.aborted) {
     const env = Number(process.env.EDEN_ISLAND_BATCH_POLL_MS);
-    await sleep(Number.isFinite(env) && env > 0 ? Math.min(2_000, env) : 20, signal);
+    await new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason ?? new Error("island aborted"));
+        return;
+      }
+      const t = setTimeout(resolve, Number.isFinite(env) && env > 0 ? Math.min(2_000, env) : 20);
+      const onAbort = () => {
+        clearTimeout(t);
+        reject(signal.reason ?? new Error("island aborted"));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
     for (const url of [statusUrl, resultsUrl]) {
       let res: Response;
       try {
