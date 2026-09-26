@@ -53,11 +53,6 @@ export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Re
   return "";
 }
 
-function wrapTokenBlocked(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): boolean {
-  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
-  return isWrapAuthToken(bearer) && !resolveUpstreamKey(opts, req);
-}
-
 function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string; fn: typeof fetch; timeout: number } {
   const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
   const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
@@ -187,7 +182,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   const wantsStream = Boolean(body.stream);
   const clientOptedIn = Array.isArray(body.tools);
   const msgs = body.messages as unknown[] | undefined;
-  const blocked = wrapTokenBlocked(opts, req);
+  const blocked = isWrapAuthToken(req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "") && !resolveUpstreamKey(opts, req);
   const picked = steerable
     ? safely(
         () => selectForRequest(live, msgs, blocked ? undefined : opts.state.jit),
