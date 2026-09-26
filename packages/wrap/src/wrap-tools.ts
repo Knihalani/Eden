@@ -485,14 +485,6 @@ export function safely<T>(fn: () => T, fallback: T, onErr?: (err: unknown) => vo
   }
 }
 
-async function safelyAsync<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await fn();
-  } catch {
-    return fallback;
-  }
-}
-
 export function wrapTools<T extends ToolsIn>(
   tools: T,
   state: WrapState,
@@ -810,7 +802,7 @@ export function wrapTools<T extends ToolsIn>(
         try {
           safely(() => noteJitUsed(state.jit, [p.name, ...(p.sequence ?? []).slice(0, 1)]), undefined);
           const input = safely(() => extractInput(p, args), args);
-          const taken = await safelyAsync(() => takeSpeculation(state, p, input), { hit: false as const });
+          const taken = await takeSpeculation(state, p, input).catch(() => ({ hit: false as const }));
           const value = taken.hit ? taken.value : await runCompiled(state, p, args, tools, registry);
           if (!taken.hit) markStretchServed(state, p, input);
           return value;
@@ -908,10 +900,7 @@ export function wrapTools<T extends ToolsIn>(
           const { key: armKey, armed } = pair;
           try {
             if (!isProgramReadOnly(hit.p)) discardSpeculation(state);
-            const taken = await safelyAsync(
-              () => takeSpeculation(state, hit.p, hit.input),
-              { hit: false as const },
-            );
+            const taken = await takeSpeculation(state, hit.p, hit.input).catch(() => ({ hit: false as const }));
             const value = taken.hit
               ? taken.value
               : await runCompiled(state, hit.p, hit.input, tools, registry);
