@@ -18,12 +18,6 @@ export function armMaxGlobal(explicit?: number): number {
   return Math.min(1_000_000, Math.max(1, Math.floor(raw)));
 }
 
-export function wrapSessionId(explicit?: string): string {
-  if (typeof explicit === "string" && explicit.length > 0) return explicit;
-  const env = process.env.EDEN_SESSION;
-  return typeof env === "string" && env.length > 0 ? env : "";
-}
-
 export type Armed = {
   rest: Map<string, number>;
   input: Record<string, unknown>;
