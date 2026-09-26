@@ -37,11 +37,6 @@ type Pending = {
   reject: (err: unknown) => void;
 };
 
-function islandTimeoutMs(): number {
-  const env = Number(process.env.EDEN_ISLAND_MS);
-  return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 30_000;
-}
-
 function syncArgs(req: IslandReq): IslandReq {
   const { wait: _wait, ...rest } = req;
   return rest;
@@ -144,7 +139,8 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   const key = opts.apiKey || process.env.OPENAI_API_KEY || "";
   const model = opts.model || "gpt-5.6-luna";
   const signals = reqs.map((r) => r.signal).filter((s): s is AbortSignal => Boolean(s));
-  const timeout = AbortSignal.timeout(islandTimeoutMs());
+  const env = Number(process.env.EDEN_ISLAND_MS);
+  const timeout = AbortSignal.timeout(Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 30_000);
   const signal = signals.length > 0 ? AbortSignal.any([...signals, timeout]) : timeout;
   const res = await fn(islandBatchUrl(opts.baseURL), {
     method: "POST",
