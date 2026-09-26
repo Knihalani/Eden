@@ -135,42 +135,6 @@ function noteFollow(s: Store, currentId: string): void {
   s.lastServedId = currentId;
 }
 
-function pickNext(
-  s: Store,
-  live: StretchProgram[],
-  current: StretchProgram,
-  currentInput: Record<string, unknown>,
-  hint: WarmHint,
-): { program: StretchProgram; input: Record<string, unknown> } | null {
-  const raw = hint.input && typeof hint.input === "object" ? hint.input : currentInput;
-  const named =
-    hint.program == null
-      ? undefined
-      : typeof hint.program === "string"
-        ? live.find((p) => p.id === hint.program || p.name === hint.program)
-        : hint.program;
-  const candidates = named
-    ? [named]
-    : live
-        .filter((p) => p.id !== current.id && isSafeToWarm(p))
-        .sort((a, b) => {
-          const fa = s.follows.get(current.id)?.get(a.id) ?? 0;
-          const fb = s.follows.get(current.id)?.get(b.id) ?? 0;
-          if (fb !== fa) return fb - fa;
-          return (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0);
-        });
-  for (const program of candidates) {
-    if (program.id === current.id) continue;
-    if (!isSafeToWarm(program)) continue;
-    const input = extractInput(program, raw);
-    if (!Object.keys(input).length) continue;
-    if (!mayServe(program, input)) continue;
-    if (!firstWaveReads(program, input).length) continue;
-    return { program, input };
-  }
-  return null;
-}
-
 function findEntry(entries: Entry[], programId: string, tool: string, args: Record<string, unknown>): Entry | undefined {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!;
@@ -284,9 +248,36 @@ export function watchWarm(
     if (!live.length) return null;
     noteFollow(s, current.id);
     const currentInput = hint.input && typeof hint.input === "object" ? hint.input : {};
-    const picked = pickNext(s, live, current, currentInput, hint);
-    if (!picked) return null;
-    const { program, input } = picked;
+    const named =
+      hint.program == null
+        ? undefined
+        : typeof hint.program === "string"
+          ? live.find((p) => p.id === hint.program || p.name === hint.program)
+          : hint.program;
+    const candidates = named
+      ? [named]
+      : live
+          .filter((p) => p.id !== current.id && isSafeToWarm(p))
+          .sort((a, b) => {
+            const fa = s.follows.get(current.id)?.get(a.id) ?? 0;
+            const fb = s.follows.get(current.id)?.get(b.id) ?? 0;
+            if (fb !== fa) return fb - fa;
+            return (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0);
+          });
+    let program: StretchProgram | undefined;
+    let input: Record<string, unknown> | undefined;
+    for (const cand of candidates) {
+      if (cand.id === current.id) continue;
+      if (!isSafeToWarm(cand)) continue;
+      const next = extractInput(cand, currentInput);
+      if (!Object.keys(next).length) continue;
+      if (!mayServe(cand, next)) continue;
+      if (!firstWaveReads(cand, next).length) continue;
+      program = cand;
+      input = next;
+      break;
+    }
+    if (!program || !input) return null;
     const wave = firstWaveReads(program, input);
     if (!wave.length) return null;
     if (wave.every((w) => findEntry(s.entries, program.id, w.tool, w.args))) {
