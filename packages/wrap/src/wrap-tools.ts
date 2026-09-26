@@ -15,10 +15,9 @@ import {
   usableTrace,
   hashStretch,
   liveTimeSavedMs,
-  protocolHeaders,
+  protocolHeaders, MAX_RUN_STEPS,
 } from "@eden/ir";
 import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram } from "@eden/runtime";
-import { MAX_RUN_STEPS } from "@eden/ir";
 import { emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
 import { filterCanary } from "./canary";
 import { extractInput } from "./steer";
