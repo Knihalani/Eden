@@ -85,19 +85,6 @@ export function noModelKey(): Response {
   });
 }
 
-export function argsFromMessages(program: StretchProgram, messages: unknown): Record<string, unknown> {
-  const text = !Array.isArray(messages) ? "" : messages.map((m) => (!m || typeof m !== "object" ? "" : typeof (m as { content?: unknown }).content === "string" ? (m as { content: string }).content : "")).join("\n");
-  const raw: Record<string, unknown> = {};
-  const ticket = text.match(/\bT-\d+\b/i);
-  if (ticket) raw.id = ticket[0];
-  const gh = text.match(/\/(?:issues|pulls|pull)\/(\d+)/i);
-  if (gh) {
-    raw.issue = gh[1];
-    if (!raw.id) raw.id = gh[1];
-  }
-  return extractInput(program, raw);
-}
-
 export async function handleChatCompletions(req: Request, opts: ProxyOpts): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" } });
   let body: Record<string, unknown>;
@@ -133,7 +120,16 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     const hit = picked[0];
     if (hit && opts.play) {
       try {
-        const facts = await opts.play(hit.name, argsFromMessages(hit, body.messages));
+        const text = !Array.isArray(body.messages) ? "" : body.messages.map((m) => (!m || typeof m !== "object" ? "" : typeof (m as { content?: unknown }).content === "string" ? (m as { content: string }).content : "")).join("\n");
+        const raw: Record<string, unknown> = {};
+        const ticket = text.match(/\bT-\d+\b/i);
+        if (ticket) raw.id = ticket[0];
+        const gh = text.match(/\/(?:issues|pulls|pull)\/(\d+)/i);
+        if (gh) {
+          raw.issue = gh[1];
+          if (!raw.id) raw.id = gh[1];
+        }
+        const facts = await opts.play(hit.name, extractInput(hit, raw));
         if (facts !== undefined && facts !== null) {
           return Response.json({
             id: "eden-compiled",
