@@ -12,18 +12,6 @@ export {
   type ForecastView,
 } from "@eden/measure";
 
-export function forecastTimeoutMs(opts: Pick<EdenOpts, "timeoutMs"> | number | undefined): number {
-  const explicit = typeof opts === "number" ? opts : opts?.timeoutMs;
-  const env = Number(process.env.EDEN_TIMEOUT_MS);
-  const raw =
-    explicit && explicit > 0
-      ? explicit
-      : Number.isFinite(env) && env > 0
-        ? env
-        : 60_000;
-  return Math.min(300_000, Math.max(1, raw));
-}
-
 export function actualSpend(run: RunRecorder, now: number): ForecastSpend {
   return spend({
     llmCalls: run.llmCalls,
@@ -63,7 +51,7 @@ export function remainingBudgetForRun(args: {
   opts: Pick<EdenOpts, "timeoutMs">;
 }): ForecastView | null {
   if (!args.program.budget) return null;
-  const cap = forecastTimeoutMs(args.opts);
+  const cap = ((o) => { const e = o?.timeoutMs; const env = Number(process.env.EDEN_TIMEOUT_MS); return Math.min(300_000, Math.max(1, e && e > 0 ? e : Number.isFinite(env) && env > 0 ? env : 60_000)); })(args.opts);
   const elapsed = args.now - args.run.t0;
   return remainingBudget({
     predicted: args.program.budget,

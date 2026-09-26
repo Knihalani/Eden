@@ -24,7 +24,6 @@ import { filterCanary } from "./canary";
 import { extractInput } from "./steer";
 import type { StretchTrace, TraceEvent } from "@eden/ir";
 import { cacheHitSpread, resetUsage } from "./usage";
-import { forecastTimeoutMs } from "./forecast";
 import { decideGuard, enforcementEnabled, requiredChecks } from "./guard";
 import {
   ARM_SLACK_CALLS,
@@ -101,7 +100,8 @@ function inputAgrees(armed: Armed, cur: Record<string, unknown>): boolean {
 export const DEFAULT_WRAP_TIMEOUT_MS = 60_000;
 
 export function wrapTimeoutMs(explicit?: number): number {
-  return forecastTimeoutMs(explicit);
+  const env = Number(process.env.EDEN_TIMEOUT_MS);
+  return Math.min(300_000, Math.max(1, explicit && explicit > 0 ? explicit : Number.isFinite(env) && env > 0 ? env : 60_000));
 }
 
 export function createState(opts: EdenOpts = {}): WrapState {
