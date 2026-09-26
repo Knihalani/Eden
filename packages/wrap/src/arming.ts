@@ -138,20 +138,6 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
     return out;
   };
 
-  const walkFleet = (fleetId: string, now: number): FleetHit[] => {
-    const out: FleetHit[] = [];
-    for (const session of [...sessions.keys()]) {
-      const b = sweepSession(session, now);
-      if (!b) continue;
-      for (const [key, armed] of newest(b)) {
-        if (armed.readOnly !== true) continue;
-        if (armed.fleetId !== fleetId) continue;
-        out.push({ session, key, armed });
-      }
-    }
-    return out;
-  };
-
   return {
     perSessionMax,
     globalMax,
@@ -197,7 +183,17 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
     },
     allFleet(fleetId, now) {
       if (!fleetId) return [];
-      return walkFleet(fleetId, now);
+      const out: FleetHit[] = [];
+      for (const session of [...sessions.keys()]) {
+        const b = sweepSession(session, now);
+        if (!b) continue;
+        for (const [key, armed] of newest(b)) {
+          if (armed.readOnly !== true) continue;
+          if (armed.fleetId !== fleetId) continue;
+          out.push({ session, key, armed });
+        }
+      }
+      return out;
     },
     sessionSize(session) {
       return sessions.get(session)?.byKey.size ?? 0;
