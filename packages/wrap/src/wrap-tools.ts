@@ -386,7 +386,7 @@ export async function runCompiled(
     } else if (stats.llmCalls === 0) {
       run.island_measured = true;
     }
-    pushCapped(state.receipts, receipt);
+    state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
     try { state.opts.onReceipt?.(receipt); } catch {}
     post(state, "/v1/receipts", receipt);
     markDirty(state, input, program.sequence);
@@ -408,16 +408,11 @@ export async function runCompiled(
       err,
     );
     stampIdentity(state, receipt);
-    pushCapped(state.receipts, receipt);
+    state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
     try { state.opts.onReceipt?.(receipt); } catch {}
     post(state, "/v1/receipts", receipt);
     throw err;
   }
-}
-
-function pushCapped<T>(buf: T[], item: T): void {
-  buf.push(item);
-  if (buf.length > MAX_TRACES + 256) buf.splice(0, buf.length - MAX_TRACES);
 }
 
 const INVOCATION = Symbol("eden.invocation");
@@ -686,7 +681,7 @@ export function wrapTools<T extends ToolsIn>(
       }
       if (state.fleetId) trace.fleetId = state.fleetId;
       if (state.region) trace.region = state.region;
-      pushCapped(state.traces, trace);
+      state.traces.push(trace); if (state.traces.length > MAX_TRACES + 256) state.traces.splice(0, state.traces.length - MAX_TRACES);
       try { state.opts.onTrace?.(trace); } catch {}
       post(state, "/v1/traces", trace);
      } catch {
@@ -758,7 +753,7 @@ export function wrapTools<T extends ToolsIn>(
         fingerprint: hashStretch(program),
       };
       stampIdentity(state, receipt);
-      pushCapped(state.receipts, receipt);
+      state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
       try { state.opts.onReceipt?.(receipt); } catch {}
       post(state, "/v1/receipts", receipt);
       return null;
@@ -809,7 +804,7 @@ export function wrapTools<T extends ToolsIn>(
         sharedAcross: n,
         ...(prog ? { fingerprint: hashStretch(prog) } : {}),
       });
-      pushCapped(state.receipts, rec);
+      state.receipts.push(rec); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
       try { state.opts.onReceipt?.(rec); } catch {}
       post(state, "/v1/receipts", rec);
     }
