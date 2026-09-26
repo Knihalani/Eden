@@ -162,7 +162,7 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   });
   if (!res.ok) throw new Error(`island batch ${res.status}`);
   const json = (await res.json()) as unknown;
-  const first = completeReplies(json, reqs);
+  const first = ((rows) => (rows.every((row) => row) ? (rows as IslandReply[]) : undefined))(reqs.map((_, i) => parseBatchResult(json, String(i))));
   if (first) return first;
   if (reqs.some((_, i) => parseBatchResult(json, String(i)))) {
     return reqs.map((_, i) => parseBatchResult(json, String(i)));
@@ -170,11 +170,6 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   const id = json && typeof json === "object" && typeof (json as { id?: unknown }).id === "string" && (json as { id: string }).id.length > 0 ? (json as { id: string }).id : undefined;
   if (!id) return reqs.map((_, i) => parseBatchResult(json, String(i)));
   return pollUntilComplete(fn, opts, id, reqs, signal, key);
-}
-
-function completeReplies(json: unknown, reqs: IslandReq[]): IslandReply[] | undefined {
-  const rows = reqs.map((_, i) => parseBatchResult(json, String(i)));
-  return rows.every((row) => row) ? (rows as IslandReply[]) : undefined;
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -243,7 +238,7 @@ async function pollUntilComplete(
         continue;
       }
       const json = await parsePollBody(res);
-      const ready = completeReplies(json, reqs);
+      const ready = ((rows) => (rows.every((row) => row) ? (rows as IslandReply[]) : undefined))(reqs.map((_, i) => parseBatchResult(json, String(i))));
       if (ready) return ready;
     }
     empty++;
