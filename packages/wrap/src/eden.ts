@@ -8,15 +8,6 @@ export type OpenAiHandle = {
   apiKey: string;
 };
 
-async function wrapUp(base: string): Promise<boolean> {
-  try {
-    const r = await fetch(`${base.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(1500) });
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
-
 export function eden(opts: EdenOpts = {}) {
   const state: WrapState = createState({
     ...opts,
@@ -34,7 +25,7 @@ export function eden(opts: EdenOpts = {}) {
         baseURL: proxy,
         apiKey,
         async resolve() {
-          const ok = await wrapUp(proxy.replace(/\/v1\/?$/, ""));
+          const ok = await fetch(`${proxy.replace(/\/v1\/?$/, "").replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false);
           if (ok) return { model, baseURL: proxy, apiKey };
           return { model, baseURL: "https://api.openai.com/v1", apiKey };
         },
