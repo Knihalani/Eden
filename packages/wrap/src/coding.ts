@@ -8,44 +8,6 @@ import { DeoptError } from "@eden/runtime";
 
 const NETWORK_BINARIES = new Set(["curl", "wget", "nc", "ncat", "netcat", "ssh", "scp", "ftp"]);
 
-function bashJail(cwd: string, cmd: string): void {
-  if (/[`$]|\$\(|\$\{/.test(cmd)) throw new Error("path outside workspace");
-  if (/[<>]\(/.test(cmd)) throw new Error("path outside workspace");
-  if (/(^|[;&|\n]|&&|\|\|)\s*cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s'"`])\.\.(\/|$)/.test(cmd)) {
-    throw new Error("path outside workspace");
-  }
-  if (/(^|[\s;(])cd\s+['"]?(\.\.|\/|~)/.test(cmd)) {
-    throw new Error("path outside workspace");
-  }
-  if (/(^|[\s;|&'"(])~[A-Za-z0-9_-]/.test(cmd)) {
-    throw new Error("path outside workspace");
-  }
-  for (const m of cmd.matchAll(/(?:^|[\s;|&`'"(=]|(?:\d)?[<>])((?:~\/|~[A-Za-z0-9_-]+|\/)[^\s'"`;&|)]*)/g)) {
-    const token = m[1]!;
-    if (!token || token.includes("://")) continue;
-    if (token === "/dev/null" || token.startsWith("/dev/fd")) continue;
-    const path = token.startsWith("~") ? token.slice(token.indexOf("/") + 1 || token.length) : token;
-    if (token.startsWith("~")) throw new Error("path outside workspace");
-    confined(cwd, path);
-  }
-  const allow = new Set((process.env.EDEN_NET_ALLOW ?? "").split(",").map((s) => s.trim()).filter(Boolean));
-  const segments = cmd.split(/\||&&/);
-  for (let s = 1; s < segments.length; s++) {
-    const words = segments[s]!.trim().split(/\s+/);
-    let target = "";
-    for (const w of words) {
-      const base = w.split("/").pop()!.toLowerCase();
-      if (base === "sudo" || base === "env" || base === "nohup" || base === "exec" || base === "command") continue;
-      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) continue;
-      target = base;
-      break;
-    }
-    if (NETWORK_BINARIES.has(target) && !allow.has(target)) {
-      throw new Error(`network binary ${target} cannot receive a pipe`);
-    }
-  }
-}
-
 function confined(cwd: string, p: string): string {
   const root = realpathSync(resolve(cwd));
   const target = resolve(root, p);
@@ -101,7 +63,41 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
       if (name === "Bash" || name === "bash") {
         const cmd = String(args.command ?? "").trim();
         if (!cmd) throw new Error("empty command");
-        bashJail(cwd, cmd);
+        if (/[`$]|\$\(|\$\{/.test(cmd)) throw new Error("path outside workspace");
+        if (/[<>]\(/.test(cmd)) throw new Error("path outside workspace");
+        if (/(^|[;&|\n]|&&|\|\|)\s*cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s'"`])\.\.(\/|$)/.test(cmd)) {
+          throw new Error("path outside workspace");
+        }
+        if (/(^|[\s;(])cd\s+['"]?(\.\.|\/|~)/.test(cmd)) {
+          throw new Error("path outside workspace");
+        }
+        if (/(^|[\s;|&'"(])~[A-Za-z0-9_-]/.test(cmd)) {
+          throw new Error("path outside workspace");
+        }
+        for (const m of cmd.matchAll(/(?:^|[\s;|&`'"(=]|(?:\d)?[<>])((?:~\/|~[A-Za-z0-9_-]+|\/)[^\s'"`;&|)]*)/g)) {
+          const token = m[1]!;
+          if (!token || token.includes("://")) continue;
+          if (token === "/dev/null" || token.startsWith("/dev/fd")) continue;
+          const path = token.startsWith("~") ? token.slice(token.indexOf("/") + 1 || token.length) : token;
+          if (token.startsWith("~")) throw new Error("path outside workspace");
+          confined(cwd, path);
+        }
+        const allow = new Set((process.env.EDEN_NET_ALLOW ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+        const segments = cmd.split(/\||&&/);
+        for (let s = 1; s < segments.length; s++) {
+          const words = segments[s]!.trim().split(/\s+/);
+          let target = "";
+          for (const w of words) {
+            const base = w.split("/").pop()!.toLowerCase();
+            if (base === "sudo" || base === "env" || base === "nohup" || base === "exec" || base === "command") continue;
+            if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) continue;
+            target = base;
+            break;
+          }
+          if (NETWORK_BINARIES.has(target) && !allow.has(target)) {
+            throw new Error(`network binary ${target} cannot receive a pipe`);
+          }
+        }
         const env = { ...process.env };
         for (const k of Object.keys(env)) {
           if (/key|token|secret|password|passwd|authorization/i.test(k)) {
