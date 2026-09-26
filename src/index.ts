@@ -1178,10 +1178,6 @@ export class AgentMemory {
     return this.flush(true), rec;
   }
 
-  private semantic(): SemanticStore {
-    return (this.sem ??= new SemanticStore(this.dir));
-  }
-
   private rebuildSeen() {
     this.seenLower = new Set();
     for (const c of this.compiled) {
@@ -1218,7 +1214,7 @@ export class AgentMemory {
       if (lane === "icl" || lane === "narrative") {
         let text = safe;
         if (lane === "narrative" && opts.keepLiveIdentity) {
-          try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
+          try { text = omitConflictingIdentity(text, (this.sem ??= new SemanticStore(this.dir))); } catch {}
         }
         if (text && !this.seenLower.has(text.toLowerCase())) {
           const tags = tokList(text).concat([lane]);
@@ -1256,7 +1252,7 @@ export class AgentMemory {
           const fact = observeAsserted(text);
           if (fact && (isIclExemplar(raw) || isIclExemplar(it.text))) continue;
           if (fact) {
-            const store = (sem ??= this.semantic());
+            const store = (sem ??= (this.sem ??= new SemanticStore(this.dir)));
             const live = store.get(fact.s, fact.p);
             if (opts.keepLiveIdentity) {
               const obj = fact.o.trim().toLowerCase();
@@ -1577,7 +1573,7 @@ export class AgentMemory {
         } catch {
           packet = !silent && retrieved.length ? assembleNotes(retrieved, this.dir) : [];
         }
-        try { if (rankCue && !silent) packet = scrubNarrativeLeftovers(packet, this.semantic()); } catch {}
+        try { if (rankCue && !silent) packet = scrubNarrativeLeftovers(packet, (this.sem ??= new SemanticStore(this.dir))); } catch {}
         packet = packet.map(formatNote);
         try { packet = dropHarmed(this.dir, packet); } catch {}
         try { logMemoryNotes(packet); } catch {}
@@ -1621,7 +1617,7 @@ export class AgentMemory {
   }
   quiet(fn: () => void) {
     this.batch++;
-    const sem = this.semantic();
+    const sem = (this.sem ??= new SemanticStore(this.dir));
     sem.beginBatch();
     try { fn(); } finally {
       try { sem.endBatch(); } catch {}
