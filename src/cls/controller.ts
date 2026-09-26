@@ -140,13 +140,6 @@ export class CLSController {
     return completeScores(q, this.epi.episodes, fused);
   }
 
-  chunk(e: Episode): string {
-    const eps = this.epi.episodes, i = e.i;
-    const prev = i > 0 && eps[i - 1]!.session === e.session ? eps[i - 1]!.render : "";
-    const next = i + 1 < eps.length && eps[i + 1]!.session === e.session ? eps[i + 1]!.render : "";
-    return [prev, e.render, next].filter(Boolean).join("\n");
-  }
-
   retrieve(q: string, k: number, opts?: { neighbors?: boolean; complete?: boolean; semantic?: boolean; recency?: boolean }): string[] {
     if (!this.epi.episodes.length) return this.cortex.notesFor(q, k, { fuse: false }).map((m) => m.text);
     const fused = this.scores(q, opts);
@@ -154,7 +147,11 @@ export class CLSController {
     const expand = opts?.neighbors !== false;
     return top.map((h) => {
       const e = this.epi.episodes[h.i]!;
-      return expand ? this.chunk(e) : e.render;
+      if (!expand) return e.render;
+      const eps = this.epi.episodes, i = e.i;
+      const prev = i > 0 && eps[i - 1]!.session === e.session ? eps[i - 1]!.render : "";
+      const next = i + 1 < eps.length && eps[i + 1]!.session === e.session ? eps[i + 1]!.render : "";
+      return [prev, e.render, next].filter(Boolean).join("\n");
     });
   }
 }
