@@ -451,25 +451,13 @@ export function wrapTools<T extends ToolsIn>(
 
   const note = (): void => safely(() => {
     if (run.warnings.length >= MAX_WARNINGS) return;
-    if (run.events.length < 2 && state.programs.length === 0) {
-      if (run.firstWarningAt == null) {
-        const at = firstWarningIndex(run.events, run.warnings);
-        if (at != null) {
-          run.firstWarningAt = at;
-          run.warnBudget = {
-            duration_ms: Math.max(0, performance.now() - run.t0),
-            llmCalls: run.llmCalls,
-            ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
-          };
-        }
-      }
-      return;
-    }
     const budget = {
       duration_ms: Math.max(0, performance.now() - run.t0),
       llmCalls: run.llmCalls,
       ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
     };
+    const stampWarn = (): void => { if (run.firstWarningAt != null) return; const at = firstWarningIndex(run.events, run.warnings); if (at == null) return; run.firstWarningAt = at; run.warnBudget = budget; };
+    if (run.events.length < 2 && state.programs.length === 0) { stampWarn(); return; }
     const required = state.programs.length === 0 ? [] : requiredChecks(filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId), run.events);
     const ledger = required.length === 0 ? undefined : evidenceLedger(run.events, required);
     const fresh = takeSignals(run.events, budget, run.seenSignals, required, ledger);
@@ -479,13 +467,7 @@ export function wrapTools<T extends ToolsIn>(
       try { state.opts.onWarning?.(w); } catch {}
     }
     run.evidence = ledger ?? EMPTY_LEDGER;
-    if (run.firstWarningAt == null) {
-      const at = firstWarningIndex(run.events, run.warnings);
-      if (at != null) {
-        run.firstWarningAt = at;
-        run.warnBudget = budget;
-      }
-    }
+    stampWarn();
     if (fresh.some((w) => w.kind === "fail_streak")) {
       run.tripped = true;
       const last = run.events.at(-1)?.name;
