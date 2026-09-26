@@ -31,19 +31,6 @@ export type CacheTokenFields = {
   denom?: number;
 };
 
-export function cacheHitDenomFromUsage(raw: unknown): number | null {
-  if (!raw || typeof raw !== "object") return null;
-  const u = raw as Record<string, unknown>;
-  if ("cache_read_input_tokens" in u || "cache_creation_input_tokens" in u) {
-    return (
-      (coerceInt(u.cache_read_input_tokens) ?? 0) +
-      (coerceInt(u.cache_creation_input_tokens) ?? 0) +
-      (coerceInt(u.input_tokens) ?? 0)
-    );
-  }
-  return coerceInt(u.prompt_tokens) ?? null;
-}
-
 export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
   if (!raw || typeof raw !== "object") return null;
   const u = raw as Record<string, unknown>;
@@ -58,7 +45,12 @@ export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
   const cacheWrite =
     coerceInt(u.cache_creation_input_tokens) ?? coerceInt(details?.cache_creation_tokens);
   if (cached == null && cacheWrite == null) return null;
-  const denom = cacheHitDenomFromUsage(u);
+  const denom =
+    "cache_read_input_tokens" in u || "cache_creation_input_tokens" in u
+      ? (coerceInt(u.cache_read_input_tokens) ?? 0) +
+        (coerceInt(u.cache_creation_input_tokens) ?? 0) +
+        (coerceInt(u.input_tokens) ?? 0)
+      : coerceInt(u.prompt_tokens) ?? null;
   return {
     cached: cached ?? 0,
     ...(cacheWrite != null ? { cacheWrite } : {}),
