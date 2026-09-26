@@ -52,14 +52,10 @@ type Store = {
 const stores = new WeakMap<WrapState, Store>();
 const MAX_ENTRIES = 64;
 
-function emptyStats(): WarmStats {
-  return { lookups: 0, hits: 0, mutatingExecutes: 0, byProgram: {} };
-}
-
 function storeOf(state: WrapState): Store {
   let s = stores.get(state);
   if (!s) {
-    s = { entries: [], stats: emptyStats(), lastServedId: null, follows: new Map() };
+    s = { entries: [], stats: { lookups: 0, hits: 0, mutatingExecutes: 0, byProgram: {} }, lastServedId: null, follows: new Map() };
     stores.set(state, s);
   }
   return s;
@@ -222,7 +218,7 @@ export function warmStats(state: WrapState): WarmStats {
       byProgram: { ...s.byProgram },
     };
   } catch {
-    return emptyStats();
+    return { lookups: 0, hits: 0, mutatingExecutes: 0, byProgram: {} };
   }
 }
 
