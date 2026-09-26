@@ -178,12 +178,6 @@ export function attachChatUsage(trace: StretchTrace, usage: ChatUsage | null): S
   };
 }
 
-export function withStreamUsage(body: Record<string, unknown>): Record<string, unknown> {
-  const prev = body.stream_options;
-  const opts = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
-  return { ...body, stream_options: { ...opts, include_usage: true } };
-}
-
 export class SseUsageParser {
   private buf = "";
   private usage: Record<string, unknown> | null = null;
