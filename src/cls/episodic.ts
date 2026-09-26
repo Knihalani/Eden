@@ -1,19 +1,5 @@
 import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properNames, stem, textTimeToks } from "./text";
 
-export type Episode = {
-  i: number;
-  speaker: string;
-  text: string;
-  date: string;
-  session: number;
-
-  render: string;
-
-  key: Map<string, number>;
-  grounded: string[];
-  isQuestion: boolean;
-};
-
 export type Cue = Map<string, number>;
 
 const EXPAND: Record<string, string[]> = {};
@@ -71,15 +57,12 @@ export function rareTermHits(text: string, terms: string[]): number {
 }
 
 export class EpisodicStore {
-  episodes: Episode[] = [];
-
   private post = new Map<string, [number, number][]>();
   private df = new Map<string, number>();
   private len: number[] = [];
   private avgLen = 1;
 
   ingest(turns: { text: string; speaker?: string; date?: string; session?: number }[]) {
-    this.episodes = [];
     this.post.clear();
     this.df.clear();
     this.len = [];
@@ -100,9 +83,6 @@ export class EpisodicStore {
       for (const t of (stamp ? [`t:y${stamp.y}`, `t:m${stamp.m}`, `t:${stamp.y}-${stamp.m}`, `t:d${stamp.d}`] : [])) bump(t, 1);
       for (const t of textTimeToks(text)) bump(t, 0.8);
       for (const g of grounded) for (const t of textTimeToks(g)) bump(t, 0.5);
-      const render = `${speaker}:${date ? ` [${date}]` : ""} ${text}${grounded.length ? ` {≈ ${grounded.join("; ")}}` : ""}`;
-      const ep: Episode = { i, speaker, text, date, session: t.session ?? 0, render, key, grounded, isQuestion: /\?/.test(text) };
-      this.episodes.push(ep);
       let l = 0;
       for (const [f, tf] of key) {
         l += tf;
@@ -117,8 +97,8 @@ export class EpisodicStore {
   }
 
   score(cue: Cue): Float64Array {
-    const out = new Float64Array(this.episodes.length);
-    const N = this.episodes.length || 1;
+    const out = new Float64Array(this.len.length);
+    const N = this.len.length || 1;
     for (const [f, w] of cue) {
       const p = this.post.get(f);
       if (!p) continue;
