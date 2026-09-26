@@ -75,17 +75,10 @@ export function recordCompletion(run: RunRecorder, json: Record<string, unknown>
   const choices = json.choices;
   if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
     const choice = choices[0] as Record<string, unknown>;
-    const message = choice.message;
-    if (message && typeof message === "object") {
-      const text = ((c: unknown) => typeof c === "string" ? c : Array.isArray(c) ? (c.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") || undefined) : undefined)((message as Record<string, unknown>).content);
-      if (text != null) out = text;
-    }
-    if (out == null) {
-      const delta = choice.delta;
-      if (delta && typeof delta === "object") {
-        const text = ((c: unknown) => typeof c === "string" ? c : Array.isArray(c) ? (c.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") || undefined) : undefined)((delta as Record<string, unknown>).content);
-        if (text != null) out = text;
-      }
+    for (const part of [choice.message, choice.delta]) {
+      if (!part || typeof part !== "object") continue;
+      const text = ((c: unknown) => typeof c === "string" ? c : Array.isArray(c) ? (c.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") || undefined) : undefined)((part as Record<string, unknown>).content);
+      if (text != null) { out = text; break; }
     }
   }
   if (out != null) run.output = redact(out);
