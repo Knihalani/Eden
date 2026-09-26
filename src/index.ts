@@ -1312,6 +1312,35 @@ export class AgentMemory {
       return packed.length < 2 ? packed : dedupSelect(packed.map((rec) => ({ rec, n: 0 })), packed.length);
     }
     const hay = queryHay(text);
+    try {
+      const expand: Record<string, string[]> = {
+        login: ["auth", "oauth", "signin"],
+        signin: ["auth", "login", "oauth"],
+        checkout: ["payment", "payments", "billing"],
+        payment: ["checkout", "billing"],
+        install: ["package", "lockfile"],
+        lockfile: ["package", "install"],
+        prod: ["deploy", "deployment"],
+        deploy: ["prod"],
+        upload: ["object", "store"],
+        avatar: ["object", "store"],
+        experiment: ["flag", "flags"],
+        assigning: ["flag", "flags"],
+        connection: ["database"],
+        dashboard: ["database"],
+        welcome: ["email"],
+        mail: ["email"],
+        sha: ["git", "bash"],
+        git: ["bash"],
+        session: ["cache"],
+        hanging: ["package"],
+      };
+      for (const t of [...hay]) {
+        const extra = expand[t];
+        if (!extra) continue;
+        for (const x of extra) hay.add(x);
+      }
+    } catch {}
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
     const scored: { rec: MemoryRecord; n: number }[] = [];
     for (const c of rows) {
