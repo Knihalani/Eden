@@ -95,10 +95,6 @@ class NonJsonReply extends Error {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export function openaiIsland(opts: {
   model?: string;
   apiKey?: string;
@@ -113,7 +109,7 @@ export function openaiIsland(opts: {
     let lastErr: unknown = undefined;
     for (let attempt = 0; attempt <= ISLAND_RETRIES; attempt++) {
       if (signal?.aborted) throw lastErr ?? new Error("island aborted");
-      if (attempt > 0) await sleep(ISLAND_BACKOFF_MS * attempt);
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, ISLAND_BACKOFF_MS * attempt));
       try {
         const res = await fn(`${base}/chat/completions`, {
           method: "POST",
