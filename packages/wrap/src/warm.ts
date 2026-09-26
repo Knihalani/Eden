@@ -126,10 +126,6 @@ function isSafeToWarm(program: StretchProgram): boolean {
   return true;
 }
 
-function followScore(s: Store, fromId: string, toId: string): number {
-  return s.follows.get(fromId)?.get(toId) ?? 0;
-}
-
 function noteFollow(s: Store, currentId: string): void {
   const prev = s.lastServedId;
   if (prev && prev !== currentId) {
@@ -162,8 +158,8 @@ function pickNext(
     : live
         .filter((p) => p.id !== current.id && isSafeToWarm(p))
         .sort((a, b) => {
-          const fa = followScore(s, current.id, a.id);
-          const fb = followScore(s, current.id, b.id);
+          const fa = s.follows.get(current.id)?.get(a.id) ?? 0;
+          const fb = s.follows.get(current.id)?.get(b.id) ?? 0;
           if (fb !== fa) return fb - fa;
           return (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0);
         });
