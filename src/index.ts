@@ -53,6 +53,9 @@ export function isMathChatterCue(cue: string): boolean {
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
 export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number; lane?: MemoryLaneKind };
+function memRec(id: string, text: string, kind: MemoryKind, lane: MemoryLaneKind, tags: string[], at: number): MemoryRecord {
+  return { id, text, kind, lane, tags, at };
+}
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
@@ -759,14 +762,7 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
     for (const hit of hits) {
       const body = String(hit?.text ?? "").trim();
       if (!body) continue;
-      chunks.push({
-        id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`,
-        text: body,
-        kind: "episode",
-        lane: "narrative",
-        tags: ["chunk"],
-        at: Number.isFinite(hit.t) ? hit.t : 0,
-      });
+      chunks.push(memRec(hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`, body, "episode", "narrative", ["chunk"], Number.isFinite(hit.t) ? hit.t : 0));
     }
     if (!chunks.length) return chat;
     const out: MemoryRecord[] = [];
@@ -799,14 +795,7 @@ function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: 
       if (seen.has(id) || seen.has(body.toLowerCase())) continue;
       seen.add(id);
       seen.add(body.toLowerCase());
-      out.push({
-        id,
-        text: body,
-        kind: "fact",
-        lane: "icl",
-        tags: ["icl"],
-        at: Number.isFinite(hit.t) ? hit.t : 0,
-      });
+      out.push(memRec(id, body, "fact", "icl", ["icl"], Number.isFinite(hit.t) ? hit.t : 0));
     }
     return out;
   } catch {
@@ -851,14 +840,7 @@ function mergeExperienceLane(lexical: MemoryRecord[], text: string, dir: string)
     for (const hit of hits) {
       const body = String(hit?.text ?? "").trim();
       if (!body) continue;
-      extra.push({
-        id: `exp:${hit.id}`,
-        text: body,
-        kind: "episode",
-        lane: "trajectory",
-        tags: ["experience", "trajectory"],
-        at: Number.isFinite(hit.t) ? hit.t : 0,
-      });
+      extra.push(memRec(`exp:${hit.id}`, body, "episode", "trajectory", ["experience", "trajectory"], Number.isFinite(hit.t) ? hit.t : 0));
     }
     if (!extra.length) return lexical;
     const out = lexical.slice();
@@ -879,14 +861,7 @@ function mergeGistLane(lexical: MemoryRecord[], text: string, cap: number, dir: 
     if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
     const hits = retrieveGists(dir, q, { k: Math.min(3, cap) });
     if (!hits.length) return lexical;
-    const gists: MemoryRecord[] = hits.map((h): MemoryRecord => ({
-      id: h.id || `gist:${h.level}:${h.t}`,
-      text: h.text,
-      kind: "gist",
-      lane: "narrative",
-      tags: ["gist"],
-      at: h.t,
-    }));
+    const gists: MemoryRecord[] = hits.map((h) => memRec(h.id || `gist:${h.level}:${h.t}`, h.text, "gist", "narrative", ["gist"], h.t));
     const room = Math.max(0, cap - gists.length);
     let rest = (lexical||[]).filter(l => !gists.some(g => g.id===l.id || jaccardText(g.text,l.text)>0.6));
     try {
@@ -1420,14 +1395,7 @@ export class AgentMemory {
               for (const r of retrieved) push(r);
               try {
                 for (const c of new ChunkStore(this.howtoDir).all()) {
-                  push({
-                    id: c.id,
-                    text: c.text,
-                    kind: "episode",
-                    lane: "narrative",
-                    tags: ["chunk"],
-                    at: c.t,
-                  } as MemoryRecord);
+                  push(memRec(c.id, c.text, "episode", "narrative", ["chunk"], c.t));
                 }
               } catch {}
               try {
