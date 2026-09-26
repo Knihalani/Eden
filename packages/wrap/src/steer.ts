@@ -49,6 +49,11 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
   return out;
 }
 
+export function namedProgram(live: StretchProgram[], program?: StretchProgram | string): StretchProgram | undefined {
+  if (program == null) return undefined;
+  return typeof program === "string" ? live.find((p) => p.id === program || p.name === program) : program;
+}
+
 function shapesOfString(s: string, into: Set<string>): void {
   const direct = /^https?:\/\//i.test(s);
   for (const u of direct ? [s] : extractCommandUrls(s)) {
