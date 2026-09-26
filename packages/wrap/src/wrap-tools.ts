@@ -81,14 +81,6 @@ const outboxes = new WeakMap<WrapState, OutboxJob[]>();
 const flushers = new WeakMap<WrapState, ReturnType<typeof setTimeout>>();
 const armedReceipts = new WeakMap<Armed, Receipt>();
 
-function stampIdentity(state: WrapState, receipt: Receipt): Receipt {
-  if (state.agentId) receipt.agentId = state.agentId;
-  if (state.parentRunId) receipt.parentRunId = state.parentRunId;
-  if (state.fleetId) receipt.fleetId = state.fleetId;
-  if (state.region) receipt.region = state.region;
-  return receipt;
-}
-
 function inputAgrees(armed: Armed, cur: Record<string, unknown>): boolean {
   if (eq(cur, armed.input)) return true;
   const rec = armed.input as Record<string, unknown> | null;
@@ -354,7 +346,7 @@ export async function runCompiled(
       timeoutMs: wrapTimeoutMs(state.opts.timeoutMs),
     });
     const receipt = compiledReceipt(program, true, result.stats);
-    stampIdentity(state, receipt);
+    ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
     const stats = result.stats;
     const run = state.run;
     if (stats.islandUsageMeasured) {
@@ -390,7 +382,7 @@ export async function runCompiled(
       },
       err,
     );
-    stampIdentity(state, receipt);
+    ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
     state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
     try { state.opts.onReceipt?.(receipt); } catch {}
     post(state, "/v1/receipts", receipt);
@@ -702,7 +694,7 @@ export function wrapTools<T extends ToolsIn>(
         reason: detail,
         fingerprint: hashStretch(program),
       };
-      stampIdentity(state, receipt);
+      ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
       state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
       try { state.opts.onReceipt?.(receipt); } catch {}
       post(state, "/v1/receipts", receipt);
@@ -740,7 +732,7 @@ export function wrapTools<T extends ToolsIn>(
     note();
     if (line) {
       const prog = state.programs.find((p) => p.id === armed.programId);
-      const rec = stampIdentity(state, {
+      const rec = ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, {
         toolId: armed.programId,
         version: prog?.version ?? "0",
         ms: 0,
