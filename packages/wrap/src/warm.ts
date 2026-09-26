@@ -199,11 +199,6 @@ function findEntry(entries: Entry[], programId: string, tool: string, args: Reco
   return undefined;
 }
 
-function trimEntries(s: Store): void {
-  if (s.entries.length <= MAX_ENTRIES) return;
-  s.entries.splice(0, s.entries.length - MAX_ENTRIES / 2);
-}
-
 function programStats(s: Store, programId: string): WarmProgramStats {
   const cur = s.stats.byProgram[programId];
   if (cur) return cur;
@@ -364,7 +359,7 @@ export function watchWarm(
       };
       s.entries.push(entry);
     }
-    trimEntries(s);
+    if (s.entries.length > MAX_ENTRIES) s.entries.splice(0, s.entries.length - MAX_ENTRIES / 2);
     if (!tools.length) return null;
     return { programId: program.id, input, tools, startedAt };
   } catch {
