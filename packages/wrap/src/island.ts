@@ -62,8 +62,6 @@ export function withWitnessMemo(
   };
 }
 
-export const ISLAND_RETRIES = 2;
-
 const ISLAND_BACKOFF_MS = 300;
 
 class NonJsonReply extends Error {
@@ -86,7 +84,7 @@ export function openaiIsland(opts: {
     const fn = opts.fetch ?? fetch;
 
     let lastErr: unknown = undefined;
-    for (let attempt = 0; attempt <= ISLAND_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= 2; attempt++) {
       if (signal?.aborted) throw lastErr ?? new Error("island aborted");
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, ISLAND_BACKOFF_MS * attempt));
       try {
@@ -109,7 +107,7 @@ export function openaiIsland(opts: {
             : AbortSignal.timeout(timeoutMs),
         });
         if (!res.ok) {
-          if (attempt < ISLAND_RETRIES && (res.status === 429 || res.status >= 500)) {
+          if (attempt < 2 && (res.status === 429 || res.status >= 500)) {
             lastErr = new Error(`island llm ${res.status}`);
             continue;
           }
@@ -147,7 +145,7 @@ export function openaiIsland(opts: {
         const transient =
           err instanceof NonJsonReply ||
           !(err instanceof Error && /^island llm \d+$/.test(err.message));
-        if (attempt < ISLAND_RETRIES && transient) continue;
+        if (attempt < 2 && transient) continue;
         throw err;
       }
     }
