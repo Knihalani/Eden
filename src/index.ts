@@ -636,17 +636,6 @@ function addHowtoToks(out: Set<string>, text: string, dropStops: boolean) {
   for (const p of pathCues(text.toLowerCase())) out.add(p);
 }
 
-function howtoEmbedScore(a: string, b: string): number {
-  try {
-    const fn = (globalThis as { edenHowtoEmbed?: (x: string, y: string) => number }).edenHowtoEmbed;
-    if (typeof fn !== "function") return 0;
-    const n = Number(fn(a, b));
-    return Number.isFinite(n) && n > 0 ? Math.min(n, 0.999) : 0;
-  } catch {
-    return 0;
-  }
-}
-
 export function howtoAboutness(cue: string, row: { cue?: string; files?: string[]; verify?: string; steps?: { args?: Record<string, unknown> }[] }): number {
   const q = String(cue ?? "").trim();
   if (!q) return 0;
@@ -689,7 +678,16 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
   const stemHit = !!(stem && (qToks.has(stem) || [...qPlaces].includes(stem)));
   if (placeHit || stemHit) return Math.max(n, 1) + (placeHit ? 10 : 0) + (stemHit ? 5 : 0);
   if (n >= 2) return n;
-  return howtoEmbedScore(q, [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" "));
+  return ((a, b) => {
+    try {
+      const fn = (globalThis as { edenHowtoEmbed?: (x: string, y: string) => number }).edenHowtoEmbed;
+      if (typeof fn !== "function") return 0;
+      const n = Number(fn(a, b));
+      return Number.isFinite(n) && n > 0 ? Math.min(n, 0.999) : 0;
+    } catch {
+      return 0;
+    }
+  })(q, [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" "));
 }
 
 function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): MemoryRecord {
