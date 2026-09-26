@@ -77,10 +77,6 @@ export function withPinnedIsland(
   return async (req) => inner({ ...req, pinned: true });
 }
 
-export function isTransientIslandFailure(status: number): boolean {
-  return status === 429 || status >= 500;
-}
-
 export const ISLAND_RETRIES = 2;
 
 function islandTimeoutMs(): number {
@@ -128,7 +124,7 @@ export function openaiIsland(opts: {
             : AbortSignal.timeout(islandTimeoutMs()),
         });
         if (!res.ok) {
-          if (attempt < ISLAND_RETRIES && isTransientIslandFailure(res.status)) {
+          if (attempt < ISLAND_RETRIES && (res.status === 429 || res.status >= 500)) {
             lastErr = new Error(`island llm ${res.status}`);
             continue;
           }
