@@ -38,22 +38,9 @@ function confined(cwd: string, p: string): string {
 }
 
 export function codingRegistry(cwd = process.cwd()): ToolRegistry {
-  const names = new Set([
-    "Bash",
-    "bash",
-    "Read",
-    "read",
-    "Write",
-    "write",
-    "Edit",
-    "edit",
-    "LS",
-    "ls",
-    "Grep",
-    "grep",
-    "Glob",
-    "glob",
-  ]);
+  const names = new Set(
+    ["Bash", "Read", "Write", "Edit", "LS", "Grep", "Glob"].flatMap((n) => [n, n.toLowerCase()]),
+  );
   return {
     has: (name) => names.has(name),
     allowed_callers: [...PTC_CALLERS],
