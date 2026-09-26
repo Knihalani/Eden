@@ -1361,6 +1361,20 @@ export class AgentMemory {
         }
       }
     } catch {}
+    try {
+      const stop = new Set(["the", "is", "a", "an", "of", "and", "or", "to", "in", "on", "for", "our", "we", "it", "do", "does", "did", "are", "was", "be", "use", "uses", "what", "where", "why", "how", "who"]);
+      lexical = lexical.filter((r) => {
+        const toks = [...queryHay(r.text ?? "")].filter((t) => t.length >= 3 && !stop.has(t));
+        for (const t of toks) {
+          if (hay.has(t)) return true;
+          for (const h of hay) {
+            if (h.length < 4 || stop.has(h)) continue;
+            if (t.startsWith(h) || h.startsWith(t)) return true;
+          }
+        }
+        return false;
+      });
+    } catch {}
     const packed = mergeExperienceLane(
       mergeHowtoLane(mergeNarrativeLane(lexical, text, cap, this.howtoDir, recs), text, cap, this.howtoDir),
       text,
