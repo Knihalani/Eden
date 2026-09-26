@@ -799,15 +799,14 @@ function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: 
       if (seen.has(id) || seen.has(body.toLowerCase())) continue;
       seen.add(id);
       seen.add(body.toLowerCase());
-      const rec: MemoryRecord = {
+      out.push({
         id,
         text: body,
         kind: "fact",
         lane: "icl",
         tags: ["icl"],
         at: Number.isFinite(hit.t) ? hit.t : 0,
-      };
-      out.push(rec);
+      });
     }
     return out;
   } catch {
