@@ -6,16 +6,11 @@ import { parseCacheTokens, parseUsage } from "./usage";
 export { canUseProviderBatch, islandBatchUrl, PROVIDER_BATCH_CENTS, withIslandBatch } from "./island-batch";
 export type { IslandBatchOpts } from "./island-batch";
 
-export function islandUpstreamUrl(upstream?: string | null): string {
-  const raw = (upstream || process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  if (/127\.0\.0\.1:8788|localhost:8788/.test(raw)) return "https://api.openai.com/v1";
-  return raw;
-}
-
 export function wrapIsland(opts: { apiKey?: string; upstream?: string; fetch?: typeof fetch } = {}): IslandCaller | undefined {
   const key = opts.apiKey || process.env.OPENAI_API_KEY;
   if (!key) return undefined;
-  const baseURL = islandUpstreamUrl(opts.upstream);
+  const raw = (opts.upstream || process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const baseURL = /127\.0\.0\.1:8788|localhost:8788/.test(raw) ? "https://api.openai.com/v1" : raw;
   const sync = openaiIsland({ apiKey: key, baseURL, fetch: opts.fetch });
   return withWitnessMemo(withIslandBatch(sync, { apiKey: key, baseURL, fetch: opts.fetch }));
 }
@@ -94,7 +89,9 @@ export function openaiIsland(opts: {
   fetch?: typeof fetch;
 } = {}): IslandCaller {
   return async ({ system, input, outputSchema, signal }) => {
-    const base = (opts.baseURL || islandUpstreamUrl() || "https://api.openai.com/v1").replace(/\/$/, "");
+    const fallback = (process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+    const island = /127\.0\.0\.1:8788|localhost:8788/.test(fallback) ? "https://api.openai.com/v1" : fallback;
+    const base = (opts.baseURL || island || "https://api.openai.com/v1").replace(/\/$/, "");
     const key = opts.apiKey || process.env.OPENAI_API_KEY || "";
     const fn = opts.fetch ?? fetch;
 
