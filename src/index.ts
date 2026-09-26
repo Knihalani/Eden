@@ -1545,18 +1545,13 @@ export function processMemory(): AgentMemory {
   const root = dir || join(homedir(), ".eden", "memory");
   let session: string | undefined;
   let child = false;
-  try {
-    const parent = memorySessionName(process.env.EDEN_MEMORY_SESSION) ?? memorySessionName(process.env.EDEN_MEMORY_PARENT);
-    const childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
-    if (childId) {
-      session = childSessionName(parent, childId);
-      child = true;
-    } else {
-      session = parent;
-    }
-  } catch {
-    session = undefined;
-    child = false;
+  const parent = memorySessionName(process.env.EDEN_MEMORY_SESSION) ?? memorySessionName(process.env.EDEN_MEMORY_PARENT);
+  const childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
+  if (childId) {
+    session = childSessionName(parent, childId);
+    child = true;
+  } else {
+    session = parent;
   }
   if (proc && (proc.dir !== root || proc.session !== session || proc.child !== child)) {
     try { proc.close(); } catch {}
