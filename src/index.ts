@@ -489,12 +489,7 @@ const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replac
 
 const jaccardText = (a: string, b: string): number => { const A = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(a)), B = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
-export const MEMORY_WAL_SUFFIX = ".wal";
 export const MEMORY_WAL_COMPACT_LINES = 32;
-
-export function memoryWalPath(path: string): string {
-  return `${path}${MEMORY_WAL_SUFFIX}`;
-}
 
 function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, number>, overlay: boolean): void {
   if (!existsSync(path)) return;
@@ -533,7 +528,7 @@ function load(path: string): Compiled[] {
   const out: Compiled[] = [];
   const idx = new Map<string, number>();
   ingestMemoryJsonl(path, out, idx, false);
-  ingestMemoryJsonl(memoryWalPath(path), out, idx, true);
+  ingestMemoryJsonl(`${path}.wal`, out, idx, true);
   return out;
 }
 
@@ -1196,7 +1191,7 @@ export class AgentMemory {
   private persist() {
     try { if (memoryConsent() !== "on") return; } catch { return; }
     const cap = Number(process.env.EDEN_MEMORY_STORE_CAP) || 2000;
-    const wal = memoryWalPath(this.path);
+    const wal = `${this.path}.wal`;
     try {
       withFileLock(`${this.path}.lock`, () => {
         let pending = this.compiled.filter((c) => this.walDirtyIds.has(c.rec.id));
@@ -1574,7 +1569,7 @@ export class AgentMemory {
 
   close() {
     try { clearSleepTimer(this); } catch {}
-    try { if (existsSync(memoryWalPath(this.path))) this.needCompact = true; } catch {}
+    try { if (existsSync(`${this.path}.wal`)) this.needCompact = true; } catch {}
     if (this.needCompact) this.dirty = true;
     this.flush(false);
   }

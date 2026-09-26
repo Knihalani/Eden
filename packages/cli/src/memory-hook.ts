@@ -4,7 +4,7 @@ import { redact } from "@eden/ir";
 import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { parseHookToolTraces, parseToolArgs, persistToolTraces } from "../../../src/tool-trace";
-import { childSessionName, consolidate, dropHarmed, formatPacketText, loadHarmedIds, MEMORY_MARK, memoryWalPath, openMemory, placePathsFrom, type AgentMemory, type MemoryRecord } from "../../../src/index";
+import { childSessionName, consolidate, dropHarmed, formatPacketText, loadHarmedIds, MEMORY_MARK, openMemory, placePathsFrom, type AgentMemory, type MemoryRecord } from "../../../src/index";
 import { maybeIncrementalSleep } from "../../../src/sleep";
 import { memoryConsent } from "../../../src/memory-consent";
 import { logMemoryNotes } from "../../../src/memory-log";
@@ -97,7 +97,7 @@ function briefing(mem: AgentMemory, session = ""): string {
       } catch {}
     };
     ingest(p);
-    try { ingest(memoryWalPath(p)); } catch {}
+    try { ingest(`${p}.wal`); } catch {}
     for (const id of order) {
       const rec = fileById.get(id);
       if (!rec || !rec.text || (rec.kind !== "constraint" && !(rec.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t)))) continue;
