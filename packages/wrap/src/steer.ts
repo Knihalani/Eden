@@ -50,17 +50,13 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
 }
 
 function shapesOfString(s: string, into: Set<string>): void {
-  if (/^https?:\/\//i.test(s)) {
-    const templated = parameterizeUrl(s);
-    const m = templated.match(/^(https?:\/\/)([^/?#]+)([^?#]*)/i);
-    if (m) into.add(`${m[2]!}${m[3] || "/"}`.replaceAll("{issue}", "{id}").replaceAll("{run_id}", "{id}"));
-    return;
-  }
-  for (const u of extractCommandUrls(s)) {
+  const direct = /^https?:\/\//i.test(s);
+  for (const u of direct ? [s] : extractCommandUrls(s)) {
     const templated = parameterizeUrl(u);
     const m = templated.match(/^(https?:\/\/)([^/?#]+)([^?#]*)/i);
     if (m) into.add(`${m[2]!}${m[3] || "/"}`.replaceAll("{issue}", "{id}").replaceAll("{run_id}", "{id}"));
   }
+  if (direct) return;
   const parsed = parseNamedCli(s);
   if (parsed) {
     const positionals = parsed.positionals.map((p) => (/^\d+$/.test(p) ? "{id}" : p));
