@@ -844,15 +844,6 @@ function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): M
   return { id: view.id, kind: "procedure", tags: ["howto", "procedure"], text, at: view.t, sal: 0 };
 }
 
-function isIclCue(text: string): boolean {
-  try {
-    if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false;
-    if (encodeLane(text) === "icl") return true;
-    if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true;
-  } catch {}
-  return false;
-}
-
 function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?: string[] }>(
   notes: T[],
   store: SemanticStore,
@@ -899,7 +890,7 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
   try {
     const q = String(text ?? "").trim();
     if (!q) return lexical;
-    if (isIclCue(q)) return lexical;
+    if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
     const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
     if (!k) return lexical;
     const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
@@ -1001,7 +992,7 @@ function mergeExperienceLane(lexical: MemoryRecord[], text: string, dir: string)
   try {
     const q = String(text ?? "").trim();
     if (!q) return lexical;
-    if (isIclCue(q)) return lexical;
+    if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
     const hits = retrieveExperience(dir, q);
     if (!Array.isArray(hits) || !hits.length) return lexical;
     const extra: MemoryRecord[] = [];
@@ -1034,7 +1025,7 @@ function mergeGistLane(lexical: MemoryRecord[], text: string, cap: number, dir: 
   try {
     const q = String(text ?? "").trim();
     if (!q) return lexical;
-    if (isIclCue(q)) return lexical; // already gated, belt
+    if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
     const hits = retrieveGists(dir, q, { k: Math.min(3, cap) });
     if (!hits.length) return lexical;
     const gists: MemoryRecord[] = hits.map(h => {
@@ -1497,7 +1488,7 @@ export class AgentMemory {
           let skipHop = false;
           try {
             if (memoryLastRoute.route === "icl-index" || memoryLastRoute.route === "gist-chunk") skipHop = true;
-            else if (isIclCue(rankCue)) skipHop = true;
+            else if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(rankCue)) skipHop = true;
             else if (isRecsysShot(rankCue)) skipHop = true;
             else if (isSummaryCue(rankCue)) skipHop = true;
             else if (isBookQaCue(rankCue)) skipHop = true;
