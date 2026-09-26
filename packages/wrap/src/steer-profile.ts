@@ -5,12 +5,6 @@ const WARM = 2_000;
 const N = 12_000;
 const P99_BUDGET_MS = 1;
 
-function pct(xs: number[], p: number): number {
-  const s = [...xs].sort((a, b) => a - b);
-  const i = Math.min(s.length - 1, Math.max(0, Math.ceil((p / 100) * s.length) - 1));
-  return s[i]!;
-}
-
 async function armHosted(w: number) {
   const sequence = ["lookup", "fetch", "write", "audit"];
   const p = withVersion({
@@ -64,16 +58,16 @@ const s10 = await sample(() => w10.ping.ping.execute({}));
 const w100 = await armHosted(100);
 const s100 = await sample(() => w100.ping.ping.execute({}));
 
-const p50_10 = pct(s10, 50);
-const p50_100 = pct(s100, 50);
-const p99_100 = pct(s100, 99);
+const p50_10 = [...s10].sort((a, b) => a - b)[Math.min(s10.length - 1, Math.max(0, Math.ceil((50 / 100) * s10.length) - 1))]!;
+const p50_100 = [...s100].sort((a, b) => a - b)[Math.min(s100.length - 1, Math.max(0, Math.ceil((50 / 100) * s100.length) - 1))]!;
+const p99_100 = [...s100].sort((a, b) => a - b)[Math.min(s100.length - 1, Math.max(0, Math.ceil((99 / 100) * s100.length) - 1))]!;
 const ratio = p50_100 / Math.max(p50_10, 1e-9);
 
 process.stdout.write(
   JSON.stringify(
     {
       n: N,
-      w10: { p50_ms: +p50_10.toFixed(4), p99_ms: +pct(s10, 99).toFixed(4) },
+      w10: { p50_ms: +p50_10.toFixed(4), p99_ms: +[...s10].sort((a, b) => a - b)[Math.min(s10.length - 1, Math.max(0, Math.ceil((99 / 100) * s10.length) - 1))]!.toFixed(4) },
       w100: { p50_ms: +p50_100.toFixed(4), p99_ms: +p99_100.toFixed(4) },
       p50_ratio: +ratio.toFixed(3),
       p99_budget_ms: P99_BUDGET_MS,
