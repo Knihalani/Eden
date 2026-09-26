@@ -153,11 +153,6 @@ export function pendingPosts(state: WrapState): number {
   return outboxOf(state).length;
 }
 
-function controlTimeoutMs(): number {
-  const env = Number(process.env.EDEN_CONTROL_TIMEOUT_MS);
-  return Number.isFinite(env) && env > 0 ? Math.min(120_000, env) : 10_000;
-}
-
 async function sendPost(state: WrapState, path: string, body: unknown): Promise<boolean> {
   const base = state.opts.baseUrl;
   const key = state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
@@ -168,7 +163,7 @@ async function sendPost(state: WrapState, path: string, body: unknown): Promise<
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json", ...protocolHeaders() },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(controlTimeoutMs()),
+      signal: AbortSignal.timeout(((e) => Number.isFinite(e) && e > 0 ? Math.min(120_000, e) : 10_000)(Number(process.env.EDEN_CONTROL_TIMEOUT_MS))),
     });
     return r.ok || !(r.status === 429 || r.status >= 500);
   } catch {
@@ -225,7 +220,7 @@ export async function pullLive(state: WrapState): Promise<void> {
   try {
     const r = await fn(`${base.replace(/\/$/, "")}/v1/tools`, {
       headers: { authorization: `Bearer ${key}`, ...protocolHeaders() },
-      signal: AbortSignal.timeout(controlTimeoutMs()),
+      signal: AbortSignal.timeout(((e) => Number.isFinite(e) && e > 0 ? Math.min(120_000, e) : 10_000)(Number(process.env.EDEN_CONTROL_TIMEOUT_MS))),
     });
     if (!r.ok) return;
     const j = (await r.json()) as {
