@@ -24,6 +24,18 @@ export function corsOrigin(req: Request): Record<string, string> {
   return {};
 }
 
+function chatCompletion(id: string, content: string, extra?: Record<string, unknown>) {
+  return Response.json({
+    id,
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model: "eden",
+    choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    ...extra,
+  });
+}
+
 export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): string {
   const headerKey =
     req.headers.get("x-openai-api-key")?.trim() ||
@@ -79,42 +91,16 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
         }
         const facts = await opts.play(hit.name, extractInput(hit, raw));
         if (facts !== undefined && facts !== null) {
-          return Response.json({
-            id: "eden-compiled",
-            object: "chat.completion",
-            created: Math.floor(Date.now() / 1000),
-            model: "eden",
-            choices: [
-              {
-                index: 0,
-                message: { role: "assistant", content: typeof facts === "string" ? facts : JSON.stringify(facts) },
-                finish_reason: "stop",
-              },
-            ],
-            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-          });
+          return chatCompletion("eden-compiled", typeof facts === "string" ? facts : JSON.stringify(facts));
         }
       } catch {
       }
     }
-    return Response.json({
-      id: "eden-failopen",
-      object: "chat.completion",
-      created: Math.floor(Date.now() / 1000),
-      model: "eden",
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: "assistant",
-            content: "set OPENAI_API_KEY so wrap can reach the model. An Eden key (eden_dev or eden_…) is wrap auth, not OpenAI.",
-          },
-          finish_reason: "stop",
-        },
-      ],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      fail_open: true,
-    });
+    return chatCompletion(
+      "eden-failopen",
+      "set OPENAI_API_KEY so wrap can reach the model. An Eden key (eden_dev or eden_…) is wrap auth, not OpenAI.",
+      { fail_open: true },
+    );
   }
   const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
   const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
