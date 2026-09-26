@@ -122,19 +122,6 @@ function isSafeToWarm(program: StretchProgram): boolean {
   return true;
 }
 
-function noteFollow(s: Store, currentId: string): void {
-  const prev = s.lastServedId;
-  if (prev && prev !== currentId) {
-    let row = s.follows.get(prev);
-    if (!row) {
-      row = new Map();
-      s.follows.set(prev, row);
-    }
-    row.set(currentId, (row.get(currentId) ?? 0) + 1);
-  }
-  s.lastServedId = currentId;
-}
-
 function findEntry(entries: Entry[], programId: string, tool: string, args: Record<string, unknown>): Entry | undefined {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!;
@@ -246,7 +233,16 @@ export function watchWarm(
     if (!runner) return null;
     const live = runner.live() ?? [];
     if (!live.length) return null;
-    noteFollow(s, current.id);
+    const prev = s.lastServedId;
+    if (prev && prev !== current.id) {
+      let row = s.follows.get(prev);
+      if (!row) {
+        row = new Map();
+        s.follows.set(prev, row);
+      }
+      row.set(current.id, (row.get(current.id) ?? 0) + 1);
+    }
+    s.lastServedId = current.id;
     const currentInput = hint.input && typeof hint.input === "object" ? hint.input : {};
     const named =
       hint.program == null
