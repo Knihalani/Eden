@@ -64,27 +64,6 @@ function nimTuneBody(url: string, body: Record<string, unknown>): Record<string,
   return next;
 }
 
-export function noModelKey(): Response {
-  return Response.json({
-    id: "eden-failopen",
-    object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
-    model: "eden",
-    choices: [
-      {
-        index: 0,
-        message: {
-          role: "assistant",
-          content: "set OPENAI_API_KEY so wrap can reach the model. An Eden key (eden_dev or eden_…) is wrap auth, not OpenAI.",
-        },
-        finish_reason: "stop",
-      },
-    ],
-    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    fail_open: true,
-  });
-}
-
 export async function handleChatCompletions(req: Request, opts: ProxyOpts): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" } });
   let body: Record<string, unknown>;
@@ -149,7 +128,24 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       } catch {
       }
     }
-    return noModelKey();
+    return Response.json({
+      id: "eden-failopen",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: "eden",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "set OPENAI_API_KEY so wrap can reach the model. An Eden key (eden_dev or eden_…) is wrap auth, not OpenAI.",
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      fail_open: true,
+    });
   }
   const base = (opts.upstream || process.env.OPENAI_API_BASE || "https://api.openai.com/v1").replace(/\/$/, "");
   const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
