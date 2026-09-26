@@ -166,9 +166,7 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
     for (const u of githubBareUrls(text)) {
       for (const sh of argShapes({ v: u })) msgShapes.add(sh);
     }
-  } catch {
-    /* no shapes is fine; scoring continues on text alone */
-  }
+  } catch {}
   const msgWitnesses = denseTokensFromText(text);
   const ranked: RankedInternal[] = [];
   for (let i = 0; i < programs.length; i++) {
