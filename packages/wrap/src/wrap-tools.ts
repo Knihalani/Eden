@@ -140,10 +140,6 @@ export function createState(opts: EdenOpts = {}): WrapState {
   };
 }
 
-function wrapAuth(state: WrapState): string | undefined {
-  return state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
-}
-
 function outboxOf(state: WrapState): OutboxJob[] {
   let q = outboxes.get(state);
   if (!q) {
@@ -164,7 +160,7 @@ function controlTimeoutMs(): number {
 
 async function sendPost(state: WrapState, path: string, body: unknown): Promise<boolean> {
   const base = state.opts.baseUrl;
-  const key = wrapAuth(state);
+  const key = state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
   if (!base || !key) return true;
   const fn = state.opts.fetch ?? fetch;
   try {
@@ -207,7 +203,7 @@ export async function flushOutbox(state: WrapState): Promise<void> {
 
 function post(state: WrapState, path: string, body: unknown): void {
   const base = state.opts.baseUrl;
-  const key = wrapAuth(state);
+  const key = state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
   if (!base || !key) return;
   void sendPost(state, path, body).then((ok) => {
     if (ok) return;
@@ -223,7 +219,7 @@ function post(state: WrapState, path: string, body: unknown): void {
 
 export async function pullLive(state: WrapState): Promise<void> {
   const base = state.opts.baseUrl;
-  const key = wrapAuth(state);
+  const key = state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
   if (!base || !key) return;
   const fn = state.opts.fetch ?? fetch;
   try {
