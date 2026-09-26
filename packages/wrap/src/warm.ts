@@ -1,4 +1,4 @@
-import type { Binding, Step, StretchProgram, ToolRegistry } from "@eden/ir";
+import type { Binding, StretchProgram, ToolRegistry } from "@eden/ir";
 import { eq, isMutating, isReadName, isBarrierName, mayServe } from "@eden/ir";
 import { evalArgs } from "@eden/runtime";
 import { isProgramReadOnly } from "./fleet";
@@ -98,13 +98,6 @@ function bodyOwned(program: StretchProgram): Set<string> {
   return owned;
 }
 
-function isSafeReadTool(step: Step): step is Step & { kind: "tool" } {
-  if (step.kind !== "tool") return false;
-  if (isMutating(step.tool) || isBarrierName(step.tool)) return false;
-  if (!(step.readOnly === true || isReadName(step.tool))) return false;
-  return Object.values(step.args).every((b) => !bindingDependsOnStep(b));
-}
-
 export function firstWaveReads(
   program: StretchProgram,
   input: Record<string, unknown>,
@@ -114,7 +107,8 @@ export function firstWaveReads(
   const wave: Array<{ tool: string; args: Record<string, unknown> }> = [];
   const scope = { input, results: new Map<string, unknown>() };
   for (const step of pending) {
-    if (!isSafeReadTool(step)) break;
+    if (step.kind !== "tool") break;
+    if (isMutating(step.tool) || isBarrierName(step.tool) || !(step.readOnly === true || isReadName(step.tool)) || !Object.values(step.args).every((b) => !bindingDependsOnStep(b))) break;
     try {
       const args = evalArgs(step.args, scope);
       wave.push({ tool: step.tool, args });
