@@ -19,7 +19,7 @@ import {
 } from "@eden/ir";
 import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram, type RunStats } from "@eden/runtime";
 import { MAX_RUN_STEPS } from "@eden/ir";
-import { asToolDef, emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
+import { emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
 import { filterCanary } from "./canary";
 import { extractInput } from "./steer";
 import type { StretchTrace, TraceEvent } from "@eden/ir";
@@ -345,7 +345,7 @@ export async function runCompiled(
     if (!mayServe(program, input)) throw new DeoptError("input not in witness envelope");
     const baseReg =
       registry ??
-      registryFrom(Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, asToolDef(k, v).execute])));
+      registryFrom(Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, (typeof v === "function" ? { description: k, execute: v } : v).execute])));
     const result = await runProgram(program, input, {
       registry: {
         ...(baseReg.has ? { has: (name: string) => baseReg.has!(name) } : {}),
@@ -495,7 +495,7 @@ export function wrapTools<T extends ToolsIn>(
     return ev;
   };
   const registry = registryFrom(
-    Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, asToolDef(k, v).execute])),
+    Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, (typeof v === "function" ? { description: k, execute: v } : v).execute])),
   );
   bindSpeculateRunner(state, {
     live: () => (state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId)),
@@ -805,13 +805,13 @@ export function wrapTools<T extends ToolsIn>(
           const canReplay = (p.sequence ?? []).every((n) => isReadName(n)) && !!first && first in tools;
           if (!isDeopt(err)) {
             return canReplay
-              ? asToolDef(first!, tools[first!]!).execute(args)
+              ? (typeof tools[first!] === "function" ? { description: first!, execute: tools[first!] } : tools[first!]!).execute(args)
               : { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
           }
           if (!isReplaySafe(err) && !(p.sequence ?? []).every((n) => isReadName(n))) {
             return { eden: "deopt", reason: (err as Error).message };
           }
-          if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
+          if (canReplay) return (typeof tools[first!] === "function" ? { description: first!, execute: tools[first!] } : tools[first!]!).execute(args);
           return { eden: "deopt", reason: (err as Error).message };
         } finally {
           safely(() => turnBoundary(state, { lastTool: p.name, lastArgs: args, input: args }), null);
@@ -823,7 +823,7 @@ export function wrapTools<T extends ToolsIn>(
   };
 
   for (const [name, def] of Object.entries(tools)) {
-    const spec = asToolDef(name, def);
+    const spec = typeof def === "function" ? { description: name, execute: def } : def;
     const runOne = async (args: Record<string, unknown>, selfId: number, startedAt: number): Promise<unknown> => {
         if (state.opts.baseUrl && calls % PULL_EVERY === 0) void pullLive(state);
         safely(() => noteJitUsed(state.jit, [name]), undefined);
