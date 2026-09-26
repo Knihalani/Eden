@@ -56,22 +56,6 @@ function isPinnedIntention(r: MemoryRecord): boolean {
   return (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
 }
 
-function recordFromJsonlLine(raw: unknown): MemoryRecord | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  const text = typeof o.text === "string" ? o.text.trim() : "";
-  if (!text) return null;
-  const tags = Array.isArray(o.tags) ? o.tags.filter((t): t is string => typeof t === "string") : [];
-  return {
-    id: typeof o.id === "string" && o.id ? o.id : `pin:${text.slice(0, 32)}`,
-    text,
-    kind: typeof o.kind === "string" && o.kind ? o.kind : "fact",
-    tags,
-    at: typeof o.at === "number" && Number.isFinite(o.at) ? o.at : 0,
-    sal: typeof o.sal === "number" && Number.isFinite(o.sal) ? o.sal : undefined,
-  };
-}
-
 function recordsInMemoryFile(path: string): MemoryRecord[] {
   const byId = new Map<string, MemoryRecord>();
   const order: string[] = [];
@@ -81,8 +65,20 @@ function recordsInMemoryFile(path: string): MemoryRecord[] {
       for (const line of readFileSync(file, "utf8").split("\n")) {
         if (!line) continue;
         try {
-          const rec = recordFromJsonlLine(JSON.parse(line));
-          if (!rec) continue;
+          const raw = JSON.parse(line);
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+          const o = raw as Record<string, unknown>;
+          const text = typeof o.text === "string" ? o.text.trim() : "";
+          if (!text) continue;
+          const tags = Array.isArray(o.tags) ? o.tags.filter((t): t is string => typeof t === "string") : [];
+          const rec: MemoryRecord = {
+            id: typeof o.id === "string" && o.id ? o.id : `pin:${text.slice(0, 32)}`,
+            text,
+            kind: typeof o.kind === "string" && o.kind ? o.kind : "fact",
+            tags,
+            at: typeof o.at === "number" && Number.isFinite(o.at) ? o.at : 0,
+            sal: typeof o.sal === "number" && Number.isFinite(o.sal) ? o.sal : undefined,
+          };
           if (!byId.has(rec.id)) order.push(rec.id);
           byId.set(rec.id, rec);
         } catch {}
