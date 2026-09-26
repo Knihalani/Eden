@@ -180,7 +180,13 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
           if (mb?.[1]) lb = mb[1].replace(/[.,;:!?]+$/g, "").trim().toLowerCase();
         } catch {}
         if (la && lb && la !== lb) continue;
-        if (stemJaccard(bag, stems[i]!) >= NEAR_DUP_J) { dup = true; break; }
+        const other = stems[i]!;
+        if (bag.size && other.size) {
+          let inter = 0;
+          for (const w of bag) if (other.has(w)) inter++;
+          const uni = bag.size + other.size - inter;
+          if (uni && inter / uni >= NEAR_DUP_J) { dup = true; break; }
+        }
       }
       if (dup) continue;
       picked.push(cand);
@@ -191,14 +197,6 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
   } catch {
     return prior();
   }
-}
-
-function stemJaccard(a: Set<string>, b: Set<string>): number {
-  if (!a.size || !b.size) return 0;
-  let inter = 0;
-  for (const w of a) if (b.has(w)) inter++;
-  const uni = a.size + b.size - inter;
-  return uni ? inter / uni : 0;
 }
 
 function suppressPacketNearDups(recs: MemoryRecord[]): MemoryRecord[] {
