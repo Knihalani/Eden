@@ -977,15 +977,6 @@ function mergeRootIdentity(lexical: MemoryRecord[], text: string, cap: number, d
   }
 }
 
-function mergeLiveConstraints(lexical: MemoryRecord[], text: string, cap: number, rows: Compiled[]): MemoryRecord[] {
-  try {
-    if (!String(text ?? "").trim()) return lexical;
-    return prependFloor(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
-  } catch {
-    return lexical;
-  }
-}
-
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
@@ -1498,7 +1489,11 @@ export class AgentMemory {
     }
     const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = dedupSelect(ranked, cap);
-    lexical = mergeLiveConstraints(lexical, text, cap, rows);
+    try {
+      if (String(text ?? "").trim()) {
+        lexical = prependFloor(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
+      }
+    } catch {}
     lexical = mergeRootIdentity(lexical, text, cap, this.dir);
     return suppressPacketNearDups(mergeExperienceLane(
       mergeHowtoLane(mergeNarrativeLane(lexical, text, cap, this.howtoDir, recs), text, cap, this.howtoDir),
