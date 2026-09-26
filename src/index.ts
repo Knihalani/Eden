@@ -401,15 +401,6 @@ function lastUserMessage(list: unknown[]): unknown {
 
 const WRAP_PLACE_FIELDS = ["open_files", "openFiles", "files", "file_paths", "filePaths", "file_path", "filePath", "recently_viewed_files", "recentlyViewedFiles"] as const;
 
-function stripWrapPlaceFields(body: Record<string, unknown>): Record<string, unknown> {
-  let dirty = false;
-  for (const k of WRAP_PLACE_FIELDS) if (k in body) { dirty = true; break; }
-  if (!dirty) return body;
-  const out = { ...body };
-  for (const k of WRAP_PLACE_FIELDS) delete out[k];
-  return out;
-}
-
 const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
 const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
@@ -1630,7 +1621,13 @@ export class AgentMemory {
       const next = alreadyInjected(sysBlob) || sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m, extra);
       if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys], { keepLiveIdentity: true });
       if (next === m) return body;
-      return stripWrapPlaceFields({ ...body, [key]: next });
+      const merged: Record<string, unknown> = { ...body, [key]: next };
+      let dirty = false;
+      for (const k of WRAP_PLACE_FIELDS) if (k in merged) { dirty = true; break; }
+      if (!dirty) return merged;
+      const out = { ...merged };
+      for (const k of WRAP_PLACE_FIELDS) delete out[k];
+      return out;
     } catch {
       memoryInjectSwallows.n++;
       if (process.env.EDEN_MEMORY_SWALLOW === "1") console.error("eden-memory inject swallow", memoryInjectSwallows.n);
