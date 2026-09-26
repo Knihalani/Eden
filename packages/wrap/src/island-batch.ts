@@ -35,11 +35,6 @@ type Pending = {
   reject: (err: unknown) => void;
 };
 
-function syncArgs(req: IslandReq): IslandReq {
-  const { wait: _wait, ...rest } = req;
-  return rest;
-}
-
 export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}): IslandCaller {
   const pending: Pending[] = [];
   let scheduled = false;
@@ -49,7 +44,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
     if (items.length === 1) {
       const only = items[0]!;
       try {
-        only.resolve(await base(syncArgs(only.req)));
+        only.resolve(await base((({ wait: _wait, ...rest }) => rest)(only.req)));
       } catch (err) {
         only.reject(err);
       }
@@ -59,7 +54,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
       await Promise.all(
         items.map(async (item) => {
           try {
-            item.resolve(await base(syncArgs(item.req)));
+            item.resolve(await base((({ wait: _wait, ...rest }) => rest)(item.req)));
           } catch (err) {
             item.reject(err);
           }
@@ -80,7 +75,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
             return;
           }
           try {
-            item.resolve(await base(syncArgs(item.req)));
+            item.resolve(await base((({ wait: _wait, ...rest }) => rest)(item.req)));
           } catch (err) {
             item.reject(err);
           }
@@ -94,7 +89,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
       await Promise.all(
         items.map(async (item) => {
           try {
-            item.resolve(await base(syncArgs(item.req)));
+            item.resolve(await base((({ wait: _wait, ...rest }) => rest)(item.req)));
           } catch (fallbackErr) {
             item.reject(fallbackErr);
           }
@@ -105,7 +100,7 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
 
   return (req) => {
     if (req.pinned === true) return Promise.reject(new Error("pinned island miss"));
-    if (process.env.EDEN_ISLAND_BATCH === "0" || req.wait !== true) return base(syncArgs(req));
+    if (process.env.EDEN_ISLAND_BATCH === "0" || req.wait !== true) return base((({ wait: _wait, ...rest }) => rest)(req));
     if (req.signal?.aborted) return Promise.reject(new Error("island aborted"));
     return new Promise((resolve, reject) => {
       const item: Pending = { req, resolve, reject };
