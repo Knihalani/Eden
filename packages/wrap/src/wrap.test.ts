@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { inCanary, redact } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
-import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, DEFAULT_WRAP_TIMEOUT_MS, pendingPosts, flushOutbox } from "../src/index";
+import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, DEFAULT_WRAP_TIMEOUT_MS, flushOutbox } from "../src/index";
 import type { OpenAiHandle } from "../src/eden";
 import { createTicketShip, ticketShipProgram, OOD_ID, WITNESS_IDS } from "../../runtime/src/ticketship";
 
@@ -866,7 +866,7 @@ describe("control outbox", () => {
     const tools = wrapTools(world.tools, state);
     await tools.notify.execute({ id: "T-100" });
     for (let i = 0; i < 200 && n < 2; i++) {
-      if (pendingPosts(state) > 0) await flushOutbox(state);
+      await flushOutbox(state);
       else await tick();
     }
     expect(n).toBeGreaterThanOrEqual(2);
@@ -881,7 +881,7 @@ describe("control outbox", () => {
     const tools = wrapTools({ notify: async () => ({ done: true }) }, state);
     for (let i = 0; i < 80; i++) await tools.notify.execute({ i });
     for (let i = 0; i < 500 && state.droppedPosts === 0; i++) {
-      if (pendingPosts(state) > 0) await flushOutbox(state);
+      await flushOutbox(state);
       else await tick();
     }
     for (let i = 0; i < 12; i++) await flushOutbox(state);
