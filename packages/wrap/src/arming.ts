@@ -73,11 +73,7 @@ export function totalRest(rest: Map<string, number>): number {
 }
 
 export function hintIdOf(rec: Record<string, unknown>): unknown {
-  if ("id" in rec) return rec.id;
-  if ("ticket_id" in rec) return rec.ticket_id;
-  if ("ticketId" in rec) return rec.ticketId;
-  if ("orderId" in rec) return rec.orderId;
-  if ("key" in rec) return rec.key;
+  for (const k of ["id", "ticket_id", "ticketId", "orderId", "key"]) if (k in rec) return rec[k];
   return undefined;
 }
 
