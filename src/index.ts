@@ -387,18 +387,6 @@ const FUNC_WORD = new Set([
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
-function isFactList(t: string): boolean {
-  const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l));
-  if (numbered.length >= 2) return true;
-  const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
-  if (sents.length < 2) return false;
-  let copula = 0;
-  for (const s of sents) {
-    try { if (objectAsserted(s)) copula++; } catch {}
-  }
-  return copula >= 2 && copula * 2 >= sents.length;
-}
-
 function stripDeadObjects(text: string, store: SemanticStore): string {
   const raw = String(text ?? "");
   if (!raw) return raw;
@@ -454,7 +442,7 @@ export function encodeLane(text: string): MemoryLaneKind {
     if (!t) return "chat";
     if (isIclExemplar(t)) return "icl";
     if (isRecsysShot(t)) return "narrative";
-    if (!isFactList(t)) {
+    if (!((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(t)) {
       if (t.length > 400) return "narrative";
       if (t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8).length >= 2 && t.length >= 150) {
         const toks = tokList(t);
@@ -646,7 +634,7 @@ function formatNote(r: MemoryRecord): MemoryRecord {
   if (isProcedure) body = formatProcedureBody(body);
   else {
     const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || r.lane === "narrative" || (r.tags ?? []).includes("chunk")
-      || isFactList(r.text) || isFactList(body);
+      || ((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(r.text) || ((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(body);
     const factish = r.kind === "fact" || r.kind === "preference" || /^\s*\[fact(?:\s*·[^\]]*)?\]/i.test(body);
     if (!skipFactCap && factish) body = ((text, re, cap) => { const redacted = redact(String(text ?? "")); const t = typeof redacted === "string" ? redacted : String(text ?? ""); const labeled = t.match(re); return labeled ? (labeled[2]!.length <= cap ? t : `${labeled[1]!}${labeled[2]!.slice(0, cap)}`) : (t.length <= cap ? t : t.slice(0, cap)); })(body, /^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is, FACT_CHAR_CAP);
   }
