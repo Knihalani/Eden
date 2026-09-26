@@ -207,22 +207,6 @@ function firstString(...vals: unknown[]): string | undefined {
   return undefined;
 }
 
-function resolveHookSession(raw: Record<string, unknown>): { session?: string; child: boolean } {
-  try {
-    const parent = firstString(raw.session_id, raw.sessionID, raw.sessionId, raw.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION);
-    const childId = firstString(raw.agent_id, raw.agentId, raw.subagent_id, raw.subagentId, raw.child_session_id, process.env.EDEN_MEMORY_CHILD);
-    const event = String(raw.hook_event_name ?? raw.hookEventName ?? raw.event ?? "");
-    const distinct = !!(childId && childId !== parent);
-    const asChild = event === "SubagentStop" || distinct;
-    if (!asChild) return { session: parent, child: false };
-    const session = childSessionName(parent, childId || "sub");
-    if (!session) return { session: parent, child: false };
-    return { session, child: true };
-  } catch {
-    return { child: false };
-  }
-}
-
 function additional(event: string, text: string): Record<string, unknown> | null {
   return text ? { additional_context: text, hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
 }
@@ -272,7 +256,21 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd")) return null;
     const cwd = typeof r.cwd === "string" && r.cwd ? r.cwd : undefined;
     const agent = [process.env.EDEN_MEMORY_AGENT, r.agent].find((x) => typeof x === "string" && x);
-    const resolved = resolveHookSession(r);
+    let resolved: { session?: string; child: boolean } = { child: false };
+    try {
+      const parent = firstString(r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION);
+      const childId = firstString(r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD);
+      const ev = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
+      const distinct = !!(childId && childId !== parent);
+      const asChild = ev === "SubagentStop" || distinct;
+      if (!asChild) resolved = { session: parent, child: false };
+      else {
+        const session = childSessionName(parent, childId || "sub");
+        resolved = session ? { session, child: true } : { session: parent, child: false };
+      }
+    } catch {
+      resolved = { child: false };
+    }
     const mem = openMemory({
       dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
       agent: typeof agent === "string" ? agent : undefined,
