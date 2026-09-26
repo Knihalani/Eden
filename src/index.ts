@@ -11,13 +11,7 @@ import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate, migrateSessionHowTo, noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
 import { retrieveHowTo } from "./howto-retrieve";
-import {
-  retrieveExperience,
-  EXPERIENCE_RETRIEVE_K,
-  EXPERIENCE_RETRIEVE_K_MAX,
-  EXPERIENCE_SLICE_TOKEN_CAP,
-  EXPERIENCE_SLICE_CHAR_CAP,
-} from "./experience-retrieve";
+import { retrieveExperience } from "./experience-retrieve";
 import { retrieveNarrativeChunks } from "./chunk-retrieve";
 import { retrieveGists, isSummaryCue, isBookQaCue, leftoverChunksForGists, GIST_CHAR_CAP } from "./gist-retrieve";
 import { ChunkStore } from "./chunk-store";
@@ -538,13 +532,6 @@ export function memoryRetrieveCap(): number {
   if (!Number.isFinite(raw) || raw <= 0) return PACKET_CHAT_K_MIN;
   return Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
 }
-
-export {
-  EXPERIENCE_RETRIEVE_K,
-  EXPERIENCE_RETRIEVE_K_MAX,
-  EXPERIENCE_SLICE_TOKEN_CAP,
-  EXPERIENCE_SLICE_CHAR_CAP,
-};
 
 function formatNote(r: MemoryRecord): MemoryRecord {
   const isProcedure = r.kind === "procedure";
