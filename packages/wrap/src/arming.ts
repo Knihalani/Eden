@@ -51,7 +51,6 @@ export type ArmingStore = {
   sessionSize(session: string): number;
   globalSize(): number;
   stats(): ArmingStats;
-  noteRest(session: string, key: string): void;
 };
 
 type Bucket = {
@@ -221,8 +220,6 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
     },
     stats() {
       return { sessions: sessions.size, armings: global, admits, rejects };
-    },
-    noteRest() {
     },
   };
 }
