@@ -74,8 +74,7 @@ export function openaiIsland(opts: {
 } = {}): IslandCaller {
   return async ({ system, input, outputSchema, signal }) => {
     const fallback = (process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    const island = /127\.0\.0\.1:8788|localhost:8788/.test(fallback) ? "https://api.openai.com/v1" : fallback;
-    const base = (opts.baseURL || island || "https://api.openai.com/v1").replace(/\/$/, "");
+    const base = (opts.baseURL || (/127\.0\.0\.1:8788|localhost:8788/.test(fallback) ? "https://api.openai.com/v1" : fallback)).replace(/\/$/, "");
     const key = opts.apiKey || process.env.OPENAI_API_KEY || "";
     const fn = opts.fetch ?? fetch;
 
