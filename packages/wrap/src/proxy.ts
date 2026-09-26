@@ -113,19 +113,8 @@ export function noModelKey(): Response {
   });
 }
 
-function messageText(messages: unknown): string {
-  if (!Array.isArray(messages)) return "";
-  return messages
-    .map((m) => {
-      if (!m || typeof m !== "object") return "";
-      const c = (m as { content?: unknown }).content;
-      return typeof c === "string" ? c : "";
-    })
-    .join("\n");
-}
-
 export function argsFromMessages(program: StretchProgram, messages: unknown): Record<string, unknown> {
-  const text = messageText(messages);
+  const text = !Array.isArray(messages) ? "" : messages.map((m) => (!m || typeof m !== "object" ? "" : typeof (m as { content?: unknown }).content === "string" ? (m as { content: string }).content : "")).join("\n");
   const raw: Record<string, unknown> = {};
   const ticket = text.match(/\bT-\d+\b/i);
   if (ticket) raw.id = ticket[0];
