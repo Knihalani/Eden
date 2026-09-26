@@ -250,20 +250,17 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
     );
   }
   const text = await upstreamRes.text();
-  if (!upstreamRes.ok) {
-    return new Response(text, {
+  const passthrough = () =>
+    new Response(text, {
       status: upstreamRes.status,
       headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json", ...corsOrigin(req) },
     });
-  }
+  if (!upstreamRes.ok) return passthrough();
   let msg: AnthropicMessage;
   try {
     msg = JSON.parse(text) as AnthropicMessage;
   } catch {
-    return new Response(text, {
-      status: upstreamRes.status,
-      headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json", ...corsOrigin(req) },
-    });
+    return passthrough();
   }
 
   const run = opts.state.run;
