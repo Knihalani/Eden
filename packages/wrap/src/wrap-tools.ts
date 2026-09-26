@@ -138,16 +138,6 @@ async function sendPost(state: WrapState, path: string, body: unknown): Promise<
   }
 }
 
-function scheduleFlush(state: WrapState, delayMs: number): void {
-  if (flushers.has(state)) return;
-  const t = setTimeout(() => {
-    flushers.delete(state);
-    void flushOutbox(state);
-  }, delayMs);
-  t.unref?.();
-  flushers.set(state, t);
-}
-
 export async function flushOutbox(state: WrapState): Promise<void> {
   const q = ((s, q = outboxes.get(s) ?? []) => (outboxes.set(s, q), q))(state);
   const job = q.shift();
@@ -157,9 +147,9 @@ export async function flushOutbox(state: WrapState): Promise<void> {
     job.tries++;
     if (job.tries < MAX_POST_TRIES && q.length < MAX_OUTBOX) q.push(job);
     else state.droppedPosts++; // retries exhausted, or no room to wait — counted, not silent
-    scheduleFlush(state, Math.min(30_000, 200 * 2 ** Math.min(job.tries, 8)));
+    ((state, delayMs) => { if (flushers.has(state)) return; const t = setTimeout(() => { flushers.delete(state); void flushOutbox(state); }, delayMs); t.unref?.(); flushers.set(state, t); })(state, Math.min(30_000, 200 * 2 ** Math.min(job.tries, 8)));
   } else if (q.length) {
-    scheduleFlush(state, 0);
+    ((state, delayMs) => { if (flushers.has(state)) return; const t = setTimeout(() => { flushers.delete(state); void flushOutbox(state); }, delayMs); t.unref?.(); flushers.set(state, t); })(state, 0);
   }
 }
 
@@ -175,7 +165,7 @@ function post(state: WrapState, path: string, body: unknown): void {
       return;
     }
     q.push({ path, body, tries: 0 });
-    scheduleFlush(state, 50);
+    ((state, delayMs) => { if (flushers.has(state)) return; const t = setTimeout(() => { flushers.delete(state); void flushOutbox(state); }, delayMs); t.unref?.(); flushers.set(state, t); })(state, 50);
   });
 }
 
