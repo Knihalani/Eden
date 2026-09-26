@@ -54,11 +54,6 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
   return out;
 }
 
-function inputServes(program: StretchProgram, input: Record<string, unknown>): boolean {
-  if (inDistribution(program, input)) return true;
-  return mayServe(program, input);
-}
-
 function urlShape(url: string): string | null {
   const templated = parameterizeUrl(url);
   const m = templated.match(/^(https?:\/\/)([^/?#]+)([^?#]*)/i);
@@ -216,12 +211,12 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
       if (typeof cmdLive !== "string" || !templateFits(tmpl, cmdLive)) continue;
       const recovered = recoverShellInput(p, callArgs(first));
       const input = recovered ?? extractInput(p, callArgs(first));
-      if (!inputServes(p, input)) continue;
+      if (!(inDistribution(p, input) || mayServe(p, input))) continue;
       hits.push({ p, input, by: "name" });
       continue;
     }
     const input = extractInput(p, callArgs(first));
-    if (!inputServes(p, input)) continue;
+    if (!(inDistribution(p, input) || mayServe(p, input))) continue;
     hits.push({ p, input, by: "name" });
   }
   if (!hits.length) {
@@ -240,7 +235,7 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
           if (!psig.every((s, i) => s === sig[i])) continue;
           input = extractInput(p, callArgs(first));
         }
-        if (!input || !inputServes(p, input)) continue;
+        if (!input || !(inDistribution(p, input) || mayServe(p, input))) continue;
         hits.push({ p, input, by: "argshape" });
       }
     }
