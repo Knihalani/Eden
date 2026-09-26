@@ -848,18 +848,6 @@ function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?:
   }
 }
 
-function prependFloor(extras: MemoryRecord[], lexical: MemoryRecord[], cap: number): MemoryRecord[] {
-  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-  if (!k || !extras.length) return lexical;
-  extras.sort((a, b) => b.at - a.at);
-  const base = Array.isArray(lexical) ? lexical : [];
-  const out: MemoryRecord[] = [];
-  const room = Math.max(k, 64);
-  for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); }
-  for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); }
-  return out.length ? out : base;
-}
-
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
@@ -1372,7 +1360,7 @@ export class AgentMemory {
     let lexical = dedupSelect(ranked, cap);
     try {
       if (String(text ?? "").trim()) {
-        lexical = prependFloor(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
+        lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
       }
     } catch {}
     try {
@@ -1401,7 +1389,7 @@ export class AgentMemory {
               at: Number.isFinite(row.t) ? row.t : 0,
             });
           }
-          lexical = prependFloor(extras, lexical, cap);
+          lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(extras, lexical, cap);
         }
       }
     } catch {}
