@@ -81,14 +81,11 @@ export function parseStamp(date: string): Stamp {
   return null;
 }
 
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
 export function fmtDMY(st: { y: number; m: number; d: number }): string {
-  return `${st.d} ${cap(MONTHS[st.m]!)} ${st.y}`;
+  return `${st.d} ${MONTHS[st.m]!.charAt(0).toUpperCase()}${MONTHS[st.m]!.slice(1)} ${st.y}`;
 }
 export function fmtMY(st: { y: number; m: number }): string {
-  return `${cap(MONTHS[st.m]!)} ${st.y}`;
+  return `${MONTHS[st.m]!.charAt(0).toUpperCase()}${MONTHS[st.m]!.slice(1)} ${st.y}`;
 }
 export function shiftDays(st: { y: number; m: number; d: number }, days: number) {
   const dt = new Date(Date.UTC(st.y, st.m, st.d + days));
@@ -170,11 +167,11 @@ export function groundRelativeTime(text: string, st: Stamp): string[] {
   while ((m = wd.exec(low))) {
     const which = m[1]!;
     const day = m[2]!;
-    add(which === "last" ? `the ${cap(day)} before ${fmtDMY(st)}` : which === "next" ? `the ${cap(day)} after ${fmtDMY(st)}` : `${cap(day)} around ${fmtDMY(st)}`);
+    add(which === "last" ? `the ${day.charAt(0).toUpperCase()}${day.slice(1)} before ${fmtDMY(st)}` : which === "next" ? `the ${day.charAt(0).toUpperCase()}${day.slice(1)} after ${fmtDMY(st)}` : `${day.charAt(0).toUpperCase()}${day.slice(1)} around ${fmtDMY(st)}`);
   }
   const monthOnly = /\b(january|february|march|april|june|july|august|september|october|november|december)\b(?!,?\s+20\d{2})/g;
   while ((m = monthOnly.exec(low))) {
-    add(`${cap(m[1]!)} ${st.y}`);
+    add(`${m[1]!.charAt(0).toUpperCase()}${m[1]!.slice(1)} ${st.y}`);
   }
   return out.slice(0, 4);
 }
