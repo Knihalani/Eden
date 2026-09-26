@@ -416,13 +416,6 @@ type Invocation = {
   finishedAt: number;
 };
 
-function liveOf(state: WrapState): StretchProgram[] {
-  return filterCanary(
-    state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
-    state.sessionId,
-  );
-}
-
 export { filterCanary } from "./canary";
 
 function entityKey(rec: Record<string, unknown> | undefined): string | undefined {
@@ -505,11 +498,11 @@ export function wrapTools<T extends ToolsIn>(
     Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, asToolDef(k, v).execute])),
   );
   bindSpeculateRunner(state, {
-    live: () => (state.programs.length === 0 ? NO_LIVE : liveOf(state)),
+    live: () => (state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId)),
     run: (program, input) => runCompiled(state, program, input, tools, registry),
   });
   bindWarmRunner(state, {
-    live: () => (state.programs.length === 0 ? NO_LIVE : liveOf(state)),
+    live: () => (state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId)),
     execute: (tool, args) => registry.execute(tool, args),
   });
   const wrapped: Record<string, ToolDef> = {};
@@ -538,7 +531,7 @@ export function wrapTools<T extends ToolsIn>(
       llmCalls: run.llmCalls,
       ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
     };
-    const required = state.programs.length === 0 ? [] : requiredChecks(liveOf(state), run.events);
+    const required = state.programs.length === 0 ? [] : requiredChecks(filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId), run.events);
     const ledger = required.length === 0 ? undefined : evidenceLedger(run.events, required);
     const fresh = takeSignals(run.events, budget, run.seenSignals, required, ledger);
     for (const w of fresh) {
@@ -790,7 +783,7 @@ export function wrapTools<T extends ToolsIn>(
 
   const compiledFor = (name: string): ToolDef | undefined => {
     if (!state.programs.length) return undefined;
-    const p = liveOf(state).find((x) => x.name === name || x.id === name);
+    const p = filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId).find((x) => x.name === name || x.id === name);
     if (!p) return undefined;
     const cached = compiledCache.get(p.id);
     if (cached && cached.program === p) return cached.def;
@@ -834,7 +827,7 @@ export function wrapTools<T extends ToolsIn>(
     const runOne = async (args: Record<string, unknown>, selfId: number, startedAt: number): Promise<unknown> => {
         if (state.opts.baseUrl && calls % PULL_EVERY === 0) void pullLive(state);
         safely(() => noteJitUsed(state.jit, [name]), undefined);
-        const live = state.programs.length === 0 ? NO_LIVE : liveOf(state);
+        const live = state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId);
         const owner = { id: selfId, startedAt, invocations };
 
         const prefixHits = live.length
@@ -1166,11 +1159,11 @@ export function wrapTools<T extends ToolsIn>(
       return undefined;
     },
     has(target, prop) {
-      if (typeof prop === "string" && liveOf(state).some((x) => x.name === prop)) return true;
+      if (typeof prop === "string" && filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId).some((x) => x.name === prop)) return true;
       return prop in target;
     },
     ownKeys(target) {
-      const extra = liveOf(state).map((p) => p.name);
+      const extra = filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId).map((p) => p.name);
       return [...new Set([...Object.keys(target), ...extra])];
     },
     getOwnPropertyDescriptor(target, prop) {
