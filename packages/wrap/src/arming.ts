@@ -89,9 +89,7 @@ export function armExpired(a: Armed, now: number): boolean {
 export function mightClaim(armed: Armed, name: string, args: Record<string, unknown>): boolean {
   const argHint = hintIdOf(args);
   if (armed.hintId !== undefined && argHint !== undefined && armed.hintId !== argHint) return false;
-  if (armed.rest.has(name)) return true;
-  if (armed.hintId !== undefined && argHint !== undefined && armed.hintId === argHint) return true;
-  return false;
+  return armed.rest.has(name) || (armed.hintId !== undefined && argHint !== undefined);
 }
 
 export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: number }): ArmingStore {
