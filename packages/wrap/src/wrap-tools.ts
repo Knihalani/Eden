@@ -81,14 +81,6 @@ const outboxes = new WeakMap<WrapState, OutboxJob[]>();
 const flushers = new WeakMap<WrapState, ReturnType<typeof setTimeout>>();
 const armedReceipts = new WeakMap<Armed, Receipt>();
 
-function inputAgrees(armed: Armed, cur: Record<string, unknown>): boolean {
-  if (eq(cur, armed.input)) return true;
-  const rec = armed.input as Record<string, unknown> | null;
-  if (!rec || typeof rec !== "object") return false;
-  const keys = Object.keys(cur);
-  return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k]));
-}
-
 export const DEFAULT_WRAP_TIMEOUT_MS = 60_000;
 
 export function wrapTimeoutMs(explicit?: number): number {
@@ -832,7 +824,7 @@ export function wrapTools<T extends ToolsIn>(
             const t = performance.now();
             for (const [, armed] of store.all(session, t)) {
               if (armed.programId !== hit.p.id) continue;
-              if (inputAgrees(armed, hit.input as Record<string, unknown>)) return true;
+              if (((armed, cur) => { if (eq(cur, armed.input)) return true; const rec = armed.input as Record<string, unknown> | null; if (!rec || typeof rec !== "object") return false; const keys = Object.keys(cur); return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k])); })(armed, hit.input as Record<string, unknown>)) return true;
             }
             return false;
           }, false);
@@ -841,7 +833,7 @@ export function wrapTools<T extends ToolsIn>(
             const t = performance.now();
             for (const found of store.allFleet(fleetId, t)) {
               if (found.armed.programId !== hit.p.id) continue;
-              if (inputAgrees(found.armed, hit.input as Record<string, unknown>)) return found;
+              if (((armed, cur) => { if (eq(cur, armed.input)) return true; const rec = armed.input as Record<string, unknown> | null; if (!rec || typeof rec !== "object") return false; const keys = Object.keys(cur); return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k])); })(found.armed, hit.input as Record<string, unknown>)) return found;
             }
             return undefined;
           }, undefined);
@@ -924,7 +916,7 @@ export function wrapTools<T extends ToolsIn>(
           const inputMatches = safely(() => {
             const liveP = live.find((p) => p.id === armed.programId);
             const cur = liveP ? extractInput(liveP, args) : args;
-            return inputAgrees(armed, cur as Record<string, unknown>);
+            return ((armed, cur) => { if (eq(cur, armed.input)) return true; const rec = armed.input as Record<string, unknown> | null; if (!rec || typeof rec !== "object") return false; const keys = Object.keys(cur); return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k])); })(armed, cur as Record<string, unknown>);
           }, false);
           if (!inputMatches) continue;
           safely(() => {
