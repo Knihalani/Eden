@@ -59,10 +59,3 @@ export function remainingBudgetForRun(args: {
     remainingTimeoutMs: cap - elapsed,
   });
 }
-
-export function isUniqueWork(
-  live: StretchProgram[],
-  events: { name: string; skipped?: boolean }[],
-): boolean {
-  return matchingRunPrograms(live, events).length === 0;
-}
