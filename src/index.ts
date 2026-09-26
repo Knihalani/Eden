@@ -565,28 +565,26 @@ export {
   EXPERIENCE_SLICE_CHAR_CAP,
 };
 
-function formatProcedureBody(text: string): string {
-  const redacted = redact(String(text ?? ""));
-  const t = typeof redacted === "string" ? redacted : String(text ?? "");
-  if (t.length <= PROCEDURE_CHAR_CAP) return t;
-  const vm = t.match(/^(.*?)((?:\s*·\s*|\s+)verify:\s*)(.*)$/is);
-  if (vm) {
-    const head = vm[1]!;
-    const tail = `${vm[2]!}${vm[3]!}`;
-    if (head.length + tail.length <= PROCEDURE_CHAR_CAP) return t;
-    const room = PROCEDURE_CHAR_CAP - tail.length;
-    if (room > 0) return `${head.slice(0, room)}${tail}`;
-    return tail.slice(0, PROCEDURE_CHAR_CAP).trimStart();
-  }
-  return t.slice(0, PROCEDURE_CHAR_CAP);
-}
-
 function formatNote(r: MemoryRecord): MemoryRecord {
   const isProcedure = r.kind === "procedure";
   const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
   const stripped = stripPacketLabel(raw).body;
   let body = stripped;
-  if (isProcedure) body = formatProcedureBody(body);
+  if (isProcedure) body = ((text) => {
+    const redacted = redact(String(text ?? ""));
+    const t = typeof redacted === "string" ? redacted : String(text ?? "");
+    if (t.length <= PROCEDURE_CHAR_CAP) return t;
+    const vm = t.match(/^(.*?)((?:\s*·\s*|\s+)verify:\s*)(.*)$/is);
+    if (vm) {
+      const head = vm[1]!;
+      const tail = `${vm[2]!}${vm[3]!}`;
+      if (head.length + tail.length <= PROCEDURE_CHAR_CAP) return t;
+      const room = PROCEDURE_CHAR_CAP - tail.length;
+      if (room > 0) return `${head.slice(0, room)}${tail}`;
+      return tail.slice(0, PROCEDURE_CHAR_CAP).trimStart();
+    }
+    return t.slice(0, PROCEDURE_CHAR_CAP);
+  })(body);
   else {
     const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || r.lane === "narrative" || (r.tags ?? []).includes("chunk")
       || ((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(r.text) || ((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(body);
