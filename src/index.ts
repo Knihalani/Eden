@@ -1158,7 +1158,6 @@ export class AgentMemory {
               const slot = `${fact.s}\0${fact.p}`;
               const fromBatch = batchLive.get(slot);
               if (!(fromBatch && fromBatch !== obj)) {
-                if (live && live.o.trim().toLowerCase() !== obj) continue;
                 if (store.supersededObject(fact.o)) continue;
               }
             }
