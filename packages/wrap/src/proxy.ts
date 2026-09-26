@@ -1,5 +1,5 @@
 import type { StretchProgram } from "@eden/ir";
-import { compiledSchema, extractInput, injectTools, steerToolCalls } from "./steer";
+import { extractInput, injectTools, steerToolCalls } from "./steer";
 import { noteJitUsed, selectForRequest } from "./intent";
 import { recordCompletion, tapSseUsage } from "./usage";
 import { filterCanary } from "./canary";
@@ -237,5 +237,3 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     }),
   );
 }
-
-export { compiledSchema };
