@@ -517,14 +517,6 @@ export function pathCues(lower: string): Set<string> {
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
 const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
 
-function compile(rec: MemoryRecord): Compiled {
-  const own = new Set([
-    ...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)),
-    ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w)),
-  ]);
-  return { rec, needles: [...own] };
-}
-
 const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
 export const MEMORY_WAL_SUFFIX = ".wal";
@@ -544,7 +536,7 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
       const rec = JSON.parse(t) as MemoryRecord;
       if (rec?.id && rec.text) {
         rec.lane = rec.lane ?? "chat";
-        const c = compile(rec);
+        const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec);
         const at = idx.get(rec.id);
         if (overlay && at != null) out[at] = c;
         else {
@@ -1089,7 +1081,7 @@ export class AgentMemory {
       if (!rec.tags.includes("pin")) rec.tags.push("pin");
     }
     if (sal > 0) rec.sal = sal;
-    const c = compile(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
+    const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     this.compiled.push(c);
     this.walDirtyIds.add(rec.id);
@@ -1560,7 +1552,7 @@ export class AgentMemory {
       dirty = true;
       this.walDirtyIds.add(c.rec.id);
       this.needCompact = true;
-      return compile({ ...c.rec, text: next });
+      return ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))({ ...c.rec, text: next });
     });
     if (dirty) this.flush(true);
   }
