@@ -34,18 +34,11 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
   const pending: Pending[] = [];
   let scheduled = false;
 
+  const callBase = async (item: Pending): Promise<void> => { try { item.resolve(await base((({ wait: _wait, ...rest }) => rest)(item.req))); } catch (err) { item.reject(err); } };
   const settle = async (items: Pending[]): Promise<void> => {
     if (items.length === 0) return;
     if (items.length === 1 || !canUseProviderBatch(opts)) {
-      await Promise.all(
-        items.map(async (item) => {
-          try {
-            item.resolve(await base((({ wait: _wait, ...rest }) => rest)(item.req)));
-          } catch (err) {
-            item.reject(err);
-          }
-        }),
-      );
+      await Promise.all(items.map(callBase));
       return;
     }
     try {
@@ -53,34 +46,13 @@ export function withIslandBatch(base: IslandCaller, opts: IslandBatchOpts = {}):
         items.map((item) => item.req),
         opts,
       );
-      await Promise.all(
-        items.map(async (item, i) => {
-          const reply = replies[i];
-          if (reply) {
-            item.resolve(reply);
-            return;
-          }
-          try {
-            item.resolve(await base((({ wait: _wait, ...rest }) => rest)(item.req)));
-          } catch (err) {
-            item.reject(err);
-          }
-        }),
-      );
+      await Promise.all(items.map((item, i) => replies[i] ? Promise.resolve(item.resolve(replies[i])) : callBase(item)));
     } catch (err) {
       if (items.some((item) => item.req.signal?.aborted) || (err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message)))) {
         for (const item of items) item.reject(err);
         return;
       }
-      await Promise.all(
-        items.map(async (item) => {
-          try {
-            item.resolve(await base((({ wait: _wait, ...rest }) => rest)(item.req)));
-          } catch (fallbackErr) {
-            item.reject(fallbackErr);
-          }
-        }),
-      );
+      await Promise.all(items.map(callBase));
     }
   };
 
