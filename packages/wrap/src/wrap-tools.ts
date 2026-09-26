@@ -501,13 +501,6 @@ export function wrapTools<T extends ToolsIn>(
   const run = state.run;
   const invocations = new Map<number, Invocation>();
   let nextInvocationId = 0;
-  const evictInvocations = (): void => {
-    if (invocations.size <= 256) return;
-    for (const [id, rec] of invocations) {
-      if (invocations.size <= 128) break;
-      if (rec.done) invocations.delete(id);
-    }
-  };
   const store = state.arming;
   const session = state.sessionId;
   const fleetId = state.fleetId;
@@ -1144,7 +1137,12 @@ export function wrapTools<T extends ToolsIn>(
         const selfId = ++nextInvocationId;
         const rec: Invocation = { startedAt: performance.now(), done: false, finishedAt: 0 };
         invocations.set(selfId, rec);
-        evictInvocations();
+        if (invocations.size > 256) {
+          for (const [id, rec] of invocations) {
+            if (invocations.size <= 128) break;
+            if (rec.done) invocations.delete(id);
+          }
+        }
         try {
           const value = await runOne(args, selfId, rec.startedAt);
           safely(() => turnBoundary(state, { lastTool: name, lastArgs: args, input: args }), null);
