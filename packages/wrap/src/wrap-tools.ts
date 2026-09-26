@@ -929,7 +929,6 @@ export function wrapTools<T extends ToolsIn>(
               const left = armed.rest.get(name)!;
               if (left > 1) armed.rest.set(name, left - 1);
               else armed.rest.delete(name);
-              store.noteRest(armSession, id);
             }, undefined);
             skipAsShared(armed, name, selfId);
             if (!armed.rest.size) {
@@ -951,7 +950,6 @@ export function wrapTools<T extends ToolsIn>(
               const left = armed.rest.get(name)!;
               if (left > 1) armed.rest.set(name, left - 1);
               else armed.rest.delete(name);
-              store.noteRest(armSession, id);
               if (!armed.rest.size) store.delete(armSession, id);
             }, undefined);
             steeredSkip = true;
