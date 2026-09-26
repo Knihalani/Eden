@@ -53,12 +53,6 @@ const MAX_OUTBOX = 64;
 const MAX_POST_TRIES = 5;
 const MAX_WARNINGS = 32;
 
-export function maxRunSteps(): number {
-  const env = Number(process.env.EDEN_MAX_STEPS);
-  if (Number.isFinite(env) && env > 0) return Math.min(10_000, Math.max(10, Math.floor(env)));
-  return MAX_RUN_STEPS;
-}
-
 function guardRefuse(guard: { action: string; reason: string; detail?: string }): {
   eden: "halted" | "blocked";
   reason: string;
@@ -1127,7 +1121,8 @@ export function wrapTools<T extends ToolsIn>(
         }
 
         const t0 = performance.now();
-        if (enforcementEnabled(state.opts) && run.rawExecuted >= maxRunSteps()) {
+        const envSteps = Number(process.env.EDEN_MAX_STEPS);
+        if (enforcementEnabled(state.opts) && run.rawExecuted >= (Number.isFinite(envSteps) && envSteps > 0 ? Math.min(10_000, Math.max(10, Math.floor(envSteps))) : MAX_RUN_STEPS)) {
           run.rawExecuted = 0;
           note();
           const marker: TraceEvent = { name, args: {}, ok: true, skipped: true, duration_ms: 0 };
