@@ -99,12 +99,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function callerAborted(err: unknown, signal?: AbortSignal): boolean {
-  if (!signal?.aborted) return false;
-  if (err instanceof Error && err.name === "AbortError") return true;
-  return err instanceof Error && /abort/i.test(err.message);
-}
-
 export function openaiIsland(opts: {
   model?: string;
   apiKey?: string;
@@ -172,7 +166,7 @@ export function openaiIsland(opts: {
         }
       } catch (err) {
         lastErr = err;
-        if (callerAborted(err, signal)) throw err;
+        if (signal?.aborted && err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message))) throw err;
         const transient =
           err instanceof NonJsonReply ||
           !(err instanceof Error && /^island llm \d+$/.test(err.message));
