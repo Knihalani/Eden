@@ -124,7 +124,6 @@ function steerAnthropicToolUses
 }
 
 export function anthropicMessageToSse(msg: AnthropicMessage): string {
-  const indexByBlock = new Map<AnthropicContentBlock, number>();
   let out = "";
   const sse = (event: string, data: unknown): void => {
     out += `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -145,7 +144,6 @@ export function anthropicMessageToSse(msg: AnthropicMessage): string {
   });
   const blocks = Array.isArray(msg.content) ? msg.content : [];
   blocks.forEach((block, i) => {
-    indexByBlock.set(block, i);
     if (block.type === "text") {
       sse("content_block_start", { type: "content_block_start", index: i, content_block: { type: "text", text: "" } });
       sse("content_block_delta", { type: "content_block_delta", index: i, delta: { type: "text_delta", text: block.text ?? "" } });
