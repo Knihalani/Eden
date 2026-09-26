@@ -76,17 +76,11 @@ function isSafeToSpeculate(program: StretchProgram): boolean {
   return true;
 }
 
-function hintInput(hint: SpeculateHint): Record<string, unknown> | undefined {
-  if (hint.input && typeof hint.input === "object") return hint.input;
-  if (hint.lastArgs && typeof hint.lastArgs === "object") return hint.lastArgs;
-  return undefined;
-}
-
 function pick(
   live: StretchProgram[],
   hint: SpeculateHint,
 ): { program: StretchProgram; input: Record<string, unknown> } | null {
-  const raw = hintInput(hint);
+  const raw = hint.input && typeof hint.input === "object" ? hint.input : hint.lastArgs && typeof hint.lastArgs === "object" ? hint.lastArgs : undefined;
   const named =
     hint.program == null
       ? undefined
