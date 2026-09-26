@@ -1,6 +1,6 @@
 import { eq, mayServe, type StretchProgram } from "@eden/ir";
 import { isSafeToWarm } from "./fleet";
-import { extractInput } from "./steer";
+import { extractInput, namedProgram } from "./steer";
 import type { WrapState } from "./wrap-tools";
 
 export type SpeculateHint = {
@@ -89,12 +89,7 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
     const live = runner.live() ?? [];
     if (!live.length) return null;
     const raw = hint.input && typeof hint.input === "object" ? hint.input : hint.lastArgs && typeof hint.lastArgs === "object" ? hint.lastArgs : undefined;
-    const named =
-      hint.program == null
-        ? undefined
-        : typeof hint.program === "string"
-          ? live.find((p) => p.id === hint.program || p.name === hint.program)
-          : hint.program;
+    const named = namedProgram(live, hint.program);
     const candidates = named
       ? isSafeToWarm(named) ? [named] : []
       : live.filter((p) => isSafeToWarm(p)).sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
