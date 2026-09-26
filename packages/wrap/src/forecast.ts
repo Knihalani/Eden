@@ -57,12 +57,7 @@ export function matchingRunPrograms(
     .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
 }
 
-export function inFlightProgram(
-  live: StretchProgram[],
-  events: { name: string; skipped?: boolean }[],
-): StretchProgram | undefined {
-  return matchingRunPrograms(live, events)[0];
-}
+export const inFlightProgram = (live: StretchProgram[], events: { name: string; skipped?: boolean }[]): StretchProgram | undefined => matchingRunPrograms(live, events)[0];
 
 export function remainingBudgetForRun(args: {
   program: StretchProgram;

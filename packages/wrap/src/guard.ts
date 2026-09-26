@@ -3,7 +3,6 @@ import type { StretchProgram } from "@eden/ir";
 import {
   forecastCopy,
   forecastTimeoutMs,
-  inFlightProgram,
   matchingRunPrograms,
   remainingBudget,
   actualSpend,
@@ -31,7 +30,7 @@ export function requiredChecks(
   live: StretchProgram[],
   events: { name: string; skipped?: boolean }[],
 ): string[] {
-  const hit = inFlightProgram(live, events);
+  const hit = matchingRunPrograms(live, events)[0];
   return hit ? (hit.sequence ?? []).filter(isCheckName) : [];
 }
 
