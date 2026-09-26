@@ -63,19 +63,6 @@ export class CLSController {
     return out;
   }
 
-  private norm(v: Float64Array | Map<number, number>, n: number): Float64Array {
-    const out = new Float64Array(n);
-    let max = 0;
-    if (v instanceof Map) {
-      for (const [i, s] of v) if (s > max) max = s;
-      if (max > 0) for (const [i, s] of v) out[i] = s / max;
-    } else {
-      for (let i = 0; i < n; i++) if (v[i]! > max) max = v[i]!;
-      if (max > 0) for (let i = 0; i < n; i++) out[i] = v[i]! / max;
-    }
-    return out;
-  }
-
   private bindQA(s: Float64Array): Float64Array {
     const eps = this.epi.episodes;
     const out = new Float64Array(s.length);
@@ -111,7 +98,11 @@ export class CLSController {
     const temporal = /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(q.toLowerCase()) || /\b20\d{2}\b/.test(q);
     const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5, SemanticStore.frameOf(q));
     const base = this.epi.score(cue);
-    const epi = this.norm(this.bindQA(base), n);
+    const normV = this.bindQA(base);
+    const epi = new Float64Array(n);
+    let normMax = 0;
+    for (let i = 0; i < n; i++) if (normV[i]! > normMax) normMax = normV[i]!;
+    if (normMax > 0) for (let i = 0; i < n; i++) epi[i] = normV[i]! / normMax;
     const semRaw = new Float64Array(n);
     if (opts?.semantic !== false && !this.opts.skipSemantic) {
       for (const [i, s] of this.sem.lookup(q)) if (i >= 0 && i < n) semRaw[i] = s;
