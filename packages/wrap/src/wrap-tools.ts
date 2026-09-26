@@ -32,7 +32,6 @@ import {
   hintIdOf,
   restCounts,
   totalRest,
-  wrapSessionId,
   type Armed,
   type ArmingStore,
   type FleetHit,
@@ -132,7 +131,7 @@ export function wrapTimeoutMs(explicit?: number): number {
 }
 
 export function createState(opts: EdenOpts = {}): WrapState {
-  const sessionId = wrapSessionId(opts.sessionId);
+  const sessionId = typeof opts.sessionId === "string" && opts.sessionId.length > 0 ? opts.sessionId : typeof process.env.EDEN_SESSION === "string" && process.env.EDEN_SESSION.length > 0 ? process.env.EDEN_SESSION : "";
   const fleetId = wrapFleetId(opts.fleetId);
   const agentId = wrapAgentId(opts.agentId, sessionId);
   const region = wrapRegion(opts.region);
