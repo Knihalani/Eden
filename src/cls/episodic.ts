@@ -2,18 +2,12 @@ import { STOP, codeToks, contentToks, groundRelativeTime, parseStamp, properName
 
 export type Cue = Map<string, number>;
 
-const EXPAND: Record<string, string[]> = {};
-for (const [k, alts] of Object.entries({
-  spouse: ["married", "wife", "husband"],
-  wife: ["married", "spouse"],
-  husband: ["married", "spouse"],
-  citizen: ["nationality"],
-})) {
-  const sk = stem(k);
-  const merged = new Set([...(EXPAND[sk] ?? []), ...alts.map(stem)]);
-  merged.delete(sk);
-  EXPAND[sk] = [...merged];
-}
+const EXPAND: Record<string, string[]> = {
+  [stem("spouse")]: ["married", "wife", "husband"].map(stem),
+  [stem("wife")]: ["married", "spouse"].map(stem),
+  [stem("husband")]: ["married", "spouse"].map(stem),
+  [stem("citizen")]: ["nationality"].map(stem),
+};
 
 const QUERY_LIGHT = new Set(
   ["country", "citizen", "author", "name", "city", "position", "sport", "nationality"].map(stem),
