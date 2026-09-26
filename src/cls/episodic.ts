@@ -25,7 +25,6 @@ export function rareCueToks(q: string): string[] {
   for (const n of properNames(q)) add(n);
   for (const c of codeToks(q)) add(c);
   for (const t of contentToks(q)) {
-    if (QUERY_LIGHT.has(t) || STOP.has(t)) continue;
     if (/\d/.test(t) || t.includes("-")) add(t);
   }
   for (const t of [...out]) {
