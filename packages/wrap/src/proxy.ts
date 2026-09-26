@@ -24,14 +24,6 @@ export function corsOrigin(req: Request): Record<string, string> {
   return {};
 }
 
-export function isWrapAuthToken(key: string): boolean {
-  const t = key.trim();
-  if (!t) return false;
-  if (t === "eden_dev" || t.startsWith("eden_")) return true;
-  const env = (process.env.EDEN_API_KEY || "").trim();
-  return env.length > 0 && t === env;
-}
-
 export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): string {
   const headerKey =
     req.headers.get("x-openai-api-key")?.trim() ||
@@ -40,7 +32,7 @@ export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Re
   const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
   const configured = (opts.upstreamKey || process.env.OPENAI_API_KEY || "").trim();
   for (const k of [headerKey, configured, bearer]) {
-    if (k && !isWrapAuthToken(k)) return k;
+    if (k && !((t) => t === "eden_dev" || t.startsWith("eden_") || ((e) => e.length > 0 && t === e)((process.env.EDEN_API_KEY || "").trim()))(k.trim())) return k;
   }
   return "";
 }
@@ -88,7 +80,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   const wantsStream = Boolean(body.stream);
   const clientOptedIn = Array.isArray(body.tools);
   const msgs = body.messages as unknown[] | undefined;
-  const blocked = isWrapAuthToken(req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "") && !resolveUpstreamKey(opts, req);
+  const blocked = ((t) => t === "eden_dev" || t.startsWith("eden_") || ((e) => e.length > 0 && t === e)((process.env.EDEN_API_KEY || "").trim()))((req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "").trim()) && !resolveUpstreamKey(opts, req);
   const picked = steerable
     ? safely(
         () => selectForRequest(live, msgs, blocked ? undefined : opts.state.jit),
