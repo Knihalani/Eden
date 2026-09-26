@@ -790,10 +790,7 @@ export function wrapTools<T extends ToolsIn>(
             return undefined;
           }, undefined);
           if (fleetHit) {
-            const ok = await Promise.race([
-              fleetHit.armed.settled,
-              new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
-            ]);
+            const ok = await Promise.race([fleetHit.armed.settled, new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs)))]);
             if (ok) {
               if (!(isReadName(name) && staleRead(state, args, fleetHit.armed))) {
               skipAsShared(fleetHit.armed, name, selfId);
@@ -873,10 +870,7 @@ export function wrapTools<T extends ToolsIn>(
             armed.fleetId === fleetId &&
             (armed.served?.has(name) === true);
           if (!remaining && !fleetServed) continue;
-          const ok = await Promise.race([
-            armed.settled,
-            new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
-          ]);
+          const ok = await Promise.race([armed.settled, new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs)))]);
           if (ok) {
             if (isReadName(name) && staleRead(state, args, armed)) continue;
             if (fleetServed && !remaining) {
