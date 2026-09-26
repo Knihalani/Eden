@@ -199,11 +199,6 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
   }
 }
 
-function suppressPacketNearDups(recs: MemoryRecord[]): MemoryRecord[] {
-  if (!Array.isArray(recs) || recs.length < 2) return recs;
-  return dedupSelect(recs.map((rec) => ({ rec, n: 0 })), recs.length);
-}
-
 export function queryHay(text: string): Set<string> {
   return new Set(tokList(text));
 }
@@ -1427,10 +1422,12 @@ export class AgentMemory {
     memoryLastRoute.route = route;
     const recs = this.compiled.map((c) => c.rec);
     if (route === "icl-index") {
-      return suppressPacketNearDups(mergeIclLane([], text, cap, this.howtoDir, recs));
+      const packed = mergeIclLane([], text, cap, this.howtoDir, recs);
+      return packed.length < 2 ? packed : dedupSelect(packed.map((rec) => ({ rec, n: 0 })), packed.length);
     }
     if (route === "gist-chunk") {
-      return suppressPacketNearDups(mergeGistLane(mergeNarrativeLane([], text, cap, this.howtoDir, recs), text, cap, this.howtoDir));
+      const packed = mergeGistLane(mergeNarrativeLane([], text, cap, this.howtoDir, recs), text, cap, this.howtoDir);
+      return packed.length < 2 ? packed : dedupSelect(packed.map((rec) => ({ rec, n: 0 })), packed.length);
     }
     const hay = queryHay(text);
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
@@ -1482,11 +1479,12 @@ export class AgentMemory {
         }
       }
     } catch {}
-    return suppressPacketNearDups(mergeExperienceLane(
+    const packed = mergeExperienceLane(
       mergeHowtoLane(mergeNarrativeLane(lexical, text, cap, this.howtoDir, recs), text, cap, this.howtoDir),
       text,
       this.howtoDir,
-    ));
+    );
+    return packed.length < 2 ? packed : dedupSelect(packed.map((rec) => ({ rec, n: 0 })), packed.length);
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
