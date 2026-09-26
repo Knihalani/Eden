@@ -1,4 +1,4 @@
-import type { IslandCaller, StretchProgram, ToolRegistry, TokenClass } from "@eden/ir";
+import type { IslandCaller, StretchProgram, StretchTrace, TokenClass, ToolRegistry, TraceEvent } from "@eden/ir";
 import {
   addTokenClass,
   emptyTokenClasses,
@@ -22,7 +22,6 @@ import { MAX_RUN_STEPS } from "@eden/ir";
 import { emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
 import { filterCanary } from "./canary";
 import { extractInput } from "./steer";
-import type { StretchTrace, TraceEvent } from "@eden/ir";
 import { cacheHitSpread, resetUsage } from "./usage";
 import { decideGuard, enforcementEnabled, requiredChecks } from "./guard";
 import {
