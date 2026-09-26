@@ -64,14 +64,6 @@ export function withWitnessMemo(
   };
 }
 
-export function withPinnedIsland(
-  base: IslandCaller,
-  table: ReturnType<typeof createWitnessTable> = createWitnessTable(),
-): IslandCaller {
-  const inner = withWitnessMemo(base, table);
-  return async (req) => inner({ ...req, pinned: true });
-}
-
 export const ISLAND_RETRIES = 2;
 
 const ISLAND_BACKOFF_MS = 300;
