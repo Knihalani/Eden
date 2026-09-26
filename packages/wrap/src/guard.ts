@@ -1,5 +1,4 @@
-import { evidenceLedger, isCheckName, isReadName, isStretchEnd, latestRepeatStalled } from "@eden/ir";
-import type { StretchProgram } from "@eden/ir";
+import { evidenceLedger, isCheckName, isReadName, isStretchEnd, latestRepeatStalled, type StretchProgram } from "@eden/ir";
 import {
   forecastCopy,
   matchingRunPrograms,
