@@ -53,7 +53,6 @@ export type EdenOpts = {
   onTrace?: (t: StretchTrace) => void;
   onWarning?: (w: OnlineWarning) => void;
   onReceipt?: (r: Receipt) => void;
-  shadow?: boolean;
   timeoutMs?: number;
   sessionId?: string;
   arming?: ArmingStore;
