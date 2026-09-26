@@ -182,15 +182,6 @@ function briefing(mem: AgentMemory, session = ""): string {
   return MEMORY_MARK + lines.join("");
 }
 
-function firstString(...vals: unknown[]): string | undefined {
-  for (const v of vals) {
-    if (typeof v !== "string") continue;
-    const s = v.trim();
-    if (s) return s;
-  }
-  return undefined;
-}
-
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
     const consent = memoryConsent();
@@ -204,8 +195,8 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const agent = [process.env.EDEN_MEMORY_AGENT, r.agent].find((x) => typeof x === "string" && x);
     let resolved: { session?: string; child: boolean } = { child: false };
     try {
-      const parent = firstString(r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION);
-      const childId = firstString(r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD);
+      const parent = [r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
+      const childId = [r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
       const ev = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
       const distinct = !!(childId && childId !== parent);
       const asChild = ev === "SubagentStop" || distinct;
