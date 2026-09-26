@@ -183,15 +183,7 @@ function parseBatchResult(json: unknown, customId: string): IslandReply | undefi
       const content = message.content;
       if (typeof content === "string") text = content;
       else if (Array.isArray(content)) {
-        const joined = content
-          .map((part) => {
-            if (typeof part === "string") return part;
-            if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") {
-              return (part as { text: string }).text;
-            }
-            return "";
-          })
-          .join("");
+        const joined = content.map((part) => typeof part === "string" ? part : part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "").join("");
         if (joined) text = joined;
       }
       if (text == null) {
