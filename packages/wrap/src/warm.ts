@@ -192,7 +192,6 @@ export function watchWarm(
     }
     if (!program || !input) return null;
     const wave = firstWaveReads(program, input);
-    if (!wave.length) return null;
     if (wave.every((w) => s.entries.findLast((e) => !e.discarded && e.programId === program.id && e.tool === w.tool && eq(e.args, w.args)))) {
       return { programId: program.id, tools: wave.map((w) => w.tool) };
     }
