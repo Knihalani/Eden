@@ -771,15 +771,10 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
     }
     if (!chunks.length) return chat;
     const out: MemoryRecord[] = [];
-    for (const c of chunks) {
+    for (const c of [...chunks, ...chat]) {
       if (out.length >= cap) break;
       if (out.some((p) => p.id === c.id || jaccardText(p.text, c.text) > 0.6)) continue;
       out.push(c);
-    }
-    for (const l of chat) {
-      if (out.length >= cap) break;
-      if (out.some((p) => p.id === l.id || jaccardText(p.text, l.text) > 0.6)) continue;
-      out.push(l);
     }
     return out;
   } catch {
