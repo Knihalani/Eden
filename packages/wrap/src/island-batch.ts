@@ -19,9 +19,7 @@ export function islandBatchUrl(baseURL?: string | null): string {
 export function canUseProviderBatch(opts: IslandBatchOpts = {}): boolean {
   if (opts.fetch) return true;
   const base = (opts.baseURL || "").replace(/\/$/, "") || "https://api.openai.com/v1";
-  if (/api\.openai\.com/i.test(base)) return false;
-  if (/api\.anthropic\.com/i.test(base)) return false;
-  return true;
+  return !/api\.openai\.com/i.test(base) && !/api\.anthropic\.com/i.test(base);
 }
 
 type IslandReq = Parameters<IslandCaller>[0];
