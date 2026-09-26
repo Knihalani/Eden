@@ -704,13 +704,6 @@ const HOWTO_SCHEMA_KEYS = new Set(["command", "cmd", "script", "path", "file", "
 const HOWTO_EXACT = 1_000_000;
 const HOWTO_GAP_CMD = /\bpytest\b|\bnpm\b|\brm\s|\bcd\s|\bbash\s|[|;&]/i;
 
-function howtoVerifyStem(verify?: string): string {
-  if (!verify) return "";
-  const first = verify.trim().toLowerCase().split(/\s+/)[0] ?? "";
-  const cleaned = first.replace(/^['"]+|['"]+$/g, "");
-  return (cleaned.split(/[/\\]/).pop() ?? cleaned).trim();
-}
-
 function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] {
   if (depth > 8 || v == null) return out;
   if (typeof v === "string") {
@@ -779,7 +772,7 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
   }
   if (typeof row.verify === "string" && row.verify.trim()) {
     addHowtoToks(hay, row.verify, true);
-    const stem = howtoVerifyStem(row.verify);
+    const stem = ((v?: string) => { if (!v) return ""; const first = v.trim().toLowerCase().split(/\s+/)[0] ?? ""; const cleaned = first.replace(/^['"]+|['"]+$/g, ""); return (cleaned.split(/[/\\]/).pop() ?? cleaned).trim(); })(row.verify);
     if (stem) hay.add(stem);
   }
   for (const v of howtoSchemaValues(row.steps ?? [])) addHowtoToks(hay, v, true);
@@ -796,7 +789,7 @@ export function howtoAboutness(cue: string, row: { cue?: string; files?: string[
     const base = fl.split(/[/\\]/).pop() ?? "";
     if ((base && (qPlaces.has(base) || qToks.has(base))) || qPlaces.has(fl)) { placeHit = true; break; }
   }
-  const stem = howtoVerifyStem(typeof row.verify === "string" ? row.verify : undefined);
+  const stem = ((v?: string) => { if (!v) return ""; const first = v.trim().toLowerCase().split(/\s+/)[0] ?? ""; const cleaned = first.replace(/^['"]+|['"]+$/g, ""); return (cleaned.split(/[/\\]/).pop() ?? cleaned).trim(); })(typeof row.verify === "string" ? row.verify : undefined);
   const stemHit = !!(stem && (qToks.has(stem) || [...qPlaces].includes(stem)));
   if (placeHit || stemHit) return Math.max(n, 1) + (placeHit ? 10 : 0) + (stemHit ? 5 : 0);
   if (n >= 2) return n;
