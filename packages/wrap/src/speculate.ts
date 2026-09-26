@@ -101,15 +101,10 @@ function pick(
   return null;
 }
 
-function discardSlot(slot: Slot | null): void {
-  if (!slot) return;
-  slot.discarded = true;
-}
-
 export function discardSpeculation(state: WrapState): void {
   try {
     const s = storeOf(state);
-    discardSlot(s.slot);
+    if (s.slot) s.slot.discarded = true;
     s.slot = null;
   } catch {
   }
@@ -142,7 +137,7 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
     if (cur && !cur.discarded && cur.program.id === program.id && eq(cur.input, input)) {
       return { programId: program.id, input, startedAt: cur.startedAt };
     }
-    discardSlot(cur);
+    if (cur) cur.discarded = true;
     const startedAt = performance.now();
     const slot: Slot = {
       program,
@@ -177,7 +172,7 @@ export async function takeSpeculation(
     const slot = s.slot;
     if (!slot || slot.discarded) return { hit: false };
     if (slot.program.id !== program.id || !eq(slot.input, input)) {
-      discardSlot(slot);
+      slot.discarded = true;
       s.slot = null;
       return { hit: false };
     }
