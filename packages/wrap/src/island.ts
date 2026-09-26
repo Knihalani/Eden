@@ -1,5 +1,4 @@
-import type { IslandCaller } from "@eden/ir";
-import { IslandReply, unwrapIsland } from "@eden/ir";
+import { IslandReply, unwrapIsland, type IslandCaller } from "@eden/ir";
 import { withIslandBatch } from "./island-batch";
 import { parseCacheTokens, parseUsage } from "./usage";
 
