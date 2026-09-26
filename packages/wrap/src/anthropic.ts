@@ -196,9 +196,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   try {
     const header = [req.headers.get("x-eden-open-files"), req.headers.get("x-open-files")].filter(Boolean).join(",");
     body = withOpenFileHeaders(body as unknown as Record<string, unknown>, header) as unknown as AnthropicRequest;
-  } catch {
-    /* header parse fail-open */
-  }
+  } catch {}
 
   const live = filterCanary(opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest), opts.state.sessionId);
   const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;

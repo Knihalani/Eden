@@ -118,9 +118,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   try {
     const header = [req.headers.get("x-eden-open-files"), req.headers.get("x-open-files")].filter(Boolean).join(",");
     body = withOpenFileHeaders(body, header);
-  } catch {
-    /* header parse fail-open: inject the parsed JSON as-is */
-  }
+  } catch {}
   let liveProgs: StretchProgram[] = [];
   try { liveProgs = opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest); } catch {}
   const live = filterCanary(liveProgs, opts.state.sessionId);
