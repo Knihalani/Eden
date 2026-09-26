@@ -7,6 +7,7 @@ import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 import { withKnowFactsAnthropic } from "./know-inject";
 import { stripUpstreamPlaceFields, withOpenFileHeaders } from "./tool-observe";
+import { corsOrigin } from "./proxy";
 
 export interface AnthropicProxyOpts {
   state: WrapState;
@@ -183,7 +184,7 @@ export function anthropicMessageToSse(msg: AnthropicMessage): string {
 }
 
 export async function handleAnthropicMessages(req: Request, opts: AnthropicProxyOpts): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsHeaders(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization, anthropic-version, x-api-key", "access-control-max-age": "86400" } });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization, anthropic-version, x-api-key", "access-control-max-age": "86400" } });
   let body: AnthropicRequest;
   try {
     body = (await req.json()) as AnthropicRequest;
@@ -257,7 +258,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   if (!upstreamRes.ok) {
     return new Response(text, {
       status: upstreamRes.status,
-      headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json", ...corsHeaders(req) },
+      headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json", ...corsOrigin(req) },
     });
   }
   let msg: AnthropicMessage;
@@ -266,7 +267,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   } catch {
     return new Response(text, {
       status: upstreamRes.status,
-      headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json", ...corsHeaders(req) },
+      headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json", ...corsOrigin(req) },
     });
   }
 
@@ -299,17 +300,9 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
       headers: {
         "content-type": "text/event-stream; charset=utf-8",
         "cache-control": "no-cache",
-        ...corsHeaders(req),
+        ...corsOrigin(req),
       },
     });
   }
-  return Response.json(msg, { status: upstreamRes.status, headers: corsHeaders(req) });
-}
-
-function corsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("origin") || "";
-  if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin)) {
-    return { "access-control-allow-origin": origin, vary: "origin", "access-control-expose-headers": "content-type" };
-  }
-  return {};
+  return Response.json(msg, { status: upstreamRes.status, headers: corsOrigin(req) });
 }
