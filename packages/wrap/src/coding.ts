@@ -8,15 +8,6 @@ import { DeoptError } from "@eden/runtime";
 
 const NETWORK_BINARIES = new Set(["curl", "wget", "nc", "ncat", "netcat", "ssh", "scp", "ftp"]);
 
-function networkAllow(): Set<string> {
-  return new Set(
-    (process.env.EDEN_NET_ALLOW ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
-}
-
 function bashJail(cwd: string, cmd: string): void {
   if (/[`$]|\$\(|\$\{/.test(cmd)) throw new Error("path outside workspace");
   if (/[<>]\(/.test(cmd)) throw new Error("path outside workspace");
@@ -37,7 +28,7 @@ function bashJail(cwd: string, cmd: string): void {
     if (token.startsWith("~")) throw new Error("path outside workspace");
     confined(cwd, path);
   }
-  const allow = networkAllow();
+  const allow = new Set((process.env.EDEN_NET_ALLOW ?? "").split(",").map((s) => s.trim()).filter(Boolean));
   const segments = cmd.split(/\||&&/);
   for (let s = 1; s < segments.length; s++) {
     const words = segments[s]!.trim().split(/\s+/);
