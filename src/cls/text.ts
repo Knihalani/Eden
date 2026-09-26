@@ -96,11 +96,6 @@ export function shiftMonths(st: { y: number; m: number; d: number }, months: num
   return { y: Math.floor(total / 12), m: ((total % 12) + 12) % 12, d: st.d };
 }
 
-export function stampToks(st: Stamp): string[] {
-  if (!st) return [];
-  return [`t:y${st.y}`, `t:m${st.m}`, `t:${st.y}-${st.m}`, `t:d${st.d}`];
-}
-
 export function textTimeToks(s: string): string[] {
   const out: string[] = [];
   const low = s.toLowerCase();
