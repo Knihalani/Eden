@@ -37,10 +37,6 @@ interface AnthropicRequest {
 
 const VOLATILE_TEXT = /(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})|(?:available skills)|(?:skill(?:s)?\s+(?:list|index|listing))/i;
 
-export function isVolatilePrefixText(text: string): boolean {
-  return VOLATILE_TEXT.test(text);
-}
-
 type SystemBlock = { type: string; text?: string; cache_control?: { type: "ephemeral" } };
 
 export function applyCacheGuard(body: { system?: string | SystemBlock[] }): void {
@@ -50,7 +46,7 @@ export function applyCacheGuard(body: { system?: string | SystemBlock[] }): void
   for (const b of body.system) {
     const copy = { ...b };
     delete copy.cache_control;
-    if (isVolatilePrefixText(copy.text ?? "")) volatile.push(copy);
+    if (VOLATILE_TEXT.test(copy.text ?? "")) volatile.push(copy);
     else stable.push(copy);
   }
   if (!volatile.length || !stable.length) return;
@@ -67,7 +63,7 @@ export function applyCacheBreakpoints(body: AnthropicRequest): void {
   if (typeof body.system === "string") {
     body.system = [{ type: "text", text: body.system, cache_control: { type: "ephemeral" } }];
   } else if (Array.isArray(body.system) && body.system.length > 0) {
-    const found = body.system.findLastIndex((b) => !isVolatilePrefixText(b.text ?? ""));
+    const found = body.system.findLastIndex((b) => !VOLATILE_TEXT.test(b.text ?? ""));
     const last = body.system[found >= 0 ? found : body.system.length - 1]!;
     last.cache_control = { type: "ephemeral" };
   }
