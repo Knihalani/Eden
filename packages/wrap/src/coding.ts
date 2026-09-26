@@ -2,8 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import type { ToolRegistry, ToolRunCtx } from "@eden/ir";
-import { PTC_CALLERS } from "@eden/ir";
+import { PTC_CALLERS, type ToolRegistry, type ToolRunCtx } from "@eden/ir";
 import { DeoptError } from "@eden/runtime";
 
 const NETWORK_BINARIES = new Set(["curl", "wget", "nc", "ncat", "netcat", "ssh", "scp", "ftp"]);
