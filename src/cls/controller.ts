@@ -24,14 +24,12 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
     const texts = pool.map((h) => h.text);
     const n = texts.length;
     const epiRaw = new Float64Array(n);
-    if (n && q.trim()) {
-      try {
-        const epi = new EpisodicStore();
-        epi.ingest(texts.map((text) => ({ text: String(text ?? ""), speaker: "nar", session: 0 })));
-        const scored = epi.score(epi.cueFor(q));
-        for (let i = 0; i < n; i++) epiRaw[i] = scored[i] || 0;
-      } catch {}
-    }
+    try {
+      const epi = new EpisodicStore();
+      epi.ingest(texts.map((text) => ({ text: String(text ?? ""), speaker: "nar", session: 0 })));
+      const scored = epi.score(epi.cueFor(q));
+      for (let i = 0; i < n; i++) epiRaw[i] = scored[i] || 0;
+    } catch {}
     const rareHits = pool.map((h) => rareTermHits(h.text, rare));
     const fused = new Float64Array(pool.length);
     for (let i = 0; i < pool.length; i++) {
