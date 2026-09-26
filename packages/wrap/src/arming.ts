@@ -187,13 +187,7 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
       return sessions.get(session)?.byKey.get(key);
     },
     scan(session, name, args, now) {
-      const b = sweepSession(session, now);
-      if (!b) return [];
-      const out: Array<[string, Armed]> = [];
-      for (const pair of newest(b)) {
-        if (mightClaim(pair[1], name, args)) out.push(pair);
-      }
-      return out;
+      return this.all(session, now).filter(([, armed]) => mightClaim(armed, name, args));
     },
     scanFleet(fleetId, name, args, now) {
       if (!fleetId) return [];
