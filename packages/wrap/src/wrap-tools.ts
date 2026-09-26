@@ -834,18 +834,12 @@ export function wrapTools<T extends ToolsIn>(
             armed.armedAtCall = calls;
             const compiled = [...state.receipts].reverse().find((r) => r.toolId === hit.p.id && r.ok);
             if (compiled) armedReceipts.set(armed, compiled);
-            try {
-              armed.closed = true;
-              armed.resolveSettled(true);
-            } catch {}
+            try { armed.closed = true; armed.resolveSettled(true); } catch {}
             if (!armed.rest.size) emit(hit.input, owner);
             return value;
           } catch (err) {
             armed.headErr = err;
-            try {
-              armed.closed = true;
-              armed.resolveSettled(false);
-            } catch {}
+            try { armed.closed = true; armed.resolveSettled(false); } catch {}
             if (state.opts.failOpen === false) throw err;
             void pullLive(state);
             const touched = isDeopt(err) && !isReplaySafe(err);
@@ -977,18 +971,12 @@ export function wrapTools<T extends ToolsIn>(
                 const value = await runCompiled(state, guard.program, steeredIn, tools, registry);
                 armed.armedAt = performance.now();
                 armed.armedAtCall = calls;
-                try {
-                  armed.closed = true;
-                  armed.resolveSettled(true);
-                } catch {}
+                try { armed.closed = true; armed.resolveSettled(true); } catch {}
                 if (!armed.rest.size) emit(steeredIn, owner);
                 return value;
               } catch (err) {
                 armed.headErr = err;
-                try {
-                  armed.closed = true;
-                  armed.resolveSettled(false);
-                } catch {}
+                try { armed.closed = true; armed.resolveSettled(false); } catch {}
                 emit(run.events[0]?.args, owner);
                 const touched = isDeopt(err) && !isReplaySafe(err);
                 if (!((guard.program.sequence ?? []).every((n) => isReadName(n)) && !touched)) {
