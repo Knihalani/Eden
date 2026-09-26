@@ -107,23 +107,6 @@ export function argsFromMessages(program: StretchProgram, messages: unknown): Re
   return extractInput(program, raw);
 }
 
-function compiledAnswer(facts: unknown): Response {
-  return Response.json({
-    id: "eden-compiled",
-    object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
-    model: "eden",
-    choices: [
-      {
-        index: 0,
-        message: { role: "assistant", content: typeof facts === "string" ? facts : JSON.stringify(facts) },
-        finish_reason: "stop",
-      },
-    ],
-    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-  });
-}
-
 export async function handleChatCompletions(req: Request, opts: ProxyOpts): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" } });
   let body: Record<string, unknown>;
@@ -162,7 +145,22 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     if (hit && opts.play) {
       try {
         const facts = await opts.play(hit.name, argsFromMessages(hit, body.messages));
-        if (facts !== undefined && facts !== null) return compiledAnswer(facts);
+        if (facts !== undefined && facts !== null) {
+          return Response.json({
+            id: "eden-compiled",
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1000),
+            model: "eden",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: typeof facts === "string" ? facts : JSON.stringify(facts) },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          });
+        }
       } catch {
       }
     }
