@@ -89,30 +89,7 @@ type AnthropicMessage = {
   usage?: { input_tokens?: number; output_tokens?: number };
 };
 
-function anthropicToolDef(program: StretchProgram) {
-  const openai = compiledSchema(program);
-  const fn = "function" in openai ? openai.function : undefined;
-  return {
-    name: fn?.name ?? program.name,
-    description: fn?.description ?? "",
-    input_schema: fn?.parameters ?? program.inputSchema,
-    allowed_callers: openai.allowed_callers,
-    defer_loading: openai.defer_loading,
-  };
-}
-
-function injectAnthropicTools(
-  existing: AnthropicRequest["tools"],
-  programs: StretchProgram[],
-): AnthropicRequest["tools"] {
-  const live = programs.filter((p) => p.manifest);
-  if (!live.length) return existing;
-  const extra = live.map(anthropicToolDef);
-  const names = new Set(extra.map((t) => t.name));
-  return [...extra, ...(existing ?? []).filter((t) => !names.has(t.name))];
-}
-
-export function steerAnthropicToolUses(
+function steerAnthropicToolUses
   content: AnthropicContentBlock[],
   programs: StretchProgram[],
 ): AnthropicContentBlock[] {
@@ -240,7 +217,25 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   const live = filterCanary(opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest), opts.state.sessionId);
   const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   const shouldSteer = steerable && live.length > 0 && Array.isArray(body.tools);
-  if (shouldSteer) body.tools = injectAnthropicTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit));
+  if (shouldSteer) {
+    const extra = selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit)
+      .filter((p) => p.manifest)
+      .map((program) => {
+        const openai = compiledSchema(program);
+        const fn = "function" in openai ? openai.function : undefined;
+        return {
+          name: fn?.name ?? program.name,
+          description: fn?.description ?? "",
+          input_schema: fn?.parameters ?? program.inputSchema,
+          allowed_callers: openai.allowed_callers,
+          defer_loading: openai.defer_loading,
+        };
+      });
+    if (extra.length) {
+      const names = new Set(extra.map((t) => t.name));
+      body.tools = [...extra, ...(body.tools ?? []).filter((t) => !names.has(t.name))];
+    }
+  }
 
   const wantsStream = Boolean(body.stream);
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
