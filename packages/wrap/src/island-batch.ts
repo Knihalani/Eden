@@ -246,7 +246,9 @@ async function pollUntilComplete(
 }
 
 function parseBatchResult(json: unknown, customId: string): IslandReply | undefined {
-  const row = findResultRow(json, customId);
+  if (!json || typeof json !== "object") return undefined;
+  const rows = collectResultRows(json as Record<string, unknown>);
+  const row = rows.find((r) => String(r.custom_id ?? "") === customId) ?? (rows.length === 1 && customId === "0" ? rows[0] : undefined);
   if (!row) return undefined;
   const text = resultText(row);
   if (text == null) return undefined;
@@ -273,17 +275,6 @@ function parseBatchResult(json: unknown, customId: string): IslandReply | undefi
       : {}),
   };
   return new IslandReply(parsed, usage);
-}
-
-function findResultRow(json: unknown, customId: string): Record<string, unknown> | undefined {
-  if (!json || typeof json !== "object") return undefined;
-  const obj = json as Record<string, unknown>;
-  const rows = collectResultRows(obj);
-  for (const row of rows) {
-    if (String(row.custom_id ?? "") === customId) return row;
-  }
-  if (rows.length === 1 && customId === "0") return rows[0];
-  return undefined;
 }
 
 function collectResultRows(obj: Record<string, unknown>): Array<Record<string, unknown>> {
