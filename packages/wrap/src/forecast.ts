@@ -4,12 +4,8 @@ import type { RunRecorder } from "./types";
 
 export {
   forecastCopy,
-  forecastHalt,
   remainingBudget,
-  spend,
-  type ForecastOverflow,
   type ForecastSpend,
-  type ForecastView,
 } from "@eden/measure";
 
 export function actualSpend(run: RunRecorder, now: number): ForecastSpend {
