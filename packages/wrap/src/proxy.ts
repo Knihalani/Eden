@@ -4,7 +4,7 @@ import { noteJitUsed, selectForRequest } from "./intent";
 import { recordCompletion, tapSseUsage, withStreamUsage } from "./usage";
 import { filterCanary } from "./canary";
 import { killAfterWarningEnabled } from "./guard";
-import type { WrapState } from "./wrap-tools";
+import { safely, type WrapState } from "./wrap-tools";
 import { processMemory } from "../../../src/index";
 import { injectBodyThenObserveTools, stripUpstreamPlaceFields, withOpenFileHeaders } from "./tool-observe";
 
@@ -278,14 +278,6 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json" },
     }),
   );
-}
-
-function safely<T>(fn: () => T, fallback: T): T {
-  try {
-    return fn();
-  } catch {
-    return fallback;
-  }
 }
 
 export function health(): Response {
