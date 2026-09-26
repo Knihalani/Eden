@@ -45,7 +45,7 @@ import {
   takeSpeculation,
   turnBoundary,
 } from "./speculate";
-import { bindWarmRunner, claimWarm, watchWarm, withWarmLookup } from "./warm";
+import { bindWarmRunner, claimWarm, watchWarm, takeWarm } from "./warm";
 
 const MAX_TRACES = 2000;
 const PULL_EVERY = 24;
@@ -364,7 +364,16 @@ export async function runCompiled(
       registry ??
       registryFrom(Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, asToolDef(k, v).execute])));
     const result = await runProgram(program, input, {
-      registry: withWarmLookup(state, program, input, baseReg),
+      registry: {
+        ...(baseReg.has ? { has: (name: string) => baseReg.has!(name) } : {}),
+        execute: async (name, args, ctx) => {
+          try {
+            const taken = await takeWarm(state, program, input, name, args);
+            if (taken.hit) return taken.value;
+          } catch {}
+          return baseReg.execute(name, args, ctx);
+        },
+      },
       island,
       llmCents: state.opts.llmCents ?? 1,
       checkEnvelope: false,

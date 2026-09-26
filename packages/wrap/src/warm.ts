@@ -1,4 +1,4 @@
-import type { Binding, StretchProgram, ToolRegistry } from "@eden/ir";
+import type { Binding, StretchProgram } from "@eden/ir";
 import { eq, isMutating, isReadName, isBarrierName, mayServe } from "@eden/ir";
 import { evalArgs } from "@eden/runtime";
 import { isProgramReadOnly } from "./fleet";
@@ -264,24 +264,6 @@ export async function takeWarm(
   } catch {
     return { hit: false };
   }
-}
-
-export function withWarmLookup(
-  state: WrapState,
-  program: StretchProgram,
-  input: Record<string, unknown>,
-  registry: ToolRegistry,
-): ToolRegistry {
-  return {
-    ...(registry.has ? { has: (name: string) => registry.has!(name) } : {}),
-    execute: async (name, args, ctx) => {
-      try {
-        const taken = await takeWarm(state, program, input, name, args);
-        if (taken.hit) return taken.value;
-      } catch {}
-      return registry.execute(name, args, ctx);
-    },
-  };
 }
 
 export function watchWarm(
