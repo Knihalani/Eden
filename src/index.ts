@@ -128,10 +128,6 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
-function tokList(s: string): string[] {
-  return s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [];
-}
-
 const NEAR_DUP_J = 0.8;
 
 function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
@@ -156,7 +152,7 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
       const bagAll = new Set<string>();
       const bagContent = new Set<string>();
       try {
-        for (const w of tokList(String(cand.rec.text ?? ""))) {
+        for (const w of (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(String(cand.rec.text ?? ""))) {
           if (!w) continue;
           bagAll.add(w);
           if (!STOP.has(w)) bagContent.add(w);
@@ -195,7 +191,7 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
 }
 
 export function queryHay(text: string): Set<string> {
-  return new Set(tokList(text));
+  return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
 }
 
 const TOOL_ROLES = new Set(["tool", "function"]);
@@ -445,7 +441,7 @@ export function encodeLane(text: string): MemoryLaneKind {
     if (!((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(t)) {
       if (t.length > 400) return "narrative";
       if (t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8).length >= 2 && t.length >= 150) {
-        const toks = tokList(t);
+        const toks = (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(t);
         if (toks.length >= 4) {
           let fw = 0;
           for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return "narrative";
@@ -492,8 +488,8 @@ function extractDurable(blob: string): string[] {
     const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1]!.trim();
     t = t.replace(/^[.\s]+|[.\s]+$/g, "");
     if (SPEAKER_LABEL.test(t)) {
-      const sp = new Set(tokList((t.match(SPEAKER_LABEL)?.[1] || "").replace(/:$/, "")));
-      if (!tokList(t).some((w) => !sp.has(w) && (w.length >= 5 || /^\d/.test(w)) && !STOP.has(w))) continue;
+      const sp = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])((t.match(SPEAKER_LABEL)?.[1] || "").replace(/:$/, "")));
+      if (!(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(t).some((w) => !sp.has(w) && (w.length >= 5 || /^\d/.test(w)) && !STOP.has(w))) continue;
     }
     if (t.length >= 8 && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.push(t); }
   }
@@ -517,7 +513,7 @@ export function pathCues(lower: string): Set<string> {
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
 const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
 
-const jaccardText = (a: string, b: string): number => { const A = new Set(tokList(a)), B = new Set(tokList(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
+const jaccardText = (a: string, b: string): number => { const A = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(a)), B = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
 export const MEMORY_WAL_SUFFIX = ".wal";
 export const MEMORY_WAL_COMPACT_LINES = 32;
@@ -536,7 +532,7 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
       const rec = JSON.parse(t) as MemoryRecord;
       if (rec?.id && rec.text) {
         rec.lane = rec.lane ?? "chat";
-        const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec);
+        const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec);
         const at = idx.get(rec.id);
         if (overlay && at != null) out[at] = c;
         else {
@@ -687,7 +683,7 @@ function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] 
 }
 
 function addHowtoToks(out: Set<string>, text: string, dropStops: boolean) {
-  for (const t of tokList(text)) {
+  for (const t of (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text)) {
     if (dropStops && (t.length < 2 || STOP.has(t))) continue;
     out.add(t);
   }
@@ -1081,7 +1077,7 @@ export class AgentMemory {
       if (!rec.tags.includes("pin")) rec.tags.push("pin");
     }
     if (sal > 0) rec.sal = sal;
-    const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
+    const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     this.compiled.push(c);
     this.walDirtyIds.add(rec.id);
@@ -1128,7 +1124,7 @@ export class AgentMemory {
           try { text = omitConflictingIdentity(text, (this.sem ??= new SemanticStore(this.dir))); } catch {}
         }
         if (text && !this.seenLower.has(text.toLowerCase())) {
-          const tags = tokList(text).concat([lane]);
+          const tags = (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text).concat([lane]);
           try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
           const rec = this.remember(text, {
             kind: lane === "narrative" ? "episode" : "fact",
@@ -1200,7 +1196,7 @@ export class AgentMemory {
           }
         }
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(safe) || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(it.text);
-        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: tokList(text).concat(extraTags), sal: pin ? Math.max(0.6, ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, ""))) : ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")), pin }));
+        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text).concat(extraTags), sal: pin ? Math.max(0.6, ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, ""))) : ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")), pin }));
       }
     }
     if (items.length) {
@@ -1552,7 +1548,7 @@ export class AgentMemory {
       dirty = true;
       this.walDirtyIds.add(c.rec.id);
       this.needCompact = true;
-      return ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...tokList(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))({ ...c.rec, text: next });
+      return ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))({ ...c.rec, text: next });
     });
     if (dirty) this.flush(true);
   }
