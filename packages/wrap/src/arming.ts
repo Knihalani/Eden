@@ -138,10 +138,6 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
     return sessions.get(session);
   };
 
-  const sweepAllExpired = (now: number): void => {
-    for (const session of [...sessions.keys()]) sweepSession(session, now);
-  };
-
   const newest = (b: Bucket): Array<[string, Armed]> => {
     const out: Array<[string, Armed]> = [];
     for (let i = b.recency.length - 1; i >= 0; i--) {
@@ -177,7 +173,7 @@ export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: n
         return false;
       }
       if (global >= globalMax) {
-        sweepAllExpired(now);
+        for (const session of [...sessions.keys()]) sweepSession(session, now);
         b = sessions.get(session) ?? bucket(session);
         if (global >= globalMax || b.byKey.size >= perSessionMax) {
           rejects++;
