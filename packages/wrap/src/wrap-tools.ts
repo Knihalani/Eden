@@ -870,6 +870,7 @@ export function wrapTools<T extends ToolsIn>(
             armed.fleetId === fleetId &&
             (armed.served?.has(name) === true);
           if (!remaining && !fleetServed) continue;
+          const decRest = () => { const left = armed.rest.get(name)!; if (left > 1) armed.rest.set(name, left - 1); else armed.rest.delete(name); };
           const ok = await Promise.race([armed.settled, new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs)))]);
           if (ok) {
             if (isReadName(name) && staleRead(state, args, armed)) continue;
@@ -887,11 +888,7 @@ export function wrapTools<T extends ToolsIn>(
               skipArmed = armed;
               break;
             }
-            safely(() => {
-              const left = armed.rest.get(name)!;
-              if (left > 1) armed.rest.set(name, left - 1);
-              else armed.rest.delete(name);
-            }, undefined);
+            safely(() => { decRest(); }, undefined);
             skipAsShared(armed, name, selfId);
             if (!armed.rest.size) {
               if (!(armed.readOnly && armed.fleetId)) store.delete(armSession, id);
@@ -908,12 +905,7 @@ export function wrapTools<T extends ToolsIn>(
               : null;
           }, null);
           if (doneByCompiled === true) {
-            safely(() => {
-              const left = armed.rest.get(name)!;
-              if (left > 1) armed.rest.set(name, left - 1);
-              else armed.rest.delete(name);
-              if (!armed.rest.size) store.delete(armSession, id);
-            }, undefined);
+            safely(() => { decRest(); if (!armed.rest.size) store.delete(armSession, id); }, undefined);
             steeredSkip = true;
             break;
           }
