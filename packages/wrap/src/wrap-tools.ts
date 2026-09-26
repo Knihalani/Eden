@@ -132,17 +132,8 @@ export function createState(opts: EdenOpts = {}): WrapState {
   };
 }
 
-function outboxOf(state: WrapState): OutboxJob[] {
-  let q = outboxes.get(state);
-  if (!q) {
-    q = [];
-    outboxes.set(state, q);
-  }
-  return q;
-}
-
 export function pendingPosts(state: WrapState): number {
-  return outboxOf(state).length;
+  return ((s, q = outboxes.get(s) ?? []) => (outboxes.set(s, q), q))(state).length;
 }
 
 async function sendPost(state: WrapState, path: string, body: unknown): Promise<boolean> {
@@ -174,7 +165,7 @@ function scheduleFlush(state: WrapState, delayMs: number): void {
 }
 
 export async function flushOutbox(state: WrapState): Promise<void> {
-  const q = outboxOf(state);
+  const q = ((s, q = outboxes.get(s) ?? []) => (outboxes.set(s, q), q))(state);
   const job = q.shift();
   if (!job) return;
   const ok = await sendPost(state, job.path, job.body);
@@ -194,7 +185,7 @@ function post(state: WrapState, path: string, body: unknown): void {
   if (!base || !key) return;
   void sendPost(state, path, body).then((ok) => {
     if (ok) return;
-    const q = outboxOf(state);
+    const q = ((s, q = outboxes.get(s) ?? []) => (outboxes.set(s, q), q))(state);
     if (q.length >= MAX_OUTBOX) {
       state.droppedPosts++;
       return;
