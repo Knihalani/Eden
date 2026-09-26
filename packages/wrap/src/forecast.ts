@@ -1,6 +1,6 @@
 import type { StretchProgram } from "@eden/ir";
-import { remainingBudget, spend, type ForecastSpend, type ForecastView } from "@eden/measure";
-import type { EdenOpts, RunRecorder } from "./types";
+import { remainingBudget, spend, type ForecastSpend } from "@eden/measure";
+import type { RunRecorder } from "./types";
 
 export {
   forecastCopy,
@@ -43,19 +43,3 @@ export function matchingRunPrograms(
 }
 
 export const inFlightProgram = (live: StretchProgram[], events: { name: string; skipped?: boolean }[]): StretchProgram | undefined => matchingRunPrograms(live, events)[0];
-
-export function remainingBudgetForRun(args: {
-  program: StretchProgram;
-  run: RunRecorder;
-  now: number;
-  opts: Pick<EdenOpts, "timeoutMs">;
-}): ForecastView | null {
-  if (!args.program.budget) return null;
-  const cap = ((o) => { const e = o?.timeoutMs; const env = Number(process.env.EDEN_TIMEOUT_MS); return Math.min(300_000, Math.max(1, e && e > 0 ? e : Number.isFinite(env) && env > 0 ? env : 60_000)); })(args.opts);
-  const elapsed = args.now - args.run.t0;
-  return remainingBudget({
-    predicted: args.program.budget,
-    actual: actualSpend(args.run, args.now),
-    remainingTimeoutMs: cap - elapsed,
-  });
-}
