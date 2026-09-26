@@ -8,10 +8,6 @@ export const MONTHS = ["january", "february", "march", "april", "may", "june", "
 const MONTH_IDX = new Map<string, number>(MONTHS.flatMap((m, i) => [[m, i], [m.slice(0, 3), i]] as [string, number][]));
 MONTH_IDX.set("sept", 8);
 
-export function words(s: string): string[] {
-  return String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:[.'\-][a-z0-9]+)*/g) ?? [];
-}
-
 export function stem(w0: string): string {
   let w = String(w0 ?? "");
   if (w.length < 4 || /\d/.test(w)) return w;
@@ -33,7 +29,7 @@ const CONTRACT: Record<string, string> = { "i'm": "i", "i've": "i", "i'd": "i", 
 
 export function contentToks(s: string): string[] {
   const out: string[] = [];
-  for (const w0 of words(s)) {
+  for (const w0 of (String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:[.'\-][a-z0-9]+)*/g) ?? [])) {
     const w = String(CONTRACT[w0] ?? w0);
     if (STOP.has(w)) continue;
     const base = w.replace(/'s$/, "");
