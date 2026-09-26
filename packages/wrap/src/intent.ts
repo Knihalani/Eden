@@ -83,13 +83,6 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
   return parts.join("\n").slice(0, 16_000);
 }
 
-function programTokens(p: StretchProgram): Set<string> {
-  const out = new Set<string>();
-  for (const t of informativeTokens(p.name || "")) out.add(t);
-  for (const n of p.sequence ?? []) for (const t of informativeTokens(n)) out.add(t);
-  return out;
-}
-
 const DENSE_EXTRACT =
   /[^\s]+@[^\s]+|s3:\/\/[^\s]+|arn:aws:[^\s]+|gid:\/\/[^\s]+|\+[1-9]\d{6,14}|[A-Za-z0-9_.:/-]{4,}/g;
 
@@ -211,7 +204,10 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
     }
     let hits = 0;
     const lower = text.toLowerCase();
-    for (const t of programTokens(p)) {
+    const toks = new Set<string>();
+    for (const t of informativeTokens(p.name || "")) toks.add(t);
+    for (const n of p.sequence ?? []) for (const t of informativeTokens(n)) toks.add(t);
+    for (const t of toks) {
       if (lower.includes(t)) {
         hits++;
         if (hits >= 2) break;
