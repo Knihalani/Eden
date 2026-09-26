@@ -51,7 +51,16 @@ export class SemanticStore {
       let bestShared = 0;
       for (const a of f.anchors) {
         for (const old of this.byAnchor.get(a) ?? []) {
-          const shared = conflictShared(old, f);
+          let shared = 0;
+          if (old.ep !== f.ep && old.supersededBy === undefined && old.vclass === f.vclass && old.values.length && !old.values.some((v) => f.values.includes(v))) {
+            let entity = 0;
+            for (const x of old.anchors) {
+              if (!f.anchors.has(x)) continue;
+              shared++;
+              if (x.startsWith("#")) entity++;
+            }
+            if (!(f.changeSignal && shared >= 1) && !(entity >= 1 && shared >= 2) && shared < 3) shared = 0;
+          }
           if (shared <= 0) continue;
           if (!best || shared > bestShared) {
             best = old;
@@ -139,21 +148,4 @@ export class SemanticStore {
     }
     return out;
   }
-}
-
-function conflictShared(old: Fact, f: Fact): number {
-  if (old.ep === f.ep || old.supersededBy !== undefined) return 0;
-  if (old.vclass !== f.vclass || !old.values.length) return 0;
-  if (old.values.some((v) => f.values.includes(v))) return 0;
-  let shared = 0;
-  let entity = 0;
-  for (const x of old.anchors) {
-    if (!f.anchors.has(x)) continue;
-    shared++;
-    if (x.startsWith("#")) entity++;
-  }
-  if (f.changeSignal && shared >= 1) return shared;
-  if (entity >= 1 && shared >= 2) return shared;
-  if (shared >= 3) return shared;
-  return 0;
 }
