@@ -11,9 +11,7 @@ export type WarmHint = {
 
 export type WarmHandle = {
   programId: string;
-  input: Record<string, unknown>;
   tools: string[];
-  startedAt: number;
 };
 
 export type WarmTake = { hit: true; value: unknown } | { hit: false };
@@ -196,9 +194,8 @@ export function watchWarm(
     const wave = firstWaveReads(program, input);
     if (!wave.length) return null;
     if (wave.every((w) => s.entries.findLast((e) => !e.discarded && e.programId === program.id && e.tool === w.tool && eq(e.args, w.args)))) {
-      return { programId: program.id, input, tools: wave.map((w) => w.tool), startedAt: performance.now() };
+      return { programId: program.id, tools: wave.map((w) => w.tool) };
     }
-    const startedAt = performance.now();
     const tools: string[] = [];
     for (const w of wave) {
       if (isMutating(w.tool) || !isReadName(w.tool) || isBarrierName(w.tool)) {
@@ -226,7 +223,7 @@ export function watchWarm(
     }
     if (s.entries.length > MAX_ENTRIES) s.entries.splice(0, s.entries.length - MAX_ENTRIES / 2);
     if (!tools.length) return null;
-    return { programId: program.id, input, tools, startedAt };
+    return { programId: program.id, tools };
   } catch {
     return null;
   }
