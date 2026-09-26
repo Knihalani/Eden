@@ -1,5 +1,4 @@
-import type { StretchProgram } from "@eden/ir";
-import { redact } from "@eden/ir";
+import { redact, type StretchProgram } from "@eden/ir";
 import { compiledSchema, steerToolCalls } from "./steer";
 import { noteJitUsed, selectForRequest } from "./intent";
 import { filterCanary } from "./canary";
