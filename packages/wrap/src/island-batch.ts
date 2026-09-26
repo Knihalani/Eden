@@ -190,20 +190,7 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
         try {
           pollJson = JSON.parse(trimmed) as unknown;
         } catch {
-          pollJson = {
-            results: trimmed
-              .split("\n")
-              .map((line) => line.trim())
-              .filter(Boolean)
-              .map((line) => {
-                try {
-                  return JSON.parse(line) as unknown;
-                } catch {
-                  return undefined;
-                }
-              })
-              .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object"),
-          };
+          pollJson = { results: trimmed };
         }
       }
       const ready = ((rows) => (rows.every((row) => row) ? (rows as IslandReply[]) : undefined))(reqs.map((_, i) => parseBatchResult(pollJson, String(i))));
