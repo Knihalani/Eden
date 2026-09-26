@@ -1,6 +1,6 @@
 import type { StretchProgram } from "@eden/ir";
-import { eq, isMutating, isReadName, mayServe } from "@eden/ir";
-import { isProgramReadOnly } from "./fleet";
+import { eq, mayServe } from "@eden/ir";
+import { isSafeToWarm } from "./fleet";
 import { extractInput } from "./steer";
 import type { WrapState } from "./wrap-tools";
 
@@ -64,18 +64,6 @@ export function bindSpeculateRunner(state: WrapState, runner: SpeculateRunner): 
   }
 }
 
-function isSafeToSpeculate(program: StretchProgram): boolean {
-  if (!isProgramReadOnly(program)) return false;
-  const seq = program.sequence ?? [];
-  if (!seq.length) return false;
-  if (!seq.every((n) => isReadName(n) && !isMutating(n))) return false;
-  for (const step of program.steps ?? []) {
-    if (step.kind === "island") return false;
-    if (step.kind === "tool" && (isMutating(step.tool) || !isReadName(step.tool))) return false;
-  }
-  return true;
-}
-
 export function discardSpeculation(state: WrapState): void {
   try {
     const s = storeOf(state);
@@ -113,11 +101,11 @@ export function turnBoundary(state: WrapState, hint: SpeculateHint = {}): Specul
           : hint.program;
     const candidates = named
       ? [named]
-      : live.filter((p) => isSafeToSpeculate(p)).sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
+      : live.filter((p) => isSafeToWarm(p)).sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
     let program: StretchProgram | undefined;
     let input: Record<string, unknown> | undefined;
     for (const cand of candidates) {
-      if (!isSafeToSpeculate(cand)) continue;
+      if (!isSafeToWarm(cand)) continue;
       if (!named && hint.lastTool && (cand.sequence ?? []).includes(hint.lastTool)) continue;
       const next = raw ? extractInput(cand, raw) : {};
       if (!Object.keys(next).length) continue;

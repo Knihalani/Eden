@@ -1,7 +1,7 @@
 import type { Binding, StretchProgram } from "@eden/ir";
 import { eq, isMutating, isReadName, isBarrierName, mayServe } from "@eden/ir";
 import { evalArgs } from "@eden/runtime";
-import { isProgramReadOnly } from "./fleet";
+import { isProgramReadOnly, isSafeToWarm } from "./fleet";
 import { extractInput } from "./steer";
 import type { WrapState } from "./wrap-tools";
 
@@ -108,18 +108,6 @@ export function firstWaveReads(
     }
   }
   return wave;
-}
-
-function isSafeToWarm(program: StretchProgram): boolean {
-  if (!isProgramReadOnly(program)) return false;
-  const seq = program.sequence ?? [];
-  if (!seq.length) return false;
-  if (!seq.every((n) => isReadName(n) && !isMutating(n))) return false;
-  for (const step of program.steps ?? []) {
-    if (step.kind === "island") return false;
-    if (step.kind === "tool" && (isMutating(step.tool) || !isReadName(step.tool))) return false;
-  }
-  return true;
 }
 
 function findEntry(entries: Entry[], programId: string, tool: string, args: Record<string, unknown>): Entry | undefined {

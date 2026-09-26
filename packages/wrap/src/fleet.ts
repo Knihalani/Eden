@@ -28,3 +28,12 @@ export function isProgramReadOnly(program: StretchProgram): boolean {
   if (!seq.length) return false;
   return seq.every((n) => isReadName(n) && !isMutating(n));
 }
+
+export function isSafeToWarm(program: StretchProgram): boolean {
+  if (!isProgramReadOnly(program)) return false;
+  for (const step of program.steps ?? []) {
+    if (step.kind === "island") return false;
+    if (step.kind === "tool" && (isMutating(step.tool) || !isReadName(step.tool))) return false;
+  }
+  return true;
+}
