@@ -12,9 +12,6 @@ export {
   type ForecastView,
 } from "@eden/measure";
 
-export const FORECAST_TIMEOUT_DEFAULT_MS = 60_000;
-export const FORECAST_TIMEOUT_CAP_MS = 300_000;
-
 export function forecastTimeoutMs(opts: Pick<EdenOpts, "timeoutMs"> | number | undefined): number {
   const explicit = typeof opts === "number" ? opts : opts?.timeoutMs;
   const env = Number(process.env.EDEN_TIMEOUT_MS);
@@ -23,8 +20,8 @@ export function forecastTimeoutMs(opts: Pick<EdenOpts, "timeoutMs"> | number | u
       ? explicit
       : Number.isFinite(env) && env > 0
         ? env
-        : FORECAST_TIMEOUT_DEFAULT_MS;
-  return Math.min(FORECAST_TIMEOUT_CAP_MS, Math.max(1, raw));
+        : 60_000;
+  return Math.min(300_000, Math.max(1, raw));
 }
 
 export function actualSpend(run: RunRecorder, now: number): ForecastSpend {
