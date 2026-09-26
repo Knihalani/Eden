@@ -549,10 +549,6 @@ export function pathCues(lower: string): Set<string> {
 
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
 const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
-function salience(text: string): number {
-  const t = text.replace(SPEAKER_LABEL, "");
-  return SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0;
-}
 
 function compile(rec: MemoryRecord): Compiled {
   const own = new Set([
@@ -1164,7 +1160,7 @@ export class AgentMemory {
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const uttered = `${text ?? ""}\n${rec.text}`;
     const pin = opts.pin === true || isPinUtterance(uttered);
-    let sal = opts.sal ?? salience(rec.text);
+    let sal = opts.sal ?? ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(rec.text.replace(SPEAKER_LABEL, ""));
     if (pin) {
       sal = Math.max(sal, opts.pin === true || /\b(?:always|remember)\b/i.test(uttered) ? 1 : 0.6);
       if (!rec.tags.includes("pin")) rec.tags.push("pin");
@@ -1223,7 +1219,7 @@ export class AgentMemory {
             kind: lane === "narrative" ? "episode" : "fact",
             lane,
             tags,
-            sal: salience(text),
+            sal: ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")),
           });
           out.push(rec);
           if (lane === "narrative") {
@@ -1289,7 +1285,7 @@ export class AgentMemory {
           }
         }
         const pin = isPinUtterance(safe) || isPinUtterance(it.text);
-        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: tokList(text).concat(extraTags), sal: pin ? Math.max(0.6, salience(text)) : salience(text), pin }));
+        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: tokList(text).concat(extraTags), sal: pin ? Math.max(0.6, ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, ""))) : ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")), pin }));
       }
     }
     if (items.length) {
