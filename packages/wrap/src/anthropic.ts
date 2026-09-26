@@ -202,11 +202,10 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
       .filter((p) => p.manifest)
       .map((program) => {
         const openai = compiledSchema(program);
-        const fn = "function" in openai ? openai.function : undefined;
         return {
-          name: fn?.name ?? program.name,
-          description: fn?.description ?? "",
-          input_schema: fn?.parameters ?? program.inputSchema,
+          name: program.name,
+          description: program.description ?? "",
+          input_schema: program.inputSchema,
           allowed_callers: openai.allowed_callers,
           defer_loading: openai.defer_loading,
         };
