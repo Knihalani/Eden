@@ -416,11 +416,10 @@ const EMPTY_LEDGER = Object.freeze({
   failed: Object.freeze([] as string[]),
 });
 
-export function safely<T>(fn: () => T, fallback: T, onErr?: (err: unknown) => void): T {
+export function safely<T>(fn: () => T, fallback: T): T {
   try {
     return fn();
-  } catch (err) {
-    onErr?.(err);
+  } catch {
     return fallback;
   }
 }
