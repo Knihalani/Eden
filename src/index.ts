@@ -23,8 +23,6 @@ import { applyProvenanceLabel, noteKindToken, PACKET_LABEL_RE, stripPacketLabel 
 import { routeMemory, type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
 
-export { isRecsysShot } from "./semantic-store";
-
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
@@ -1593,5 +1591,5 @@ export function processMemory(): AgentMemory {
   }));
 }
 
-export { sleep, consolidate, maybeIncrementalSleep, scheduleIncrementalSleep, flushIncrementalSleep, parseSleepEvery, sleepIdleMs, sleepBudgetMs } from "./sleep";
+export { sleep, consolidate } from "./sleep";
 
