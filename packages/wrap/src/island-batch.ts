@@ -250,7 +250,39 @@ function parseBatchResult(json: unknown, customId: string): IslandReply | undefi
   const rows = collectResultRows(json as Record<string, unknown>);
   const row = rows.find((r) => String(r.custom_id ?? "") === customId) ?? (rows.length === 1 && customId === "0" ? rows[0] : undefined);
   if (!row) return undefined;
-  const text = resultText(row);
+  let text: string | undefined;
+  if (typeof row.content === "string") text = row.content;
+  else {
+    const from = row.result && typeof row.result === "object" ? (row.result as Record<string, unknown>) : row;
+    if (from.type !== "errored" && from.type !== "canceled" && from.type !== "expired") {
+      const message =
+        (from.message && typeof from.message === "object" ? (from.message as Record<string, unknown>) : undefined) ??
+        (from.response && typeof from.response === "object" ? (from.response as Record<string, unknown>) : undefined) ??
+        from;
+      const content = message.content;
+      if (typeof content === "string") text = content;
+      else if (Array.isArray(content)) {
+        const joined = content
+          .map((part) => {
+            if (typeof part === "string") return part;
+            if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") {
+              return (part as { text: string }).text;
+            }
+            return "";
+          })
+          .join("");
+        if (joined) text = joined;
+      }
+      if (text == null) {
+        const choices = message.choices;
+        if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
+          const choice = choices[0] as Record<string, unknown>;
+          const nested = choice.message && typeof choice.message === "object" ? (choice.message as Record<string, unknown>) : choice;
+          if (typeof nested.content === "string") text = nested.content;
+        }
+      }
+    }
+  }
   if (text == null) return undefined;
   let parsed: unknown;
   try {
@@ -297,39 +329,4 @@ function collectResultRows(obj: Record<string, unknown>): Array<Record<string, u
       .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object");
   }
   return [];
-}
-
-function resultText(row: Record<string, unknown>): string | undefined {
-  if (typeof row.content === "string") return row.content;
-  const result = row.result && typeof row.result === "object" ? (row.result as Record<string, unknown>) : row;
-  if (result.type === "errored" || result.type === "canceled" || result.type === "expired") return undefined;
-  const message =
-    (result.message && typeof result.message === "object" ? (result.message as Record<string, unknown>) : undefined) ??
-    (result.response && typeof result.response === "object" ? (result.response as Record<string, unknown>) : undefined) ??
-    result;
-  return messageText(message);
-}
-
-function messageText(message: Record<string, unknown>): string | undefined {
-  const content = message.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    const text = content
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") {
-          return (part as { text: string }).text;
-        }
-        return "";
-      })
-      .join("");
-    if (text) return text;
-  }
-  const choices = message.choices;
-  if (Array.isArray(choices) && choices[0] && typeof choices[0] === "object") {
-    const choice = choices[0] as Record<string, unknown>;
-    const nested = choice.message && typeof choice.message === "object" ? (choice.message as Record<string, unknown>) : choice;
-    if (typeof nested.content === "string") return nested.content;
-  }
-  return undefined;
 }
