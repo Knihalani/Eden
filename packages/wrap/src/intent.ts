@@ -99,18 +99,6 @@ export function envelopeDenseWitnesses(p: StretchProgram): string[] {
   return out;
 }
 
-function commandCandidateLines(text: string): string[] {
-  const out: string[] = [];
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    out.push(trimmed);
-    const cut = trimmed.search(/\s+(and|please|then|tell|for me)\b/i);
-    if (cut > 0) out.push(trimmed.slice(0, cut).trim());
-  }
-  return out;
-}
-
 export function githubBareUrls(text: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -136,9 +124,17 @@ export function githubResourceKey(shape: string): string | null {
 export function rankPrograms(messages: readonly unknown[], programs: StretchProgram[]): RankedMatch[] {
   const text = messageText(messages);
   if (!text) return [];
+  const cmdLines: string[] = [];
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    cmdLines.push(trimmed);
+    const cut = trimmed.search(/\s+(and|please|then|tell|for me)\b/i);
+    if (cut > 0) cmdLines.push(trimmed.slice(0, cut).trim());
+  }
   const msgShapes = new Set<string>();
   try {
-    for (const s of commandCandidateLines(text)) {
+    for (const s of cmdLines) {
       for (const sh of argShapes({ v: s })) msgShapes.add(sh);
     }
     for (const u of githubBareUrls(text)) {
@@ -169,7 +165,7 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
       }
       const tmpl = firstCommandTemplate(p);
       if (!score && tmpl) {
-        for (const line of commandCandidateLines(text)) {
+        for (const line of cmdLines) {
           if (templateFits(tmpl, line)) {
             score += SCORE_TEMPLATE;
             via = "template";
