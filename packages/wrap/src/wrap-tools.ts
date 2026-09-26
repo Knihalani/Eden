@@ -53,18 +53,6 @@ const MAX_OUTBOX = 64;
 const MAX_POST_TRIES = 5;
 const MAX_WARNINGS = 32;
 
-function guardRefuse(guard: { action: string; reason: string; detail?: string }): {
-  eden: "halted" | "blocked";
-  reason: string;
-  detail?: string;
-} {
-  return {
-    eden: guard.action === "block" ? "blocked" : "halted",
-    reason: guard.reason,
-    ...(guard.detail ? { detail: guard.detail } : {}),
-  };
-}
-
 export type WrapState = {
   opts: EdenOpts;
   programs: StretchProgram[];
@@ -900,7 +888,7 @@ export function wrapTools<T extends ToolsIn>(
             );
             if (guard && (guard.action === "halt" || guard.action === "block")) {
               emit(run.events[0]?.args, owner);
-              return guardRefuse(guard);
+              return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason, ...(guard.detail ? { detail: guard.detail } : {}) };
             }
           }
           const sessionArmed = safely(() => {
@@ -1083,7 +1071,7 @@ export function wrapTools<T extends ToolsIn>(
           const guard = safely(() => decideGuard({ name, run, live, opts: state.opts, now }), null);
           if (guard && guard.action !== "steer") {
             emit(run.events[0]?.args, owner);
-            return guardRefuse(guard);
+            return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason, ...(guard.detail ? { detail: guard.detail } : {}) };
           }
           if (guard && guard.action === "steer") {
             const steeredIn = safely(() => extractInput(guard.program, args), null);
