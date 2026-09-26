@@ -223,20 +223,6 @@ function resolveHookSession(raw: Record<string, unknown>): { session?: string; c
   }
 }
 
-function hookMemory(raw: Record<string, unknown> = {}): AgentMemory {
-  const cwd = typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined;
-  const agent = [process.env.EDEN_MEMORY_AGENT, raw.agent].find((x) => typeof x === "string" && x);
-  const resolved = resolveHookSession(raw);
-  return openMemory({
-    dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
-    agent: typeof agent === "string" ? agent : undefined,
-    project: cwd || process.env.EDEN_MEMORY_PROJECT || undefined,
-    session: resolved.session,
-    child: resolved.child,
-    cwd,
-  });
-}
-
 function additional(event: string, text: string): Record<string, unknown> | null {
   return text ? { additional_context: text, hookSpecificOutput: { hookEventName: event, additionalContext: text } } : null;
 }
@@ -284,7 +270,17 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     if (!MEMORY_EVENTS.has(event)) return null;
     const writes = consent === "on";
     if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd")) return null;
-    const mem = hookMemory(r);
+    const cwd = typeof r.cwd === "string" && r.cwd ? r.cwd : undefined;
+    const agent = [process.env.EDEN_MEMORY_AGENT, r.agent].find((x) => typeof x === "string" && x);
+    const resolved = resolveHookSession(r);
+    const mem = openMemory({
+      dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
+      agent: typeof agent === "string" ? agent : undefined,
+      project: cwd || process.env.EDEN_MEMORY_PROJECT || undefined,
+      session: resolved.session,
+      child: resolved.child,
+      cwd,
+    });
     try {
     const sessionRaw0 = r.session_id ?? r.sessionID ?? r.sessionId;
     const session0 = typeof sessionRaw0 === "string" && sessionRaw0 ? sessionRaw0 : undefined;
