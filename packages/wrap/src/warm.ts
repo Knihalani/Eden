@@ -168,7 +168,7 @@ export function watchWarm(
           ? live.find((p) => p.id === hint.program || p.name === hint.program)
           : hint.program;
     const candidates = named
-      ? [named]
+      ? named.id !== current.id && isSafeToWarm(named) ? [named] : []
       : live
           .filter((p) => p.id !== current.id && isSafeToWarm(p))
           .sort((a, b) => {
@@ -180,8 +180,6 @@ export function watchWarm(
     let program: StretchProgram | undefined;
     let input: Record<string, unknown> | undefined;
     for (const cand of candidates) {
-      if (cand.id === current.id) continue;
-      if (!isSafeToWarm(cand)) continue;
       const next = extractInput(cand, currentInput);
       if (!Object.keys(next).length) continue;
       if (!mayServe(cand, next)) continue;
