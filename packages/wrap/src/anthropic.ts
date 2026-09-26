@@ -100,11 +100,6 @@ type AnthropicMessage = {
   usage?: { input_tokens?: number; output_tokens?: number };
 };
 
-function upstreamTimeoutMs(): number {
-  const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
-  return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000;
-}
-
 function anthropicToolDef(program: StretchProgram) {
   const openai = compiledSchema(program);
   const fn = "function" in openai ? openai.function : undefined;
@@ -278,7 +273,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
         "content-type": "application/json",
       },
       body: JSON.stringify(stripUpstreamPlaceFields(body as unknown as Record<string, unknown>)),
-      signal: AbortSignal.timeout(upstreamTimeoutMs()),
+      signal: AbortSignal.timeout((() => { const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS); return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000; })()),
     });
   } catch {
     upstreamRes = undefined;
