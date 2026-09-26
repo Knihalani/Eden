@@ -120,8 +120,3 @@ export function emptyRun(): RunRecorder {
     rawExecuted: 0,
   };
 }
-
-export function asToolDef(name: string, def: ToolsIn[string]): ToolDef {
-  if (typeof def === "function") return { description: name, execute: def };
-  return def;
-}
