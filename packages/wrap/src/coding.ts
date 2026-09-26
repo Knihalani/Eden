@@ -62,15 +62,7 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
       if (name === "Bash" || name === "bash") {
         const cmd = String(args.command ?? "").trim();
         if (!cmd) throw new Error("empty command");
-        if (/[`$]|\$\(|\$\{/.test(cmd)) throw new Error("path outside workspace");
-        if (/[<>]\(/.test(cmd)) throw new Error("path outside workspace");
-        if (/(^|[;&|\n]|&&|\|\|)\s*cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s'"`])\.\.(\/|$)/.test(cmd)) {
-          throw new Error("path outside workspace");
-        }
-        if (/(^|[\s;(])cd\s+['"]?(\.\.|\/|~)/.test(cmd)) {
-          throw new Error("path outside workspace");
-        }
-        if (/(^|[\s;|&'"(])~[A-Za-z0-9_-]/.test(cmd)) {
+        if (/[`$]|\$\(|\$\{/.test(cmd) || /[<>]\(/.test(cmd) || /(^|[;&|\n]|&&|\|\|)\s*cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s'"`])\.\.(\/|$)/.test(cmd) || /(^|[\s;(])cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s;|&'"(])~[A-Za-z0-9_-]/.test(cmd)) {
           throw new Error("path outside workspace");
         }
         for (const m of cmd.matchAll(/(?:^|[\s;|&`'"(=]|(?:\d)?[<>])((?:~\/|~[A-Za-z0-9_-]+|\/)[^\s'"`;&|)]*)/g)) {
