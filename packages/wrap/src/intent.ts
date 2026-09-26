@@ -11,8 +11,7 @@ export function surfaceMode(): SurfaceMode {
   if (v === "none") return "none";
   if (v === "all") return "all";
   if (v === "jit-shadow" || v === "shadow") return "jit-shadow";
-  if (v === "jit") return "jit";
-  if (!v) return "jit";
+  if (!v || v === "jit") return "jit";
   return "all";
 }
 
