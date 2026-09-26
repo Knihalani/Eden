@@ -357,7 +357,7 @@ function stampRemainderSkip(state: WrapState, armed: Armed, toolName: string): v
     last.sharedAcross = n;
     if (!last.reason.includes(line)) last.reason = `${last.reason} · ${line}`;
   }
-  notifyHost(() => state.opts.onReceipt?.(last));
+  try { state.opts.onReceipt?.(last); } catch {}
   post(state, "/v1/receipts", last);
 }
 
@@ -405,7 +405,7 @@ export async function runCompiled(
       run.island_measured = true;
     }
     pushCapped(state.receipts, receipt);
-    notifyHost(() => state.opts.onReceipt?.(receipt));
+    try { state.opts.onReceipt?.(receipt); } catch {}
     post(state, "/v1/receipts", receipt);
     markDirty(state, input, program.sequence);
     return result.value;
@@ -427,7 +427,7 @@ export async function runCompiled(
     );
     stampIdentity(state, receipt);
     pushCapped(state.receipts, receipt);
-    notifyHost(() => state.opts.onReceipt?.(receipt));
+    try { state.opts.onReceipt?.(receipt); } catch {}
     post(state, "/v1/receipts", receipt);
     throw err;
   }
@@ -436,13 +436,6 @@ export async function runCompiled(
 function pushCapped<T>(buf: T[], item: T): void {
   buf.push(item);
   if (buf.length > MAX_TRACES + 256) buf.splice(0, buf.length - MAX_TRACES);
-}
-
-function notifyHost(fn: () => void): void {
-  try {
-    fn();
-  } catch {
-  }
 }
 
 const INVOCATION = Symbol("eden.invocation");
@@ -601,7 +594,7 @@ export function wrapTools<T extends ToolsIn>(
     for (const w of fresh) {
       if (run.warnings.length >= MAX_WARNINGS) break;
       run.warnings.push(w);
-      notifyHost(() => state.opts.onWarning?.(w));
+      try { state.opts.onWarning?.(w); } catch {}
     }
     run.evidence = ledger ?? EMPTY_LEDGER;
     if (run.firstWarningAt == null) {
@@ -716,7 +709,7 @@ export function wrapTools<T extends ToolsIn>(
       if (state.fleetId) trace.fleetId = state.fleetId;
       if (state.region) trace.region = state.region;
       pushCapped(state.traces, trace);
-      notifyHost(() => state.opts.onTrace?.(trace));
+      try { state.opts.onTrace?.(trace); } catch {}
       post(state, "/v1/traces", trace);
      } catch {
     } finally {
@@ -774,7 +767,7 @@ export function wrapTools<T extends ToolsIn>(
         llmCalls: run.llmCalls,
       };
       if (run.warnings.length < MAX_WARNINGS) run.warnings.push(w);
-      notifyHost(() => state.opts.onWarning?.(w));
+      try { state.opts.onWarning?.(w); } catch {}
       const receipt: Receipt = {
         toolId: program.id,
         version: program.version,
@@ -788,7 +781,7 @@ export function wrapTools<T extends ToolsIn>(
       };
       stampIdentity(state, receipt);
       pushCapped(state.receipts, receipt);
-      notifyHost(() => state.opts.onReceipt?.(receipt));
+      try { state.opts.onReceipt?.(receipt); } catch {}
       post(state, "/v1/receipts", receipt);
       return null;
     }
@@ -839,7 +832,7 @@ export function wrapTools<T extends ToolsIn>(
         ...(prog ? { fingerprint: hashStretch(prog) } : {}),
       });
       pushCapped(state.receipts, rec);
-      notifyHost(() => state.opts.onReceipt?.(rec));
+      try { state.opts.onReceipt?.(rec); } catch {}
       post(state, "/v1/receipts", rec);
     }
     stampRemainderSkip(state, armed, toolName);
