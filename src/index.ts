@@ -19,7 +19,7 @@ import { IclIndex, retrieveIcl } from "./icl-index";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { logMemoryNotes } from "./memory-log";
-import { applyProvenanceLabel, noteKindToken, PACKET_LABEL_RE, stripPacketLabel } from "./memory-provenance";
+import { applyProvenanceLabel, noteKindToken, stripPacketLabel } from "./memory-provenance";
 import { routeMemory, type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
 
