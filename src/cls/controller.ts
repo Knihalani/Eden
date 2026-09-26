@@ -172,23 +172,6 @@ const AR_SPREAD_SEQ = 1.25;
 
 const AR_SPREAD_SHARED = 0.45;
 
-function arAdjacentWeight<T extends { text: string; src?: string; id?: string }>(
-  a: T,
-  b: T,
-  ia: number,
-  ib: number,
-  rare: string[],
-  cueTerms: string[],
-): number {
-  if (Math.abs(ia - ib) !== 1) return 0;
-  if (cueTerms.length && rareTermHits(b.text, cueTerms) < 1) return 0;
-  const sa = typeof a.src === "string" ? a.src : "";
-  const sb = typeof b.src === "string" ? b.src : "";
-  if (sa && sb && sa === sb) return AR_SPREAD_SEQ;
-  if (rare.length && rareTermHits(a.text, rare) > 0 && rareTermHits(b.text, rare) > 0) return AR_SPREAD_SHARED;
-  return 0;
-}
-
 export function fuseArHits<T extends { text: string; score: number; id?: string; src?: string }>(
   query: string,
   hits: T[],
@@ -234,7 +217,17 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
       if (rareHits[i]! < 1) continue;
       for (let j = 0; j < pool.length; j++) {
         if (i === j) continue;
-        const w = arAdjacentWeight(pool[i]!, pool[j]!, idx[i]!, idx[j]!, rare, cueTerms);
+        const ia = idx[i]!, ib = idx[j]!;
+        if (Math.abs(ia - ib) !== 1) continue;
+        const aHit = pool[i]!, bHit = pool[j]!;
+        if (cueTerms.length && rareTermHits(bHit.text, cueTerms) < 1) continue;
+        const sa = typeof aHit.src === "string" ? aHit.src : "";
+        const sb = typeof bHit.src === "string" ? bHit.src : "";
+        const w = sa && sb && sa === sb
+          ? AR_SPREAD_SEQ
+          : rare.length && rareTermHits(aHit.text, rare) > 0 && rareTermHits(bHit.text, rare) > 0
+            ? AR_SPREAD_SHARED
+            : 0;
         if (w <= 0) continue;
         spread[j] += w * fused[i]!;
       }
