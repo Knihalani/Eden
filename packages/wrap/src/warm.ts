@@ -212,15 +212,12 @@ export function watchWarm(
         args: w.args,
         discarded: false,
         promise: Promise.resolve()
-          .then(() => {
-            if (isMutating(w.tool) || !isReadName(w.tool)) {
-              return { ok: false as const };
-            }
-            return runner.execute(w.tool, w.args).then(
+          .then(() =>
+            runner.execute(w.tool, w.args).then(
               (value) => ({ ok: true as const, value }),
               () => ({ ok: false as const }),
-            );
-          })
+            ),
+          )
           .then(
             (out) => out,
             () => ({ ok: false as const }),
