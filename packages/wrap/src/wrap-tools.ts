@@ -783,9 +783,7 @@ export function wrapTools<T extends ToolsIn>(
               NO_PREFIX,
             )
           : NO_PREFIX;
-        if (prefixHits.length > 1) {
-          prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
-        }
+        prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
         const hit = prefixHits[0];
         if (hit) {
           if (enforcementEnabled(state.opts)) {
