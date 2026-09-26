@@ -1490,9 +1490,6 @@ export class AgentMemory {
       if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys], { keepLiveIdentity: true });
       if (next === m) return body;
       const merged: Record<string, unknown> = { ...body, [key]: next };
-      let dirty = false;
-      for (const k of WRAP_PLACE_FIELDS) if (k in merged) { dirty = true; break; }
-      if (!dirty) return merged;
       for (const k of WRAP_PLACE_FIELDS) delete merged[k];
       return merged;
     } catch {
