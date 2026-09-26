@@ -108,7 +108,6 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   if (!res.ok) throw new Error(`island batch ${res.status}`);
   const json = (await res.json()) as unknown;
   const parsed = reqs.map((_, i) => parseBatchResult(json, String(i)));
-  if (parsed.every((row) => row)) return parsed as IslandReply[];
   if (parsed.some((row) => row)) return parsed;
   const id = json && typeof json === "object" && typeof (json as { id?: unknown }).id === "string" && (json as { id: string }).id.length > 0 ? (json as { id: string }).id : undefined;
   if (!id) return parsed;
