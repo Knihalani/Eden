@@ -71,19 +71,6 @@ export function rareTermHits(text: string, terms: string[]): number {
   return n;
 }
 
-export function scoreChunksAsEpisodes(query: string, texts: string[]): Float64Array {
-  const n = texts.length;
-  const out = new Float64Array(n);
-  if (!n || !String(query ?? "").trim()) return out;
-  try {
-    const epi = new EpisodicStore();
-    epi.ingest(texts.map((text) => ({ text: String(text ?? ""), speaker: "nar", session: 0 })));
-    const scored = epi.score(epi.cueFor(query));
-    for (let i = 0; i < n; i++) out[i] = scored[i] || 0;
-  } catch {}
-  return out;
-}
-
 export type Hit = { i: number; s: number };
 
 export class EpisodicStore {
