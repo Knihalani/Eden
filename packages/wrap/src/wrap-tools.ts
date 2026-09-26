@@ -595,8 +595,7 @@ export function wrapTools<T extends ToolsIn>(
       post(state, "/v1/traces", trace);
      } catch {
     } finally {
-      const hadLoopWarning =
-        run.warnings.some((w) => w.kind === "repeat_ngram" || w.kind === "repeat_visits") || false;
+      const hadLoopWarning = run.warnings.some((w) => w.kind === "repeat_ngram" || w.kind === "repeat_visits");
       if (!owner) run.events = [];
       if (consumed) {
         if (!hadLoopWarning) run.rawExecuted = 0;
