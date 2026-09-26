@@ -933,10 +933,8 @@ export function wrapTools<T extends ToolsIn>(
               store.noteRest(armSession, id);
             }, undefined);
             skipAsShared(armed, name, selfId);
-            if (!armed.rest.size && !(armed.readOnly && armed.fleetId)) {
-              store.delete(armSession, id);
-              emit(armed.input, owner);
-            } else if (!armed.rest.size) {
+            if (!armed.rest.size) {
+              if (!(armed.readOnly && armed.fleetId)) store.delete(armSession, id);
               emit(armed.input, owner);
             }
             steeredSkip = true;
