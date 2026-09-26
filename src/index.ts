@@ -570,8 +570,7 @@ function formatNote(r: MemoryRecord): MemoryRecord {
       labeled = kind ? `[${kind}] ${body}` : body;
     } catch { labeled = body; }
   }
-  const copy = { ...r, text: labeled };
-  return copy;
+  return { ...r, text: labeled };
 }
 
 export function formatPacketText(r: MemoryRecord): string {
