@@ -63,20 +63,6 @@ export class CLSController {
     return out;
   }
 
-  private bindQA(s: Float64Array): Float64Array {
-    const eps = this.epi.episodes;
-    const out = new Float64Array(s.length);
-    for (let i = 0; i < s.length; i++) {
-      let v = s[i]!;
-      const prev = i > 0 && eps[i - 1]!.session === eps[i]!.session ? eps[i - 1]! : undefined;
-      const next = i + 1 < s.length && eps[i + 1]!.session === eps[i]!.session ? eps[i + 1]! : undefined;
-      if (prev && prev.isQuestion) v += 0.45 * s[i - 1]!;
-      if (next && eps[i]!.isQuestion) v += 0.27 * s[i + 1]!;
-      out[i] = v;
-    }
-    return out;
-  }
-
   private lexicalHits(cue: Cue, q: string, n: number): { hit: boolean[]; active: boolean } {
     const names = new Set<string>();
     for (const x of properNames(q)) names.add(stem(x));
@@ -98,7 +84,16 @@ export class CLSController {
     const temporal = /\b(when|what time|what day|what date|which day|what year|what month|how long ago|date|year|month|ago|yesterday|last week|before|after|january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(q.toLowerCase()) || /\b20\d{2}\b/.test(q);
     const cue: Cue = this.epi.cueFor(q, temporal ? 2 : 1.5, SemanticStore.frameOf(q));
     const base = this.epi.score(cue);
-    const normV = this.bindQA(base);
+    const epsBind = this.epi.episodes;
+    const normV = new Float64Array(base.length);
+    for (let i = 0; i < base.length; i++) {
+      let v = base[i]!;
+      const prev = i > 0 && epsBind[i - 1]!.session === epsBind[i]!.session ? epsBind[i - 1]! : undefined;
+      const next = i + 1 < base.length && epsBind[i + 1]!.session === epsBind[i]!.session ? epsBind[i + 1]! : undefined;
+      if (prev && prev.isQuestion) v += 0.45 * base[i - 1]!;
+      if (next && epsBind[i]!.isQuestion) v += 0.27 * base[i + 1]!;
+      normV[i] = v;
+    }
     const epi = new Float64Array(n);
     let normMax = 0;
     for (let i = 0; i < n; i++) if (normV[i]! > normMax) normMax = normV[i]!;
