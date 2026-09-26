@@ -17,23 +17,18 @@ export type Episode = {
 
 export type Cue = Map<string, number>;
 
-function stemExpand(raw: Record<string, string[]>): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const [k, alts] of Object.entries(raw)) {
-    const sk = stem(k);
-    const merged = new Set([...(out[sk] ?? []), ...alts.map(stem)]);
-    merged.delete(sk);
-    out[sk] = [...merged];
-  }
-  return out;
-}
-
-const EXPAND = stemExpand({
+const EXPAND: Record<string, string[]> = {};
+for (const [k, alts] of Object.entries({
   spouse: ["married", "wife", "husband"],
   wife: ["married", "spouse"],
   husband: ["married", "spouse"],
   citizen: ["nationality"],
-});
+})) {
+  const sk = stem(k);
+  const merged = new Set([...(EXPAND[sk] ?? []), ...alts.map(stem)]);
+  merged.delete(sk);
+  EXPAND[sk] = [...merged];
+}
 
 const QUERY_LIGHT = new Set(
   ["country", "citizen", "author", "name", "city", "position", "sport", "nationality"].map(stem),
