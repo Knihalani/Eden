@@ -106,11 +106,6 @@ export function childSessionName(parent?: string, child?: string): string | unde
   }
 }
 
-export function isChildSession(session?: string): boolean {
-  const s = memorySessionName(session);
-  return !!s && s.includes("--");
-}
-
 type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
