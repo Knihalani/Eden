@@ -304,46 +304,6 @@ export function noteJitUsed(jit: JitGuard, names: readonly string[]): void {
   jit.unusedStreak = 0;
 }
 
-function toolNamesInMessages(messages?: unknown[]): string[] {
-  const names: string[] = [];
-  const walk = (v: unknown, depth: number): void => {
-    if (v == null || depth > 6 || names.length > 32) return;
-    if (Array.isArray(v)) {
-      for (const x of v) walk(x, depth + 1);
-      return;
-    }
-    if (typeof v !== "object") return;
-    const o = v as Record<string, unknown>;
-    const fn = o.function;
-    if (fn && typeof fn === "object" && typeof (fn as { name?: unknown }).name === "string") {
-      names.push((fn as { name: string }).name);
-    }
-    if (typeof o.name === "string" && (o.type === "function" || o.type === "tool_use")) {
-      names.push(o.name);
-    }
-    for (const k of ["tool_calls", "content", "message"]) if (k in o) walk(o[k], depth + 1);
-  };
-  if (messages) walk(messages, 0);
-  return names;
-}
-
-function settleJit(jit: JitGuard, messages?: unknown[]): boolean {
-  if (jit.demoted) return true;
-  if (jit.pendingName) {
-    noteJitUsed(jit, toolNamesInMessages(messages));
-  }
-  if (jit.pendingName) {
-    jit.unusedStreak++;
-    jit.pendingName = undefined;
-    jit.pendingAliases = [];
-    if (jit.unusedStreak >= JIT_UNUSED_DEMOTE) {
-      jit.demoted = true;
-      return true;
-    }
-  }
-  return jit.injections >= jitMax();
-}
-
 export function selectForRequest(
   live: StretchProgram[],
   messages?: unknown[],
@@ -352,7 +312,44 @@ export function selectForRequest(
   let selected = live;
   try {
     const mode = surfaceMode();
-    if (mode === "jit" && jit && settleJit(jit, messages)) return [];
+    if (mode === "jit" && jit) {
+      let settled = jit.demoted;
+      if (!settled) {
+        if (jit.pendingName) {
+          const names: string[] = [];
+          const walk = (v: unknown, depth: number): void => {
+            if (v == null || depth > 6 || names.length > 32) return;
+            if (Array.isArray(v)) {
+              for (const x of v) walk(x, depth + 1);
+              return;
+            }
+            if (typeof v !== "object") return;
+            const o = v as Record<string, unknown>;
+            const fn = o.function;
+            if (fn && typeof fn === "object" && typeof (fn as { name?: unknown }).name === "string") {
+              names.push((fn as { name: string }).name);
+            }
+            if (typeof o.name === "string" && (o.type === "function" || o.type === "tool_use")) {
+              names.push(o.name);
+            }
+            for (const k of ["tool_calls", "content", "message"]) if (k in o) walk(o[k], depth + 1);
+          };
+          if (messages) walk(messages, 0);
+          noteJitUsed(jit, names);
+        }
+        if (jit.pendingName) {
+          jit.unusedStreak++;
+          jit.pendingName = undefined;
+          jit.pendingAliases = [];
+          if (jit.unusedStreak >= JIT_UNUSED_DEMOTE) {
+            jit.demoted = true;
+            settled = true;
+          }
+        }
+        if (!settled) settled = jit.injections >= jitMax();
+      }
+      if (settled) return [];
+    }
     selected = selectSurfacePrograms({
       mode,
       live,
