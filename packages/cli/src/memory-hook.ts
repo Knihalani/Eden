@@ -90,16 +90,19 @@ function recordsInMemoryFile(path: string): MemoryRecord[] {
   return order.map((id) => byId.get(id)!);
 }
 
-function pinsFromRoot(root: string): MemoryRecord[] {
+function briefing(mem: AgentMemory, session = ""): string {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  const logged: { id: string; at: number }[] = [];
   const files: string[] = [];
   try {
-    const p = join(root, "memories.jsonl");
+    const p = join(mem.dir, "memories.jsonl");
     if (existsSync(p)) files.push(p);
   } catch {}
   try {
-    for (const ent of readdirSync(root, { withFileTypes: true })) {
+    for (const ent of readdirSync(mem.dir, { withFileTypes: true })) {
       if (!ent.isDirectory() || ent.name === "." || ent.name === ".." || ent.name.includes("..")) continue;
-      const p = join(root, ent.name, "memories.jsonl");
+      const p = join(mem.dir, ent.name, "memories.jsonl");
       try { if (existsSync(p)) files.push(p); } catch {}
     }
   } catch {}
@@ -111,14 +114,7 @@ function pinsFromRoot(root: string): MemoryRecord[] {
       if (!prev || rec.at >= prev.at) byId.set(rec.id, rec);
     }
   }
-  return [...byId.values()];
-}
-
-function briefing(mem: AgentMemory, session = ""): string {
-  const seen = new Set<string>();
-  const lines: string[] = [];
-  const logged: { id: string; at: number }[] = [];
-  let pinRows = [...mem.memories().filter(isPinnedIntention), ...pinsFromRoot(mem.dir)];
+  let pinRows = [...mem.memories().filter(isPinnedIntention), ...byId.values()];
   try { pinRows = dropHarmed(mem.dir, pinRows); } catch {}
   const pins = pinRows.sort((a, b) =>
     Number(b.kind === "constraint") - Number(a.kind === "constraint") || (b.sal ?? 0) - (a.sal ?? 0) || b.at - a.at
