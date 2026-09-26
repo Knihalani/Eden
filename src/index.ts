@@ -135,11 +135,6 @@ function tokList(s: string): string[] {
 const NEAR_DUP_J = 0.8;
 
 function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
-  const prior = (): MemoryRecord[] => {
-    const n = Math.floor(Number(cap));
-    const limit = Number.isFinite(n) && n > 0 ? n : 0;
-    return pool.slice(0, limit).map((x) => x.rec);
-  };
   try {
     const limit = Math.floor(Number(cap));
     if (!Number.isFinite(limit) || limit <= 0 || !pool.length) return [];
@@ -195,7 +190,7 @@ function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap:
     }
     return picked.map((x) => x.rec);
   } catch {
-    return prior();
+    return pool.slice(0, ((n) => (Number.isFinite(n) && n > 0 ? n : 0))(Math.floor(Number(cap)))).map((x) => x.rec);
   }
 }
 
