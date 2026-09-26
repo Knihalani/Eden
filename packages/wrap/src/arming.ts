@@ -25,7 +25,6 @@ export type Armed = {
   hintId: unknown;
   readOnly?: boolean;
   fleetId?: string;
-  head?: string;
   served?: Set<string>;
   agentIds?: Set<string>;
 };

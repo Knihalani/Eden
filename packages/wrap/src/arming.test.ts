@@ -122,7 +122,6 @@ describe("arming store", () => {
       rest: new Map([["fetchComments", 1]]),
       readOnly: true,
       fleetId: "f1",
-      head: "fetchIssue",
     });
     const mut = fakeArmed({
       input: { id: "E-1" },
