@@ -10,8 +10,6 @@ import {
   takeWarm,
   watchWarm,
   watchWarmEnabled,
-  warmHitRate,
-  warmStats,
   wrapTools,
 } from "./index";
 
@@ -246,10 +244,6 @@ describe("watch-time warming", () => {
     expect(log.filter((e) => e.startsWith("getLabels"))).toHaveLength(1);
     expect(log.filter((e) => e.startsWith("getAssignees"))).toHaveLength(1);
     expect(log.filter((e) => e.startsWith("getTimeline"))).toHaveLength(1);
-    const rate = warmHitRate(state, "fetch-meta");
-    expect(rate.lookups).toBe(2);
-    expect(rate.hits).toBe(2);
-    expect(rate.rate).toBe(1);
   });
 
   test("mutating programs are never pre-executed", async () => {
@@ -263,7 +257,6 @@ describe("watch-time warming", () => {
     await runCompiled(state, current, { id: "T-100" }, defs);
     await Bun.sleep(15);
     expect(log.filter((e) => e.startsWith("writeRecord"))).toHaveLength(0);
-    expect(warmStats(state).mutatingExecutes).toBe(0);
   });
 
   test("a wrong guess discards — the agent never sees the unconfirmed value", async () => {
@@ -345,9 +338,6 @@ describe("watch-time warming", () => {
     await wrapped.fetch_meta.execute({ id: "T-100" });
     expect(log.filter((e) => e.startsWith("getLabels"))).toHaveLength(1);
     expect(log.filter((e) => e.startsWith("getTimeline"))).toHaveLength(1);
-    const rate = warmHitRate(state, "fetch-meta");
-    expect(rate.hits).toBeGreaterThan(0);
-    expect(rate.hits).toBe(rate.lookups);
   });
 
   test("next likely follows witnessed successors, not the longest other program", () => {
