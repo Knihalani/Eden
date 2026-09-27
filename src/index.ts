@@ -389,7 +389,7 @@ export class AgentMemory {
         experiment: ["flag", "flags"],
         assigning: ["flag", "flags"],
         connection: ["database"],
-        dashboard: ["database"],
+        dashboard: ["database", "dashboards"],
         welcome: ["email"],
         mail: ["email"],
         sha: ["git", "bash"],
@@ -410,6 +410,8 @@ export class AgentMemory {
         apply: ["infra"],
         policies: ["auth"],
         channel: ["chat"],
+        funnel: ["analytics"],
+        signup: ["analytics"],
       };
       for (const t of [...hay]) {
         const extra = expand[t];
