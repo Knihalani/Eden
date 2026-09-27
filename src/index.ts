@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
@@ -479,17 +479,6 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
   }
 }
 
-function appendJsonl(path: string, blob: string): void {
-  let prefix = "";
-  try {
-    if (existsSync(path)) {
-      const prev = readFileSync(path, "utf8");
-      if (prev.length && !prev.endsWith("\n")) prefix = "\n";
-    }
-  } catch {}
-  appendFileSync(path, prefix + blob);
-}
-
 function load(path: string): Compiled[] {
   const out: Compiled[] = [];
   const idx = new Map<string, number>();
@@ -879,7 +868,7 @@ export class AgentMemory {
           evicted = true;
         }
         pending = this.compiled.filter((c) => this.walDirtyIds.has(c.rec.id));
-        compact = compact || evicted;
+        compact = compact || evicted || pending.length > 0;
         if (compact) {
           writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
           try { chmodSync(this.path, 0o600); } catch {}
@@ -888,17 +877,6 @@ export class AgentMemory {
           this.walDirtyIds.clear();
           this.deletedIds.clear();
           this.needCompact = false;
-        } else if (pending.length) {
-          const lines = (rows: Compiled[]) => rows.map((c) => JSON.stringify(c.rec)).join("\n") + "\n";
-          appendJsonl(wal, lines(pending));
-          try { chmodSync(wal, 0o600); } catch {}
-          const fresh = pending.filter((c) => !this.durableIds.has(c.rec.id));
-          if (fresh.length) {
-            appendJsonl(this.path, lines(fresh));
-            try { chmodSync(this.path, 0o600); } catch {}
-          }
-          for (const c of pending) this.durableIds.add(c.rec.id);
-          this.walDirtyIds.clear();
         }
       });
       this.dirty = false;
