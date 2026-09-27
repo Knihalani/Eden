@@ -307,8 +307,6 @@ export function attachPlaceCues(cue: string, paths: Iterable<string>): string {
   return `${trimmed} ${names.join(" ")}`;
 }
 
-const WRAP_PLACE_FIELDS = ["open_files", "openFiles", "files", "file_paths", "filePaths", "file_path", "filePath", "recently_viewed_files", "recentlyViewedFiles"] as const;
-
 const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
 const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
@@ -888,7 +886,7 @@ export class AgentMemory {
     try { persistHarmed(this.dir, ids); } catch {}
   }
 
-  inject(messages: unknown[], extraPaths?: Iterable<string>): unknown[] {
+  inject(messages: unknown[]): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
       try { if (memoryConsent() === "off") return list; } catch { return list; }
@@ -974,9 +972,7 @@ export class AgentMemory {
       const next = alreadyInjected(sysBlob) || sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m);
       if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys], { keepLiveIdentity: true });
       if (next === m) return body;
-      const merged: Record<string, unknown> = { ...body, [key]: next };
-      for (const k of WRAP_PLACE_FIELDS) delete merged[k];
-      return merged;
+      return { ...body, [key]: next };
     } catch {
       memoryInjectSwallows.n++;
       if (process.env.EDEN_MEMORY_SWALLOW === "1") console.error("eden-memory inject swallow", memoryInjectSwallows.n);
