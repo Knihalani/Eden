@@ -6,7 +6,6 @@ import { redact } from "../packages/ir/src/redact";
 import { splitNumberedItems } from "./assemble";
 import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
-import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate } from "./sleep";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
@@ -334,9 +333,6 @@ export class AgentMemory {
     for (let i = 0; i < items.length; i++) {
       const it = items[i]!;
       const safe = this.persistText(it.text);
-      let forgot = false;
-      try { forgot = applyObserveForget(this, it.role, safe); } catch { forgot = false; }
-      if (forgot) continue;
       for (const raw of extractDurable(safe)) {
         let text = raw;
         try {
