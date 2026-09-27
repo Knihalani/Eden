@@ -628,7 +628,7 @@ export class AgentMemory {
     try {
       const sysBlob = typeof sys === "string" ? sys : sys ? convBlob(Array.isArray(sys) ? sys : [sys]) : "";
       const next = alreadyInjected(sysBlob) || sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m);
-      if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys], { keepLiveIdentity: true });
+      if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys]);
       if (next === m) return body;
       return { ...body, [key]: next };
     } catch {
