@@ -199,18 +199,8 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-export function pathCues(lower: string): Set<string> {
-  const out = new Set<string>();
-  lower = lower.toLowerCase();
-  for (const m of lower.matchAll(/(?:^|[\s"'`(,:])((?:[a-z0-9_.-]+\/)+[a-z0-9_.-]*)/g)) {
-    const segs = m[1]!.split("/").filter((s) => s.length >= 3);
-    for (const s of segs) out.add(s);
-    if (segs.length >= 2) out.add(segs.slice(0, 2).join("/"));
-  }
-  for (const m of lower.matchAll(/(?:^|[\s"'`(,:])([a-z0-9_-]+(?:\.[a-z][a-z0-9]*)+)\b/g)) {
-    if (m[1]!.length >= 3) out.add(m[1]!);
-  }
-  return out;
+export function pathCues(_lower: string): Set<string> {
+  return new Set();
 }
 
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
