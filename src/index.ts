@@ -12,7 +12,6 @@ import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory
 import { clearSleepTimer, consolidate, migrateSessionHowTo } from "./sleep";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
-import { logMemoryNotes } from "./memory-log";
 import { stripPacketLabel } from "./memory-provenance";
 import { type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
@@ -854,7 +853,6 @@ export class AgentMemory {
         }
         packet = packet.map(formatNote);
         try { packet = dropHarmed(this.dir, packet); } catch {}
-        try { logMemoryNotes(packet); } catch {}
         if (packet.length) notes.push({ role: "system", content: MEMORY_MARK + packet.map((m) => `\n- ${m.text}`).join("") });
       }
       if (!notes.length) return list;
