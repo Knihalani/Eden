@@ -575,22 +575,6 @@ export class AgentMemory {
     for (let i = 0; i < items.length; i++) {
       const it = items[i]!;
       const safe = this.persistText(it.text);
-      const lane = encodeLane(it.text);
-      if (lane === "icl" || lane === "narrative") {
-        const text = safe;
-        if (text && !this.seenLower.has(text.toLowerCase())) {
-          const tags = (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text).concat([lane]);
-          try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
-          const rec = this.remember(text, {
-            kind: lane === "narrative" ? "episode" : "fact",
-            lane,
-            tags,
-            sal: ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")),
-          });
-          out.push(rec);
-        }
-        continue;
-      }
       let forgot = false;
       try { forgot = applyObserveForget(this, it.role, safe); } catch { forgot = false; }
       if (forgot) continue;
