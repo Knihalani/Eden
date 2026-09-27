@@ -471,11 +471,10 @@ export class AgentMemory {
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
     try { if (memoryConsent() === "off") return body; } catch { return body; }
-    const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages", m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [], sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
+    const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages";
+    const m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [];
     try {
-      const sysBlob = typeof sys === "string" ? sys : sys ? convBlob(Array.isArray(sys) ? sys : [sys]) : "";
-      const next = sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m);
-      if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys]);
+      const next = this.inject(m);
       if (next === m) return body;
       return { ...body, [key]: next };
     } catch {
