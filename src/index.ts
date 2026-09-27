@@ -72,68 +72,6 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
-const NEAR_DUP_J = 0.8;
-
-function dedupSelect<T extends { rec: MemoryRecord; n: number }>(pool: T[], cap: number): MemoryRecord[] {
-  try {
-    const limit = Math.floor(Number(cap));
-    if (!Number.isFinite(limit) || limit <= 0 || !pool.length) return [];
-    const picked: T[] = [];
-    const lanes: string[] = [];
-    const stems: Set<string>[] = [];
-    for (const cand of pool) {
-      if (picked.length >= limit) break;
-      let lane = "chat";
-      try {
-        const rec = cand.rec;
-        const text = String(rec?.text ?? "");
-        if (rec?.lane === "icl" || isIclExemplar(text)) lane = "icl";
-        else if (rec?.kind === "procedure") lane = "procedure";
-        else if (rec?.lane === "trajectory") lane = "trajectory";
-        else if (rec?.kind === "gist" || rec?.kind === "digest") lane = "gist";
-        else if (rec?.lane === "narrative") lane = "narrative";
-      } catch {}
-      const bagAll = new Set<string>();
-      const bagContent = new Set<string>();
-      try {
-        for (const w of (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(String(cand.rec.text ?? ""))) {
-          if (!w) continue;
-          bagAll.add(w);
-          if (!STOP.has(w)) bagContent.add(w);
-        }
-      } catch {}
-      const bag = bagContent.size ? bagContent : bagAll;
-      let dup = false;
-      for (let i = 0; i < picked.length; i++) {
-        if (lanes[i] !== lane) continue;
-        let la = "";
-        let lb = "";
-        try {
-          const ma = String(cand.rec?.text ?? "").match(/\blabel\s*:\s*(\S+)/i);
-          if (ma?.[1]) la = ma[1].replace(/[.,;:!?]+$/g, "").trim().toLowerCase();
-          const mb = String(picked[i]!.rec?.text ?? "").match(/\blabel\s*:\s*(\S+)/i);
-          if (mb?.[1]) lb = mb[1].replace(/[.,;:!?]+$/g, "").trim().toLowerCase();
-        } catch {}
-        if (la && lb && la !== lb) continue;
-        const other = stems[i]!;
-        if (bag.size && other.size) {
-          let inter = 0;
-          for (const w of bag) if (other.has(w)) inter++;
-          const uni = bag.size + other.size - inter;
-          if (uni && inter / uni >= NEAR_DUP_J) { dup = true; break; }
-        }
-      }
-      if (dup) continue;
-      picked.push(cand);
-      lanes.push(lane);
-      stems.push(bag);
-    }
-    return picked.map((x) => x.rec);
-  } catch {
-    return pool.slice(0, ((n) => (Number.isFinite(n) && n > 0 ? n : 0))(Math.floor(Number(cap)))).map((x) => x.rec);
-  }
-}
-
 export function queryHay(text: string): Set<string> {
   return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
 }
@@ -277,8 +215,6 @@ export function pathCues(lower: string): Set<string> {
 
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
 const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
-
-const jaccardText = (a: string, b: string): number => { const A = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(a)), B = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(b)); let i = 0; for (const w of A) if (B.has(w)) i++; const u = A.size + B.size - i; return u ? i / u : 0; };
 
 export const MEMORY_WAL_COMPACT_LINES = 32;
 
@@ -616,7 +552,7 @@ export class AgentMemory {
       if (n) scored.push({ rec: c.rec, n });
     }
     const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
-    let lexical = dedupSelect(ranked, cap);
+    let lexical = ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
     try {
       if (String(text ?? "").trim()) {
         lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
