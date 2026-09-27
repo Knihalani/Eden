@@ -763,20 +763,6 @@ export class AgentMemory {
         lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
       }
     } catch {}
-    try {
-      const stop = new Set(["the", "is", "a", "an", "of", "and", "or", "to", "in", "on", "for", "our", "we", "it", "do", "does", "did", "are", "was", "be", "use", "uses", "what", "where", "why", "how", "who"]);
-      lexical = lexical.filter((r) => {
-        const toks = [...queryHay(r.text ?? "")].filter((t) => t.length >= 3 && !stop.has(t));
-        for (const t of toks) {
-          if (hay.has(t)) return true;
-          for (const h of hay) {
-            if (h.length < 4 || stop.has(h)) continue;
-            if (t.startsWith(h) || h.startsWith(t)) return true;
-          }
-        }
-        return false;
-      });
-    } catch {}
     return lexical.length < 2 ? lexical : dedupSelect(lexical.map((rec) => ({ rec, n: 0 })), lexical.length);
   }
 
