@@ -1,12 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
 import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
-import { scrubTombstonedIdentity } from "../../../src/gist-store";
 import { parseHookToolTraces, parseToolArgs, persistToolTraces } from "../../../src/tool-trace";
-import { childSessionName, consolidate, dropHarmed, formatPacketText, MEMORY_MARK, openMemory, type AgentMemory, type MemoryRecord } from "../../../src/index";
+import { childSessionName, consolidate, MEMORY_MARK, openMemory } from "../../../src/index";
 import { memoryConsent } from "../../../src/memory-consent";
-import { logMemoryNotes } from "../../../src/memory-log";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd", "PostToolUse", "SubagentStop"]);
 
@@ -44,79 +42,6 @@ export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: s
 
 export function notesFromInject(injected: unknown[]): string {
   return injected.map((m) => asRec(m)).filter((o) => o.role === "system" && typeof o.content === "string" && (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:"))).map((o) => String(o.content)).join("\n\n");
-}
-
-const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
-
-function briefing(mem: AgentMemory, session = ""): string {
-  const seen = new Set<string>();
-  const lines: string[] = [];
-  const logged: { id: string; at: number }[] = [];
-  const files: string[] = [];
-  try { const p = join(mem.dir, "memories.jsonl"); if (existsSync(p)) files.push(p); } catch {}
-  try { for (const ent of readdirSync(mem.dir, { withFileTypes: true })) { if (!ent.isDirectory() || ent.name === "." || ent.name === ".." || ent.name.includes("..")) continue; const p = join(mem.dir, ent.name, "memories.jsonl"); try { if (existsSync(p)) files.push(p); } catch {} } } catch {}
-  const byId = new Map<string, MemoryRecord>();
-  for (const p of files) {
-    const fileById = new Map<string, MemoryRecord>();
-    const order: string[] = [];
-    const ingest = (file: string) => {
-      try {
-        if (!existsSync(file)) return;
-        for (const line of readFileSync(file, "utf8").split("\n")) {
-          if (!line) continue;
-          try {
-            const raw = JSON.parse(line);
-            if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-            const o = raw as Record<string, unknown>;
-            const text = typeof o.text === "string" ? o.text.trim() : "";
-            if (!text) continue;
-            const tags = Array.isArray(o.tags) ? o.tags.filter((t): t is string => typeof t === "string") : [];
-            const rec: MemoryRecord = {
-              id: typeof o.id === "string" && o.id ? o.id : `pin:${text.slice(0, 32)}`,
-              text,
-              kind: typeof o.kind === "string" && o.kind ? o.kind : "fact",
-              tags,
-              at: typeof o.at === "number" && Number.isFinite(o.at) ? o.at : 0,
-              sal: typeof o.sal === "number" && Number.isFinite(o.sal) ? o.sal : undefined,
-            };
-            if (!fileById.has(rec.id)) order.push(rec.id);
-            fileById.set(rec.id, rec);
-          } catch {}
-        }
-      } catch {}
-    };
-    ingest(p);
-    try { ingest(`${p}.wal`); } catch {}
-    for (const id of order) {
-      const rec = fileById.get(id);
-      if (!rec || !rec.text || (rec.kind !== "constraint" && !(rec.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t)))) continue;
-      const prev = byId.get(rec.id);
-      if (!prev || rec.at >= prev.at) byId.set(rec.id, rec);
-    }
-  }
-  let pinRows = [...mem.memories().filter((r) => !!r.text && (r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t)))), ...byId.values()];
-  try { pinRows = dropHarmed(mem.dir, pinRows); } catch {}
-  const pins = pinRows.sort((a, b) =>
-    Number(b.kind === "constraint") - Number(a.kind === "constraint") || (b.sal ?? 0) - (a.sal ?? 0) || b.at - a.at
-  ).slice(0, 8);
-  for (const raw of pins) {
-    const r = raw.kind === "fact" || raw.kind === "preference" ? { ...raw, kind: "constraint" } : raw;
-    let text = r.text.trim();
-    try {
-      const cleaned = scrubTombstonedIdentity(text, mem.dir);
-      if (typeof cleaned === "string") text = cleaned.trim();
-    } catch {}
-    const key = text.toLowerCase();
-    if (!text || seen.has(key)) continue;
-    seen.add(key);
-    let line = text;
-    try { line = formatPacketText({ ...r, text }); } catch { line = `[rule] ${text}`; }
-    lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
-    logged.push({ id: r.id, at: r.at });
-  }
-  if (!lines.length) return "";
-  try { logMemoryNotes(logged); } catch {}
-  return MEMORY_MARK + lines.join("");
 }
 
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
@@ -213,9 +138,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true });
         try { consolidate(mem, { session: session || undefined, mode: "full" }); } catch {}
       }
-      if (stop) return null;
-      const brief = briefing(mem, session);
-      return brief ? { additional_context: brief, hookSpecificOutput: { hookEventName: event, additionalContext: brief } } : null;
+      return null;
     }
     const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
     const notes = prompt
