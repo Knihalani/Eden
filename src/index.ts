@@ -596,9 +596,6 @@ export class AgentMemory {
             sal: ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")),
           });
           out.push(rec);
-          if (lane === "narrative") {
-            try { new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
-          }
         }
         continue;
       }
