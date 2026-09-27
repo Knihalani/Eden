@@ -284,9 +284,7 @@ export async function runCompiled(
     const result = await runProgram(program, input, {
       registry: {
         ...(baseReg.has ? { has: (name: string) => baseReg.has!(name) } : {}),
-        execute: async (name, args, ctx) => {
-          return baseReg.execute(name, args, ctx);
-        },
+        execute: baseReg.execute,
       },
       island,
       llmCents: state.opts.llmCents ?? 1,
