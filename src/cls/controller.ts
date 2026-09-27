@@ -1,4 +1,4 @@
-import { EpisodicStore, rareCueToks, rareTermHits } from "./episodic";
+import { rareCueToks, rareTermHits } from "./episodic";
 import { contentToks } from "./text";
 
 export function fuseArHits<T extends { text: string; score: number; id?: string; src?: string }>(
@@ -21,22 +21,12 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
     const pool = cueTerms.length ? raw.filter((h) => rareTermHits(h.text, cueTerms) >= 1) : raw;
     if (!pool.length) return [];
 
-    const texts = pool.map((h) => h.text);
-    const epiRaw = new Float64Array(texts.length);
-    try {
-      const epi = new EpisodicStore();
-      epi.ingest(texts.map((text) => ({ text: String(text ?? ""), speaker: "nar", session: 0 })));
-      const scored = epi.score(epi.cueFor(q));
-      for (let i = 0; i < texts.length; i++) epiRaw[i] = scored[i] || 0;
-    } catch {}
     const rareHits = pool.map((h) => rareTermHits(h.text, rare));
     const fused = new Float64Array(pool.length);
     for (let i = 0; i < pool.length; i++) {
       const a = Number(pool[i]!.score) || 0;
       const hitsN = rareHits[i]!;
-      const comb = a * Math.max(1, hitsN);
-      const bRaw = epiRaw[i] || 0;
-      fused[i] = comb * (1 + 0.15 * bRaw);
+      fused[i] = a * Math.max(1, hitsN);
     }
 
     const idx = pool.map((h, i) => { const extra = h as typeof h & { i?: unknown }; if (typeof extra.i === "number" && Number.isInteger(extra.i) && extra.i >= 0) return extra.i; const m = String(h.id ?? "").match(/:(\d+)$/); return m ? Number(m[1]) : i; });
