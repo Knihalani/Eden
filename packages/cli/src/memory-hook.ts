@@ -19,10 +19,6 @@ function flattenContent(content: unknown): string {
   return content.map(flattenContent).filter(Boolean).join("\n");
 }
 
-export function notesFromInject(injected: unknown[]): string {
-  return injected.map((m) => asRec(m)).filter((o) => o.role === "system" && typeof o.content === "string" && (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:"))).map((o) => String(o.content)).join("\n\n");
-}
-
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
     const consent = memoryConsent();
@@ -100,7 +96,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     }
     const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
     const notes = prompt
-      ? notesFromInject(mem.inject([{ role: "user", content: prompt }]))
+      ? mem.inject([{ role: "user", content: prompt }]).map((m) => asRec(m)).filter((o) => o.role === "system" && typeof o.content === "string" && o.content.includes(MEMORY_MARK)).map((o) => String(o.content)).join("\n\n")
       : "";
     if (writes && prior.length) mem.observe(prior);
     return notes ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } } : null;
