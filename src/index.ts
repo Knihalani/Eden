@@ -460,31 +460,8 @@ export function memoryRetrieveCap(): number {
 }
 
 function formatNote(r: MemoryRecord): MemoryRecord {
-  const isProcedure = r.kind === "procedure";
   const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
-  const stripped = stripPacketLabel(raw).body;
-  let body = stripped;
-  if (isProcedure) body = ((text) => {
-    const redacted = redact(String(text ?? ""));
-    const t = typeof redacted === "string" ? redacted : String(text ?? "");
-    if (t.length <= PROCEDURE_CHAR_CAP) return t;
-    const vm = t.match(/^(.*?)((?:\s*·\s*|\s+)verify:\s*)(.*)$/is);
-    if (vm) {
-      const head = vm[1]!;
-      const tail = `${vm[2]!}${vm[3]!}`;
-      if (head.length + tail.length <= PROCEDURE_CHAR_CAP) return t;
-      const room = PROCEDURE_CHAR_CAP - tail.length;
-      if (room > 0) return `${head.slice(0, room)}${tail}`;
-      return tail.slice(0, PROCEDURE_CHAR_CAP).trimStart();
-    }
-    return t.slice(0, PROCEDURE_CHAR_CAP);
-  })(body);
-  else {
-    const skipFactCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body) || r.lane === "narrative" || (r.tags ?? []).includes("chunk")
-      || ((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(r.text) || ((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(body);
-    const factish = r.kind === "fact" || r.kind === "preference" || /^\s*\[fact(?:\s*·[^\]]*)?\]/i.test(body);
-    if (!skipFactCap && factish) body = ((text, re, cap) => { const redacted = redact(String(text ?? "")); const t = typeof redacted === "string" ? redacted : String(text ?? ""); const labeled = t.match(re); return labeled ? (labeled[2]!.length <= cap ? t : `${labeled[1]!}${labeled[2]!.slice(0, cap)}`) : (t.length <= cap ? t : t.slice(0, cap)); })(body, /^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is, PROCEDURE_CHAR_CAP);
-  }
+  const body = stripPacketLabel(raw).body;
   let labeled = body;
   try { labeled = applyProvenanceLabel(r, body); } catch {
     try {
