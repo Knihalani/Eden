@@ -563,7 +563,7 @@ export class AgentMemory {
     }
   }
 
-  observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
+  observe(messages: unknown[], opts: { keepLiveIdentity?: boolean } = {}): MemoryRecord[] {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
     this.batch++;
     try {
