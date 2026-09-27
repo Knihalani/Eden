@@ -4,10 +4,6 @@ export const STOP = new Set(
   ),
 );
 
-export const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-const MONTH_IDX = new Map<string, number>(MONTHS.flatMap((m, i) => [[m, i], [m.slice(0, 3), i]] as [string, number][]));
-MONTH_IDX.set("sept", 8);
-
 export function stem(w0: string): string {
   let w = String(w0 ?? "");
   if (w.length < 4 || /\d/.test(w)) return w;
@@ -58,104 +54,4 @@ export function properNames(s: string): string[] {
 
 export function codeToks(s: string): string[] {
   return (s.match(/\b(?=[A-Za-z0-9-]*\d)(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9-]{2,12}\b/g) ?? []).map((x) => x.toLowerCase());
-}
-
-export type Stamp = { y: number; m: number; d: number } | null;
-
-export function parseStamp(date: string): Stamp {
-  if (!date) return null;
-  let m = date.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-  if (m) return { y: +m[1]!, m: +m[2]! - 1, d: +m[3]! };
-  m = date.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9}),?\s+(\d{4})\b/);
-  if (m && MONTH_IDX.has(m[2]!.toLowerCase())) return { y: +m[3]!, m: MONTH_IDX.get(m[2]!.toLowerCase())!, d: +m[1]! };
-  m = date.match(/\b([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/);
-  if (m && MONTH_IDX.has(m[1]!.toLowerCase())) return { y: +m[3]!, m: MONTH_IDX.get(m[1]!.toLowerCase())!, d: +m[2]! };
-  m = date.match(/\b([A-Za-z]{3,9}),?\s+(\d{4})\b/);
-  if (m && MONTH_IDX.has(m[1]!.toLowerCase())) return { y: +m[2]!, m: MONTH_IDX.get(m[1]!.toLowerCase())!, d: 1 };
-  m = date.match(/\b(20\d{2})\b/);
-  if (m) return { y: +m[1]!, m: 0, d: 1 };
-  return null;
-}
-
-export function fmtDMY(st: { y: number; m: number; d: number }): string {
-  return `${st.d} ${MONTHS[st.m]!.charAt(0).toUpperCase()}${MONTHS[st.m]!.slice(1)} ${st.y}`;
-}
-export function fmtMY(st: { y: number; m: number }): string {
-  return `${MONTHS[st.m]!.charAt(0).toUpperCase()}${MONTHS[st.m]!.slice(1)} ${st.y}`;
-}
-export function shiftDays(st: { y: number; m: number; d: number }, days: number) {
-  const dt = new Date(Date.UTC(st.y, st.m, st.d + days));
-  return { y: dt.getUTCFullYear(), m: dt.getUTCMonth(), d: dt.getUTCDate() };
-}
-export function shiftMonths(st: { y: number; m: number; d: number }, months: number) {
-  const total = st.y * 12 + st.m + months;
-  return { y: Math.floor(total / 12), m: ((total % 12) + 12) % 12, d: st.d };
-}
-
-export function textTimeToks(s: string): string[] {
-  const out: string[] = [];
-  const low = s.toLowerCase();
-  for (const y of low.match(/\b20\d{2}\b/g) ?? []) out.push(`t:y${y}`);
-  for (const w of low.match(/\b[a-z]{3,9}\b/g) ?? []) {
-    if (MONTH_IDX.has(w) && (w.length > 3 || w === "may")) out.push(`t:m${MONTH_IDX.get(w)}`);
-  }
-  return out;
-}
-
-const NUM = "(\\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|couple of|few)";
-
-export function groundRelativeTime(text: string, st: Stamp): string[] {
-  if (!st) return [];
-  const out: string[] = [];
-  const low = text.toLowerCase();
-  const add = (s: string) => {
-    if (!out.includes(s)) out.push(s);
-  };
-  if (/\byesterday\b/.test(low)) add(`the day before ${fmtDMY(st)}: ${fmtDMY(shiftDays(st, -1))}`);
-  if (/\b(tomorrow)\b/.test(low)) add(`the day after ${fmtDMY(st)}: ${fmtDMY(shiftDays(st, 1))}`);
-  if (/\b(today|tonight|this morning|this afternoon|this evening|earlier today)\b/.test(low)) add(`on ${fmtDMY(st)}`);
-  if (/\b(last|past|previous) (week|few days)\b/.test(low) || /\b(a|one) week ago\b/.test(low)) add(`the week before ${fmtDMY(st)}: ${fmtDMY(shiftDays(st, -7))}`);
-  if (/\b(next|coming|following) week\b/.test(low)) add(`the week after ${fmtDMY(st)}: ${fmtDMY(shiftDays(st, 7))}`);
-  if (/\b(last|past) weekend\b/.test(low)) add(`the weekend before ${fmtDMY(st)}`);
-  if (/\bthis weekend\b/.test(low)) add(`the weekend of ${fmtDMY(st)}`);
-  if (/\b(next|coming) weekend\b/.test(low)) add(`the weekend after ${fmtDMY(st)}`);
-  if (/\b(last|past|previous) month\b/.test(low) || /\b(a|one) month ago\b/.test(low)) add(`${fmtMY(shiftMonths(st, -1))} (the month before ${fmtMY(st)})`);
-  if (/\b(next|coming|following) month\b/.test(low)) add(`${fmtMY(shiftMonths(st, 1))} (the month after ${fmtMY(st)})`);
-  if (/\b(last|past|previous) year\b/.test(low) || /\b(a|one) year ago\b/.test(low)) add(`${st.y - 1} (the year before ${st.y})`);
-  if (/\b(next|coming|following) year\b/.test(low)) add(`${st.y + 1}`);
-  if (/\bthis (year|summer|spring|winter|fall|autumn|month|week|semester|season)\b/.test(low) || /\bearlier this year\b/.test(low)) add(`${fmtMY(st)}`);
-  if (/\b(last|past) (summer|spring|winter|fall|autumn|christmas|semester|season)\b/.test(low)) add(`${st.y - 1} or earlier in ${st.y}`);
-  if (/\b(next|this coming) (summer|spring|winter|fall|autumn|christmas)\b/.test(low)) add(`${st.y} or ${st.y + 1}`);
-  let m: RegExpExecArray | null;
-  const ago = new RegExp(`\\b${NUM} (day|days|week|weeks|month|months|year|years)\\s+(?:ago|back|earlier|before)\\b`, "g");
-  while ((m = ago.exec(low))) {
-    const n = ((x) => x === "a" || x === "an" || x === "one" ? 1 : x === "couple of" ? 2 : x === "few" ? 3 : NUMWORD[x] ? +NUMWORD[x]! : +x)(m[1]!.toLowerCase());
-    const u = m[2]!;
-    if (!Number.isFinite(n)) continue;
-    if (u.startsWith("day")) add(`${n} day${n > 1 ? "s" : ""} before ${fmtDMY(st)}: ${fmtDMY(shiftDays(st, -n))}`);
-    else if (u.startsWith("week")) add(`${n} week${n > 1 ? "s" : ""} before ${fmtDMY(st)}: ${fmtDMY(shiftDays(st, -7 * n))}`);
-    else if (u.startsWith("month")) add(`${fmtMY(shiftMonths(st, -n))} (${n} month${n > 1 ? "s" : ""} before ${fmtMY(st)})`);
-    else add(`${st.y - n} (${n} year${n > 1 ? "s" : ""} before ${st.y})`);
-  }
-  const inN = new RegExp(`\\bin ${NUM} (day|days|week|weeks|month|months|year|years)\\b`, "g");
-  while ((m = inN.exec(low))) {
-    const n = ((x) => x === "a" || x === "an" || x === "one" ? 1 : x === "couple of" ? 2 : x === "few" ? 3 : NUMWORD[x] ? +NUMWORD[x]! : +x)(m[1]!.toLowerCase());
-    const u = m[2]!;
-    if (!Number.isFinite(n)) continue;
-    if (u.startsWith("day")) add(`${fmtDMY(shiftDays(st, n))}`);
-    else if (u.startsWith("week")) add(`${fmtDMY(shiftDays(st, 7 * n))} (${n} week${n > 1 ? "s" : ""} after ${fmtDMY(st)})`);
-    else if (u.startsWith("month")) add(`${fmtMY(shiftMonths(st, n))}`);
-    else add(`${st.y + n}`);
-  }
-  const wd = /\b(last|next|this|on)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g;
-  while ((m = wd.exec(low))) {
-    const which = m[1]!;
-    const day = m[2]!;
-    add(which === "last" ? `the ${day.charAt(0).toUpperCase()}${day.slice(1)} before ${fmtDMY(st)}` : which === "next" ? `the ${day.charAt(0).toUpperCase()}${day.slice(1)} after ${fmtDMY(st)}` : `${day.charAt(0).toUpperCase()}${day.slice(1)} around ${fmtDMY(st)}`);
-  }
-  const monthOnly = /\b(january|february|march|april|june|july|august|september|october|november|december)\b(?!,?\s+20\d{2})/g;
-  while ((m = monthOnly.exec(low))) {
-    add(`${m[1]!.charAt(0).toUpperCase()}${m[1]!.slice(1)} ${st.y}`);
-  }
-  return out.slice(0, 4);
 }
