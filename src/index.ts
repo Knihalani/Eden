@@ -358,6 +358,9 @@ export class AgentMemory {
         git: ["bash"],
         session: ["cache"],
         hanging: ["package"],
+        sso: ["auth"],
+        jwt: ["auth"],
+        bouncing: ["auth"],
       };
       for (const t of [...hay]) {
         const extra = expand[t];
