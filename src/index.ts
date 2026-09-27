@@ -944,7 +944,6 @@ export class AgentMemory {
             try { hopPool = dropHarmed(this.dir, hopStore); } catch { hopPool = hopStore; }
             hopped = completeNotes(rankCue, retrieved, hopPool);
             packet = hopped.length ? assembleNotes(hopped, this.dir) : [];
-            packet = completeNotes(rankCue, packet, hopPool, { pull: false });
           } else {
             packet = hopped.length ? assembleNotes(hopped, this.dir) : [];
           }
