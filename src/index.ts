@@ -10,7 +10,6 @@ import { memoryConsent } from "./memory-consent";
 import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate, migrateSessionHowTo } from "./sleep";
-import { ChunkStore } from "./chunk-store";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { logMemoryNotes } from "./memory-log";
@@ -47,9 +46,6 @@ export function isMathChatterCue(cue: string): boolean {
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
 export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number; lane?: MemoryLaneKind };
-function memRec(id: string, text: string, kind: MemoryKind, lane: MemoryLaneKind, tags: string[], at: number): MemoryRecord {
-  return { id, text, kind, lane, tags, at };
-}
 export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
 export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
@@ -475,9 +471,6 @@ export class AgentMemory {
   get jsonlDir(): string {
     return dirname(this.path);
   }
-  get howtoDir(): string {
-    return this.dir;
-  }
   private know?: KnowSearch;
   private agent?: string;
   private project?: string;
@@ -853,11 +846,6 @@ export class AgentMemory {
                 } catch {}
               };
               for (const r of retrieved) push(r);
-              try {
-                for (const c of new ChunkStore(this.howtoDir).all()) {
-                  push(memRec(c.id, c.text, "episode", "narrative", ["chunk"], c.t));
-                }
-              } catch {}
               try {
                 for (const m of this.memories()) {
                   if (m.lane === "narrative" && !(m.tags ?? []).includes("chunk")) continue;
