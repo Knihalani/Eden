@@ -207,6 +207,8 @@ export class AgentMemory {
   private batch = 0;
   private dirty = false;
   private seenLower = new Set<string>();
+  private post: Map<string, Compiled[]> | null = null;
+  private cons: MemoryRecord[] = [];
 
   constructor(opts: MemoryOptions = {}) {
     this.agent = opts.agent; this.project = opaqueProject(opts.project);
@@ -266,15 +268,37 @@ export class AgentMemory {
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     this.compiled.push(c);
+    this.post = null;
     if (!this.project || rec.project === this.project) this.seenLower.add(rec.text.toLowerCase());
     return this.flush(true), rec;
   }
 
   private rebuildSeen() {
     this.seenLower = new Set();
+    this.post = null;
     for (const c of this.compiled) {
       if (!this.project || c.rec.project === this.project) this.seenLower.add(c.rec.text.toLowerCase());
     }
+  }
+
+  private ensureIndex() {
+    if (this.post) return;
+    const post = new Map<string, Compiled[]>();
+    const cons: MemoryRecord[] = [];
+    for (const c of this.compiled) {
+      if (c.rec.kind === "digest") continue;
+      if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
+      if (this.project && c.rec.project !== this.project) continue;
+      if (c.rec.kind === "constraint") cons.push(c.rec);
+      for (const w of c.needles) {
+        if (w.length < 3 || STOP.has(w)) continue;
+        let arr = post.get(w);
+        if (!arr) post.set(w, arr = []);
+        arr.push(c);
+      }
+    }
+    this.post = post;
+    this.cons = cons;
   }
 
   observe(messages: unknown[]): MemoryRecord[] {
@@ -368,7 +392,28 @@ export class AgentMemory {
         for (const x of extra) hay.add(x);
       }
     } catch {}
-    const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
+    let rows: Compiled[] = [];
+    try {
+      this.ensureIndex();
+      const seen = new Set<Compiled>();
+      if (this.post) {
+        for (const t of hay) {
+          if (t.length < 3 || STOP.has(t)) continue;
+          const arr = this.post.get(t);
+          if (!arr) continue;
+          for (const c of arr) {
+            if (seen.has(c)) continue;
+            seen.add(c);
+            rows.push(c);
+          }
+        }
+      }
+    } catch {
+      rows = [];
+    }
+    if (!rows.length) {
+      rows = this.compiled.filter((c) => c.rec.kind !== "digest" && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
+    }
     const scored: { rec: MemoryRecord; n: number; k: number }[] = [];
     for (const c of rows) {
       let n = 0;
@@ -382,7 +427,7 @@ export class AgentMemory {
     let lexical = ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
     try {
       if (String(text ?? "").trim()) {
-        lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
+        lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(this.cons.length ? this.cons : rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
       }
     } catch {}
     return lexical;
@@ -423,6 +468,17 @@ export class AgentMemory {
           packet = !silent && retrieved.length ? retrieved : [];
         }
         try { packet = dropHarmed(this.dir, packet); } catch {}
+        try {
+          const latest = (re: RegExp) => packet.reduce((b, m) => (re.test(String(m.text ?? "")) && m.at > b ? m.at : b), -1);
+          const sha = latest(/\bsha256\b/i);
+          const loc = latest(/\bbased in\b/i);
+          packet = packet.filter((m) => {
+            const t = String(m.text ?? "");
+            if (sha >= 0 && /\bsha256\b/i.test(t) && m.at < sha) return false;
+            if (loc >= 0 && /\bbased in\b/i.test(t) && m.at < loc) return false;
+            return true;
+          });
+        } catch {}
         if (packet.length) notes.push({ role: "system", content: MEMORY_MARK + packet.map((m) => `\n- ${m.text}`).join("") });
       }
       if (!notes.length) return list;
@@ -450,6 +506,7 @@ export class AgentMemory {
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void {
     this.compiled = this.compiled.filter((c) => !pred(c.rec));
+    this.post = null;
     this.flush(true);
   }
 
@@ -461,6 +518,7 @@ export class AgentMemory {
       dirty = true;
       return compileNeedles({ ...c.rec, text: next });
     });
+    if (dirty) this.post = null;
     if (dirty) this.flush(true);
   }
 
