@@ -425,8 +425,8 @@ export class AgentMemory {
     try {
       for (const t of [...hay]) {
         const extra = CUE_EXPAND[t];
-        if (!extra) continue;
-        for (const x of extra) hay.add(x);
+        if (extra) for (const x of extra) hay.add(x);
+        if (t.length >= 4 && !t.endsWith("s")) hay.add(`${t}s`);
       }
     } catch {}
     let rows: Compiled[] = [];
