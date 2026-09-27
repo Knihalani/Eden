@@ -323,31 +323,6 @@ const FUNC_WORD = new Set([
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
-function stripDeadObjects(text: string, store: SemanticStore): string {
-  const raw = String(text ?? "");
-  if (!raw) return raw;
-  try {
-    const live = store.live();
-    if (!Array.isArray(live) || !live.length) return raw;
-    let t = raw;
-    for (const row of live) {
-      const s = String(row?.s ?? "").trim();
-      const liveO = String(row?.o ?? "").trim();
-      if (s.length < 3 || liveO.length < 2) continue;
-      const subj = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-      const obj = liveO.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      t = t.replace(
-        new RegExp(`(?:the\\s+)?${subj}\\s+(?:is\\s+now|are\\s+now|was|were|is|are)\\s+(?!${obj}\\b)[A-Za-z][A-Za-z0-9-]*`, "gi"),
-        "",
-      );
-    }
-    t = t.replace(/\s+/g, " ").trim();
-    return t || raw;
-  } catch {
-    return raw;
-  }
-}
-
 function omitConflictingIdentity(text: string, store: SemanticStore): string {
   const raw = String(text ?? "").trim();
   if (!raw) return "";
@@ -560,36 +535,6 @@ function formatNote(r: MemoryRecord): MemoryRecord {
 
 export function formatPacketText(r: MemoryRecord): string {
   try { return formatNote(r).text; } catch { return String(r?.text ?? ""); }
-}
-
-function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?: string[] }>(
-  notes: T[],
-  store: SemanticStore,
-): T[] {
-  try {
-    if (!Array.isArray(notes)) return notes;
-    const out: T[] = [];
-    for (const n of notes) {
-      if (!n || typeof n !== "object") continue;
-      if (!(n.lane === "narrative" || (n.tags ?? []).includes("chunk")) && n.lane !== "trajectory") {
-        out.push(n);
-        continue;
-      }
-      let next = String(n.text ?? "");
-      try { next = omitConflictingIdentity(next, store); } catch { next = String(n.text ?? ""); }
-      if (n.lane === "trajectory") {
-        try { next = stripDeadObjects(next || String(n.text ?? ""), store); } catch {}
-      }
-      if (!next) {
-        if (n.lane === "trajectory") out.push(n);
-        continue;
-      }
-      out.push(next === n.text ? n : { ...n, text: next });
-    }
-    return out;
-  } catch {
-    return Array.isArray(notes) ? notes : [];
-  }
 }
 
 export class AgentMemory {
@@ -1054,7 +999,6 @@ export class AgentMemory {
         } catch {
           packet = !silent && retrieved.length ? assembleNotes(retrieved, this.dir) : [];
         }
-        try { if (rankCue && !silent) packet = scrubNarrativeLeftovers(packet, (this.sem ??= new SemanticStore(this.dir))); } catch {}
         packet = packet.map(formatNote);
         try { packet = dropHarmed(this.dir, packet); } catch {}
         try { logMemoryNotes(packet); } catch {}
