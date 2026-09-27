@@ -831,28 +831,16 @@ export class AgentMemory {
           let hopped = silent ? [] : retrieved;
           if (!silent && rankCue && retrieved.length) {
             const hopStore = (() => {
-              const out: MemoryRecord[] = [];
-              const seen = new Set<string>();
-              const push = (m: MemoryRecord | { id?: string; text?: string; lane?: string; kind?: string; at?: number; tags?: string[] }) => {
-                try {
-                  const text = String(m?.text ?? "").trim();
-                  if (!text) return;
-                  if ((m as { lane?: string }).lane === "icl" || isIclExemplar(text)) return;
-                  const id = String((m as { id?: string }).id ?? "") || `hop:${text.slice(0, 48)}`;
-                  if (seen.has(id) || seen.has(text.slice(0, 96))) return;
-                  seen.add(id);
-                  seen.add(text.slice(0, 96));
-                  out.push(m as MemoryRecord);
-                } catch {}
-              };
-              for (const r of retrieved) push(r);
               try {
-                for (const m of this.memories()) {
-                  if (m.lane === "narrative" && !(m.tags ?? []).includes("chunk")) continue;
-                  push(m);
-                }
-              } catch {}
-              return out;
+                return this.memories().filter((m) => {
+                  if (!String(m.text ?? "").trim()) return false;
+                  if (m.lane === "icl" || isIclExemplar(m.text)) return false;
+                  if (m.lane === "narrative" && !(m.tags ?? []).includes("chunk")) return false;
+                  return true;
+                });
+              } catch {
+                return retrieved;
+              }
             })();
             let hopPool = hopStore;
             try { hopPool = dropHarmed(this.dir, hopStore); } catch { hopPool = hopStore; }
