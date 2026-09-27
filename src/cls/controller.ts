@@ -39,14 +39,7 @@ export function fuseArHits<T extends { text: string; score: number; id?: string;
       fused[i] = comb * (1 + 0.15 * bRaw);
     }
 
-    const idx = pool.map((h, i) => {
-      const extra = h as typeof h & { i?: unknown };
-      if (typeof extra.i === "number" && Number.isInteger(extra.i) && extra.i >= 0) return extra.i;
-      const id = String(h.id ?? "");
-      const m = id.match(/:(\d+)$/);
-      if (m) return Number(m[1]);
-      return i;
-    });
+    const idx = pool.map((h, i) => { const extra = h as typeof h & { i?: unknown }; if (typeof extra.i === "number" && Number.isInteger(extra.i) && extra.i >= 0) return extra.i; const m = String(h.id ?? "").match(/:(\d+)$/); return m ? Number(m[1]) : i; });
     const spread = Float64Array.from(fused);
     for (let i = 0; i < pool.length; i++) {
       if (rareHits[i]! < 1) continue;
