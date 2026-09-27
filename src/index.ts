@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
-import { alreadyInjected, injectFromRequest, injectNote } from "../packages/know/src/inject";
+import { alreadyInjected } from "../packages/know/src/inject";
 import { redact } from "../packages/ir/src/redact";
 import { assembleNotes, splitNumberedItems } from "./assemble";
 import { completeNotes } from "./cls/complete";
@@ -1059,7 +1059,6 @@ export class AgentMemory {
         try { packet = dropHarmed(this.dir, packet); } catch {}
         try { logMemoryNotes(packet); } catch {}
         if (packet.length) notes.push({ role: "system", content: MEMORY_MARK + packet.map((m) => `\n- ${m.text}`).join("") });
-        const card = injectFromRequest({ text: blob }, this.know); if (card) notes.push({ role: "system", content: injectNote(card) });
       }
       this.observe(list, { deferSleep: true });
       if (!notes.length) return list;
