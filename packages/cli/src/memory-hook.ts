@@ -3,7 +3,18 @@ import { redact } from "@eden/ir";
 import { childSessionName, MEMORY_MARK, openMemory } from "../../../src/index";
 import { memoryConsent } from "../../../src/memory-consent";
 
+const live = new Map<string, ReturnType<typeof openMemory>>();
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd", "PostToolUse", "SubagentStop"]);
+
+function hookMemory(opts: { dir?: string; agent?: string; project?: string; session?: string; child: boolean; cwd?: string }) {
+  const key = `${opts.dir ?? ""}\0${opts.session ?? ""}\0${opts.child ? "1" : "0"}\0${opts.agent ?? ""}`;
+  let mem = live.get(key);
+  if (!mem) {
+    mem = openMemory(opts);
+    live.set(key, mem);
+  }
+  return mem;
+}
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -44,7 +55,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     } catch {
       resolved = { child: false };
     }
-    const mem = openMemory({
+    const mem = hookMemory({
       dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
       agent: typeof agent === "string" ? agent : undefined,
       project: cwd || process.env.EDEN_MEMORY_PROJECT || undefined,
