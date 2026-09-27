@@ -1031,15 +1031,7 @@ export class AgentMemory {
       const notes: { role: "system"; content: string }[] = [];
       if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
         const cue = cueFor(list);
-        let rankCue = cue;
-        try {
-          const fromMsg = placePathsFrom(Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined);
-          const extra: string[] = [];
-          if (extraPaths) for (const p of extraPaths) if (typeof p === "string") extra.push(p);
-          rankCue = cue ? attachPlaceCues(cue, extra.length ? [...fromMsg, ...extra] : fromMsg) : "";
-        } catch {
-          rankCue = cue;
-        }
+        const rankCue = cue;
         const retrieved = rankCue ? this.notesFor(rankCue) : [];
         let silent = false;
         if (rankCue && retrieved.length) {
@@ -1127,9 +1119,7 @@ export class AgentMemory {
     const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages", m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [], sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
     try {
       const sysBlob = typeof sys === "string" ? sys : sys ? convBlob(Array.isArray(sys) ? sys : [sys]) : "";
-      let extra: string[] = [];
-      try { extra = placePathsFrom(body); } catch { extra = []; }
-      const next = alreadyInjected(sysBlob) || sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m, extra);
+      const next = alreadyInjected(sysBlob) || sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m);
       if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys], { keepLiveIdentity: true });
       if (next === m) return body;
       const merged: Record<string, unknown> = { ...body, [key]: next };

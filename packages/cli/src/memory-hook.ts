@@ -4,7 +4,7 @@ import { redact } from "@eden/ir";
 import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { parseHookToolTraces, parseToolArgs, persistToolTraces } from "../../../src/tool-trace";
-import { childSessionName, consolidate, dropHarmed, formatPacketText, loadHarmedIds, MEMORY_MARK, openMemory, placePathsFrom, type AgentMemory, type MemoryRecord } from "../../../src/index";
+import { childSessionName, consolidate, dropHarmed, formatPacketText, loadHarmedIds, MEMORY_MARK, openMemory, type AgentMemory, type MemoryRecord } from "../../../src/index";
 import { maybeIncrementalSleep } from "../../../src/sleep";
 import { memoryConsent } from "../../../src/memory-consent";
 import { logMemoryNotes } from "../../../src/memory-log";
@@ -279,13 +279,8 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       return brief ? { additional_context: brief, hookSpecificOutput: { hookEventName: event, additionalContext: brief } } : null;
     }
     const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
-    let files: string[] = [];
-    try {
-      const got = placePathsFrom(r);
-      if (Array.isArray(got)) files = got.filter((p) => typeof p === "string" && p);
-    } catch {}
     const notes = prompt
-      ? notesFromInject(mem.inject([{ role: "user", content: prompt, ...(files.length ? { files } : {}) }]))
+      ? notesFromInject(mem.inject([{ role: "user", content: prompt }]))
       : "";
     if (writes && prior.length) mem.observe(prior);
     if (writes) {
