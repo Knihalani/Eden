@@ -43,7 +43,6 @@ import {
   takeSpeculation,
   turnBoundary,
 } from "./speculate";
-import { bindWarmRunner, claimWarm, watchWarm, takeWarm } from "./warm";
 
 const MAX_TRACES = 2000;
 const PULL_EVERY = 24;
@@ -279,8 +278,6 @@ export async function runCompiled(
   registry?: ToolRegistry,
 ): Promise<unknown> {
   const t0 = performance.now();
-  safely(() => watchWarm(state, program, { input }), null);
-  safely(() => claimWarm(state, program, input), null);
   const island: IslandCaller =
     state.opts.island ??
     (async () => {
@@ -295,10 +292,6 @@ export async function runCompiled(
       registry: {
         ...(baseReg.has ? { has: (name: string) => baseReg.has!(name) } : {}),
         execute: async (name, args, ctx) => {
-          try {
-            const taken = await takeWarm(state, program, name, args);
-            if (taken.hit) return taken.value;
-          } catch {}
           return baseReg.execute(name, args, ctx);
         },
       },
@@ -426,10 +419,6 @@ export function wrapTools<T extends ToolsIn>(
   bindSpeculateRunner(state, {
     live: () => (state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId)),
     run: (program, input) => runCompiled(state, program, input, tools, registry),
-  });
-  bindWarmRunner(state, {
-    live: () => (state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId)),
-    execute: (tool, args) => registry.execute(tool, args),
   });
   const wrapped: Record<string, ToolDef> = {};
   const compiledCache = new Map<string, { program: StretchProgram; def: ToolDef }>();
