@@ -209,6 +209,7 @@ export class AgentMemory {
   private seenLower = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
   private cons: MemoryRecord[] = [];
+  private hopShort: MemoryRecord[] = [];
 
   constructor(opts: MemoryOptions = {}) {
     this.agent = opts.agent; this.project = opaqueProject(opts.project);
@@ -285,11 +286,13 @@ export class AgentMemory {
     if (this.post) return;
     const post = new Map<string, Compiled[]>();
     const cons: MemoryRecord[] = [];
+    const shorts: MemoryRecord[] = [];
     for (const c of this.compiled) {
       if (c.rec.kind === "digest") continue;
       if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
       if (this.project && c.rec.project !== this.project) continue;
       if (c.rec.kind === "constraint") cons.push(c.rec);
+      if (c.needles.length <= 12 && String(c.rec.text ?? "").trim()) shorts.push(c.rec);
       for (const w of c.needles) {
         if (w.length < 3 || STOP.has(w)) continue;
         let arr = post.get(w);
@@ -299,6 +302,7 @@ export class AgentMemory {
     }
     this.post = post;
     this.cons = cons;
+    this.hopShort = shorts;
   }
 
   observe(messages: unknown[]): MemoryRecord[] {
@@ -385,6 +389,11 @@ export class AgentMemory {
         sso: ["auth"],
         jwt: ["auth"],
         bouncing: ["auth"],
+        errors: ["error"],
+        grouping: ["error"],
+        workflow: ["workflows"],
+        purging: ["cdn"],
+        edge: ["cdn"],
       };
       for (const t of [...hay]) {
         const extra = expand[t];
@@ -460,7 +469,7 @@ export class AgentMemory {
         try {
           if (!silent && cue && retrieved.length) {
             let hopPool = retrieved;
-            try { hopPool = this.compiled.filter((c) => c.needles.length <= 12).map((c) => c.rec).filter((m) => String(m.text ?? "").trim()); } catch {}
+            try { hopPool = this.hopShort.length ? this.hopShort : retrieved; } catch {}
             try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
             packet = completeNotes(cue, retrieved, hopPool);
           } else if (!silent) packet = retrieved;
@@ -472,10 +481,14 @@ export class AgentMemory {
           const latest = (re: RegExp) => packet.reduce((b, m) => (re.test(String(m.text ?? "")) && m.at > b ? m.at : b), -1);
           const sha = latest(/\bsha256\b/i);
           const loc = latest(/\bbased in\b/i);
+          const drain = latest(/\blog drain\b/i);
+          const region = latest(/\bregion of\b/i);
           packet = packet.filter((m) => {
             const t = String(m.text ?? "");
             if (sha >= 0 && /\bsha256\b/i.test(t) && m.at < sha) return false;
             if (loc >= 0 && /\bbased in\b/i.test(t) && m.at < loc) return false;
+            if (drain >= 0 && /\blog drain\b/i.test(t) && m.at < drain) return false;
+            if (region >= 0 && /\bregion of\b/i.test(t) && m.at < region) return false;
             return true;
           });
         } catch {}
