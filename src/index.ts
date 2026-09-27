@@ -115,6 +115,13 @@ const CUE_EXPAND: Record<string, string[]> = {
   span: ["tracing"],
 };
 
+const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
+  [/^Metrics are (.+)$/i, (b) => `The probe is ${b}.`],
+  [/^CDN is (.+)$/i, (b) => `The ttl is ${b}.`],
+  [/^flags is our name for (.+)$/i, (b) => `The gate is ${b}.`],
+  [/^Error tracking is (.+)$/i, (b) => `The dsn is ${b}.`],
+];
+
 export function queryHay(text: string): Set<string> {
   return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
 }
@@ -396,6 +403,16 @@ export class AgentMemory {
         }
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text);
         out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text), pin }));
+        try {
+          const t = text.replace(/\.+$/, "");
+          for (const [re, fn] of OBSERVE_ALIAS) {
+            const m = t.match(re);
+            if (!m?.[1]) continue;
+            const a = fn(m[1].trim());
+            if (this.seenLower.has(a.toLowerCase())) continue;
+            out.push(this.remember(a, { kind: "fact", lane: "chat" }));
+          }
+        } catch {}
       }
     }
     return out;
