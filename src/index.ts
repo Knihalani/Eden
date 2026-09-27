@@ -10,7 +10,6 @@ import { memoryConsent } from "./memory-consent";
 import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate, migrateSessionHowTo } from "./sleep";
-import { GIST_CHAR_CAP } from "./gist-retrieve";
 import { ChunkStore } from "./chunk-store";
 import { IclIndex } from "./icl-index";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
@@ -487,15 +486,6 @@ function formatNote(r: MemoryRecord): MemoryRecord {
     const factish = r.kind === "fact" || r.kind === "preference" || /^\s*\[fact(?:\s*·[^\]]*)?\]/i.test(body);
     if (!skipFactCap && factish) body = ((text, re, cap) => { const redacted = redact(String(text ?? "")); const t = typeof redacted === "string" ? redacted : String(text ?? ""); const labeled = t.match(re); return labeled ? (labeled[2]!.length <= cap ? t : `${labeled[1]!}${labeled[2]!.slice(0, cap)}`) : (t.length <= cap ? t : t.slice(0, cap)); })(body, /^(\s*\[fact(?:\s*·[^\]]*)?\]\s*)(.*)$/is, PROCEDURE_CHAR_CAP);
   }
-  try {
-    const tags = Array.isArray(r.tags) ? r.tags : [];
-    const skipGistCap = r.lane === "icl" || r.lane === "trajectory" || isIclExemplar(r.text) || isIclExemplar(body)
-      || (r.kind === "episode" && tags.includes("chunk"));
-    const gistish = r.kind === "digest" || r.kind === "gist"
-      || tags.some((t) => t === "gist" || t === "digest")
-      || /^\s*\[gist(?:\s*·[^\]]*)?\]/i.test(body);
-    if (!skipGistCap && gistish) body = ((text, re, cap) => { const redacted = redact(String(text ?? "")); const t = typeof redacted === "string" ? redacted : String(text ?? ""); const labeled = t.match(re); return labeled ? (labeled[2]!.length <= cap ? t : `${labeled[1]!}${labeled[2]!.slice(0, cap)}`) : (t.length <= cap ? t : t.slice(0, cap)); })(body, /^(\s*\[gist(?:\s*·[^\]]*)?\]\s*)(.*)$/is, GIST_CHAR_CAP);
-  } catch { /* fail-open: leave body */ }
   let labeled = body;
   try { labeled = applyProvenanceLabel(r, body); } catch {
     try {
