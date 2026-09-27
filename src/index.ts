@@ -839,13 +839,9 @@ export class AgentMemory {
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
-    if (text) {
-      const recs = this.relevant(text, k).map(formatNote);
-      try { return dropHarmed(this.dir, recs); } catch { return recs; }
-    }
-    const recs = this.memories().filter((r) => !(r.lane === "narrative" || (r.tags ?? []).includes("chunk")) && r.lane !== "icl" && r.lane !== "trajectory");
-    const emptyCue = ((rows) => [...rows.filter((r) => r.kind === "constraint").slice(-k), ...rows.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(recs).map(formatNote);
-    try { return dropHarmed(this.dir, emptyCue); } catch { return emptyCue; }
+    if (!text) return [];
+    const recs = this.relevant(text, k).map(formatNote);
+    try { return dropHarmed(this.dir, recs); } catch { return recs; }
   }
 
   markHarmed(ids: Iterable<string>): void {
