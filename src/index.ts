@@ -10,14 +10,12 @@ import { dropHarmed, markHarmed as persistHarmed } from "./memory-harmed";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { stripPacketLabel } from "./memory-provenance";
-import { type MemoryRoute } from "./memory-router";
 import { isToolProse, objectAsserted } from "./semantic-store";
 
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
 export const memoryInjectSilent = { n: 0 };
-export const memoryLastRoute = { route: "chat-jsonl" as MemoryRoute };
 
 export function isMathChatterCue(cue: string): boolean {
   try {
@@ -114,14 +112,6 @@ export function cueFor(list: unknown[]): string {
   return m && typeof m === "object" ? convBlob([m]).trim() : "";
 }
 
-export function placePathsFrom(_raw: unknown): string[] {
-  return [];
-}
-
-export function attachPlaceCues(cue: string, _paths?: Iterable<string>): string {
-  return typeof cue === "string" ? cue : "";
-}
-
 const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
 const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
@@ -153,10 +143,6 @@ function extractDurable(blob: string): string[] {
     if (t.length >= 8 && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.push(t); }
   }
   return out;
-}
-
-export function pathCues(_lower: string): Set<string> {
-  return new Set();
 }
 
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
@@ -208,8 +194,6 @@ export function subjectKey(text: string): string | null {
 
 export const PACKET_CHAT_K_MIN = 6;
 export const PACKET_CHAT_K_MAX = 10;
-export const PROCEDURE_TOKEN_CAP = 300;
-export const PROCEDURE_CHAR_CAP = PROCEDURE_TOKEN_CAP * 4;
 
 export function memoryRetrieveCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_CAP);
@@ -220,10 +204,6 @@ export function memoryRetrieveCap(): number {
 function formatNote(r: MemoryRecord): MemoryRecord {
   const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
   return { ...r, text: stripPacketLabel(raw).body };
-}
-
-export function formatPacketText(r: MemoryRecord): string {
-  try { return formatNote(r).text; } catch { return String(r?.text ?? ""); }
 }
 
 export class AgentMemory {
