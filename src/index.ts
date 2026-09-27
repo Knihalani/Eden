@@ -10,12 +10,9 @@ import { memoryConsent } from "./memory-consent";
 import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate, migrateSessionHowTo, noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
-import { retrieveHowTo } from "./howto-retrieve";
-import { retrieveExperience } from "./experience-retrieve";
-import { retrieveNarrativeChunks } from "./chunk-retrieve";
-import { retrieveGists, isSummaryCue, isBookQaCue, leftoverChunksForGists, GIST_CHAR_CAP } from "./gist-retrieve";
+import { isSummaryCue, isBookQaCue, GIST_CHAR_CAP } from "./gist-retrieve";
 import { ChunkStore } from "./chunk-store";
-import { IclIndex, retrieveIcl } from "./icl-index";
+import { IclIndex } from "./icl-index";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { logMemoryNotes } from "./memory-log";
@@ -576,148 +573,6 @@ export function formatPacketText(r: MemoryRecord): string {
   try { return formatNote(r).text; } catch { return String(r?.text ?? ""); }
 }
 
-const HOWTO_SCHEMA_KEYS = new Set(["command", "cmd", "script", "path", "file", "filepath", "filename"]);
-const HOWTO_EXACT = 1_000_000;
-const HOWTO_GAP_CMD = /\bpytest\b|\bnpm\b|\brm\s|\bcd\s|\bbash\s|[|;&]/i;
-
-function howtoSchemaValues(v: unknown, out: string[] = [], depth = 0): string[] {
-  if (depth > 8 || v == null) return out;
-  if (typeof v === "string") {
-    const looks = /^\s*[{\[]/.test(v) || /"(?:cmd|command|script)"/i.test(v);
-    if (!looks) return out;
-    try { howtoSchemaValues(JSON.parse(v), out, depth + 1); } catch { /* partial JSON */ }
-    const re = /"(command|cmd|script|path|file|filepath|filename)"\s*:\s*"((?:\\.|[^"\\])*)"/gi;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(v))) {
-      try {
-        const s = JSON.parse(`"${m[2]!}"`);
-        if (typeof s === "string" && s.trim()) out.push(s.trim());
-      } catch { if (m[2]) out.push(m[2]); }
-    }
-    return out;
-  }
-  if (Array.isArray(v)) { for (const x of v) howtoSchemaValues(x, out, depth + 1); return out; }
-  if (typeof v !== "object") return out;
-  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-    if (HOWTO_SCHEMA_KEYS.has(k.toLowerCase())) {
-      if (typeof val === "string" && val.trim()) out.push(val.trim());
-      else if (typeof val === "number" && Number.isFinite(val)) out.push(String(val));
-      else howtoSchemaValues(val, out, depth + 1);
-    } else howtoSchemaValues(val, out, depth + 1);
-  }
-  return out;
-}
-
-function addHowtoToks(out: Set<string>, text: string, dropStops: boolean) {
-  for (const t of (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text)) {
-    if (dropStops && (t.length < 2 || STOP.has(t))) continue;
-    out.add(t);
-  }
-  for (const p of pathCues(text.toLowerCase())) out.add(p);
-}
-
-export function howtoAboutness(cue: string, row: { cue?: string; files?: string[]; verify?: string; steps?: { args?: Record<string, unknown> }[] }): number {
-  const q = String(cue ?? "").trim();
-  if (!q) return 0;
-  const rowCue = typeof row.cue === "string" ? row.cue : "";
-  const nq = q.toLowerCase().replace(/\s+/g, " ");
-  const nr = rowCue.trim().toLowerCase().replace(/\s+/g, " ");
-  if (nq && nq === nr) return HOWTO_EXACT;
-  const qToks = new Set<string>();
-  addHowtoToks(qToks, q, true);
-  for (const v of howtoSchemaValues(q)) addHowtoToks(qToks, v, true);
-  const hay = new Set<string>();
-  addHowtoToks(hay, rowCue, true);
-  const files = Array.isArray(row.files) ? row.files : [];
-  for (const f of files) {
-    if (typeof f !== "string") continue;
-    addHowtoToks(hay, f, false);
-    const base = f.trim().toLowerCase().split(/[/\\]/).pop() ?? "";
-    if (base) hay.add(base);
-  }
-  if (typeof row.verify === "string" && row.verify.trim()) {
-    addHowtoToks(hay, row.verify, true);
-    const stem = ((v?: string) => { if (!v) return ""; const first = v.trim().toLowerCase().split(/\s+/)[0] ?? ""; const cleaned = first.replace(/^['"]+|['"]+$/g, ""); return (cleaned.split(/[/\\]/).pop() ?? cleaned).trim(); })(row.verify);
-    if (stem) hay.add(stem);
-  }
-  for (const v of howtoSchemaValues(row.steps ?? [])) addHowtoToks(hay, v, true);
-  let n = 0;
-  for (const t of qToks) if (hay.has(t)) n++;
-  const qPlaces = new Set<string>();
-  for (const p of pathCues(q.toLowerCase())) qPlaces.add(p);
-  for (const v of howtoSchemaValues(q)) for (const p of pathCues(v.toLowerCase())) qPlaces.add(p);
-  let placeHit = false;
-  for (const f of files) {
-    if (typeof f !== "string") continue;
-    const fl = f.trim().toLowerCase();
-    if (!fl) continue;
-    const base = fl.split(/[/\\]/).pop() ?? "";
-    if ((base && (qPlaces.has(base) || qToks.has(base))) || qPlaces.has(fl)) { placeHit = true; break; }
-  }
-  const stem = ((v?: string) => { if (!v) return ""; const first = v.trim().toLowerCase().split(/\s+/)[0] ?? ""; const cleaned = first.replace(/^['"]+|['"]+$/g, ""); return (cleaned.split(/[/\\]/).pop() ?? cleaned).trim(); })(typeof row.verify === "string" ? row.verify : undefined);
-  const stemHit = !!(stem && (qToks.has(stem) || [...qPlaces].includes(stem)));
-  if (placeHit || stemHit) return Math.max(n, 1) + (placeHit ? 10 : 0) + (stemHit ? 5 : 0);
-  if (n >= 2) return n;
-  return ((a, b) => {
-    try {
-      const fn = (globalThis as { edenHowtoEmbed?: (x: string, y: string) => number }).edenHowtoEmbed;
-      if (typeof fn !== "function") return 0;
-      const n = Number(fn(a, b));
-      return Number.isFinite(n) && n > 0 ? Math.min(n, 0.999) : 0;
-    } catch {
-      return 0;
-    }
-  })(q, [row.cue ?? "", ...(Array.isArray(row.files) ? row.files : []), row.verify ?? "", ...howtoSchemaValues(row.steps ?? [])].join(" "));
-}
-
-function howtoProcedureRecord(view: ReturnType<typeof retrieveHowTo>[number]): MemoryRecord {
-  const cue = typeof view.cue === "string" ? view.cue.trim() : "";
-  const seen = new Set<string>();
-  const files: string[] = [];
-  const add = (f: unknown) => {
-    if (typeof f !== "string") return;
-    const s = f.trim();
-    if (!s || seen.has(s)) return;
-    seen.add(s);
-    files.push(s);
-  };
-  if (Array.isArray(view.files)) for (const f of view.files) add(f);
-  if (!files.length && Array.isArray(view.steps)) {
-    for (const s of view.steps) {
-      if (Array.isArray(s?.files)) for (const f of s.files) add(f);
-      const args = s?.args;
-      if (!args) continue;
-      for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]);
-    }
-  }
-  let verify = typeof view.verify === "string" ? view.verify.trim() : "";
-  if (!verify && Array.isArray(view.steps)) {
-    for (let i = view.steps.length - 1; i >= 0; i--) {
-      const args = view.steps[i]?.args;
-      if (!args) continue;
-      for (const k of ["command", "cmd", "script"] as const) {
-        const v = args[k];
-        if (typeof v === "string" && v.trim()) {
-          verify = v.trim();
-          break;
-        }
-      }
-      if (verify) break;
-    }
-  }
-  let text = cue;
-  if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" ");
-  if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
-  const gaps = view.gaps;
-  let unknown: string | undefined;
-  if (Array.isArray(gaps) && gaps.length) {
-    const raw = typeof gaps[0]?.reason === "string" ? gaps[0].reason.trim() : "";
-    unknown = !raw || HOWTO_GAP_CMD.test(raw) ? "missing step" : raw;
-  }
-  if (unknown) text = text ? `${text} · unknown: ${unknown}` : `unknown: ${unknown}`;
-  return { id: view.id, kind: "procedure", tags: ["howto", "procedure"], text, at: view.t, sal: 0 };
-}
-
 function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?: string[] }>(
   notes: T[],
   store: SemanticStore,
@@ -746,131 +601,6 @@ function scrubNarrativeLeftovers<T extends { text: string; lane?: string; tags?:
   } catch {
     return Array.isArray(notes) ? notes : [];
   }
-}
-
-function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
-  try {
-    const q = String(text ?? "").trim();
-    if (!q) return lexical;
-    if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
-    const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-    if (!k) return lexical;
-    const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
-    const chat = Array.isArray(lexical) ? lexical.filter((l) => !(l.lane === "narrative" || (l.tags ?? []).includes("chunk"))) : [];
-    if (!Array.isArray(hits) || !hits.length) return chat;
-    const chunks: MemoryRecord[] = [];
-    for (const hit of hits) {
-      const body = String(hit?.text ?? "").trim();
-      if (!body) continue;
-      chunks.push(memRec(hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`, body, "episode", "narrative", ["chunk"], Number.isFinite(hit.t) ? hit.t : 0));
-    }
-    if (!chunks.length) return chat;
-    const out: MemoryRecord[] = [];
-    for (const c of [...chunks, ...chat]) {
-      if (out.length >= cap) break;
-      if (out.some((p) => p.id === c.id || jaccardText(p.text, c.text) > 0.6)) continue;
-      out.push(c);
-    }
-    return out;
-  } catch {
-    return lexical;
-  }
-}
-
-function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
-  try {
-    const q = String(text ?? "").trim();
-    if (!q) return [];
-    const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-    if (!k) return [];
-    const hits = retrieveIcl(dir, q, { k, fallback: compiled });
-    if (!Array.isArray(hits) || !hits.length) return [];
-    const out: MemoryRecord[] = [];
-    const seen = new Set<string>();
-    for (const hit of hits) {
-      if (out.length >= cap) break;
-      const body = String(hit?.text ?? "").trim();
-      if (!body) continue;
-      const id = hit.id || `icl:${out.length}`;
-      if (seen.has(id) || seen.has(body.toLowerCase())) continue;
-      seen.add(id);
-      seen.add(body.toLowerCase());
-      out.push(memRec(id, body, "fact", "icl", ["icl"], Number.isFinite(hit.t) ? hit.t : 0));
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
-  try {
-    const q = String(text ?? "").trim();
-    if (!q) return lexical;
-    const views = retrieveHowTo(dir, q);
-    if (!Array.isArray(views) || !views.length) return lexical;
-    let harmed = new Set<string>();
-    try { harmed = loadHarmedIds(dir); } catch { harmed = new Set(); }
-    const scored: { view: (typeof views)[number]; n: number }[] = [];
-    for (const view of views) {
-      if (!view || typeof view !== "object") continue;
-      try { if (view.id && harmed.has(view.id)) continue; } catch {}
-      const n = howtoAboutness(q, view);
-      if (n <= 0) continue;
-      scored.push({ view, n });
-    }
-    if (!scored.length) return lexical;
-    scored.sort((a, b) => b.n - a.n || (b.view.wins ?? 0) - (a.view.wins ?? 0) || b.view.t - a.view.t);
-    const rec = howtoProcedureRecord(scored[0]!.view);
-    const kept = lexical.filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
-    return [...kept, rec];
-  } catch {
-    return lexical;
-  }
-}
-
-function mergeExperienceLane(lexical: MemoryRecord[], text: string, dir: string): MemoryRecord[] {
-  try {
-    const q = String(text ?? "").trim();
-    if (!q) return lexical;
-    if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
-    const hits = retrieveExperience(dir, q);
-    if (!Array.isArray(hits) || !hits.length) return lexical;
-    const extra: MemoryRecord[] = [];
-    for (const hit of hits) {
-      const body = String(hit?.text ?? "").trim();
-      if (!body) continue;
-      extra.push(memRec(`exp:${hit.id}`, body, "episode", "trajectory", ["experience", "trajectory"], Number.isFinite(hit.t) ? hit.t : 0));
-    }
-    if (!extra.length) return lexical;
-    const out = lexical.slice();
-    for (const e of extra) {
-      if (out.some((p) => p.id === e.id || jaccardText(p.text, e.text) > 0.6)) continue;
-      out.push(e);
-    }
-    return out;
-  } catch {
-    return lexical;
-  }
-}
-
-function mergeGistLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
-  try {
-    const q = String(text ?? "").trim();
-    if (!q) return lexical;
-    if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(q)) return lexical;
-    const hits = retrieveGists(dir, q, { k: Math.min(3, cap) });
-    if (!hits.length) return lexical;
-    const gists: MemoryRecord[] = hits.map((h) => memRec(h.id || `gist:${h.level}:${h.t}`, h.text, "gist", "narrative", ["gist"], h.t));
-    const room = Math.max(0, cap - gists.length);
-    let rest = (lexical||[]).filter(l => !gists.some(g => g.id===l.id || jaccardText(g.text,l.text)>0.6));
-    try {
-      rest = isBookQaCue(q) ? leftoverChunksForGists(rest, hits, dir, room) : rest.slice(0, room);
-    } catch {
-      rest = rest.slice(0, room);
-    }
-    return [...gists, ...rest].slice(0, cap);
-  } catch { return lexical; }
 }
 
 export class AgentMemory {
@@ -1194,15 +924,6 @@ export class AgentMemory {
       if (live.length >= 4 && live.every((c) => c.rec.lane === "icl" || isIclExemplar(String(c.rec.text ?? "")))) route = "icl-index";
     } catch {}
     memoryLastRoute.route = route;
-    const recs = this.compiled.map((c) => c.rec);
-    if (route === "icl-index") {
-      const packed = mergeIclLane([], text, cap, this.howtoDir, recs);
-      return packed.length < 2 ? packed : dedupSelect(packed.map((rec) => ({ rec, n: 0 })), packed.length);
-    }
-    if (route === "gist-chunk") {
-      const packed = mergeGistLane(mergeNarrativeLane([], text, cap, this.howtoDir, recs), text, cap, this.howtoDir);
-      return packed.length < 2 ? packed : dedupSelect(packed.map((rec) => ({ rec, n: 0 })), packed.length);
-    }
     const hay = queryHay(text);
     try {
       const expand: Record<string, string[]> = {
@@ -1296,12 +1017,7 @@ export class AgentMemory {
         return false;
       });
     } catch {}
-    const packed = mergeExperienceLane(
-      mergeHowtoLane(mergeNarrativeLane(lexical, text, cap, this.howtoDir, recs), text, cap, this.howtoDir),
-      text,
-      this.howtoDir,
-    );
-    return packed.length < 2 ? packed : dedupSelect(packed.map((rec) => ({ rec, n: 0 })), packed.length);
+    return lexical.length < 2 ? lexical : dedupSelect(lexical.map((rec) => ({ rec, n: 0 })), lexical.length);
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
