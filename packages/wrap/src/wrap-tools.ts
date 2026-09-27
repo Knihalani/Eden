@@ -773,7 +773,6 @@ export function wrapTools<T extends ToolsIn>(
 
         const now = performance.now();
         let steeredSkip = false;
-        let skipArmed: Armed | undefined;
         let structuredDeopt: string | null = null;
         const seenArmed = new Set<Armed>();
         const candidates: Array<{ session: string; key: string; armed: Armed }> = [];
@@ -817,7 +816,6 @@ export function wrapTools<T extends ToolsIn>(
             if (fleetServed && !remaining) {
               skipAsShared(armed, name, selfId);
               steeredSkip = true;
-              skipArmed = armed;
               break;
             }
             const stillThere = safely(() => store.get(armSession, id) === armed && !!armed.rest.get(name), false);
@@ -825,7 +823,6 @@ export function wrapTools<T extends ToolsIn>(
               if (!fleetServed) continue;
               skipAsShared(armed, name, selfId);
               steeredSkip = true;
-              skipArmed = armed;
               break;
             }
             safely(() => { decRest(); }, undefined);
@@ -835,7 +832,6 @@ export function wrapTools<T extends ToolsIn>(
               emit(armed.input, owner);
             }
             steeredSkip = true;
-            skipArmed = armed;
             break;
           }
           const doneByCompiled = safely(() => {
@@ -858,10 +854,7 @@ export function wrapTools<T extends ToolsIn>(
             break;
           }
         }
-        if (steeredSkip) {
-          if (skipArmed) stampRemainderSkip(state, skipArmed, name);
-          return { eden: "steered", skipped: name };
-        }
+        if (steeredSkip) return { eden: "steered", skipped: name };
         if (structuredDeopt != null) return { eden: "deopt", reason: structuredDeopt };
 
         if (enforcementEnabled(state.opts)) {
