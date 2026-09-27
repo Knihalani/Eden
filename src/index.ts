@@ -9,7 +9,7 @@ import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
 import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
-import { clearSleepTimer, consolidate, migrateSessionHowTo, noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
+import { clearSleepTimer, consolidate, migrateSessionHowTo } from "./sleep";
 import { isSummaryCue, isBookQaCue, GIST_CHAR_CAP } from "./gist-retrieve";
 import { ChunkStore } from "./chunk-store";
 import { IclIndex } from "./icl-index";
@@ -813,16 +813,6 @@ export class AgentMemory {
         out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text).concat(extraTags), sal: pin ? Math.max(0.6, ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, ""))) : ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")), pin }));
       }
     }
-    if (items.length) {
-      const goalRaw = [...items].reverse().find((i) => i.role === "user")?.text ?? "";
-      let goal = goalRaw;
-      try { goal = this.persistText(goalRaw); } catch {}
-      const bytes = items.reduce((n, i) => n + i.text.length, 0);
-      try { noteSleepActivity(this, { turns: 1, bytes, goal }); } catch {}
-      if (opts.deferSleep !== true) {
-        try { scheduleIncrementalSleep(this); } catch {}
-      }
-    }
     return out;
     } finally {
       this.batch--;
@@ -1103,7 +1093,6 @@ export class AgentMemory {
         const card = injectFromRequest({ text: blob }, this.know); if (card) notes.push({ role: "system", content: injectNote(card) });
       }
       this.observe(list, { deferSleep: true });
-      try { scheduleIncrementalSleep(this); } catch {}
       if (!notes.length) return list;
       const next = list.slice(), i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
       return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
