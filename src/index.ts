@@ -563,7 +563,7 @@ export class AgentMemory {
     }
   }
 
-  observe(messages: unknown[], opts: { keepLiveIdentity?: boolean } = {}): MemoryRecord[] {
+  observe(messages: unknown[]): MemoryRecord[] {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
     this.batch++;
     try {
@@ -593,14 +593,6 @@ export class AgentMemory {
           if (fact) {
             const store = (sem ??= (this.sem ??= new SemanticStore(this.dir)));
             const live = store.get(fact.s, fact.p);
-            if (opts.keepLiveIdentity) {
-              const obj = fact.o.trim().toLowerCase();
-              const slot = `${fact.s}\0${fact.p}`;
-              const fromBatch = batchLive.get(slot);
-              if (!(fromBatch && fromBatch !== obj)) {
-                if (store.supersededObject(fact.o)) continue;
-              }
-            }
             const serial = String(text).trim().match(/^(\d+)[.)]\s+\S/);
             const serialT = serial && Number.isFinite(Number(serial[1])) ? Number(serial[1]) : undefined;
             if (serialT != null || !live || live.t >= 1e11 || batchLive.has(`${fact.s}\0${fact.p}`)) {
