@@ -4,8 +4,6 @@ export * from "./intent";
 export * from "./arming";
 export * from "./fleet";
 export * from "./wrap-tools";
-export * from "./speculate";
-export * from "./warm";
 export * from "./proxy";
 export * from "./eden";
 export * from "./usage";
