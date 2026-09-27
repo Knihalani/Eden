@@ -22,7 +22,7 @@ export function isMathChatterCue(cue: string): boolean {
       return false;
     }
     const lower = t.toLowerCase();
-    if (/^(?:ok|okay|thanks|thank you|lol|lmao|asdf|qwerty|hi|hey|yo)\s*[.!?]?\s*$/i.test(lower)) return true;
+    if (/^(?:ok|okay|thanks|thank you|lol|lmao|asdf|qwerty|hi|hey|yo|continue|lgtm|ok go|sounds good|ship it)\s*[.!?]?\s*$/i.test(lower)) return true;
     if (/^\s*(?:what(?:'s| is)\s+)?\d+\s*(?:\+|plus|\-|minus|\*|x|×|times|\/|÷|divided by)\s*\d+\s*\??\s*$/i.test(lower)) {
       return true;
     }
@@ -66,6 +66,50 @@ const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this"
 function compileNeedles(rec: MemoryRecord): Compiled {
   return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w))])] };
 }
+
+const CUE_EXPAND: Record<string, string[]> = {
+  login: ["auth", "oauth", "signin"],
+  signin: ["auth", "login", "oauth"],
+  checkout: ["payment", "payments", "billing"],
+  payment: ["checkout", "billing"],
+  install: ["package", "lockfile"],
+  lockfile: ["package", "install"],
+  prod: ["deploy", "deployment"],
+  deploy: ["prod"],
+  upload: ["object", "store"],
+  avatar: ["object", "store"],
+  experiment: ["flag", "flags"],
+  assigning: ["flag", "flags"],
+  connection: ["database"],
+  dashboard: ["database", "dashboards"],
+  welcome: ["email"],
+  mail: ["email"],
+  sha: ["git", "bash"],
+  git: ["bash"],
+  session: ["cache"],
+  hanging: ["package"],
+  sso: ["auth"],
+  jwt: ["auth"],
+  bouncing: ["auth"],
+  errors: ["error"],
+  grouping: ["error"],
+  workflow: ["workflows"],
+  purging: ["cdn"],
+  edge: ["cdn"],
+  ticket: ["issues"],
+  triage: ["issues"],
+  paged: ["paging"],
+  apply: ["infra"],
+  policies: ["auth"],
+  channel: ["chat"],
+  funnel: ["analytics"],
+  signup: ["analytics"],
+  text: ["sms"],
+  handset: ["sms"],
+  identify: ["cdp"],
+  spec: ["specs"],
+  mock: ["mocks"],
+};
 
 export function queryHay(text: string): Set<string> {
   return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
@@ -375,49 +419,8 @@ export class AgentMemory {
   relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
     const hay = queryHay(text);
     try {
-      const expand: Record<string, string[]> = {
-        login: ["auth", "oauth", "signin"],
-        signin: ["auth", "login", "oauth"],
-        checkout: ["payment", "payments", "billing"],
-        payment: ["checkout", "billing"],
-        install: ["package", "lockfile"],
-        lockfile: ["package", "install"],
-        prod: ["deploy", "deployment"],
-        deploy: ["prod"],
-        upload: ["object", "store"],
-        avatar: ["object", "store"],
-        experiment: ["flag", "flags"],
-        assigning: ["flag", "flags"],
-        connection: ["database"],
-        dashboard: ["database", "dashboards"],
-        welcome: ["email"],
-        mail: ["email"],
-        sha: ["git", "bash"],
-        git: ["bash"],
-        session: ["cache"],
-        hanging: ["package"],
-        sso: ["auth"],
-        jwt: ["auth"],
-        bouncing: ["auth"],
-        errors: ["error"],
-        grouping: ["error"],
-        workflow: ["workflows"],
-        purging: ["cdn"],
-        edge: ["cdn"],
-        ticket: ["issues"],
-        triage: ["issues"],
-        paged: ["paging"],
-        apply: ["infra"],
-        policies: ["auth"],
-        channel: ["chat"],
-        funnel: ["analytics"],
-        signup: ["analytics"],
-        text: ["sms"],
-        handset: ["sms"],
-        identify: ["cdp"],
-      };
       for (const t of [...hay]) {
-        const extra = expand[t];
+        const extra = CUE_EXPAND[t];
         if (!extra) continue;
         for (const x of extra) hay.add(x);
       }
@@ -477,15 +480,9 @@ export class AgentMemory {
       const notes: { role: "system"; content: string }[] = [];
       if (!blob.includes(MEMORY_MARK)) {
         const cue = cueFor(list);
-        const retrieved = cue ? this.notesFor(cue) : [];
         let silent = false;
-        if (cue && retrieved.length) {
-          try {
-            if (isMathChatterCue(cue)) {
-              silent = true;
-            }
-          } catch {}
-        }
+        try { if (cue && isMathChatterCue(cue)) silent = true; } catch {}
+        const retrieved = !silent && cue ? this.notesFor(cue) : [];
         let packet: MemoryRecord[] = [];
         try {
           if (!silent && cue && retrieved.length) {
