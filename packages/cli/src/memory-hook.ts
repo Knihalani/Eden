@@ -5,7 +5,6 @@ import { omitExperienceTree, putExperienceFromTool } from "../../../src/experien
 import { scrubTombstonedIdentity } from "../../../src/gist-store";
 import { parseHookToolTraces, parseToolArgs, persistToolTraces } from "../../../src/tool-trace";
 import { childSessionName, consolidate, dropHarmed, formatPacketText, MEMORY_MARK, openMemory, type AgentMemory, type MemoryRecord } from "../../../src/index";
-import { maybeIncrementalSleep } from "../../../src/sleep";
 import { memoryConsent } from "../../../src/memory-consent";
 import { logMemoryNotes } from "../../../src/memory-log";
 
@@ -156,10 +155,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     try {
     const sessionRaw0 = r.session_id ?? r.sessionID ?? r.sessionId;
     const session0 = typeof sessionRaw0 === "string" && sessionRaw0 ? sessionRaw0 : undefined;
-    const sleepSession = mem.child && mem.session ? mem.session : session0;
-    if (writes && event !== "Stop" && event !== "SessionEnd" && event !== "SessionStart") {
-      try { maybeIncrementalSleep(mem, { session: sleepSession }); } catch {}
-    }
     const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : Array.isArray(r.contents) ? r.contents : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; })].slice(-40);
     if (event === "PostToolUse" || event === "SubagentStop") {
       try {
@@ -204,9 +199,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
           putExperienceFromTool(mem.dir, { session: session0, cwd, name, args, result });
         }
       } catch {}
-      try {
-        maybeIncrementalSleep(mem, { session: sleepSession });
-      } catch {}
       return null;
     }
     const stop = event === "Stop" || event === "SessionEnd";
@@ -230,9 +222,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       ? notesFromInject(mem.inject([{ role: "user", content: prompt }]))
       : "";
     if (writes && prior.length) mem.observe(prior);
-    if (writes) {
-      try { maybeIncrementalSleep(mem, { session: sleepSession }); } catch {}
-    }
     return notes ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } } : null;
     } finally {
       try { mem.close(); } catch {}
