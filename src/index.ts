@@ -70,6 +70,10 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
+function compileNeedles(rec: MemoryRecord): Compiled {
+  return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] };
+}
+
 export function queryHay(text: string): Set<string> {
   return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
 }
@@ -171,7 +175,7 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
       const rec = JSON.parse(t) as MemoryRecord;
       if (rec?.id && rec.text) {
         rec.lane = rec.lane ?? "chat";
-        const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec);
+        const c = compileNeedles(rec);
         const at = idx.get(rec.id);
         if (overlay && at != null) out[at] = c;
         else {
@@ -308,7 +312,7 @@ export class AgentMemory {
       if (!rec.tags.includes("pin")) rec.tags.push("pin");
     }
     if (sal > 0) rec.sal = sal;
-    const c = ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
+    const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     this.compiled.push(c);
     this.walDirtyIds.add(rec.id);
@@ -589,7 +593,7 @@ export class AgentMemory {
       dirty = true;
       this.walDirtyIds.add(c.rec.id);
       this.needCompact = true;
-      return ((rec) => ({ rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] }))({ ...c.rec, text: next });
+      return compileNeedles({ ...c.rec, text: next });
     });
     if (dirty) this.flush(true);
   }
