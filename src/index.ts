@@ -39,8 +39,7 @@ export function isMathChatterCue(cue: string): boolean {
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
 export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number; lane?: MemoryLaneKind };
-export type KnowSearch = { search(q: string, k?: number): { s: string; p: string; o: string; e: string; url?: string }[]; close?: () => void };
-export type MemoryOptions = { dir?: string; know?: KnowSearch; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
+export type MemoryOptions = { dir?: string; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
