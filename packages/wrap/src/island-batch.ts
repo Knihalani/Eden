@@ -118,16 +118,9 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
   while (!signal.aborted) {
     const pollEnv = Number(process.env.EDEN_ISLAND_BATCH_POLL_MS);
     await new Promise<void>((resolve, reject) => {
-      if (signal.aborted) {
-        reject(signal.reason ?? new Error("island aborted"));
-        return;
-      }
+      if (signal.aborted) return reject(signal.reason ?? new Error("island aborted"));
       const t = setTimeout(resolve, Number.isFinite(pollEnv) && pollEnv > 0 ? Math.min(2_000, pollEnv) : 20);
-      const onAbort = () => {
-        clearTimeout(t);
-        reject(signal.reason ?? new Error("island aborted"));
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
+      signal.addEventListener("abort", () => { clearTimeout(t); reject(signal.reason ?? new Error("island aborted")); }, { once: true });
     });
     for (const url of [statusUrl, resultsUrl]) {
       let pollRes: Response;
