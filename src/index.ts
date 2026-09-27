@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { alreadyInjected } from "../packages/know/src/inject";
 import { redact } from "../packages/ir/src/redact";
-import { assembleNotes, splitNumberedItems } from "./assemble";
+import { splitNumberedItems } from "./assemble";
 import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
 import { applyObserveForget } from "./memory-forget";
@@ -844,12 +844,12 @@ export class AgentMemory {
             let hopPool = hopStore;
             try { hopPool = dropHarmed(this.dir, hopStore); } catch { hopPool = hopStore; }
             hopped = completeNotes(rankCue, retrieved, hopPool);
-            packet = hopped.length ? assembleNotes(hopped, this.dir) : [];
+            packet = hopped;
           } else {
-            packet = hopped.length ? assembleNotes(hopped, this.dir) : [];
+            packet = hopped;
           }
         } catch {
-          packet = !silent && retrieved.length ? assembleNotes(retrieved, this.dir) : [];
+          packet = !silent && retrieved.length ? retrieved : [];
         }
         packet = packet.map(formatNote);
         try { packet = dropHarmed(this.dir, packet); } catch {}
