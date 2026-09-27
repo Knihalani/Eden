@@ -377,7 +377,7 @@ export class AgentMemory {
       }
     } catch {}
     const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
-    const scored: { rec: MemoryRecord; n: number }[] = [];
+    const scored: { rec: MemoryRecord; n: number; k: number }[] = [];
     for (const c of rows) {
       let n = 0;
       const seen = new Set<string>();
@@ -386,9 +386,9 @@ export class AgentMemory {
         seen.add(x);
         n++;
       }
-      if (n) scored.push({ rec: c.rec, n });
+      if (n) scored.push({ rec: c.rec, n, k: c.needles.length });
     }
-    const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
+    const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || a.k - b.k || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
     try {
       if (String(text ?? "").trim()) {
