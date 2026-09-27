@@ -530,7 +530,6 @@ export class AgentMemory {
   private scrubCwd?: string;
   private compiled: Compiled[];
   private path: string;
-  private lastWin: string[] = [];
   private batch = 0;
   private dirty = false;
   private durableIds = new Set<string>();
@@ -624,22 +623,9 @@ export class AgentMemory {
     const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
     const out: MemoryRecord[] = [];
     const items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text);
-    const fps = items.map((i) => `${i.role}${i.text.slice(0, 400)}`);
-    let start = 0;
-    if (this.lastWin.length && fps.length) {
-      let found = -1;
-      for (let k = 0; k < this.lastWin.length && found < 0; k++) {
-        const len = Math.min(this.lastWin.length - k, fps.length);
-        let ok = true;
-        for (let i = 0; i < len; i++) if (this.lastWin[k + i] !== fps[i]) { ok = false; break; }
-        if (ok) found = len;
-      }
-      if (found >= 0) start = found;
-    }
-    if (fps.length) this.lastWin = fps.slice(-80);
     let sem: SemanticStore | undefined;
     const batchLive = new Map<string, string>();
-    for (let i = start; i < items.length; i++) {
+    for (let i = 0; i < items.length; i++) {
       const it = items[i]!;
       const safe = this.persistText(it.text);
       const lane = encodeLane(it.text);
