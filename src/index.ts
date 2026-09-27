@@ -131,24 +131,6 @@ export function encodeLane(_text: string): MemoryLaneKind {
   return "chat";
 }
 
-function observeAsserted(text: string): { s: string; p: string; o: string } | undefined {
-  const a = objectAsserted(text);
-  if (a) return a;
-  const raw = String(text ?? "").trim().replace(/\s+/g, " ").replace(/^\d+[.)]\s+/, "");
-  if (!raw || raw.endsWith("?")) return undefined;
-  const became = raw.match(/^(?:the\s+)?(.{1,80}?)\s+(?:became|becomes)\s+(\S.*)$/i);
-  if (became) {
-    const s = became[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const o = became[2]!.replace(/[.,;:!?]+$/g, "").trim();
-    if (s && o) return { s, p: "is", o };
-  }
-  const d = raw.match(/\b(?:decided|chose|picked|went with|going with|settled on|opted for)\s+(?:to\s+)?(?:use|go with)?\s*(.{1,40}?)\s+for\s+(.{1,40}?)(?=\s+(?:because|since|as|so)\b|[.,;:!?]|$)/i);
-  if (!d) return undefined;
-  const o = d[1]!.replace(/^(?:the|a|an)\s+/i, "").replace(/[.,;:!?]+$/g, "").trim();
-  const s = d[2]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  return s && o ? { s, p: "is", o } : undefined;
-}
-
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>(), out: string[] = [];
   let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
@@ -360,7 +342,7 @@ export class AgentMemory {
       for (const raw of extractDurable(safe)) {
         let text = raw;
         try {
-          const asserted = observeAsserted(text);
+          const asserted = objectAsserted(text);
           if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) {
             text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`;
           }
