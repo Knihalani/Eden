@@ -10,7 +10,7 @@ import { memoryConsent } from "./memory-consent";
 import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate, migrateSessionHowTo } from "./sleep";
-import { isSummaryCue, isBookQaCue, GIST_CHAR_CAP } from "./gist-retrieve";
+import { GIST_CHAR_CAP } from "./gist-retrieve";
 import { ChunkStore } from "./chunk-store";
 import { IclIndex } from "./icl-index";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
@@ -1013,16 +1013,7 @@ export class AgentMemory {
         let packet: MemoryRecord[] = [];
         try {
           let hopped = silent ? [] : retrieved;
-          let skipHop = false;
-          try {
-            if (memoryLastRoute.route === "icl-index" || memoryLastRoute.route === "gist-chunk") skipHop = true;
-            else if (((text) => { try { if (isBookQaCue(text) && !/\blabel\s*:/i.test(text)) return false; if (encodeLane(text) === "icl") return true; if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true; } catch {} return false; })(rankCue)) skipHop = true;
-            else if (isRecsysShot(rankCue)) skipHop = true;
-            else if (isSummaryCue(rankCue)) skipHop = true;
-            else if (isBookQaCue(rankCue)) skipHop = true;
-            else if (retrieved.every((m) => m.lane === "icl" || isIclExemplar(m.text))) skipHop = true;
-          } catch {}
-          if (!silent && rankCue && retrieved.length && !skipHop) {
+          if (!silent && rankCue && retrieved.length) {
             const hopStore = (() => {
               const out: MemoryRecord[] = [];
               const seen = new Set<string>();
