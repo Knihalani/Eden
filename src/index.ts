@@ -7,7 +7,6 @@ import { splitNumberedItems } from "./assemble";
 import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
 import { dropHarmed, markHarmed as persistHarmed } from "./memory-harmed";
-import { clearSleepTimer } from "./sleep";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { stripPacketLabel } from "./memory-provenance";
@@ -529,10 +528,7 @@ export class AgentMemory {
     if (dirty) this.flush(true);
   }
 
-  async sleep(_opts?: { session?: string }): Promise<void> {}
-
   close() {
-    try { clearSleepTimer(this); } catch {}
     this.flush(false);
   }
 }
@@ -571,6 +567,4 @@ export function processMemory(): AgentMemory {
     child,
   }));
 }
-
-export { sleep, consolidate } from "./sleep";
 
