@@ -156,6 +156,10 @@ export function cueFor(list: unknown[]): string {
   const last = paras.at(-1)!;
   const first = paras[0]!;
   const ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
+  if (raw.length > 800) {
+    const lastLine = last.split(/\n/).map((p) => p.trim()).filter(Boolean).at(-1) || "";
+    if (lastLine.length >= 8 && lastLine.length <= 280 && !/^\s*at\s+/.test(lastLine)) return lastLine;
+  }
   if (ask(last)) return last;
   if (ask(first)) return first;
   return last;
@@ -386,7 +390,7 @@ export class AgentMemory {
           this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
           if (this.compiled.length !== before) this.rebuildSeen();
         }
-        const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(safe) || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(it.text);
+        const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text);
         out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text), pin }));
       }
     }
