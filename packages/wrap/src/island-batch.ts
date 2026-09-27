@@ -134,16 +134,9 @@ async function submitBatch(reqs: IslandReq[], opts: IslandBatchOpts): Promise<Ar
         if (empty >= 2) return reqs.map(() => undefined);
         continue;
       }
-      const text = await pollRes.text();
-      const trimmed = text.trim();
+      const trimmed = (await pollRes.text()).trim();
       let pollJson: unknown = {};
-      if (trimmed) {
-        try {
-          pollJson = JSON.parse(trimmed) as unknown;
-        } catch {
-          pollJson = { results: trimmed };
-        }
-      }
+      if (trimmed) try { pollJson = JSON.parse(trimmed) as unknown; } catch { pollJson = { results: trimmed }; }
       const ready = ((rows) => (rows.every((row) => row) ? (rows as IslandReply[]) : undefined))(reqs.map((_, i) => parseBatchResult(pollJson, String(i))));
       if (ready) return ready;
     }
