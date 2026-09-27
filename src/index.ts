@@ -3,7 +3,6 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { redact } from "../packages/ir/src/redact";
-import { splitNumberedItems } from "./assemble";
 import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
 import { dropHarmed, markHarmed as persistHarmed } from "./memory-harmed";
@@ -127,9 +126,8 @@ function extractDurable(blob: string): string[] {
   let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
   if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1))) whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
   const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?");
-  const numberedWhole = /^\d+[.)]\s+\S/.test(whole);
   const label = whole.match(SPEAKER_LABEL)?.[1];
-  for (const raw of labeledWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/)) {
+  for (const raw of labeledWhole ? [whole] : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/)) {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "");
     t = t.replace(SECRET_INLINE, "[REDACTED]");
     if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || CHAT.test(t)) continue;
