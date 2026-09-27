@@ -8,7 +8,6 @@ import { memoryConsent } from "./memory-consent";
 import { dropHarmed } from "./memory-harmed";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
-import { stripPacketLabel } from "./memory-provenance";
 import { isToolProse, objectAsserted } from "./semantic-store";
 
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
@@ -196,11 +195,6 @@ export function memoryRetrieveCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_CAP);
   if (!Number.isFinite(raw) || raw <= 0) return PACKET_CHAT_K_MIN;
   return Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
-}
-
-function formatNote(r: MemoryRecord): MemoryRecord {
-  const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
-  return { ...r, text: stripPacketLabel(raw).body };
 }
 
 export class AgentMemory {
@@ -403,7 +397,7 @@ export class AgentMemory {
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     if (!text) return [];
-    const recs = this.relevant(text, k).map(formatNote);
+    const recs = this.relevant(text, k);
     try { return dropHarmed(this.dir, recs); } catch { return recs; }
   }
 
@@ -436,7 +430,6 @@ export class AgentMemory {
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
         }
-        packet = packet.map(formatNote);
         try { packet = dropHarmed(this.dir, packet); } catch {}
         if (packet.length) notes.push({ role: "system", content: MEMORY_MARK + packet.map((m) => `\n- ${m.text}`).join("") });
       }
