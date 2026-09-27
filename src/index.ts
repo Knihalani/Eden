@@ -412,6 +412,9 @@ export class AgentMemory {
         channel: ["chat"],
         funnel: ["analytics"],
         signup: ["analytics"],
+        text: ["sms"],
+        handset: ["sms"],
+        identify: ["cdp"],
       };
       for (const t of [...hay]) {
         const extra = expand[t];
