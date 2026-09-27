@@ -593,15 +593,9 @@ export class AgentMemory {
         try {
           let hopped = silent ? [] : retrieved;
           if (!silent && rankCue && retrieved.length) {
-            const hopStore = (() => {
-              try {
-                return this.memories().filter((m) => String(m.text ?? "").trim());
-              } catch {
-                return retrieved;
-              }
-            })();
-            let hopPool = hopStore;
-            try { hopPool = dropHarmed(this.dir, hopStore); } catch { hopPool = hopStore; }
+            let hopPool = retrieved;
+            try { hopPool = this.memories().filter((m) => String(m.text ?? "").trim()); } catch {}
+            try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
             hopped = completeNotes(rankCue, retrieved, hopPool);
           }
           packet = hopped;
