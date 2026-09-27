@@ -844,10 +844,8 @@ export class AgentMemory {
             let hopPool = hopStore;
             try { hopPool = dropHarmed(this.dir, hopStore); } catch { hopPool = hopStore; }
             hopped = completeNotes(rankCue, retrieved, hopPool);
-            packet = hopped;
-          } else {
-            packet = hopped;
           }
+          packet = hopped;
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
         }
