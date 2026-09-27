@@ -14,7 +14,7 @@ import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { stripPacketLabel } from "./memory-provenance";
 import { type MemoryRoute } from "./memory-router";
-import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted } from "./semantic-store";
+import { isIclExemplar, isToolProse, objectAsserted } from "./semantic-store";
 
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export const MEMORY_MARK = "Eden Memory:";
@@ -125,36 +125,10 @@ const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|na
 const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
-const FUNC_WORD = new Set([
-  "i","we","you","he","she","they","my","our","your","his","her","their","me","us","him","them",
-  "is","are","was","were","am","be","been","being","has","have","had","having",
-  "do","does","did","will","would","can","could","should","must","might","may",
-  "the","a","an","and","but","of","to","in","on","at","for","with","from","by","as","that","this",
-  "these","those","it","its","because","if","so","also","when","who","which","not","no",
-]);
-
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
-export function encodeLane(text: string): MemoryLaneKind {
-  try {
-    const t = String(text ?? "").trim();
-    if (!t) return "chat";
-    if (isIclExemplar(t)) return "icl";
-    if (isRecsysShot(t)) return "narrative";
-    if (!((t) => { const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+)?\d+[.)]\s+/.test(l)); if (numbered.length >= 2) return true; const sents = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8); if (sents.length < 2) return false; let copula = 0; for (const s of sents) { try { if (objectAsserted(s)) copula++; } catch {} } return copula >= 2 && copula * 2 >= sents.length; })(t)) {
-      if (t.length > 400) return "narrative";
-      if (t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8).length >= 2 && t.length >= 150) {
-        const toks = (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(t);
-        if (toks.length >= 4) {
-          let fw = 0;
-          for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return "narrative";
-        }
-      }
-    }
-    return "chat";
-  } catch {
-    return "chat";
-  }
+export function encodeLane(_text: string): MemoryLaneKind {
+  return "chat";
 }
 
 function observeAsserted(text: string): { s: string; p: string; o: string } | undefined {
