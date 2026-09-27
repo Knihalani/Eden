@@ -678,16 +678,8 @@ export function wrapTools<T extends ToolsIn>(
           if (state.opts.failOpen === false) throw err;
           const first = (p.sequence ?? [])[0];
           const canReplay = (p.sequence ?? []).every((n) => isReadName(n)) && !!first && first in tools;
-          if (!isDeopt(err)) {
-            return canReplay
-              ? (typeof tools[first!] === "function" ? { description: first!, execute: tools[first!] } : tools[first!]!).execute(args)
-              : { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
-          }
-          if (!isReplaySafe(err) && !(p.sequence ?? []).every((n) => isReadName(n))) {
-            return { eden: "deopt", reason: (err as Error).message };
-          }
           if (canReplay) return (typeof tools[first!] === "function" ? { description: first!, execute: tools[first!] } : tools[first!]!).execute(args);
-          return { eden: "deopt", reason: (err as Error).message };
+          return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
         }
       },
     };
