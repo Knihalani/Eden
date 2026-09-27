@@ -570,8 +570,6 @@ export class AgentMemory {
     const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
     const out: MemoryRecord[] = [];
     const items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text);
-    let sem: SemanticStore | undefined;
-    const batchLive = new Map<string, string>();
     for (let i = 0; i < items.length; i++) {
       const it = items[i]!;
       const safe = this.persistText(it.text);
@@ -587,20 +585,6 @@ export class AgentMemory {
           }
         } catch {}
         text = this.persistText(text);
-        try {
-          const fact = observeAsserted(text);
-          if (fact && (isIclExemplar(raw) || isIclExemplar(it.text))) continue;
-          if (fact) {
-            const store = (sem ??= (this.sem ??= new SemanticStore(this.dir)));
-            const live = store.get(fact.s, fact.p);
-            const serial = String(text).trim().match(/^(\d+)[.)]\s+\S/);
-            const serialT = serial && Number.isFinite(Number(serial[1])) ? Number(serial[1]) : undefined;
-            if (serialT != null || !live || live.t >= 1e11 || batchLive.has(`${fact.s}\0${fact.p}`)) {
-              store.put(fact.s, fact.p, fact.o, serialT ?? Date.now());
-              batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase());
-            }
-          }
-        } catch {}
         if (this.seenLower.has(text.toLowerCase())) continue;
         const key = isToolProse(text) ? null : subjectKey(text);
         const supersede = /\b(?:instead of|rather than)\b/i.test(raw);
