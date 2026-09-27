@@ -338,17 +338,8 @@ export class AgentMemory {
 
   private persist() {
     try { if (memoryConsent() !== "on") return; } catch { return; }
-    const cap = Number(process.env.EDEN_MEMORY_STORE_CAP) || 2000;
     try {
       withFileLock(`${this.path}.lock`, () => {
-        if (this.compiled.length > cap) {
-          const pin = (c: Compiled) => c.rec.kind === "constraint" || (c.rec.sal ?? 0) >= 0.6 || (c.rec.tags ?? []).includes("pin");
-          const pins = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-cap);
-          const rest = this.compiled.filter((c) => !pin(c)).sort((a, b) => a.rec.at - b.rec.at);
-          const room = cap - pins.length;
-          this.compiled = [...pins, ...rest.slice(Math.max(0, rest.length - room))];
-          this.rebuildSeen();
-        }
         writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
