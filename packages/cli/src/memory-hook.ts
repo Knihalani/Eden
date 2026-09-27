@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
 import { childSessionName, MEMORY_MARK, openMemory } from "../../../src/index";
@@ -18,24 +17,6 @@ function flattenContent(content: unknown): string {
     return String(o.text ?? o.content ?? o.llmContent ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? "");
   }
   return content.map(flattenContent).filter(Boolean).join("\n");
-}
-
-export function messagesFromTranscript(path: unknown, cap = 40): Array<{ role: string; content: string }> {
-  if (typeof path !== "string" || !path || !existsSync(path)) return [];
-  try {
-    const out: Array<{ role: string; content: string }> = [];
-    for (const line of readFileSync(path, "utf8").split("\n").filter(Boolean).slice(-Math.max(cap * 2, cap))) try {
-      const rec = asRec(JSON.parse(line));
-      const msg = Object.keys(asRec(rec.message)).length ? asRec(rec.message) : rec;
-      const rawRole = String(msg.role || rec.type || "");
-      const role = rawRole === "human" || rawRole === "Human" ? "user" : rawRole === "model" || rawRole === "Model" || rawRole === "ai" || rawRole === "AI" ? "assistant" : rawRole;
-      const content = [flattenContent(msg.content ?? msg.parts), String(msg.llmContent ?? msg.reasoning_content ?? msg.thinking ?? msg.reasoning ?? "")].filter(Boolean).join("\n");
-      if ((role === "user" || role === "assistant") && content) out.push({ role, content });
-    } catch {}
-    return out.slice(-cap);
-  } catch {
-    return [];
-  }
 }
 
 export function notesFromInject(injected: unknown[]): string {
@@ -76,7 +57,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       cwd,
     });
     try {
-    const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : Array.isArray(r.contents) ? r.contents : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; })].slice(-40);
+    const prior = ((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : Array.isArray(r.contents) ? r.contents : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; }).slice(-40);
     if (event === "PostToolUse" || event === "SubagentStop") {
       try {
         const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
