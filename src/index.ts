@@ -763,7 +763,7 @@ export class AgentMemory {
         lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
       }
     } catch {}
-    return lexical.length < 2 ? lexical : dedupSelect(lexical.map((rec) => ({ rec, n: 0 })), lexical.length);
+    return lexical;
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
