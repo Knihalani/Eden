@@ -253,7 +253,6 @@ export class AgentMemory {
   get jsonlDir(): string {
     return dirname(this.path);
   }
-  private know?: KnowSearch;
   private agent?: string;
   private project?: string;
   private scrubSession?: string;
@@ -269,7 +268,7 @@ export class AgentMemory {
   private seenLower = new Set<string>();
 
   constructor(opts: MemoryOptions = {}) {
-    this.know = opts.know; this.agent = opts.agent; this.project = opaqueProject(opts.project);
+    this.agent = opts.agent; this.project = opaqueProject(opts.project);
     this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined;
     const cwdOpt = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
     const proj = typeof opts.project === "string" && opts.project.trim() ? opts.project.trim() : undefined;
