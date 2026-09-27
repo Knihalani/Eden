@@ -1,8 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
-import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
-import { parseHookToolTraces, parseToolArgs, persistToolTraces } from "../../../src/tool-trace";
 import { childSessionName, MEMORY_MARK, openMemory } from "../../../src/index";
 import { memoryConsent } from "../../../src/memory-consent";
 
@@ -78,16 +76,12 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       cwd,
     });
     try {
-    const sessionRaw0 = r.session_id ?? r.sessionID ?? r.sessionId;
-    const session0 = typeof sessionRaw0 === "string" && sessionRaw0 ? sessionRaw0 : undefined;
     const prior = [...messagesFromTranscript(r.transcript_path ?? r.transcriptPath ?? r.transcript), ...((Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : Array.isArray(r.contents) ? r.contents : []) as unknown[]).flatMap((m) => { const o = asRec(m); const c = flattenContent(o.content ?? o.parts ?? o); const raw = String(o.role || ""); const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw; return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : []; })].slice(-40);
     if (event === "PostToolUse" || event === "SubagentStop") {
       try {
         const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
         const original = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
-        let rawObs: unknown = original;
-        try { rawObs = omitExperienceTree(original); } catch {}
-        const redacted = rawObs == null || rawObs === "" ? "" : redact(rawObs);
+        const redacted = original == null || original === "" ? "" : redact(original);
         let result = "";
         if (typeof redacted === "string") result = redacted;
         else if (redacted && typeof redacted === "object") {
@@ -111,18 +105,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         }
         if (text) mem.observe([{ role: "user", content: text }]);
         else if (event === "SubagentStop" && prior.length) mem.observe(prior);
-      } catch {}
-      try {
-        persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
-      } catch {}
-      try {
-        const cwd = typeof r.cwd === "string" && r.cwd.trim() ? r.cwd.trim() : undefined;
-        const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
-        const args = parseToolArgs(r.tool_input ?? r.tool_args ?? r.args ?? r.parameters ?? r.input);
-        const result = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
-        if (name || result != null) {
-          putExperienceFromTool(mem.dir, { session: session0, cwd, name, args, result });
-        }
       } catch {}
       return null;
     }
