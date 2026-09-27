@@ -418,7 +418,6 @@ export class AgentMemory {
       return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
     } catch {
       memoryInjectSwallows.n++;
-      if (process.env.EDEN_MEMORY_SWALLOW === "1") console.error("eden-memory inject swallow", memoryInjectSwallows.n);
       return list;
     }
   }
@@ -433,7 +432,6 @@ export class AgentMemory {
       return { ...body, [key]: next };
     } catch {
       memoryInjectSwallows.n++;
-      if (process.env.EDEN_MEMORY_SWALLOW === "1") console.error("eden-memory inject swallow", memoryInjectSwallows.n);
       return body;
     }
   }
