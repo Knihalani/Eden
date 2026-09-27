@@ -14,7 +14,7 @@ import { ChunkStore } from "./chunk-store";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { logMemoryNotes } from "./memory-log";
-import { applyProvenanceLabel, noteKindToken, stripPacketLabel } from "./memory-provenance";
+import { stripPacketLabel } from "./memory-provenance";
 import { type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
 
@@ -461,15 +461,7 @@ export function memoryRetrieveCap(): number {
 
 function formatNote(r: MemoryRecord): MemoryRecord {
   const raw = typeof r.text === "string" ? r.text : String(r.text ?? "");
-  const body = stripPacketLabel(raw).body;
-  let labeled = body;
-  try { labeled = applyProvenanceLabel(r, body); } catch {
-    try {
-      const kind = noteKindToken(r, body);
-      labeled = kind ? `[${kind}] ${body}` : body;
-    } catch { labeled = body; }
-  }
-  return { ...r, text: labeled };
+  return { ...r, text: stripPacketLabel(raw).body };
 }
 
 export function formatPacketText(r: MemoryRecord): string {
