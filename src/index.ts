@@ -25,7 +25,6 @@ export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
 export const memoryInjectSilent = { n: 0 };
 export const memoryLastRoute = { route: "chat-jsonl" as MemoryRoute };
-const MEMORY_X_FAT_CHARS = 2400;
 
 export function isMathChatterCue(cue: string): boolean {
   try {
@@ -855,27 +854,8 @@ export class AgentMemory {
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     if (text) {
-      const pool = Math.min(18, Math.max(Math.floor(Number(k) || 0), 12));
-      const recs = this.relevant(text, pool);
-      const mixed = ((list, cap) => {
-        try {
-          const rows = Array.isArray(list) ? list : [];
-          const out: MemoryRecord[] = [];
-          let chars = 0;
-          const floor = Math.max(1, Math.floor(Number(cap) || 6));
-          for (const r of rows) {
-            const n = String(r.text ?? "").length;
-            if (out.length >= floor && chars + n > MEMORY_X_FAT_CHARS) continue;
-            out.push(r);
-            chars += n;
-            if (chars >= MEMORY_X_FAT_CHARS && out.length >= floor) break;
-          }
-          return (out.length ? out : rows.slice(0, floor)).map(formatNote);
-        } catch {
-          return (Array.isArray(list) ? list : []).map(formatNote);
-        }
-      })(recs, k);
-      try { return dropHarmed(this.dir, mixed); } catch { return mixed; }
+      const recs = this.relevant(text, k).map(formatNote);
+      try { return dropHarmed(this.dir, recs); } catch { return recs; }
     }
     const recs = this.memories().filter((r) => !(r.lane === "narrative" || (r.tags ?? []).includes("chunk")) && r.lane !== "icl" && r.lane !== "trajectory");
     const emptyCue = ((rows) => [...rows.filter((r) => r.kind === "constraint").slice(-k), ...rows.filter((r) => r.kind !== "constraint").slice(-k)].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i).slice(0, k))(recs).map(formatNote);
