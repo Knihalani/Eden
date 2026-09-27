@@ -36,13 +36,6 @@ import {
 } from "./arming";
 import { isProgramReadOnly, sharedAcrossLine, wrapAgentId, wrapFleetId, wrapRegion } from "./fleet";
 import { createJitGuard, noteJitUsed, type JitGuard } from "./intent";
-import {
-  bindSpeculateRunner,
-  discardSpeculation,
-  markStretchServed,
-  takeSpeculation,
-  turnBoundary,
-} from "./speculate";
 
 const MAX_TRACES = 2000;
 const PULL_EVERY = 24;
@@ -416,10 +409,6 @@ export function wrapTools<T extends ToolsIn>(
   const registry = registryFrom(
     Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, (typeof v === "function" ? { description: k, execute: v } : v).execute])),
   );
-  bindSpeculateRunner(state, {
-    live: () => (state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId)),
-    run: (program, input) => runCompiled(state, program, input, tools, registry),
-  });
   const wrapped: Record<string, ToolDef> = {};
   const compiledCache = new Map<string, { program: StretchProgram; def: ToolDef }>();
   let calls = 0;
@@ -685,10 +674,7 @@ export function wrapTools<T extends ToolsIn>(
       execute: async (args) => {
         try {
           safely(() => noteJitUsed(state.jit, [p.name, ...(p.sequence ?? []).slice(0, 1)]), undefined);
-          const input = safely(() => extractInput(p, args), args);
-          const taken = await takeSpeculation(state, p, input).catch(() => ({ hit: false as const }));
-          const value = taken.hit ? taken.value : await runCompiled(state, p, args, tools, registry);
-          if (!taken.hit) markStretchServed(state, p, input);
+          const value = await runCompiled(state, p, args, tools, registry);
           return value;
         } catch (err) {
           if (state.opts.failOpen === false) throw err;
@@ -704,8 +690,6 @@ export function wrapTools<T extends ToolsIn>(
           }
           if (canReplay) return (typeof tools[first!] === "function" ? { description: first!, execute: tools[first!] } : tools[first!]!).execute(args);
           return { eden: "deopt", reason: (err as Error).message };
-        } finally {
-          safely(() => turnBoundary(state, { lastTool: p.name, lastArgs: args, input: args }), null);
         }
       },
     };
@@ -766,12 +750,7 @@ export function wrapTools<T extends ToolsIn>(
           if (pair) {
           const { armed } = pair;
           try {
-            if (!isProgramReadOnly(hit.p)) discardSpeculation(state);
-            const taken = await takeSpeculation(state, hit.p, hit.input).catch(() => ({ hit: false as const }));
-            const value = taken.hit
-              ? taken.value
-              : await runCompiled(state, hit.p, hit.input, tools, registry);
-            if (!taken.hit) markStretchServed(state, hit.p, hit.input);
+            const value = await runCompiled(state, hit.p, hit.input, tools, registry);
             armed.armedAt = performance.now();
             armed.armedAtCall = calls;
             const compiled = [...state.receipts].reverse().find((r) => r.toolId === hit.p.id && r.ok);
@@ -972,7 +951,6 @@ export function wrapTools<T extends ToolsIn>(
         }
         try {
           const value = await runOne(args, selfId, rec.startedAt);
-          safely(() => turnBoundary(state, { lastTool: name, lastArgs: args, input: args }), null);
           return value;
         } finally {
           rec.done = true;
