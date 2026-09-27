@@ -144,9 +144,6 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
-const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
-
 function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, number>): void {
   if (!existsSync(path)) return;
   let raw = "";
@@ -262,18 +259,13 @@ export class AgentMemory {
     return t;
   }
 
-  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; sal?: number; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
+  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const rec: MemoryRecord = { id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => t.toLowerCase()), agent: opts.agent || this.agent, project: opaqueProject(opts.project || this.project), at: Date.now(), lane: opts.lane ?? "chat" };
     if (!rec.text) return rec;
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const uttered = `${text ?? ""}\n${rec.text}`;
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(uttered);
-    let sal = opts.sal ?? ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(rec.text.replace(SPEAKER_LABEL, ""));
-    if (pin) {
-      sal = Math.max(sal, opts.pin === true || /\b(?:always|remember)\b/i.test(uttered) ? 1 : 0.6);
-      if (!rec.tags.includes("pin")) rec.tags.push("pin");
-    }
-    if (sal > 0) rec.sal = sal;
+    if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     this.compiled.push(c);
@@ -316,7 +308,7 @@ export class AgentMemory {
           if (this.compiled.length !== before) this.rebuildSeen();
         }
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(safe) || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(it.text);
-        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text), sal: pin ? Math.max(0.6, ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, ""))) : ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")), pin }));
+        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text), pin }));
       }
     }
     return out;
@@ -386,7 +378,7 @@ export class AgentMemory {
         seen.add(x);
         n++;
       }
-      if (n) scored.push({ rec: c.rec, n, k: c.needles.length });
+      if (n && (n > 1 || c.needles.length <= 12)) scored.push({ rec: c.rec, n, k: c.needles.length });
     }
     const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || a.k - b.k || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
