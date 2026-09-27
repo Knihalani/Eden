@@ -140,10 +140,12 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, number>): void {
-  if (!existsSync(path)) return;
+function load(path: string): Compiled[] {
+  const out: Compiled[] = [];
+  const idx = new Map<string, number>();
+  if (!existsSync(path)) return out;
   let raw = "";
-  try { raw = readFileSync(path, "utf8"); } catch { return; }
+  try { raw = readFileSync(path, "utf8"); } catch { return out; }
   for (const t of raw.split("\n")) {
     if (!t) continue;
     try {
@@ -160,12 +162,6 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
       }
     } catch {}
   }
-}
-
-function load(path: string): Compiled[] {
-  const out: Compiled[] = [];
-  const idx = new Map<string, number>();
-  ingestMemoryJsonl(path, out, idx);
   return out;
 }
 
