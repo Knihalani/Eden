@@ -170,12 +170,7 @@ export async function pullLive(state: WrapState): Promise<void> {
       tools?: Array<{ program: StretchProgram; state: string; rollout?: "canary" | "live" }>;
     };
     const rows = j.tools ?? [];
-    const pulled = rows
-      .filter((t) => t.state === "live")
-      .map((t) => {
-        const rollout = t.rollout === "canary" || t.rollout === "live" ? t.rollout : undefined;
-        return rollout ? { ...t.program, rollout } : t.program;
-      });
+    const pulled = rows.filter((t) => t.state === "live").map((t) => { const rollout = t.rollout === "canary" || t.rollout === "live" ? t.rollout : undefined; return rollout ? { ...t.program, rollout } : t.program; });
     const known = new Set(rows.map((t) => t.program?.id).filter((id): id is string => typeof id === "string" && !!id));
     const localOnly = state.programs.filter((p) => p.manifest && !known.has(p.id));
     state.programs = [...pulled, ...localOnly];
