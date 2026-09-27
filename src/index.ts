@@ -109,6 +109,10 @@ const CUE_EXPAND: Record<string, string[]> = {
   identify: ["cdp"],
   spec: ["specs"],
   mock: ["mocks"],
+  clip: ["walkthroughs"],
+  nightly: ["pipelines"],
+  seat: ["directory"],
+  span: ["tracing"],
 };
 
 export function queryHay(text: string): Set<string> {
@@ -500,7 +504,6 @@ export class AgentMemory {
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
         }
-        try { packet = dropHarmed(this.dir, packet); } catch {}
         try {
           const latest = (re: RegExp) => packet.reduce((b, m) => (re.test(String(m.text ?? "")) && m.at > b ? m.at : b), -1);
           const sha = latest(/\bsha256\b/i);
