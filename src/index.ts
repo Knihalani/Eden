@@ -17,7 +17,7 @@ import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { logMemoryNotes } from "./memory-log";
 import { applyProvenanceLabel, noteKindToken, stripPacketLabel } from "./memory-provenance";
-import { routeMemory, type MemoryRoute } from "./memory-router";
+import { type MemoryRoute } from "./memory-router";
 import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
 
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
@@ -789,13 +789,6 @@ export class AgentMemory {
   }
 
   relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
-    let route: MemoryRoute = "chat-jsonl";
-    try { route = routeMemory(text); } catch { route = "chat-jsonl"; }
-    try {
-      const live = this.compiled.filter((c) => c.rec.kind !== "digest");
-      if (live.length >= 4 && live.every((c) => c.rec.lane === "icl" || isIclExemplar(String(c.rec.text ?? "")))) route = "icl-index";
-    } catch {}
-    memoryLastRoute.route = route;
     const hay = queryHay(text);
     try {
       const expand: Record<string, string[]> = {
