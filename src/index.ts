@@ -65,7 +65,7 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
 function compileNeedles(rec: MemoryRecord): Compiled {
-  return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w))])] };
+  return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w))])] };
 }
 
 export function queryHay(text: string): Set<string> {
@@ -117,10 +117,6 @@ const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|underst
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
-
-export function encodeLane(_text: string): MemoryLaneKind {
-  return "chat";
-}
 
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>(), out: string[] = [];
@@ -418,7 +414,7 @@ export class AgentMemory {
         try {
           if (!silent && cue && retrieved.length) {
             let hopPool = retrieved;
-            try { hopPool = this.memories().filter((m) => String(m.text ?? "").trim()); } catch {}
+            try { hopPool = this.compiled.filter((c) => c.needles.length <= 12).map((c) => c.rec).filter((m) => String(m.text ?? "").trim()); } catch {}
             try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
             packet = completeNotes(cue, retrieved, hopPool);
           } else if (!silent) packet = retrieved;
