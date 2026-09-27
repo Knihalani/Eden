@@ -368,12 +368,7 @@ export class AgentMemory {
     const scored: { rec: MemoryRecord; n: number; k: number }[] = [];
     for (const c of rows) {
       let n = 0;
-      const seen = new Set<string>();
-      for (const x of c.needles) {
-        if (!hay.has(x) || seen.has(x)) continue;
-        seen.add(x);
-        n++;
-      }
+      for (const x of c.needles) if (hay.has(x)) n++;
       if (n && (n > 1 || c.needles.length <= 12) && !(n < 2 && c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)))) scored.push({ rec: c.rec, n, k: c.needles.length });
     }
     const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || a.k - b.k || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
