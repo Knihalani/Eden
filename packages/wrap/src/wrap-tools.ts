@@ -144,16 +144,10 @@ export async function flushOutbox(state: WrapState): Promise<void> {
 }
 
 function post(state: WrapState, path: string, body: unknown): void {
-  const base = state.opts.baseUrl;
-  const key = state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
-  if (!base || !key) return;
   void sendPost(state, path, body).then((ok) => {
     if (ok) return;
     const q = ((s, q = outboxes.get(s) ?? []) => (outboxes.set(s, q), q))(state);
-    if (q.length >= MAX_OUTBOX) {
-      state.droppedPosts++;
-      return;
-    }
+    if (q.length >= MAX_OUTBOX) { state.droppedPosts++; return; }
     q.push({ path, body, tries: 0 });
     ((state, delayMs) => { if (flushers.has(state)) return; const t = setTimeout(() => { flushers.delete(state); void flushOutbox(state); }, delayMs); t.unref?.(); flushers.set(state, t); })(state, 50);
   });
