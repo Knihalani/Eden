@@ -6,7 +6,7 @@ import { redact } from "../packages/ir/src/redact";
 import { splitNumberedItems } from "./assemble";
 import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
-import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
+import { dropHarmed, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate } from "./sleep";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
