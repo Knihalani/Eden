@@ -135,7 +135,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
           try { consolidate(mem, { session: session || undefined, mode: "full" }); } catch {}
           return null;
         }
-        mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true });
+        mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior);
         try { consolidate(mem, { session: session || undefined, mode: "full" }); } catch {}
       }
       return null;
