@@ -522,12 +522,11 @@ export class AgentMemory {
       const notes: { role: "system"; content: string }[] = [];
       if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
         const cue = cueFor(list);
-        const rankCue = cue;
-        const retrieved = rankCue ? this.notesFor(rankCue) : [];
+        const retrieved = cue ? this.notesFor(cue) : [];
         let silent = false;
-        if (rankCue && retrieved.length) {
+        if (cue && retrieved.length) {
           try {
-            if (isMathChatterCue(rankCue)) {
+            if (isMathChatterCue(cue)) {
               memoryInjectSilent.n++;
               silent = true;
             }
@@ -535,14 +534,12 @@ export class AgentMemory {
         }
         let packet: MemoryRecord[] = [];
         try {
-          let hopped = silent ? [] : retrieved;
-          if (!silent && rankCue && retrieved.length) {
+          if (!silent && cue && retrieved.length) {
             let hopPool = retrieved;
             try { hopPool = this.memories().filter((m) => String(m.text ?? "").trim()); } catch {}
             try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
-            hopped = completeNotes(rankCue, retrieved, hopPool);
-          }
-          packet = hopped;
+            packet = completeNotes(cue, retrieved, hopPool);
+          } else if (!silent) packet = retrieved;
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
         }
