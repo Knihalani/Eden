@@ -2,7 +2,6 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
-import { alreadyInjected } from "../packages/know/src/inject";
 import { redact } from "../packages/ir/src/redact";
 import { splitNumberedItems } from "./assemble";
 import { completeNotes } from "./cls/complete";
@@ -520,7 +519,7 @@ export class AgentMemory {
       try { if (memoryConsent() === "off") return list; } catch { return list; }
       const blob = convBlob(list);
       const notes: { role: "system"; content: string }[] = [];
-      if (!alreadyInjected(blob) && !blob.includes(MEMORY_MARK)) {
+      if (!blob.includes(MEMORY_MARK)) {
         const cue = cueFor(list);
         const retrieved = cue ? this.notesFor(cue) : [];
         let silent = false;
@@ -562,7 +561,7 @@ export class AgentMemory {
     const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages", m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [], sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
     try {
       const sysBlob = typeof sys === "string" ? sys : sys ? convBlob(Array.isArray(sys) ? sys : [sys]) : "";
-      const next = alreadyInjected(sysBlob) || sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m);
+      const next = sysBlob.includes(MEMORY_MARK) ? (this.observe(m), m) : this.inject(m);
       if (sys) this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : [sys]);
       if (next === m) return body;
       return { ...body, [key]: next };
