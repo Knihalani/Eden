@@ -744,7 +744,7 @@ export class AgentMemory {
         for (const x of extra) hay.add(x);
       }
     } catch {}
-    const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && c.rec.lane !== "icl" && !isIclExemplar(c.rec.text) && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
+    const rows = this.compiled.filter((c) => c.rec.kind !== "digest" && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
     const scored: { rec: MemoryRecord; n: number }[] = [];
     for (const c of rows) {
       let n = 0;
