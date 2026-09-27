@@ -107,8 +107,14 @@ export function cueFor(list: unknown[]): string {
   const m = Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined;
   const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
   if (!raw) return "";
-  const head = raw.split(/\n\n/)[0]!.trim();
-  return head || raw;
+  const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean);
+  if (!paras.length) return raw;
+  const last = paras.at(-1)!;
+  const first = paras[0]!;
+  const ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
+  if (ask(last)) return last;
+  if (ask(first)) return first;
+  return last;
 }
 
 const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
