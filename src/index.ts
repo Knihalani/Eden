@@ -374,7 +374,7 @@ export class AgentMemory {
         seen.add(x);
         n++;
       }
-      if (n && (n > 1 || c.needles.length <= 12)) scored.push({ rec: c.rec, n, k: c.needles.length });
+      if (n && (n > 1 || c.needles.length <= 12) && !(n < 2 && c.needles.some((x) => !hay.has(x) && /[a-z]/.test(x) && /\d/.test(x)))) scored.push({ rec: c.rec, n, k: c.needles.length });
     }
     const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || a.k - b.k || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
     let lexical = ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
