@@ -14,7 +14,7 @@ import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { stripPacketLabel } from "./memory-provenance";
 import { type MemoryRoute } from "./memory-router";
-import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
+import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted } from "./semantic-store";
 
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export const MEMORY_MARK = "Eden Memory:";
@@ -303,7 +303,6 @@ export class AgentMemory {
   private walDirtyIds = new Set<string>();
   private deletedIds = new Set<string>();
   private needCompact = false;
-  private sem?: SemanticStore;
   private seenLower = new Set<string>();
 
   constructor(opts: MemoryOptions = {}) {
@@ -640,10 +639,7 @@ export class AgentMemory {
   }
   quiet(fn: () => void) {
     this.batch++;
-    const sem = (this.sem ??= new SemanticStore(this.dir));
-    sem.beginBatch();
     try { fn(); } finally {
-      try { sem.endBatch(); } catch {}
       this.batch--;
       this.flush(false);
     }
