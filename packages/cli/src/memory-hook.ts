@@ -2,13 +2,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
 import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
-import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
+import { scrubTombstonedIdentity } from "../../../src/gist-store";
 import { parseHookToolTraces, parseToolArgs, persistToolTraces } from "../../../src/tool-trace";
-import { childSessionName, consolidate, dropHarmed, formatPacketText, loadHarmedIds, MEMORY_MARK, openMemory, type AgentMemory, type MemoryRecord } from "../../../src/index";
+import { childSessionName, consolidate, dropHarmed, formatPacketText, MEMORY_MARK, openMemory, type AgentMemory, type MemoryRecord } from "../../../src/index";
 import { maybeIncrementalSleep } from "../../../src/sleep";
 import { memoryConsent } from "../../../src/memory-consent";
 import { logMemoryNotes } from "../../../src/memory-log";
-import { opaqueId } from "../../../src/memory-scrub";
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd", "PostToolUse", "SubagentStop"]);
 
@@ -116,58 +115,6 @@ function briefing(mem: AgentMemory, session = ""): string {
     lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
     logged.push({ id: r.id, at: r.at });
   }
-  try {
-    let gistHarmed = new Set<string>();
-    try { gistHarmed = loadHarmedIds(mem.dir); } catch { gistHarmed = new Set(); }
-    const harmedText: string[] = [];
-    try {
-      for (const r of mem.memories()) {
-        if (!r?.id || !gistHarmed.has(r.id)) continue;
-        const t = String(r.text ?? "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!?]+$/g, "");
-        if (t.length >= 8) harmedText.push(t);
-      }
-    } catch {}
-    for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) {
-      try {
-        const src = typeof g.src === "string" ? g.src : "";
-        if (src && gistHarmed.has(src)) continue;
-      } catch {}
-      let text = g.text.trim();
-      try {
-        if (gistHarmed.has(`gist:${opaqueId(text)}`)) text = "";
-        else {
-          const parts = text.split(/(?<=[.!?])\s+/);
-          const kept = parts.filter((p) => {
-            const norm = p.replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!?]+$/g, "");
-            if (!norm) return false;
-            return !harmedText.some((t) => norm.includes(t) || t.includes(norm));
-          });
-          text = kept.join(" ").trim();
-        }
-      } catch {}
-      if (!text) continue;
-      try {
-        const cleaned = scrubTombstonedIdentity(text, mem.dir);
-        if (typeof cleaned === "string") text = cleaned.trim();
-      } catch {}
-      if (!text) continue;
-      const key = text.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      let line = text;
-      try {
-        line = formatPacketText({
-          id: `gist:${opaqueId(text)}`,
-          text,
-          kind: "gist",
-          tags: ["gist"],
-          at: g.t,
-        });
-      } catch { line = `[gist] ${text}`; }
-      lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
-      logged.push({ id: `gist:${opaqueId(text)}`, at: g.t });
-    }
-  } catch {}
   if (!lines.length) return "";
   try { logMemoryNotes(logged); } catch {}
   return MEMORY_MARK + lines.join("");
