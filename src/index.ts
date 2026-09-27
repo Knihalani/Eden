@@ -323,30 +323,6 @@ const FUNC_WORD = new Set([
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
-function omitConflictingIdentity(text: string, store: SemanticStore): string {
-  const raw = String(text ?? "").trim();
-  if (!raw) return "";
-  try {
-    const parts = raw.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
-    const units = parts.length ? parts : [raw];
-    const kept: string[] = [];
-    for (const s of units) {
-      try {
-        const fact = objectAsserted(s);
-        if (fact) {
-          const live = store.get(fact.s, fact.p);
-          if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue;
-          if (store.supersededObject(fact.o)) continue;
-        }
-      } catch {}
-      kept.push(s);
-    }
-    return kept.join(" ").trim();
-  } catch {
-    return raw;
-  }
-}
-
 export function encodeLane(text: string): MemoryLaneKind {
   try {
     const t = String(text ?? "").trim();
@@ -668,10 +644,7 @@ export class AgentMemory {
       const safe = this.persistText(it.text);
       const lane = encodeLane(it.text);
       if (lane === "icl" || lane === "narrative") {
-        let text = safe;
-        if (lane === "narrative" && opts.keepLiveIdentity) {
-          try { text = omitConflictingIdentity(text, (this.sem ??= new SemanticStore(this.dir))); } catch {}
-        }
+        const text = safe;
         if (text && !this.seenLower.has(text.toLowerCase())) {
           const tags = (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text).concat([lane]);
           try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
