@@ -974,36 +974,6 @@ export class AgentMemory {
       }
     } catch {}
     try {
-      if (String(text ?? "").trim()) {
-        const live = new SemanticStore(this.dir).live();
-        if (Array.isArray(live) && live.length) {
-          const extras: MemoryRecord[] = [];
-          for (const row of live) {
-            let subj = String(row.s ?? "").trim();
-            let obj = String(row.o ?? "").trim();
-            const pred = String(row.p ?? "").trim().toLowerCase();
-            if (!subj || !obj || !pred) continue;
-            try {
-              subj = scrubMemoryText(subj);
-              obj = scrubMemoryText(obj);
-            } catch {}
-            if (!subj || !obj || subj === "[cwd]" || obj === "[cwd]" || subj === "[session]" || obj === "[session]" || subj === "[email]" || obj === "[email]") continue;
-            const titled = subj.charAt(0).toUpperCase() + subj.slice(1);
-            const body = pred === "uses" ? `${subj} uses ${obj}` : pred === "is" ? (/^[A-Z]/.test(obj) ? `${titled} is ${obj}.` : `The ${subj} is ${obj}.`) : `${titled} ${pred} ${obj}`.replace(/\s+/g, " ").trim();
-            extras.push({
-              id: `sem:${row.s}:${row.p}`,
-              text: body,
-              kind: "fact",
-              lane: "chat",
-              tags: ["fact", "semantic", "x-identity"],
-              at: Number.isFinite(row.t) ? row.t : 0,
-            });
-          }
-          lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(extras, lexical, cap);
-        }
-      }
-    } catch {}
-    try {
       const stop = new Set(["the", "is", "a", "an", "of", "and", "or", "to", "in", "on", "for", "our", "we", "it", "do", "does", "did", "are", "was", "be", "use", "uses", "what", "where", "why", "how", "who"]);
       lexical = lexical.filter((r) => {
         const toks = [...queryHay(r.text ?? "")].filter((t) => t.length >= 3 && !stop.has(t));
