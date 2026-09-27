@@ -801,12 +801,7 @@ export class AgentMemory {
           if (!silent && rankCue && retrieved.length) {
             const hopStore = (() => {
               try {
-                return this.memories().filter((m) => {
-                  if (!String(m.text ?? "").trim()) return false;
-                  if (m.lane === "icl" || isIclExemplar(m.text)) return false;
-                  if (m.lane === "narrative" && !(m.tags ?? []).includes("chunk")) return false;
-                  return true;
-                });
+                return this.memories().filter((m) => String(m.text ?? "").trim());
               } catch {
                 return retrieved;
               }
