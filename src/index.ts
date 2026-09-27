@@ -1,11 +1,11 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { redact } from "../packages/ir/src/redact";
 import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
-import { dropHarmed, markHarmed as persistHarmed } from "./memory-harmed";
+import { dropHarmed } from "./memory-harmed";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { stripPacketLabel } from "./memory-provenance";
@@ -208,9 +208,6 @@ export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
   readonly child: boolean;
-  get jsonlDir(): string {
-    return dirname(this.path);
-  }
   private agent?: string;
   private project?: string;
   private scrubSession?: string;
@@ -418,10 +415,6 @@ export class AgentMemory {
     if (!text) return [];
     const recs = this.relevant(text, k).map(formatNote);
     try { return dropHarmed(this.dir, recs); } catch { return recs; }
-  }
-
-  markHarmed(ids: Iterable<string>): void {
-    try { persistHarmed(this.dir, ids); } catch {}
   }
 
   inject(messages: unknown[]): unknown[] {
