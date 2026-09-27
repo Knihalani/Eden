@@ -163,9 +163,7 @@ export function pathCues(_lower: string): Set<string> {
 const SAL_STRONG = /\b(root cause|because|instead of|rather than|decided|we chose|chose|settled on|going with|never|always|do not|don'?t|must|the fix (?:was|is)|fixed (?:it )?by|turned out|the reason|that'?s why|that is why|so that)\b/i;
 const SAL_WEAK = /\b(?:i|we) (?:changed|added|fixed|raised|moved|switched|replaced|set|bumped|pointed|deleted|removed|rewrote|derived|forced|chunked|serialised|serialized|used|wired|dropped|renamed|reverted|pinned|upgraded|downgraded|disabled|enabled|patched|migrated|recreated)\b|\b(?:should|prefer|convention|rule|instead)\b/i;
 
-export const MEMORY_WAL_COMPACT_LINES = 32;
-
-function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, number>, overlay: boolean): void {
+function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, number>): void {
   if (!existsSync(path)) return;
   let raw = "";
   try { raw = readFileSync(path, "utf8"); } catch { return; }
@@ -177,7 +175,7 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
         rec.lane = rec.lane ?? "chat";
         const c = compileNeedles(rec);
         const at = idx.get(rec.id);
-        if (overlay && at != null) out[at] = c;
+        if (at != null) out[at] = c;
         else {
           idx.set(rec.id, out.length);
           out.push(c);
@@ -190,8 +188,7 @@ function ingestMemoryJsonl(path: string, out: Compiled[], idx: Map<string, numbe
 function load(path: string): Compiled[] {
   const out: Compiled[] = [];
   const idx = new Map<string, number>();
-  ingestMemoryJsonl(path, out, idx, false);
-  ingestMemoryJsonl(`${path}.wal`, out, idx, true);
+  ingestMemoryJsonl(path, out, idx);
   return out;
 }
 
@@ -245,10 +242,6 @@ export class AgentMemory {
   private path: string;
   private batch = 0;
   private dirty = false;
-  private durableIds = new Set<string>();
-  private walDirtyIds = new Set<string>();
-  private deletedIds = new Set<string>();
-  private needCompact = false;
   private seenLower = new Set<string>();
 
   constructor(opts: MemoryOptions = {}) {
@@ -271,7 +264,6 @@ export class AgentMemory {
       this.path = join(this.dir, "memories.jsonl");
     }
     this.compiled = load(this.path);
-    this.durableIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
   }
 
@@ -315,7 +307,6 @@ export class AgentMemory {
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     this.compiled.push(c);
-    this.walDirtyIds.add(rec.id);
     if (!this.project || rec.project === this.project) this.seenLower.add(rec.text.toLowerCase());
     return this.flush(true), rec;
   }
@@ -350,18 +341,9 @@ export class AgentMemory {
         const key = isToolProse(text) ? null : subjectKey(text);
         const supersede = /\b(?:instead of|rather than)\b/i.test(raw);
         if (key && !supersede) {
-          let removed = false;
-          for (const c of this.compiled) {
-            if ((!this.project || c.rec.project === this.project) && subjectKey(c.rec.text) === key) {
-              this.deletedIds.add(c.rec.id);
-              removed = true;
-            }
-          }
-          if (removed) {
-            this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
-            this.needCompact = true;
-            this.rebuildSeen();
-          }
+          const before = this.compiled.length;
+          this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
+          if (this.compiled.length !== before) this.rebuildSeen();
         }
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(safe) || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(it.text);
         out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text), sal: pin ? Math.max(0.6, ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, ""))) : ((t) => SAL_STRONG.test(t) ? 1 : SAL_WEAK.test(t) ? 0.6 : 0)(text.replace(SPEAKER_LABEL, "")), pin }));
@@ -383,66 +365,19 @@ export class AgentMemory {
   private persist() {
     try { if (memoryConsent() !== "on") return; } catch { return; }
     const cap = Number(process.env.EDEN_MEMORY_STORE_CAP) || 2000;
-    const wal = `${this.path}.wal`;
     try {
       withFileLock(`${this.path}.lock`, () => {
-        let pending = this.compiled.filter((c) => this.walDirtyIds.has(c.rec.id));
-        let walN = 0;
-        try {
-          if (existsSync(wal)) {
-            for (const t of readFileSync(wal, "utf8").split("\n")) if (t) walN++;
-          }
-        } catch {}
-        let snapshotMissing = false;
-        try { snapshotMissing = !existsSync(this.path); } catch { snapshotMissing = true; }
-        let compact = this.needCompact || snapshotMissing || this.compiled.length > cap || walN + pending.length >= MEMORY_WAL_COMPACT_LINES;
-        if (compact) {
-          const disk = load(this.path);
-          const local = new Map(this.compiled.map((c) => [c.rec.id, c] as const));
-          const merged: Compiled[] = [];
-          const seen = new Set<string>();
-          for (const c of disk) {
-            const id = c.rec.id;
-            if (this.deletedIds.has(id) || seen.has(id)) continue;
-            merged.push(this.walDirtyIds.has(id) ? (local.get(id) ?? c) : c);
-            seen.add(id);
-          }
-          for (const c of this.compiled) {
-            if (this.deletedIds.has(c.rec.id) || seen.has(c.rec.id)) continue;
-            merged.push(c);
-            seen.add(c.rec.id);
-          }
-          this.compiled = merged;
-        }
-        let evicted = false;
         if (this.compiled.length > cap) {
           const pin = (c: Compiled) => c.rec.kind === "constraint" || (c.rec.sal ?? 0) >= 0.6 || (c.rec.tags ?? []).includes("pin");
-          const laneOf = (c: Compiled) => c.rec.lane || "chat";
-          const durableLane = (c: Compiled) => laneOf(c) === "icl" || laneOf(c) === "narrative";
           const pins = this.compiled.filter(pin).sort((a, b) => a.rec.at - b.rec.at).slice(-cap);
-          const durable = this.compiled.filter((c) => !pin(c) && durableLane(c)).sort((a, b) => a.rec.at - b.rec.at);
-          const chat = this.compiled.filter((c) => !pin(c) && !durableLane(c)).sort((a, b) => a.rec.at - b.rec.at);
-          let room = cap - pins.length;
-          const keepDurable = durable.slice(Math.max(0, durable.length - room));
-          room = cap - pins.length - keepDurable.length;
-          const keepChat = chat.slice(Math.max(0, chat.length - room));
-          const kept = new Set([...pins, ...keepDurable, ...keepChat].map((c) => c.rec.id));
-          for (const c of this.compiled) if (!kept.has(c.rec.id)) this.deletedIds.add(c.rec.id);
-          this.compiled = [...pins, ...keepDurable, ...keepChat];
+          const rest = this.compiled.filter((c) => !pin(c)).sort((a, b) => a.rec.at - b.rec.at);
+          const room = cap - pins.length;
+          this.compiled = [...pins, ...rest.slice(Math.max(0, rest.length - room))];
           this.rebuildSeen();
-          evicted = true;
         }
-        pending = this.compiled.filter((c) => this.walDirtyIds.has(c.rec.id));
-        compact = compact || evicted || pending.length > 0;
-        if (compact) {
-          writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
-          try { chmodSync(this.path, 0o600); } catch {}
-          try { unlinkSync(wal); } catch {}
-          this.durableIds = new Set(this.compiled.map((c) => c.rec.id));
-          this.walDirtyIds.clear();
-          this.deletedIds.clear();
-          this.needCompact = false;
-        }
+        writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
+        try { chmodSync(this.path, 0o600); } catch {}
+        try { unlinkSync(`${this.path}.wal`); } catch {}
       });
       this.dirty = false;
     } catch {
@@ -579,9 +514,7 @@ export class AgentMemory {
   }
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void {
-    for (const c of this.compiled) if (pred(c.rec)) this.deletedIds.add(c.rec.id);
     this.compiled = this.compiled.filter((c) => !pred(c.rec));
-    this.needCompact = true;
     this.flush(true);
   }
 
@@ -591,8 +524,6 @@ export class AgentMemory {
       const next = pred(c.rec);
       if (typeof next !== "string" || next === c.rec.text) return c;
       dirty = true;
-      this.walDirtyIds.add(c.rec.id);
-      this.needCompact = true;
       return compileNeedles({ ...c.rec, text: next });
     });
     if (dirty) this.flush(true);
@@ -605,8 +536,6 @@ export class AgentMemory {
 
   close() {
     try { clearSleepTimer(this); } catch {}
-    try { if (existsSync(`${this.path}.wal`)) this.needCompact = true; } catch {}
-    if (this.needCompact) this.dirty = true;
     this.flush(false);
   }
 }
