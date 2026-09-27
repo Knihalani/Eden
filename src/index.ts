@@ -435,13 +435,6 @@ export class AgentMemory {
       return body;
     }
   }
-  quiet(fn: () => void) {
-    this.batch++;
-    try { fn(); } finally {
-      this.batch--;
-      this.flush(false);
-    }
-  }
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void {
     this.compiled = this.compiled.filter((c) => !pred(c.rec));
