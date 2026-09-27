@@ -8,7 +8,7 @@ import { completeNotes } from "./cls/complete";
 import { memoryConsent } from "./memory-consent";
 import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
-import { clearSleepTimer, consolidate, migrateSessionHowTo } from "./sleep";
+import { clearSleepTimer, consolidate } from "./sleep";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { stripPacketLabel } from "./memory-provenance";
@@ -270,7 +270,6 @@ export class AgentMemory {
     this.compiled = load(this.path);
     this.durableIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
-    try { migrateSessionHowTo(this); } catch {}
   }
 
   memories(): MemoryRecord[] {
