@@ -11,7 +11,6 @@ import { applyObserveForget } from "./memory-forget";
 import { dropHarmed, loadHarmedIds, markHarmed as persistHarmed } from "./memory-harmed";
 import { clearSleepTimer, consolidate, migrateSessionHowTo } from "./sleep";
 import { ChunkStore } from "./chunk-store";
-import { IclIndex } from "./icl-index";
 import { opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { logMemoryNotes } from "./memory-log";
@@ -630,9 +629,6 @@ export class AgentMemory {
           out.push(rec);
           if (lane === "narrative") {
             try { new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
-          }
-          if (lane === "icl") {
-            try { new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
           }
         }
         continue;
