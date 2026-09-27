@@ -13,7 +13,6 @@ import { isToolProse, objectAsserted } from "./semantic-store";
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
-export const memoryInjectSilent = { n: 0 };
 
 export function isMathChatterCue(cue: string): boolean {
   try {
@@ -396,7 +395,6 @@ export class AgentMemory {
         if (cue && retrieved.length) {
           try {
             if (isMathChatterCue(cue)) {
-              memoryInjectSilent.n++;
               silent = true;
             }
           } catch {}
