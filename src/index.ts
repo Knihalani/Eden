@@ -394,6 +394,12 @@ export class AgentMemory {
         workflow: ["workflows"],
         purging: ["cdn"],
         edge: ["cdn"],
+        ticket: ["issues"],
+        triage: ["issues"],
+        paged: ["paging"],
+        apply: ["infra"],
+        policies: ["auth"],
+        channel: ["chat"],
       };
       for (const t of [...hay]) {
         const extra = expand[t];
@@ -468,10 +474,12 @@ export class AgentMemory {
         let packet: MemoryRecord[] = [];
         try {
           if (!silent && cue && retrieved.length) {
-            let hopPool = retrieved;
-            try { hopPool = this.hopShort.length ? this.hopShort : retrieved; } catch {}
-            try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
-            packet = completeNotes(cue, retrieved, hopPool);
+            if (/\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
+              let hopPool = retrieved;
+              try { hopPool = this.hopShort.length ? this.hopShort : retrieved; } catch {}
+              try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
+              packet = completeNotes(cue, retrieved, hopPool);
+            } else packet = retrieved;
           } else if (!silent) packet = retrieved;
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
