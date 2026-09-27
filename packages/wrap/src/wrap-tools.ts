@@ -159,6 +159,8 @@ function post(state: WrapState, path: string, body: unknown): void {
   });
 }
 
+function publishReceipt(state: WrapState, r: Receipt): void { state.receipts.push(r); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES); try { state.opts.onReceipt?.(r); } catch {} post(state, "/v1/receipts", r); }
+
 export async function pullLive(state: WrapState): Promise<void> {
   const base = state.opts.baseUrl;
   const key = state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
@@ -332,9 +334,7 @@ export async function runCompiled(
     } else if (stats.llmCalls === 0) {
       run.island_measured = true;
     }
-    state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
-    try { state.opts.onReceipt?.(receipt); } catch {}
-    post(state, "/v1/receipts", receipt);
+    publishReceipt(state, receipt);
     markDirty(state, input, program.sequence);
     return result.value;
   } catch (err) {
@@ -351,9 +351,7 @@ export async function runCompiled(
       err,
     );
     ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
-    state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
-    try { state.opts.onReceipt?.(receipt); } catch {}
-    post(state, "/v1/receipts", receipt);
+    publishReceipt(state, receipt);
     throw err;
   }
 }
@@ -642,9 +640,7 @@ export function wrapTools<T extends ToolsIn>(
         fingerprint: hashStretch(program),
       };
       ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
-      state.receipts.push(receipt); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
-      try { state.opts.onReceipt?.(receipt); } catch {}
-      post(state, "/v1/receipts", receipt);
+      publishReceipt(state, receipt);
       return null;
     }
     return { key, armed };
@@ -693,9 +689,7 @@ export function wrapTools<T extends ToolsIn>(
         sharedAcross: n,
         ...(prog ? { fingerprint: hashStretch(prog) } : {}),
       });
-      state.receipts.push(rec); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
-      try { state.opts.onReceipt?.(rec); } catch {}
-      post(state, "/v1/receipts", rec);
+      publishReceipt(state, rec);
     }
     stampRemainderSkip(state, armed, toolName);
   };
