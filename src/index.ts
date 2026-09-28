@@ -119,6 +119,10 @@ const CUE_EXPAND: Record<string, string[]> = {
   story: ["issues"],
   formula: ["spreadsheets"],
   canvas: ["whiteboards"],
+  locale: ["i18n"],
+  mapper: ["orm"],
+  asset: ["bundling"],
+  worker: ["jobs"],
 };
 
 const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
