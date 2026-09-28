@@ -653,12 +653,6 @@ export class AgentMemory {
     this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
     try { this.ensureIndex(); } catch {}
-    try {
-      this.lookupNotes("alpha widget catalog");
-      this.lookupNotes("what is the widget provider?");
-      this.lookupNotes("which catalog database do we use?");
-    } catch {}
-    try { this.inject([{ role: "user", content: "cool" }]); } catch {}
   }
 
   get jsonlDir(): string {
