@@ -286,8 +286,7 @@ export function childSessionName(parent?: string, child?: string): string | unde
 
 type Compiled = { rec: MemoryRecord; needles: string[] };
 
-const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
-const CUE_SKIP = new Set(["where","who","whom","whose","does","did","which","when"]);
+const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app","where","who","whom","whose","does","did","which","when"]);
 
 function compileNeedles(rec: MemoryRecord): Compiled {
   return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t) && !/^[a-z]{3,}\d+[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w) && !/^[a-z]{3,}\d+[a-z]$/.test(w))])] };
@@ -700,7 +699,7 @@ export class AgentMemory {
       agent: opts.agent || this.agent,
       project: opaqueProject(opts.project || this.project),
       at: now,
-      lane: opts.lane ?? "chat",
+      ...(opts.lane ? { lane: opts.lane } : {}),
       ...(this.session ? { ep: opaqueId(this.session) } : {}),
     };
     if (!rec.text) return rec;
@@ -1004,7 +1003,7 @@ export class AgentMemory {
     try {
       this.ensureIndex();
       if (this.post) {
-        const toks = [...hay].filter((t) => t.length >= 3 && !STOP.has(t) && !CUE_SKIP.has(t));
+        const toks = [...hay].filter((t) => t.length >= 3 && !STOP.has(t));
         const ranked = toks
           .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
           .filter((x) => x.df > 0)
