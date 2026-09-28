@@ -1002,7 +1002,6 @@ export class AgentMemory {
     if (next.length === this.compiled.length) return;
     this.compiled = next;
     this.post = null;
-    this.rebuildSeen();
   }
 
   relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
