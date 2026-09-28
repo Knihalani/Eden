@@ -30,6 +30,7 @@ import {
   preferObservationOverSources,
   stripMemoryPacket,
   writeAliasTags,
+  WRITE_ALIASES,
   goldFirstNotes,
   PACKET_BYTE_CAP,
   PACKET_BULLET_MAX,
@@ -289,7 +290,7 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app","where","who","whom","whose","does","did","which","when"]);
 
 function compileNeedles(rec: MemoryRecord): Compiled {
-  return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t) && !/^[a-z]{3,}\d+[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w) && !/^[a-z]{3,}\d+[a-z]$/.test(w))])] };
+  return { rec, needles: [...new Set([...(rec.tags ?? []).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t) && !/^[a-z]{3,}\d+[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w) && !/^[a-z]{3,}\d+[a-z]$/.test(w))])] };
 }
 
 const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
@@ -663,7 +664,11 @@ export class AgentMemory {
   }
 
   memories(): MemoryRecord[] {
-    return this.compiled.map((c) => c.rec).filter((r) => !this.project || r.project === this.project);
+    return this.compiled.map((c) => {
+      const r = c.rec;
+      const tags = writeAliasTags(r.tags ?? [], r.text).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
+      return { ...r, tags };
+    }).filter((r) => !this.project || r.project === this.project);
   }
 
   private persistText(text: string): string {
@@ -705,7 +710,12 @@ export class AgentMemory {
     const uttered = `${text ?? ""}\n${rec.text}`;
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(uttered);
     if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
-    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
+    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => {
+      if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false;
+      if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true;
+      return Object.values(WRITE_ALIASES).some((a) => a.includes(t));
+    });
+    if (!rec.tags.length) delete rec.tags;
     try {
       const until = parseRuleTime(rec.text)?.until;
       if (typeof until === "number") rec.validUntil = until;
@@ -725,23 +735,7 @@ export class AgentMemory {
     try { this.invalidateSameCopula(rec); } catch {}
     this.compiled.push(c);
     this.knownIds.add(rec.id);
-    if (this.post) {
-      try {
-        if (c.rec.kind !== "digest" && isLiveRow(c.rec) && (!this.agent || !c.rec.agent || c.rec.agent === this.agent) && (!this.project || c.rec.project === this.project)) {
-          if (c.needles.length <= 12 && String(c.rec.text ?? "").trim() && c.rec.lane !== "icl" && c.rec.kind !== "icl") {
-            let icl = false;
-            try { icl = isIclExemplar(c.rec.text); } catch {}
-            if (!icl) this.hopShort.push(c.rec);
-          }
-          for (const w of c.needles) {
-            if (w.length < 3 || STOP.has(w)) continue;
-            let arr = this.post.get(w);
-            if (!arr) this.post.set(w, arr = []);
-            arr.push(c);
-          }
-        }
-      } catch { this.post = null; }
-    }
+    this.post = null;
     if (!this.project || rec.project === this.project) this.seenLower.add(rec.text.toLowerCase());
     return this.flush(true), rec;
   }
