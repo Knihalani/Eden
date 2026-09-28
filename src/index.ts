@@ -702,7 +702,6 @@ export class AgentMemory {
       agent: opts.agent || this.agent,
       project: opaqueProject(opts.project || this.project),
       at: now,
-      validFrom: now,
       lane: opts.lane ?? "chat",
       ...(this.session ? { ep: opaqueId(this.session) } : {}),
     };
