@@ -129,6 +129,15 @@ const CUE_EXPAND: Record<string, string[]> = {
   bloom: ["indexes"],
   storefront: ["themes"],
   diarization: ["transcription"],
+  digest: ["sha256"],
+  cron: ["schedules", "timers"],
+  caption: ["subtitles", "captions"],
+  lag: ["brokers"],
+  migration: ["schema"],
+  graph: ["edges", "vertices"],
+  throttle: ["quotas", "limits"],
+  watermark: ["cursors", "offsets"],
+  webhook: ["endpoints", "signing"],
 };
 
 const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
