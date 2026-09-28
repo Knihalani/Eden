@@ -4,39 +4,265 @@ import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { redact } from "../packages/ir/src/redact";
 import { completeNotes } from "./cls/complete";
+import { assembleNotes, splitNumberedItems } from "./assemble";
+import { noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
+import { ChunkStore } from "./chunk-store";
+import { retrieveNarrativeChunks } from "./chunk-retrieve";
+import * as howtoRetrieve from "./howto-retrieve";
+import { IclIndex } from "./icl-index";
+import * as iclIndex from "./icl-index";
+import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
 import { dropHarmed } from "./memory-harmed";
-import { opaqueProject, scrubMemoryText } from "./memory-scrub";
+import { opaqueId, opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
-import { isToolProse, objectAsserted } from "./semantic-store";
+import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
+import { GistStore } from "./gist-store";
+import { applyProvenanceLabel, noteKindToken, stripPacketLabel } from "./memory-provenance";
+import { logMemoryNotes } from "./memory-log";
+import {
+  attachPlaceCues,
+  hookLane,
+  isNoopCue,
+  packNotes,
+  parseRuleTime,
+  placePathsFrom,
+  preferObservationOverSources,
+  stripMemoryPacket,
+  writeAliasTags,
+  goldFirstNotes,
+  PACKET_BYTE_CAP,
+  PACKET_BULLET_MAX,
+} from "./memory-sota";
 
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
+export {
+  attachPlaceCues,
+  hookLane,
+  isNoopCue,
+  packNotes,
+  parseRuleTime,
+  pathCues,
+  placePathsFrom,
+  preferObservationOverSources,
+  goldFirstNotes,
+  stripMemoryPacket,
+  writeAliasTags,
+  WRITE_ALIASES,
+  PACKET_BULLET_MAX,
+  PACKET_BYTE_CAP,
+} from "./memory-sota";
+/** Tokens with M32: Harbor prompt Δ 150854 → 178613 (+27759) and total +26941 are agent traces. No 89-task claim. No dual-API. */
+export const PROCEDURE_TOKEN_CAP = 300;
+export const PROCEDURE_CHAR_CAP = PROCEDURE_TOKEN_CAP * 4;
+export const FACT_CHAR_CAP = PROCEDURE_CHAR_CAP;
+export {
+  EXPERIENCE_RETRIEVE_K,
+  EXPERIENCE_RETRIEVE_K_MAX,
+  EXPERIENCE_SLICE_CHAR_CAP,
+  EXPERIENCE_SLICE_TOKEN_CAP,
+} from "./experience-retrieve";
+export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
+export { applyProvenanceLabel, relativeMemoryAge } from "./memory-provenance";
+export { isRecsysShot } from "./semantic-store";
+export { sleep } from "./sleep";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
 
-export function isMathChatterCue(cue: string): boolean {
+const FUNC_WORD = new Set([
+  "i","we","you","he","she","they","my","our","your","his","her","their","me","us","him","them",
+  "is","are","was","were","am","be","been","being","has","have","had","having",
+  "do","does","did","will","would","can","could","should","must","might","may",
+  "the","a","an","and","but","of","to","in","on","at","for","with","from","by","as","that","this",
+  "these","those","it","its","because","if","so","also","when","who","which","not","no",
+]);
+
+function tokList(s: string): string[] {
+  return (String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []);
+}
+
+function looksNarrative(t: string): boolean {
+  const toks = tokList(t);
+  if (toks.length < 4) return false;
+  let fw = 0;
+  for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return true;
+  return false;
+}
+
+function sentenceParts(t: string): string[] {
+  return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
+}
+
+function isFactList(t: string): boolean {
+  const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*[·|][^\]]*)?\]\s+)?\d+[.)]\s+/.test(l));
+  if (numbered.length >= 2) return true;
+  const sents = sentenceParts(t);
+  if (sents.length < 2) return false;
+  let copula = 0;
+  for (const s of sents) {
+    try { if (objectAsserted(s)) copula++; } catch {}
+  }
+  return copula >= 2 && copula * 2 >= sents.length;
+}
+
+function isNarrativeProse(t: string): boolean {
+  const text = t.trim();
+  if (isIclExemplar(text) || isFactList(text)) return false;
+  if (text.length > 400) return true;
+  return sentenceParts(text).length >= 2 && text.length >= 150 && looksNarrative(text);
+}
+
+/** Encode lane for observe. Chat still extractDurable; ICL/narrative/recsys store-all. Never throws. */
+export function encodeLane(text: string): MemoryLaneKind {
   try {
-    const t = String(cue ?? "").trim();
-    if (!t) return false;
-    if (/\b(?:auth|sqlite|postgres|clerk|flake|commit|test|database|provider|session|file|src\/|\.ts|\.py|adr)\b/i.test(t)) {
-      return false;
-    }
-    const lower = t.toLowerCase();
-    if (/^(?:ok|okay|thanks|thank you|lol|lmao|asdf|qwerty|hi|hey|yo|continue|lgtm|ok go|sounds good|ship it)\s*[.!?]?\s*$/i.test(lower)) return true;
-    if (/^\s*(?:what(?:'s| is)\s+)?\d+\s*(?:\+|plus|\-|minus|\*|x|×|times|\/|÷|divided by)\s*\d+\s*\??\s*$/i.test(lower)) {
-      return true;
-    }
-    if (/\b(?:times|plus|minus|divided by)\b/.test(lower) && /\d/.test(lower) && lower.split(/\s+/).length <= 8) {
-      return true;
-    }
-    return false;
+    const t = String(text ?? "").trim();
+    if (!t) return "chat";
+    if (isIclExemplar(t)) return "icl";
+    if (isRecsysShot(t)) return "narrative";
+    if (isNarrativeProse(t)) return "narrative";
+    return "chat";
   } catch {
-    return false;
+    return "chat";
   }
 }
 
+function leadingSerial(text: string): number | undefined {
+  const m = String(text ?? "").trim().replace(/^\[[^\]]+\]\s+/, "").match(/^(\d+)[.)]\s+\S/);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function rankKindBoost(r: MemoryRecord): number {
+  if (/\?\s*$/.test(String(r.text ?? "").trim())) return -40;
+  const k = String(r.kind ?? "");
+  if (k === "constraint") return 50;
+  if (k === "procedure") return 40;
+  if (k === "fact" || k === "preference") return 25;
+  return 0;
+}
+
+function capMemoryBody(r: MemoryRecord, body: string): string {
+  const text = String(body ?? "");
+  try {
+    if (r.lane === "icl" || isIclExemplar(text)) return text;
+    if (r.kind === "procedure") {
+      const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180));
+      if (text.length <= cap) return text;
+      return text.slice(-cap);
+    }
+    if (/\d+[.)]\s+\S/.test(text)) return text;
+    if (text.length <= FACT_CHAR_CAP) return text;
+    return text.slice(0, FACT_CHAR_CAP);
+  } catch {
+    return text;
+  }
+}
+
+function omitConflictingIdentity(text: string, store: SemanticStore): string {
+  const raw = String(text ?? "").trim();
+  if (!raw) return "";
+  try {
+    const parts = sentenceParts(raw);
+    const units = parts.length ? parts : [raw];
+    const kept: string[] = [];
+    for (const s of units) {
+      try {
+        const fact = objectAsserted(s);
+        if (fact) {
+          const live = store.get(fact.s, fact.p);
+          if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue;
+          if (store.supersededObject(fact.o)) continue;
+        }
+      } catch {}
+      kept.push(s);
+    }
+    return kept.join(" ").trim();
+  } catch {
+    return raw;
+  }
+}
+
+export function isMathChatterCue(cue: string): boolean {
+  return isNoopCue(cue);
+}
+
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; agent?: string; project?: string; at: number; ep?: string; ctx?: Record<string, number>; sal?: number; lane?: MemoryLaneKind };
+export type MemoryRecord = {
+  id: string;
+  text: string;
+  kind: MemoryKind;
+  tags: string[];
+  agent?: string;
+  project?: string;
+  at: number;
+  ep?: string;
+  ctx?: Record<string, number>;
+  sal?: number;
+  lane?: MemoryLaneKind;
+  invalidAt?: number;
+  validFrom?: number;
+  validUntil?: number;
+  heat?: number;
+};
+
+function rowValidFrom(r: MemoryRecord): number {
+  if (typeof r.validFrom === "number" && Number.isFinite(r.validFrom)) return r.validFrom;
+  return Number.isFinite(r.at) ? r.at : 0;
+}
+
+function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
+  if (typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) return false;
+  if (typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now) return false;
+  return true;
+}
+
+function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
+  const byKey = new Map<string, T>();
+  const rest: T[] = [];
+  for (const row of rows) {
+    let a: ReturnType<typeof objectAsserted>;
+    try { a = objectAsserted(row.rec.text); } catch { a = undefined; }
+    if (!a) {
+      rest.push(row);
+      continue;
+    }
+    const k = `${a.s}\0${a.p}`;
+    const prev = byKey.get(k);
+    if (!prev) {
+      byKey.set(k, row);
+      continue;
+    }
+    const serial = leadingSerial(row.rec.text);
+    const prevSerial = leadingSerial(prev.rec.text);
+    if (serial != null && prevSerial != null) {
+      if (serial >= prevSerial) byKey.set(k, row);
+      continue;
+    }
+    if (serial != null && prevSerial == null) {
+      byKey.set(k, row);
+      continue;
+    }
+    if (serial == null && prevSerial != null) continue;
+    if (rowValidFrom(row.rec) >= rowValidFrom(prev.rec)) byKey.set(k, row);
+  }
+  return [...byKey.values(), ...rest];
+}
+
+function gistTextsFor(dir: string, notes: MemoryRecord[]): string[] {
+  const out: string[] = [];
+  for (const n of notes) {
+    const k = String(n.kind ?? "").toLowerCase();
+    if (k === "gist" || k === "digest") out.push(String(n.text ?? ""));
+  }
+  try {
+    if (!existsSync(join(dir, "gists.jsonl"))) return out;
+    for (const g of new GistStore(dir).latest("", 8)) {
+      if (g.text) out.push(g.text);
+    }
+  } catch {}
+  return out;
+}
 export type MemoryOptions = { dir?: string; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
@@ -62,83 +288,11 @@ export function childSessionName(parent?: string, child?: string): string | unde
 type Compiled = { rec: MemoryRecord; needles: string[] };
 
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
+const CUE_SKIP = new Set(["where","who","whom","whose","does","did","which","when"]);
 
 function compileNeedles(rec: MemoryRecord): Compiled {
   return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t) && !/^[a-z]{3,}\d+[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w) && !/^[a-z]{3,}\d+[a-z]$/.test(w))])] };
 }
-
-const CUE_EXPAND: Record<string, string[]> = {
-  login: ["auth", "oauth", "signin"],
-  signin: ["auth", "login", "oauth"],
-  checkout: ["payment", "payments", "billing"],
-  payment: ["checkout", "billing"],
-  install: ["package", "lockfile"],
-  lockfile: ["package", "install"],
-  prod: ["deploy", "deployment"],
-  deploy: ["prod"],
-  upload: ["object", "store"],
-  avatar: ["object", "store"],
-  experiment: ["flag", "flags"],
-  assigning: ["flag", "flags"],
-  connection: ["database"],
-  dashboard: ["database", "dashboards"],
-  welcome: ["email"],
-  mail: ["email"],
-  sha: ["git", "bash"],
-  git: ["bash"],
-  session: ["cache"],
-  hanging: ["package"],
-  sso: ["auth"],
-  jwt: ["auth"],
-  bouncing: ["auth"],
-  errors: ["error"],
-  grouping: ["error"],
-  workflow: ["workflows"],
-  purging: ["cdn"],
-  edge: ["cdn"],
-  ticket: ["issues"],
-  triage: ["issues"],
-  paged: ["paging"],
-  apply: ["infra"],
-  policies: ["auth"],
-  channel: ["chat"],
-  funnel: ["analytics"],
-  signup: ["analytics"],
-  text: ["sms"],
-  handset: ["sms"],
-  identify: ["cdp"],
-  spec: ["specs"],
-  mock: ["mocks"],
-  clip: ["walkthroughs"],
-  nightly: ["pipelines"],
-  seat: ["directory"],
-  span: ["tracing"],
-  snippet: ["gists"],
-  warp: ["tunnels"],
-  tarball: ["registry"],
-  story: ["issues"],
-  formula: ["spreadsheets"],
-  canvas: ["whiteboards"],
-  locale: ["i18n"],
-  mapper: ["orm"],
-  asset: ["bundling"],
-  worker: ["jobs"],
-  embedding: ["vectors"],
-  draft: ["publishing"],
-  prompt: ["gateway"],
-  bloom: ["indexes"],
-  storefront: ["themes"],
-  diarization: ["transcription"],
-  digest: ["sha256"],
-  cron: ["schedules", "timers"],
-  caption: ["subtitles", "captions"],
-  lag: ["brokers"],
-  migration: ["schema"],
-  graph: ["edges", "vertices"],
-  throttle: ["quotas", "limits"],
-  watermark: ["cursors", "offsets"],
-  webhook: ["endpoints", "signing"],
-};
 
 const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
   [/^Metrics are (.+)$/i, (b) => `The probe is ${b}.`],
@@ -240,8 +394,9 @@ function extractDurable(blob: string): string[] {
   let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
   if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1))) whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
   const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?");
+  const numberedWhole = /^\d+[.)]\s+\S/.test(whole);
   const label = whole.match(SPEAKER_LABEL)?.[1];
-  const chunks = labeledWhole ? [whole] : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/).flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
+  const chunks = labeledWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/).flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
   for (const raw of chunks) {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "");
     t = t.replace(SECRET_INLINE, "[REDACTED]");
@@ -300,11 +455,160 @@ export function subjectKey(text: string): string | null {
 
 export const PACKET_CHAT_K_MIN = 6;
 export const PACKET_CHAT_K_MAX = 10;
+export const PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
 
 export function memoryRetrieveCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_CAP);
   if (!Number.isFinite(raw) || raw <= 0) return PACKET_CHAT_K_MIN;
   return Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
+}
+
+/** JSONL cap. Distinct from retrieve k. Unset → 2000. */
+export function memoryStoreCap(): number {
+  const raw = Number(process.env.EDEN_MEMORY_STORE_CAP);
+  if (!Number.isFinite(raw) || raw <= 0) return 2000;
+  return Math.floor(raw);
+}
+
+function isIclCue(text: string): boolean {
+  try {
+    if (encodeLane(text) === "icl") return true;
+    if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true;
+  } catch {}
+  return false;
+}
+
+function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
+  try {
+    const q = String(text ?? "").trim();
+    if (!q) return lexical;
+    if (isIclCue(q)) return lexical;
+    const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
+    if (!k) return lexical;
+    const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
+    const chat = Array.isArray(lexical) ? lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk")) : [];
+    if (!Array.isArray(hits) || !hits.length) return chat.length ? chat : lexical;
+    const chunks: MemoryRecord[] = [];
+    for (const hit of hits) {
+      const body = String(hit?.text ?? "").trim();
+      if (!body) continue;
+      chunks.push({
+        id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`,
+        text: body,
+        kind: "episode",
+        lane: "narrative",
+        tags: ["chunk"],
+        at: Number.isFinite(hit.t) ? hit.t : 0,
+      });
+    }
+    if (!chunks.length) return chat.length ? chat : lexical;
+    const out: MemoryRecord[] = [];
+    for (const c of chunks) {
+      if (out.length >= cap) break;
+      if (out.some((p) => p.id === c.id)) continue;
+      out.push(c);
+    }
+    for (const l of chat) {
+      if (out.length >= cap) break;
+      if (out.some((p) => p.id === l.id)) continue;
+      out.push(l);
+    }
+    return out;
+  } catch {
+    return lexical;
+  }
+}
+
+function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
+  const q = String(text ?? "").trim();
+  if (!q) return [];
+  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
+  if (!k) return [];
+  const hits = iclIndex.retrieveIcl(dir, q, { k, fallback: compiled });
+  if (!Array.isArray(hits) || !hits.length) return [];
+  const out: MemoryRecord[] = [];
+  const seen = new Set<string>();
+  for (const hit of hits) {
+    if (out.length >= cap) break;
+    const body = String(hit?.text ?? "").trim();
+    if (!body) continue;
+    const id = hit.id || `icl:${out.length}`;
+    if (seen.has(id) || seen.has(body.toLowerCase())) continue;
+    seen.add(id);
+    seen.add(body.toLowerCase());
+    out.push({
+      id,
+      text: body,
+      kind: "fact",
+      lane: "icl",
+      tags: ["icl"],
+      at: Number.isFinite(hit.t) ? hit.t : 0,
+    });
+  }
+  return out;
+}
+
+function howtoProcedureRecord(view: ReturnType<typeof howtoRetrieve.retrieveHowTo>[number]): MemoryRecord {
+  const cue = typeof view.cue === "string" ? view.cue.trim() : "";
+  const files: string[] = [];
+  const add = (f: unknown) => {
+    if (typeof f === "string" && f.trim() && !files.includes(f.trim())) files.push(f.trim());
+  };
+  if (Array.isArray(view.files)) for (const f of view.files) add(f);
+  if (!files.length && Array.isArray(view.steps)) {
+    for (const s of view.steps) {
+      if (Array.isArray(s?.files)) for (const f of s.files) add(f);
+      const args = s?.args;
+      if (args) for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]);
+    }
+  }
+  let verify = typeof view.verify === "string" ? view.verify.trim() : "";
+  if (!verify && Array.isArray(view.steps)) {
+    for (let i = view.steps.length - 1; i >= 0; i--) {
+      const args = view.steps[i]?.args;
+      if (!args) continue;
+      for (const k of ["command", "cmd", "script"] as const) {
+        const v = args[k];
+        if (typeof v === "string" && v.trim()) {
+          verify = v.trim();
+          break;
+        }
+      }
+      if (verify) break;
+    }
+  }
+  let text = cue;
+  if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" ");
+  if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
+  return { id: view.id, kind: "procedure", tags: ["howto", "procedure"], text, at: view.t };
+}
+
+function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
+  try {
+    const q = String(text ?? "").trim();
+    if (!q) return lexical;
+    let lane: ReturnType<typeof hookLane> = "none";
+    try { lane = hookLane(q); } catch {}
+    if (lane !== "procedure" && !/\bflake\b/i.test(q)) return lexical;
+    const views = howtoRetrieve.retrieveHowTo(dir, q);
+    if (!Array.isArray(views) || !views.length) return lexical;
+    const rec = howtoProcedureRecord(views[0]!);
+    if (!rec.text) return lexical;
+    if (/\bflake\b/i.test(q) && !/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
+    const kept = (Array.isArray(lexical) ? lexical : []).filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
+    return [...kept, rec];
+  } catch {
+    return lexical;
+  }
+}
+
+function isNarrativeNote(m: { lane?: string; tags?: string[] }): boolean {
+  return m.lane === "narrative" || (m.tags ?? []).includes("chunk");
+}
+
+function skipNarrativeComplete(retrieved: MemoryRecord[], cue = ""): boolean {
+  try { if (isIclCue(cue)) return true; } catch {}
+  return retrieved.some((n) => n.lane === "icl" || isIclExemplar(String(n.text ?? "")));
 }
 
 export class AgentMemory {
@@ -321,8 +625,10 @@ export class AgentMemory {
   private dirty = false;
   private seenLower = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
+  private knownIds = new Set<string>();
   private cons: MemoryRecord[] = [];
   private hopShort: MemoryRecord[] = [];
+  private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
     this.agent = opts.agent; this.project = opaqueProject(opts.project);
@@ -344,7 +650,27 @@ export class AgentMemory {
       this.path = join(this.dir, "memories.jsonl");
     }
     this.compiled = load(this.path);
+    this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
+    try { this.ensureIndex(); } catch {}
+    try {
+      this.lookupNotes("alpha widget catalog");
+      this.lookupNotes("what is the widget provider?");
+      this.lookupNotes("which catalog database do we use?");
+    } catch {}
+    try { this.inject([{ role: "user", content: "cool" }]); } catch {}
+  }
+
+  get jsonlDir(): string {
+    return this.session ? join(this.dir, this.session) : this.dir;
+  }
+
+  get howtoDir(): string {
+    return this.dir;
+  }
+
+  private semantic(): SemanticStore {
+    return (this.sem ??= new SemanticStore(this.dir));
   }
 
   memories(): MemoryRecord[] {
@@ -373,18 +699,89 @@ export class AgentMemory {
   }
 
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
-    const rec: MemoryRecord = { id: opts.id || `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => t.toLowerCase()), agent: opts.agent || this.agent, project: opaqueProject(opts.project || this.project), at: Date.now(), lane: opts.lane ?? "chat" };
+    const now = Date.now();
+    const rec: MemoryRecord = {
+      id: opts.id || `m${now.toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+      text: this.persistText(String(text || "").trim()),
+      kind: opts.kind || "fact",
+      tags: writeAliasTags((opts.tags || []).map((t) => t.toLowerCase()), String(text || "")),
+      agent: opts.agent || this.agent,
+      project: opaqueProject(opts.project || this.project),
+      at: now,
+      validFrom: now,
+      lane: opts.lane ?? "chat",
+      ...(this.session ? { ep: opaqueId(this.session) } : {}),
+    };
     if (!rec.text) return rec;
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const uttered = `${text ?? ""}\n${rec.text}`;
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(uttered);
     if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
+    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
+    try {
+      const until = parseRuleTime(rec.text)?.until;
+      if (typeof until === "number") rec.validUntil = until;
+    } catch {}
+    try {
+      const fact = objectAsserted(rec.text);
+      if (fact) {
+        const live = this.semantic().get(fact.s, fact.p);
+        const serial = leadingSerial(rec.text);
+        if (!(serial == null && live && live.t < 1e11)) {
+          if (!STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.validFrom ?? rec.at);
+        }
+      }
+    } catch {}
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
+    try { this.invalidateSameCopula(rec); } catch {}
     this.compiled.push(c);
-    this.post = null;
+    this.knownIds.add(rec.id);
+    if (this.post) {
+      try {
+        if (c.rec.kind !== "digest" && isLiveRow(c.rec) && (!this.agent || !c.rec.agent || c.rec.agent === this.agent) && (!this.project || c.rec.project === this.project)) {
+          if (c.rec.kind === "constraint") this.cons.push(c.rec);
+          if (c.needles.length <= 12 && String(c.rec.text ?? "").trim() && c.rec.lane !== "icl" && c.rec.kind !== "icl") {
+            let icl = false;
+            try { icl = isIclExemplar(c.rec.text); } catch {}
+            if (!icl) this.hopShort.push(c.rec);
+          }
+          for (const w of c.needles) {
+            if (w.length < 3 || STOP.has(w)) continue;
+            let arr = this.post.get(w);
+            if (!arr) this.post.set(w, arr = []);
+            arr.push(c);
+          }
+        }
+      } catch { this.post = null; }
+    }
     if (!this.project || rec.project === this.project) this.seenLower.add(rec.text.toLowerCase());
     return this.flush(true), rec;
+  }
+
+  /** Same entity + same relation only. Stamp invalidAt; do not delete. Prefer max leading serial. */
+  private invalidateSameCopula(incoming: MemoryRecord): void {
+    let asserted: ReturnType<typeof objectAsserted>;
+    try { asserted = objectAsserted(incoming.text); } catch { return; }
+    if (!asserted) return;
+    const now = incoming.validFrom ?? incoming.at ?? Date.now();
+    const incomingSerial = leadingSerial(incoming.text);
+    let dirty = false;
+    for (const c of this.compiled) {
+      if (c.rec.id === incoming.id) continue;
+      if (this.project && c.rec.project !== this.project) continue;
+      if (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt)) continue;
+      let other: ReturnType<typeof objectAsserted>;
+      try { other = objectAsserted(c.rec.text); } catch { continue; }
+      if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
+      if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
+      const liveSerial = leadingSerial(c.rec.text);
+      if (incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) continue;
+      if (incomingSerial == null && liveSerial != null) continue;
+      c.rec.invalidAt = now;
+      dirty = true;
+    }
+    if (dirty) this.post = null;
   }
 
   private rebuildSeen() {
@@ -404,8 +801,13 @@ export class AgentMemory {
       if (c.rec.kind === "digest") continue;
       if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
       if (this.project && c.rec.project !== this.project) continue;
+      if (!isLiveRow(c.rec)) continue;
       if (c.rec.kind === "constraint") cons.push(c.rec);
-      if (c.needles.length <= 12 && String(c.rec.text ?? "").trim()) shorts.push(c.rec);
+      if (c.needles.length <= 12 && String(c.rec.text ?? "").trim() && c.rec.lane !== "icl" && c.rec.kind !== "icl") {
+        let icl = false;
+        try { icl = isIclExemplar(c.rec.text); } catch {}
+        if (!icl) shorts.push(c.rec);
+      }
       for (const w of c.needles) {
         if (w.length < 3 || STOP.has(w)) continue;
         let arr = post.get(w);
@@ -418,17 +820,45 @@ export class AgentMemory {
     this.hopShort = shorts;
   }
 
-  observe(messages: unknown[]): MemoryRecord[] {
+  observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
     this.batch++;
     try {
     const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
     const out: MemoryRecord[] = [];
     const items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text);
+    const batchLive = new Map<string, string>();
     for (let i = 0; i < items.length; i++) {
       const it = items[i]!;
-      const safe = this.persistText(it.text);
-      for (const raw of extractDurable(safe)) {
+      const safe = this.persistText(stripMemoryPacket(it.text));
+      const lane = encodeLane(it.text);
+      if (lane === "icl" || lane === "narrative") {
+        let text = safe;
+        if (lane === "narrative" && opts.keepLiveIdentity) {
+          try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
+        }
+        if (text && !this.seenLower.has(text.toLowerCase())) {
+          const tags = tokList(text).concat([lane]);
+          try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
+          const rec = this.remember(text, {
+            kind: lane === "narrative" ? "episode" : "fact",
+            lane,
+            tags,
+          });
+          out.push(rec);
+          if (lane === "narrative") {
+            try { new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
+          }
+          if (lane === "icl") {
+            try { new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
+          }
+        }
+        continue;
+      }
+      const before = out.length;
+      let coveredChars = 0;
+      let skippedIdentity = false;
+      for (const raw of extractDurable(it.text)) {
         let text = raw;
         try {
           const asserted = objectAsserted(text);
@@ -447,16 +877,38 @@ export class AgentMemory {
           if (inn) t = `The continent of ${inn[1]!.trim()} is ${inn[2]!.trim()}`;
           if (t) text = /[.!?]$/.test(t) ? t : `${t}.`;
         } catch {}
+        try {
+          const fact = objectAsserted(text);
+          if (fact) {
+            const store = this.semantic();
+            const live = store.get(fact.s, fact.p);
+            if (opts.keepLiveIdentity) {
+              const obj = fact.o.trim().toLowerCase();
+              const slot = `${fact.s}\0${fact.p}`;
+              const fromBatch = batchLive.get(slot);
+              if (!(fromBatch && fromBatch !== obj)) {
+                if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; }
+                if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; }
+              }
+            }
+            const serial = leadingSerial(text);
+            if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`))) {
+              if (!STATUS_OBJECT.test(fact.o)) {
+                store.put(fact.s, fact.p, fact.o, serial ?? Date.now());
+                batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase());
+              }
+            }
+          }
+        } catch {}
         if (this.seenLower.has(text.toLowerCase())) continue;
-        const key = isToolProse(text) ? null : subjectKey(text);
-        const supersede = /\b(?:instead of|rather than)\b/i.test(raw);
-        if (key && !supersede) {
-          const before = this.compiled.length;
-          this.compiled = this.compiled.filter((c) => (this.project && c.rec.project !== this.project) || subjectKey(c.rec.text) !== key);
-          if (this.compiled.length !== before) this.rebuildSeen();
-        }
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text);
-        out.push(this.remember(text, { kind: pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) ? "episode" : "fact", lane: "chat", tags: (s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text), pin }));
+        const asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
+        let kind: MemoryKind = asQuestion ? "episode" : pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) || (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text)) ? "episode" : "fact";
+        if (kind === "fact" && !asQuestion && !pin) {
+          try { if (!objectAsserted(text)) kind = "episode"; } catch { kind = "episode"; }
+        }
+        out.push(this.remember(text, { kind, lane: encodeLane(text) === "chat" ? "chat" : "chat", tags: tokList(text), pin }));
+        coveredChars += text.length;
         try {
           const t = text.replace(/\.+$/, "");
           for (const [re, fn] of OBSERVE_ALIAS) {
@@ -468,11 +920,40 @@ export class AgentMemory {
           }
         } catch {}
       }
+      try {
+        if (!skippedIdentity && !isNoopCue(it.text) && !CHAT.test(it.text.trim()) && safe.length >= 8) {
+          let identityTurn = false;
+          try { identityTurn = !!objectAsserted(safe); } catch {}
+          if (opts.keepLiveIdentity && identityTurn) {
+            // SessionStart replay: copula already in SemanticStore; do not re-store the instead-of tail.
+          } else {
+          const cover = coveredChars / Math.max(1, safe.length);
+          if (out.length === before || cover < 0.85) {
+            const key = safe.replace(/[.!?]+$/g, "").toLowerCase();
+            const dup = this.seenLower.has(safe.toLowerCase())
+              || out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key)
+              || [...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key);
+            if (!dup) {
+              out.push(this.remember(safe, {
+                kind: "episode",
+                lane: "chat",
+                tags: tokList(safe),
+              }));
+            }
+          }
+          }
+        }
+      } catch {}
     }
     return out;
     } finally {
       this.batch--;
       this.flush(false);
+      try { if (!this.post) this.ensureIndex(); } catch {}
+      if (!opts.deferSleep) {
+        try { noteSleepActivity(this); } catch {}
+        try { scheduleIncrementalSleep(this, { session: this.session }); } catch {}
+      }
     }
   }
 
@@ -486,69 +967,215 @@ export class AgentMemory {
     try { if (memoryConsent() !== "on") return; } catch { return; }
     try {
       withFileLock(`${this.path}.lock`, () => {
+        let extra = false;
+        try {
+          const mine = new Set(this.compiled.map((c) => c.rec.id));
+          const disk = load(this.path);
+          const byId = new Map<string, Compiled>();
+          for (const c of disk) {
+            if (!mine.has(c.rec.id) && this.knownIds.has(c.rec.id)) continue;
+            byId.set(c.rec.id, c);
+            if (!mine.has(c.rec.id)) extra = true;
+          }
+          for (const c of this.compiled) byId.set(c.rec.id, c);
+          this.compiled = [...byId.values()];
+          for (const c of this.compiled) this.knownIds.add(c.rec.id);
+        } catch {}
+        try { this.trimToStoreCap(); } catch {}
         writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
+        if (extra) this.post = null;
       });
+      try { this.rebuildSeen(); } catch {}
       this.dirty = false;
     } catch {
     }
   }
 
+  /** Persist-only. Sleep heat does not call this. Pins/constraints kept; oldest unpinned dropped. */
+  private trimToStoreCap(): void {
+    const cap = memoryStoreCap();
+    if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
+    const pinned = (r: MemoryRecord) => r.pin === true || (r.tags ?? []).includes("pin") || r.kind === "constraint";
+    const keep: Compiled[] = [];
+    const rest: Compiled[] = [];
+    for (const c of this.compiled) (pinned(c.rec) ? keep : rest).push(c);
+    rest.sort((a, b) => a.rec.at - b.rec.at);
+    const room = Math.max(0, cap - keep.length);
+    const keptRest = rest.slice(Math.max(0, rest.length - room));
+    const next = keep.concat(keptRest);
+    if (next.length === this.compiled.length) return;
+    this.compiled = next;
+    this.post = null;
+    this.rebuildSeen();
+  }
+
   relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
+    if (!String(text ?? "").trim() || isNoopCue(text)) return [];
     const hay = queryHay(text);
-    try {
-      for (const t of [...hay]) {
-        const extra = CUE_EXPAND[t];
-        if (extra) for (const x of extra) hay.add(x);
-        if (t.length >= 4 && !t.endsWith("s")) hay.add(`${t}s`);
-      }
-    } catch {}
     let rows: Compiled[] = [];
     try {
       this.ensureIndex();
-      const seen = new Set<Compiled>();
       if (this.post) {
-        for (const t of hay) {
-          if (t.length < 3 || STOP.has(t)) continue;
-          const arr = this.post.get(t);
-          if (!arr) continue;
-          for (const c of arr) {
-            if (seen.has(c)) continue;
-            seen.add(c);
-            rows.push(c);
+        const toks = [...hay].filter((t) => t.length >= 3 && !STOP.has(t) && !CUE_SKIP.has(t));
+        const ranked = toks
+          .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
+          .filter((x) => x.df > 0)
+          .sort((a, b) => a.df - b.df || a.t.localeCompare(b.t));
+        if (!ranked.length) rows = [];
+        else {
+          const poolCap = Math.max(cap * 6, 30);
+          const COMMON = 80;
+          const seen = new Set<Compiled>();
+          const pool: Compiled[] = [];
+          for (const { t, df } of ranked) {
+            if (df >= COMMON && pool.length) break;
+            if (/^(?:where|what|who|whom|whose|why|how|does|did|which)$/.test(t)) continue;
+            const list = this.post.get(t) ?? [];
+            if (df >= COMMON) {
+              for (const c of list) {
+                if (seen.has(c)) continue;
+                seen.add(c);
+                pool.push(c);
+                if (pool.length >= poolCap) break;
+              }
+              break;
+            }
+            for (const c of list) {
+              if (seen.has(c)) continue;
+              seen.add(c);
+              pool.push(c);
+            }
+            if (pool.length >= poolCap) break;
           }
+          const asserted = pool.filter((c) => !/\?\s*$/.test(String(c.rec.text ?? "").trim()));
+          rows = (asserted.length ? asserted : pool).slice(0, poolCap);
         }
       }
     } catch {
       rows = [];
     }
-    if (!rows.length) {
-      rows = this.compiled.filter((c) => c.rec.kind !== "digest" && !(this.agent && c.rec.agent && c.rec.agent !== this.agent) && !(this.project && c.rec.project !== this.project));
-    }
-    const scored: { rec: MemoryRecord; n: number; k: number }[] = [];
+    if (!rows.length) return [];
+    const scored: { rec: MemoryRecord; n: number; k: number; rare: number }[] = [];
     for (const c of rows) {
       let n = 0;
-      for (const x of c.needles) if (hay.has(x)) n++;
+      let rare = 0;
+      for (const x of c.needles) {
+        if (!hay.has(x)) continue;
+        n++;
+        const df = this.post?.get(x)?.length ?? 1;
+        rare += 1 / Math.max(1, df);
+      }
       if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x))) {
         if (/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) continue;
-        scored.push({ rec: c.rec, n, k: c.needles.length });
+        scored.push({ rec: c.rec, n, k: c.needles.length, rare });
       }
     }
-    const ranked = scored.sort((a, b) => b.n - a.n || Number(b.rec.kind === "constraint") - Number(a.rec.kind === "constraint") || a.k - b.k || b.rec.at - a.rec.at).slice(0, Math.max(cap * 6, 30));
-    let lexical = ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
-    try {
-      if (String(text ?? "").trim()) {
-        lexical = ((extras, lexical, cap) => { const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))); if (!k || !extras.length) return lexical; extras.sort((a, b) => b.at - a.at); const base = Array.isArray(lexical) ? lexical : []; const out: MemoryRecord[] = []; const room = Math.max(k, 64); for (const r of extras) { if (out.length >= room) break; if (out.some((p) => p.id === r.id) || base.some((p) => p.id === r.id)) continue; out.push(r); } for (const l of base) { if (out.length >= room) break; if (out.some((p) => p.id === l.id)) continue; out.push(l); } return out.length ? out : base; })(this.cons.length ? this.cons : rows.filter((c) => c.rec.kind === "constraint").map((c) => c.rec), lexical, cap);
-      }
-    } catch {}
-    return lexical;
+    const live = scored.filter((x) => isLiveRow(x.rec));
+    const latest = liveCopulaLatest(live);
+    const ranked = latest.sort((a, b) =>
+      (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec))
+      || b.rare - a.rare
+      || (Number(b.rec.heat ?? b.rec.sal ?? 1) - Number(a.rec.heat ?? a.rec.sal ?? 1))
+      || a.k - b.k
+      || rowValidFrom(b.rec) - rowValidFrom(a.rec)
+    ).slice(0, Math.max(cap * 6, 30));
+    return ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
+    return this.lookupNotes(text, k);
+  }
+
+  private lookupNotes(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     if (!text) return [];
-    const recs = this.relevant(text, k);
-    try { return dropHarmed(this.dir, recs); } catch { return recs; }
+    const cap = Math.max(0, Math.floor(Number(k) || 0));
+    const route = (() => {
+      const r = routeMemory(text);
+      if (r === "icl-index") return r;
+      try {
+        if (this.compiled.length && this.compiled.every((c) => c.rec.lane === "icl" || c.rec.kind === "icl")) return "icl-index";
+      } catch {}
+      return r;
+    })();
+    let recs: MemoryRecord[] = [];
+    if (route === "icl-index") {
+      recs = mergeIclLane([], text, cap, this.howtoDir, this.compiled.map((c) => c.rec));
+    } else {
+      recs = this.relevant(text, k);
+      recs = recs.filter((r) => r.lane !== "icl" && r.kind !== "icl");
+      let wantNar = route === "gist-chunk";
+      if (!wantNar) {
+        try {
+          const hay = queryHay(text);
+          wantNar = this.compiled.some((c) => c.rec.lane === "narrative" && c.needles.some((n) => hay.has(n)));
+        } catch {}
+      }
+      if (wantNar) {
+        try { recs = mergeNarrativeLane(recs, text, cap, this.howtoDir, this.compiled.map((c) => c.rec)); } catch {}
+      }
+      try { recs = mergeHowtoLane(recs, text, cap, this.howtoDir); } catch {}
+    }
+    if (!recs.length) return [];
+    let kept = recs;
+    try { kept = dropHarmed(this.dir, recs); } catch { kept = recs; }
+    if (!kept.length) return [];
+    try {
+      if (kept.length) {
+        const store = this.semantic();
+        kept = kept.map((n) => {
+        let fact: ReturnType<typeof objectAsserted>;
+        try { fact = objectAsserted(String(n.text ?? "").replace(/^\[[^\]]+\]\s+/, "")); } catch { return n; }
+        if (!fact) return n;
+        const live = store.get(fact.s, fact.p);
+        if (!live) return n;
+        const lo = live.o.replace(/\s+/g, " ").trim();
+        const fo = fact.o.replace(/\s+/g, " ").trim();
+        const needsPeel = /\b(?:instead of|rather than)\b/i.test(String(n.text ?? ""));
+        if (lo.toLowerCase() === fo.toLowerCase() && !needsPeel) return n;
+        const next = fact.p === "uses" ? `${fact.s} uses ${live.o}.` : `The ${fact.s} is ${live.o}.`;
+        return { ...n, text: next };
+        });
+      }
+    } catch {}
+    const aligned = kept;
+    try { kept = preferObservationOverSources(kept, gistTextsFor(this.dir, kept)); } catch {}
+    try {
+      const store = this.semantic();
+      const ids = new Set(kept.map((n) => n.id));
+      for (const n of aligned) {
+        if (ids.has(n.id)) continue;
+        let fact: ReturnType<typeof objectAsserted>;
+        try { fact = objectAsserted(String(n.text ?? "").replace(/^\[[^\]]+\]\s+/, "")); } catch { continue; }
+        if (!fact) continue;
+        const live = store.get(fact.s, fact.p);
+        if (!live) continue;
+        if (live.o.replace(/\s+/g, " ").trim().toLowerCase() !== fact.o.replace(/\s+/g, " ").trim().toLowerCase()) continue;
+        kept.push(n);
+        ids.add(n.id);
+      }
+    } catch {}
+    try {
+      if (kept.some((n) => n.lane === "narrative" || (n.tags ?? []).includes("chunk"))) {
+        const store = this.semantic();
+        kept = kept.map((n) => {
+          if (n.lane !== "narrative" && !(n.tags ?? []).includes("chunk")) return n;
+          let next = n.text;
+          try { next = omitConflictingIdentity(n.text, store); } catch {}
+          return next === n.text ? n : { ...n, text: next };
+        }).filter((n) => String(n.text ?? "").trim());
+      }
+    } catch {}
+    return kept.map((r) => {
+      try {
+        const stripped = stripPacketLabel(r.text).body;
+        const capped = capMemoryBody(r, stripped);
+        return { ...r, text: applyProvenanceLabel(r, capped) };
+      } catch {
+        return r;
+      }
+    });
   }
 
   inject(messages: unknown[]): unknown[] {
@@ -558,46 +1185,131 @@ export class AgentMemory {
       const blob = convBlob(list);
       const notes: { role: "system"; content: string }[] = [];
       if (!blob.includes(MEMORY_MARK)) {
-        const cue = cueFor(list);
+        const lastUser = Array.isArray(list) ? list.findLast((x) => x && typeof x === "object" && ["user", "human"].includes(String((x as { role?: unknown }).role ?? "").toLowerCase())) : undefined;
+        const cue = attachPlaceCues(cueFor(list), [...placePathsFrom(list), ...(lastUser ? placePathsFrom(lastUser) : [])]);
         let silent = false;
-        try { if (cue && isMathChatterCue(cue)) silent = true; } catch {}
+        try {
+          if (cue && isNoopCue(cue)) silent = true;
+          else if (hookLane(cue) === "none") silent = true;
+        } catch {}
         const retrieved = !silent && cue ? this.notesFor(cue) : [];
         let packet: MemoryRecord[] = [];
+        let keepHopOrder = false;
         try {
+          const route = cue ? routeMemory(cue) : "chat-jsonl";
+          keepHopOrder = /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)
+            || route === "sf-assemble" || route === "icl-index";
           if (!silent && cue && retrieved.length) {
-            if (/\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
+            if (route === "icl-index") packet = retrieved;
+            else if (!skipNarrativeComplete(retrieved, cue) && /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
+              keepHopOrder = true;
               let hopPool = retrieved;
-              try { hopPool = this.hopShort.length ? this.hopShort : retrieved; } catch {}
+              const hopStore = (() => {
+                const out: MemoryRecord[] = [];
+                const seen = new Set<string>();
+                const push = (m: MemoryRecord) => {
+                  const text = String(m.text ?? "").trim();
+                  if (!text || seen.has(m.id) || seen.has(text.toLowerCase())) return;
+                  seen.add(m.id);
+                  seen.add(text.toLowerCase());
+                  out.push(m);
+                };
+                try {
+                  for (const ch of new ChunkStore(this.howtoDir).all()) {
+                    const text = String(ch.text ?? "").trim();
+                    if (!text) continue;
+                    push({
+                      id: ch.id || `chunk:${ch.src || "anon"}:${ch.i}`,
+                      text,
+                      kind: "episode",
+                      lane: "narrative",
+                      tags: ["chunk"],
+                      at: Number.isFinite(ch.t) ? ch.t : 0,
+                    });
+                  }
+                } catch {}
+                try {
+                  for (const m of this.hopShort) {
+                    if (m.lane === "icl" || isIclExemplar(m.text)) continue;
+                    if (isNarrativeNote(m) && !(m.tags ?? []).includes("chunk")) continue;
+                    push(m);
+                  }
+                } catch {}
+                return out;
+              })();
+              try { hopPool = hopStore.length ? hopStore : retrieved; } catch {}
               try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
               packet = completeNotes(cue, retrieved, hopPool);
-            } else packet = retrieved;
+              try { packet = assembleNotes(packet, this.dir); } catch {}
+              try { packet = completeNotes(cue, packet, hopPool); } catch {}
+            } else if (route === "sf-assemble") {
+              keepHopOrder = true;
+              packet = assembleNotes(retrieved, this.dir);
+            } else {
+              packet = retrieved;
+              if (retrieved.length > 1) {
+                try { packet = assembleNotes(packet, this.dir); } catch {}
+              }
+            }
           } else if (!silent) packet = retrieved;
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
         }
         try {
-          const latest = (re: RegExp) => packet.reduce((b, m) => (re.test(String(m.text ?? "")) && m.at > b ? m.at : b), -1);
+          const assertional = (re: RegExp, t: string) => {
+            if (!re.test(t)) return false;
+            const parts = t.split(/(?<=[.!?])\s+/);
+            return parts.some((s) => re.test(s) && !/\?\s*$/.test(s.trim()));
+          };
+          const latest = (re: RegExp) => packet.reduce((b, m) => {
+            const t = String(m.text ?? "");
+            return assertional(re, t) && m.at > b ? m.at : b;
+          }, -1);
           const sha = latest(/\bsha256\b/i);
           const loc = latest(/\bbased in\b/i);
           const drain = latest(/\blog drain\b/i);
           const region = latest(/\bregion of\b/i);
           packet = packet.filter((m) => {
             const t = String(m.text ?? "");
-            if (sha >= 0 && /\bsha256\b/i.test(t) && m.at < sha) return false;
-            if (loc >= 0 && /\bbased in\b/i.test(t) && m.at < loc) return false;
-            if (drain >= 0 && /\blog drain\b/i.test(t) && m.at < drain) return false;
-            if (region >= 0 && /\bregion of\b/i.test(t) && m.at < region) return false;
+            if (sha >= 0 && assertional(/\bsha256\b/i, t) && m.at < sha) return false;
+            if (loc >= 0 && assertional(/\bbased in\b/i, t) && m.at < loc) return false;
+            if (drain >= 0 && assertional(/\blog drain\b/i, t) && m.at < drain) return false;
+            if (region >= 0 && assertional(/\bregion of\b/i, t) && m.at < region) return false;
             return true;
           });
         } catch {}
-        if (packet.length) notes.push({ role: "system", content: MEMORY_MARK + packet.map((m) => `\n- ${m.text}`).join("") });
+        if (packet.length) {
+          try { logMemoryNotes(packet); } catch {}
+          const labeled = packet.map((m) => {
+            const stripped = stripPacketLabel(String(m.text ?? "")).body;
+            let kind = noteKindToken(m, stripped) || "fact";
+            if (kind === "constraint") kind = "rule";
+            const rec = { ...m, kind: kind === "rule" ? "constraint" : kind };
+            const capped = capMemoryBody(rec, stripped);
+            const body = applyProvenanceLabel(rec, capped).trim();
+            let src = typeof m.ep === "string" ? m.ep.trim() : "";
+            if (!src || src.length > 40 || /\s/.test(src) || /\n/.test(src)) {
+              const file = capped.match(/\b((?:src|tests|lib)\/[\w./-]+\.[A-Za-z]{1,12}|[A-Za-z0-9._-]+\.[A-Za-z]{1,12})\b/);
+              src = file ? file[1]! : "";
+            }
+            const short = src && src.length <= 40 && !/\s/.test(src) && !/\n/.test(src) ? src : "";
+            return { text: body, id: m.id, kind: rec.kind, at: m.at, src: short || undefined };
+          });
+          const packed = packNotes(keepHopOrder ? labeled : goldFirstNotes(cue, labeled), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
+          if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
+        }
       }
+      try {
+        const q = cueFor(list);
+        const skipStore = !q || isNoopCue(q);
+        if (!skipStore) this.observe(list, { deferSleep: true });
+      } catch {}
       if (!notes.length) return list;
       const next = list.slice(), i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
       return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
     } catch {
       memoryInjectSwallows.n++;
-      return list;
+      return list; // pass-through
     }
   }
 
@@ -605,13 +1317,49 @@ export class AgentMemory {
     try { if (memoryConsent() === "off") return body; } catch { return body; }
     const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages";
     const m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [];
+    const sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
     try {
-      const next = this.inject(m);
+      const paths = placePathsFrom(body);
+      let msgs = m;
+      if (paths.length) {
+        msgs = m.slice();
+        let idx = -1;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const o = msgs[i];
+          if (!o || typeof o !== "object") continue;
+          const role = String((o as { role?: unknown }).role ?? "").toLowerCase();
+          if (role === "user" || role === "human") { idx = i; break; }
+        }
+        if (idx >= 0) {
+          const last = { ...(msgs[idx] as Record<string, unknown>) };
+          const existing = placePathsFrom(last);
+          last.open_files = [...existing, ...paths];
+          msgs[idx] = last;
+        }
+      }
+      const next = this.inject(msgs);
+      if (sys) {
+        try {
+          this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], { keepLiveIdentity: true });
+        } catch {}
+      }
       if (next === m) return body;
       return { ...body, [key]: next };
     } catch {
       memoryInjectSwallows.n++;
-      return body;
+      return body; // pass-through
+    }
+  }
+
+  /** One JSONL flush after many observes. Nested with SemanticStore quiet. */
+  quiet(fn: () => void) {
+    this.batch++;
+    const sem = this.semantic();
+    sem.beginBatch();
+    try { fn(); } finally {
+      try { sem.endBatch(); } catch {}
+      this.batch--;
+      this.flush(false);
     }
   }
 
@@ -633,8 +1381,29 @@ export class AgentMemory {
     if (dirty) this.flush(true);
   }
 
+  patchWhere(fn: (r: MemoryRecord) => MemoryRecord | undefined): void {
+    let dirty = false;
+    this.compiled = this.compiled.map((c) => {
+      let next: MemoryRecord | undefined;
+      try { next = fn(c.rec); } catch { return c; }
+      if (!next || next === c.rec) return c;
+      dirty = true;
+      return compileNeedles(next);
+    });
+    if (dirty) this.post = null;
+    if (dirty) this.flush(true);
+  }
+
   close() {
     this.flush(false);
+  }
+
+  /** Idle/Stop only. Inject must not await this. */
+  async sleep(opts?: { session?: string }): Promise<void> {
+    try {
+      const { consolidate } = await import("./sleep");
+      consolidate(this, { session: opts?.session ?? this.session, mode: "full" });
+    } catch {}
   }
 }
 

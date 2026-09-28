@@ -85,7 +85,7 @@ type AnthropicMessage = {
   usage?: { input_tokens?: number; output_tokens?: number };
 };
 
-function steerAnthropicToolUses
+function steerAnthropicToolUses(
   content: AnthropicContentBlock[],
   programs: StretchProgram[],
 ): AnthropicContentBlock[] {
