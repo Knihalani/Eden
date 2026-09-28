@@ -1301,7 +1301,7 @@ export class AgentMemory {
       }
       try {
         const q = cueFor(list);
-        const skipStore = !q || isNoopCue(q);
+        const skipStore = !q || isNoopCue(q) || /^(?:what|which|who|where|when|why|how)\b/i.test(q.trim());
         if (!skipStore) this.observe(list, { deferSleep: true });
       } catch {}
       if (!notes.length) return list;
