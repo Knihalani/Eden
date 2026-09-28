@@ -1039,8 +1039,7 @@ export class AgentMemory {
             }
             if (pool.length >= poolCap) break;
           }
-          const asserted = pool.filter((c) => !/\?\s*$/.test(String(c.rec.text ?? "").trim()));
-          rows = (asserted.length ? asserted : pool).slice(0, poolCap);
+          rows = pool.slice(0, poolCap);
         }
       }
     } catch {
