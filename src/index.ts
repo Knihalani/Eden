@@ -422,7 +422,6 @@ function load(path: string): Compiled[] {
     try {
       const rec = JSON.parse(t) as MemoryRecord;
       if (rec?.id && rec.text) {
-        rec.lane = rec.lane ?? "chat";
         const c = compileNeedles(rec);
         const at = idx.get(rec.id);
         if (at != null) out[at] = c;
