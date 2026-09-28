@@ -134,7 +134,6 @@ function leadingSerial(text: string): number | undefined {
 }
 
 function rankKindBoost(r: MemoryRecord): number {
-  if (/\?\s*$/.test(String(r.text ?? "").trim())) return -40;
   const k = String(r.kind ?? "");
   if (k === "constraint") return 50;
   if (k === "procedure") return 40;
