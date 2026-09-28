@@ -892,7 +892,7 @@ export class AgentMemory {
         if (kind === "fact" && !asQuestion && !pin) {
           try { if (!objectAsserted(text)) kind = "episode"; } catch { kind = "episode"; }
         }
-        out.push(this.remember(text, { kind, lane: encodeLane(text) === "chat" ? "chat" : "chat", tags: tokList(text), pin }));
+        out.push(this.remember(text, { kind, pin }));
         coveredChars += text.length;
         try {
           const t = text.replace(/\.+$/, "");
@@ -901,7 +901,7 @@ export class AgentMemory {
             if (!m?.[1]) continue;
             const a = fn(m[1].trim());
             if (this.seenLower.has(a.toLowerCase())) continue;
-            out.push(this.remember(a, { kind: "fact", lane: "chat" }));
+            out.push(this.remember(a, { kind: "fact" }));
           }
         } catch {}
       }
@@ -919,11 +919,7 @@ export class AgentMemory {
               || out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key)
               || [...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key);
             if (!dup) {
-              out.push(this.remember(safe, {
-                kind: "episode",
-                lane: "chat",
-                tags: tokList(safe),
-              }));
+              out.push(this.remember(safe, { kind: "episode" }));
             }
           }
           }
