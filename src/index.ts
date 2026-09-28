@@ -947,7 +947,6 @@ export class AgentMemory {
     try { if (memoryConsent() !== "on") return; } catch { return; }
     try {
       withFileLock(`${this.path}.lock`, () => {
-        let extra = false;
         try {
           const mine = new Set(this.compiled.map((c) => c.rec.id));
           const disk = load(this.path);
@@ -955,7 +954,6 @@ export class AgentMemory {
           for (const c of disk) {
             if (!mine.has(c.rec.id) && this.knownIds.has(c.rec.id)) continue;
             byId.set(c.rec.id, c);
-            if (!mine.has(c.rec.id)) extra = true;
           }
           for (const c of this.compiled) byId.set(c.rec.id, c);
           this.compiled = [...byId.values()];
@@ -965,7 +963,6 @@ export class AgentMemory {
         writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
-        if (extra) this.post = null;
       });
       try { this.rebuildSeen(); } catch {}
       this.dirty = false;
