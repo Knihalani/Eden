@@ -530,7 +530,7 @@ export class AgentMemory {
     for (const c of rows) {
       let n = 0;
       for (const x of c.needles) if (hay.has(x)) n++;
-      if (n && (n > 1 || c.needles.length <= 12) && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x))) {
+      if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x))) {
         if (/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) continue;
         scored.push({ rec: c.rec, n, k: c.needles.length });
       }
