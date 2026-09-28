@@ -113,6 +113,12 @@ const CUE_EXPAND: Record<string, string[]> = {
   nightly: ["pipelines"],
   seat: ["directory"],
   span: ["tracing"],
+  snippet: ["gists"],
+  warp: ["tunnels"],
+  tarball: ["registry"],
+  story: ["issues"],
+  formula: ["spreadsheets"],
+  canvas: ["whiteboards"],
 };
 
 const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
