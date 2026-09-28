@@ -64,7 +64,7 @@ type Compiled = { rec: MemoryRecord; needles: string[] };
 const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app"]);
 
 function compileNeedles(rec: MemoryRecord): Compiled {
-  return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w))])] };
+  return { rec, needles: [...new Set([...rec.tags.filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t) && !/^[a-z]{3,}\d+[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w) && !/^[a-z]{3,}\d+[a-z]$/.test(w))])] };
 }
 
 const CUE_EXPAND: Record<string, string[]> = {
