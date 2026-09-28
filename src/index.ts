@@ -625,7 +625,6 @@ export class AgentMemory {
   private seenLower = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
   private knownIds = new Set<string>();
-  private cons: MemoryRecord[] = [];
   private hopShort: MemoryRecord[] = [];
   private sem?: SemanticStore;
 
@@ -732,7 +731,6 @@ export class AgentMemory {
     if (this.post) {
       try {
         if (c.rec.kind !== "digest" && isLiveRow(c.rec) && (!this.agent || !c.rec.agent || c.rec.agent === this.agent) && (!this.project || c.rec.project === this.project)) {
-          if (c.rec.kind === "constraint") this.cons.push(c.rec);
           if (c.needles.length <= 12 && String(c.rec.text ?? "").trim() && c.rec.lane !== "icl" && c.rec.kind !== "icl") {
             let icl = false;
             try { icl = isIclExemplar(c.rec.text); } catch {}
@@ -787,14 +785,12 @@ export class AgentMemory {
   private ensureIndex() {
     if (this.post) return;
     const post = new Map<string, Compiled[]>();
-    const cons: MemoryRecord[] = [];
     const shorts: MemoryRecord[] = [];
     for (const c of this.compiled) {
       if (c.rec.kind === "digest") continue;
       if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
       if (this.project && c.rec.project !== this.project) continue;
       if (!isLiveRow(c.rec)) continue;
-      if (c.rec.kind === "constraint") cons.push(c.rec);
       if (c.needles.length <= 12 && String(c.rec.text ?? "").trim() && c.rec.lane !== "icl" && c.rec.kind !== "icl") {
         let icl = false;
         try { icl = isIclExemplar(c.rec.text); } catch {}
@@ -808,7 +804,6 @@ export class AgentMemory {
       }
     }
     this.post = post;
-    this.cons = cons;
     this.hopShort = shorts;
   }
 
