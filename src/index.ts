@@ -1025,7 +1025,6 @@ export class AgentMemory {
           const pool: Compiled[] = [];
           for (const { t, df } of ranked) {
             if (df >= COMMON && pool.length) break;
-            if (/^(?:where|what|who|whom|whose|why|how|does|did|which)$/.test(t)) continue;
             const list = this.post.get(t) ?? [];
             if (df >= COMMON) {
               for (const c of list) {
