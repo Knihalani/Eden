@@ -648,7 +648,6 @@ export class AgentMemory {
     this.compiled = load(this.path);
     this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
-    try { this.ensureIndex(); } catch {}
   }
 
   get jsonlDir(): string {
