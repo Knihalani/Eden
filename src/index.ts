@@ -141,6 +141,12 @@ const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
   [/^CMS is (.+)$/i, (b) => `The board is ${b}.`],
   [/^Secrets are (.+)$/i, (b) => `The vault is ${b}.`],
   [/^Search is (.+)$/i, (b) => `The index is ${b}.`],
+  [/^Ads are (.+)$/i, (b) => `The pixel is ${b}.`],
+  [/^Isolated runtimes are (.+)$/i, (b) => `The sandbox is ${b}.`],
+  [/^Status is (.+)$/i, (b) => `The badge is ${b}.`],
+  [/^Notebooks are (.+)$/i, (b) => `The cell is ${b}.`],
+  [/^Review is (.+)$/i, (b) => `The stack is ${b}.`],
+  [/^Serving is (.+)$/i, (b) => `The model is ${b}.`],
 ];
 
 export function queryHay(text: string): Set<string> {
