@@ -30,7 +30,6 @@ import {
   PACKET_BULLET_MAX,
 } from "./memory-sota";
 
-export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export {
   attachPlaceCues,
   isNoopCue,
@@ -52,7 +51,6 @@ export {
 } from "./experience-retrieve";
 export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
 export { applyProvenanceLabel, relativeMemoryAge } from "./memory-provenance";
-export { isRecsysShot } from "./semantic-store";
 export { sleep } from "./sleep";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
