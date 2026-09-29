@@ -594,11 +594,6 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   }
 }
 
-function skipNarrativeComplete(retrieved: MemoryRecord[], cue = ""): boolean {
-  try { if (isIclCue(cue)) return true; } catch {}
-  return retrieved.some((n) => n.lane === "icl" || isIclExemplar(String(n.text ?? "")));
-}
-
 export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
@@ -684,7 +679,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
-      id: opts.id || `${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: opts.id || `${now.toString(36)}${Math.random().toString(36).slice(2, 5)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: writeAliasTags((opts.tags || []).map((t) => t.toLowerCase()), String(text || "")),
@@ -1138,7 +1133,7 @@ export class AgentMemory {
             || route === "sf-assemble" || route === "icl-index";
           if (!silent && cue && retrieved.length) {
             if (route === "icl-index") packet = retrieved;
-            else if (!skipNarrativeComplete(retrieved, cue) && /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
+            else if (!(isIclCue(cue) || retrieved.some((n) => n.lane === "icl" || isIclExemplar(String(n.text ?? "")))) && /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
               keepHopOrder = true;
               let hopPool = retrieved;
               try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
