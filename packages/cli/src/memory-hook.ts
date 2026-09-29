@@ -16,8 +16,7 @@ function hookMemory(opts: { dir?: string; session?: string; child: boolean; cwd?
 function asRec(v: unknown): Record<string, unknown> { return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {}; }
 
 function flattenContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) return content.map(flattenContent).filter(Boolean).join("\n");
+  if (typeof content === "string") return content; if (Array.isArray(content)) return content.map(flattenContent).filter(Boolean).join("\n");
   const o = asRec(content); return String(o.text ?? o.content ?? o.stdout ?? o.stderr ?? o.output ?? o.message ?? o.error ?? o.llmContent ?? "");
 }
 
