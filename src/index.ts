@@ -568,12 +568,10 @@ export class AgentMemory {
       }
       try {
         if (!skippedIdentity && !isNoopCue(it.text) && !CHAT.test(it.text.trim()) && safe.length >= 8) {
-          let identityTurn = false;
-          try { identityTurn = !!objectAsserted(safe); } catch {}
+          let identityTurn = false; try { identityTurn = !!objectAsserted(safe); } catch {}
           if (!(opts.keepLiveIdentity && identityTurn) && (out.length === before || coveredChars / Math.max(1, safe.length) < 0.85)) {
             const key = safe.replace(/[.!?]+$/g, "").toLowerCase();
-            if (!this.seenLower.has(safe.toLowerCase()) && !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) && ![...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key))
-              out.push(this.remember(safe, { kind: "episode" }));
+            if (!this.seenLower.has(safe.toLowerCase()) && !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) && ![...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key)) out.push(this.remember(safe, { kind: "episode" }));
           }
         }
       } catch {}
