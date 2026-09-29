@@ -28,8 +28,7 @@ function flattenContent(content: unknown): string {
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
 
 function isPinnedIntention(r: MemoryRecord): boolean {
-  if (r.kind === "constraint") return true;
-  return (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
+  return r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
 }
 
 function additional(event: string, text: string): Record<string, unknown> | null {
