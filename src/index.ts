@@ -441,15 +441,10 @@ export function memoryStoreCap(): number {
   return Math.floor(raw);
 }
 
-function isIclCue(text: string): boolean {
-  try { return encodeLane(text) === "icl" || isIclExemplar(text) || /\blabel\s*:/i.test(text); } catch { return false; }
-}
-
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
     if (!q) return lexical;
-    if (isIclCue(q)) return lexical;
     const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
     if (!k) return lexical;
     const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
