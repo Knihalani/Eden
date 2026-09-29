@@ -1029,10 +1029,9 @@ export class AgentMemory {
         try {
           const route = cue ? routeMemory(cue) : "chat-jsonl";
           keepHopOrder = route === "sf-assemble" || route === "icl-index";
-          if (!silent && cue && retrieved.length)
-            packet = route === "sf-assemble" ? assembleNotes(retrieved, this.dir) : retrieved;
+          packet = retrieved.length && route === "sf-assemble" ? assembleNotes(retrieved, this.dir) : retrieved;
         } catch {
-          packet = !silent && retrieved.length ? retrieved : [];
+          packet = retrieved;
         }
         if (packet.length) {
           try { logMemoryNotes(packet); } catch {}
