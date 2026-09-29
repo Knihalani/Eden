@@ -14,7 +14,7 @@ import { memoryConsent } from "./memory-consent";
 import { opaqueId, opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
-import { applyProvenanceLabel, noteKindToken, stripPacketLabel } from "./memory-provenance";
+import { applyProvenanceLabel, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import {
   attachPlaceCues,
@@ -1056,21 +1056,12 @@ export class AgentMemory {
         }
         if (packet.length) {
           try { logMemoryNotes(packet); } catch {}
-          const labeled = packet.map((m) => {
-            const stripped = stripPacketLabel(String(m.text ?? "")).body;
-            let kind = noteKindToken(m, stripped) || "fact";
-            if (kind === "constraint") kind = "rule";
-            const rec = { ...m, kind: kind === "rule" ? "constraint" : kind };
-            const capped = capMemoryBody(rec, stripped);
-            const body = applyProvenanceLabel(rec, capped).trim();
-            let src = typeof m.ep === "string" ? m.ep.trim() : "";
-            if (!src || src.length > 40 || /\s/.test(src) || /\n/.test(src)) {
-              const file = capped.match(/\b((?:src|tests|lib)\/[\w./-]+\.[A-Za-z]{1,12}|[A-Za-z0-9._-]+\.[A-Za-z]{1,12})\b/);
-              src = file ? file[1]! : "";
-            }
-            const short = src && src.length <= 40 && !/\s/.test(src) && !/\n/.test(src) ? src : "";
-            return { text: body, id: m.id, kind: rec.kind, at: m.at, src: short || undefined };
-          });
+          const labeled = packet.map((m) => ({
+            text: String(m.text ?? "").trim(),
+            id: m.id,
+            kind: m.kind,
+            at: m.at,
+          }));
           const packed = packNotes(keepHopOrder ? labeled : goldFirstNotes(cue, labeled), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
           if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
         }
