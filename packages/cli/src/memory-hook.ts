@@ -50,10 +50,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   ).slice(0, 8);
   for (const r of pins) {
     let text = r.text.trim();
-    try {
-      const cleaned = scrubTombstonedIdentity(text, mem.dir);
-      if (typeof cleaned === "string") text = cleaned.trim();
-    } catch {}
+    try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {}
     const key = text.toLowerCase();
     if (!text || seen.has(key)) continue;
     seen.add(key);
@@ -64,10 +61,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   try {
     for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) {
       let text = g.text.trim();
-      try {
-        const cleaned = scrubTombstonedIdentity(text, mem.dir);
-        if (typeof cleaned === "string") text = cleaned.trim();
-      } catch {}
+    try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {}
       if (!text) continue;
       const key = text.toLowerCase();
       if (seen.has(key)) continue;
