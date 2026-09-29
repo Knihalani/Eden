@@ -44,8 +44,7 @@ function leadingSerial(text: string): number | undefined {
 }
 
 function rankKindBoost(r: MemoryRecord): number {
-  const k = String(r.kind ?? "");
-  return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
+  const k = String(r.kind ?? ""); return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
 }
 
 function capMemoryBody(r: MemoryRecord, body: string): string {
@@ -60,10 +59,7 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
   const raw = String(text ?? "").trim();
   if (!raw) return "";
   const parts = sentenceParts(raw), units = parts.length ? parts : [raw], kept: string[] = [];
-  for (const s of units) {
-    try { const fact = objectAsserted(s); if (fact) { const live = store.get(fact.s, fact.p); if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue; if (store.supersededObject(fact.o)) continue; } } catch {}
-    kept.push(s);
-  }
+  for (const s of units) { try { const fact = objectAsserted(s); if (fact) { const live = store.get(fact.s, fact.p); if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue; if (store.supersededObject(fact.o)) continue; } } catch {} kept.push(s); }
   return kept.join(" ").trim();
 }
 
@@ -136,8 +132,7 @@ function convBlob(list: unknown[]): string {
 
 export function cueFor(list: unknown[]): string {
   const m = Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined;
-  const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
-  if (!raw) return "";
+  const raw = m && typeof m === "object" ? convBlob([m]).trim() : ""; if (!raw) return "";
   const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean), ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
   return ask(paras.at(-1)!) ? paras.at(-1)! : ask(paras[0]!) ? paras[0]! : paras.at(-1)!;
 }
@@ -155,8 +150,7 @@ function extractDurable(blob: string): string[] {
   const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"), numberedWhole = /^\d+[.)]\s+\S/.test(whole), label = whole.match(SPEAKER_LABEL)?.[1];
   const chunks = labeledWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/).flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
   for (const raw of chunks) {
-    let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "");
-    t = t.replace(SECRET_INLINE, "[REDACTED]");
+    let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "").replace(SECRET_INLINE, "[REDACTED]");
     if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || CHAT.test(t) || /qx\d+z/i.test(t)) continue;
     if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
     const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1]!.trim();
@@ -182,13 +176,11 @@ const STATUS_OBJECT = /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|
 export const PACKET_CHAT_K_MIN = 6, PACKET_CHAT_K_MAX = 10, PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
 
 export function memoryRetrieveCap(): number {
-  const raw = Number(process.env.EDEN_MEMORY_CAP);
-  return !Number.isFinite(raw) || raw <= 0 ? PACKET_CHAT_K_MIN : Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
+  const raw = Number(process.env.EDEN_MEMORY_CAP); return !Number.isFinite(raw) || raw <= 0 ? PACKET_CHAT_K_MIN : Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
 }
 
 export function memoryStoreCap(): number {
-  const raw = Number(process.env.EDEN_MEMORY_STORE_CAP);
-  return !Number.isFinite(raw) || raw <= 0 ? 2000 : Math.floor(raw);
+  const raw = Number(process.env.EDEN_MEMORY_STORE_CAP); return !Number.isFinite(raw) || raw <= 0 ? 2000 : Math.floor(raw);
 }
 
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
@@ -260,8 +252,7 @@ export class AgentMemory {
   memories(): MemoryRecord[] { return this.compiled.map((c) => c.rec); }
 
   private persistText(text: string): string {
-    let t = String(text ?? "");
-    try { const redacted = redact(t); if (typeof redacted === "string") t = redacted; } catch {}
+    let t = String(text ?? ""); try { const redacted = redact(t); if (typeof redacted === "string") t = redacted; } catch {}
     try { t = scrubMemoryText(t, { session: this.scrubSession, cwd: this.scrubCwd }); } catch {}
     return t;
   }
@@ -371,11 +362,7 @@ export class AgentMemory {
         if (df >= 80 || pool.length >= poolCap) break;
       }
       const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
-      for (const c of pool) {
-        let n = 0, rare = 0;
-        for (const x of c.needles) if (hay.has(x)) { n++; rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1); }
-        if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) scored.push({ rec: c.rec, n, rare });
-      }
+      for (const c of pool) { let n = 0, rare = 0; for (const x of c.needles) if (hay.has(x)) { n++; rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1); } if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) scored.push({ rec: c.rec, n, rare }); }
       return liveCopulaLatest(scored).sort((a, b) => (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec)) || b.rare - a.rare || b.rec.at - a.rec.at).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
     } catch { return []; }
   }
