@@ -26,7 +26,6 @@ import {
   stripMemoryPacket,
   writeAliasTags,
   WRITE_ALIASES,
-  goldFirstNotes,
   PACKET_BYTE_CAP,
   PACKET_BULLET_MAX,
 } from "./memory-sota";
@@ -972,16 +971,13 @@ export class AgentMemory {
           else if (hookLane(cue) === "none") silent = true;
         } catch {}
         const retrieved = !silent && cue ? this.notesFor(cue) : [];
-        let keepHopOrder = false;
         let packet = retrieved;
         try {
-          const route = cue ? routeMemory(cue) : "chat-jsonl";
-          keepHopOrder = route === "sf-assemble" || route === "icl-index";
-          if (retrieved.length && route === "sf-assemble") packet = assembleNotes(retrieved, this.dir);
+          if (retrieved.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(retrieved, this.dir);
         } catch {}
         if (packet.length) {
           try { logMemoryNotes(packet); } catch {}
-          const packed = packNotes(keepHopOrder ? packet : goldFirstNotes(cue, packet), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
+          const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
           if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
         }
       }
