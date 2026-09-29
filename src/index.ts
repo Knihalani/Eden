@@ -1024,15 +1024,13 @@ export class AgentMemory {
           else if (hookLane(cue) === "none") silent = true;
         } catch {}
         const retrieved = !silent && cue ? this.notesFor(cue) : [];
-        let packet: MemoryRecord[] = [];
         let keepHopOrder = false;
+        let packet = retrieved;
         try {
           const route = cue ? routeMemory(cue) : "chat-jsonl";
           keepHopOrder = route === "sf-assemble" || route === "icl-index";
-          packet = retrieved.length && route === "sf-assemble" ? assembleNotes(retrieved, this.dir) : retrieved;
-        } catch {
-          packet = retrieved;
-        }
+          if (retrieved.length && route === "sf-assemble") packet = assembleNotes(retrieved, this.dir);
+        } catch {}
         if (packet.length) {
           try { logMemoryNotes(packet); } catch {}
           const packed = packNotes(keepHopOrder ? packet : goldFirstNotes(cue, packet), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
