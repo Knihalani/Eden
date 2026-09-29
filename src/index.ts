@@ -185,14 +185,10 @@ export function memorySessionName(raw: unknown): string | undefined {
 }
 
 export function childSessionName(parent?: string, child?: string): string | undefined {
-  try {
-    const p = memorySessionName(parent);
-    const c = memorySessionName(child);
-    if (p && c) return memorySessionName(`${p}--${c}`);
-    return c ?? p;
-  } catch {
-    return undefined;
-  }
+  const p = memorySessionName(parent);
+  const c = memorySessionName(child);
+  if (p && c) return memorySessionName(`${p}--${c}`);
+  return c ?? p;
 }
 
 type Compiled = { rec: MemoryRecord; needles: string[] };
