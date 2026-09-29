@@ -320,8 +320,7 @@ export class AgentMemory {
   }
 
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
-    const now = Date.now();
-    const rec: MemoryRecord = { id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => String(t).toLowerCase()), at: now, ...(opts.lane ? { lane: opts.lane } : {}), ...(this.session ? { ep: opaqueId(this.session) } : {}) };
+    const rec: MemoryRecord = { id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => String(t).toLowerCase()), at: Date.now(), ...(opts.lane ? { lane: opts.lane } : {}), ...(this.session ? { ep: opaqueId(this.session) } : {}) };
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
     if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
@@ -332,16 +331,12 @@ export class AgentMemory {
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     try { this.invalidateSameCopula(rec); } catch {}
-    this.compiled.push(c);
-    this.knownIds.add(rec.id);
-    this.post = null;
-    this.seenLower.add(rec.text.toLowerCase());
+    this.compiled.push(c); this.knownIds.add(rec.id); this.post = null; this.seenLower.add(rec.text.toLowerCase());
     return this.flush(true), rec;
   }
 
   private invalidateSameCopula(incoming: MemoryRecord): void {
-    let asserted: ReturnType<typeof objectAsserted>;
-    try { asserted = objectAsserted(incoming.text); } catch { return; }
+    let asserted: ReturnType<typeof objectAsserted>; try { asserted = objectAsserted(incoming.text); } catch { return; }
     if (!asserted) return;
     const now = incoming.at ?? Date.now(), incomingSerial = leadingSerial(incoming.text);
     for (const c of this.compiled) {
@@ -358,12 +353,7 @@ export class AgentMemory {
 
   private rebuildSeen() { this.seenLower = new Set(); this.post = null; for (const c of this.compiled) this.seenLower.add(c.rec.text.toLowerCase()); }
 
-  private ensureIndex() {
-    if (this.post) return;
-    const post = new Map<string, Compiled[]>();
-    for (const c of this.compiled) if (isLiveRow(c.rec)) for (const w of c.needles) { let arr = post.get(w); if (!arr) post.set(w, arr = []); arr.push(c); }
-    this.post = post;
-  }
+  private ensureIndex() { if (this.post) return; const post = new Map<string, Compiled[]>(); for (const c of this.compiled) if (isLiveRow(c.rec)) for (const w of c.needles) { let arr = post.get(w); if (!arr) post.set(w, arr = []); arr.push(c); } this.post = post; }
 
   observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
@@ -397,8 +387,7 @@ export class AgentMemory {
           }
         } catch {}
         if (this.seenLower.has(text.toLowerCase())) continue;
-        const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text);
-        const asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
+        const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text), asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
         let kind: MemoryKind = asQuestion ? "episode" : pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) || (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text)) ? "episode" : "fact";
         if (kind === "fact" && !asQuestion && !pin) try { if (!objectAsserted(text)) kind = "episode"; } catch { kind = "episode"; }
         out.push(this.remember(text, { kind, pin }));
