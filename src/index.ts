@@ -680,12 +680,7 @@ export class AgentMemory {
 
   rewriteWhere(pred: (r: MemoryRecord) => string | undefined): void {
     let dirty = false;
-    this.compiled = this.compiled.map((c) => {
-      const next = pred(c.rec);
-      if (typeof next !== "string" || next === c.rec.text) return c;
-      dirty = true;
-      return compileNeedles({ ...c.rec, text: next });
-    });
+    this.compiled = this.compiled.map((c) => { const next = pred(c.rec); if (typeof next !== "string" || next === c.rec.text) return c; dirty = true; return compileNeedles({ ...c.rec, text: next }); });
     if (dirty) this.post = null, this.flush(true);
   }
 
