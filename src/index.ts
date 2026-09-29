@@ -11,7 +11,7 @@ import * as howtoRetrieve from "./howto-retrieve";
 import { IclIndex, retrieveIcl } from "./icl-index";
 import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
-import { opaqueId, opaqueProject, scrubMemoryText } from "./memory-scrub";
+import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { applyProvenanceLabel, stripPacketLabel } from "./memory-provenance";
@@ -490,8 +490,6 @@ export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
   readonly child: boolean;
-  private agent?: string;
-  private project?: string;
   private scrubSession?: string;
   private scrubCwd?: string;
   private compiled: Compiled[];
@@ -505,7 +503,6 @@ export class AgentMemory {
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
-    this.agent = opts.agent; this.project = opaqueProject(opts.project);
     this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined;
     const cwdOpt = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
     const proj = typeof opts.project === "string" && opts.project.trim() ? opts.project.trim() : undefined;
