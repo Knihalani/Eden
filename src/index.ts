@@ -271,10 +271,7 @@ function load(path: string): Compiled[] {
         const c = compileNeedles(rec);
         const at = idx.get(rec.id);
         if (at != null) out[at] = c;
-        else {
-          idx.set(rec.id, out.length);
-          out.push(c);
-        }
+        else idx.set(rec.id, out.length), out.push(c);
       }
     } catch {}
   }
