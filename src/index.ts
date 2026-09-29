@@ -171,8 +171,7 @@ export function memorySessionName(raw: unknown): string | undefined {
 export function childSessionName(parent?: string, child?: string): string | undefined {
   const p = memorySessionName(parent);
   const c = memorySessionName(child);
-  if (p && c) return memorySessionName(`${p}--${c}`);
-  return c ?? p;
+  return p && c ? memorySessionName(`${p}--${c}`) : c ?? p;
 }
 
 type Compiled = { rec: MemoryRecord; needles: string[] };
