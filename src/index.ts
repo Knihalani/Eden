@@ -208,8 +208,7 @@ function extractDurable(blob: string): string[] {
 }
 
 function load(path: string): Compiled[] {
-  const out: Compiled[] = [];
-  const idx = new Map<string, number>();
+  const out: Compiled[] = [], idx = new Map<string, number>();
   let raw = "";
   try { raw = readFileSync(path, "utf8"); } catch { return out; }
   for (const t of raw.split("\n")) {
@@ -473,8 +472,7 @@ export class AgentMemory {
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
-    const cap = Math.max(0, Math.floor(Number(k) || 0));
-    const route = routeMemory(text);
+    const cap = Math.max(0, Math.floor(Number(k) || 0)), route = routeMemory(text);
     let recs: MemoryRecord[] = [];
     if (route === "icl-index") recs = mergeIclLane(text, cap, this.dir, this.compiled.map((c) => c.rec));
     else { recs = this.relevant(text, k); if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); recs = mergeHowtoLane(recs, text, cap, this.dir); }
