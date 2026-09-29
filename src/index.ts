@@ -638,25 +638,14 @@ export class AgentMemory {
       const pool: Compiled[] = [];
       for (const { t, df } of ranked) {
         if (df >= 80 && pool.length) break;
-        for (const c of this.post!.get(t) ?? []) {
-          if (seen.has(c)) continue;
-          seen.add(c);
-          pool.push(c);
-          if (pool.length >= poolCap) break;
-        }
+        for (const c of this.post!.get(t) ?? []) { if (seen.has(c)) continue; seen.add(c); pool.push(c); if (pool.length >= poolCap) break; }
         if (df >= 80 || pool.length >= poolCap) break;
       }
       const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
       for (const c of pool) {
         let n = 0, rare = 0;
-        for (const x of c.needles) {
-          if (!hay.has(x)) continue;
-          n++;
-          const df = this.post?.get(x)?.length ?? 1;
-          rare += 1 / Math.max(1, df);
-        }
-        if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text))
-          scored.push({ rec: c.rec, n, rare });
+        for (const x of c.needles) if (hay.has(x)) { n++; rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1); }
+        if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) scored.push({ rec: c.rec, n, rare });
       }
       return liveCopulaLatest(scored).sort((a, b) =>
         (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec))
