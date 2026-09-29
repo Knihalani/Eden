@@ -531,8 +531,7 @@ export class AgentMemory {
         try { const mine = new Set(this.compiled.map((c) => c.rec.id)), byId = new Map<string, Compiled>(); for (const c of load(this.path)) if (mine.has(c.rec.id) || !this.knownIds.has(c.rec.id)) byId.set(c.rec.id, c); for (const c of this.compiled) byId.set(c.rec.id, c); this.compiled = [...byId.values()]; for (const c of this.compiled) this.knownIds.add(c.rec.id); } catch {}
         this.trimToStoreCap();
         writeFileAtomic(this.path, this.compiled.map((x) => { const r = x.rec; return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined, invalidAt: undefined, validUntil: undefined }); }).join("\n") + (this.compiled.length ? "\n" : ""));
-        try { chmodSync(this.path, 0o600); } catch {}
-        try { unlinkSync(`${this.path}.wal`); } catch {}
+        try { chmodSync(this.path, 0o600); } catch {} try { unlinkSync(`${this.path}.wal`); } catch {}
       });
       this.rebuildSeen();
       this.dirty = false;
