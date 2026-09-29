@@ -557,9 +557,7 @@ export class AgentMemory {
   close() { this.flush(false); }
 
   /** Idle/Stop only. Inject must not await this. */
-  async sleep(opts?: { session?: string }): Promise<void> {
-    try { const { consolidate } = await import("./sleep"); consolidate(this, { session: opts?.session ?? this.session, mode: "full" }); } catch {}
-  }
+  async sleep(opts?: { session?: string }): Promise<void> { try { const { consolidate } = await import("./sleep"); consolidate(this, { session: opts?.session ?? this.session, mode: "full" }); } catch {} }
 }
 
 export function openMemory(opts: MemoryOptions = {}): AgentMemory { return new AgentMemory(opts); }
