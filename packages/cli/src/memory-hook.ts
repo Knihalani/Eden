@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
 import { childSessionName, MEMORY_MARK, openMemory, type MemoryRecord } from "../../../src/index";
@@ -102,7 +102,6 @@ export function notesFromInject(messages: unknown[]): string {
 
 export function messagesFromTranscript(path: string): { role: string; content: string }[] {
   try {
-    if (!path || !existsSync(path)) return [];
     const out: { role: string; content: string }[] = [];
     for (const line of readFileSync(path, "utf8").split("\n")) {
       if (!line) continue;
@@ -117,7 +116,7 @@ export function messagesFromTranscript(path: string): { role: string; content: s
         if ((role === "user" || role === "assistant") && content) out.push({ role, content });
       } catch {}
     }
-    return out.slice(-40);
+    return out;
   } catch {
     return [];
   }
