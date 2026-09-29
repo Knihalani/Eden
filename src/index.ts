@@ -457,9 +457,7 @@ export class AgentMemory {
     try {
       this.ensureIndex();
       const ranked = [...hay].filter((t) => t.length >= 3 && !STOP.has(t)).map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 })).filter((x) => x.df > 0).sort((a, b) => a.df - b.df);
-      const poolCap = Math.max(cap * 6, 30);
-      const seen = new Set<Compiled>();
-      const pool: Compiled[] = [];
+      const poolCap = Math.max(cap * 6, 30), seen = new Set<Compiled>(), pool: Compiled[] = [];
       for (const { t, df } of ranked) {
         if (df >= 80 && pool.length) break;
         for (const c of this.post!.get(t) ?? []) { if (seen.has(c)) continue; seen.add(c); pool.push(c); if (pool.length >= poolCap) break; }
@@ -472,9 +470,7 @@ export class AgentMemory {
         if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) scored.push({ rec: c.rec, n, rare });
       }
       return liveCopulaLatest(scored).sort((a, b) => (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec)) || b.rare - a.rare || b.rec.at - a.rec.at).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
