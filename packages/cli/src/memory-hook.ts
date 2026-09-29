@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
 import { childSessionName, MEMORY_MARK, openMemory, type MemoryRecord } from "../../../src/index";
@@ -38,60 +38,6 @@ function isPinnedIntention(r: MemoryRecord): boolean {
   return (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
 }
 
-function recordFromJsonlLine(raw: unknown): MemoryRecord | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  const text = typeof o.text === "string" ? o.text.trim() : "";
-  if (!text) return null;
-  const tags = Array.isArray(o.tags) ? o.tags.filter((t): t is string => typeof t === "string") : [];
-  return {
-    id: typeof o.id === "string" && o.id ? o.id : `pin:${text.slice(0, 32)}`,
-    text,
-    kind: typeof o.kind === "string" && o.kind ? o.kind : "fact",
-    tags,
-    at: typeof o.at === "number" && Number.isFinite(o.at) ? o.at : 0,
-  };
-}
-
-function recordsInMemoryFile(path: string): MemoryRecord[] {
-  const byId = new Map<string, MemoryRecord>();
-  try {
-    if (!existsSync(path)) return [];
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        const rec = recordFromJsonlLine(JSON.parse(line));
-        if (rec) byId.set(rec.id, rec);
-      } catch {}
-    }
-  } catch {}
-  return [...byId.values()];
-}
-
-function pinsFromRoot(root: string): MemoryRecord[] {
-  const files: string[] = [];
-  try {
-    const p = join(root, "memories.jsonl");
-    if (existsSync(p)) files.push(p);
-  } catch {}
-  try {
-    for (const ent of readdirSync(root, { withFileTypes: true })) {
-      if (!ent.isDirectory() || ent.name === "." || ent.name === ".." || ent.name.includes("..")) continue;
-      const p = join(root, ent.name, "memories.jsonl");
-      try { if (existsSync(p)) files.push(p); } catch {}
-    }
-  } catch {}
-  const byId = new Map<string, MemoryRecord>();
-  for (const p of files) {
-    for (const rec of recordsInMemoryFile(p)) {
-      if (!isPinnedIntention(rec)) continue;
-      const prev = byId.get(rec.id);
-      if (!prev || rec.at >= prev.at) byId.set(rec.id, rec);
-    }
-  }
-  return [...byId.values()];
-}
-
 function additional(event: string, text: string): Record<string, unknown> | null {
   const notes = String(text ?? "").trim();
   if (!notes || !notes.includes(MEMORY_MARK)) return null;
@@ -102,7 +48,7 @@ function additional(event: string, text: string): Record<string, unknown> | null
 function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const seen = new Set<string>();
   const lines: string[] = [];
-  let pinRows = [...mem.memories().filter(isPinnedIntention), ...pinsFromRoot(mem.dir)];
+  let pinRows = mem.memories().filter(isPinnedIntention);
   try { pinRows = dropHarmed(mem.dir, pinRows); } catch {}
   const pins = pinRows.sort((a, b) =>
     Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at
