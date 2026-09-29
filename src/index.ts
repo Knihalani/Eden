@@ -541,12 +541,7 @@ export class AgentMemory {
   }
 
   /** One JSONL flush after many observes. Nested with SemanticStore quiet. */
-  quiet(fn: () => void) {
-    this.batch++;
-    const sem = this.semantic();
-    sem.beginBatch();
-    try { fn(); } finally { try { sem.endBatch(); } catch {} this.batch--; this.flush(false); }
-  }
+  quiet(fn: () => void) { this.batch++; const sem = this.semantic(); sem.beginBatch(); try { fn(); } finally { try { sem.endBatch(); } catch {} this.batch--; this.flush(false); } }
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void { this.compiled = this.compiled.filter((c) => !pred(c.rec)); this.post = null; this.flush(true); }
 
