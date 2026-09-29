@@ -236,7 +236,6 @@ export function cueFor(list: unknown[]): string {
   const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
   if (!raw) return "";
   const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean);
-  if (!paras.length) return raw;
   const last = paras.at(-1)!;
   const first = paras[0]!;
   const ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
@@ -784,7 +783,6 @@ export class AgentMemory {
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
-    if (!text) return [];
     const cap = Math.max(0, Math.floor(Number(k) || 0));
     const route = routeMemory(text);
     let recs: MemoryRecord[] = [];
