@@ -99,25 +99,21 @@ function capMemoryBody(r: MemoryRecord, body: string): string {
 function omitConflictingIdentity(text: string, store: SemanticStore): string {
   const raw = String(text ?? "").trim();
   if (!raw) return "";
-  try {
-    const parts = sentenceParts(raw);
-    const units = parts.length ? parts : [raw];
-    const kept: string[] = [];
-    for (const s of units) {
-      try {
-        const fact = objectAsserted(s);
-        if (fact) {
-          const live = store.get(fact.s, fact.p);
-          if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue;
-          if (store.supersededObject(fact.o)) continue;
-        }
-      } catch {}
-      kept.push(s);
-    }
-    return kept.join(" ").trim();
-  } catch {
-    return raw;
+  const parts = sentenceParts(raw);
+  const units = parts.length ? parts : [raw];
+  const kept: string[] = [];
+  for (const s of units) {
+    try {
+      const fact = objectAsserted(s);
+      if (fact) {
+        const live = store.get(fact.s, fact.p);
+        if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue;
+        if (store.supersededObject(fact.o)) continue;
+      }
+    } catch {}
+    kept.push(s);
   }
+  return kept.join(" ").trim();
 }
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
