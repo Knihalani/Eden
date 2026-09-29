@@ -772,11 +772,7 @@ export class AgentMemory {
     const kept = recs.map((n) => {
       const raw = String(n.text ?? "");
       if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
-      try {
-        const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, ""));
-        if (!fact) return n;
-        return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` };
-      } catch { return n; }
+      try { const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, "")); if (!fact) return n; return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` }; } catch { return n; }
     });
     try {
       return kept.map((r) => {
