@@ -540,12 +540,7 @@ export class AgentMemory {
             lane,
           });
           out.push(rec);
-          if (lane === "narrative") {
-            try { new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
-          }
-          if (lane === "icl") {
-            try { new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
-          }
+          try { if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); else new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
         }
         continue;
       }
