@@ -69,12 +69,6 @@ function sentenceParts(t: string): string[] {
   return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
 }
 
-function isNarrativeProse(t: string): boolean {
-  const text = t.trim();
-  if (text.length > 400) return true;
-  return sentenceParts(text).length >= 2 && text.length >= 150;
-}
-
 /** Encode lane for observe. Chat still extractDurable; ICL/narrative/recsys store-all. Never throws. */
 export function encodeLane(text: string): MemoryLaneKind {
   try {
@@ -82,7 +76,7 @@ export function encodeLane(text: string): MemoryLaneKind {
     if (!t) return "chat";
     if (isIclExemplar(t)) return "icl";
     if (isRecsysShot(t)) return "narrative";
-    if (isNarrativeProse(t)) return "narrative";
+    if (t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150)) return "narrative";
     return "chat";
   } catch {
     return "chat";
