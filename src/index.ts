@@ -602,7 +602,7 @@ export class AgentMemory {
     this.compiled.push(c);
     this.knownIds.add(rec.id);
     this.post = null;
-    if (!this.project || rec.project === this.project) this.seenLower.add(rec.text.toLowerCase());
+    this.seenLower.add(rec.text.toLowerCase());
     return this.flush(true), rec;
   }
 
@@ -633,9 +633,7 @@ export class AgentMemory {
   private rebuildSeen() {
     this.seenLower = new Set();
     this.post = null;
-    for (const c of this.compiled) {
-      if (!this.project || c.rec.project === this.project) this.seenLower.add(c.rec.text.toLowerCase());
-    }
+    for (const c of this.compiled) this.seenLower.add(c.rec.text.toLowerCase());
   }
 
   private ensureIndex() {
