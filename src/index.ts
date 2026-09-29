@@ -326,43 +326,39 @@ export function memoryStoreCap(): number {
 }
 
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
-  try {
-    const q = String(text ?? "").trim();
-    if (!q) return lexical;
-    const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-    if (!k) return lexical;
-    const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
-    const chat = Array.isArray(lexical) ? lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk")) : [];
-    if (!Array.isArray(hits) || !hits.length) return chat.length ? chat : lexical;
-    const chunks: MemoryRecord[] = [];
-    for (const hit of hits) {
-      const body = String(hit?.text ?? "").trim();
-      if (!body) continue;
-      chunks.push({
-        id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`,
-        text: body,
-        kind: "episode",
-        lane: "narrative",
-        tags: ["chunk"],
-        at: Number.isFinite(hit.t) ? hit.t : 0,
-      });
-    }
-    if (!chunks.length) return chat.length ? chat : lexical;
-    const out: MemoryRecord[] = [];
-    for (const c of chunks) {
-      if (out.length >= cap) break;
-      if (out.some((p) => p.id === c.id)) continue;
-      out.push(c);
-    }
-    for (const l of chat) {
-      if (out.length >= cap) break;
-      if (out.some((p) => p.id === l.id)) continue;
-      out.push(l);
-    }
-    return out;
-  } catch {
-    return lexical;
+  const q = String(text ?? "").trim();
+  if (!q) return lexical;
+  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
+  if (!k) return lexical;
+  const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
+  const chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
+  if (!Array.isArray(hits) || !hits.length) return chat.length ? chat : lexical;
+  const chunks: MemoryRecord[] = [];
+  for (const hit of hits) {
+    const body = String(hit?.text ?? "").trim();
+    if (!body) continue;
+    chunks.push({
+      id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`,
+      text: body,
+      kind: "episode",
+      lane: "narrative",
+      tags: ["chunk"],
+      at: Number.isFinite(hit.t) ? hit.t : 0,
+    });
   }
+  if (!chunks.length) return chat.length ? chat : lexical;
+  const out: MemoryRecord[] = [];
+  for (const c of chunks) {
+    if (out.length >= cap) break;
+    if (out.some((p) => p.id === c.id)) continue;
+    out.push(c);
+  }
+  for (const l of chat) {
+    if (out.length >= cap) break;
+    if (out.some((p) => p.id === l.id)) continue;
+    out.push(l);
+  }
+  return out;
 }
 
 function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
