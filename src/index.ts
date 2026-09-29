@@ -143,15 +143,9 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
     }
     const serial = leadingSerial(row.rec.text);
     const prevSerial = leadingSerial(prev.rec.text);
-    if (serial != null && prevSerial != null) {
-      if (serial >= prevSerial) byKey.set(k, row);
-      continue;
-    }
-    if (serial != null && prevSerial == null) {
-      byKey.set(k, row);
-      continue;
-    }
-    if (serial == null && prevSerial != null) continue;
+    if (serial != null && prevSerial != null) { if (serial >= prevSerial) byKey.set(k, row); continue; }
+    if (serial != null) { byKey.set(k, row); continue; }
+    if (prevSerial != null) continue;
     if (row.rec.at >= prev.rec.at) byKey.set(k, row);
   }
   return [...byKey.values(), ...rest];
