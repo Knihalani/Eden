@@ -21,11 +21,9 @@ function asRec(v: unknown): Record<string, unknown> {
 
 function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
-  if (!Array.isArray(content)) {
-    const o = asRec(content);
-    return String(o.text ?? o.content ?? o.llmContent ?? o.reasoning_content ?? o.thinking ?? o.reasoning ?? "");
-  }
-  return content.map(flattenContent).filter(Boolean).join("\n");
+  if (Array.isArray(content)) return content.map(flattenContent).filter(Boolean).join("\n");
+  const o = asRec(content);
+  return String(o.text ?? o.content ?? "");
 }
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
