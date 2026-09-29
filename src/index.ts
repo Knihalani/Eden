@@ -1021,9 +1021,8 @@ export class AgentMemory {
     if (!recs.length) return [];
     let kept = recs;
     try {
-      if (kept.length) {
-        const store = this.semantic();
-        kept = kept.map((n) => {
+      const store = this.semantic();
+      kept = kept.map((n) => {
         let fact: ReturnType<typeof objectAsserted>;
         try { fact = objectAsserted(String(n.text ?? "").replace(/^\[[^\]]+\]\s+/, "")); } catch { return n; }
         if (!fact) return n;
@@ -1035,8 +1034,7 @@ export class AgentMemory {
         if (lo.toLowerCase() === fo.toLowerCase() && !needsPeel) return n;
         const next = fact.p === "uses" ? `${fact.s} uses ${live.o}.` : `The ${fact.s} is ${live.o}.`;
         return { ...n, text: next };
-        });
-      }
+      });
     } catch {}
     return kept.map((r) => {
       try {
