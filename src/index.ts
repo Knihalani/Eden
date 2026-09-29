@@ -524,10 +524,7 @@ export class AgentMemory {
       if (!notes.length) return list;
       const next = list.slice(), i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
       return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
-    } catch {
-      memoryInjectSwallows.n++;
-      return list; // pass-through
-    }
+    } catch { memoryInjectSwallows.n++; return list; }
   }
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
