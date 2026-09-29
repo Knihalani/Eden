@@ -116,9 +116,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const notes = prompt ? notesFromInject(mem.inject([{ role: "user", content: prompt }])) : "";
     if (writes && prior.length) mem.observe(prior);
     return additional(event, notes);
-    } finally {
-      try { mem.close(); } catch {}
-    }
+    } finally { try { mem.close(); } catch {} }
   } catch {
     return null;
   }
