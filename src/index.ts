@@ -661,13 +661,8 @@ export class AgentMemory {
     try {
       withFileLock(`${this.path}.lock`, () => {
         try {
-          const mine = new Set(this.compiled.map((c) => c.rec.id));
-          const disk = load(this.path);
-          const byId = new Map<string, Compiled>();
-          for (const c of disk) {
-            if (!mine.has(c.rec.id) && this.knownIds.has(c.rec.id)) continue;
-            byId.set(c.rec.id, c);
-          }
+          const mine = new Set(this.compiled.map((c) => c.rec.id)), byId = new Map<string, Compiled>();
+          for (const c of load(this.path)) if (mine.has(c.rec.id) || !this.knownIds.has(c.rec.id)) byId.set(c.rec.id, c);
           for (const c of this.compiled) byId.set(c.rec.id, c);
           this.compiled = [...byId.values()];
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
