@@ -455,8 +455,7 @@ export class AgentMemory {
         writeFileAtomic(this.path, this.compiled.map((x) => { const r = x.rec; return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined, invalidAt: undefined, validUntil: undefined }); }).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {} try { unlinkSync(`${this.path}.wal`); } catch {}
       });
-      this.rebuildSeen();
-      this.dirty = false;
+      this.rebuildSeen(); this.dirty = false;
     } catch {}
   }
 
