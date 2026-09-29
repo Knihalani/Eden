@@ -82,10 +82,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     } catch { resolved = { child: false }; }
     const mem = hookMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), session: resolved.session, child: resolved.child, cwd });
     try {
-    const transPath = typeof r.transcript_path === "string" ? r.transcript_path : typeof r.transcriptPath === "string" ? r.transcriptPath : "";
-    const fromFile = messagesFromTranscript(transPath);
-    const fromPayload = payloadMessages(r);
-    const prior = (fromPayload.length ? fromPayload : fromFile).slice(-40);
+    const transPath = typeof r.transcript_path === "string" ? r.transcript_path : typeof r.transcriptPath === "string" ? r.transcriptPath : "", fromFile = messagesFromTranscript(transPath), fromPayload = payloadMessages(r), prior = (fromPayload.length ? fromPayload : fromFile).slice(-40);
     if (event === "PostToolUse" || event === "SubagentStop") {
       try {
         const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
@@ -112,9 +109,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     if (writes && prior.length) mem.observe(prior);
     return additional(event, notes);
     } finally { try { mem.close(); } catch {} }
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 export async function runMemoryHookStdin(): Promise<void> {
