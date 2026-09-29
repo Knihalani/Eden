@@ -729,7 +729,6 @@ export class AgentMemory {
       if (this.project && c.rec.project !== this.project) continue;
       if (!isLiveRow(c.rec)) continue;
       for (const w of c.needles) {
-        if (w.length < 3 || STOP.has(w)) continue;
         let arr = post.get(w);
         if (!arr) post.set(w, arr = []);
         arr.push(c);
