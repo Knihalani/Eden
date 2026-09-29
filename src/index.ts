@@ -64,8 +64,7 @@ export function encodeLane(text: string): MemoryLaneKind {
   const t = String(text ?? "").trim();
   if (!t) return "chat";
   if (isIclExemplar(t)) return "icl";
-  if (t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150)) return "narrative";
-  return "chat";
+  return t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150) ? "narrative" : "chat";
 }
 
 function leadingSerial(text: string): number | undefined {
