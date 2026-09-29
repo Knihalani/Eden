@@ -1062,17 +1062,6 @@ export class AgentMemory {
       }
     } catch {}
     try { kept = preferObservationOverSources(kept, gistTextsFor(this.dir, kept)); } catch {}
-    try {
-      if (kept.some((n) => n.lane === "narrative" || (n.tags ?? []).includes("chunk"))) {
-        const store = this.semantic();
-        kept = kept.map((n) => {
-          if (n.lane !== "narrative" && !(n.tags ?? []).includes("chunk")) return n;
-          let next = n.text;
-          try { next = omitConflictingIdentity(n.text, store); } catch {}
-          return next === n.text ? n : { ...n, text: next };
-        }).filter((n) => String(n.text ?? "").trim());
-      }
-    } catch {}
     return kept.map((r) => {
       try {
         const stripped = stripPacketLabel(r.text).body;
