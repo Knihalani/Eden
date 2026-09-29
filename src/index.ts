@@ -236,12 +236,8 @@ export function cueFor(list: unknown[]): string {
   const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
   if (!raw) return "";
   const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean);
-  const last = paras.at(-1)!;
-  const first = paras[0]!;
   const ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
-  if (ask(last)) return last;
-  if (ask(first)) return first;
-  return last;
+  return ask(paras.at(-1)!) ? paras.at(-1)! : ask(paras[0]!) ? paras[0]! : paras.at(-1)!;
 }
 
 const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
