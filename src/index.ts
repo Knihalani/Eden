@@ -144,8 +144,6 @@ export type MemoryRecord = {
   text: string;
   kind: MemoryKind;
   tags: string[];
-  agent?: string;
-  project?: string;
   at: number;
   ep?: string;
   sal?: number;
@@ -556,7 +554,7 @@ export class AgentMemory {
     return t;
   }
 
-  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
+  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
       id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-2)}`,
