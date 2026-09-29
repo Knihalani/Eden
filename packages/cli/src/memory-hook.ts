@@ -30,9 +30,7 @@ function additional(event: string, text: string): Record<string, unknown> | null
 function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const seen = new Set<string>(), lines: string[] = [], pins = mem.memories().filter(isPinnedIntention).sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at).slice(0, 8);
   for (const r of pins) { let text = r.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ ...r, text }, text); } catch { line = `[rule] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
-  try {
-    for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) { let text = g.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t }, text); } catch { line = `[gist] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
-  } catch {}
+  try { for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) { let text = g.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t }, text); } catch { line = `[gist] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); } } catch {}
   if (!lines.length) return ""; return MEMORY_MARK + lines.join("");
 }
 
@@ -45,8 +43,7 @@ export function messagesFromTranscript(path: string): { role: string; content: s
     const out: { role: string; content: string }[] = [];
     for (const line of readFileSync(path, "utf8").split("\n")) {
       try {
-        const o = asRec(JSON.parse(line)), msg = asRec(o.message ?? o), rawRole = String(msg.role || o.type || o.role || ""), role = rawRole === "human" || rawRole === "Human" || rawRole === "user" ? "user" : rawRole === "model" || rawRole === "Model" || rawRole === "ai" || rawRole === "AI" || rawRole === "assistant" ? "assistant" : "", content = flattenContent(msg.content ?? o.content ?? msg.parts);
-        if ((role === "user" || role === "assistant") && content) out.push({ role, content });
+        const o = asRec(JSON.parse(line)), msg = asRec(o.message ?? o), rawRole = String(msg.role || o.type || o.role || ""), role = rawRole === "human" || rawRole === "Human" || rawRole === "user" ? "user" : rawRole === "model" || rawRole === "Model" || rawRole === "ai" || rawRole === "AI" || rawRole === "assistant" ? "assistant" : "", content = flattenContent(msg.content ?? o.content ?? msg.parts); if ((role === "user" || role === "assistant") && content) out.push({ role, content });
       } catch {}
     }
     return out;
