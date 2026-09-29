@@ -458,11 +458,7 @@ export class AgentMemory {
     }
   }
 
-  private flush(mark: boolean) {
-    if (mark) this.dirty = true;
-    if (this.batch || !this.dirty) return;
-    this.persist();
-  }
+  private flush(mark: boolean) { if (mark) this.dirty = true; if (this.batch || !this.dirty) return; this.persist(); }
 
   private persist() {
     try { if (memoryConsent() !== "on") return; } catch { return; }
