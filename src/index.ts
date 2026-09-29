@@ -598,12 +598,7 @@ export class AgentMemory {
       let skippedIdentity = false;
       for (const raw of extractDurable(it.text)) {
         let text = raw;
-        try {
-          const asserted = objectAsserted(text);
-          if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) {
-            text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`;
-          }
-        } catch {}
+        try { const asserted = objectAsserted(text); if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`; } catch {}
         text = this.persistText(text);
         try {
           const fact = objectAsserted(text);
