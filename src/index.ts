@@ -813,8 +813,7 @@ export class AgentMemory {
     const hay = queryHay(text);
     try {
       this.ensureIndex();
-      const toks = [...hay].filter((t) => t.length >= 3 && !STOP.has(t));
-      const ranked = toks
+      const ranked = [...hay].filter((t) => t.length >= 3 && !STOP.has(t))
         .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
         .filter((x) => x.df > 0)
         .sort((a, b) => a.df - b.df);
@@ -841,7 +840,7 @@ export class AgentMemory {
           const df = this.post?.get(x)?.length ?? 1;
           rare += 1 / Math.max(1, df);
         }
-        if (n && c.needles.length <= 12 && isLiveRow(c.rec) && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text))
+        if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text))
           scored.push({ rec: c.rec, n, rare });
       }
       return liveCopulaLatest(scored).sort((a, b) =>
