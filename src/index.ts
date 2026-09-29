@@ -191,7 +191,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   return [...byKey.values(), ...rest];
 }
 
-export type MemoryOptions = { dir?: string; project?: string; session?: string; cwd?: string; child?: boolean };
+export type MemoryOptions = { dir?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
@@ -502,9 +502,7 @@ export class AgentMemory {
 
   constructor(opts: MemoryOptions = {}) {
     this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined;
-    const cwdOpt = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
-    const proj = typeof opts.project === "string" && opts.project.trim() ? opts.project.trim() : undefined;
-    this.scrubCwd = cwdOpt || (proj && (proj.includes("/") || proj.includes("\\") || /^[A-Za-z]:/.test(proj)) ? proj : undefined);
+    this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
     const session = memorySessionName(opts.session);
     this.session = session;
