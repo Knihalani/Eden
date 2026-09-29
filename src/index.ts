@@ -230,11 +230,7 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled }), chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
   if (!hits.length) return chat.length ? chat : lexical;
   const chunks: MemoryRecord[] = [];
-  for (const hit of hits) {
-    const body = String(hit?.text ?? "").trim();
-    if (!body) continue;
-    chunks.push({ id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`, text: body, kind: "episode", lane: "narrative", tags: ["chunk"], at: Number.isFinite(hit.t) ? hit.t : 0 });
-  }
+  for (const hit of hits) { const body = String(hit?.text ?? "").trim(); if (body) chunks.push({ id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`, text: body, kind: "episode", lane: "narrative", tags: ["chunk"], at: Number.isFinite(hit.t) ? hit.t : 0 }); }
   if (!chunks.length) return chat.length ? chat : lexical;
   const out: MemoryRecord[] = [];
   for (const c of [...chunks, ...chat]) { if (out.length >= cap) break; if (out.some((p) => p.id === c.id)) continue; out.push(c); }
@@ -249,40 +245,28 @@ function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRe
   const out: MemoryRecord[] = [], seen = new Set<string>();
   for (const hit of hits) {
     if (out.length >= cap) break;
-    const body = String(hit?.text ?? "").trim();
-    if (!body) continue;
-    const id = hit.id || `icl:${out.length}`;
-    if (seen.has(id) || seen.has(body.toLowerCase())) continue;
+    const body = String(hit?.text ?? "").trim(), id = hit.id || `icl:${out.length}`;
+    if (!body || seen.has(id) || seen.has(body.toLowerCase())) continue;
     seen.add(id); seen.add(body.toLowerCase()); out.push({ id, text: body, kind: "fact", lane: "icl", tags: ["icl"], at: Number.isFinite(hit.t) ? hit.t : 0 });
   }
   return out;
 }
 
 function howtoProcedureRecord(view: ReturnType<typeof howtoRetrieve.retrieveHowTo>[number]): MemoryRecord {
-  const cue = typeof view.cue === "string" ? view.cue.trim() : "";
-  const files: string[] = [];
-  const add = (f: unknown) => { if (typeof f === "string" && f.trim() && !files.includes(f.trim())) files.push(f.trim()); };
+  const cue = typeof view.cue === "string" ? view.cue.trim() : "", files: string[] = [], add = (f: unknown) => { if (typeof f === "string" && f.trim() && !files.includes(f.trim())) files.push(f.trim()); };
   if (Array.isArray(view.files)) for (const f of view.files) add(f);
-  if (!files.length && Array.isArray(view.steps)) {
-    for (const s of view.steps) { if (Array.isArray(s?.files)) for (const f of s.files) add(f); const args = s?.args; if (args) for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]); }
-  }
+  if (!files.length && Array.isArray(view.steps)) { for (const s of view.steps) { if (Array.isArray(s?.files)) for (const f of s.files) add(f); const args = s?.args; if (args) for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]); } }
   let verify = typeof view.verify === "string" ? view.verify.trim() : "";
-  if (!verify && Array.isArray(view.steps)) {
-    for (let i = view.steps.length - 1; i >= 0; i--) { const args = view.steps[i]?.args; if (!args) continue; for (const k of ["command", "cmd", "script"] as const) { const v = args[k]; if (typeof v === "string" && v.trim()) { verify = v.trim(); break; } } if (verify) break; }
-  }
-  let text = cue;
-  if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" ");
-  if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
+  if (!verify && Array.isArray(view.steps)) { for (let i = view.steps.length - 1; i >= 0; i--) { const args = view.steps[i]?.args; if (!args) continue; for (const k of ["command", "cmd", "script"] as const) { const v = args[k]; if (typeof v === "string" && v.trim()) { verify = v.trim(); break; } } if (verify) break; } }
+  let text = cue; if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" "); if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
   return { id: view.id, kind: "procedure", tags: ["howto", "procedure"], text, at: view.t };
 }
 
 function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
   const q = String(text ?? "").trim();
   if (!q || !/\bflake\b/i.test(q)) return lexical;
-  const views = howtoRetrieve.retrieveHowTo(dir, q);
-  if (!views.length) return lexical;
-  const rec = howtoProcedureRecord(views[0]!);
-  if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
+  const views = howtoRetrieve.retrieveHowTo(dir, q); if (!views.length) return lexical;
+  const rec = howtoProcedureRecord(views[0]!); if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
   const kept = lexical.filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
   return [...kept, rec];
 }
