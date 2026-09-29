@@ -538,7 +538,6 @@ export class AgentMemory {
     if (!asserted) return;
     const now = incoming.at ?? Date.now();
     const incomingSerial = leadingSerial(incoming.text);
-    let dirty = false;
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id) continue;
       if (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt)) continue;
@@ -550,9 +549,7 @@ export class AgentMemory {
       if (incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) continue;
       if (incomingSerial == null && liveSerial != null) continue;
       c.rec.invalidAt = now;
-      dirty = true;
     }
-    if (dirty) this.post = null;
   }
 
   private rebuildSeen() {
