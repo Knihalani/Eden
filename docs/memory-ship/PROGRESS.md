@@ -27,7 +27,7 @@ This is the single source of truth for what is done and what is next. `/next` re
 
 | ID | Slice | Deps | Size | Gate (A5 arm or check) | Status | PR | Report |
 |---|---|---|---|---|---|---|---|
-| P0.−1 | Green CI baseline (112 typecheck errors; then tests, CLI build) | — | M | GitHub `test` workflow green on `main`; no behaviour change (test count before = after, minus named quarantines) | todo | | |
+| P0.−1 | Green CI baseline (112 typecheck errors; then tests, CLI build) | — | M | GitHub `test` workflow green on `main`; no behaviour change (test count before = after, minus named quarantines) | in-progress (`mem/P0.-1-green-ci`) | | |
 | R-5 | Formatter config + reformat line-joined files (`src/index.ts`, `src/memory-sota.ts`, …); `git worktree prune` | P0.−1 | S | formatting-only diff (AST-equal or identical test results before/after); CI green | todo | | |
 | P0.0a | Harness: Claude-shaped event + transcript simulator, process-per-event runner | R-5 | M | simulator self-tests; replays an R6-shaped session | todo | | |
 | P0.0b | Harness: world oracle, simulated context window, annotated cues | P0.0a | M | oracle self-tests; A/A noise floors recorded in A5 | todo | | |
