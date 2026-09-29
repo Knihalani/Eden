@@ -386,23 +386,16 @@ export class AgentMemory {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
     this.batch++;
     try {
-    const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system");
-    const out: MemoryRecord[] = [];
-    const items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text);
-    const batchLive = new Map<string, string>();
+    const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system"), out: MemoryRecord[] = [], items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text), batchLive = new Map<string, string>();
     for (let i = 0; i < items.length; i++) {
-      const it = items[i]!;
-      const safe = this.persistText(stripMemoryPacket(it.text));
-      const lane = encodeLane(it.text);
+      const it = items[i]!, safe = this.persistText(stripMemoryPacket(it.text)), lane = encodeLane(it.text);
       if (lane === "icl" || lane === "narrative") {
         let text = safe;
         if (lane === "narrative" && opts.keepLiveIdentity) try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
         if (text && !this.seenLower.has(text.toLowerCase())) { const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane }); out.push(rec); try { if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); else new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {} }
         continue;
       }
-      const before = out.length;
-      let coveredChars = 0;
-      let skippedIdentity = false;
+      const before = out.length; let coveredChars = 0, skippedIdentity = false;
       for (const raw of extractDurable(it.text)) {
         let text = raw;
         try { const asserted = objectAsserted(text); if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`; } catch {}
