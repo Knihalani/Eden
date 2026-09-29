@@ -11,9 +11,7 @@ import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace"
 
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd", "PostToolUse", "SubagentStop"]);
 
-function hookMemory(opts: { dir?: string; session?: string; child: boolean; cwd?: string }) {
-  return openMemory(opts);
-}
+function hookMemory(opts: { dir?: string; session?: string; child: boolean; cwd?: string }) { return openMemory(opts); }
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
