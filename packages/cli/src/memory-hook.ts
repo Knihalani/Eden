@@ -75,8 +75,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const cwd = typeof r.cwd === "string" && r.cwd ? r.cwd : undefined;
     let resolved: { session?: string; child: boolean } = { child: false };
     try {
-      const parent = [r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
-      const childId = [r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
+      const parent = [r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean), childId = [r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
       const asChild = event === "SubagentStop" || !!(childId && childId !== parent), session = asChild ? childSessionName(parent, childId || "sub") : parent;
       resolved = { session: asChild && session ? session : parent, child: !!(asChild && session) };
     } catch { resolved = { child: false }; }
