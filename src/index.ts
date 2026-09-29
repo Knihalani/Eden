@@ -559,11 +559,7 @@ export class AgentMemory {
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void { this.compiled = this.compiled.filter((c) => !pred(c.rec)); this.post = null; this.flush(true); }
 
-  rewriteWhere(pred: (r: MemoryRecord) => string | undefined): void {
-    let dirty = false;
-    this.compiled = this.compiled.map((c) => { const next = pred(c.rec); if (typeof next !== "string" || next === c.rec.text) return c; dirty = true; return compileNeedles({ ...c.rec, text: next }); });
-    if (dirty) this.post = null, this.flush(true);
-  }
+  rewriteWhere(pred: (r: MemoryRecord) => string | undefined): void { let dirty = false; this.compiled = this.compiled.map((c) => { const next = pred(c.rec); if (typeof next !== "string" || next === c.rec.text) return c; dirty = true; return compileNeedles({ ...c.rec, text: next }); }); if (dirty) this.post = null, this.flush(true); }
 
   patchWhere(fn: (r: MemoryRecord) => MemoryRecord | undefined): void {
     let dirty = false;
