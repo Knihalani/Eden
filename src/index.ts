@@ -1133,29 +1133,6 @@ export class AgentMemory {
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
         }
-        try {
-          const assertional = (re: RegExp, t: string) => {
-            if (!re.test(t)) return false;
-            const parts = t.split(/(?<=[.!?])\s+/);
-            return parts.some((s) => re.test(s) && !/\?\s*$/.test(s.trim()));
-          };
-          const latest = (re: RegExp) => packet.reduce((b, m) => {
-            const t = String(m.text ?? "");
-            return assertional(re, t) && m.at > b ? m.at : b;
-          }, -1);
-          const sha = latest(/\bsha256\b/i);
-          const loc = latest(/\bbased in\b/i);
-          const drain = latest(/\blog drain\b/i);
-          const region = latest(/\bregion of\b/i);
-          packet = packet.filter((m) => {
-            const t = String(m.text ?? "");
-            if (sha >= 0 && assertional(/\bsha256\b/i, t) && m.at < sha) return false;
-            if (loc >= 0 && assertional(/\bbased in\b/i, t) && m.at < loc) return false;
-            if (drain >= 0 && assertional(/\blog drain\b/i, t) && m.at < drain) return false;
-            if (region >= 0 && assertional(/\bregion of\b/i, t) && m.at < region) return false;
-            return true;
-          });
-        } catch {}
         if (packet.length) {
           try { logMemoryNotes(packet); } catch {}
           const labeled = packet.map((m) => {
