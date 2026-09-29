@@ -535,7 +535,7 @@ export class AgentMemory {
   }
 
   memories(): MemoryRecord[] {
-    return this.compiled.map((c) => c.rec).filter((r) => !this.project || r.project === this.project);
+    return this.compiled.map((c) => c.rec);
   }
 
   private persistText(text: string): string {
@@ -616,7 +616,6 @@ export class AgentMemory {
     let dirty = false;
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id) continue;
-      if (this.project && c.rec.project !== this.project) continue;
       if (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt)) continue;
       let other: ReturnType<typeof objectAsserted>;
       try { other = objectAsserted(c.rec.text); } catch { continue; }
