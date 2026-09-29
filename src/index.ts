@@ -935,8 +935,7 @@ export class AgentMemory {
           .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
           .filter((x) => x.df > 0)
           .sort((a, b) => a.df - b.df || a.t.localeCompare(b.t));
-        if (!ranked.length) rows = [];
-        else {
+        if (ranked.length) {
           const poolCap = Math.max(cap * 6, 30);
           const COMMON = 80;
           const seen = new Set<Compiled>();
@@ -951,7 +950,7 @@ export class AgentMemory {
             }
             if (df >= COMMON || pool.length >= poolCap) break;
           }
-          rows = pool.slice(0, poolCap);
+          rows = pool;
         }
       }
     } catch {
