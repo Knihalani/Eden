@@ -48,9 +48,8 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   for (const r of pins) {
     let text = r.text.trim();
     try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {}
-    const key = text.toLowerCase();
-    if (!text || seen.has(key)) continue;
-    seen.add(key);
+    if (!text || seen.has(text.toLowerCase())) continue;
+    seen.add(text.toLowerCase());
     let line = text;
     try { line = applyProvenanceLabel({ ...r, text }, text); } catch { line = `[rule] ${text}`; }
     lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
