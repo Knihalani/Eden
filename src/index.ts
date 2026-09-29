@@ -943,22 +943,13 @@ export class AgentMemory {
           const pool: Compiled[] = [];
           for (const { t, df } of ranked) {
             if (df >= COMMON && pool.length) break;
-            const list = this.post.get(t) ?? [];
-            if (df >= COMMON) {
-              for (const c of list) {
-                if (seen.has(c)) continue;
-                seen.add(c);
-                pool.push(c);
-                if (pool.length >= poolCap) break;
-              }
-              break;
-            }
-            for (const c of list) {
+            for (const c of this.post.get(t) ?? []) {
               if (seen.has(c)) continue;
               seen.add(c);
               pool.push(c);
+              if (pool.length >= poolCap) break;
             }
-            if (pool.length >= poolCap) break;
+            if (df >= COMMON || pool.length >= poolCap) break;
           }
           rows = pool.slice(0, poolCap);
         }
