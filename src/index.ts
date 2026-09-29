@@ -422,7 +422,6 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   const views = howtoRetrieve.retrieveHowTo(dir, q);
   if (!views.length) return lexical;
   const rec = howtoProcedureRecord(views[0]!);
-  if (!rec.text) return lexical;
   if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
   const kept = lexical.filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
   return [...kept, rec];
