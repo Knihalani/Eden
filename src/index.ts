@@ -414,15 +414,7 @@ export class AgentMemory {
 
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
-    const rec: MemoryRecord = {
-      id: opts.id || `${(process.pid % 1296).toString(36)}${(++memSeq).toString(36)}`,
-      text: this.persistText(String(text || "").trim()),
-      kind: opts.kind || "fact",
-      tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
-      at: now,
-      ...(opts.lane ? { lane: opts.lane } : {}),
-      ...(this.session ? { ep: opaqueId(this.session) } : {}),
-    };
+    const rec: MemoryRecord = { id: opts.id || `${(process.pid % 1296).toString(36)}${(++memSeq).toString(36)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => String(t).toLowerCase()), at: now, ...(opts.lane ? { lane: opts.lane } : {}), ...(this.session ? { ep: opaqueId(this.session) } : {}) };
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
     if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
