@@ -552,7 +552,6 @@ export class AgentMemory {
     const proj = typeof opts.project === "string" && opts.project.trim() ? opts.project.trim() : undefined;
     this.scrubCwd = cwdOpt || (proj && (proj.includes("/") || proj.includes("\\") || /^[A-Za-z]:/.test(proj)) ? proj : undefined);
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
-    try { chmodSync(this.dir, 0o700); } catch {}
     const session = memorySessionName(opts.session);
     this.session = session;
     this.child = opts.child === true;
