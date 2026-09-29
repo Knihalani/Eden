@@ -85,10 +85,7 @@ function rankKindBoost(r: MemoryRecord): number {
 function capMemoryBody(r: MemoryRecord, body: string): string {
   const text = String(body ?? "");
   if (r.lane === "icl" || isIclExemplar(text)) return text;
-  if (r.kind === "procedure") {
-    const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180));
-    return text.length <= cap ? text : text.slice(-cap);
-  }
+  if (r.kind === "procedure") { const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180)); return text.length <= cap ? text : text.slice(-cap); }
   if (/\d+[.)]\s+\S/.test(text) || text.length <= FACT_CHAR_CAP) return text;
   return text.slice(0, FACT_CHAR_CAP);
 }
