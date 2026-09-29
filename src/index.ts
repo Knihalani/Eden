@@ -571,9 +571,7 @@ export class AgentMemory {
   }
 }
 
-export function openMemory(opts: MemoryOptions = {}): AgentMemory {
-  return new AgentMemory(opts);
-}
+export function openMemory(opts: MemoryOptions = {}): AgentMemory { return new AgentMemory(opts); }
 
 let proc: AgentMemory | undefined;
 
