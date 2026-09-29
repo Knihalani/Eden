@@ -38,9 +38,7 @@ function additional(event: string, text: string): Record<string, unknown> | null
 function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const seen = new Set<string>();
   const lines: string[] = [];
-  const pins = mem.memories().filter(isPinnedIntention).sort((a, b) =>
-    Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at
-  ).slice(0, 8);
+  const pins = mem.memories().filter(isPinnedIntention).sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at).slice(0, 8);
   for (const r of pins) { let text = r.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ ...r, text }, text); } catch { line = `[rule] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
   try {
     for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) { let text = g.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t }, text); } catch { line = `[gist] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
