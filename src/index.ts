@@ -297,16 +297,10 @@ function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRe
 function howtoProcedureRecord(view: ReturnType<typeof howtoRetrieve.retrieveHowTo>[number]): MemoryRecord {
   const cue = typeof view.cue === "string" ? view.cue.trim() : "";
   const files: string[] = [];
-  const add = (f: unknown) => {
-    if (typeof f === "string" && f.trim() && !files.includes(f.trim())) files.push(f.trim());
-  };
+  const add = (f: unknown) => { if (typeof f === "string" && f.trim() && !files.includes(f.trim())) files.push(f.trim()); };
   if (Array.isArray(view.files)) for (const f of view.files) add(f);
   if (!files.length && Array.isArray(view.steps)) {
-    for (const s of view.steps) {
-      if (Array.isArray(s?.files)) for (const f of s.files) add(f);
-      const args = s?.args;
-      if (args) for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]);
-    }
+    for (const s of view.steps) { if (Array.isArray(s?.files)) for (const f of s.files) add(f); const args = s?.args; if (args) for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]); }
   }
   let verify = typeof view.verify === "string" ? view.verify.trim() : "";
   if (!verify && Array.isArray(view.steps)) {
