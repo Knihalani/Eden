@@ -237,9 +237,7 @@ export function memoryStoreCap(): number {
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   const q = String(text ?? "").trim();
   if (!q) return lexical;
-  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-  const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
-  const chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
+  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled }), chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
   if (!hits.length) return chat.length ? chat : lexical;
   const chunks: MemoryRecord[] = [];
   for (const hit of hits) {
@@ -256,11 +254,9 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
 function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   const q = String(text ?? "").trim();
   if (!q) return [];
-  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-  const hits = retrieveIcl(dir, q, { k, fallback: compiled });
+  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveIcl(dir, q, { k, fallback: compiled });
   if (!hits.length) return [];
-  const out: MemoryRecord[] = [];
-  const seen = new Set<string>();
+  const out: MemoryRecord[] = [], seen = new Set<string>();
   for (const hit of hits) {
     if (out.length >= cap) break;
     const body = String(hit?.text ?? "").trim();
