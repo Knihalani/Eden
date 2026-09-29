@@ -10,17 +10,10 @@ import { opaqueId } from "../../../src/memory-scrub";
 import { consolidate } from "../../../src/sleep";
 import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace";
 
-const live = new Map<string, ReturnType<typeof openMemory>>();
 const MEMORY_EVENTS = new Set(["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd", "PostToolUse", "SubagentStop"]);
 
-function hookMemory(opts: { dir?: string; agent?: string; project?: string; session?: string; child: boolean; cwd?: string }) {
-  const key = `${opts.dir ?? ""}\0${opts.session ?? ""}\0${opts.child ? "1" : "0"}\0${opts.agent ?? ""}`;
-  let mem = live.get(key);
-  if (!mem) {
-    mem = openMemory(opts);
-    live.set(key, mem);
-  }
-  return mem;
+function hookMemory(opts: { dir?: string; session?: string; child: boolean; cwd?: string }) {
+  return openMemory(opts);
 }
 
 function asRec(v: unknown): Record<string, unknown> {
