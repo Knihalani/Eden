@@ -265,8 +265,7 @@ export function memoryRetrieveCap(): number {
 /** JSONL cap. Distinct from retrieve k. Unset → 2000. */
 export function memoryStoreCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_STORE_CAP);
-  if (!Number.isFinite(raw) || raw <= 0) return 2000;
-  return Math.floor(raw);
+  return !Number.isFinite(raw) || raw <= 0 ? 2000 : Math.floor(raw);
 }
 
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
