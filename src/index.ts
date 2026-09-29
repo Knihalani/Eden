@@ -992,15 +992,13 @@ export class AgentMemory {
       }
     }
     const live = scored.filter((x) => isLiveRow(x.rec));
-    const latest = liveCopulaLatest(live);
-    const ranked = latest.sort((a, b) =>
+    return liveCopulaLatest(live).sort((a, b) =>
       (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec))
       || b.rare - a.rare
       || (Number(b.rec.heat ?? b.rec.sal ?? 1) - Number(a.rec.heat ?? a.rec.sal ?? 1))
       || a.k - b.k
       || b.rec.at - a.rec.at
-    ).slice(0, Math.max(cap * 6, 30));
-    return ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
+    ).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
