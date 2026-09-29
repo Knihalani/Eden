@@ -99,10 +99,7 @@ export function messagesFromTranscript(path: string): { role: string; content: s
 function payloadMessages(r: Record<string, unknown>): { role: string; content: string }[] {
   const list = (Array.isArray(r.messages) ? r.messages : Array.isArray(r.conversation) ? r.conversation : Array.isArray(r.contents) ? r.contents : []) as unknown[];
   return list.flatMap((m) => {
-    const o = asRec(m);
-    const c = flattenContent(o.content ?? o.parts ?? o);
-    const raw = String(o.role || "");
-    const role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw;
+    const o = asRec(m), c = flattenContent(o.content ?? o.parts ?? o), raw = String(o.role || ""), role = raw === "human" || raw === "Human" ? "user" : raw === "model" || raw === "Model" || raw === "ai" || raw === "AI" ? "assistant" : raw;
     return (role === "user" || role === "assistant") && c ? [{ role, content: c }] : [];
   });
 }
