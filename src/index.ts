@@ -186,12 +186,7 @@ function convBlob(list: unknown[]): string {
     if (typeof c === "string" && c) parts.push(c);
     else if (Array.isArray(c) || Array.isArray(o.parts) || (c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).parts))) {
       for (const b of (Array.isArray(c) ? c : Array.isArray(o.parts) ? o.parts as unknown[] : (c as Record<string, unknown>).parts as unknown[])) {
-        if (b && typeof b === "object") {
-          const type = String((b as Record<string, unknown>).type || "").toLowerCase();
-          if (TOOL_BLOCKS.has(type)) continue;
-          const t = ["text","content","llmContent","value"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v);
-          if (t) parts.push(t as string);
-        }
+        if (b && typeof b === "object") { const type = String((b as Record<string, unknown>).type || "").toLowerCase(); if (TOOL_BLOCKS.has(type)) continue; const t = ["text","content","llmContent","value"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v); if (t) parts.push(t as string); }
       }
     }
     const r = o.reasoning_content ?? o.thinking ?? o.reasoning; if (typeof r === "string" && r) parts.push(r);
