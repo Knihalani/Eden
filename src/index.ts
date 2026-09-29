@@ -594,10 +594,6 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   }
 }
 
-function isNarrativeNote(m: { lane?: string; tags?: string[] }): boolean {
-  return m.lane === "narrative" || (m.tags ?? []).includes("chunk");
-}
-
 function skipNarrativeComplete(retrieved: MemoryRecord[], cue = ""): boolean {
   try { if (isIclCue(cue)) return true; } catch {}
   return retrieved.some((n) => n.lane === "icl" || isIclExemplar(String(n.text ?? "")));
@@ -688,7 +684,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
-      id: opts.id || `m${now.toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+      id: opts.id || `${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: writeAliasTags((opts.tags || []).map((t) => t.toLowerCase()), String(text || "")),
