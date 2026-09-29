@@ -264,40 +264,6 @@ function compileNeedles(rec: MemoryRecord): Compiled {
   return { rec, needles: [...new Set([...(rec.tags ?? []).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t) && !/^[a-z]{3,}\d+[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w) && !/^[a-z]{3,}\d+[a-z]$/.test(w))])] };
 }
 
-const OBSERVE_ALIAS: [RegExp, (body: string) => string][] = [
-  [/^Metrics are (.+)$/i, (b) => `The probe is ${b}.`],
-  [/^CDN is (.+)$/i, (b) => `The ttl is ${b}.`],
-  [/^flags is our name for (.+)$/i, (b) => `The gate is ${b}.`],
-  [/^Error tracking is (.+)$/i, (b) => `The dsn is ${b}.`],
-  [/^The database branch is (.+)$/i, (b) => `The replica is ${b}.`],
-  [/^Analytics warehouse is (.+)$/i, (b) => `The scan is ${b}.`],
-  [/^Social login is (.+)$/i, (b) => `The identity is ${b}.`],
-  [/^The billing topic is (.+)$/i, (b) => `The consumer is ${b}.`],
-  [/^Documents live in (.+)$/i, (b) => `The shard is ${b}.`],
-  [/^Object store is (.+)$/i, (b) => `The bucket is ${b}.`],
-  [/^Test runner is (.+)$/i, (b) => `The fixture is ${b}.`],
-  [/^Payments are (.+)$/i, (b) => `The card is ${b}.`],
-  [/^APM is (.+)$/i, (b) => `The trace is ${b}.`],
-  [/^Cache is (.+)$/i, (b) => `The queue is ${b}.`],
-  [/^Deploy is (.+)$/i, (b) => `The region is ${b}.`],
-  [/^Booking is (.+)$/i, (b) => `The slot is ${b}.`],
-  [/^The inbox is (.+)$/i, (b) => `The visitor is ${b}.`],
-  [/^Orchestration is (.+)$/i, (b) => `The cluster is ${b}.`],
-  [/^Certificates are (.+)$/i, (b) => `The cert is ${b}.`],
-  [/^Session replay is (.+)$/i, (b) => `The heatmap is ${b}.`],
-  [/^Session replay is (.+)$/i, (b) => `The tape is ${b}.`],
-  [/^Invoicing is (.+)$/i, (b) => `The invoice is ${b}.`],
-  [/^CMS is (.+)$/i, (b) => `The board is ${b}.`],
-  [/^Secrets are (.+)$/i, (b) => `The vault is ${b}.`],
-  [/^Search is (.+)$/i, (b) => `The index is ${b}.`],
-  [/^Ads are (.+)$/i, (b) => `The pixel is ${b}.`],
-  [/^Isolated runtimes are (.+)$/i, (b) => `The sandbox is ${b}.`],
-  [/^Status is (.+)$/i, (b) => `The badge is ${b}.`],
-  [/^Notebooks are (.+)$/i, (b) => `The cell is ${b}.`],
-  [/^Review is (.+)$/i, (b) => `The stack is ${b}.`],
-  [/^Serving is (.+)$/i, (b) => `The model is ${b}.`],
-];
-
 export function queryHay(text: string): Set<string> {
   return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
 }
@@ -826,16 +792,6 @@ export class AgentMemory {
         }
         out.push(this.remember(text, { kind, pin }));
         coveredChars += text.length;
-        try {
-          const t = text.replace(/\.+$/, "");
-          for (const [re, fn] of OBSERVE_ALIAS) {
-            const m = t.match(re);
-            if (!m?.[1]) continue;
-            const a = fn(m[1].trim());
-            if (this.seenLower.has(a.toLowerCase())) continue;
-            out.push(this.remember(a, { kind: "fact" }));
-          }
-        } catch {}
       }
       try {
         if (!skippedIdentity && !isNoopCue(it.text) && !CHAT.test(it.text.trim()) && safe.length >= 8) {
