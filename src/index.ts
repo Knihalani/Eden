@@ -12,7 +12,6 @@ import * as howtoRetrieve from "./howto-retrieve";
 import { IclIndex, retrieveIcl } from "./icl-index";
 import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
-import { dropHarmed } from "./memory-harmed";
 import { opaqueId, opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
@@ -1110,8 +1109,7 @@ export class AgentMemory {
             if (route === "icl-index") packet = retrieved;
             else if (!(isIclCue(cue) || retrieved.some((n) => n.lane === "icl" || isIclExemplar(String(n.text ?? "")))) && /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
               keepHopOrder = true;
-              let hopPool = retrieved;
-              try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
+              const hopPool = retrieved;
               packet = completeNotes(cue, retrieved, hopPool);
               try { packet = assembleNotes(packet, this.dir); } catch {}
             } else if (route === "sf-assemble") {
