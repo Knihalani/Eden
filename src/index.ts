@@ -986,10 +986,8 @@ export class AgentMemory {
       recs = mergeIclLane([], text, cap, this.dir, this.compiled.map((c) => c.rec));
     } else {
       recs = this.relevant(text, k);
-      if (route === "gist-chunk") {
-        try { recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); } catch {}
-      }
-      try { recs = mergeHowtoLane(recs, text, cap, this.dir); } catch {}
+      if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec));
+      recs = mergeHowtoLane(recs, text, cap, this.dir);
     }
     if (!recs.length) return [];
     const kept = recs.map((n) => {
