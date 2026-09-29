@@ -133,8 +133,7 @@ export function memorySessionName(raw: unknown): string | undefined {
 }
 
 export function childSessionName(parent?: string, child?: string): string | undefined {
-  const p = memorySessionName(parent);
-  const c = memorySessionName(child);
+  const p = memorySessionName(parent), c = memorySessionName(child);
   return p && c ? memorySessionName(`${p}--${c}`) : c ?? p;
 }
 
