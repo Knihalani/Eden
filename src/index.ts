@@ -543,10 +543,7 @@ export class AgentMemory {
       if (sys) try { this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], { keepLiveIdentity: true }); } catch {}
       if (next === m) return body;
       return { ...body, [key]: next };
-    } catch {
-      memoryInjectSwallows.n++;
-      return body; // pass-through
-    }
+    } catch { memoryInjectSwallows.n++; return body; }
   }
 
   /** One JSONL flush after many observes. Nested with SemanticStore quiet. */
