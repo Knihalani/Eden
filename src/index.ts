@@ -575,9 +575,7 @@ export class AgentMemory {
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text);
         const asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
         let kind: MemoryKind = asQuestion ? "episode" : pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) || (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text)) ? "episode" : "fact";
-        if (kind === "fact" && !asQuestion && !pin) {
-          try { if (!objectAsserted(text)) kind = "episode"; } catch { kind = "episode"; }
-        }
+        if (kind === "fact" && !asQuestion && !pin) try { if (!objectAsserted(text)) kind = "episode"; } catch { kind = "episode"; }
         out.push(this.remember(text, { kind, pin }));
         coveredChars += text.length;
       }
