@@ -36,6 +36,7 @@ export {
   attachPlaceCues,
   hookLane,
   isNoopCue,
+  isNoopCue as isMathChatterCue,
   packNotes,
   parseRuleTime,
   pathCues,
@@ -176,10 +177,6 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
   } catch {
     return raw;
   }
-}
-
-export function isMathChatterCue(cue: string): boolean {
-  return isNoopCue(cue);
 }
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
