@@ -882,18 +882,17 @@ export class AgentMemory {
         .filter((x) => x.df > 0)
         .sort((a, b) => a.df - b.df);
       const poolCap = Math.max(cap * 6, 30);
-      const COMMON = 80;
       const seen = new Set<Compiled>();
       const pool: Compiled[] = [];
       for (const { t, df } of ranked) {
-        if (df >= COMMON && pool.length) break;
+        if (df >= 80 && pool.length) break;
         for (const c of this.post!.get(t) ?? []) {
           if (seen.has(c)) continue;
           seen.add(c);
           pool.push(c);
           if (pool.length >= poolCap) break;
         }
-        if (df >= COMMON || pool.length >= poolCap) break;
+        if (df >= 80 || pool.length >= poolCap) break;
       }
       const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
       for (const c of pool) {
