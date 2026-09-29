@@ -593,4 +593,4 @@ Ship with one truth.
 | Product code | `src/index.ts`, `src/memory-sota.ts`, `src/semantic-store.ts`, `packages/cli/src/memory-hook.ts`, `packages/wrap/src/know-inject.ts` |
 | UI rebuild (unrelated) | `apps/web/REBUILD.md` |
 
-Remote for git/GitHub work stays `KaiavN/Eden`.
+Remote for git/GitHub work is `Knihalani/Eden` (updated 2026-09-29; formerly `KaiavN/Eden`).
