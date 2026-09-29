@@ -27,8 +27,7 @@ export { EXPERIENCE_RETRIEVE_K, EXPERIENCE_RETRIEVE_K_MAX, EXPERIENCE_SLICE_CHAR
 export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
 export { applyProvenanceLabel, relativeMemoryAge } from "./memory-provenance";
 export { sleep } from "./sleep";
-export const MEMORY_MARK = "Eden Memory:";
-export const memoryInjectSwallows = { n: 0 };
+export const MEMORY_MARK = "Eden Memory:", memoryInjectSwallows = { n: 0 };
 
 function sentenceParts(t: string): string[] {
   return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
@@ -54,8 +53,7 @@ function capMemoryBody(r: MemoryRecord, body: string): string {
 }
 
 function omitConflictingIdentity(text: string, store: SemanticStore): string {
-  const raw = String(text ?? "").trim();
-  if (!raw) return "";
+  const raw = String(text ?? "").trim(); if (!raw) return "";
   const parts = sentenceParts(raw), units = parts.length ? parts : [raw], kept: string[] = [];
   for (const s of units) { try { const fact = objectAsserted(s); if (fact) { const live = store.get(fact.s, fact.p); if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue; if (store.supersededObject(fact.o)) continue; } } catch {} kept.push(s); }
   return kept.join(" ").trim();
@@ -76,10 +74,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
     const k = `${a.s}\0${a.p}`, prev = byKey.get(k);
     if (!prev) { byKey.set(k, row); continue; }
     const serial = leadingSerial(row.rec.text), prevSerial = leadingSerial(prev.rec.text);
-    if (serial != null && prevSerial != null) { if (serial >= prevSerial) byKey.set(k, row); continue; }
-    if (serial != null) { byKey.set(k, row); continue; }
-    if (prevSerial != null) continue;
-    if (row.rec.at >= prev.rec.at) byKey.set(k, row);
+    if (serial != null && prevSerial != null) { if (serial >= prevSerial) byKey.set(k, row); continue; } if (serial != null) { byKey.set(k, row); continue; } if (prevSerial != null) continue; if (row.rec.at >= prev.rec.at) byKey.set(k, row);
   }
   return [...byKey.values(), ...rest];
 }
@@ -87,8 +82,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
 export type MemoryOptions = { dir?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
-  const s = typeof raw === "string" ? raw.trim() : "";
-  return s && !s.includes("\0") && !s.includes("/") && !s.includes("\\") && !s.split("--").join("").includes("..") && /^[A-Za-z0-9._-]+$/.test(s) && s !== "." && s !== ".." ? s : undefined;
+  const s = typeof raw === "string" ? raw.trim() : ""; return s && !s.includes("\0") && !s.includes("/") && !s.includes("\\") && !s.split("--").join("").includes("..") && /^[A-Za-z0-9._-]+$/.test(s) && s !== "." && s !== ".." ? s : undefined;
 }
 
 export function childSessionName(parent?: string, child?: string): string | undefined {
@@ -143,8 +137,7 @@ const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>(), out: string[] = [];
-  let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
-  if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1))) whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
+  let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, ""); if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1))) whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
   const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"), numberedWhole = /^\d+[.)]\s+\S/.test(whole), label = whole.match(SPEAKER_LABEL)?.[1];
   const chunks = labeledWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/).flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
   for (const raw of chunks) {
