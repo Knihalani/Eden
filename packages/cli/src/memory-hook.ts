@@ -100,12 +100,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       const session = asChild ? childSessionName(parent, childId || "sub") : parent;
       resolved = { session: asChild && session ? session : parent, child: !!(asChild && session) };
     } catch { resolved = { child: false }; }
-    const mem = hookMemory({
-      dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
-      session: resolved.session,
-      child: resolved.child,
-      cwd,
-    });
+    const mem = hookMemory({ dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), session: resolved.session, child: resolved.child, cwd });
     try {
     const transPath = typeof r.transcript_path === "string" ? r.transcript_path : typeof r.transcriptPath === "string" ? r.transcriptPath : "";
     const fromFile = messagesFromTranscript(transPath);
