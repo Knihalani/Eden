@@ -628,11 +628,7 @@ export class AgentMemory {
     this.batch++;
     const sem = this.semantic();
     sem.beginBatch();
-    try { fn(); } finally {
-      try { sem.endBatch(); } catch {}
-      this.batch--;
-      this.flush(false);
-    }
+    try { fn(); } finally { try { sem.endBatch(); } catch {} this.batch--; this.flush(false); }
   }
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void {
