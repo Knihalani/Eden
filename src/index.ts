@@ -132,9 +132,7 @@ export type MemoryRecord = {
 };
 
 function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
-  if (typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) return false;
-  if (typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now) return false;
-  return true;
+  return !(typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
 }
 
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
@@ -677,7 +675,7 @@ export class AgentMemory {
         this.trimToStoreCap();
         writeFileAtomic(this.path, this.compiled.map((x) => {
           const r = x.rec;
-          return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined, invalidAt: undefined });
+          return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined, invalidAt: undefined, validUntil: undefined });
         }).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
