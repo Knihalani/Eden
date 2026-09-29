@@ -16,39 +16,14 @@ import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { applyProvenanceLabel, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
-import {
-  attachPlaceCues,
-  hookLane,
-  isNoopCue,
-  packNotes,
-  parseRuleTime,
-  placePathsFrom,
-  stripMemoryPacket,
-  writeAliasTags,
-  WRITE_ALIASES,
-  PACKET_BYTE_CAP,
-  PACKET_BULLET_MAX,
-} from "./memory-sota";
+import { attachPlaceCues, hookLane, isNoopCue, packNotes, parseRuleTime, placePathsFrom, stripMemoryPacket, writeAliasTags, WRITE_ALIASES, PACKET_BYTE_CAP, PACKET_BULLET_MAX } from "./memory-sota";
 
-export {
-  attachPlaceCues,
-  isNoopCue,
-  packNotes,
-  placePathsFrom,
-  goldFirstNotes,
-  PACKET_BULLET_MAX,
-  PACKET_BYTE_CAP,
-} from "./memory-sota";
+export { attachPlaceCues, isNoopCue, packNotes, placePathsFrom, goldFirstNotes, PACKET_BULLET_MAX, PACKET_BYTE_CAP } from "./memory-sota";
 /** Tokens with M32: Harbor prompt Δ 150854 → 178613 (+27759) and total +26941 are agent traces. No 89-task claim. No dual-API. */
 export const PROCEDURE_TOKEN_CAP = 300;
 export const PROCEDURE_CHAR_CAP = PROCEDURE_TOKEN_CAP * 4;
 export const FACT_CHAR_CAP = PROCEDURE_CHAR_CAP;
-export {
-  EXPERIENCE_RETRIEVE_K,
-  EXPERIENCE_RETRIEVE_K_MAX,
-  EXPERIENCE_SLICE_CHAR_CAP,
-  EXPERIENCE_SLICE_TOKEN_CAP,
-} from "./experience-retrieve";
+export { EXPERIENCE_RETRIEVE_K, EXPERIENCE_RETRIEVE_K_MAX, EXPERIENCE_SLICE_CHAR_CAP, EXPERIENCE_SLICE_TOKEN_CAP } from "./experience-retrieve";
 export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
 export { applyProvenanceLabel, relativeMemoryAge } from "./memory-provenance";
 export { sleep } from "./sleep";
@@ -139,8 +114,7 @@ export function queryHay(text: string): Set<string> {
   return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
 }
 
-const TOOL_ROLES = new Set(["tool", "function"]);
-const TOOL_BLOCKS = new Set(["tool_result", "tool_use", "function_call", "function_result"]);
+const TOOL_ROLES = new Set(["tool", "function"]), TOOL_BLOCKS = new Set(["tool_result", "tool_use", "function_call", "function_result"]);
 
 function convBlob(list: unknown[]): string {
   if (list.length === 1) { const o = list[0] as Record<string, unknown> | undefined; if (TOOL_ROLES.has(String(o?.role ?? "").toLowerCase())) return ""; if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content; }
@@ -205,9 +179,7 @@ function load(path: string): Compiled[] {
 
 const STATUS_OBJECT = /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
 
-export const PACKET_CHAT_K_MIN = 6;
-export const PACKET_CHAT_K_MAX = 10;
-export const PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
+export const PACKET_CHAT_K_MIN = 6, PACKET_CHAT_K_MAX = 10, PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
 
 export function memoryRetrieveCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_CAP);
