@@ -16,8 +16,7 @@ function hookMemory(opts: { dir?: string; session?: string; child: boolean; cwd?
 function asRec(v: unknown): Record<string, unknown> { return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {}; }
 
 function flattenContent(content: unknown): string {
-  if (typeof content === "string") return content; if (Array.isArray(content)) return content.map(flattenContent).filter(Boolean).join("\n");
-  const o = asRec(content); return String(o.text ?? o.content ?? o.stdout ?? o.stderr ?? o.output ?? o.message ?? o.error ?? o.llmContent ?? "");
+  if (typeof content === "string") return content; if (Array.isArray(content)) return content.map(flattenContent).filter(Boolean).join("\n"); const o = asRec(content); return String(o.text ?? o.content ?? o.stdout ?? o.stderr ?? o.output ?? o.message ?? o.error ?? o.llmContent ?? "");
 }
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
@@ -34,8 +33,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   try {
     for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) { let text = g.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t }, text); } catch { line = `[gist] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
   } catch {}
-  if (!lines.length) return "";
-  return MEMORY_MARK + lines.join("");
+  if (!lines.length) return ""; return MEMORY_MARK + lines.join("");
 }
 
 export function notesFromInject(messages: unknown[]): string {
