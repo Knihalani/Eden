@@ -685,14 +685,9 @@ export class AgentMemory {
     const cap = memoryStoreCap();
     if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
     const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint";
-    const keep: Compiled[] = [];
-    const rest: Compiled[] = [];
-    for (const c of this.compiled) (pinned(c.rec) ? keep : rest).push(c);
-    rest.sort((a, b) => a.rec.at - b.rec.at);
-    const room = Math.max(0, cap - keep.length);
-    const keptRest = rest.slice(Math.max(0, rest.length - room));
-    const next = keep.concat(keptRest);
-    this.compiled = next;
+    const keep = this.compiled.filter((c) => pinned(c.rec));
+    const rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => a.rec.at - b.rec.at);
+    this.compiled = keep.concat(rest.slice(Math.max(0, rest.length - Math.max(0, cap - keep.length))));
     this.post = null;
   }
 
