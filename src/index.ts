@@ -441,9 +441,7 @@ export class AgentMemory {
     this.rebuildSeen();
   }
 
-  get jsonlDir(): string {
-    return this.session ? join(this.dir, this.session) : this.dir;
-  }
+  get jsonlDir(): string { return join(this.dir, this.session || ""); }
 
   private semantic(): SemanticStore {
     return (this.sem ??= new SemanticStore(this.dir));
