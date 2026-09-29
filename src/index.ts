@@ -937,7 +937,6 @@ export class AgentMemory {
       if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec));
       recs = mergeHowtoLane(recs, text, cap, this.dir);
     }
-    if (!recs.length) return [];
     const kept = recs.map((n) => {
       const raw = String(n.text ?? "");
       if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
