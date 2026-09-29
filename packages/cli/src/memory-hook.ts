@@ -56,9 +56,7 @@ export function messagesFromTranscript(path: string): { role: string; content: s
     const out: { role: string; content: string }[] = [];
     for (const line of readFileSync(path, "utf8").split("\n")) {
       try {
-        const o = asRec(JSON.parse(line));
-        const msg = asRec(o.message ?? o);
-        const rawRole = String(msg.role || o.type || o.role || "");
+        const o = asRec(JSON.parse(line)), msg = asRec(o.message ?? o), rawRole = String(msg.role || o.type || o.role || "");
         const role = rawRole === "human" || rawRole === "Human" || rawRole === "user" ? "user" : rawRole === "model" || rawRole === "Model" || rawRole === "ai" || rawRole === "AI" || rawRole === "assistant" ? "assistant" : "";
         const content = flattenContent(msg.content ?? o.content ?? msg.parts);
         if ((role === "user" || role === "assistant") && content) out.push({ role, content });
