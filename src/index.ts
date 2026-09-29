@@ -576,11 +576,7 @@ export class AgentMemory {
         for (const x of c.needles) if (hay.has(x)) { n++; rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1); }
         if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) scored.push({ rec: c.rec, n, rare });
       }
-      return liveCopulaLatest(scored).sort((a, b) =>
-        (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec))
-        || b.rare - a.rare
-        || b.rec.at - a.rec.at
-      ).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
+      return liveCopulaLatest(scored).sort((a, b) => (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec)) || b.rare - a.rare || b.rec.at - a.rec.at).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
     } catch {
       return [];
     }
