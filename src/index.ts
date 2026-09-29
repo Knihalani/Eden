@@ -197,19 +197,12 @@ export type MemoryRecord = {
   project?: string;
   at: number;
   ep?: string;
-  ctx?: Record<string, number>;
   sal?: number;
   lane?: MemoryLaneKind;
   invalidAt?: number;
-  validFrom?: number;
   validUntil?: number;
   heat?: number;
 };
-
-function rowValidFrom(r: MemoryRecord): number {
-  if (typeof r.validFrom === "number" && Number.isFinite(r.validFrom)) return r.validFrom;
-  return Number.isFinite(r.at) ? r.at : 0;
-}
 
 function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
   if (typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) return false;
@@ -244,7 +237,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
       continue;
     }
     if (serial == null && prevSerial != null) continue;
-    if (rowValidFrom(row.rec) >= rowValidFrom(prev.rec)) byKey.set(k, row);
+    if (row.rec.at >= prev.rec.at) byKey.set(k, row);
   }
   return [...byKey.values(), ...rest];
 }
@@ -423,6 +416,7 @@ function load(path: string): Compiled[] {
     try {
       const rec = JSON.parse(t) as MemoryRecord;
       if (rec?.id && rec.text) {
+        if (!rec.kind) rec.kind = "fact";
         const c = compileNeedles(rec);
         const at = idx.get(rec.id);
         if (at != null) out[at] = c;
@@ -667,7 +661,7 @@ export class AgentMemory {
     return this.compiled.map((c) => {
       const r = c.rec;
       const tags = writeAliasTags(r.tags ?? [], r.text).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
-      return { ...r, tags };
+      return { ...r, kind: r.kind ?? "fact", tags };
     }).filter((r) => !this.project || r.project === this.project);
   }
 
@@ -726,7 +720,7 @@ export class AgentMemory {
         const live = this.semantic().get(fact.s, fact.p);
         const serial = leadingSerial(rec.text);
         if (!(serial == null && live && live.t < 1e11)) {
-          if (!STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.validFrom ?? rec.at);
+          if (!STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at);
         }
       }
     } catch {}
@@ -745,7 +739,7 @@ export class AgentMemory {
     let asserted: ReturnType<typeof objectAsserted>;
     try { asserted = objectAsserted(incoming.text); } catch { return; }
     if (!asserted) return;
-    const now = incoming.validFrom ?? incoming.at ?? Date.now();
+    const now = incoming.at ?? Date.now();
     const incomingSerial = leadingSerial(incoming.text);
     let dirty = false;
     for (const c of this.compiled) {
@@ -816,12 +810,12 @@ export class AgentMemory {
           try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
         }
         if (text && !this.seenLower.has(text.toLowerCase())) {
-          const tags = tokList(text).concat([lane]);
+          const tags: string[] = [];
           try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
           const rec = this.remember(text, {
             kind: lane === "narrative" ? "episode" : "fact",
             lane,
-            tags,
+            ...(tags.length ? { tags } : {}),
           });
           out.push(rec);
           if (lane === "narrative") {
@@ -954,7 +948,7 @@ export class AgentMemory {
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
         } catch {}
         try { this.trimToStoreCap(); } catch {}
-        writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
+        writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec.kind === "fact" ? { ...x.rec, kind: undefined } : x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
       });
@@ -968,7 +962,7 @@ export class AgentMemory {
   private trimToStoreCap(): void {
     const cap = memoryStoreCap();
     if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
-    const pinned = (r: MemoryRecord) => r.pin === true || (r.tags ?? []).includes("pin") || r.kind === "constraint";
+    const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint";
     const keep: Compiled[] = [];
     const rest: Compiled[] = [];
     for (const c of this.compiled) (pinned(c.rec) ? keep : rest).push(c);
@@ -1047,7 +1041,7 @@ export class AgentMemory {
       || b.rare - a.rare
       || (Number(b.rec.heat ?? b.rec.sal ?? 1) - Number(a.rec.heat ?? a.rec.sal ?? 1))
       || a.k - b.k
-      || rowValidFrom(b.rec) - rowValidFrom(a.rec)
+      || b.rec.at - a.rec.at
     ).slice(0, Math.max(cap * 6, 30));
     return ranked.slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
   }
