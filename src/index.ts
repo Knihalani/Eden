@@ -836,10 +836,7 @@ export function processMemory(): AgentMemory {
   const childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
   const session = childId ? childSessionName(parent, childId) : parent;
   const child = !!childId;
-  if (proc && (proc.dir !== root || proc.session !== session || proc.child !== child)) {
-    try { proc.close(); } catch {}
-    proc = undefined;
-  }
+  if (proc && (proc.dir !== root || proc.session !== session || proc.child !== child)) { try { proc.close(); } catch {} proc = undefined; }
   return (proc ??= openMemory({ dir, session, child }));
 }
 
