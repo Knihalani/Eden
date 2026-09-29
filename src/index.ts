@@ -874,14 +874,13 @@ export class AgentMemory {
   relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
     if (!String(text ?? "").trim() || isNoopCue(text)) return [];
     const hay = queryHay(text);
-    let rows: Compiled[] = [];
     try {
       this.ensureIndex();
       const toks = [...hay].filter((t) => t.length >= 3 && !STOP.has(t));
       const ranked = toks
         .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
         .filter((x) => x.df > 0)
-        .sort((a, b) => a.df - b.df || a.t.localeCompare(b.t));
+        .sort((a, b) => a.df - b.df);
       const poolCap = Math.max(cap * 6, 30);
       const COMMON = 80;
       const seen = new Set<Compiled>();
@@ -896,28 +895,27 @@ export class AgentMemory {
         }
         if (df >= COMMON || pool.length >= poolCap) break;
       }
-      rows = pool;
-    } catch {
-      rows = [];
-    }
-    const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
-    for (const c of rows) {
-      let n = 0;
-      let rare = 0;
-      for (const x of c.needles) {
-        if (!hay.has(x)) continue;
-        n++;
-        const df = this.post?.get(x)?.length ?? 1;
-        rare += 1 / Math.max(1, df);
+      const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
+      for (const c of pool) {
+        let n = 0;
+        let rare = 0;
+        for (const x of c.needles) {
+          if (!hay.has(x)) continue;
+          n++;
+          const df = this.post?.get(x)?.length ?? 1;
+          rare += 1 / Math.max(1, df);
+        }
+        if (n && c.needles.length <= 12 && isLiveRow(c.rec) && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text))
+          scored.push({ rec: c.rec, n, rare });
       }
-      if (n && c.needles.length <= 12 && isLiveRow(c.rec) && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text))
-        scored.push({ rec: c.rec, n, rare });
+      return liveCopulaLatest(scored).sort((a, b) =>
+        (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec))
+        || b.rare - a.rare
+        || b.rec.at - a.rec.at
+      ).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
+    } catch {
+      return [];
     }
-    return liveCopulaLatest(scored).sort((a, b) =>
-      (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec))
-      || b.rare - a.rare
-      || b.rec.at - a.rec.at
-    ).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
