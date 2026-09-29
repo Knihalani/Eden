@@ -179,7 +179,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
           result = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n") || flattenContent(redacted);
         }
         result = result.trim().replace(/\s+/g, " ");
-        if (result.length > 360) result = result.slice(0, 360);
         const who = (name || "subagent").replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim() || "subagent";
         const text = result ? `The ${who} tool result is ${result}.` : "";
         if (text) mem.observe([{ role: "user", content: text }]);
