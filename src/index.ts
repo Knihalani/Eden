@@ -531,9 +531,7 @@ export class AgentMemory {
       const lane = encodeLane(it.text);
       if (lane === "icl" || lane === "narrative") {
         let text = safe;
-        if (lane === "narrative" && opts.keepLiveIdentity) {
-          try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
-        }
+        if (lane === "narrative" && opts.keepLiveIdentity) try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
         if (text && !this.seenLower.has(text.toLowerCase())) {
           const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane });
           out.push(rec);
