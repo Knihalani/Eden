@@ -33,18 +33,10 @@ import {
 export { dropHarmed, loadHarmedIds, markHarmed } from "./memory-harmed";
 export {
   attachPlaceCues,
-  hookLane,
   isNoopCue,
-  isNoopCue as isMathChatterCue,
   packNotes,
-  parseRuleTime,
-  pathCues,
   placePathsFrom,
-  preferObservationOverSources,
   goldFirstNotes,
-  stripMemoryPacket,
-  writeAliasTags,
-  WRITE_ALIASES,
   PACKET_BULLET_MAX,
   PACKET_BYTE_CAP,
 } from "./memory-sota";
