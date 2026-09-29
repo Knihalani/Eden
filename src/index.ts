@@ -411,6 +411,8 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   return [...kept, rec];
 }
 
+let memSeq = 0;
+
 export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
@@ -424,7 +426,6 @@ export class AgentMemory {
   private seenLower = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
   private knownIds = new Set<string>();
-  private nid = 0;
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
@@ -461,7 +462,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
-      id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-1)}`,
+      id: opts.id || `${process.pid.toString(36)}${(++memSeq).toString(36)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
@@ -469,7 +470,6 @@ export class AgentMemory {
       ...(opts.lane ? { lane: opts.lane } : {}),
       ...(this.session ? { ep: opaqueId(this.session) } : {}),
     };
-    if (!rec.text) return rec;
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
     if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
@@ -698,8 +698,7 @@ export class AgentMemory {
       }
       const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
       for (const c of pool) {
-        let n = 0;
-        let rare = 0;
+        let n = 0, rare = 0;
         for (const x of c.needles) {
           if (!hay.has(x)) continue;
           n++;
