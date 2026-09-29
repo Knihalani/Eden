@@ -289,14 +289,7 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
   for (const hit of hits) {
     const body = String(hit?.text ?? "").trim();
     if (!body) continue;
-    chunks.push({
-      id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`,
-      text: body,
-      kind: "episode",
-      lane: "narrative",
-      tags: ["chunk"],
-      at: Number.isFinite(hit.t) ? hit.t : 0,
-    });
+    chunks.push({ id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`, text: body, kind: "episode", lane: "narrative", tags: ["chunk"], at: Number.isFinite(hit.t) ? hit.t : 0 });
   }
   if (!chunks.length) return chat.length ? chat : lexical;
   const out: MemoryRecord[] = [];
