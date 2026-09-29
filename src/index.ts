@@ -539,10 +539,7 @@ export function processMemory(): AgentMemory {
   if (process.argv.some((a) => a.endsWith(".test.ts"))) {
     return openMemory({ dir: join(tmpdir(), "eden-m-" + Math.random().toString(36).slice(2)) });
   }
-  const dir = process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined);
-  const root = dir || join(homedir(), ".eden", "memory");
-  const parent = memorySessionName(process.env.EDEN_MEMORY_SESSION) ?? memorySessionName(process.env.EDEN_MEMORY_PARENT);
-  const childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
+  const dir = process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), root = dir || join(homedir(), ".eden", "memory"), parent = memorySessionName(process.env.EDEN_MEMORY_SESSION) ?? memorySessionName(process.env.EDEN_MEMORY_PARENT), childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
   const session = childId ? childSessionName(parent, childId) : parent, child = !!childId;
   if (proc && (proc.dir !== root || proc.session !== session || proc.child !== child)) { try { proc.close(); } catch {} proc = undefined; }
   return (proc ??= openMemory({ dir, session, child }));
