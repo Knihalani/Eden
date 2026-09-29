@@ -202,12 +202,7 @@ function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRe
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveIcl(dir, q, { k, fallback: compiled });
   if (!hits.length) return [];
   const out: MemoryRecord[] = [], seen = new Set<string>();
-  for (const hit of hits) {
-    if (out.length >= cap) break;
-    const body = String(hit?.text ?? "").trim(), id = hit.id || `icl:${out.length}`;
-    if (!body || seen.has(id) || seen.has(body.toLowerCase())) continue;
-    seen.add(id); seen.add(body.toLowerCase()); out.push({ id, text: body, kind: "fact", lane: "icl", tags: ["icl"], at: Number.isFinite(hit.t) ? hit.t : 0 });
-  }
+  for (const hit of hits) { if (out.length >= cap) break; const body = String(hit?.text ?? "").trim(), id = hit.id || `icl:${out.length}`; if (!body || seen.has(id) || seen.has(body.toLowerCase())) continue; seen.add(id); seen.add(body.toLowerCase()); out.push({ id, text: body, kind: "fact", lane: "icl", tags: ["icl"], at: Number.isFinite(hit.t) ? hit.t : 0 }); }
   return out;
 }
 
@@ -222,8 +217,7 @@ function howtoProcedureRecord(view: ReturnType<typeof howtoRetrieve.retrieveHowT
 }
 
 function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
-  const q = String(text ?? "").trim();
-  if (!q || !/\bflake\b/i.test(q)) return lexical;
+  const q = String(text ?? "").trim(); if (!q || !/\bflake\b/i.test(q)) return lexical;
   const views = howtoRetrieve.retrieveHowTo(dir, q); if (!views.length) return lexical;
   const rec = howtoProcedureRecord(views[0]!); if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
   const kept = lexical.filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
@@ -282,8 +276,7 @@ export class AgentMemory {
       let other: ReturnType<typeof objectAsserted>; try { other = objectAsserted(c.rec.text); } catch { continue; }
       if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
       if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
-      const liveSerial = leadingSerial(c.rec.text);
-      if ((incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) || (incomingSerial == null && liveSerial != null)) continue;
+      const liveSerial = leadingSerial(c.rec.text); if ((incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) || (incomingSerial == null && liveSerial != null)) continue;
       c.rec.invalidAt = now;
     }
   }
@@ -356,11 +349,7 @@ export class AgentMemory {
       this.ensureIndex();
       const ranked = [...hay].filter((t) => t.length >= 3 && !STOP.has(t)).map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 })).filter((x) => x.df > 0).sort((a, b) => a.df - b.df);
       const poolCap = Math.max(cap * 6, 30), seen = new Set<Compiled>(), pool: Compiled[] = [];
-      for (const { t, df } of ranked) {
-        if (df >= 80 && pool.length) break;
-        for (const c of this.post!.get(t) ?? []) { if (seen.has(c)) continue; seen.add(c); pool.push(c); if (pool.length >= poolCap) break; }
-        if (df >= 80 || pool.length >= poolCap) break;
-      }
+      for (const { t, df } of ranked) { if (df >= 80 && pool.length) break; for (const c of this.post!.get(t) ?? []) { if (seen.has(c)) continue; seen.add(c); pool.push(c); if (pool.length >= poolCap) break; } if (df >= 80 || pool.length >= poolCap) break; }
       const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
       for (const c of pool) { let n = 0, rare = 0; for (const x of c.needles) if (hay.has(x)) { n++; rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1); } if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) scored.push({ rec: c.rec, n, rare }); }
       return liveCopulaLatest(scored).sort((a, b) => (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec)) || b.rare - a.rare || b.rec.at - a.rec.at).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
