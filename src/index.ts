@@ -1075,12 +1075,7 @@ export class AgentMemory {
             else if (route === "sf-assemble") {
               keepHopOrder = true;
               packet = assembleNotes(retrieved, this.dir);
-            } else {
-              packet = retrieved;
-              if (retrieved.length > 1) {
-                try { packet = assembleNotes(packet, this.dir); } catch {}
-              }
-            }
+            } else packet = retrieved;
           } else if (!silent) packet = retrieved;
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
