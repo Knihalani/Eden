@@ -239,8 +239,7 @@ export class AgentMemory {
     const rec: MemoryRecord = { id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => String(t).toLowerCase()), at: Date.now(), ...(opts.lane ? { lane: opts.lane } : {}), ...(this.session ? { ep: opaqueId(this.session) } : {}) };
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text); if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
-    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => { if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false; if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true; return Object.values(WRITE_ALIASES).some((a) => a.includes(t)); });
-    if (!rec.tags.length) delete rec.tags;
+    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => { if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false; if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true; return Object.values(WRITE_ALIASES).some((a) => a.includes(t)); }); if (!rec.tags.length) delete rec.tags;
     try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
     try { const fact = objectAsserted(rec.text); if (fact && !STATUS_OBJECT.test(fact.o)) { const live = this.semantic().get(fact.s, fact.p); const serial = leadingSerial(rec.text); if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at); } } catch {}
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id); i >= 0 && this.compiled.splice(i, 1); try { this.invalidateSameCopula(rec); } catch {}
@@ -254,8 +253,7 @@ export class AgentMemory {
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt))) continue;
       let other: ReturnType<typeof objectAsserted>; try { other = objectAsserted(c.rec.text); } catch { continue; }
-      if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
-      if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
+      if (!other || other.s !== asserted.s || other.p !== asserted.p) continue; if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
       const liveSerial = leadingSerial(c.rec.text); if ((incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) || (incomingSerial == null && liveSerial != null)) continue;
       c.rec.invalidAt = now;
     }
@@ -267,8 +265,7 @@ export class AgentMemory {
 
   observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
     try { if (memoryConsent() !== "on") return []; } catch { return []; }
-    this.batch++;
-    try {
+    this.batch++; try {
     const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system"), out: MemoryRecord[] = [], items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text), batchLive = new Map<string, string>();
     for (let i = 0; i < items.length; i++) {
       const it = items[i]!, safe = this.persistText(stripMemoryPacket(it.text)), lane = encodeLane(it.text);
