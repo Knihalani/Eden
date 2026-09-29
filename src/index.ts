@@ -325,8 +325,7 @@ export class AgentMemory {
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
-    this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined;
-    this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
+    this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined; this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
     const session = memorySessionName(opts.session);
     this.session = session; this.child = opts.child === true;
