@@ -117,16 +117,10 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     try {
       const parent = [r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
       const childId = [r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
-      const distinct = !!(childId && childId !== parent);
-      const asChild = event === "SubagentStop" || distinct;
-      if (!asChild) resolved = { session: parent, child: false };
-      else {
-        const session = childSessionName(parent, childId || "sub");
-        resolved = session ? { session, child: true } : { session: parent, child: false };
-      }
-    } catch {
-      resolved = { child: false };
-    }
+      const asChild = event === "SubagentStop" || !!(childId && childId !== parent);
+      const session = asChild ? childSessionName(parent, childId || "sub") : parent;
+      resolved = { session: asChild && session ? session : parent, child: !!(asChild && session) };
+    } catch { resolved = { child: false }; }
     const mem = hookMemory({
       dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
       session: resolved.session,
