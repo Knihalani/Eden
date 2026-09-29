@@ -15,7 +15,6 @@ import { memoryConsent } from "./memory-consent";
 import { opaqueId, opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
-import { GistStore } from "./gist-store";
 import { applyProvenanceLabel, noteKindToken, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import {
@@ -25,7 +24,6 @@ import {
   packNotes,
   parseRuleTime,
   placePathsFrom,
-  preferObservationOverSources,
   stripMemoryPacket,
   writeAliasTags,
   WRITE_ALIASES,
@@ -240,20 +238,6 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   return [...byKey.values(), ...rest];
 }
 
-function gistTextsFor(dir: string, notes: MemoryRecord[]): string[] {
-  const out: string[] = [];
-  for (const n of notes) {
-    const k = String(n.kind ?? "").toLowerCase();
-    if (k === "gist" || k === "digest") out.push(String(n.text ?? ""));
-  }
-  try {
-    if (!existsSync(join(dir, "gists.jsonl"))) return out;
-    for (const g of new GistStore(dir).latest("", 8)) {
-      if (g.text) out.push(g.text);
-    }
-  } catch {}
-  return out;
-}
 export type MemoryOptions = { dir?: string; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
@@ -605,6 +589,7 @@ export class AgentMemory {
   private seenLower = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
   private knownIds = new Set<string>();
+  private nid = 0;
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
@@ -671,7 +656,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
-      id: opts.id || `${now.toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+      id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-3)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: writeAliasTags((opts.tags || []).map((t) => t.toLowerCase()), String(text || "")),
@@ -1061,7 +1046,6 @@ export class AgentMemory {
         });
       }
     } catch {}
-    try { kept = preferObservationOverSources(kept, gistTextsFor(this.dir, kept)); } catch {}
     return kept.map((r) => {
       try {
         const stripped = stripPacketLabel(r.text).body;
