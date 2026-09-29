@@ -1036,13 +1036,7 @@ export class AgentMemory {
         }
         if (packet.length) {
           try { logMemoryNotes(packet); } catch {}
-          const labeled = packet.map((m) => ({
-            text: String(m.text ?? "").trim(),
-            id: m.id,
-            kind: m.kind,
-            at: m.at,
-          }));
-          const packed = packNotes(keepHopOrder ? labeled : goldFirstNotes(cue, labeled), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
+          const packed = packNotes(keepHopOrder ? packet : goldFirstNotes(cue, packet), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
           if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
         }
       }
