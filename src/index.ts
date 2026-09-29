@@ -498,14 +498,7 @@ export class AgentMemory {
     });
     if (!rec.tags.length) delete rec.tags;
     try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
-    try {
-      const fact = objectAsserted(rec.text);
-      if (fact && !STATUS_OBJECT.test(fact.o)) {
-        const live = this.semantic().get(fact.s, fact.p);
-        const serial = leadingSerial(rec.text);
-        if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at);
-      }
-    } catch {}
+    try { const fact = objectAsserted(rec.text); if (fact && !STATUS_OBJECT.test(fact.o)) { const live = this.semantic().get(fact.s, fact.p); const serial = leadingSerial(rec.text); if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at); } } catch {}
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
     i >= 0 && this.compiled.splice(i, 1);
     try { this.invalidateSameCopula(rec); } catch {}
@@ -684,7 +677,7 @@ export class AgentMemory {
         this.trimToStoreCap();
         writeFileAtomic(this.path, this.compiled.map((x) => {
           const r = x.rec;
-          return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined });
+          return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined, invalidAt: undefined });
         }).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
