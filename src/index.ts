@@ -804,10 +804,7 @@ export class AgentMemory {
       const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
       if (!blob.includes(MEMORY_MARK)) {
         let silent = false;
-        try {
-          if (cue && isNoopCue(cue)) silent = true;
-          else if (hookLane(cue) === "none") silent = true;
-        } catch {}
+        try { if (cue && isNoopCue(cue)) silent = true; else if (hookLane(cue) === "none") silent = true; } catch {}
         const retrieved = !silent && cue ? this.notesFor(cue) : [];
         let packet = retrieved;
         try {
