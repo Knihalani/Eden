@@ -88,11 +88,9 @@ function capMemoryBody(r: MemoryRecord, body: string): string {
   if (r.lane === "icl" || isIclExemplar(text)) return text;
   if (r.kind === "procedure") {
     const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180));
-    if (text.length <= cap) return text;
-    return text.slice(-cap);
+    return text.length <= cap ? text : text.slice(-cap);
   }
-  if (/\d+[.)]\s+\S/.test(text)) return text;
-  if (text.length <= FACT_CHAR_CAP) return text;
+  if (/\d+[.)]\s+\S/.test(text) || text.length <= FACT_CHAR_CAP) return text;
   return text.slice(0, FACT_CHAR_CAP);
 }
 
