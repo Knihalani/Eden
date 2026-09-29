@@ -840,10 +840,6 @@ export function processMemory(): AgentMemory {
     try { proc.close(); } catch {}
     proc = undefined;
   }
-  return (proc ??= openMemory({
-    dir,
-    session,
-    child,
-  }));
+  return (proc ??= openMemory({ dir, session, child }));
 }
 
