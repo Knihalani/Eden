@@ -329,10 +329,9 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
   const q = String(text ?? "").trim();
   if (!q) return lexical;
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-  if (!k) return lexical;
   const hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled });
   const chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
-  if (!Array.isArray(hits) || !hits.length) return chat.length ? chat : lexical;
+  if (!hits.length) return chat.length ? chat : lexical;
   const chunks: MemoryRecord[] = [];
   for (const hit of hits) {
     const body = String(hit?.text ?? "").trim();
@@ -361,13 +360,12 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
   return out;
 }
 
-function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
+function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
   const q = String(text ?? "").trim();
   if (!q) return [];
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
-  if (!k) return [];
   const hits = retrieveIcl(dir, q, { k, fallback: compiled });
-  if (!Array.isArray(hits) || !hits.length) return [];
+  if (!hits.length) return [];
   const out: MemoryRecord[] = [];
   const seen = new Set<string>();
   for (const hit of hits) {
@@ -429,11 +427,11 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   const q = String(text ?? "").trim();
   if (!q || !/\bflake\b/i.test(q)) return lexical;
   const views = howtoRetrieve.retrieveHowTo(dir, q);
-  if (!Array.isArray(views) || !views.length) return lexical;
+  if (!views.length) return lexical;
   const rec = howtoProcedureRecord(views[0]!);
   if (!rec.text) return lexical;
   if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
-  const kept = (Array.isArray(lexical) ? lexical : []).filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
+  const kept = lexical.filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
   return [...kept, rec];
 }
 
@@ -798,7 +796,7 @@ export class AgentMemory {
     const route = routeMemory(text);
     let recs: MemoryRecord[] = [];
     if (route === "icl-index") {
-      recs = mergeIclLane([], text, cap, this.dir, this.compiled.map((c) => c.rec));
+      recs = mergeIclLane(text, cap, this.dir, this.compiled.map((c) => c.rec));
     } else {
       recs = this.relevant(text, k);
       if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec));
