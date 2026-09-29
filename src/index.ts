@@ -705,16 +705,6 @@ export class AgentMemory {
         } catch {}
         text = this.persistText(text);
         try {
-          let t = text.replace(/\.+$/, "");
-          const by = t.match(/^(.{2,80}?)\s+is by\s+(.+)$/i);
-          if (by) t = `The author of ${by[1]!.trim()} is ${by[2]!.trim()}`;
-          const sp = t.match(/^(.{2,40}?)(?:'s|\s+s)\s+spouse is (.+)$/i);
-          if (sp) t = `The spouse of ${sp[1]!.trim()} is ${sp[2]!.trim()}`;
-          const inn = t.match(/^(.{2,80}?)\s+is in\s+(Africa|Europe|Asia|Antarctica|Oceania|Australia|North America|South America)$/i);
-          if (inn) t = `The continent of ${inn[1]!.trim()} is ${inn[2]!.trim()}`;
-          if (t) text = /[.!?]$/.test(t) ? t : `${t}.`;
-        } catch {}
-        try {
           const fact = objectAsserted(text);
           if (fact) {
             const store = this.semantic();
