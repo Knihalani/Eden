@@ -475,10 +475,7 @@ export class AgentMemory {
 
   private persistText(text: string): string {
     let t = String(text ?? "");
-    try {
-      const redacted = redact(t);
-      if (typeof redacted === "string") t = redacted;
-    } catch {}
+    try { const redacted = redact(t); if (typeof redacted === "string") t = redacted; } catch {}
     try {
       t = scrubMemoryText(t, { session: this.scrubSession, cwd: this.scrubCwd });
     } catch {}
