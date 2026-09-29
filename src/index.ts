@@ -483,9 +483,7 @@ export class AgentMemory {
             const store = this.semantic();
             const live = store.get(fact.s, fact.p);
             if (opts.keepLiveIdentity) {
-              const obj = fact.o.trim().toLowerCase();
-              const slot = `${fact.s}\0${fact.p}`;
-              const fromBatch = batchLive.get(slot);
+              const obj = fact.o.trim().toLowerCase(), slot = `${fact.s}\0${fact.p}`, fromBatch = batchLive.get(slot);
               if (!(fromBatch && fromBatch !== obj)) {
                 if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; }
                 if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; }
