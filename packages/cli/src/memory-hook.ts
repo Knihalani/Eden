@@ -183,15 +183,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         result = result.trim().replace(/\s+/g, " ");
         if (result.length > 360) result = result.slice(0, 360);
         const who = (name || "subagent").replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim() || "subagent";
-        let text = "";
-        if (!result) {
-          try {
-            const blob = typeof original === "string" ? original : original != null ? JSON.stringify(original) : "";
-            if (/RootWebArea|\[landmark\]|accessibility_tree/i.test(blob)) text = `The ${who} tool was called.`;
-          } catch {}
-        } else {
-          text = `The ${who} tool result is ${result}.`;
-        }
+        const text = result ? `The ${who} tool result is ${result}.` : "";
         if (text) mem.observe([{ role: "user", content: text }]);
         else if (event === "SubagentStop" && prior.length) mem.observe(prior);
         try { persistToolTraces(mem.jsonlDir, parseHookToolTraces(r)); } catch {}
