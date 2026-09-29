@@ -309,16 +309,7 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
   }
   if (!chunks.length) return chat.length ? chat : lexical;
   const out: MemoryRecord[] = [];
-  for (const c of chunks) {
-    if (out.length >= cap) break;
-    if (out.some((p) => p.id === c.id)) continue;
-    out.push(c);
-  }
-  for (const l of chat) {
-    if (out.length >= cap) break;
-    if (out.some((p) => p.id === l.id)) continue;
-    out.push(l);
-  }
+  for (const c of [...chunks, ...chat]) { if (out.length >= cap) break; if (out.some((p) => p.id === c.id)) continue; out.push(c); }
   return out;
 }
 
