@@ -336,13 +336,9 @@ export class AgentMemory {
 
   get jsonlDir(): string { return join(this.dir, this.session || ""); }
 
-  private semantic(): SemanticStore {
-    return (this.sem ??= new SemanticStore(this.dir));
-  }
+  private semantic(): SemanticStore { return (this.sem ??= new SemanticStore(this.dir)); }
 
-  memories(): MemoryRecord[] {
-    return this.compiled.map((c) => c.rec);
-  }
+  memories(): MemoryRecord[] { return this.compiled.map((c) => c.rec); }
 
   private persistText(text: string): string {
     let t = String(text ?? "");
