@@ -166,12 +166,7 @@ const TOOL_ROLES = new Set(["tool", "function"]);
 const TOOL_BLOCKS = new Set(["tool_result", "tool_use", "function_call", "function_result"]);
 
 function convBlob(list: unknown[]): string {
-  if (list.length === 1) {
-    const o = list[0] as Record<string, unknown> | undefined;
-    const role = String(o?.role ?? "").toLowerCase();
-    if (TOOL_ROLES.has(role)) return "";
-    if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content;
-  }
+  if (list.length === 1) { const o = list[0] as Record<string, unknown> | undefined; if (TOOL_ROLES.has(String(o?.role ?? "").toLowerCase())) return ""; if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content; }
   const parts: string[] = [];
   for (const m of list) {
     if (!m || typeof m !== "object") continue;
