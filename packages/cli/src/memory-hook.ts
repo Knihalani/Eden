@@ -23,7 +23,7 @@ function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return content.map(flattenContent).filter(Boolean).join("\n");
   const o = asRec(content);
-  return String(o.text ?? o.content ?? "");
+  return String(o.text ?? o.content ?? o.stdout ?? o.stderr ?? o.output ?? o.message ?? o.error ?? o.llmContent ?? "");
 }
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
@@ -153,12 +153,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
         const original = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
         const redacted = original == null || original === "" ? "" : redact(original);
-        let result = "";
-        if (typeof redacted === "string") result = redacted;
-        else if (redacted && typeof redacted === "object") {
-          const o = asRec(redacted);
-          result = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n") || flattenContent(redacted);
-        }
+        const result = flattenContent(redacted);
         const text = result ? `The ${name || "subagent"} tool result is ${result}.` : "";
         if (text) mem.observe([{ role: "user", content: text }]);
         else if (event === "SubagentStop" && prior.length) mem.observe(prior);
