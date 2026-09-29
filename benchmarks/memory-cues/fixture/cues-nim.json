@@ -1,0 +1,7520 @@
+[
+ {
+  "id": "n000",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a01"
+  ],
+  "cue": "Why did our route hooks change behavior after the server upgrade to version 5?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n001",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a01"
+  ],
+  "cue": "Can you adjust the backend plugins for the new v5 lifecycle and error handling?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n002",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a02"
+  ],
+  "cue": "writing a migration for apps/api, does our SQL engine support generated columns yet?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n003",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a02"
+  ],
+  "cue": "setting up the api locally \u2014 which server version should I install for the relational backend?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n004",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a03"
+  ],
+  "cue": "add a column to the users table in the fastify service and write the query for it",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n005",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a03"
+  ],
+  "cue": "where are the tables defined in the postgres backend? i need to join orders with customers",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n006",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a04"
+  ],
+  "cue": "the backend keeps crashing on startup, looks like the new columns aren't in postgres yet \u2014 how do I push the schema changes?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n007",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a04"
+  ],
+  "cue": "hey, just pulled latest and the server errors on missing tables. what's the command to run the pending schema updates?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n008",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a05"
+  ],
+  "cue": "how do i add a column and roll out the database change for users",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n009",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a05"
+  ],
+  "cue": "after adding a field, which command refreshes the server data model safely",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n010",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a06"
+  ],
+  "cue": "users keep getting 401s on the web app even though they're logged in, can you check how the server validates their identity?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n011",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a06"
+  ],
+  "cue": "I need to swap out the token checking logic in the fastify service to support a new identity provider, where does that live?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n012",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a07"
+  ],
+  "cue": "users hitting 429s on the api when they hammer the login endpoint, how are we throttling that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n013",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a07"
+  ],
+  "cue": "need to bump how many calls a client can make to the api each min \u2014 where's that configured?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n014",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a08"
+  ],
+  "cue": "web calls to /users keep 404ing; did the backend move everything under a prefix?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n015",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a08"
+  ],
+  "cue": "add a Fastify endpoint for invoices and make sure the path matches the rest of the backend",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n016",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a09"
+  ],
+  "cue": "the docs for our REST endpoints are stale \u2014 where do they actually come from, I don't want to hand-edit them",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n017",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a09"
+  ],
+  "cue": "I changed a validation model in the backend, how do I refresh the contract file that describes the routes?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n018",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a10"
+  ],
+  "cue": "Why do the service checks need a live database instead of mocks in CI?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n019",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a10"
+  ],
+  "cue": "My local suite fails without Docker; what backend dependency should I provision first?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n020",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a11"
+  ],
+  "cue": "the login flow specs keep failing in the server package \u2014 how do I execute just those?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n021",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a11"
+  ],
+  "cue": "full suite on the backend takes forever, only want the sign-in related checks this time",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n022",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a12"
+  ],
+  "cue": "payments endpoint keeps rejecting events from the processor even though the secret is right, any idea why?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n023",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a12"
+  ],
+  "cue": "hooking up the billing provider's event callback in apps/api and it errors out on every request, can you take a look?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n024",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a13"
+  ],
+  "cue": "hey, when the api rejects a bad request what shape should the response body have? frontend folks are asking",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n025",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a13"
+  ],
+  "cue": "writing tests for apps/api 404s \u2014 how should the failure payload look so I can assert on it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n026",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a14"
+  ],
+  "cue": "Add a GET route in apps/api to fetch all users for the admin dashboard, front-end wants paging controls",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n027",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a14"
+  ],
+  "cue": "the /api/orders page loads way too slow once the table gets big, can we stop fetching everything at once?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n028",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a15"
+  ],
+  "cue": "when a user removes a record in apps/api, should I actually drop it from postgres or keep it around somehow?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n029",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a15"
+  ],
+  "cue": "qa says removed accounts still show up in the admin list endpoint \u2014 how is that supposed to work here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n030",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a16"
+  ],
+  "cue": "Why does the API return 1299 for a $12.99 price, and how should I format totals?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n031",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a16"
+  ],
+  "cue": "Can you add a checkout total field without rounding errors from decimal math in responses?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n032",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a17"
+  ],
+  "cue": "adding a new table to the api schema \u2014 what should I use for the row identifiers here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n033",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a17"
+  ],
+  "cue": "the migration I generated uses serial ints, but the existing tables look different, what's the convention?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n034",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a18"
+  ],
+  "cue": "api is throwing 'too many clients' errors under load, how do I raise that limit?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n035",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a18"
+  ],
+  "cue": "db calls time out when traffic spikes \u2014 can we bump how many concurrent db links one api instance can open?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n036",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a19"
+  ],
+  "cue": "api throws 42P05 duplicate query name after prisma connects through pooler; what config flips?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n037",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a19"
+  ],
+  "cue": "Why do Fastify handlers fail only behind the db proxy with cached plan errors?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n038",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a21"
+  ],
+  "cue": "just set up the repo and the web app shows nothing \u2014 how do I get test records into postgres?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n039",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a21"
+  ],
+  "cue": "the backend keeps returning empty lists \u2014 how do I load some fixture rows into my dev Postgres?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n040",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a22"
+  ],
+  "cue": "users say the password reset notice never arrives; where is delivery wired up in this repo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n041",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a22"
+  ],
+  "cue": "I need to tweak the welcome copy and add a footer link; which folder holds those JSX mail views?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n042",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a23"
+  ],
+  "cue": "the report generation endpoint returns instantly but nothing ever gets processed, where does the task go?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n043",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a23"
+  ],
+  "cue": "add a delayed email reminder for trial expiry \u2014 how do we hand that off from the web service?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n044",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a24"
+  ],
+  "cue": "browser keeps blocking requests from the web app to the api, preflight fails \u2014 what's wrong?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n045",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a24"
+  ],
+  "cue": "frontend on staging can't hit the api, getting blocked by the browser. where do I fix that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n046",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a25"
+  ],
+  "cue": "In apps/api, what route should I curl to confirm the service is up and its dependencies are reachable?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n047",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a25"
+  ],
+  "cue": "The load balancer keeps marking apps/api down; which URL should it probe, and what does it verify?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n048",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a26"
+  ],
+  "cue": "In apps/api, which trace field should I echo back so support can match one failing call across entries?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n049",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a26"
+  ],
+  "cue": "Support gave me a correlation value from the client; where do I read it in apps/api and include it in responses?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n050",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a27"
+  ],
+  "cue": "The /api/invoices route hangs whenever Stripe is sluggish; can we cap how long we wait on it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n051",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a27"
+  ],
+  "cue": "Users see spinning loaders when the tax service stalls; add a hard ceiling for that dependency in apps/api.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n052",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a28"
+  ],
+  "cue": "the /customers endpoint is slow; it fires one db call per row when loading each customer's invoices",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n053",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a28"
+  ],
+  "cue": "api responses crawl on /accounts; looks like a separate postgres hit for every nested item",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n054",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a29"
+  ],
+  "cue": "how do I let users attach a profile photo in the api? do we stream it through the server?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n055",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a29"
+  ],
+  "cue": "the endpoint for sending big attachments keeps timing out on large payloads, what's the right way to handle this?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n056",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a30"
+  ],
+  "cue": "the API's keyword lookup endpoint is slow, should we spin up an external indexing engine to speed it up?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n057",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a30"
+  ],
+  "cue": "thinking of adding a dedicated indexing service for finding records in the api \u2014 what's already in place?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n058",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a31"
+  ],
+  "cue": "apps/api feels sluggish on fresh deploys; which db layer are we using now?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n059",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a31"
+  ],
+  "cue": "Can you trim boot latency in apps/api without changing the Postgres schema?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n060",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a33"
+  ],
+  "cue": "can we tweak last week's SQL file directly, or should I create a follow-up script for the API?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n061",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a33"
+  ],
+  "cue": "deploy blew up after a teammate touched an old db revision; how do we roll forward safely?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n062",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a34"
+  ],
+  "cue": "apps/api: customers can see other workspaces' invoices after login\u2014where should the repo scope lookups?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n063",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a34"
+  ],
+  "cue": "Before I add a Fastify route for billing, what check stops one account reading another account's rows?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n064",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a35"
+  ],
+  "cue": "partner says the event notifications we send them fail their authenticity check, how do we generate that proof value?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n065",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a35"
+  ],
+  "cue": "adding a new endpoint that pings customer servers \u2014 what do we need to attach so receivers can verify it's really from us?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n066",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a36"
+  ],
+  "cue": "users keep getting kicked out at random even with fresh login tokens; what should I check in apps/api?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n067",
+  "cat": "nim-para",
+  "scope": "apps/api",
+  "gold": [
+   "a36"
+  ],
+  "cue": "API calls randomly fail as denied right after deploy, though credentials look fine\u2014any known drift issue?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n068",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c01"
+  ],
+  "cue": "I need to add a new subcommand with flags to the packages tool \u2014 what's the argument-parsing setup here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n069",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c01"
+  ],
+  "cue": "the --help output for our node tool in packages looks off, where do I tweak option definitions?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n070",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c02"
+  ],
+  "cue": "how is the acme command-line tool packaged for release? I need to add a new dependency",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n071",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c02"
+  ],
+  "cue": "running the tool from source works but the published artifact crashes \u2014 where does the build output come from?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n072",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c03"
+  ],
+  "cue": "What should I type in the terminal after installing our tool globally?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n073",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c03"
+  ],
+  "cue": "Users say command not found after install; is our console entrypoint mismatched again?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n074",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c04"
+  ],
+  "cue": "where does the command line tool keep its settings file? I want to tweak the default endpoint by hand",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n075",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c04"
+  ],
+  "cue": "my coworker's terminal picks up different defaults than mine \u2014 is there a per-user file for the package tool under my home directory?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n076",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c05"
+  ],
+  "cue": "how should I write checks for the command-line package in packages? what's the convention there",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n077",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c05"
+  ],
+  "cue": "my new spec for the terminal tool keeps failing on output formatting, what am I doing wrong",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n078",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c06"
+  ],
+  "cue": "How do I get a fresh build of the command-line tool out to users?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n079",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c06"
+  ],
+  "cue": "Tag cut is green; what step actually pushes the package to the registry?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n080",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c07"
+  ],
+  "cue": "users on v18 are crashing on startup, crypto.hash isn't there \u2014 can we use something that works for them?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n081",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c07"
+  ],
+  "cue": "before you add that fancy builtin, check it actually runs on 18, some of our installs are still on it",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n082",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c08"
+  ],
+  "cue": "folks running our command-line tool on ancient javascript runtimes keep getting a weird crash about module loading, what should i tell them",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n083",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c08"
+  ],
+  "cue": "someone hit a failure launching the bundled binary on an outdated runtime, complaining about import syntax \u2014 how do i respond",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n084",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c09"
+  ],
+  "cue": "how does the terminal tool remember who I am between runs? I never have to sign in twice",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n085",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c09"
+  ],
+  "cue": "users on headless boxes can't open a browser \u2014 how do they get the command line tool connected to their account?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n086",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c10"
+  ],
+  "cue": "How do I start the Node command-line package from my machine and pass it a few options?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n087",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c10"
+  ],
+  "cue": "The workspace tool won\u2019t launch on my laptop; what\u2019s the right way to invoke it with flags?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n088",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c11"
+  ],
+  "cue": "reviewing a PR that adds a new dependency for styling text output in our command-line package \u2014 is that the right choice?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n089",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c11"
+  ],
+  "cue": "before I add ANSI styling to the command-line output in packages, which dependency should I import for that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n090",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c12"
+  ],
+  "cue": "the terminal tool asks the user questions on startup \u2014 what library do we use for those menus again?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n091",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c12"
+  ],
+  "cue": "adding a yes/no confirmation to the setup wizard in the node tool, want it to match the existing spinners and selects",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n092",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c13"
+  ],
+  "cue": "can you make the acme tool print results in a machine-readable format? I'm piping it into other tools",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n093",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c13"
+  ],
+  "cue": "when I pipe the tool's results into jq it chokes on the table layout, can we add a machine-readable mode?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n094",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c14"
+  ],
+  "cue": "Does the terminal tool send usage stats by default, and how do I turn that off for CI?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n095",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c14"
+  ],
+  "cue": "Our build runners shouldn't phone home; which env var disables analytics for the command-line package?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n096",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c15"
+  ],
+  "cue": "CLI fails on Win11: it writes settings under C:\\Users\\me, not the real profile folder.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n097",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c15"
+  ],
+  "cue": "Why does the CLI mash directories with slashes? On Win10 it lands in the wrong account directory.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n098",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c16"
+  ],
+  "cue": "The terminal tool keeps nagging about a newer release; can we make it quiet except once every 24 hours?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n099",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c16"
+  ],
+  "cue": "Why does our command print that obsolete-version banner on every run, and where is the throttle configured?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n100",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c17"
+  ],
+  "cue": "the acme command-line tool just blew up with status 2 after I mistyped a flag \u2014 what does that number tell me?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n101",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c17"
+  ],
+  "cue": "my script checks the status from the acme terminal tool and I got a 1 vs a 2, how should I handle each?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n102",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c18"
+  ],
+  "cue": "How do I make the command-line tool available system-wide so I can invoke it from any folder?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n103",
+  "cat": "nim-para",
+  "scope": "packages/cli",
+  "gold": [
+   "c18"
+  ],
+  "cue": "The terminal says command not found when I call our dev tool outside its directory \u2014 what step did I miss?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n104",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i01"
+  ],
+  "cue": "Which tool and version should I use for the EKS cluster definitions, and where do those files live?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n105",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i01"
+  ],
+  "cue": "CI failed while applying cloud changes for the worker; what HCL version is pinned in this repo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n106",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i02"
+  ],
+  "cue": "Two applies collided and now the cloud plan is wedged; where should I point the backend config?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n107",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i02"
+  ],
+  "cue": "I\u2019m switching CI to a fresh account; what remote store and mutex does our infra tooling expect?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n108",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i03"
+  ],
+  "cue": "terraform plan keeps failing \u2014 do you know which location our infra is supposed to deploy to?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n109",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i03"
+  ],
+  "cue": "setting up the worker's env vars, what's the geographic placement we use for our resources?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n110",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i04"
+  ],
+  "cue": "Which kube context should I use for the live backend before I roll out the fix?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n111",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i04"
+  ],
+  "cue": "Deploy failed again\u2014what namespace and environment are our Fastify and BullMQ pieces actually on?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n112",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i05"
+  ],
+  "cue": "I need to tweak the worker's deployment config \u2014 where do we keep the k8s packaging for each app?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n113",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i05"
+  ],
+  "cue": "adding a new api replica setting, which directory holds the templated manifests for the worker?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n114",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i06"
+  ],
+  "cue": "Can I push the infra changes straight from my machine, or does automation handle them?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n115",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i06"
+  ],
+  "cue": "My shell is in infra; is it safe to provision the EKS tweak by hand?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n116",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i07"
+  ],
+  "cue": "How do I preview infra changes for the pre-prod cluster from my laptop before applying them?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n117",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i07"
+  ],
+  "cue": "make: *** No rule to make target `preview'. Stop. \u2014 what target shows the diff for our EKS stack?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n118",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i08"
+  ],
+  "cue": "I'm adding a new API token for the staging cluster \u2014 where do I actually put it so the pods pick it up?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n119",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i08"
+  ],
+  "cue": "why does the worker keep crashing with missing env vars right after I updated the values in the cloud console?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n120",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i09"
+  ],
+  "cue": "the prod domain isn't resolving after the terraform apply, where do our nameservers actually live?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n121",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i09"
+  ],
+  "cue": "need to add a CNAME for the new api subdomain \u2014 which provider manages our records?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n122",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i10"
+  ],
+  "cue": "where do I check API error rates and traces for the EKS service?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n123",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i10"
+  ],
+  "cue": "the worker is backed up\u2014where are its alerts and runtime charts kept?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n124",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i11"
+  ],
+  "cue": "prod is down and nobody got notified; where is the incident escalation hooked up in infra?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n125",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i11"
+  ],
+  "cue": "Users see 500s but ops stayed silent; which Terraform wires severity breaches to the human rotation?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n126",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i12"
+  ],
+  "cue": "My terminal is pointing at the wrong cluster again; how do I load fresh credentials for the live one?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n127",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i12"
+  ],
+  "cue": "Port-forward fails because my CLI still targets staging; remind me how to authenticate against the real cluster.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n128",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i13"
+  ],
+  "cue": "where do i publish the worker build in aws? need the exact target path",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n129",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i13"
+  ],
+  "cue": "ci failed: no such aws artifact destination for api; what's the correct prefix?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n130",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i14"
+  ],
+  "cue": "before launch, is our live sql cluster resilient if one zone goes down, and how far can we restore?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n131",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i14"
+  ],
+  "cue": "what's the retention window for point-in-time recovery on the main sql instance?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n132",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i15"
+  ],
+  "cue": "For the live deploy, should the worker use our AWS managed cache endpoint instead of the local container one?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n133",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i15"
+  ],
+  "cue": "The BullMQ board is fine on my laptop but times out after release; which broker URL should Terraform inject?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n134",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i16"
+  ],
+  "cue": "cluster's on 1.29 now and external traffic just 404s, any idea what's wrong?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n135",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i16"
+  ],
+  "cue": "after the kubernetes version bump our routing layer stopped working, what do I check before redeploying?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n136",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i17"
+  ],
+  "cue": "Why is https on the EKS web app still serving a self-signed TLS chain after the DNS cutover?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n137",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i17"
+  ],
+  "cue": "Before I edit the DNS zone, which component terminates public TLS for apps/web in our cluster?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n138",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i18"
+  ],
+  "cue": "i tweaked the eks terraform, does this need anything special before i open a pull request?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n139",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i18"
+  ],
+  "cue": "updating the staging cluster config \u2014 who has to sign off on this and what goes in the description?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n140",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i19"
+  ],
+  "cue": "Why do the background consumers spike with backlog while the web tier only adds pods after high load?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n141",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i19"
+  ],
+  "cue": "Before I change thresholds in Terraform, which component reacts to backlog and which one watches processor use?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n142",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i20"
+  ],
+  "cue": "adding a new s3 bucket in the terraform module, anything i need to set on it before apply?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n143",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i20"
+  ],
+  "cue": "finance flagged our eks cluster in the billing report as unattributed, can you check what's missing",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n144",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i21"
+  ],
+  "cue": "psql to the live Postgres host just times out from my laptop\u2014what network path should I use?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n145",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i21"
+  ],
+  "cue": "Trying to run a migration against the live Postgres from my laptop but the host won't resolve\u2014what network do I need to be on?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n146",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i22"
+  ],
+  "cue": "db went down during the chaos drill, how long does our service keep hammering before it gives up?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n147",
+  "cat": "nim-para",
+  "scope": "infra",
+  "gold": [
+   "i22"
+  ],
+  "cue": "whenever the database blips the backend just hangs forever \u2014 is that expected or should we shorten the wait?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n148",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p01"
+  ],
+  "cue": "Everything's approved and green \u2014 go ahead and land it on main for me, thanks",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n149",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p01"
+  ],
+  "cue": "CI finally passed, can you just hit the green button and close it out?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n150",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p02"
+  ],
+  "cue": "can you push this branch and create the merge proposal on github now?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n151",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p02"
+  ],
+  "cue": "go ahead and submit my changes for review, i'm done tweaking the api fix",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n152",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p03"
+  ],
+  "cue": "I need the login fix isolated from trunk and ready for review; can you set that up?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n153",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p03"
+  ],
+  "cue": "Why did my edits land straight on trunk instead of a safe reviewable line?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n154",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p04"
+  ],
+  "cue": "Can you sync my branch to origin and open the PR, or should I confirm before anything leaves this clone?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n155",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p04"
+  ],
+  "cue": "My changes are ready; please publish them to the shared repo if that's okay here.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n156",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p05"
+  ],
+  "cue": "All set with the login fix in apps/api \u2014 want me to open the PR, or should I look it over once more?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n157",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p05"
+  ],
+  "cue": "Before we ship the Stripe webhook handler, give it one more careful pass for anything I might have missed.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n158",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p06"
+  ],
+  "cue": "about to push my branch and make the pull request \u2014 anything I should do first?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n159",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p06"
+  ],
+  "cue": "CI keeps failing after I merge even though my local specs pass, what am I missing?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n160",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p07"
+  ],
+  "cue": "that last answer about the BullMQ retry config went way over my head, can you break it down simpler?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n161",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p07"
+  ],
+  "cue": "hey the readme you wrote for the cli is full of fancy terms, rewrite it so a new hire actually gets it",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n162",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p08"
+  ],
+  "cue": "can you dig into why our Fastify routes 502 on EKS? want actual docs linked, not guesses",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n163",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p08"
+  ],
+  "cue": "look into BullMQ retry behavior for me \u2014 skimmed answers keep burning me, give me real references",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n164",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p09"
+  ],
+  "cue": "can you clean up the old git refs from the v1 release, they're cluttering my list",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n165",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p09"
+  ],
+  "cue": "go ahead and remove apps/api/src/legacy/ and everything in packages/cli/tmp, thanks",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n166",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p10"
+  ],
+  "cue": "it's end of week, should I go ahead and push this release out to live?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n167",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p10"
+  ],
+  "cue": "it's late on the last workday of the week \u2014 should I push this release to live now or wait?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n168",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p11"
+  ],
+  "cue": "This branch mixes login fixes with billing retries; how should I split it before review?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n169",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p11"
+  ],
+  "cue": "My last review stalled because one patch touched web, api, and terraform together\u2014what now?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n170",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p12"
+  ],
+  "cue": "can we get lodash into apps/web? need debounce for the search box",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n171",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p12"
+  ],
+  "cue": "the worker needs a redis client \u2014 mind if I install ioredis, or should I check first?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n172",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p13"
+  ],
+  "cue": "the build output dir has a bug in the compiled code, can you patch it directly?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n173",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p13"
+  ],
+  "cue": "CI keeps overwriting my changes to the auto-created schema module, why won't they stick?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n174",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p14"
+  ],
+  "cue": "prod looks broken, can you clear out all rows in the orders table real quick",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n175",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p14"
+  ],
+  "cue": "can you wipe the staging tables and reload the fixtures before tomorrow's demo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n176",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p15"
+  ],
+  "cue": "CI keeps flaking after my last commit; should I just verify the files I touched or is there more to check?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n177",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p15"
+  ],
+  "cue": "ready to ship the auth fix \u2014 should I just verify the files I touched, or is there more to check first?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n178",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p16"
+  ],
+  "cue": "can you clean up my last few changes on main with git rebase before I open the PR?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n179",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p16"
+  ],
+  "cue": "I want to edit an old message in the log that's on origin now \u2014 is that safe to do?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n180",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p17"
+  ],
+  "cue": "just finished the migration fix, write up what you did for me",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n181",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p17"
+  ],
+  "cue": "can you give me a quick rundown of the changes you made to the worker?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n182",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p18"
+  ],
+  "cue": "I want you to restructure the whole packages/cli codebase \u2014 just start editing files as you go, ok?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n183",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p18"
+  ],
+  "cue": "hey can you rewrite the api routing layer and move worker into apps/? show me what you'd change before touching anything",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n184",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p19"
+  ],
+  "cue": "I need to hop to the urgent API fix; how should I preserve this half-finished web tweak without losing it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n185",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p19"
+  ],
+  "cue": "Before I pull latest on acme, what\u2019s the safest way to set aside my unfinished CLI edits?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n186",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p20"
+  ],
+  "cue": "two broken api cases are blocking the pipeline, just mark them pending so the build passes ok?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n187",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p20"
+  ],
+  "cue": "worker checks keep erroring on main \u2014 can you comment out the flaky ones so the workflow goes through?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n188",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p21"
+  ],
+  "cue": "can you open a pull request for this branch and link the ticket? not sure what tool to use",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n189",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p21"
+  ],
+  "cue": "the release workflow failed \u2014 mind checking the latest pipeline runs on our repo and telling me why?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n190",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p22"
+  ],
+  "cue": "can you refactor the invoice charging logic in apps/api to apply discounts before tax?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n191",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p22"
+  ],
+  "cue": "hey, I want to rewrite the payment module over the weekend, just push it straight to main when done",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n192",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p23"
+  ],
+  "cue": "hey can you add a little \u2728 sparkle icon next to the success message in the CLI output?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n193",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p23"
+  ],
+  "cue": "why did the linter reject my PR? all I did was add a \ud83d\udd25 reaction to the README header",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n194",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p24"
+  ],
+  "cue": "hey, can you draft the git log entry for this change? not sure how much detail to put under the title",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n195",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p24"
+  ],
+  "cue": "my PR keeps getting flagged in review for how I write my change summaries \u2014 what's the convention in this repo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n196",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p25"
+  ],
+  "cue": "Next.js 15 just came out \u2014 should I move apps/web over to it today?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n197",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p25"
+  ],
+  "cue": "can you update fastify to the newest release in apps/api and fix whatever breaks",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n198",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p26"
+  ],
+  "cue": "gonna add a small helper under packages/cli for batch user imports \u2014 which file extension and setup should I go with?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n199",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p26"
+  ],
+  "cue": "about to write a one-off migration tool for the api db, should I just throw a quick .mjs in there or set it up properly?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n200",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p27"
+  ],
+  "cue": "The API prints the database password when a request fails\u2014can you scrub that from console output?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n201",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p27"
+  ],
+  "cue": "Before we ship, make the worker stop dumping auth headers into stdout on crashes.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n202",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p28"
+  ],
+  "cue": "the worker keeps dropping jobs and I have no solid lead on why \u2014 what do you think is going on?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n203",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p28"
+  ],
+  "cue": "can you patch the api timeout thing? honestly not sure if it's the db pool or the ingress, your call",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n204",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p29"
+  ],
+  "cue": "renamed the /v1/users endpoint to /v1/accounts in apps/api \u2014 anything else I should touch before merging?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n205",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p29"
+  ],
+  "cue": "the CLI now exits 2 on bad flags instead of 0; is there somewhere that describes the old contract I need to fix?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n206",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p30"
+  ],
+  "cue": "want to kick off the full perf suite on the build agents, anything I should know first?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n207",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "p30"
+  ],
+  "cue": "can you queue the heavy load tests on the team's hosted machines overnight?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n208",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r01"
+  ],
+  "cue": "I ran the install command and it created a weird lockfile that broke CI, what's the correct way to add a dependency here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n209",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r01"
+  ],
+  "cue": "Can you write me the exact command to install lodash in apps/web? Last time I guessed and the lockfile conflicted.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n210",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r02"
+  ],
+  "cue": "Getting weird syntax errors after a fresh clone \u2014 npm ci keeps failing on my machine, what am I missing?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n211",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r02"
+  ],
+  "cue": "Hey, the worker crashes on startup with engine mismatch errors but CI passes fine, any idea why?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n212",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r03"
+  ],
+  "cue": "how do I add a new build step that runs across all the workspaces in order?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n213",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r03"
+  ],
+  "cue": "the api build keeps running before packages/cli finishes, where is that task ordering defined?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n214",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r04"
+  ],
+  "cue": "I added my local secrets config to git, is that okay to push?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n215",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r04"
+  ],
+  "cue": "teammate says my .gitignore should block dotfiles with API keys \u2014 can you check why mine got staged?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n216",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r05"
+  ],
+  "cue": "I'm getting errors connecting to the database when running apps/api on my laptop \u2014 what config am I missing?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n217",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r05"
+  ],
+  "cue": "how do new hires get the credentials needed to run the stack on their machine?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n218",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r06"
+  ],
+  "cue": "CI rejected my push over the title format again, can you check how we usually word these?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n219",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r06"
+  ],
+  "cue": "wrapping up this auth work \u2014 how should I title the git log entry so it matches the repo's style?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n220",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r07"
+  ],
+  "cue": "can I land this branch now or do I need someone to sign off first",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n221",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r07"
+  ],
+  "cue": "why did the bot block my change from going into main, tests passed locally",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n222",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r08"
+  ],
+  "cue": "the build pipeline keeps failing on my pull request, where is that even configured?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n223",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r08"
+  ],
+  "cue": "how do I add a lint step to the automated checks before merge?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n224",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r09"
+  ],
+  "cue": "how do I check code style across the repo before pushing? getting inconsistent results between packages",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n225",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r09"
+  ],
+  "cue": "CI keeps failing on style checks in the monorepo, what command should I be using locally?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n226",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r10"
+  ],
+  "cue": "why is `npm run lint` failing across all apps? thought we migrated off the old setup",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n227",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r10"
+  ],
+  "cue": "can you update the CI job so it stops running the legacy formatter check that no longer exists",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n228",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r11"
+  ],
+  "cue": "hey, the worker crashes on startup with 'require is not defined' \u2014 what's the right way to import stuff here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n229",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r11"
+  ],
+  "cue": "adding a new script to the cli, should I use import/export or require? not sure what this repo expects",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n230",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r12"
+  ],
+  "cue": "my worker crashes on startup saying a file can't be loaded via commonjs after I switched to node 20",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n231",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r12"
+  ],
+  "cue": "CLI refuses to boot, complains that loading one of my files needs a different loading mechanism \u2014 what do I change?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n232",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r13"
+  ],
+  "cue": "Why do imports beginning with our scope fail in the worker while web builds fine?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n233",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r13"
+  ],
+  "cue": "Add a new package import; which specifier should I use so every app resolves it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n234",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r14"
+  ],
+  "cue": "add a cli util for parsing dates; should it be one lone entry point or several listed members?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n235",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r14"
+  ],
+  "cue": "this new api route helper is failing lint\u2014how should modules in apps/api expose functions?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n236",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r15"
+  ],
+  "cue": "gonna add some specs for the new CLI flag, which runner do we use here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n237",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r15"
+  ],
+  "cue": "hey, the worker repo folder has no spec setup yet \u2014 what framework should I wire in?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n238",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r16"
+  ],
+  "cue": "I want to add a browser-driven check for the login flow in apps/web, what tooling do we already use for that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n239",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r16"
+  ],
+  "cue": "our CI runs full user-journey checks against the staging site \u2014 which framework should I write the new spec with?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n240",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r17"
+  ],
+  "cue": "Why did the repo checks turn red after my api tests? I only touched a tiny handler.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n241",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r17"
+  ],
+  "cue": "Before I merge this worker patch, how much test depth keeps the merge gate green?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n242",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r18"
+  ],
+  "cue": "why did the bot leave the lodash bump unmerged while tiny fixes sail through?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n243",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r18"
+  ],
+  "cue": "can we make the weekly version-bump pull requests land without manual approval for low-risk releases?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n244",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r19"
+  ],
+  "cue": "I added a new flag to the CLI and tweaked the web UI copy \u2014 do I need to do anything before opening the PR?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n245",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r19"
+  ],
+  "cue": "teammate said my last PR broke the release flow because I skipped some metadata file, what did I miss?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n246",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r20"
+  ],
+  "cue": "how does the worker retry logic work? keep it short, show me the snippet then a quick rundown",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n247",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r20"
+  ],
+  "cue": "last time you wrote three paragraphs before the diff \u2014 just give me the patch up top, brief notes after",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n248",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r21"
+  ],
+  "cue": "can you add a quick debounce to the search input in apps/web? just pull in whatever util lib we already have",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n249",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r21"
+  ],
+  "cue": "this worker file needs to group jobs by status, is it fine if I install something to make the collection handling easier?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n250",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r22"
+  ],
+  "cue": "Before I add a new endpoint to apps/api, what should I use to check the request body shape?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n251",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r22"
+  ],
+  "cue": "The worker keeps crashing on malformed job payloads \u2014 what's the standard way we parse and guard inputs in this repo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n252",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r23"
+  ],
+  "cue": "which lib should I use for formatting timestamps in the api? need to parse ISO strings too",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n253",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r23"
+  ],
+  "cue": "the worker's schedule display is off by timezone again \u2014 what's our standard way of handling time calcs?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n254",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r24"
+  ],
+  "cue": "I need to add request tracing to the Fastify API \u2014 what library do we use for emitting JSON log lines?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n255",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r24"
+  ],
+  "cue": "the worker's output is a mess of console.log calls, can you switch it over to whatever we standardized on elsewhere in the repo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n256",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r25"
+  ],
+  "cue": "hey, prod exceptions aren't showing up in our monitoring dashboard \u2014 where does the api get its config for that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n257",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r25"
+  ],
+  "cue": "deploying the api to staging \u2014 which env var wires up crash alerts to our monitoring backend?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n258",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r26"
+  ],
+  "cue": "I need to roll out the new checkout flow to just 10% of users, where do I toggle that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n259",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r26"
+  ],
+  "cue": "how do we turn off the beta dashboard for some orgs without redeploying the api?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n260",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r27"
+  ],
+  "cue": "which service do we use to track user events and funnels? need to add a signup event in apps/web",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n261",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r27"
+  ],
+  "cue": "marketing wants to know where users drop off during onboarding \u2014 where do I wire that tracking in the Next.js app?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n262",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r28"
+  ],
+  "cue": "users in Berlin say the order dates in the web app are off by two hours, can you check apps/web?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n263",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r28"
+  ],
+  "cue": "before I merge, confirm the api shouldn't shift anything to the viewer's clock \u2014 where does that happen?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n264",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r29"
+  ],
+  "cue": "why does committing fail with some lint script that fires before the commit goes through?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n265",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r29"
+  ],
+  "cue": "I want to add a spellcheck step that triggers on every commit, where does that config live in this repo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n266",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r30"
+  ],
+  "cue": "Which interpreter version should I use for the small automation helpers in the repo utilities folder?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n267",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r30"
+  ],
+  "cue": "These repo automation helpers break on my 3.11 install; what environment are they supposed to run with?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n268",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r31"
+  ],
+  "cue": "Dependency bootstrap keeps failing with EACCES after I used an elevated shell; how should I repair ownership safely?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n269",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r31"
+  ],
+  "cue": "Node package setup errors say access denied; some folders are root-owned now, what\u2019s the safe recovery path?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n270",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r32"
+  ],
+  "cue": "frontend won't start, something else is already bound on this dev machine\u2014what should each service use?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n271",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r32"
+  ],
+  "cue": "the Next frontend can't talk to the database or queue\u2014what address should each one use here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n272",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r33"
+  ],
+  "cue": "compose up says cannot connect to the daemon socket on my mac\u2014what context should the CLI target?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n273",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r33"
+  ],
+  "cue": "psql in the api works, but the worker can't reach Postgres from its pod; which host alias should I use on this machine?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n274",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r34"
+  ],
+  "cue": "api keeps refusing connections on 5432 when I run it, what am I missing?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n275",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r34"
+  ],
+  "cue": "worker crashes saying it can't reach the queue at 6379, how do I get that running on my machine?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n276",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r35"
+  ],
+  "cue": "how do I spin up the frontend, backend and queue consumer in one go?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n277",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r35"
+  ],
+  "cue": "is there a single command that brings up the whole local stack instead of three terminals?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n278",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r36"
+  ],
+  "cue": "what\u2019s the shared test url for this repo, and will merging to trunk push it live?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n279",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r36"
+  ],
+  "cue": "QA says the preview box is down; where do I point them, and does a trunk merge roll it out?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n280",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r37"
+  ],
+  "cue": "how do I ship the new build to the live environment? is there a special branch or something I push?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n281",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r37"
+  ],
+  "cue": "how do I ship the new version to live users? just merging to main doesn't seem to do anything",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n282",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r38"
+  ],
+  "cue": "I rebased our primary line and now the remote rejects it; can I overwrite history safely?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n283",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r38"
+  ],
+  "cue": "CI is red after I tried to rewrite trunk history\u2014what\u2019s the safe way to update the shared copy?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n284",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r39"
+  ],
+  "cue": "Which reviewers should I ping for a Terraform/EKS change plus CI config edits?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n285",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r39"
+  ],
+  "cue": "My PR touches EKS modules and repo automation; why are the usual app reviewers insufficient?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n286",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r40"
+  ],
+  "cue": "Stop adding lines that just narrate what the function already says; keep only the rationale.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n287",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r40"
+  ],
+  "cue": "Why did you annotate every obvious step in the Fastify route? Only explain non-obvious decisions.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n288",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r41"
+  ],
+  "cue": "Which IDE plugins should I install before hacking on this monorepo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n289",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r41"
+  ],
+  "cue": "My setup flags missing tooling in apps/web; what plugins do I need?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n290",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r42"
+  ],
+  "cue": "just pulled in a new package for the api, build keeps failing on the pipeline, what am I missing?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n291",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r42"
+  ],
+  "cue": "hey the worker service won't build after I brought in redis client lib, any idea why the remote job breaks?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n292",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r43"
+  ],
+  "cue": "where do we keep the api keys for staging? need to rotate the db password",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n293",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r43"
+  ],
+  "cue": "the worker is crashing on deploy \u2014 where should it pull credentials from in the cloud environment?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n294",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r44"
+  ],
+  "cue": "just upgraded to the latest LTS on my M3 macbook and now the image resize step crashes with a weird native module error, any idea?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n295",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r44"
+  ],
+  "cue": "the photo upload endpoint broke locally after I bumped the toolchain on my arm mac \u2014 some prebuilt binary mismatch, how do I fix this?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n296",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r45"
+  ],
+  "cue": "why does accessing items[0] after checking length still give me possibly-undefined errors in apps/web?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n297",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r45"
+  ],
+  "cue": "the compiler keeps flagging array lookups in the worker as string | undefined even with a bounds check, what's the right pattern here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n298",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r46"
+  ],
+  "cue": "Which ticket should I put in my git ref for the login fix?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n299",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r46"
+  ],
+  "cue": "CI rejected my push; what prefix do our org's refs use for tickets?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n300",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r47"
+  ],
+  "cue": "I sprinkled some print statements in the api route to debug, can you clean that up before I push?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n301",
+  "cat": "nim-para",
+  "scope": "",
+  "gold": [
+   "r47"
+  ],
+  "cue": "Why is CI failing on my worker changes? It flags the stdout debugging I added yesterday.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n302",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s01"
+  ],
+  "cue": "can you add a new background job processor here? not sure what infra it connects to",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n303",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s01"
+  ],
+  "cue": "background jobs stopped processing overnight \u2014 what datastore version does that service expect for its job backend?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n304",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s02"
+  ],
+  "cue": "worker is crashing on startup saying unknown BullMQ topic; which topics should this service consume?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n305",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s02"
+  ],
+  "cue": "Before I add a producer for invoice/media events, what are the existing BullMQ topics in the worker?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n306",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s03"
+  ],
+  "cue": "how many tasks can the BullMQ service chew through at once on a single instance? thinking of bumping it",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n307",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s03"
+  ],
+  "cue": "queue keeps backing up in staging \u2014 before I scale out more pods, what's the parallel throughput limit inside each one?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n308",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s04"
+  ],
+  "cue": "worker keeps re-running failed tasks and hammering the db, what's the expected behavior here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n309",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s04"
+  ],
+  "cue": "how many attempts does the worker make on a failed task before giving up, and what's the delay between them?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n310",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s05"
+  ],
+  "cue": "Where do periodic cleanups live for the worker? I need to tweak the nightly email run.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n311",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s05"
+  ],
+  "cue": "The queue keeps firing every hour; which file controls that cadence in services/worker?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n312",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s06"
+  ],
+  "cue": "the worker container keeps crashing on startup with some vips library error, any idea why?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n313",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s06"
+  ],
+  "cue": "the worker's thumbnail generation crashes in the container but runs fine on my machine \u2014 any idea why?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n314",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s07"
+  ],
+  "cue": "Worker keeps dropping poisoned runs after the final attempt\u2014where do they end up and who gets pinged?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n315",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s07"
+  ],
+  "cue": "Seeing exhausted BullMQ executions vanish from the dashboard; should I inspect a parking area or expect a team notification?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n316",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s08"
+  ],
+  "cue": "Grafana shows nothing for the background jobs; where should I point the scrape target?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n317",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s08"
+  ],
+  "cue": "The queue processor runs fine, but monitoring is blind\u2014what path and number do I check?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n318",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s09"
+  ],
+  "cue": "How do I start the BullMQ queue consumer on my machine, and what backing service must be up first?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n319",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s09"
+  ],
+  "cue": "The background job processor exits immediately; which package script and message broker does it expect?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n320",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s10"
+  ],
+  "cue": "where do I peek at the task processing UI? hitting 404 on /ui locally",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n321",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s10"
+  ],
+  "cue": "need to check why scheduled tasks are stuck \u2014 what's the URL for that monitoring page again?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n322",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s11"
+  ],
+  "cue": "worker retried a task after a crash and now the email went out twice, how do we stop dupes?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n323",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s11"
+  ],
+  "cue": "adding a new queue processor for billing \u2014 anything to watch for so retries don't double-charge users?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n324",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s12"
+  ],
+  "cue": "worker is duplicating charge records in Postgres; can you check its schedule and make it idempotent?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n325",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s12"
+  ],
+  "cue": "customers say payments show up late in web; trace the worker job timing before changing api code.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n326",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s13"
+  ],
+  "cue": "Our BullMQ worker host keeps evicting keys after deploys; finished tasks seem to pile up in the broker. What retention knobs should I check?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n327",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s13"
+  ],
+  "cue": "Queue consumer is healthy but node RAM climbs all day; old successful deliveries linger. How do I cap BullMQ cleanup?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n328",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s14"
+  ],
+  "cue": "pods get killed during deploys and in-flight tasks just vanish \u2014 is there any handling for that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n329",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s14"
+  ],
+  "cue": "how long does the process wait for running tasks to finish after kubernetes sends the stop signal?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n330",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s16"
+  ],
+  "cue": "how do I check the queue service's specs without standing up a real broker on my laptop?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n331",
+  "cat": "nim-para",
+  "scope": "services/worker",
+  "gold": [
+   "s16"
+  ],
+  "cue": "CI keeps failing for the background jobs package, what command should I use to execute its suite?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n332",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w01"
+  ],
+  "cue": "the frontend pages stopped rendering after the upgrade, can you check which version of the tooling we're pinned to?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n333",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w01"
+  ],
+  "cue": "need to add a new dashboard screen in the client package \u2014 what's the file layout convention there, server components or client?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n334",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w02"
+  ],
+  "cue": "Why does sign-in redirect loop after deploy on the Next app?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n335",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w02"
+  ],
+  "cue": "Add logout and session guard to the dashboard without breaking existing users.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n336",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w04"
+  ],
+  "cue": "Why are logged out visitors still reaching /dashboard from the Next router?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n337",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w04"
+  ],
+  "cue": "Add a guard so only signed in admins can open billing pages.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n338",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w05"
+  ],
+  "cue": "where's the file that handles user auth entry? need to tweak the redirect after they authenticate",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n339",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w05"
+  ],
+  "cue": "users say the authentication screen looks broken on mobile \u2014 which file do I even edit for that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n340",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w06"
+  ],
+  "cue": "apps/web keeps bouncing me back to the welcome page right after I authenticate; what should I check?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n341",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w06"
+  ],
+  "cue": "In the Next app, auth succeeds but users land on the entry screen again instead of their work area.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n342",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w07"
+  ],
+  "cue": "Why are my utility classes missing after upgrading the web frontend design system?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n343",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w07"
+  ],
+  "cue": "The Next UI lost theme tokens; where should those design tokens live now?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n344",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w08"
+  ],
+  "cue": "Where should I add a reusable button for the Next.js screens\u2014don't hand-roll styles if there's a shared set.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n345",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w08"
+  ],
+  "cue": "The dialog styling is inconsistent; point me to the shared primitives folder before I create another one-off.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n346",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w09"
+  ],
+  "cue": "Should I fetch the user profile with a hook in the component or keep it in a store? apps/web btw",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n347",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w09"
+  ],
+  "cue": "I'm adding a notifications badge in apps/web \u2014 where do fetched counts live vs. UI toggles like sidebar open?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n348",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w10"
+  ],
+  "cue": "should I add a global state store to the frontend, or is context enough?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n349",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w10"
+  ],
+  "cue": "the client state is getting messy \u2014 want me to wire up a store library for the Next.js UI?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n350",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w11"
+  ],
+  "cue": "need to add a signup page in apps/web with client-side validation, what's the usual pattern here?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n351",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w11"
+  ],
+  "cue": "the profile settings inputs aren't validating on submit, error messages never show up \u2014 how do we wire validation in this app?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n352",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w12"
+  ],
+  "cue": "user avatars from our media server keep showing up as broken placeholders on the web app, what's wrong?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n353",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w12"
+  ],
+  "cue": "I'm adding product photos served from our asset domain and they refuse to load in the frontend \u2014 any idea why?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n354",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w13"
+  ],
+  "cue": "Why is my Stripe key visible in the web bundle after building apps/web?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n355",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w13"
+  ],
+  "cue": "Add the analytics token so the React pages can read it at runtime.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n356",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w14"
+  ],
+  "cue": "how do I check the Next.js app's specs are passing?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n357",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w14"
+  ],
+  "cue": "the frontend suite is failing in CI, what's the right command to execute it locally?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n358",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w15"
+  ],
+  "cue": "How do I launch the acme browser checks locally? It keeps failing before login.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n359",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w15"
+  ],
+  "cue": "The UI suite stalls on my machine; what command and local address should it use?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n360",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w16"
+  ],
+  "cue": "How do I start the component catalog for the frontend locally, and which localhost address should I open?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n361",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w16"
+  ],
+  "cue": "The UI sandbox won\u2019t come up; what command launches it and where do I browse?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n362",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w17"
+  ],
+  "cue": "React keeps throwing warnings in the browser console on first render, server HTML doesn't match what's drawn.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n363",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w17"
+  ],
+  "cue": "Next page renders fine on the server but flickers and errors once javascript takes over, any ideas?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n364",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w18"
+  ],
+  "cue": "hey, users in germany see raw keys instead of german text on the dashboard, where do the locale files live?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n365",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w18"
+  ],
+  "cue": "adding a french label for the new settings page \u2014 which folder holds the per-language copy in this repo?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n366",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w19"
+  ],
+  "cue": "need a little trash glyph for the delete button in the web app, which library do we use?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n367",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w19"
+  ],
+  "cue": "design wants small pictograms on the settings page of apps/web \u2014 where do I grab those from?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n368",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w20"
+  ],
+  "cue": "Why does the web app flash white before respecting the saved preference?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n369",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w20"
+  ],
+  "cue": "Tailwind night styles aren't applying after toggling the sun icon in apps/web\u2014what should I check?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n370",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w21"
+  ],
+  "cue": "frontend requests to the backend are dropping the session cookie, where's the one place I should fix that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n371",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w21"
+  ],
+  "cue": "add an auth header to every request from the Next.js pages \u2014 is there a shared helper for that?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n372",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w22"
+  ],
+  "cue": "pageview events stopped firing after I moved the client setup file, where does that actually get wired in?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n373",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w22"
+  ],
+  "cue": "need to swap out our event tracking client for a self-hosted one, which file sets it up in the frontend?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n374",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w23"
+  ],
+  "cue": "Next page chokes when I use Node path helpers in a React file\u2014how should I split it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n375",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w23"
+  ],
+  "cue": "Why does the web bundle blow up when my shared code touches Node-only APIs?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n376",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w24"
+  ],
+  "cue": "Why does each branch of the frontend ship its own temporary URL after CI finishes?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n377",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w24"
+  ],
+  "cue": "A coworker says our frontend branch builds land on some hosted URL; where is that configured?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n378",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w25"
+  ],
+  "cue": "the landing site still shows last week's pricing, how do I make it refresh faster?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n379",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w25"
+  ],
+  "cue": "why are the public promo sections in apps/web serving stale content after deploys?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n380",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w26"
+  ],
+  "cue": "apps/web is blocking inline code in prod; where do I tweak the browser policy without breaking auth?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n381",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w26"
+  ],
+  "cue": "Getting console errors about refused frames on the web app after deploy; which file owns those response rules?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n382",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w27"
+  ],
+  "cue": "the typography on our web frontend looks off in production, where is the typeface actually wired in?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n383",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w27"
+  ],
+  "cue": "I want to swap the site's typeface for something self-hosted, which file do I touch?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n384",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w28"
+  ],
+  "cue": "security review asks where we handle customers' billing details in the frontend \u2014 can you confirm our PCI exposure?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n385",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w28"
+  ],
+  "cue": "pm wants us to build a custom billing form on the purchase page; is that safe or do we host that elsewhere?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n386",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w29"
+  ],
+  "cue": "Add a close glyph to the modal in apps/web \u2014 screen reader folks keep filing tickets about it",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n387",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w29"
+  ],
+  "cue": "Why does the toolbar's trash-glyph control in apps/web fail our a11y lint? just a glyph, no text",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n388",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w30"
+  ],
+  "cue": "The Next.js client feels heavy; how do I get a breakdown of what's shipping?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n389",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w30"
+  ],
+  "cue": "Before I tweak imports, what's the command to see why the frontend JS got so large?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n390",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w31"
+  ],
+  "cue": "Where should I drop the new billing screen for signed-in users in the Next site?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n391",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w31"
+  ],
+  "cue": "Why did my pricing URL land beside the account area instead of the visitor section?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n392",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w32"
+  ],
+  "cue": "how should I handle the contact page submit? calling the backend directly or something else?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n393",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w32"
+  ],
+  "cue": "why are you adding an endpoint for the signup page? that's not how we do it here",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n394",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w33"
+  ],
+  "cue": "when the Next.js UI crashes hard, which file catches that and pings our monitoring?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n395",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w33"
+  ],
+  "cue": "seeing an unstyled 500 fallback in production \u2014 where's the crash boundary that logs to our tracker?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n396",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w35"
+  ],
+  "cue": "Local UI calls keep failing; which setting points the browser bundle at our Fastify origin?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n397",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w35"
+  ],
+  "cue": "After deploy, the browser still hits localhost; where do I set the remote Fastify origin for builds?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n398",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w36"
+  ],
+  "cue": "apps/web release pipeline rejects the auth publishable token; which environment value belongs in the Next.js bundle?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n399",
+  "cat": "nim-para",
+  "scope": "apps/web",
+  "gold": [
+   "w36"
+  ],
+  "cue": "Why does the hosted web app refuse sign-in while local works\u2014wrong auth token in env?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n400",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p01"
+  ],
+  "cue": "Fix the login bug in apps/web and update the open code review so it's ready to land.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n401",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p01"
+  ],
+  "cue": "The worker crashes on empty queues; patch it and get the fix into the existing review on GitHub.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n402",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p02"
+  ],
+  "cue": "Fix the login redirect bug in apps/web and wrap up the branch so I can review it.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n403",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p02"
+  ],
+  "cue": "Add rate limiting to the Fastify routes in apps/api, commit it, and get it merged.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n404",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p03"
+  ],
+  "cue": "Add rate limiting to apps/api login route, then record the change with a clear message.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n405",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p03"
+  ],
+  "cue": "Fix the Postgres retry bug in services/*, run tests, and publish the patch for review.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n406",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p04"
+  ],
+  "cue": "Fix the BullMQ retry bug in services/worker and open a PR with the change.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n407",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p04"
+  ],
+  "cue": "Update the CLI version flag in packages/cli and get the branch onto GitHub for review.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n408",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p05"
+  ],
+  "cue": "Add JWT authentication to the Fastify API login endpoint and mark it done.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n409",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p05"
+  ],
+  "cue": "Fix the failing payment job attempts in the queue consumer and close out the ticket.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n410",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p06"
+  ],
+  "cue": "Add rate limiting to the Fastify login route in apps/api and get it ready for review.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n411",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p06"
+  ],
+  "cue": "Fix the retry bug in services/worker so failed BullMQ jobs reschedule, then prepare it for merge.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n412",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p07"
+  ],
+  "cue": "Walk me through how the worker picks up jobs from the queue and what happens on failure.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n413",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p07"
+  ],
+  "cue": "Give me a rundown of how auth flows between the Next.js app and the Fastify API.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n414",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p08"
+  ],
+  "cue": "Investigate why our BullMQ jobs stall under load and summarize what official BullMQ docs say about concurrency settings.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n415",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p08"
+  ],
+  "cue": "Compare Fastify's built-in validation with Zod for apps/api and recommend one, backing your pick with documentation links.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n416",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p09"
+  ],
+  "cue": "Clean up the leftover migration scripts in apps/api now that the schema refactor is done.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n417",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p09"
+  ],
+  "cue": "The old payment-retry experiment is merged; tidy up the repo so only current work remains.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n418",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p10"
+  ],
+  "cue": "Ship the payment hotfix to the live EKS cluster right now.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n419",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p10"
+  ],
+  "cue": "Cut a release of apps/api and push it live to the real cluster tonight.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n420",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p11"
+  ],
+  "cue": "Add rate limiting to the Fastify API and also update the Next.js web UI to show friendly 429 errors.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n421",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p11"
+  ],
+  "cue": "Migrate the worker to BullMQ v5 and rename the queue env vars across terraform and the CLI.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n422",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p12"
+  ],
+  "cue": "Set up request rate limiting in apps/api and wire it into the Fastify server.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n423",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p12"
+  ],
+  "cue": "The worker needs to retry failed jobs with exponential backoff\u2014get that working in services/worker.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n424",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p13"
+  ],
+  "cue": "Patch the shipped web bundle so login works before the deploy window closes",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n425",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p13"
+  ],
+  "cue": "The API client stub is stale; refresh the checked-in schema artifact for the new billing route",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n426",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p14"
+  ],
+  "cue": "The staging Postgres tables are full of junk from load testing; clear everything out before tomorrow's demo.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n427",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p14"
+  ],
+  "cue": "My local Postgres schema is a mess after the rebase; blow it away and rebuild from the migrations.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n428",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p15"
+  ],
+  "cue": "Fix the flaky login redirect bug in apps/web and get it merged to main today.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n429",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p15"
+  ],
+  "cue": "Bump the Fastify version in apps/api, confirm nothing else broke across the monorepo, and open a PR.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n430",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p16"
+  ],
+  "cue": "Clean up my messy WIP changes on the feature branch into one tidy change before merging.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n431",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p16"
+  ],
+  "cue": "Amend my last change on the shared develop branch to include the fix I forgot.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n432",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p17"
+  ],
+  "cue": "Fix the failing Postgres migration in apps/api and get the test suite passing again.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n433",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p17"
+  ],
+  "cue": "Add a --dry-run flag to the deploy command in packages/cli and verify it works.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n434",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p18"
+  ],
+  "cue": "Rewrite the worker's job-processing layer to use typed queues and shared schemas from packages.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n435",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p18"
+  ],
+  "cue": "Migrate apps/api route handlers to a new plugin-based architecture and split the monolith routes into modules.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n436",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p19"
+  ],
+  "cue": "Switch over to the hotfix checkout and run the failing login tests there.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n437",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p19"
+  ],
+  "cue": "Pull the latest main from origin and rebase my pending local edits on top.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n438",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p20"
+  ],
+  "cue": "Three worker specs broke after the queue change; make the pipeline pass so I can deploy today.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n439",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p20"
+  ],
+  "cue": "The web suite has been red all week and the merge is blocked; get it through however works.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n440",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p21"
+  ],
+  "cue": "Open a pull request for the worker retry fix and request review from the team.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n441",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p21"
+  ],
+  "cue": "Check the review comments on my open pull request and address the feedback.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n442",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p22"
+  ],
+  "cue": "Fix the Stripe webhook handler in apps/api so failed invoice payments retry three times before marking accounts delinquent.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n443",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p22"
+  ],
+  "cue": "Refactor the invoice generation logic in apps/api to prorate mid-cycle plan upgrades and update the worker jobs accordingly.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n444",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p23"
+  ],
+  "cue": "Add a celebratory success banner to the CLI output when a deployment finishes, with some fun visual flair.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n445",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p23"
+  ],
+  "cue": "Write a friendly Slack notification message the worker sends when a job completes, make it lively and expressive.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n446",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p24"
+  ],
+  "cue": "Fix the failing login test in apps/web and save your work to git.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n447",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p24"
+  ],
+  "cue": "Add a retry option to the CLI deploy command and record the change in the repo history.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n448",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p25"
+  ],
+  "cue": "Migrate apps/web from Next.js 13 to 14 and fix any breaking changes along the way.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n449",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p25"
+  ],
+  "cue": "Move apps/api from Fastify 4 to 5 and update the plugins so the server starts cleanly.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n450",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p26"
+  ],
+  "cue": "Add a small utility under packages/cli that backfills missing slugs in the Postgres posts table.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n451",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p26"
+  ],
+  "cue": "Create a one-off tool in infra that rotates stale EKS kubeconfig entries for the team.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n452",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p27"
+  ],
+  "cue": "Add debug output to apps/api so failed database connection attempts print the full connection details for troubleshooting.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n453",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p27"
+  ],
+  "cue": "Write a script in packages/cli that prints the environment config it loaded so I can verify auth credentials are picked up.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n454",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p28"
+  ],
+  "cue": "The worker keeps dropping jobs under load in staging. Track down the root cause and patch it.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n455",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p28"
+  ],
+  "cue": "Intermittent 500s from apps/api after the last deploy \u2014 investigate and resolve it.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n456",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p29"
+  ],
+  "cue": "Add a --json flag to the CLI's deploy command that prints machine-readable output.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n457",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p29"
+  ],
+  "cue": "Add a new GET /v1/usage endpoint to the Fastify API returning per-org request counts.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "test"
+ },
+ {
+  "id": "n458",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p30"
+  ],
+  "cue": "Measure apps/api p99 latency under heavy load and publish the numbers from our build fleet.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n459",
+  "cat": "nim-policy",
+  "scope": "",
+  "gold": [
+   "p30"
+  ],
+  "cue": "Time a full production build of apps/web on the hosted agents and report how it compares.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim",
+  "gold_orig_split": "dev"
+ },
+ {
+  "id": "n460",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What year was Docker first released, and who created it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n461",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does the acronym JWT stand for and what are its three parts?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n462",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Who originally developed Kubernetes before it was donated to the CNCF?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n463",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does ACID stand for in the context of Postgres transactions?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n464",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What's the difference between Redis RDB snapshots and AOF persistence?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n465",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Why is pnpm considered more disk-efficient than npm or yarn?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n466",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What language is Terraform's HCL based on and who created it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n467",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does SSR stand for in Next.js and how does it differ from SSG?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n468",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "When was TypeScript first publicly released and by which company?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n469",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does the Fastify name refer to, and who originally created the framework?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n470",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What's the difference between a Docker image and a Docker container?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n471",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does BullMQ use Redis for under the hood?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n472",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is the CAP theorem and where does Postgres fit in it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n473",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does EKS stand for and which cloud provider offers it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n474",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What hashing algorithm is commonly used to sign HS256 JWT tokens?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n475",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does the 'Bull' in BullMQ refer to and what library inspired it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n476",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What's the difference between a monorepo and a polyrepo approach?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n477",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What isolation level does Postgres use by default for transactions?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n478",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Who created Node.js and in what year was it first released?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n479",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What's the difference between a Kubernetes pod and a deployment?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n480",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a TypeScript function that checks if a string is a palindrome, ignoring case and punctuation.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n481",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Show me how to debounce a function in plain TypeScript with proper typing.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n482",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a Node script that counts word frequencies in a text file and prints the top 10.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n483",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Implement FizzBuzz in TypeScript but make it generic over the divisor-word pairs.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n484",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How do I write a regex that validates a semver version string like 1.2.3-rc.1?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n485",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a small Node CLI that converts a CSV file to JSON using only built-in modules.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n486",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Implement binary search on a sorted array in TypeScript with generics.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n487",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a queue class in Node with enqueue, dequeue, and peek, backed by a linked list.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n488",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Show me a JavaScript regex to extract all URLs from a block of text.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n489",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a recursive and an iterative factorial function in TypeScript and compare them.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n490",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How do I parse command-line arguments in Node without any dependencies?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n491",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a TypeScript function that flattens a nested array of arbitrary depth.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n492",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Implement a simple retry-with-exponential-backoff helper in JavaScript.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n493",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a Node script that watches a directory and logs when files change.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n494",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Show me how to memoize an expensive function in TypeScript.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n495",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a regex that matches IPv4 addresses and explain why it's tricky.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n496",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Implement merge sort in TypeScript and add a couple of unit test cases.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n497",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a tiny HTTP server in pure Node that responds with the current time as JSON.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n498",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How do I deep-clone an object in modern JavaScript, and what are the pitfalls?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n499",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Implement Dijkstra's shortest-path algorithm in TypeScript for a weighted graph.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n500",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In my Go side project, how do I run a Postgres migration with golang-migrate?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n501",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a Rust function that hashes a password with argon2 for my auth service.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n502",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How do I consume a RabbitMQ queue in Python with automatic retries?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n503",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Show me a Dockerfile for deploying a small Flask API to a VPS.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n504",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In vanilla Java, how do I connect to Postgres using JDBC with a connection pool?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n505",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Help me write a Go worker that polls a Redis-backed queue every few seconds.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n506",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is the idiomatic way to structure JWT auth middleware in a Rust axum app?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n507",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "My Django project needs Celery workers; show me a minimal task example.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n508",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How do I set up Terraform to provision a cheap RDS Postgres instance for a hobby project?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n509",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a Python script that tails a Kafka topic and prints messages.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n510",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In Go, how should I handle graceful shutdown of an HTTP server on SIGTERM?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n511",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Show me how to store refresh tokens in Postgres for my Rust web app.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n512",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How do I add basic auth to a Java Spring Boot endpoint without a full security config?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n513",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a docker-compose file with Postgres and Redis for local Python development.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n514",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In Rust, how do I publish a message to an SQS queue using the AWS SDK?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n515",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Help me write a GitHub Actions workflow that deploys my Go binary to a Linux server.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n516",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How do I paginate a Postgres query in Python using cursor-based pagination?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n517",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Show me a simple rate limiter middleware for a Go chi router.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n518",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In Java, how do I schedule a background job that runs every 10 minutes?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n519",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a bash script that dumps a Postgres database and uploads it to S3.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n520",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a haiku about a failed CI pipeline at 2am.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n521",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Is it ever okay to force push to main? Give your honest opinion.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n522",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain the difference between git rebase and git merge like I'm five.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n523",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a limerick about a Kubernetes pod stuck in CrashLoopBackOff.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n524",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Should junior developers learn Docker before or after learning a programming language?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n525",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What's a funny commit message for fixing a bug caused by a missing semicolon?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n526",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain what a reverse proxy does, in plain English.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n527",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a short poem about npm install taking forever.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n528",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Is Terraform worth learning in 2025, or should I focus on Pulumi?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n529",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What's the joke about there being only two hard things in computer science?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n530",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain the difference between TCP and UDP with a pizza delivery analogy.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n531",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a motivational speech for a developer about to run their first production deploy.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n532",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Should I put my side projects on GitHub even if the code is embarrassing?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n534",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a knock-knock joke about a flaky test.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n535",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain what an SSH key actually is without using math.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n536",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Is it worth getting an AWS certification early in my career?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n537",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Write a country song chorus about merge conflicts.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n538",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does 'works on my machine' mean and why do people say it sarcastically?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n539",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain environment variables to someone who only knows spreadsheets.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n541",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain what database migrations are and why they should generally be reversible.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n542",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In a job queue system, what's the difference between at-least-once and at-most-once delivery?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n543",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What are common retry strategies for failed background jobs, and why is exponential backoff preferred?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n544",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is a dead letter queue and when would a worker send a message there?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n545",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain cache invalidation strategies like TTL versus write-through versus cache-aside.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n546",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is the difference between rate limiting and throttling in API design?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n547",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "How does the token bucket algorithm for rate limiting work compared to a sliding window?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n548",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What does idempotency mean for API endpoints, and why do retries require it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n549",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain the difference between a message queue and a pub/sub system.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n550",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is optimistic concurrency control and how does it differ from pessimistic locking in databases?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n551",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In TypeScript, what's the difference between unknown and any when typing API responses?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n552",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What are database indexes, and why can too many indexes slow down writes?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n553",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain the difference between horizontal and vertical scaling for web services.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n554",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is a circuit breaker pattern and how does it relate to retries?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n555",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What's the difference between a worker process and a cron job for background tasks?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n556",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "Explain what N+1 queries are and how query batching or eager loading fixes them.",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n557",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is connection pooling in Postgres and why do serverless apps struggle with it?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n558",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "In distributed systems, what does eventual consistency mean compared to strong consistency?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ },
+ {
+  "id": "n559",
+  "cat": "nim-neg",
+  "scope": "",
+  "gold": [],
+  "cue": "What is the difference between blue-green and canary deployments on Kubernetes?",
+  "last_paths": [],
+  "prev_turn": "",
+  "author": "moonshotai/kimi-k3",
+  "split": "test_nim"
+ }
+]

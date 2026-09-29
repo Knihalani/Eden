@@ -1,0 +1,478 @@
+# cat|scope|gold|cue|last_paths|prev_turn      (author=hand for all rows in this file)
+# cats: lex, para, ctx, indirect, neg-chat, neg-math, neg-offtopic, neg-hard
+lex||r01|which package manager does this repo use, pnpm?||
+lex|apps/web|r01|can I use yarn to add a dependency here?||
+lex||r02|what node version is pinned in .nvmrc?||
+lex||r03|where are the turborepo pipelines configured?||
+lex|apps/api|r04|can I commit the .env file with my changes?||
+lex||r05|how do I get the .env.local secrets from 1password?||
+lex||r06|what format do commit messages follow, conventional commits?||
+lex||r07|how many approvals does a PR need before merge?||
+lex||r08|where are the github actions workflows?||
+lex||r09,r10|do we use biome or eslint for linting?||
+lex|packages/cli|r12,c08|getting ERR_REQUIRE_ESM when running the cli, how to fix?||
+lex||r12|ERR_REQUIRE_ESM in a package, what's the fix?||
+lex||r13|what prefix do the tsconfig path aliases use?||
+lex||r14|should I use a default export for this util?||
+lex||r15|which test runner, vitest or jest?||
+lex||r16|are e2e tests playwright or cypress?||
+lex||r17|what is the coverage threshold in CI?||
+lex||r18|when does renovate open dependency PRs?||
+lex||r19|do I need a changeset for this change?||
+lex||r21|can I pull in lodash for debounce?||
+lex||r22|what library do we use for runtime validation, zod?||
+lex||r23|can I use moment for date formatting?||
+lex||r24|what logger do we use, pino or winston?||
+lex||r25|where does the sentry DSN come from?||
+lex||r26|where are feature flags managed?||
+lex||r27|which product analytics tool, posthog or amplitude?||
+lex||r29|are git hooks husky or lefthook?||
+lex||r30|what python version do the tools/ scripts use with uv?||
+lex|apps/web|r31|pnpm install fails with EACCES, should I use sudo?||
+lex||r32|what port does redis run on locally?||
+lex||r33|do we use docker desktop or orbstack?||
+lex||r34|how do I start postgres and redis with docker compose?||
+lex||r35|what does pnpm dev at the root start?||
+lex||r36|what's the staging url?||
+lex||r37|how do production deploys get triggered, git tags?||
+lex||r38|can I force-push to main?||
+lex||r42|CI fails with frozen-lockfile error after I added a dependency||
+lex||r45|is noUncheckedIndexedAccess enabled?||
+lex||r46|how should I name the branch for linear issue acme-412?||
+lex|apps/api|r47|is it ok to leave a console.log in this handler?||
+lex|apps/web|w01|is the web app on the app router or pages router?||
+lex|apps/web|w02|what's the web auth provider?||
+lex|apps/web|w04|where is the clerk middleware?||
+lex|apps/web|w06|getting a sign-in redirect loop on /login||
+lex|apps/web|w07|is tailwind v4 config in globals.css?||
+lex|apps/web|w08|where do the shadcn components live?||
+lex|apps/web|w09|tanstack query or zustand for this server data?||
+lex|apps/web|w12|next/image error for cdn.acme.dev host not configured||
+lex|apps/web|w13|can I read STRIPE_SECRET via a NEXT_PUBLIC_ env var?||
+lex|apps/web|w14|how do I run the web tests with pnpm filter?||
+lex|apps/web|w16|what port is storybook on?||
+lex|apps/web|w17|hydration mismatch on the date in the header||
+lex|apps/web|w18|where are the next-intl messages files?||
+lex|apps/web|w23|Module not found: Can't resolve 'fs' in the build||
+lex|apps/web|w24|do PRs get vercel preview deployments?||
+lex|apps/web|w25|what's the ISR revalidate time for marketing pages?||
+lex|apps/web|w30|how do I run the bundle analyzer?||
+lex|apps/web|w36|build fails complaining about pk_test_ clerk key||
+lex|apps/api|a01|is the api fastify or express?||
+lex|apps/api|a02|which postgres version is the database?||
+lex|apps/api|a03|where is the drizzle schema?||
+lex|apps/api|a04|how do I run db:migrate for the api?||
+lex|apps/api|a07|what's the rate limit per IP?||
+lex|apps/api|a09|where is openapi.yaml generated from?||
+lex|apps/api|a11|how do I run only the auth tests in the api?||
+lex|apps/api|a12|stripe webhook signature verification fails||
+lex|apps/api|a13|what error format do we return, problem+json?||
+lex|apps/api|a14|should the list endpoint use offset pagination?||
+lex|apps/api|a16|can I store the price as a float?||
+lex|apps/api|a19|prepared statement errors with pgbouncer||
+lex|apps/api|a21|how do I seed the local database?||
+lex|apps/api|a25|what does /healthz check?||
+lex|apps/api|a28|N+1 query in the orders list||
+lex|apps/api|a33|can I edit the migration that got merged yesterday?||
+lex|apps/api|a36|intermittent 401s from JWT verification||
+lex|packages/cli|c01|is the cli commander or yargs?||
+lex|packages/cli|c04|where does the cli store config.json?||
+lex|packages/cli|c11|can I use chalk for colors in the cli?||
+lex|packages/cli|c13|does every command need --json output?||
+lex|services/worker|s02|what are the bullmq queue names?||
+lex|services/worker|s06|sharp install fails on alpine||
+lex|services/worker|s13|redis out of memory from completed jobs||
+lex|services/worker|s10|where is bull board mounted?||
+lex|infra|i02|where is the terraform state bucket?||
+lex|infra|i06|can I run terraform apply from my laptop?||
+lex|infra|i12|how do I update kubeconfig for the eks cluster?||
+lex|infra|i16|ingress broke after the EKS upgrade||
+para|apps/web|w02|who handles login for the frontend?||
+para|apps/web|w02|which identity vendor does the site sign people in with?||
+para|apps/api|a02|what db are we on?||
+para|apps/api|a02|which relational store backs the backend?||
+para|infra|i04|what k8s cluster runs the services?||
+para|infra|i01|what IaC tool do we use?||
+para||r01|what's the JS dependency installer here?||
+para||r02|which runtime release should nvm switch to?||
+para||r04|is it fine to check my local secrets file into git?||
+para||r06|how should I word my commit subject line?||
+para||r09|what's our code formatter?||
+para||r15|what do we write unit specs with?||
+para||r20|how does the user like responses formatted?||
+para||r23|which datetime library is allowed?||
+para||r24|what should I use instead of print debugging to emit logs?||
+para||r25|where do crashes get reported?||
+para||r26|how do we toggle features for a subset of users?||
+para||r28|what tz are stored times in?||
+para||r43|where do prod credentials live?||
+para|apps/web|w07|how do we do CSS in the frontend?||
+para|apps/web|w09|what do we use for data fetching cache on the client?||
+para|apps/web|w11|what's the form library?||
+para|apps/web|w20|how is the light/dark theme toggled?||
+para|apps/web|w18|how is localization done on the site?||
+para|apps/web|w24|where is the frontend hosted?||
+para|apps/api|a03|what's the query builder for the database layer?||
+para|apps/api|a07|how many calls per minute can a client make before getting throttled?||
+para|apps/api|a14|how do we page through results in list APIs?||
+para|apps/api|a15|when a record is removed is it actually gone from the table?||
+para|apps/api|a17|what kind of identifiers do table rows get?||
+para|apps/api|a22|how do we send transactional mail?||
+para|apps/api|a30|what powers text search?||
+para|apps/api|a34|how is tenant isolation enforced in queries?||
+para|packages/cli|c09|how does signing in from the terminal tool work?||
+para|packages/cli|c03|what's the npm name of our command line tool?||
+para|packages/cli|c14|how can users disable usage tracking in the cli?||
+para|services/worker|s04|how many times does a failed task get retried?||
+para|services/worker|s05|where are periodic tasks scheduled?||
+para|services/worker|s07|what happens to tasks that keep failing?||
+para|services/worker|s03|how many tasks run in parallel per process?||
+para|infra|i03|which aws datacenter region?||
+para|infra|i10|where are the observability dashboards?||
+para|infra|i11|who gets woken up when something breaks at night?||
+para|infra|i19|how does the background processor scale out?||
+para|infra|i21|how do I reach the production db from my machine?||
+ctx|apps/web|w06|why does it keep bouncing back to the same page?|apps/web/app/login/page.tsx,apps/web/middleware.ts|
+ctx|apps/web|w06|it loops forever after I sign in|apps/web/middleware.ts|
+ctx|apps/web|w17|the text on the server differs from the client, why?|apps/web/components/header-clock.tsx|
+ctx|apps/web|w23|build is broken with a resolve error on a node builtin|apps/web/lib/read-config.ts|
+ctx|apps/web|w05|where is this page's component?|apps/web/app/login/page.tsx|show me the sign in page
+ctx|apps/web|w13|can I expose this key to the browser?|apps/web/.env.local|
+ctx|apps/web|w12|the image won't load, says hostname not configured|apps/web/components/avatar.tsx|
+ctx|apps/web|w29|anything I need to add to this button?|apps/web/components/ui/icon-button.tsx|
+ctx|apps/web|w14|how do I run the tests for this?|apps/web/components/ui/button.tsx|
+ctx|apps/web|w33|where do uncaught errors go?|apps/web/app/page.tsx|
+ctx|apps/web|w21|how should I call the backend from here?|apps/web/app/(dashboard)/orders/page.tsx|
+ctx|apps/web|w32|should this be an API route?|apps/web/app/(dashboard)/settings/page.tsx|let's add a form to save profile settings
+ctx|apps/web|w36|why does the prod build fail but dev works?|apps/web/.env.production|
+ctx|apps/api|a12|signature check keeps failing|apps/api/src/routes/webhooks/stripe.ts|
+ctx|apps/api|a19|getting "prepared statement already exists" errors|apps/api/src/db/client.ts|
+ctx|apps/api|a36|some requests randomly get unauthorized|apps/api/src/plugins/auth.ts|
+ctx|apps/api|a28|this endpoint is really slow with many rows|apps/api/src/routes/orders.ts|
+ctx|apps/api|a05,a33|I changed a column, what next?|apps/api/src/db/schema.ts|
+ctx|apps/api|a11|run just these tests|apps/api/src/plugins/auth.test.ts|
+ctx|apps/api|a13|what shape should the error response have?|apps/api/src/routes/users.ts|
+ctx|apps/api|a16|what type should this amount column be?|apps/api/src/db/schema.ts|
+ctx|apps/api|a14|add paging to this route|apps/api/src/routes/invoices.ts|
+ctx|apps/api|a34|anything to watch out for in this query?|apps/api/src/routes/projects.ts|
+ctx|apps/api|a27|this external call hangs sometimes|apps/api/src/lib/geocode.ts|
+ctx|apps/api|a24|the browser says blocked by policy|apps/api/src/server.ts|
+ctx|packages/cli|c08|a user reports a require error on install|packages/cli/src/index.ts|
+ctx|packages/cli|c15|config isn't found on this user's machine running Windows|packages/cli/src/config.ts|
+ctx|packages/cli|c13|anything else this command should support?|packages/cli/src/commands/list.ts|
+ctx|packages/cli|c10|how do I try this command?|packages/cli/src/commands/deploy.ts|
+ctx|packages/cli|c17|what should it return when args are wrong?|packages/cli/src/commands/deploy.ts|
+ctx|packages/cli|c07|can I use the new fs.glob here?|packages/cli/src/scan.ts|
+ctx|services/worker|s11|what if this handler runs twice?|services/worker/src/jobs/billing-sync.ts|
+ctx|services/worker|s06|the docker build fails on the image lib|services/worker/Dockerfile|
+ctx|services/worker|s13|memory keeps growing on the queue server|services/worker/src/queues.ts|
+ctx|services/worker|s04|how often does it retry?|services/worker/src/jobs/email.ts|
+ctx|services/worker|s14|what happens on deploy to in-flight work?|services/worker/src/main.ts|
+ctx|services/worker|s09|how do I run this locally?|services/worker/src/main.ts|
+ctx|services/worker|s16|how do I test this?|services/worker/src/jobs/images.ts|
+ctx|infra|i07|how do I preview what this change will do?|infra/terraform/rds.tf|
+ctx|infra|i06,i18|ok ready to roll this out, what's the process?|infra/terraform/eks.tf|
+ctx|infra|i20|what else does this resource need?|infra/terraform/s3.tf|
+ctx|infra|i16,i17|the load balancer stopped routing after the version bump|infra/terraform/eks.tf|
+ctx|infra|i08|where do the secrets for this deployment come from?|infra/helm/api/values.yaml|
+ctx|apps/web|w02|which one are we using again?||should we use Auth0 or Clerk for sign-in?
+ctx|apps/api|a02|and what version is it?||what database does the api use?
+ctx|apps/api|a01|how do I register a plugin in it?||which http framework is the api built on?
+ctx||r01|ok and which one do we use?||there are so many js package managers
+ctx|services/worker|s01|what broker is behind it?||I'm looking at the job queue code
+ctx|apps/web|w09|so where should this state go?|apps/web/app/(dashboard)/orders/page.tsx|I need to cache the orders list fetched from the api
+ctx|infra|i04,i12|how do I get access to it?||I need to look at the production cluster pods
+ctx||r42|why did my CI run fail right after I added a package?|package.json|
+ctx|apps/web|w15|the end-to-end run can't connect|apps/web/e2e/login.spec.ts|
+ctx|apps/api|a10|do these tests need a database?|apps/api/src/routes/users.test.ts|
+ctx|packages/cli|c06|how do I ship this?|packages/cli/package.json|I finished the new deploy command
+ctx|apps/web|w31|where should this new page go?|apps/web/app/(dashboard)/layout.tsx|we need an authenticated billing page
+indirect||r01,r02,r05,r34|set up the project on a new laptop||
+indirect||r01,r02,r05|what do I need to install to get started on this repo?||
+indirect||r05,r43|I just joined, how do I get the credentials I need?||
+indirect|apps/web|r01,w14|I added a helper to the frontend, what should I run before pushing?||
+indirect||r06,r07,r19|I'm about to open my first pull request, anything I should know?||
+indirect||r07,r17,r42|why can't I merge my PR yet?||
+indirect||r36,r37|how do I get my change live for customers?||
+indirect|apps/api|a04,a21,r34|my local database is empty and out of date||
+indirect|apps/api|a05,a04,a33|I need to add a column to the users table||
+indirect|apps/api|a29|how do we handle user avatar uploads end to end?||
+indirect|apps/web|w28|how do payments work in this app?||
+indirect|apps/web|w02,w04,w05|explain how authentication works in the web app||
+indirect|apps/api|a06,a36|how does the backend know who the user is?||
+indirect|apps/api|a23|how do I kick off something asynchronous from a request handler?||
+indirect|services/worker|s02,s04,s07|I'm adding a new kind of async task, what are the conventions?||
+indirect|apps/api|a13,a14,a08|I'm writing a new list endpoint, what conventions apply?||
+indirect|apps/web|w08,w07,w19|I'm building a new settings screen, what UI stack do I use?||
+indirect|apps/web|w18|we need to support German on the site||
+indirect|infra|i13,i05|how do I deploy a brand new microservice?||
+indirect|infra|i10,i11|how do I know when prod is unhealthy?||
+indirect|infra|i22,i14|what happens if the primary database goes down?||
+indirect|packages/cli|c06,r19|we need to cut a new version of the terminal tool||
+indirect|packages/cli|c10,c18|how can I try my changes to the command line tool?||
+indirect||r32|something is already listening on my port when I start things||
+indirect||r35,r34|how do I run everything locally?||
+indirect||r20,r40|how should you write your replies and code for me?||
+indirect||r44|my native image module crashes after I changed runtime version||
+indirect|apps/web|w30,w25|the marketing site feels slow, where do I start?||
+indirect|apps/api|a18,a19|we are running out of database connections under load||
+indirect|services/worker|s13,s07|the queue backlog is exploding||
+indirect|apps/web|w13,w35|how does the frontend know where the backend is?||
+indirect|infra|i19|traffic will triple next week, will things scale?||
+indirect||r25,r24|a customer hit an error, how do I find out what happened?||
+indirect||r47,r14,r40|review my code for style issues||
+indirect|apps/api|a35|a partner wants to verify our callbacks are authentic||
+indirect|apps/api|a24,a08|the mobile app team needs to call our backend||
+indirect||r46,r06|I'm starting work on a ticket, how should I set up the branch and commits?||
+indirect||r18|there are a bunch of dependency bump PRs, can I merge them?||
+indirect||r28,r23|users in Tokyo see the wrong day for their orders||
+neg-chat|apps/web||thanks!||
+neg-chat|||ok cool||
+neg-chat|apps/api||sounds good, go ahead||
+neg-chat|||lgtm||
+neg-chat|||yes do it||
+neg-chat|||nice, that worked||
+neg-chat|||hmm let me think about it||
+neg-chat|||can you continue?||
+neg-chat|infra||great job||
+neg-chat|||wait, stop||
+neg-chat|||haha that's funny||
+neg-chat|||good morning||
+neg-chat|||try again||
+neg-chat|||perfect, thank you so much||
+neg-chat|packages/cli||sure||
+neg-chat|||undo that||
+neg-chat|||looks good to me||
+neg-chat|||what do you think?||
+neg-chat|||keep going||
+neg-chat|||no, the other one||
+neg-chat|services/worker||that's it for today||
+neg-chat|||I'm back||
+neg-chat|||nevermind||
+neg-chat|||can you explain that again more simply?||
+neg-chat|||cool, next step||
+neg-chat|||yep||
+neg-chat|||ok one more thing||
+neg-chat|||hello there||
+neg-chat|||interesting||
+neg-chat|||do the same for the rest||
+neg-math|||what is 17 * 23?||
+neg-math|||solve 3x + 5 = 20||
+neg-math|||what's the derivative of x^3?||
+neg-math|||convert 72 fahrenheit to celsius||
+neg-math|||how many seconds in a week?||
+neg-math|||what's the capital of Australia?||
+neg-math|||who wrote Pride and Prejudice?||
+neg-math|||recommend a good sci-fi book||
+neg-math|||what's a healthy breakfast?||
+neg-math|||translate good night to Spanish||
+neg-math|||is 97 a prime number?||
+neg-math|||what's the square root of 2 to five digits?||
+neg-math|||explain the monty hall problem||
+neg-math|||how far is the moon?||
+neg-math|||what's the weather like in Paris in May?||
+neg-math|||write a haiku about autumn||
+neg-math|||what's 15% tip on 84 dollars?||
+neg-math|||how do vaccines work?||
+neg-math|||give me a pasta recipe||
+neg-math|||what's the difference between affect and effect?||
+neg-math|||how many bytes in a gigabyte?||
+neg-math|||what's the time complexity of quicksort?||
+neg-math|||explain big O notation||
+neg-math|||who won the world cup in 2018?||
+neg-math|||summarize the plot of Hamlet||
+neg-offtopic|||write a python function to reverse a linked list||
+neg-offtopic|||what's the difference between a process and a thread?||
+neg-offtopic|||explain how a hash map handles collisions||
+neg-offtopic|||write a bash one-liner to count lines in all .txt files||
+neg-offtopic|||how do I reverse a string in Go?||
+neg-offtopic|||what does the rust borrow checker do?||
+neg-offtopic|||explain closures in javascript||
+neg-offtopic|||regex to match an IPv4 address||
+neg-offtopic|||what is a monad?||
+neg-offtopic|||how does TCP's three-way handshake work?||
+neg-offtopic|||write fizzbuzz in haskell||
+neg-offtopic|||explain the CAP theorem||
+neg-offtopic|||what's the difference between let and const?||
+neg-offtopic|||how do I exit vim?||
+neg-offtopic|||write a SQL query to find duplicate emails in a table||
+neg-offtopic|||what's a good way to learn algorithms?||
+neg-offtopic|||explain dependency injection||
+neg-offtopic|||how does garbage collection work in the JVM?||
+neg-offtopic|||convert this callback code to async await: fs.readFile(p, cb)||
+neg-offtopic|||what's the difference between TCP and UDP?||
+neg-offtopic|||implement binary search in C||
+neg-offtopic|||explain the observer pattern||
+neg-offtopic|||how do I make an HTTP request in python?||
+neg-offtopic|||what is memoization?||
+neg-offtopic|||write a function that checks if a string is a palindrome||
+neg-offtopic|||what are the SOLID principles?||
+neg-offtopic|||how do git rebase and merge differ?||
+neg-offtopic|||explain event loop in node||
+neg-offtopic|||what does idempotent mean in math?||
+neg-offtopic|||how does public key cryptography work?||
+neg-offtopic|||what is a race condition?||
+neg-offtopic|||generate a random UUID in python||
+neg-offtopic|||how do I sort a dictionary by value in python?||
+neg-offtopic|||explain what a mutex is||
+neg-offtopic|||write a quick unit test for an add(a, b) function||
+neg-offtopic|||what's the difference between == and === in js?||
+neg-offtopic|||how do I parse json in rust?||
+neg-offtopic|||explain recursion with an example||
+neg-offtopic|||how to compute fibonacci numbers efficiently?||
+neg-offtopic|||what's tail call optimization?||
+neg-offtopic|||how does a bloom filter work?||
+neg-offtopic|||explain map reduce||
+neg-offtopic|||what is a B-tree?||
+neg-offtopic|||how do I flatten a nested list in python?||
+neg-offtopic|||what's the difference between an interface and an abstract class in Java?||
+neg-offtopic|||write a debounce function from scratch||
+neg-offtopic|||explain two's complement||
+neg-offtopic|||what is currying?||
+neg-offtopic|||how do I read a CSV file with pandas?||
+neg-offtopic|||what are generics in typescript?||
+neg-hard|apps/web||what year was Next.js first released?||
+neg-hard|apps/api||is postgres or mysql more popular worldwide?||
+neg-hard|||what does the acronym ESM stand for historically?||
+neg-hard|||who created the Node.js runtime?||
+neg-hard|infra||what does kubernetes mean in Greek?||
+neg-hard|||write a poem about redis||
+neg-hard|||tell me a joke about docker containers||
+neg-hard|||how did the terraform license change affect the community?||
+neg-hard|apps/web||what is the history of tailwind css?||
+neg-hard|||explain how oauth device code flow works in general, conceptually||
+neg-hard|||what does the 429 status code mean in HTTP?||
+neg-hard|||how does exponential backoff work mathematically?||
+neg-hard|||what is the difference between UTC and GMT?||
+neg-hard|||compare sentry and datadog as companies||
+neg-hard|apps/api||what is the time complexity of a postgres btree index lookup?||
+neg-hard|||explain what a monorepo is to a non-programmer||
+neg-hard|||write a limerick about pnpm||
+neg-hard|||how does GitHub make money?||
+neg-hard|||what's the origin of the name Stripe?||
+neg-hard|||explain JWT structure: header, payload, signature||
+neg-hard|||is zod pronounced zed or zee?||
+neg-hard|||write a python script that prints the first 10 primes using a loop||
+neg-hard|||what's the plot of the movie The Social Network?||
+neg-hard|||how do I write unit tests in Java with JUnit?||
+neg-hard|||explain what a cron expression like 0 5 * * * means||
+neg-hard|||in general, what are the tradeoffs of soft deletes?||
+neg-hard|||how do Python virtual environments work?||
+neg-hard|||what is WebP and why is it smaller than JPEG?||
+neg-hard|||what is the capital of the Cloudflare headquarters state?||
+neg-hard|||what's the default port for MongoDB?||
+neg-hard|||how do I center a div in plain CSS without any framework?||
+neg-hard|||explain react hooks to a beginner||
+neg-hard|||what's the best mechanical keyboard for programming?||
+neg-hard|||how do I set up a Django project from scratch?||
+neg-hard|||what does HMAC stand for?||
+neg-hard|||how many letters are in the word typescript?||
+neg-hard|||write a rust program that reads a file line by line||
+neg-hard|||what is the difference between an ORM and a query builder in general?||
+neg-hard|||explain what a CDN is||
+neg-hard|||how do I install node on Ubuntu for a different personal project?||
+neg-hard|||summarize the history of the S3 service||
+neg-hard|||how do I write a for loop in Lua?||
+neg-hard|||what is the fastest sorting algorithm for nearly sorted data?||
+neg-hard|||explain what rate limiting is using a leaky bucket analogy||
+neg-hard|||what is a good name for a pet cat?||
+para||r01|which installer tool should I type before add when grabbing a library?||
+para||r02|which release of the javascript engine do I need locally?||
+para||r03|what tool coordinates builds across all the workspaces?||
+para||r07|who has to sign off before my branch lands?||
+para||r11|are our libraries import-style or require-style?||
+para||r13|how do I import shared workspace code without long relative paths?||
+para||r16|what drives the browser automation suite?||
+para||r17|what percentage of lines must the specs exercise?||
+para||r21|is there a utility belt library I'm allowed to pull in?||
+para||r29|what runs checks right before I commit locally?||
+para||r33|what do we run containers with on macs?||
+para||r38|can I rewrite history on the default branch?||
+para||r46|where do we track bugs and tickets?||
+para|apps/web|w01|which react meta-framework powers the frontend?||
+para|apps/web|w08|where is the shared button and dialog library?||
+para|apps/web|w10|should I add a global store library like the one with reducers and actions?||
+para|apps/web|w19|which glyph set do we pull svg symbols from?||
+para|apps/web|w26|where are the content security rules defined for the site?||
+para|apps/web|w27|how is the typeface loaded on the site?||
+para|apps/web|w28|how do customers pay on the site?||
+para|apps/web|w29|what's the rule for screen reader labels on symbol-only controls?||
+para|apps/api|a01|which node http server library powers the backend?||
+para|apps/api|a10|do backend specs spin up a real sql server in docker?||
+para|apps/api|a16|how should currency amounts be represented in columns?||
+para|apps/api|a18|how many simultaneous sql sessions can one pod hold?||
+para|apps/api|a26|how can I correlate log lines for a single call?||
+para|apps/api|a29|how do users send big files to storage?||
+para|apps/api|a31|why did we move away from the previous data mapper?||
+para|apps/api|a35|how do receivers verify our outbound callbacks?||
+para|packages/cli|c01|which argument parsing library does the terminal tool use?||
+para|packages/cli|c02|what compiles the terminal tool into a single output file?||
+para|packages/cli|c12|what gives us interactive questions in the terminal?||
+para|packages/cli|c16|how does the tool tell people a newer release exists?||
+para|services/worker|s06|why is the container base debian instead of the tiny distro?||
+para|services/worker|s11|what if the same task gets delivered twice?||
+para|services/worker|s12|how frequently do we pull payment records?||
+para|infra|i02|where is the remote backend for provisioning kept?||
+para|infra|i09|who hosts our domain name records?||
+para|infra|i14|how long do snapshots of the prod sql server stick around?||
+para|infra|i17|how does traffic get from the internet into the cluster?||
+policy|apps/web|p01,p05|fix the typo in the header and get it merged||
+policy||p01|looks done, can you land it?||
+policy|apps/api|p01,p15|tests pass now, finish up and close this out||
+policy||p01|go ahead and merge when CI is green||
+policy|apps/web|p02,p06|the feature is mostly there, let's get it reviewed||
+policy||p02|put this up for review||
+policy||p03,p22|start on the new billing export feature||
+policy|packages/cli|p03|quick fix: change the default timeout to 30s and commit||
+policy||p03,p04|commit this and push||
+policy||p04|sync my changes to github||
+policy||p05|are we done?||
+policy|apps/api|p05,p28|is this fix good to go?||
+policy||p05|wrap it up||
+policy|apps/web|p06|I think the checkout flow change works, ready for a PR?||
+policy||p07|what does this error even mean?||
+policy||p07|explain what a race condition in our job handler would look like||
+policy||p08|research how other teams handle feature flag cleanup||
+policy||p08|dig into why our cold starts are slow and report back||
+policy||p09|clean up the old experiments folder||
+policy||p09|remove the stale branches from last quarter||
+policy|infra|p10|let's roll this out to prod now, it's Friday afternoon||
+policy|infra|p10|can we release to customers today?||
+policy||p11|also refactor the logger while you're in there||
+policy||p11|add the export endpoint and fix the styles and bump deps in one go||
+policy|apps/web|p12|add a nice date picker package for the form||
+policy|packages/cli|p12|pull in a library for spinners||
+policy||p13|the output in dist is wrong, just patch it there||
+policy|apps/api|p13|tweak the types in client.gen.ts||
+policy|apps/api|p14|reset my local db, it's in a weird state||
+policy|apps/api|p14|wipe the orders table on staging and start fresh||
+policy||p15|I only changed one file, just run its tests and push||
+policy||p16|squash the last five commits on the branch I pushed yesterday||
+policy||p16|clean up the commit history before review||
+policy||p17|summarize what you did||
+policy||p17|give me a recap of the changes||
+policy|apps/web|p18|move the whole app from pages to server components||
+policy|apps/api|p18|restructure the routes folder by domain||
+policy||p19|I need to switch tasks, save my current changes somewhere||
+policy||p20|CI is red because of one flaky spec, just get it passing||
+policy|apps/web|p20|this e2e keeps failing randomly, can you make CI green?||
+policy||p21|create an issue for the flaky login test||
+policy||p21|check the status of the checks on my PR||
+policy|apps/api|p22|update how invoices round the tax amount||
+policy|services/worker|p22|change the invoice sync to run hourly||
+policy||p23|add some fun to the README||
+policy||p24|write the commit for this||
+policy||p24|how should I describe this change in git?||
+policy||p25|upgrade react to the next major||
+policy|apps/api|p25|update fastify to the latest version||
+policy||p26|write a small script to rename the fixture files||
+policy||p27|add logging around the login request so we can debug||
+policy|apps/api|p27|print the auth header when verification fails||
+policy||p28|why is the build failing? just fix it||
+policy||p29|I changed how the --json flag behaves, anything else to update?||
+policy|packages/cli|p29|rename the init command to setup||
+policy||p30|run the load test in CI to compare||
+policy||p30|add the perf suite to the github workflow||
+policy||p01,p02|done, ship it to the team||
+policy||p05,p06|let me know when it's fully working||
+policy||p03|let's try an experimental approach to caching||

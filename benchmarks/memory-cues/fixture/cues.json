@@ -1,0 +1,8515 @@
+[
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r01"
+],
+"cue": "which package manager does this repo use, pnpm?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q000",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"r01"
+],
+"cue": "can I use yarn to add a dependency here?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q001",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r02"
+],
+"cue": "what node version is pinned in .nvmrc?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q002",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r03"
+],
+"cue": "where are the turborepo pipelines configured?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q003",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"r04"
+],
+"cue": "can I commit the .env file with my changes?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q004",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r05"
+],
+"cue": "how do I get the .env.local secrets from 1password?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q005",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r06"
+],
+"cue": "what format do commit messages follow, conventional commits?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q006",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r07"
+],
+"cue": "how many approvals does a PR need before merge?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q007",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r08"
+],
+"cue": "where are the github actions workflows?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q008",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r09",
+"r10"
+],
+"cue": "do we use biome or eslint for linting?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q009",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "packages/cli",
+"gold": [
+"r12",
+"c08"
+],
+"cue": "getting ERR_REQUIRE_ESM when running the cli, how to fix?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q010",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r12"
+],
+"cue": "ERR_REQUIRE_ESM in a package, what's the fix?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q011",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r13"
+],
+"cue": "what prefix do the tsconfig path aliases use?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q012",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r14"
+],
+"cue": "should I use a default export for this util?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q013",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r15"
+],
+"cue": "which test runner, vitest or jest?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q014",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r16"
+],
+"cue": "are e2e tests playwright or cypress?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q015",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r17"
+],
+"cue": "what is the coverage threshold in CI?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q016",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r18"
+],
+"cue": "when does renovate open dependency PRs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q017",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r19"
+],
+"cue": "do I need a changeset for this change?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q018",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r21"
+],
+"cue": "can I pull in lodash for debounce?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q019",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r22"
+],
+"cue": "what library do we use for runtime validation, zod?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q020",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r23"
+],
+"cue": "can I use moment for date formatting?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q021",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r24"
+],
+"cue": "what logger do we use, pino or winston?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q022",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r25"
+],
+"cue": "where does the sentry DSN come from?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q023",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r26"
+],
+"cue": "where are feature flags managed?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q024",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r27"
+],
+"cue": "which product analytics tool, posthog or amplitude?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q025",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r29"
+],
+"cue": "are git hooks husky or lefthook?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q026",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r30"
+],
+"cue": "what python version do the tools/ scripts use with uv?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q027",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"r31"
+],
+"cue": "pnpm install fails with EACCES, should I use sudo?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q028",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r32"
+],
+"cue": "what port does redis run on locally?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q029",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r33"
+],
+"cue": "do we use docker desktop or orbstack?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q030",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r34"
+],
+"cue": "how do I start postgres and redis with docker compose?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q031",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r35"
+],
+"cue": "what does pnpm dev at the root start?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q032",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r36"
+],
+"cue": "what's the staging url?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q033",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r37"
+],
+"cue": "how do production deploys get triggered, git tags?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q034",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r38"
+],
+"cue": "can I force-push to main?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q035",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r42"
+],
+"cue": "CI fails with frozen-lockfile error after I added a dependency",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q036",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r45"
+],
+"cue": "is noUncheckedIndexedAccess enabled?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q037",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "",
+"gold": [
+"r46"
+],
+"cue": "how should I name the branch for linear issue acme-412?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q038",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"r47"
+],
+"cue": "is it ok to leave a console.log in this handler?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q039",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w01"
+],
+"cue": "is the web app on the app router or pages router?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q040",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w02"
+],
+"cue": "what's the web auth provider?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q041",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w04"
+],
+"cue": "where is the clerk middleware?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q042",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w06"
+],
+"cue": "getting a sign-in redirect loop on /login",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q043",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w07"
+],
+"cue": "is tailwind v4 config in globals.css?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q044",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w08"
+],
+"cue": "where do the shadcn components live?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q045",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w09"
+],
+"cue": "tanstack query or zustand for this server data?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q046",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w12"
+],
+"cue": "next/image error for cdn.acme.dev host not configured",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q047",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w13"
+],
+"cue": "can I read STRIPE_SECRET via a NEXT_PUBLIC_ env var?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q048",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w14"
+],
+"cue": "how do I run the web tests with pnpm filter?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q049",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w16"
+],
+"cue": "what port is storybook on?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q050",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w17"
+],
+"cue": "hydration mismatch on the date in the header",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q051",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w18"
+],
+"cue": "where are the next-intl messages files?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q052",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w23"
+],
+"cue": "Module not found: Can't resolve 'fs' in the build",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q053",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w24"
+],
+"cue": "do PRs get vercel preview deployments?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q054",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w25"
+],
+"cue": "what's the ISR revalidate time for marketing pages?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q055",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w30"
+],
+"cue": "how do I run the bundle analyzer?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q056",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/web",
+"gold": [
+"w36"
+],
+"cue": "build fails complaining about pk_test_ clerk key",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q057",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a01"
+],
+"cue": "is the api fastify or express?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q058",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a02"
+],
+"cue": "which postgres version is the database?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q059",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a03"
+],
+"cue": "where is the drizzle schema?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q060",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a04"
+],
+"cue": "how do I run db:migrate for the api?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q061",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a07"
+],
+"cue": "what's the rate limit per IP?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q062",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a09"
+],
+"cue": "where is openapi.yaml generated from?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q063",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a11"
+],
+"cue": "how do I run only the auth tests in the api?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q064",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a12"
+],
+"cue": "stripe webhook signature verification fails",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q065",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a13"
+],
+"cue": "what error format do we return, problem+json?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q066",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a14"
+],
+"cue": "should the list endpoint use offset pagination?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q067",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a16"
+],
+"cue": "can I store the price as a float?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q068",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a19"
+],
+"cue": "prepared statement errors with pgbouncer",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q069",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a21"
+],
+"cue": "how do I seed the local database?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q070",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a25"
+],
+"cue": "what does /healthz check?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q071",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a28"
+],
+"cue": "N+1 query in the orders list",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q072",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a33"
+],
+"cue": "can I edit the migration that got merged yesterday?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q073",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "apps/api",
+"gold": [
+"a36"
+],
+"cue": "intermittent 401s from JWT verification",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q074",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "packages/cli",
+"gold": [
+"c01"
+],
+"cue": "is the cli commander or yargs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q075",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "packages/cli",
+"gold": [
+"c04"
+],
+"cue": "where does the cli store config.json?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q076",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "packages/cli",
+"gold": [
+"c11"
+],
+"cue": "can I use chalk for colors in the cli?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q077",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "packages/cli",
+"gold": [
+"c13"
+],
+"cue": "does every command need --json output?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q078",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "services/worker",
+"gold": [
+"s02"
+],
+"cue": "what are the bullmq queue names?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q079",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "services/worker",
+"gold": [
+"s06"
+],
+"cue": "sharp install fails on alpine",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q080",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "services/worker",
+"gold": [
+"s13"
+],
+"cue": "redis out of memory from completed jobs",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q081",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "services/worker",
+"gold": [
+"s10"
+],
+"cue": "where is bull board mounted?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q082",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "infra",
+"gold": [
+"i02"
+],
+"cue": "where is the terraform state bucket?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q083",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "infra",
+"gold": [
+"i06"
+],
+"cue": "can I run terraform apply from my laptop?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q084",
+"split": "test"
+},
+{
+"cat": "lex",
+"scope": "infra",
+"gold": [
+"i12"
+],
+"cue": "how do I update kubeconfig for the eks cluster?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q085",
+"split": "dev"
+},
+{
+"cat": "lex",
+"scope": "infra",
+"gold": [
+"i16"
+],
+"cue": "ingress broke after the EKS upgrade",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q086",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w02"
+],
+"cue": "who handles login for the frontend?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q087",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w02"
+],
+"cue": "which identity vendor does the site sign people in with?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q088",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a02"
+],
+"cue": "what db are we on?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q089",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a02"
+],
+"cue": "which relational store backs the backend?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q090",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i04"
+],
+"cue": "what k8s cluster runs the services?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q091",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i01"
+],
+"cue": "what IaC tool do we use?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q092",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r01"
+],
+"cue": "what's the JS dependency installer here?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q093",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r02"
+],
+"cue": "which runtime release should nvm switch to?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q094",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r04"
+],
+"cue": "is it fine to check my local secrets file into git?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q095",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r06"
+],
+"cue": "how should I word my commit subject line?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q096",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r09"
+],
+"cue": "what's our code formatter?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q097",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r15"
+],
+"cue": "what do we write unit specs with?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q098",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r20"
+],
+"cue": "how does the user like responses formatted?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q099",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r23"
+],
+"cue": "which datetime library is allowed?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q100",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r24"
+],
+"cue": "what should I use instead of print debugging to emit logs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q101",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r25"
+],
+"cue": "where do crashes get reported?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q102",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r26"
+],
+"cue": "how do we toggle features for a subset of users?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q103",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r28"
+],
+"cue": "what tz are stored times in?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q104",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r43"
+],
+"cue": "where do prod credentials live?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q105",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w07"
+],
+"cue": "how do we do CSS in the frontend?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q106",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w09"
+],
+"cue": "what do we use for data fetching cache on the client?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q107",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w11"
+],
+"cue": "what's the form library?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q108",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w20"
+],
+"cue": "how is the light/dark theme toggled?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q109",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w18"
+],
+"cue": "how is localization done on the site?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q110",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w24"
+],
+"cue": "where is the frontend hosted?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q111",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a03"
+],
+"cue": "what's the query builder for the database layer?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q112",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a07"
+],
+"cue": "how many calls per minute can a client make before getting throttled?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q113",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a14"
+],
+"cue": "how do we page through results in list APIs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q114",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a15"
+],
+"cue": "when a record is removed is it actually gone from the table?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q115",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a17"
+],
+"cue": "what kind of identifiers do table rows get?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q116",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a22"
+],
+"cue": "how do we send transactional mail?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q117",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a30"
+],
+"cue": "what powers text search?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q118",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a34"
+],
+"cue": "how is tenant isolation enforced in queries?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q119",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c09"
+],
+"cue": "how does signing in from the terminal tool work?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q120",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c03"
+],
+"cue": "what's the npm name of our command line tool?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q121",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c14"
+],
+"cue": "how can users disable usage tracking in the cli?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q122",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s04"
+],
+"cue": "how many times does a failed task get retried?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q123",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s05"
+],
+"cue": "where are periodic tasks scheduled?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q124",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s07"
+],
+"cue": "what happens to tasks that keep failing?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q125",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s03"
+],
+"cue": "how many tasks run in parallel per process?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q126",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i03"
+],
+"cue": "which aws datacenter region?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q127",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i10"
+],
+"cue": "where are the observability dashboards?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q128",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i11"
+],
+"cue": "who gets woken up when something breaks at night?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q129",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i19"
+],
+"cue": "how does the background processor scale out?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q130",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i21"
+],
+"cue": "how do I reach the production db from my machine?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q131",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w06"
+],
+"cue": "why does it keep bouncing back to the same page?",
+"last_paths": [
+"apps/web/app/login/page.tsx",
+"apps/web/middleware.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q132",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w06"
+],
+"cue": "it loops forever after I sign in",
+"last_paths": [
+"apps/web/middleware.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q133",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w17"
+],
+"cue": "the text on the server differs from the client, why?",
+"last_paths": [
+"apps/web/components/header-clock.tsx"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q134",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w23"
+],
+"cue": "build is broken with a resolve error on a node builtin",
+"last_paths": [
+"apps/web/lib/read-config.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q135",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w05"
+],
+"cue": "where is this page's component?",
+"last_paths": [
+"apps/web/app/login/page.tsx"
+],
+"prev_turn": "show me the sign in page",
+"author": "hand",
+"id": "q136",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w13"
+],
+"cue": "can I expose this key to the browser?",
+"last_paths": [
+"apps/web/.env.local"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q137",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w12"
+],
+"cue": "the image won't load, says hostname not configured",
+"last_paths": [
+"apps/web/components/avatar.tsx"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q138",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w29"
+],
+"cue": "anything I need to add to this button?",
+"last_paths": [
+"apps/web/components/ui/icon-button.tsx"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q139",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w14"
+],
+"cue": "how do I run the tests for this?",
+"last_paths": [
+"apps/web/components/ui/button.tsx"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q140",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w33"
+],
+"cue": "where do uncaught errors go?",
+"last_paths": [
+"apps/web/app/page.tsx"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q141",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w21"
+],
+"cue": "how should I call the backend from here?",
+"last_paths": [
+"apps/web/app/(dashboard)/orders/page.tsx"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q142",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w32"
+],
+"cue": "should this be an API route?",
+"last_paths": [
+"apps/web/app/(dashboard)/settings/page.tsx"
+],
+"prev_turn": "let's add a form to save profile settings",
+"author": "hand",
+"id": "q143",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w36"
+],
+"cue": "why does the prod build fail but dev works?",
+"last_paths": [
+"apps/web/.env.production"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q144",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a12"
+],
+"cue": "signature check keeps failing",
+"last_paths": [
+"apps/api/src/routes/webhooks/stripe.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q145",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a19"
+],
+"cue": "getting \"prepared statement already exists\" errors",
+"last_paths": [
+"apps/api/src/db/client.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q146",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a36"
+],
+"cue": "some requests randomly get unauthorized",
+"last_paths": [
+"apps/api/src/plugins/auth.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q147",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a28"
+],
+"cue": "this endpoint is really slow with many rows",
+"last_paths": [
+"apps/api/src/routes/orders.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q148",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a05",
+"a33"
+],
+"cue": "I changed a column, what next?",
+"last_paths": [
+"apps/api/src/db/schema.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q149",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a11"
+],
+"cue": "run just these tests",
+"last_paths": [
+"apps/api/src/plugins/auth.test.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q150",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a13"
+],
+"cue": "what shape should the error response have?",
+"last_paths": [
+"apps/api/src/routes/users.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q151",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a16"
+],
+"cue": "what type should this amount column be?",
+"last_paths": [
+"apps/api/src/db/schema.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q152",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a14"
+],
+"cue": "add paging to this route",
+"last_paths": [
+"apps/api/src/routes/invoices.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q153",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a34"
+],
+"cue": "anything to watch out for in this query?",
+"last_paths": [
+"apps/api/src/routes/projects.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q154",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a27"
+],
+"cue": "this external call hangs sometimes",
+"last_paths": [
+"apps/api/src/lib/geocode.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q155",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a24"
+],
+"cue": "the browser says blocked by policy",
+"last_paths": [
+"apps/api/src/server.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q156",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "packages/cli",
+"gold": [
+"c08"
+],
+"cue": "a user reports a require error on install",
+"last_paths": [
+"packages/cli/src/index.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q157",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "packages/cli",
+"gold": [
+"c15"
+],
+"cue": "config isn't found on this user's machine running Windows",
+"last_paths": [
+"packages/cli/src/config.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q158",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "packages/cli",
+"gold": [
+"c13"
+],
+"cue": "anything else this command should support?",
+"last_paths": [
+"packages/cli/src/commands/list.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q159",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "packages/cli",
+"gold": [
+"c10"
+],
+"cue": "how do I try this command?",
+"last_paths": [
+"packages/cli/src/commands/deploy.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q160",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "packages/cli",
+"gold": [
+"c17"
+],
+"cue": "what should it return when args are wrong?",
+"last_paths": [
+"packages/cli/src/commands/deploy.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q161",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "packages/cli",
+"gold": [
+"c07"
+],
+"cue": "can I use the new fs.glob here?",
+"last_paths": [
+"packages/cli/src/scan.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q162",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s11"
+],
+"cue": "what if this handler runs twice?",
+"last_paths": [
+"services/worker/src/jobs/billing-sync.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q163",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s06"
+],
+"cue": "the docker build fails on the image lib",
+"last_paths": [
+"services/worker/Dockerfile"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q164",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s13"
+],
+"cue": "memory keeps growing on the queue server",
+"last_paths": [
+"services/worker/src/queues.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q165",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s04"
+],
+"cue": "how often does it retry?",
+"last_paths": [
+"services/worker/src/jobs/email.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q166",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s14"
+],
+"cue": "what happens on deploy to in-flight work?",
+"last_paths": [
+"services/worker/src/main.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q167",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s09"
+],
+"cue": "how do I run this locally?",
+"last_paths": [
+"services/worker/src/main.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q168",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s16"
+],
+"cue": "how do I test this?",
+"last_paths": [
+"services/worker/src/jobs/images.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q169",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "infra",
+"gold": [
+"i07"
+],
+"cue": "how do I preview what this change will do?",
+"last_paths": [
+"infra/terraform/rds.tf"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q170",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "infra",
+"gold": [
+"i06",
+"i18"
+],
+"cue": "ok ready to roll this out, what's the process?",
+"last_paths": [
+"infra/terraform/eks.tf"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q171",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "infra",
+"gold": [
+"i20"
+],
+"cue": "what else does this resource need?",
+"last_paths": [
+"infra/terraform/s3.tf"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q172",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "infra",
+"gold": [
+"i16",
+"i17"
+],
+"cue": "the load balancer stopped routing after the version bump",
+"last_paths": [
+"infra/terraform/eks.tf"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q173",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "infra",
+"gold": [
+"i08"
+],
+"cue": "where do the secrets for this deployment come from?",
+"last_paths": [
+"infra/helm/api/values.yaml"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q174",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w02"
+],
+"cue": "which one are we using again?",
+"last_paths": [],
+"prev_turn": "should we use Auth0 or Clerk for sign-in?",
+"author": "hand",
+"id": "q175",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a02"
+],
+"cue": "and what version is it?",
+"last_paths": [],
+"prev_turn": "what database does the api use?",
+"author": "hand",
+"id": "q176",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a01"
+],
+"cue": "how do I register a plugin in it?",
+"last_paths": [],
+"prev_turn": "which http framework is the api built on?",
+"author": "hand",
+"id": "q177",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "",
+"gold": [
+"r01"
+],
+"cue": "ok and which one do we use?",
+"last_paths": [],
+"prev_turn": "there are so many js package managers",
+"author": "hand",
+"id": "q178",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "services/worker",
+"gold": [
+"s01"
+],
+"cue": "what broker is behind it?",
+"last_paths": [],
+"prev_turn": "I'm looking at the job queue code",
+"author": "hand",
+"id": "q179",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w09"
+],
+"cue": "so where should this state go?",
+"last_paths": [
+"apps/web/app/(dashboard)/orders/page.tsx"
+],
+"prev_turn": "I need to cache the orders list fetched from the api",
+"author": "hand",
+"id": "q180",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "infra",
+"gold": [
+"i04",
+"i12"
+],
+"cue": "how do I get access to it?",
+"last_paths": [],
+"prev_turn": "I need to look at the production cluster pods",
+"author": "hand",
+"id": "q181",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "",
+"gold": [
+"r42"
+],
+"cue": "why did my CI run fail right after I added a package?",
+"last_paths": [
+"package.json"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q182",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w15"
+],
+"cue": "the end-to-end run can't connect",
+"last_paths": [
+"apps/web/e2e/login.spec.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q183",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/api",
+"gold": [
+"a10"
+],
+"cue": "do these tests need a database?",
+"last_paths": [
+"apps/api/src/routes/users.test.ts"
+],
+"prev_turn": "",
+"author": "hand",
+"id": "q184",
+"split": "dev"
+},
+{
+"cat": "ctx",
+"scope": "packages/cli",
+"gold": [
+"c06"
+],
+"cue": "how do I ship this?",
+"last_paths": [
+"packages/cli/package.json"
+],
+"prev_turn": "I finished the new deploy command",
+"author": "hand",
+"id": "q185",
+"split": "test"
+},
+{
+"cat": "ctx",
+"scope": "apps/web",
+"gold": [
+"w31"
+],
+"cue": "where should this new page go?",
+"last_paths": [
+"apps/web/app/(dashboard)/layout.tsx"
+],
+"prev_turn": "we need an authenticated billing page",
+"author": "hand",
+"id": "q186",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r01",
+"r02",
+"r05",
+"r34"
+],
+"cue": "set up the project on a new laptop",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q187",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r01",
+"r02",
+"r05"
+],
+"cue": "what do I need to install to get started on this repo?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q188",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r05",
+"r43"
+],
+"cue": "I just joined, how do I get the credentials I need?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q189",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "apps/web",
+"gold": [
+"r01",
+"w14"
+],
+"cue": "I added a helper to the frontend, what should I run before pushing?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q190",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r06",
+"r07",
+"r19"
+],
+"cue": "I'm about to open my first pull request, anything I should know?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q191",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r07",
+"r17",
+"r42"
+],
+"cue": "why can't I merge my PR yet?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q192",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r36",
+"r37"
+],
+"cue": "how do I get my change live for customers?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q193",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a04",
+"a21",
+"r34"
+],
+"cue": "my local database is empty and out of date",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q194",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a05",
+"a04",
+"a33"
+],
+"cue": "I need to add a column to the users table",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q195",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a29"
+],
+"cue": "how do we handle user avatar uploads end to end?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q196",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/web",
+"gold": [
+"w28"
+],
+"cue": "how do payments work in this app?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q197",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/web",
+"gold": [
+"w02",
+"w04",
+"w05"
+],
+"cue": "explain how authentication works in the web app",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q198",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a06",
+"a36"
+],
+"cue": "how does the backend know who the user is?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q199",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a23"
+],
+"cue": "how do I kick off something asynchronous from a request handler?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q200",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "services/worker",
+"gold": [
+"s02",
+"s04",
+"s07"
+],
+"cue": "I'm adding a new kind of async task, what are the conventions?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q201",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a13",
+"a14",
+"a08"
+],
+"cue": "I'm writing a new list endpoint, what conventions apply?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q202",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/web",
+"gold": [
+"w08",
+"w07",
+"w19"
+],
+"cue": "I'm building a new settings screen, what UI stack do I use?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q203",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/web",
+"gold": [
+"w18"
+],
+"cue": "we need to support German on the site",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q204",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "infra",
+"gold": [
+"i13",
+"i05"
+],
+"cue": "how do I deploy a brand new microservice?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q205",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "infra",
+"gold": [
+"i10",
+"i11"
+],
+"cue": "how do I know when prod is unhealthy?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q206",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "infra",
+"gold": [
+"i22",
+"i14"
+],
+"cue": "what happens if the primary database goes down?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q207",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "packages/cli",
+"gold": [
+"c06",
+"r19"
+],
+"cue": "we need to cut a new version of the terminal tool",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q208",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "packages/cli",
+"gold": [
+"c10",
+"c18"
+],
+"cue": "how can I try my changes to the command line tool?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q209",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r32"
+],
+"cue": "something is already listening on my port when I start things",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q210",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r35",
+"r34"
+],
+"cue": "how do I run everything locally?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q211",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r20",
+"r40"
+],
+"cue": "how should you write your replies and code for me?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q212",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r44"
+],
+"cue": "my native image module crashes after I changed runtime version",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q213",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/web",
+"gold": [
+"w30",
+"w25"
+],
+"cue": "the marketing site feels slow, where do I start?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q214",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a18",
+"a19"
+],
+"cue": "we are running out of database connections under load",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q215",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "services/worker",
+"gold": [
+"s13",
+"s07"
+],
+"cue": "the queue backlog is exploding",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q216",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/web",
+"gold": [
+"w13",
+"w35"
+],
+"cue": "how does the frontend know where the backend is?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q217",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "infra",
+"gold": [
+"i19"
+],
+"cue": "traffic will triple next week, will things scale?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q218",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r25",
+"r24"
+],
+"cue": "a customer hit an error, how do I find out what happened?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q219",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r47",
+"r14",
+"r40"
+],
+"cue": "review my code for style issues",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q220",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a35"
+],
+"cue": "a partner wants to verify our callbacks are authentic",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q221",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "apps/api",
+"gold": [
+"a24",
+"a08"
+],
+"cue": "the mobile app team needs to call our backend",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q222",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r46",
+"r06"
+],
+"cue": "I'm starting work on a ticket, how should I set up the branch and commits?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q223",
+"split": "test"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r18"
+],
+"cue": "there are a bunch of dependency bump PRs, can I merge them?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q224",
+"split": "dev"
+},
+{
+"cat": "indirect",
+"scope": "",
+"gold": [
+"r28",
+"r23"
+],
+"cue": "users in Tokyo see the wrong day for their orders",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q225",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "apps/web",
+"gold": [],
+"cue": "thanks!",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q226",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "ok cool",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q227",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "apps/api",
+"gold": [],
+"cue": "sounds good, go ahead",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q228",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "lgtm",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q229",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "yes do it",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q230",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "nice, that worked",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q231",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "hmm let me think about it",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q232",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "can you continue?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q233",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "infra",
+"gold": [],
+"cue": "great job",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q234",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "wait, stop",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q235",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "haha that's funny",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q236",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "good morning",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q237",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "try again",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q238",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "perfect, thank you so much",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q239",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "packages/cli",
+"gold": [],
+"cue": "sure",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q240",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "undo that",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q241",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "looks good to me",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q242",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "what do you think?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q243",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "keep going",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q244",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "no, the other one",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q245",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "services/worker",
+"gold": [],
+"cue": "that's it for today",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q246",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "I'm back",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q247",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "nevermind",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q248",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "can you explain that again more simply?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q249",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "cool, next step",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q250",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "yep",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q251",
+"split": "test"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "ok one more thing",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q252",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "hello there",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q253",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "interesting",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q254",
+"split": "dev"
+},
+{
+"cat": "neg-chat",
+"scope": "",
+"gold": [],
+"cue": "do the same for the rest",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q255",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what is 17 * 23?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q256",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "solve 3x + 5 = 20",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q257",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's the derivative of x^3?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q258",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "convert 72 fahrenheit to celsius",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q259",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "how many seconds in a week?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q260",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's the capital of Australia?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q261",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "who wrote Pride and Prejudice?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q262",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "recommend a good sci-fi book",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q263",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's a healthy breakfast?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q264",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "translate good night to Spanish",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q265",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "is 97 a prime number?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q266",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's the square root of 2 to five digits?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q267",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "explain the monty hall problem",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q268",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "how far is the moon?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q269",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's the weather like in Paris in May?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q270",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "write a haiku about autumn",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q271",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's 15% tip on 84 dollars?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q272",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "how do vaccines work?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q273",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "give me a pasta recipe",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q274",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's the difference between affect and effect?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q275",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "how many bytes in a gigabyte?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q276",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "what's the time complexity of quicksort?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q277",
+"split": "dev"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "explain big O notation",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q278",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "who won the world cup in 2018?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q279",
+"split": "test"
+},
+{
+"cat": "neg-math",
+"scope": "",
+"gold": [],
+"cue": "summarize the plot of Hamlet",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q280",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "write a python function to reverse a linked list",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q281",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what's the difference between a process and a thread?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q282",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain how a hash map handles collisions",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q283",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "write a bash one-liner to count lines in all .txt files",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q284",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do I reverse a string in Go?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q285",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what does the rust borrow checker do?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q286",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain closures in javascript",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q287",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "regex to match an IPv4 address",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q288",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what is a monad?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q289",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how does TCP's three-way handshake work?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q290",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "write fizzbuzz in haskell",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q291",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain the CAP theorem",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q292",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what's the difference between let and const?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q293",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do I exit vim?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q294",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "write a SQL query to find duplicate emails in a table",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q295",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what's a good way to learn algorithms?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q296",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain dependency injection",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q297",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how does garbage collection work in the JVM?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q298",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "convert this callback code to async await: fs.readFile(p, cb)",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q299",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what's the difference between TCP and UDP?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q300",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "implement binary search in C",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q301",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain the observer pattern",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q302",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do I make an HTTP request in python?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q303",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what is memoization?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q304",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "write a function that checks if a string is a palindrome",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q305",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what are the SOLID principles?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q306",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do git rebase and merge differ?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q307",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain event loop in node",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q308",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what does idempotent mean in math?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q309",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how does public key cryptography work?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q310",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what is a race condition?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q311",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "generate a random UUID in python",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q312",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do I sort a dictionary by value in python?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q313",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain what a mutex is",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q314",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "write a quick unit test for an add(a, b) function",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q315",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what's the difference between == and === in js?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q316",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do I parse json in rust?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q317",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain recursion with an example",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q318",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how to compute fibonacci numbers efficiently?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q319",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what's tail call optimization?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q320",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how does a bloom filter work?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q321",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain map reduce",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q322",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what is a B-tree?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q323",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do I flatten a nested list in python?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q324",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what's the difference between an interface and an abstract class in Java?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q325",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "write a debounce function from scratch",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q326",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "explain two's complement",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q327",
+"split": "dev"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what is currying?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q328",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "how do I read a CSV file with pandas?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q329",
+"split": "test"
+},
+{
+"cat": "neg-offtopic",
+"scope": "",
+"gold": [],
+"cue": "what are generics in typescript?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q330",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "apps/web",
+"gold": [],
+"cue": "what year was Next.js first released?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q331",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "apps/api",
+"gold": [],
+"cue": "is postgres or mysql more popular worldwide?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q332",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what does the acronym ESM stand for historically?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q333",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "who created the Node.js runtime?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q334",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "infra",
+"gold": [],
+"cue": "what does kubernetes mean in Greek?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q335",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "write a poem about redis",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q336",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "tell me a joke about docker containers",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q337",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how did the terraform license change affect the community?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q338",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "apps/web",
+"gold": [],
+"cue": "what is the history of tailwind css?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q339",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "explain how oauth device code flow works in general, conceptually",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q340",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what does the 429 status code mean in HTTP?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q341",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how does exponential backoff work mathematically?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q342",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what is the difference between UTC and GMT?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q343",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "compare sentry and datadog as companies",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q344",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "apps/api",
+"gold": [],
+"cue": "what is the time complexity of a postgres btree index lookup?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q345",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "explain what a monorepo is to a non-programmer",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q346",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "write a limerick about pnpm",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q347",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how does GitHub make money?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q348",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what's the origin of the name Stripe?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q349",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "explain JWT structure: header, payload, signature",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q350",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "is zod pronounced zed or zee?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q351",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "write a python script that prints the first 10 primes using a loop",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q352",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what's the plot of the movie The Social Network?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q353",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how do I write unit tests in Java with JUnit?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q354",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "explain what a cron expression like 0 5 * * * means",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q355",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "in general, what are the tradeoffs of soft deletes?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q356",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how do Python virtual environments work?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q357",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what is WebP and why is it smaller than JPEG?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q358",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what is the capital of the Cloudflare headquarters state?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q359",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what's the default port for MongoDB?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q360",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how do I center a div in plain CSS without any framework?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q361",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "explain react hooks to a beginner",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q362",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what's the best mechanical keyboard for programming?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q363",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how do I set up a Django project from scratch?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q364",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what does HMAC stand for?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q365",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how many letters are in the word typescript?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q366",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "write a rust program that reads a file line by line",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q367",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what is the difference between an ORM and a query builder in general?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q368",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "explain what a CDN is",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q369",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how do I install node on Ubuntu for a different personal project?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q370",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "summarize the history of the S3 service",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q371",
+"split": "test"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "how do I write a for loop in Lua?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q372",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what is the fastest sorting algorithm for nearly sorted data?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q373",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "explain what rate limiting is using a leaky bucket analogy",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q374",
+"split": "dev"
+},
+{
+"cat": "neg-hard",
+"scope": "",
+"gold": [],
+"cue": "what is a good name for a pet cat?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q375",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r01"
+],
+"cue": "which installer tool should I type before add when grabbing a library?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q376",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r02"
+],
+"cue": "which release of the javascript engine do I need locally?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q377",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r03"
+],
+"cue": "what tool coordinates builds across all the workspaces?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q378",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r07"
+],
+"cue": "who has to sign off before my branch lands?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q379",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r11"
+],
+"cue": "are our libraries import-style or require-style?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q380",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r13"
+],
+"cue": "how do I import shared workspace code without long relative paths?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q381",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r16"
+],
+"cue": "what drives the browser automation suite?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q382",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r17"
+],
+"cue": "what percentage of lines must the specs exercise?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q383",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r21"
+],
+"cue": "is there a utility belt library I'm allowed to pull in?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q384",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r29"
+],
+"cue": "what runs checks right before I commit locally?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q385",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r33"
+],
+"cue": "what do we run containers with on macs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q386",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r38"
+],
+"cue": "can I rewrite history on the default branch?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q387",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r46"
+],
+"cue": "where do we track bugs and tickets?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q388",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w01"
+],
+"cue": "which react meta-framework powers the frontend?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q389",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w08"
+],
+"cue": "where is the shared button and dialog library?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q390",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w10"
+],
+"cue": "should I add a global store library like the one with reducers and actions?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q391",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w19"
+],
+"cue": "which glyph set do we pull svg symbols from?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q392",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w26"
+],
+"cue": "where are the content security rules defined for the site?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q393",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w27"
+],
+"cue": "how is the typeface loaded on the site?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q394",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w28"
+],
+"cue": "how do customers pay on the site?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q395",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w29"
+],
+"cue": "what's the rule for screen reader labels on symbol-only controls?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q396",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a01"
+],
+"cue": "which node http server library powers the backend?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q397",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a10"
+],
+"cue": "do backend specs spin up a real sql server in docker?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q398",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a16"
+],
+"cue": "how should currency amounts be represented in columns?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q399",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a18"
+],
+"cue": "how many simultaneous sql sessions can one pod hold?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q400",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a26"
+],
+"cue": "how can I correlate log lines for a single call?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q401",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a29"
+],
+"cue": "how do users send big files to storage?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q402",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a31"
+],
+"cue": "why did we move away from the previous data mapper?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q403",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a35"
+],
+"cue": "how do receivers verify our outbound callbacks?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q404",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c01"
+],
+"cue": "which argument parsing library does the terminal tool use?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q405",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c02"
+],
+"cue": "what compiles the terminal tool into a single output file?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q406",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c12"
+],
+"cue": "what gives us interactive questions in the terminal?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q407",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c16"
+],
+"cue": "how does the tool tell people a newer release exists?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q408",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s06"
+],
+"cue": "why is the container base debian instead of the tiny distro?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q409",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s11"
+],
+"cue": "what if the same task gets delivered twice?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q410",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s12"
+],
+"cue": "how frequently do we pull payment records?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q411",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i02"
+],
+"cue": "where is the remote backend for provisioning kept?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q412",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i09"
+],
+"cue": "who hosts our domain name records?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q413",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i14"
+],
+"cue": "how long do snapshots of the prod sql server stick around?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q414",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i17"
+],
+"cue": "how does traffic get from the internet into the cluster?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q415",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/web",
+"gold": [
+"p01",
+"p05"
+],
+"cue": "fix the typo in the header and get it merged",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q416",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p01"
+],
+"cue": "looks done, can you land it?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q417",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p01",
+"p15"
+],
+"cue": "tests pass now, finish up and close this out",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q418",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p01"
+],
+"cue": "go ahead and merge when CI is green",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q419",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/web",
+"gold": [
+"p02",
+"p06"
+],
+"cue": "the feature is mostly there, let's get it reviewed",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q420",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p02"
+],
+"cue": "put this up for review",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q421",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p03",
+"p22"
+],
+"cue": "start on the new billing export feature",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q422",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "packages/cli",
+"gold": [
+"p03"
+],
+"cue": "quick fix: change the default timeout to 30s and commit",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q423",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p03",
+"p04"
+],
+"cue": "commit this and push",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q424",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p04"
+],
+"cue": "sync my changes to github",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q425",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p05"
+],
+"cue": "are we done?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q426",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p05",
+"p28"
+],
+"cue": "is this fix good to go?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q427",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p05"
+],
+"cue": "wrap it up",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q428",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/web",
+"gold": [
+"p06"
+],
+"cue": "I think the checkout flow change works, ready for a PR?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q429",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p07"
+],
+"cue": "what does this error even mean?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q430",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p07"
+],
+"cue": "explain what a race condition in our job handler would look like",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q431",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p08"
+],
+"cue": "research how other teams handle feature flag cleanup",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q432",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p08"
+],
+"cue": "dig into why our cold starts are slow and report back",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q433",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p09"
+],
+"cue": "clean up the old experiments folder",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q434",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p09"
+],
+"cue": "remove the stale branches from last quarter",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q435",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "infra",
+"gold": [
+"p10"
+],
+"cue": "let's roll this out to prod now, it's Friday afternoon",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q436",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "infra",
+"gold": [
+"p10"
+],
+"cue": "can we release to customers today?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q437",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p11"
+],
+"cue": "also refactor the logger while you're in there",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q438",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p11"
+],
+"cue": "add the export endpoint and fix the styles and bump deps in one go",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q439",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "apps/web",
+"gold": [
+"p12"
+],
+"cue": "add a nice date picker package for the form",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q440",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "packages/cli",
+"gold": [
+"p12"
+],
+"cue": "pull in a library for spinners",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q441",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p13"
+],
+"cue": "the output in dist is wrong, just patch it there",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q442",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p13"
+],
+"cue": "tweak the types in client.gen.ts",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q443",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p14"
+],
+"cue": "reset my local db, it's in a weird state",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q444",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p14"
+],
+"cue": "wipe the orders table on staging and start fresh",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q445",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p15"
+],
+"cue": "I only changed one file, just run its tests and push",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q446",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p16"
+],
+"cue": "squash the last five commits on the branch I pushed yesterday",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q447",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p16"
+],
+"cue": "clean up the commit history before review",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q448",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p17"
+],
+"cue": "summarize what you did",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q449",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p17"
+],
+"cue": "give me a recap of the changes",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q450",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/web",
+"gold": [
+"p18"
+],
+"cue": "move the whole app from pages to server components",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q451",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p18"
+],
+"cue": "restructure the routes folder by domain",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q452",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p19"
+],
+"cue": "I need to switch tasks, save my current changes somewhere",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q453",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p20"
+],
+"cue": "CI is red because of one flaky spec, just get it passing",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q454",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/web",
+"gold": [
+"p20"
+],
+"cue": "this e2e keeps failing randomly, can you make CI green?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q455",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p21"
+],
+"cue": "create an issue for the flaky login test",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q456",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p21"
+],
+"cue": "check the status of the checks on my PR",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q457",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p22"
+],
+"cue": "update how invoices round the tax amount",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q458",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "services/worker",
+"gold": [
+"p22"
+],
+"cue": "change the invoice sync to run hourly",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q459",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p23"
+],
+"cue": "add some fun to the README",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q460",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p24"
+],
+"cue": "write the commit for this",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q461",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p24"
+],
+"cue": "how should I describe this change in git?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q462",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p25"
+],
+"cue": "upgrade react to the next major",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q463",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p25"
+],
+"cue": "update fastify to the latest version",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q464",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p26"
+],
+"cue": "write a small script to rename the fixture files",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q465",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p27"
+],
+"cue": "add logging around the login request so we can debug",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q466",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "apps/api",
+"gold": [
+"p27"
+],
+"cue": "print the auth header when verification fails",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q467",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p28"
+],
+"cue": "why is the build failing? just fix it",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q468",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p29"
+],
+"cue": "I changed how the --json flag behaves, anything else to update?",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q469",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "packages/cli",
+"gold": [
+"p29"
+],
+"cue": "rename the init command to setup",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q470",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p30"
+],
+"cue": "run the load test in CI to compare",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q471",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p30"
+],
+"cue": "add the perf suite to the github workflow",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q472",
+"split": "dev"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p01",
+"p02"
+],
+"cue": "done, ship it to the team",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q473",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p05",
+"p06"
+],
+"cue": "let me know when it's fully working",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q474",
+"split": "test"
+},
+{
+"cat": "policy",
+"scope": "",
+"gold": [
+"p03"
+],
+"cue": "let's try an experimental approach to caching",
+"last_paths": [],
+"prev_turn": "",
+"author": "hand",
+"id": "q475",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w36"
+],
+"cue": "What causes production builds to fail for clerk instances?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q476",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w36"
+],
+"cue": "Could you remind me why pk_test_ keys cause build failures in prod?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q477",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r39"
+],
+"cue": "What directories do platform members own?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q478",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r39"
+],
+"cue": "Could you remind me who owns infra/ and .github/ in CODEOWNERS?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q479",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a19"
+],
+"cue": "how do we handle prepared statements with PgBouncer?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q480",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a19"
+],
+"cue": "Need help enabling prepared statements for PgBouncer?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q481",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i14"
+],
+"cue": "What's the duration backups are stored for?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q482",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i14"
+],
+"cue": "Could you remind me about production Postgres backup retention?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q483",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r13"
+],
+"cue": "How do we set up alias paths for TypeScript files?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q484",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r13"
+],
+"cue": "Can you remind me about TypeScript path aliases and their prefix?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q485",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r19"
+],
+"cue": "what does running changeset do for our project?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q486",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r19"
+],
+"cue": "Help! Need to create a changeset for a user-facing update.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q487",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s01"
+],
+"cue": "What queue system is being used with Redis version 7?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q488",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s01"
+],
+"cue": "Could you remind me how BullMQ works with Redis 7?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q489",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r25"
+],
+"cue": "what does DSN stand for in this context?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q490",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r25"
+],
+"cue": "Could you please remind me where to find the Sentry DSN?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q491",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a11"
+],
+"cue": "How do I run just the authentication tests?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q492",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a11"
+],
+"cue": "Can you run just the auth tests using pnpm?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q493",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s13"
+],
+"cue": "how do we clear job data after processing them?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q494",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s13"
+],
+"cue": "Need help understanding \"removeOnComplete: 1000\" setting?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q495",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r15"
+],
+"cue": "How do I set up unit tests with Vitest?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q496",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r15"
+],
+"cue": "Could you remind me where Vitest is used for unit tests?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q497",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c11"
+],
+"cue": "What library should I use for terminal colors?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q498",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "packages/cli",
+"gold": [
+"c11"
+],
+"cue": "Could you please remind me about picocolors vs chalk for terminal colors?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q499",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w08"
+],
+"cue": "where are UI components stored?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q500",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w08"
+],
+"cue": "Can you remind me where UI components are stored?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q501",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r10"
+],
+"cue": "Why switched from linting tools now?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q502",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r10"
+],
+"cue": "Could you please remind me why we switched to Biome?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q503",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r23"
+],
+"cue": "What date library should I use now?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q504",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r23"
+],
+"cue": "Check if we can use date-fns for date operations instead of moment.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q505",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a29"
+],
+"cue": "How do we send files to S3 using POST?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q506",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a29"
+],
+"cue": "Could you remind me how file uploads work with S3 and presigned URLs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q507",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a25"
+],
+"cue": "What checks does the health endpoint do?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q508",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a25"
+],
+"cue": "Could you remind me what endpoints check Postgres and Redis?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q509",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r18"
+],
+"cue": "What happens with dependency updates on Mondays?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q510",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r18"
+],
+"cue": "Check if it's Monday to trigger renames and watch automerge for patches.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q511",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w15"
+],
+"cue": "What command do I use to run web tests and start dev server?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q512",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w15"
+],
+"cue": "Help needed: Starting dev server on port 3000 for web E2E tests?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q513",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r24"
+],
+"cue": "How do we set up structured logging with pino?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q514",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r24"
+],
+"cue": "Need info on structured logging using pino?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q515",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s05"
+],
+"cue": "What are BullMQ jobs used for in schedules?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q516",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s05"
+],
+"cue": "Could you remind me what Cron jobs are in our setup?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q517",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a26"
+],
+"cue": "What does each log entry include?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q518",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a26"
+],
+"cue": "Could you remind me what the requestId header is called?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q519",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r16"
+],
+"cue": "What's Playwright used for in our tests?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q520",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r16"
+],
+"cue": "Need info on where Playwright is used for end-to-end tests?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q521",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s08"
+],
+"cue": "What endpoint exposes metrics for Prometheus?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q522",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s08"
+],
+"cue": "Can you help me expose Prometheus metrics on port 9464?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q523",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r32"
+],
+"cue": "What are the server ports for web, API, and database?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q524",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r32"
+],
+"cue": "Hey AI, could you remind me of local port numbers for web, API, and DB?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q525",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w11"
+],
+"cue": "How does react-hook-form work with Zod?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q526",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w11"
+],
+"cue": "Need help with react-hook-form and Zod resolvers?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q527",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s16"
+],
+"cue": "What's the command to run worker tests with Redis mock?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q528",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s16"
+],
+"cue": "Need help running worker tests with pnpm filter?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q529",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s11"
+],
+"cue": "How do we ensure each job run can safely run multiple times without double-processing?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q530",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s11"
+],
+"cue": "Can you remind me what it means for a job handler to be idempotent?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q531",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i20"
+],
+"cue": "How do I ensure all resources have team and env tags?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q532",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i20"
+],
+"cue": "Could you remind me about cost tags: team and env for all resources?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q533",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i18"
+],
+"cue": "What do I need to do for infra changes?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q534",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i18"
+],
+"cue": "Need platform team review and plan for infra change PR?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q535",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w10"
+],
+"cue": "Why did you decide against Redux here?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q536",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w10"
+],
+"cue": "Could you remind me why we decided against Redux for this project?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q537",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r12"
+],
+"cue": "how do I fix the error for ES Module imports?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q538",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r12"
+],
+"cue": "Can you remind me how to fix ERR_REQUIRE_ESM?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q539",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s06"
+],
+"cue": "How do I resolve Sharp not working with Alpine image?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q540",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s06"
+],
+"cue": "Can you remind me why Sharp isn't working in Alpine?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q541",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r35"
+],
+"cue": "How do I start all services using Turborepo?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q542",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r35"
+],
+"cue": "Check `pnpm dev` at root to start all services.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q543",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w28"
+],
+"cue": "What setup ensures card info isn't stored in our app?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q544",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w28"
+],
+"cue": "Can you remind me how Stripe Checkout redirects work without exposing card data?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q545",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i06"
+],
+"cue": "Why can't I use local apply for CI?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q546",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i06"
+],
+"cue": "Could you remind me why we don't run apply locally?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q547",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r37"
+],
+"cue": "What tag triggers production deploys and where can I find the release process config?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q548",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r37"
+],
+"cue": "Need help with production deploy steps?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q549",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r31"
+],
+"cue": "How do I avoid using sudo for npm installs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q550",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r31"
+],
+"cue": "Check your npm/pnpm permissions; don't use sudo.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q551",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w32"
+],
+"cue": "How do we handle form submissions now?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q552",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w32"
+],
+"cue": "Can you remind me why we're using server actions for form posts?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q553",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r47"
+],
+"cue": "how should I log messages without console?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q554",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r47"
+],
+"cue": "Can you remind about removing console.logs and using pino logger?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q555",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r27"
+],
+"cue": "How do we set up analytics tracking in our project?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q556",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r27"
+],
+"cue": "Could you remind me where we're using PostHog for product analytics?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q557",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w01"
+],
+"cue": "How do I set up routing for Next.js 15 App Router?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q558",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w01"
+],
+"cue": "Need info on Next.js 15 App Router setup?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q559",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a13"
+],
+"cue": "What does it mean for errors to be JSON formatted per RFC 7807?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q560",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a13"
+],
+"cue": "Could you remind me what format errors are returned as?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q561",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i15"
+],
+"cue": "What service does our production use for caching?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q562",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i15"
+],
+"cue": "Could you remind me where we store our production Redis?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q563",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r17"
+],
+"cue": "What if our code coverage drops below 80%?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q564",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r17"
+],
+"cue": "Could you check if our code coverage meets the 80% threshold for CI?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q565",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s12"
+],
+"cue": "How often does Stripe invoice data get fetched?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q566",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s12"
+],
+"cue": "Could you remind me what billing-sync does with Stripe invoices?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q567",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w06"
+],
+"cue": "Why am I getting stuck in a login loop?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q568",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w06"
+],
+"cue": "Need help with login redirect loop issue.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q569",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c09"
+],
+"cue": "How do we securely save OAuth tokens across sessions?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q570",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "packages/cli",
+"gold": [
+"c09"
+],
+"cue": "Need help with OAuth device code flow and storing token in OS keychain using Keytar?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q571",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a05"
+],
+"cue": "How do I create a new migration for the API schema?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q572",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a05"
+],
+"cue": "Help needed: How to create new API migration with Drizzle Kit?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q573",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w22"
+],
+"cue": "What file has the PostHog provider configured?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q574",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w22"
+],
+"cue": "Could you remind me where the PostHog provider is mounted?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q575",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i10"
+],
+"cue": "Where do we store metrics and how are dashboards accessed?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q576",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i10"
+],
+"cue": "Need help finding where to input metrics/logs for Grafana Cloud?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q577",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a17"
+],
+"cue": "What does UUID v7 mean for primary keys here?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q578",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a17"
+],
+"cue": "Could you remind me what UUID v7 is used for as primary keys?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q579",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r41"
+],
+"cue": "what docs mention recommended vscode add-ins?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q580",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r41"
+],
+"cue": "Can you show me the recommended VS Code extensions list?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q581",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w13"
+],
+"cue": "what if I want to use a sensitive key in my code?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q582",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w13"
+],
+"cue": "Could you remind me which env vars can be exposed to the browser?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q583",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s04"
+],
+"cue": "How does retry mechanism work in terms of time?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q584",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s04"
+],
+"cue": "Can you remind me how jobs retry with exponential backoff?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q585",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a36"
+],
+"cue": "how do we handle JWT time discrepancies?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q586",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a36"
+],
+"cue": "Could you remind us about JWT clock skew and the 5-second leeway?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q587",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w12"
+],
+"cue": "How do I add cdn.acme.dev to allow remote images?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q588",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w12"
+],
+"cue": "Could you remind me how to add cdn.acme.dev to remotePatterns in next.config.ts?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q589",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c17"
+],
+"cue": "What does it mean if my script shows exit code 2?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q590",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "packages/cli",
+"gold": [
+"c17"
+],
+"cue": "Could you remind me what exit codes 1 and 2 mean?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q591",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i21"
+],
+"cue": "How do we connect to prod database securely?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q592",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i21"
+],
+"cue": "Need to access prod DB via Tailscale? No public endpoint.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q593",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s14"
+],
+"cue": "How does the app handle tasks when\u6536\u5230SIGTERM\u4fe1\u53f7?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q594",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s14"
+],
+"cue": "Can you remind me what happens to jobs when a worker gets SIGTERM?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q595",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s10"
+],
+"cue": "How do I access Bull Board with basic auth?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q596",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s10"
+],
+"cue": "Could you remind me where Bull Board is mounted and what auth setup is in place?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q597",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i03"
+],
+"cue": "what AWS location is set for all services?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q598",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i03"
+],
+"cue": "Could you remind me of the AWS region?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q599",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a07"
+],
+"cue": "How do I manage request limits for my API?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q600",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a07"
+],
+"cue": "Need info on rate limit and Redis setup?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q601",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c05"
+],
+"cue": "How do we run snapshot tests for CLI outputs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q602",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "packages/cli",
+"gold": [
+"c05"
+],
+"cue": "Could you remind me what CLI tests do with Vitest and stdout?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q603",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a33"
+],
+"cue": "What should I do if I need to change something in the database schema?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q604",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a33"
+],
+"cue": "Check the guideline: Never edit a merged migration, create a new one instead.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q605",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r11"
+],
+"cue": "how do I check if my project is using ES modules?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q606",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r11"
+],
+"cue": "Could you remind me where I set my project to use ES Modules?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q607",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w27"
+],
+"cue": "What does it mean to load Inter font with next/font/google?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q608",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w27"
+],
+"cue": "Could you remind me where Inter font is loaded?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q609",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a34"
+],
+"cue": "How do we ensure all tables filter by org_id?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q610",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a34"
+],
+"cue": "Could you remind me how queries should filter by org_id?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q611",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w21"
+],
+"cue": "How do we ensure all API calls include credentials?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q612",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w21"
+],
+"cue": "Could you remind me where browser API calls go and about including credentials?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q613",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w17"
+],
+"cue": "how can we avoid date formatting issues between server and client?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q614",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w17"
+],
+"cue": "Need help with hydration mismatch for dates?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q615",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r44"
+],
+"cue": "How do I ensure my app works on newer Node version without issues?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q616",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r44"
+],
+"cue": "Need help with Rosetta-free builds for sharp and canvas?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q617",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i19"
+],
+"cue": "How do we manage scaling for CPU usage and queue size?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q618",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i19"
+],
+"cue": "Need help understanding KEDA for worker scaling and HPA for CPU at 70%.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q619",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i13"
+],
+"cue": "What repositories do we push image builds to?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q620",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i13"
+],
+"cue": "Can you remind me where to push new image versions?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q621",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "services/worker",
+"gold": [
+"s02"
+],
+"cue": "what are the queue names mentioned?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q622",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "services/worker",
+"gold": [
+"s02"
+],
+"cue": "Could you remind me what queue names we have set up?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q623",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w31"
+],
+"cue": "What routes hold authenticated vs public pages?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q624",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w31"
+],
+"cue": "Could you remind me where authenticated and public pages are stored?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q625",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i09"
+],
+"cue": "what's the domain setup for acme dev?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q626",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i09"
+],
+"cue": "Need DNS info for acme.dev?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q627",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i11"
+],
+"cue": "What does it mean for alerts to go through PagerDuty?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q628",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i11"
+],
+"cue": "Could you remind me what \"on-call through PagerDuty\" means for the alerts page?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q629",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w19"
+],
+"cue": "What does \"Lucide React\" refer to here?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q630",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w19"
+],
+"cue": "Need help finding icons info from lucide-react?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q631",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w07"
+],
+"cue": "What does CSS-first mean in app/globals.css?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q632",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w07"
+],
+"cue": "Need help with Tailwind CSS v4 and app/globals.css?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q633",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r22"
+],
+"cue": "What does runtime validation with zod involve here?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q634",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r22"
+],
+"cue": "Need help finding where Zod is used for runtime validation?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q635",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a22"
+],
+"cue": "How do we configure transactional emails for React?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q636",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a22"
+],
+"cue": "Could you remind me where to find the React Email templates for transactional emails?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q637",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r20"
+],
+"cue": "Help with quick, code-first responses needed today.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q638",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r20"
+],
+"cue": "Can you provide the code first, then explain it?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q639",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w16"
+],
+"cue": "how do I start my storybook server?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q640",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w16"
+],
+"cue": "Tell me how to start Storybook on port 6006.",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q641",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a14"
+],
+"cue": "How should I implement pagination for my API endpoints?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q642",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a14"
+],
+"cue": "Could you remind me about cursor vs offset pagination for endpoints?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q643",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r06"
+],
+"cue": "What do commit messages use for feature additions?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q644",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r06"
+],
+"cue": "Could you remind me what commit types we use?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q645",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a03"
+],
+"cue": "what does orm drizzle mean here?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q646",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a03"
+],
+"cue": "Can you remind me where the Drizzle schema is defined?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q647",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i07"
+],
+"cue": "what do i need to do to preview changes in staging?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q648",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i07"
+],
+"cue": "Can you remind me how to run the Terraform plan for staging?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q649",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w25"
+],
+"cue": "how does ISR work with page caching?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q650",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w25"
+],
+"cue": "Could you remind me what ISR with revalidate = 60 means for marketing pages?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q651",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "infra",
+"gold": [
+"i01"
+],
+"cue": "How do I check Terraform version in my repo?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q652",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "infra",
+"gold": [
+"i01"
+],
+"cue": "Can you remind me where I can find Terraform 1.8 config?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q653",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c04"
+],
+"cue": "Where exactly does the CLI save its settings?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q654",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "packages/cli",
+"gold": [
+"c04"
+],
+"cue": "Could you remind me where CLI stores its config file?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q655",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a12"
+],
+"cue": "How do I handle raw POST data for Stripe webhooks?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q656",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a12"
+],
+"cue": "Need help with Stripe webhook raw body requirement?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q657",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "",
+"gold": [
+"r45"
+],
+"cue": "What does enabling noUncheckedIndexedAccess mean in strict mode?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q658",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "",
+"gold": [
+"r45"
+],
+"cue": "Could you remind me what strict mode with noUncheckedIndexedAccess means?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q659",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "apps/web",
+"gold": [
+"w30"
+],
+"cue": "What command do I run to check my web app's package size?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q660",
+"split": "test"
+},
+{
+"cat": "natural",
+"scope": "apps/web",
+"gold": [
+"w30"
+],
+"cue": "Can you help me analyze the bundle size with ANALYZE=true?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q661",
+"split": "test"
+},
+{
+"cat": "para",
+"scope": "apps/api",
+"gold": [
+"a23"
+],
+"cue": "How does BullMQ help manage background jobs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q662",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "apps/api",
+"gold": [
+"a23"
+],
+"cue": "Could you remind me how BullMQ is used for enqueueing background jobs?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q663",
+"split": "dev"
+},
+{
+"cat": "para",
+"scope": "packages/cli",
+"gold": [
+"c02"
+],
+"cue": "What does it mean for CLI to be bundled with tsup?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q664",
+"split": "dev"
+},
+{
+"cat": "natural",
+"scope": "packages/cli",
+"gold": [
+"c02"
+],
+"cue": "Can you tell me where I can find the bundled CLI in dist/index.js?",
+"last_paths": [],
+"prev_turn": "",
+"author": "qwen2.5-3b",
+"id": "q665",
+"split": "dev"
+}
+]

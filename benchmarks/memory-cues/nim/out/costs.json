@@ -1,0 +1,411 @@
+{
+ "rows": [
+  {
+   "tag": "",
+   "model": "nvidia/nemotron-3-embed-1b",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 12,
+   "completion_tokens": 0,
+   "lat_p50": 0.361,
+   "lat_p95": 0.361
+  },
+  {
+   "tag": "e1-neg",
+   "model": "moonshotai/kimi-k3",
+   "ok": 5,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 1484,
+   "completion_tokens": 1793,
+   "lat_p50": 42.531,
+   "lat_p95": 69.71799999999999
+  },
+  {
+   "tag": "e1-para",
+   "model": "moonshotai/kimi-k3",
+   "ok": 215,
+   "failed": 119,
+   "fails": {
+    "429": 111,
+    "net": 8
+   },
+   "prompt_tokens": 73513,
+   "completion_tokens": 47605,
+   "lat_p50": 42.252,
+   "lat_p95": 62.28919999999999
+  },
+  {
+   "tag": "e1-policy",
+   "model": "moonshotai/kimi-k3",
+   "ok": 32,
+   "failed": 2,
+   "fails": {
+    "net": 1,
+    "429": 1
+   },
+   "prompt_tokens": 10409,
+   "completion_tokens": 6021,
+   "lat_p50": 36.4955,
+   "lat_p95": 57.888549999999995
+  },
+  {
+   "tag": "e2-blind",
+   "model": "google/gemma-4-31b-it",
+   "ok": 205,
+   "failed": 5,
+   "fails": {
+    "net": 2,
+    "5xx": 3
+   },
+   "prompt_tokens": 21920,
+   "completion_tokens": 13611,
+   "lat_p50": 24.886,
+   "lat_p95": 56.795399999999994
+  },
+  {
+   "tag": "e2-blind",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "ok": 205,
+   "failed": 54,
+   "fails": {
+    "5xx": 53,
+    "net": 1
+   },
+   "prompt_tokens": 22505,
+   "completion_tokens": 231485,
+   "lat_p50": 14.17,
+   "lat_p95": 36.57639999999999
+  },
+  {
+   "tag": "e2-blind",
+   "model": "openai/gpt-oss-20b",
+   "ok": 205,
+   "failed": 36,
+   "fails": {
+    "net": 36
+   },
+   "prompt_tokens": 32199,
+   "completion_tokens": 359014,
+   "lat_p50": 46.03,
+   "lat_p95": 74.35119999999996
+  },
+  {
+   "tag": "e2-miss",
+   "model": "google/gemma-4-31b-it",
+   "ok": 312,
+   "failed": 5,
+   "fails": {
+    "5xx": 4,
+    "net": 1
+   },
+   "prompt_tokens": 49810,
+   "completion_tokens": 5172,
+   "lat_p50": 15.499500000000001,
+   "lat_p95": 39.309899999999985
+  },
+  {
+   "tag": "e2-miss",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "ok": 312,
+   "failed": 56,
+   "fails": {
+    "5xx": 55,
+    "429": 1
+   },
+   "prompt_tokens": 49629,
+   "completion_tokens": 5662,
+   "lat_p50": 0.844,
+   "lat_p95": 2.064199999999999
+  },
+  {
+   "tag": "e3-probe",
+   "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "ok": 3,
+   "failed": 1,
+   "fails": {
+    "net": 1
+   },
+   "prompt_tokens": 3004,
+   "completion_tokens": 3852,
+   "lat_p50": 48.868,
+   "lat_p95": 53.2393
+  },
+  {
+   "tag": "e3-probe",
+   "model": "openai/gpt-oss-20b",
+   "ok": 3,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 3061,
+   "completion_tokens": 378,
+   "lat_p50": 3.064,
+   "lat_p95": 5.962899999999999
+  },
+  {
+   "tag": "e3-raw",
+   "model": "google/gemma-4-31b-it",
+   "ok": 26,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 27691,
+   "completion_tokens": 182,
+   "lat_p50": 8.628499999999999,
+   "lat_p95": 17.546
+  },
+  {
+   "tag": "e3-raw",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "ok": 26,
+   "failed": 9,
+   "fails": {
+    "5xx": 9
+   },
+   "prompt_tokens": 26644,
+   "completion_tokens": 925,
+   "lat_p50": 0.9045,
+   "lat_p95": 2.83725
+  },
+  {
+   "tag": "e3-raw",
+   "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "ok": 26,
+   "failed": 5,
+   "fails": {
+    "net": 5
+   },
+   "prompt_tokens": 26644,
+   "completion_tokens": 1183,
+   "lat_p50": 4.1514999999999995,
+   "lat_p95": 58.025999999999996
+  },
+  {
+   "tag": "e3-raw",
+   "model": "openai/gpt-oss-20b",
+   "ok": 26,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 27101,
+   "completion_tokens": 5128,
+   "lat_p50": 3.61,
+   "lat_p95": 14.681249999999999
+  },
+  {
+   "tag": "e3-stripped",
+   "model": "google/gemma-4-31b-it",
+   "ok": 325,
+   "failed": 4,
+   "fails": {
+    "5xx": 3,
+    "net": 1
+   },
+   "prompt_tokens": 338485,
+   "completion_tokens": 5814,
+   "lat_p50": 18.406,
+   "lat_p95": 47.203400000000016
+  },
+  {
+   "tag": "e3-stripped",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "ok": 325,
+   "failed": 49,
+   "fails": {
+    "5xx": 49
+   },
+   "prompt_tokens": 326088,
+   "completion_tokens": 10644,
+   "lat_p50": 0.905,
+   "lat_p95": 3.8144000000000013
+  },
+  {
+   "tag": "e3-stripped",
+   "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "ok": 325,
+   "failed": 58,
+   "fails": {
+    "net": 57,
+    "5xx": 1
+   },
+   "prompt_tokens": 326088,
+   "completion_tokens": 5911,
+   "lat_p50": 1.943,
+   "lat_p95": 67.2994
+  },
+  {
+   "tag": "e3-stripped",
+   "model": "openai/gpt-oss-20b",
+   "ok": 323,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 330093,
+   "completion_tokens": 44415,
+   "lat_p50": 2.322,
+   "lat_p95": 9.00409999999999
+  },
+  {
+   "tag": "e4-guard",
+   "model": "nvidia/llama-3.1-nemotron-safety-guard-8b-v3",
+   "ok": 72,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 29524,
+   "completion_tokens": 759,
+   "lat_p50": 3.1145,
+   "lat_p95": 13.922450000000003
+  },
+  {
+   "tag": "e4-guard",
+   "model": "nvidia/nemotron-3.5-content-safety",
+   "ok": 72,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 34780,
+   "completion_tokens": 360,
+   "lat_p50": 0.4225,
+   "lat_p95": 0.9533499999999999
+  },
+  {
+   "tag": "e4-judge",
+   "model": "google/gemma-4-31b-it",
+   "ok": 144,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 24850,
+   "completion_tokens": 5940,
+   "lat_p50": 15.0975,
+   "lat_p95": 34.52635
+  },
+  {
+   "tag": "e4-probe",
+   "model": "nvidia/llama-3.1-nemotron-safety-guard-8b-v3",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 407,
+   "completion_tokens": 19,
+   "lat_p50": 1.45,
+   "lat_p95": 1.45
+  },
+  {
+   "tag": "e4-probe",
+   "model": "nvidia/nemotron-3.5-content-safety",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 479,
+   "completion_tokens": 5,
+   "lat_p50": 0.358,
+   "lat_p95": 0.358
+  },
+  {
+   "tag": "e5-embed",
+   "model": "nvidia/nemotron-3-embed-1b",
+   "ok": 48,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 25281,
+   "completion_tokens": 0,
+   "lat_p50": 1.0655000000000001,
+   "lat_p95": 3.6441
+  },
+  {
+   "tag": "ping",
+   "model": "deepseek-ai/deepseek-v4.1-flash",
+   "ok": 0,
+   "failed": 6,
+   "fails": {
+    "net": 6
+   },
+   "prompt_tokens": 0,
+   "completion_tokens": 0,
+   "lat_p50": null,
+   "lat_p95": null
+  },
+  {
+   "tag": "ping",
+   "model": "google/gemma-4-31b-it",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 20,
+   "completion_tokens": 2,
+   "lat_p50": 22.65,
+   "lat_p95": 22.65
+  },
+  {
+   "tag": "ping",
+   "model": "moonshotai/kimi-k3",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 93,
+   "completion_tokens": 34,
+   "lat_p50": 39.301,
+   "lat_p95": 39.301
+  },
+  {
+   "tag": "ping",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "ok": 1,
+   "failed": 1,
+   "fails": {
+    "5xx": 1
+   },
+   "prompt_tokens": 23,
+   "completion_tokens": 52,
+   "lat_p50": 17.386,
+   "lat_p95": 17.386
+  },
+  {
+   "tag": "ping",
+   "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 23,
+   "completion_tokens": 96,
+   "lat_p50": 3.884,
+   "lat_p95": 3.884
+  },
+  {
+   "tag": "ping",
+   "model": "openai/gpt-oss-20b",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 72,
+   "completion_tokens": 32,
+   "lat_p50": 1.925,
+   "lat_p95": 1.925
+  },
+  {
+   "tag": "probe",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 1001,
+   "completion_tokens": 39,
+   "lat_p50": 0.952,
+   "lat_p95": 0.952
+  },
+  {
+   "tag": "probe",
+   "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+   "ok": 1,
+   "failed": 0,
+   "fails": {},
+   "prompt_tokens": 1001,
+   "completion_tokens": 39,
+   "lat_p50": 46.783,
+   "lat_p95": 46.783
+  }
+ ],
+ "total": {
+  "ok": 3245,
+  "failed": 410,
+  "pt": 1813934,
+  "ct": 756172
+ }
+}

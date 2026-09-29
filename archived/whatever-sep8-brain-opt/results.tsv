@@ -1,0 +1,18 @@
+n	commit	status	description	primary:brain-miss	guard:mem-tests	guard:junk	guard:losses	guard:cost-ms	guard:holdout-miss	guard:holdout-junk	guard:holdout-losses	guard:sota-holdout	guard:v2-gold	guard:bakeoff-rec5	guard:bakeoff-junkfp
+0	18b2ee069	baseline	v2 harness baseline: brain-opt + holdout + sota + v2 + bakeoff	1775	1	0	0	0	105	36	61	15	1000	512	0
+1	31ec70c75	keep	episodic chunk reconstruction (graph-1) → 1640, holdout 105→84 KEEP	1640	1	0	0	0	84	36	61	15	1000	512	0
+2	9ff902845	keep	question-frame carry (encode-1) → 1579, rec5 559 KEEP	1579	1	0	0	0	84	36	61	15	1000	559	0
+3	7fe856cb1	discard	graph-2 episode lane → 1574 under-eps (holdout 84→77, losses 61→47 — stack next)	1574	1	0	0	0	77	36	47	15	1000	559	0
+4	4ef3ba0cd	discard	query-2 ±2 kernel → 1561 under-eps (holdout losses 61→51, rec5 565 — stack w/ graph-2)	1561	1	0	0	0	83	36	51	15	1000	565	0
+5	d748e629b	discard	stack graph-2+query-2 → 1570 under-eps (holdout 76/46 best-ever)	1570	1	0	0	0	76	36	46	15	1000	565	0
+6	d00fcac60	discard	research-R stack → 1472 (-6.8%) but holdout 84→86/89 REGRESSION (re-run confirmed) — overfit; sent back	1471	1	0	0	0	89	36	61	15	1000	559	0
+7	3f736fe8b	keep	slot-digest consolidation (encode-2) → 1525, holdout 84→76/losses 61→52, rec5 593 KEEP	1525	1	0	0	0	76	36	52	15	1000	593	0
+8	4e5ebbc0f	keep	CLS rebuild (moon-cls): episodic pattern-completion + semantic consolidation + controller -> 1442, holdout 76->47, losses 52->33, rec5 593 KEEP	1442	1	0	0	0	47	36	33	15	1000	593	0
+9	e19b5ed42	discard	multihop chain + evolve params → brain-opt flat 1442 (primary must move), but holdout 47->30/losses 33->29 huge — isolate for stacking	1442	1	0	0	0	30	36	29	15	1000	593	0
+10	c64b6d85a	discard	dense embed+IVF 4th lane → brain-opt 1442->1421 (-1.5%, need <=1413) under-eps; holdout 47->36/-23% huge; losses 33->36 slight. asked for weight tune	1421	1	0	0	0	36	36	36	15	1000	593	0
+11	dc55b5d39	discard	evolved weights (world-3) → brain-opt 1442->1429 (-0.9%, need <=1413) under-eps; holdout 47->30/losses 33->29 huge. try stacking w/ dense-1	1429	1	0	0	0	30	36	29	15	1000	593	0
+12	e277d88b4	discard	dense+evolved-weights stack → brain-opt 1422 (-1.4%, need <=1413) still under-eps; holdout 47->21 best-ever, losses 35. eden5(AgentMemory path) untouched by all CLS work - likely next bottleneck	1422	1	0	0	0	21	36	35	15	1000	593	0
+13	92d4160d8	discard	dense-2 nprobe fix → brain-opt 1442->1405 (-2.6%, clears eps!) but holdout_losses 33->38 guard regression (tol ~33.6) - DISCARD. sent back to fix losses	1405	1	0	0	0	32	36	38	15	1000	593	0
+14	68137a5c5	keep	topic-fusion re-ranking (moon-agentmem) -> 1376, eden5 947->845, holdout_losses 33->30, rec5 593->695 KEEP	1376	1	0	0	0	47	36	30	15	1000	695	0
+15	975423b7f	discard	fuse-tune (moon-eden2-01) -> 1367 (-0.65%, need <=1348) under-eps; all gates flat/held, rec5 695->708. near-miss, agent searching for more	1367	1	0	0	0	47	36	30	15	1000	708	0
+16	79e69cc2b	discard	short-word extraction fix (moon-extract) -> 1375 (-0.07%) real bugfix but under-eps; all gates flat, rec5 696	1375	1	0	0	0	47	36	30	15	1000	696	0

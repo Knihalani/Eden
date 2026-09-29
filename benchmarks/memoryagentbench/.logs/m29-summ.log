@@ -1,0 +1,2021 @@
+NIM smoke: (True, "ok model=google/gemma-4-31b-it reply='pong'")
+
+========== summ configs/data_conf/Long_Range_Understanding/InfBench_sum.yaml ==========
+
+
+
+Using agent-specific chunk_size: 4096
+
+
+09/21/2026 12:02:00 - INFO - conversation_creator - Running test on infbench_sum_eng_shots2
+Dataset: infbench_sum_eng_shots2
+Loading infbench_sum_eng_shots2 from Hugging Face dataset: ai-hyz/MemoryAgentBench
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+09/21/2026 12:02:00 - WARNING - huggingface_hub.utils._http - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loaded 110 samples from Long_Range_Understanding
+Filtered to 100 samples matching source 'infbench_sum_eng_shots2' (from 110 total)
+Dataset length: 100, each sample has 1 qa pairs
+  0%|          | 0/100 [00:00<?, ?it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 1/100:   0%|          | 0/95 [00:00<?, ?it/s][AProcessing experiments 1/100: 100%|██████████| 95/95 [00:00<00:00, 5742.97it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 0!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 0 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 5526.09it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 2/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 2/100: 100%|██████████| 22/22 [00:00<00:00, 4231.43it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 1!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 1 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 11618.57it/s]
+  2%|▏         | 2/100 [00:00<00:05, 19.38it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 3/100:   0%|          | 0/58 [00:00<?, ?it/s][AProcessing experiments 3/100: 100%|██████████| 58/58 [00:00<00:00, 4772.43it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 2!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 2 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 10305.42it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 4/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 4/100: 100%|██████████| 23/23 [00:00<00:00, 6796.94it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 3!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 3 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 13842.59it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 5/100:   0%|          | 0/33 [00:00<?, ?it/s][AProcessing experiments 5/100: 100%|██████████| 33/33 [00:00<00:00, 5057.99it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 4!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 4 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 12483.05it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 6/100:   0%|          | 0/35 [00:00<?, ?it/s][AProcessing experiments 6/100: 100%|██████████| 35/35 [00:00<00:00, 6531.15it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 5!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 5 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 17189.77it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 7/100:   0%|          | 0/38 [00:00<?, ?it/s][AProcessing experiments 7/100: 100%|██████████| 38/38 [00:00<00:00, 4614.46it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 6!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 6 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 13530.01it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 8/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 8/100: 100%|██████████| 23/23 [00:00<00:00, 6654.87it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 7!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 7 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 23172.95it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 9/100:   0%|          | 0/62 [00:00<?, ?it/s][AProcessing experiments 9/100: 100%|██████████| 62/62 [00:00<00:00, 5304.16it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 8!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 8 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 17848.10it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 10/100:   0%|          | 0/131 [00:00<?, ?it/s][AProcessing experiments 10/100: 100%|██████████| 131/131 [00:00<00:00, 4797.59it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 9!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 9 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 11214.72it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 11/100:   0%|          | 0/89 [00:00<?, ?it/s][AProcessing experiments 11/100: 100%|██████████| 89/89 [00:00<00:00, 7672.56it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 10!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 10 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 14027.77it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 12/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 12/100: 100%|██████████| 22/22 [00:00<00:00, 6251.67it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 11!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 11 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 20460.02it/s]
+ 12%|█▏        | 12/100 [00:00<00:01, 65.16it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 13/100:   0%|          | 0/64 [00:00<?, ?it/s][AProcessing experiments 13/100: 100%|██████████| 64/64 [00:00<00:00, 4960.10it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 12!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 12 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 14979.66it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 14/100:   0%|          | 0/50 [00:00<?, ?it/s][AProcessing experiments 14/100: 100%|██████████| 50/50 [00:00<00:00, 7007.79it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 13!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 13 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 16710.37it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 15/100:   0%|          | 0/182 [00:00<?, ?it/s][AProcessing experiments 15/100: 100%|██████████| 182/182 [00:00<00:00, 5017.80it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 14!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 14 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 10979.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 16/100:   0%|          | 0/148 [00:00<?, ?it/s][AProcessing experiments 16/100: 100%|██████████| 148/148 [00:00<00:00, 6485.54it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 15!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 15 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 12192.74it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 17/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 17/100: 100%|██████████| 20/20 [00:00<00:00, 5529.37it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 16!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 16 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 20068.44it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 18/100:   0%|          | 0/33 [00:00<?, ?it/s][AProcessing experiments 18/100: 100%|██████████| 33/33 [00:00<00:00, 7078.45it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 17!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 17 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 16980.99it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 19/100:   0%|          | 0/65 [00:00<?, ?it/s][AProcessing experiments 19/100: 100%|██████████| 65/65 [00:00<00:00, 4966.02it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 18!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 18 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 17331.83it/s]
+ 19%|█▉        | 19/100 [00:00<00:01, 65.27it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 20/100:   0%|          | 0/99 [00:00<?, ?it/s][AProcessing experiments 20/100: 100%|██████████| 99/99 [00:00<00:00, 6854.12it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 19!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 19 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 10951.19it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 21/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 21/100: 100%|██████████| 23/23 [00:00<00:00, 5694.07it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 20!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 20 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 14513.16it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 22/100:   0%|          | 0/36 [00:00<?, ?it/s][AProcessing experiments 22/100: 100%|██████████| 36/36 [00:00<00:00, 5723.41it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 21!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 21 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 16320.25it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 23/100:   0%|          | 0/51 [00:00<?, ?it/s][AProcessing experiments 23/100: 100%|██████████| 51/51 [00:00<00:00, 6495.89it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 22!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 22 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 12192.74it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 24/100:   0%|          | 0/30 [00:00<?, ?it/s][AProcessing experiments 24/100: 100%|██████████| 30/30 [00:00<00:00, 4450.35it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 23!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 23 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 11335.96it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 25/100:   0%|          | 0/43 [00:00<?, ?it/s][AProcessing experiments 25/100: 100%|██████████| 43/43 [00:00<00:00, 6369.14it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 24!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 24 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 10979.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 26/100:   0%|          | 0/45 [00:00<?, ?it/s][AProcessing experiments 26/100: 100%|██████████| 45/45 [00:00<00:00, 4932.15it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 25!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 25 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 11491.24it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 27/100:   0%|          | 0/48 [00:00<?, ?it/s][AProcessing experiments 27/100: 100%|██████████| 48/48 [00:00<00:00, 7205.93it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 26!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 26 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 14716.86it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 28/100:   0%|          | 0/53 [00:00<?, ?it/s][AProcessing experiments 28/100: 100%|██████████| 53/53 [00:00<00:00, 6745.50it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 27!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 27 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 11214.72it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 29/100:   0%|          | 0/64 [00:00<?, ?it/s][AProcessing experiments 29/100: 100%|██████████| 64/64 [00:00<00:00, 7494.01it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 28!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 28 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 11915.64it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 30/100:   0%|          | 0/18 [00:00<?, ?it/s][AProcessing experiments 30/100: 100%|██████████| 18/18 [00:00<00:00, 7349.12it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 29!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 29 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 17848.10it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 31/100:   0%|          | 0/36 [00:00<?, ?it/s][AProcessing experiments 31/100: 100%|██████████| 36/36 [00:00<00:00, 5428.93it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 30!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 30 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 14979.66it/s]
+ 31%|███       | 31/100 [00:00<00:00, 86.04it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 32/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 32/100: 100%|██████████| 23/23 [00:00<00:00, 8531.79it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 31!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 31 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 18157.16it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 33/100:   0%|          | 0/51 [00:00<?, ?it/s][AProcessing experiments 33/100: 100%|██████████| 51/51 [00:00<00:00, 7418.40it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 32!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 32 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 19972.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 34/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 34/100: 100%|██████████| 29/29 [00:00<00:00, 6863.88it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 33!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 33 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 17848.10it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 35/100:   0%|          | 0/30 [00:00<?, ?it/s][AProcessing experiments 35/100: 100%|██████████| 30/30 [00:00<00:00, 6153.62it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 34!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 34 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 22671.91it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 36/100:   0%|          | 0/92 [00:00<?, ?it/s][AProcessing experiments 36/100: 100%|██████████| 92/92 [00:00<00:00, 7367.70it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 35!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 35 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 21290.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 37/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 37/100: 100%|██████████| 19/19 [00:00<00:00, 7319.23it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 36!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 36 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 19599.55it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 38/100:   0%|          | 0/59 [00:00<?, ?it/s][AProcessing experiments 38/100: 100%|██████████| 59/59 [00:00<00:00, 5762.88it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 37!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 37 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 16131.94it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 39/100:   0%|          | 0/40 [00:00<?, ?it/s][AProcessing experiments 39/100: 100%|██████████| 40/40 [00:00<00:00, 7529.83it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 38!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 38 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 19972.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 40/100:   0%|          | 0/28 [00:00<?, ?it/s][AProcessing experiments 40/100: 100%|██████████| 28/28 [00:00<00:00, 7240.92it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 39!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 39 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 26214.40it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 41/100:   0%|          | 0/43 [00:00<?, ?it/s][AProcessing experiments 41/100: 100%|██████████| 43/43 [00:00<00:00, 6809.19it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 40!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 40 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 25115.59it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 42/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 42/100: 100%|██████████| 22/22 [00:00<00:00, 7224.76it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 41!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 41 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 31300.78it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 43/100:   0%|          | 0/49 [00:00<?, ?it/s][AProcessing experiments 43/100: 100%|██████████| 49/49 [00:00<00:00, 7300.14it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 42!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 42 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 30174.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 44/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 44/100: 100%|██████████| 25/25 [00:00<00:00, 7460.52it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 43!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:41 - INFO - __main__ - !!!!!Query 43 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 19691.57it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 45/100:   0%|          | 0/35 [00:00<?, ?it/s][AProcessing experiments 45/100: 100%|██████████| 35/35 [00:00<00:00, 7932.60it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 44!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 44 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 29330.80it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 46/100:   0%|          | 0/37 [00:00<?, ?it/s][AProcessing experiments 46/100: 100%|██████████| 37/37 [00:00<00:00, 8097.53it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 45!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 45 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 31300.78it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 47/100:   0%|          | 0/45 [00:00<?, ?it/s][AProcessing experiments 47/100: 100%|██████████| 45/45 [00:00<00:00, 7641.14it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 46!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 46 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 23831.27it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 48/100:   0%|          | 0/49 [00:00<?, ?it/s][AProcessing experiments 48/100: 100%|██████████| 49/49 [00:00<00:00, 6730.89it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 47!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 47 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 28532.68it/s]
+ 48%|████▊     | 48/100 [00:00<00:00, 112.57it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 49/100:   0%|          | 0/57 [00:00<?, ?it/s][AProcessing experiments 49/100: 100%|██████████| 57/57 [00:00<00:00, 7661.44it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 48!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 48 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 30393.51it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 50/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 50/100: 100%|██████████| 22/22 [00:00<00:00, 7250.88it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 49!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 49 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 21620.12it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 51/100:   0%|          | 0/48 [00:00<?, ?it/s][AProcessing experiments 51/100: 100%|██████████| 48/48 [00:00<00:00, 7615.33it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 50!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 50 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 17260.51it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 52/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 52/100: 100%|██████████| 25/25 [00:00<00:00, 5750.03it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 51!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 51 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 24385.49it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 53/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 53/100: 100%|██████████| 20/20 [00:00<00:00, 8900.38it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 52!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 52 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 23301.69it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 54/100:   0%|          | 0/24 [00:00<?, ?it/s][AProcessing experiments 54/100: 100%|██████████| 24/24 [00:00<00:00, 6876.38it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 53!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 53 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 29330.80it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 55/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 55/100: 100%|██████████| 25/25 [00:00<00:00, 8235.11it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 54!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 54 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 30174.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 56/100:   0%|          | 0/17 [00:00<?, ?it/s][AProcessing experiments 56/100: 100%|██████████| 17/17 [00:00<00:00, 6871.27it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 55!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 55 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 25731.93it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 57/100:   0%|          | 0/18 [00:00<?, ?it/s][AProcessing experiments 57/100: 100%|██████████| 18/18 [00:00<00:00, 7832.50it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 56!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 56 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 29537.35it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 58/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 58/100: 100%|██████████| 20/20 [00:00<00:00, 5015.01it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 57!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 57 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 19972.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 59/100:   0%|          | 0/16 [00:00<?, ?it/s][AProcessing experiments 59/100: 100%|██████████| 16/16 [00:00<00:00, 7629.48it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 58!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 58 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 24528.09it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 60/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 60/100: 100%|██████████| 23/23 [00:00<00:00, 6689.94it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 59!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 59 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 27776.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 61/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 61/100: 100%|██████████| 29/29 [00:00<00:00, 7722.85it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 60!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 60 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 27962.03it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 62/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 62/100: 100%|██████████| 19/19 [00:00<00:00, 7097.59it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 61!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 61 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 27594.11it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 63/100:   0%|          | 0/46 [00:00<?, ?it/s][AProcessing experiments 63/100: 100%|██████████| 46/46 [00:00<00:00, 6566.54it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 62!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 62 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 23301.69it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 64/100:   0%|          | 0/21 [00:00<?, ?it/s][AProcessing experiments 64/100: 100%|██████████| 21/21 [00:00<00:00, 7350.45it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 63!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 63 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 24385.49it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 65/100:   0%|          | 0/30 [00:00<?, ?it/s][AProcessing experiments 65/100: 100%|██████████| 30/30 [00:00<00:00, 7730.01it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 64!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 64 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 29330.80it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 66/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 66/100: 100%|██████████| 29/29 [00:00<00:00, 8189.79it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 65!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 65 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 30174.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 67/100:   0%|          | 0/44 [00:00<?, ?it/s][AProcessing experiments 67/100: 100%|██████████| 44/44 [00:00<00:00, 7552.36it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 66!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 66 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 30393.51it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 68/100:   0%|          | 0/35 [00:00<?, ?it/s][AProcessing experiments 68/100: 100%|██████████| 35/35 [00:00<00:00, 6218.79it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 67!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 67 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 16710.37it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 69/100:   0%|          | 0/21 [00:00<?, ?it/s][AProcessing experiments 69/100: 100%|██████████| 21/21 [00:00<00:00, 7201.99it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 68!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 68 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 27235.74it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 70/100:   0%|          | 0/31 [00:00<?, ?it/s][AProcessing experiments 70/100: 100%|██████████| 31/31 [00:00<00:00, 8238.19it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 69!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 69 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 28728.11it/s]
+ 70%|███████   | 70/100 [00:00<00:00, 147.86it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 71/100:   0%|          | 0/42 [00:00<?, ?it/s][AProcessing experiments 71/100: 100%|██████████| 42/42 [00:00<00:00, 8150.31it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 70!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 70 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 25115.59it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 72/100:   0%|          | 0/32 [00:00<?, ?it/s][AProcessing experiments 72/100: 100%|██████████| 32/32 [00:00<00:00, 6636.23it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 71!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 71 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 28532.68it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 73/100:   0%|          | 0/32 [00:00<?, ?it/s][AProcessing experiments 73/100: 100%|██████████| 32/32 [00:00<00:00, 7167.07it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 72!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 72 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 16710.37it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 74/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 74/100: 100%|██████████| 20/20 [00:00<00:00, 7686.80it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 73!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 73 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 24966.10it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 75/100:   0%|          | 0/76 [00:00<?, ?it/s][AProcessing experiments 75/100: 100%|██████████| 76/76 [00:00<00:00, 7346.56it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 74!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 74 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 23831.27it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 76/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 76/100: 100%|██████████| 25/25 [00:00<00:00, 8283.25it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 75!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 75 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 30174.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 77/100:   0%|          | 0/38 [00:00<?, ?it/s][AProcessing experiments 77/100: 100%|██████████| 38/38 [00:00<00:00, 7009.88it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 76!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 76 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 20763.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 78/100:   0%|          | 0/17 [00:00<?, ?it/s][AProcessing experiments 78/100: 100%|██████████| 17/17 [00:00<00:00, 7892.76it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 77!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 77 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 28532.68it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 79/100:   0%|          | 0/63 [00:00<?, ?it/s][AProcessing experiments 79/100: 100%|██████████| 63/63 [00:00<00:00, 6494.81it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 78!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 78 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 20460.02it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 80/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 80/100: 100%|██████████| 29/29 [00:00<00:00, 7770.70it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 79!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 79 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 27776.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 81/100:   0%|          | 0/28 [00:00<?, ?it/s][AProcessing experiments 81/100: 100%|██████████| 28/28 [00:00<00:00, 7538.87it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 80!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 80 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 29330.80it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 82/100:   0%|          | 0/96 [00:00<?, ?it/s][AProcessing experiments 82/100: 100%|██████████| 96/96 [00:00<00:00, 7622.11it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 81!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 81 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 23301.69it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 83/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 83/100: 100%|██████████| 25/25 [00:00<00:00, 5550.37it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 82!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 82 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 20867.18it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 84/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 84/100: 100%|██████████| 20/20 [00:00<00:00, 7745.71it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 83!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 83 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 29330.80it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 85/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 85/100: 100%|██████████| 19/19 [00:00<00:00, 7291.10it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 84!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 84 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 32263.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 86/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 86/100: 100%|██████████| 22/22 [00:00<00:00, 8979.63it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 85!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 85 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 32263.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 87/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 87/100: 100%|██████████| 23/23 [00:00<00:00, 7930.70it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 86!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 86 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 25731.93it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 88/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 88/100: 100%|██████████| 19/19 [00:00<00:00, 8879.31it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 87!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 87 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 30174.85it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 89/100:   0%|          | 0/53 [00:00<?, ?it/s][AProcessing experiments 89/100: 100%|██████████| 53/53 [00:00<00:00, 6879.53it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 88!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 88 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 25731.93it/s]
+ 89%|████████▉ | 89/100 [00:00<00:00, 158.72it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 90/100:   0%|          | 0/73 [00:00<?, ?it/s][AProcessing experiments 90/100: 100%|██████████| 73/73 [00:00<00:00, 7259.33it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 89!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 89 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 24528.09it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 91/100:   0%|          | 0/18 [00:00<?, ?it/s][AProcessing experiments 91/100: 100%|██████████| 18/18 [00:00<00:00, 7573.22it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 90!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 90 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 21183.35it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 92/100:   0%|          | 0/17 [00:00<?, ?it/s][AProcessing experiments 92/100: 100%|██████████| 17/17 [00:00<00:00, 4936.18it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 91!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 91 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 14926.35it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 93/100:   0%|          | 0/26 [00:00<?, ?it/s][AProcessing experiments 93/100: 100%|██████████| 26/26 [00:00<00:00, 7719.94it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 92!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 92 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 29330.80it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 94/100:   0%|          | 0/68 [00:00<?, ?it/s][AProcessing experiments 94/100: 100%|██████████| 68/68 [00:00<00:00, 6808.77it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 93!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 93 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 24966.10it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 95/100:   0%|          | 0/111 [00:00<?, ?it/s][AProcessing experiments 95/100: 100%|██████████| 111/111 [00:00<00:00, 5085.17it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 94!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 94 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 19599.55it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 96/100:   0%|          | 0/60 [00:00<?, ?it/s][AProcessing experiments 96/100: 100%|██████████| 60/60 [00:00<00:00, 4952.15it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 95!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 95 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 19599.55it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 97/100:   0%|          | 0/37 [00:00<?, ?it/s][AProcessing experiments 97/100: 100%|██████████| 37/37 [00:00<00:00, 5432.47it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 96!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 96 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 26379.27it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 98/100:   0%|          | 0/55 [00:00<?, ?it/s][AProcessing experiments 98/100: 100%|██████████| 55/55 [00:00<00:00, 5914.74it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 97!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 97 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 21290.88it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 99/100:   0%|          | 0/32 [00:00<?, ?it/s][AProcessing experiments 99/100: 100%|██████████| 32/32 [00:00<00:00, 7586.78it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 98!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 98 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 17476.27it/s]
+Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 100/100:   0%|          | 0/57 [00:00<?, ?it/s][AProcessing experiments 100/100: 100%|██████████| 57/57 [00:00<00:00, 5122.57it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 99!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][A09/21/2026 12:02:42 - INFO - __main__ - !!!!!Query 99 already processed, skipping...
+
+100%|██████████| 1/1 [00:00<00:00, 13842.59it/s]
+100%|██████████| 100/100 [00:00<00:00, 120.53it/s]
+09/21/2026 12:02:42 - INFO - __main__ - Total time taken: 41.69287180900574
+leaf summ: ok n=100 score=9.0
+Wrote /Users/kaiavnihalani/Downloads/Eden/benchmarks/memoryagentbench/TABLE3-RESULTS.md

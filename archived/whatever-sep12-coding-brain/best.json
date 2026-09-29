@@ -1,0 +1,16 @@
+{
+  "values": {
+    "coding-miss": 0,
+    "junk": 14,
+    "ms": 90,
+    "chars": 728,
+    "holdout2-miss": 40,
+    "holdout2-losses": 47,
+    "generic-miss": 44,
+    "generic-losses": 28,
+    "locomo-miss": 1420,
+    "tests": 1
+  },
+  "n": 175,
+  "commit": "47d4e32a8"
+}

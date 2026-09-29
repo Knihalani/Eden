@@ -1,0 +1,12 @@
+{
+  "runs": [
+    {
+      "exam": "Table 3",
+      "k": 40,
+      "eventqa_length": 64000,
+      "fc_length": 6000,
+      "sh_length": 64000,
+      "mh_length": 64000
+    }
+  ]
+}

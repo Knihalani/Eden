@@ -1,0 +1,182 @@
+n	commit	status	description	primary:extract-miss	guard:extract-tests	guard:junk	guard:cost-ms
+0	7cb7f992daadaa462c180618d1fa04037828cbcc	baseline	unmodified	17	1	0	80
+1	eb0f658639c2b96a493410a6a3f54d55068e2570	keep	rank notesFor by query not leftover constraints	8	1	0	80
+2	aa294f9446be386594307f437292ef0e26fe6d36	keep	fold query/memory tokens for retrieve	4	1	0	80
+3	79527c0b3c6d3106cb46eafa7e2366b6369007e3	discard	fold aliases to needle-length tokens	4	1	0	80
+4	a4740758e5f0dbfb308ca34980af9cb3ee27f434	keep	rank retrieve by overlap before kind	3	1	0	80
+5	e4463570acca26cdb5ff38853fd786eca8cf666c	keep	keep semicolon clauses in one extract	2	1	0	80
+6	43011d31deb823fdf223853393df07ee9bb7d70e	keep	extract all-in-one tool lead sentences	1	1	0	80
+7	f4c534a3447d34cd0bf0606c7c2cdb96f8163c0e	keep	flash what-is-X-used-for technique cards	0	1	0	80
+8	2fdd214bcff33c9d5f8db7d300467c4b253d1f1f	keep	drop identity retrieve fold keys	0	1	0	80
+9	70d0e3cc97677bf344cf9ebb2a4059d0ba7b35bd	discard	skip directory fsync on memory persist	0	1	0	80
+10	0309334b59b954380003063007bb46c85184b88c	keep	fold used-for rewrite into one return	0	1	0	80
+11	1ae4f43d16071e55229fb111e1d8a4bea0eea42b	keep	persist without re-reading jsonl	0	1	0	60
+12	2999021362f0e2e2009f6868f52e7e1a1c52fc7b	keep	drop misplaced flashCard docblock	0	1	0	60
+13	216351a74867bacb345a1ee2d1349cde0b0e65f3	keep	compact used-for flash lookup	0	1	0	60
+14	fbc77d65272dee715917ab35d9e9c5d717007eeb	keep	share technique extract match loop	0	1	0	60
+15	609a2b089f49e7232d7f001ea348111f9e837334	keep	skip unused memories scan on retrieve	0	1	0	60
+16	ac05a4b3850aa6a5555a9985f6f89c44593d8749	keep	skip knowQuery when retrieve already filled k	0	1	0	60
+17	2b34399688ccbccd191ae7918c15658cfc854db4	keep	skip pack search on unanswered question queries	0	1	0	60
+18	7f2dca922863b71babc2b5436512d00870235aad	discard	store only extra tags not token copies	1	1	0	60
+19	0a189ffd7a44345e4426f4b48f864636cd206e52	keep	compile needles without recopying tag case	0	1	0	60
+20	cabb10a27d9becdb5292c3d0cebb8ca1cb32f415	keep	score retrieve without a hay local	0	1	0	60
+21	fab8f6e0429172270b0a41dc7a09a69dd496f021	keep	persist mode on write instead of chmod+fsync	0	1	0	60
+22	57b884315d533d813290c900b7089f3fb409bf92	keep	skip pack search on WH-word queries	0	1	0	60
+23	f09cbabee9e7dd29f900b621671f1108158c3e1d	keep	fold llmContent into convBlob string pull	0	1	0	60
+24	662027b14291794e914f7ae7971cf42825252763	keep	drop extractDurable lowercase local	0	1	0	60
+25	07b6c51a733eafaa6c779302987a7bc6d7e3c773	keep	pack retrieve fold table onto one line	0	1	0	60
+26	b62991885e14e829231e426617d8263530e11b4d	keep	pack remember persist into return	0	1	0	60
+27	7bc4c927e2999c63ab299a9f9cc591b9828e2993	keep	inline notesFor empty-path recs	0	1	0	60
+28	05471c347ade1592709c425381b9d7e5956f6976	keep	fold inject RFC detect into one test	0	1	0	60
+29	77443d307ed940fa6b7211c8193a13e7bbd1ab0f	keep	pack know inject note push	0	1	0	60
+30	d417edcd233b5aaeb8f60cacd5dabd3677dbefe3	keep	return RFC copula inject without query array	0	1	0	60
+31	5642e8f045ae12208f8bb3adcc5cacddf4e237ea	keep	share infobox label whitespace fold	0	1	0	60
+32	121fa4e2ad62280963da8b6c13d4ee4a9f41d697	keep	pack inject fact memo lookup	0	1	0	60
+33	ac0c7f3e02612923e0c2b5a0777510fef3df8a68	keep	walk inject queries without index locals	0	1	0	60
+34	d81811e185cb24aacc609bdf7e2adab12c3e6213	keep	pack injectNote into one return	0	1	0	60
+35	5520822be7f076da68bab6b6ae023d5f738cef90	keep	collapse infobox label predicates to arrows	0	1	0	60
+36	0c77cc8bfd7102244fd0f840386d99b546ebdef5	keep	share pushIs for infobox is-facts	0	1	0	60
+37	6cef9b0fd2b0462b70effa6ff954b1f668adf3df	keep	pack rewriteQuery optional captures	0	1	0	60
+38	f3d1ecbec3e2a1e006e05c0bf3e9d8f792bbdcd8	keep	pack capTokens into one join	0	1	0	60
+39	edc649e5aec80b0fa7d474176ffbbe45d69b8185	keep	persist jsonl without tmp rename	0	1	0	20
+40	8ebdee8aab61e39d9bb00bb6ee7ce9554e37a72a	keep	pack internFact dual-key intern	0	1	0	20
+41	c2ef5477252971971d13461b79b333edc6001d5d	keep	pack RFC flash intern path	0	1	0	20
+42	bd0000c4e134b90d0aaf9d6a858756ebfc393162	keep	pack RFC successor query walk	0	1	0	20
+43	fd5dcbd483f2e4b0a43d8f9f3352cc6c04c1c041	keep	fold RFC relation question into one test	0	1	0	20
+44	f723d89df182f2cf11f245819c38fbf9f2e09321	keep	pack capital-of flash lookup	0	1	0	20
+45	1f3959273f5789900a97229959d7cc4037c6a6a6	keep	pack HTTP status flash returns	0	1	0	20
+46	e47c248931e3d0d41a21e07ad5521204ab5614a1	keep	pack inject factFor memo store	0	1	0	20
+47	cc9f77e2f40f5df5e678926a3ff007961fdb908f	keep	pack method header SPDX flash returns	0	1	0	20
+48	1e00a24c0e37d2e2cf7e6b901063894a10720801	keep	pack flash keep intern side effect	0	1	0	20
+49	7717c345f5b51b45adf742f7cb452742bce58d30	keep	pack protocol flash return	0	1	0	20
+50	522dcf45f8b9ff71c5d4d18a95cec4cbf63ed608	keep	pack dns w3c whatwg flash returns	0	1	0	20
+51	6823659de3093b7331c119f2a7d327b2ccc2d9ee	keep	pack unicode and IANA flash returns	0	1	0	20
+52	b4a32b7d8552ff20f12f7aa11b69c00ec4b8ca7f	keep	pack canonCountry name map fill	0	1	0	20
+53	8abd178f20923065720b51abb6d0fab0ab476f97	keep	pack knowQuery technique fallback loop	0	1	0	20
+54	f0d606bb372811431127071279caeaa87524bc95	keep	fold json mediaWant into one return	0	1	0	20
+55	d0d0e5a20042e258d63941ad2dcdebaf7ab38c2c	keep	pack media flash subtype lookup	0	1	0	20
+56	a54f646e20610d07911a583c25cbcec16b169b9c	keep	pack charset flash shown object	0	1	0	20
+57	c92dd8d11d3f4780e069f776d812130c372acf4e	keep	pack rfcTitle URI preference	0	1	0	20
+58	4925c03a77a23548b086df030846174bd1ac4eff	keep	pack articleFor into one ternary	0	1	0	20
+59	7baeff43a249a0cd183bd1969e8602c6e8c2f62f	keep	pack cardFromHit decode locals	0	1	0	20
+60	79a361d2c81e53c70ec6c9ba0d0e1745c9ce0749	keep	pack RFC cardFromHit title branch	0	1	0	20
+61	2ac783dc80cadc57245ee9bd175e199fa9b78564	keep	pack tidyIso into one match	0	1	0	20
+62	c8602eaa96bf2c518cbe6ffd72065e3cda6a0483	keep	pack tidyCapital reject guards	0	1	0	20
+63	8880aca271011fec1effca202254a7d844f13c49	keep	pack formatCard first-hit loop	0	1	0	20
+64	3fb8f7139504c9fb53c35af5de328a12f0e49b56	keep	pack tidyPopulation into one match	0	1	0	20
+65	0e28a95d330d8dc9462e3fe22e47b06cb076f98c	keep	pack tidyArea into one match	0	1	0	20
+66	3fd95db54b6598ac4e697c1c8cca108c33338a22	keep	pack tidyGov article prefix	0	1	0	20
+67	070e0e79799d49ff606ddf0f4526f0c75f0b2cf7	keep	fold rankHits IANA exact-score checks	0	1	0	20
+68	ac8b55044eaccfe1a840ca4d1df6d4719783235f	keep	fold extrasFromProse is-fact length into add	0	1	0	20
+69	8fe4ce26e31ad54af203008cfd7fca710599b2e6	keep	fold file-link attr tests into one regex	0	1	0	20
+70	96b06d1ce4e1e8c9c8899c6784dbaed0f7a20333	keep	pack consecutiveHeads run counter	0	1	0	20
+71	910d3cfa675f168242250a5bb76507a16f449656	keep	reuse lab() in headerLabel	0	1	0	20
+72	506d634a488463333fb6c8f31642111f8ab5a388	keep	pack techniquesFromProse add and match	0	1	0	20
+73	ad42e49baf2de656cdec387a4fcb28b5b4590e9b	keep	pack tidySoftwareObject article prefix	0	1	0	20
+74	67f1f25242540dd1cee654d9b229ed46b2b8f53d	keep	persist without fsync flush	0	1	0	20
+75	cef0167f793f6782f52a93320c10f4fed8a70b88	keep	pack softwareLeadIs candidate walk	0	1	0	20
+76	1434844ed0d3cbe173541a30dc9b16d40ccb9e39	keep	pack stripCellChrome into two returns	0	1	0	20
+77	62acb2340f5909687939827321b09dc29f51f35a	keep	pack RFC edge inverse walk	0	1	0	20
+78	97df6d166ca981823b0fcfb143a33d97e51e4b58	keep	pack scanHtml leftover-text branch	0	1	0	20
+79	1c954f20cd81c2207d6ce947fe8a3298a388ca61	keep	pack scanHtml JSON-LD script close	0	1	0	20
+80	3ac014cb6d1d0c46d286851a2a7604ebb5a2d20b	keep	pack scanHtml navigation skip test	0	1	0	20
+81	d351f879b3c5c776a43635ca361531ac8b8f83dc	keep	pack wikiCapital early returns	0	1	0	20
+82	735bf3a3d714ccb44ccbb5108d285b529ab52765	keep	pack wikiIso ISO-label loop	0	1	0	20
+83	888779d47d61668f12edd77a81c394947ef79039	keep	pack triplesFromPage RFC title object	0	1	0	20
+84	12c188735c33b6318581b59d2f44f9d03aaa86f5	keep	pack wikiSubject candidate pushes	0	1	0	20
+85	050b9e03a729183f835a0500f5076ddeef4c8c82	keep	pack wikiLeadIs tryObj returns	0	1	0	20
+86	ded6edcfb2719648572856a51ee43ef64fb6d981	keep	pack triplesFromPage leadIs and toolIs	0	1	0	20
+87	efb18e3964653800dca12f0aaebde3cbe0078607	keep	pack triplesFromPage W3C TR title	0	1	0	20
+88	1ba069ae36caf7b7919a437f79d99428413d305a	keep	pack observe extra tag loop	0	1	0	20
+89	1ac6c416c99a40d8a7e49a921e3d3766aebd0337	keep	pack wikiInfoboxExtras wikitext fallbacks	0	1	0	20
+90	d0a42816feec9622fa7098ccc4382fec9c911432	keep	pack triplesFromPage wikiCap wikiId	0	1	0	20
+91	488a11bf0b4b7e9097f90123404a6d208553028f	keep	pack capital inverse extra loop	0	1	0	20
+92	c127f069581c92f0c84b6d4dcc01b21908e59dde	keep	pack og.title is-fact push	0	1	0	20
+93	aa0c83bc80d85f61d92bfc4216e8bdffbb227442	keep	pack defListFacts subject fallback	0	1	0	20
+94	7c60fc703c89da5f7bffe4507798f6ae99a97cd2	keep	pack wikiShortDescription close	0	1	0	20
+95	9916d5c321d5b49ea61748e9eedf2da98386d7a7	keep	pack extrasFromPairs else-if arms	0	1	0	20
+96	6e0cf7486e45e41c04bdfc0d2910507ebdec3a94	keep	pack wikiCapitalTable capital push	0	1	0	20
+97	1a27d8b35c74b4886abab8fc35ecf0fa10c5fcbe	keep	pack isoInverse walk	0	1	0	20
+98	7069e3dca140b596a2564fbd52a38ef76f4fa848	keep	pack rfcNum titled and edges	0	1	0	20
+99	68b23bda4cd0301ce1c4599c721c30285aceda0d	keep	pack countryFactsFromScope	0	1	0	20
+100	3d3b0b213c389c8a95e2ec4a595fcb2203a253f9	keep	pack structuredCountryCapitals	0	1	0	20
+101	8800c0a3d4bfa93b9a038f5fd2c3b74c9011b093	keep	pack wikiGrowUrls addSlug	0	1	0	20
+102	32d492422e906d98acdcdad53d67a01b99bebd7c	keep	pack shortDescObject article prefix	0	1	0	20
+103	6df0a637263f48f3a956e4ca60fddb4dec1b07d2	keep	one-pass kept capital/rest split	0	1	0	20
+104	615bbcd06ac64bfd840096527c0d47211d0573f0	keep	pack attrOrInner schema.org lookup	0	1	0	20
+105	c6648fad7eb15ea58baa5bc662372f332090f02c	keep	pack extractLinks add and cap	0	1	0	20
+106	086f24e2f0245b828a963b9419fe65206b318dc0	keep	pack wikiLeadIs remaining walks	0	1	0	20
+107	ed79448048747895944efcbdfd07b04c3ca53af2	keep	pack inject factFor memo	0	1	0	20
+108	ef91fd441dc4fce9da106a1f2e0fddc72a78c4bd	keep	pack formatCard cardFromHit arms	0	1	0	20
+109	9d5fccd45f3b223c9828ac2da270cf1e2c6c4ee0	keep	pack rankHits score	0	1	0	20
+110	8b3fa40167fc9206f690d46019815131ba2008d5	keep	pack successorQueries hit walk	0	1	0	20
+111	63c4dcf78b4ce12a7dc897a3b6201ad7bd138cd5	keep	pack injectFromRequest RFC-is	0	1	0	20
+112	9f86060456d1d8c4a9689ce1144a09301f6ccb83	keep	pack rewriteQuery charset utf8	0	1	0	20
+113	8b2114f60d5443917eec76130728b429ff4edeb0	keep	pack inject system-note splice	0	1	0	20
+114	02d6abefd6282c8258d4db94818616e3b59495bf	keep	pack injectBody key sys next	0	1	0	20
+115	5b59db5c738d39c6b31157cd77a26e8340d3b4b3	keep	pack cardFromHit grounded queryHit	0	1	0	20
+116	ef56396ae2029f3c94b80d7b1dd46a1e1e9d6b5c	keep	pack flashCard buildTyped early arms	0	1	0	20
+117	142bcfdc556d76dec620b2a998a654dd12be4bf6	keep	pack subjectMentioned RFC and tool	0	1	0	20
+118	6a64dadc91e1bb91be89974da03ed2dc794c34c4	keep	pack buildTyped late intern arms	0	1	0	20
+119	064d662a9cdd2fb2c6110e69f8e6b29f7dd3c159	keep	pack knowQuery technique fallbacks	0	1	0	20
+120	2a0e438ec018c96c15b2c5adc029dee43f245710	keep	pack host fetch cors and GET	0	1	0	20
+121	ecd6ddd8da7aa5e1f9ed39e0426a32d29c134cb5	keep	inline rfcRelationQuestion into subjectMentioned	0	1	0	20
+122	ef65471ad145eb2010b8cbb2ce5fa56aa19d5a9d	keep	pack extrasFromProse add and language loops	0	1	0	20
+123	6f36b0bdd25c8c9eb328190a76388f0de5d7dae0	keep	pack scanHtml table dl meta leftover tags	0	1	0	20
+124	b646f93301c1e92599f42471c98f1532eb92125a	keep	pack capitalProse possessive capital walks	0	1	0	20
+125	c7928a20bacbb760e53aa7821bb4fedc501db193	keep	pack knowQuery searchHits edge-promote	0	1	0	20
+126	ea83ed44bdab8a8439bbf456910244e390c7fa50	keep	pack boundMention into one return	0	1	0	20
+127	dbeacec5243a5f21a41a43add8ad215c518e2d7a	keep	pack scanHtml return object	0	1	0	20
+128	edd3d1bf9bc9529f716e14fc5c2b2d000bc11b0a	keep	pack extrasFromProse TOOL_IS loop	0	1	0	20
+129	1562f35d779a257ecd7b21f86295a6c69cc17573	keep	pack spdxObjectName switch to Record	0	1	0	20
+130	bd133bcd301a2de8662662dd17c2cae068747089	keep	pack rfcMentionsFromText regex array	0	1	0	20
+131	c071d4fd55c31d13ed23ad7d5af5cda638c51459	keep	pack capitalProse add and leftover walks	0	1	0	20
+132	75edb3bbc12375a79b510cc69032710938ed96bf	keep	pack toks expand and hyphen split	0	1	0	20
+133	95171380de3d99d5e22a09b615f43f72103b2f1e	keep	pack citeableUrl guards	0	1	0	20
+134	2915b230be56dddf6d6b612515c033b2e4bbe9de	keep	pack ianaKindFromUrl if-chain	0	1	0	20
+135	443148cce7843142e2a8c4c0560105f1d0c83569	keep	pack parseLdJson candidates	0	1	0	20
+136	a4b142a6c985a0376459dee98e2d111873589740	keep	inline rfcPageUrl into sourceOf	0	1	0	20
+137	084a1b0ece3fbeefffd716c9fe872fe129740045	keep	pack extrasFromProse remaining language and currency loops	0	1	0	20
+138	9b923c110260f52f2f2e910331ebad7f655f54f0	keep	pack host POST blob msgs run	0	1	0	20
+139	0e464dfb60ce18aea1bd77ec47cb0c40341236ca	keep	pack jsonLdBlocks continue arms	0	1	0	20
+140	24b0a50a4788bcd16f4582e97ce4a00903ff7f65	keep	pack ianaRecordsFromBody kind arms	0	1	0	20
+141	e9f12621b201d5c6991577276728a35ffa3b8883	keep	pack openGraph dual regex	0	1	0	20
+142	29be12b0a0853f77cc96a24061adb45848d2706f	keep	pack host GET run if	0	1	0	20
+143	13ad42a7a8aeaebbb135d76e5a835c044c02edd3	keep	pack namedMeta matchAll	0	1	0	20
+144	e148d355b83be6bcbed7e97aa54c8d266f5aa6e2	keep	pack htmlAlternateHrefs matchAll	0	1	0	20
+145	b4001f3847dcdd2cea6324f07b33ef5feacb8201	keep	pack mediaFromText match loop	0	1	0	20
+146	1b2361736daef2ece909976e430b60979df2074d	keep	pack mediaFromUrl	0	1	0	20
+147	d673a9a31e5c55a9856d80c52b6328538a864bf9	keep	pack spdxFromText add and regex walks	0	1	0	20
+148	0017b301b227ad14168ed22fddacabd6d7ab64c0	keep	pack isoFromText	0	1	0	20
+149	e57d69c57e5e766fcc2dc48bf083dccf206ba008	keep	pack rfcXmlNumber match chain	0	1	0	20
+150	cfd04fb1b61b67c8d3f083015724c55ef253c774	keep	pack qualityHost try path	0	1	0	20
+151	1b0fdb1c3b825e20386414cd4c5cee0d301e2a9b	keep	pack frozenEncyclopedia id arms	0	1	0	20
+152	4e867c129cd032d4b575c27b336264ba8abcb22d	keep	pack persistable is rfc arms	0	1	0	20
+153	efeda9b1edae8cff0919b1ea433c52019a5fe8c1	keep	pack rfcTitleFromXml	0	1	0	20
+154	bab75bd5f03d0e041f6fc2ab124a015aa79357e1	keep	pack rfcEdgesFromXml take	0	1	0	20
+155	eeeaf9345d2ddb5f20389dbf476dcff074073942	keep	pack rfcStatusObject	0	1	0	20
+156	872b3d82d4810c6a2cb6a143a5cd600e5493dfae	keep	pack rfcStatusFromXml seriesInfo	0	1	0	20
+157	3829e3ed74584e34fbbd93c821725c68f0282958	keep	pack ldText object arms	0	1	0	20
+158	6e5d82a928ade1943c28979800818d97942fd1eb	keep	pack opinionTrash and englishEnough	0	1	0	20
+159	bc7375525b79e53672eeba1e35132f9ed25b1552	keep	pack rfcStatusFromText	0	1	0	20
+160	a4ad1d8bd30382e1806aff17f8b0c7f5049fd5ab	keep	pack shortTitle	0	1	0	20
+161	6b5bce0a2d4781b3fe0e48882deee2e5de5115f2	keep	pack rfcGistJunk	0	1	0	20
+162	1560d4ae5150ed48bd40fba3e692c4721e5c74a6	keep	pack rfcTitleFromHtml scan arms	0	1	0	20
+163	b53fd798174c35295c457045206f364a1117085c	discard	pack ldTypes and walkLd array walks	0	1	0	40
+164	12e815fc0902d545d5ebeee93b5e997a45149663	keep	pack rfcNumsListed	0	1	0	20
+165	5059431b03c9f4aff8419549bc0d9be621c4935a	keep	pack convBlob early return and string arms	0	1	0	20
+166	ec917a558f7bf955a749b9ad93fe8a3fc98a926c	keep	pack qualityUrlSql parts	0	1	0	20
+167	40731d47e997b64c3a7967341cc1b8d1bb662423	keep	pack rfcEdgesFromText shared emit	0	1	0	20
+168	9467e1759b4a4d7a06dcec8083f435580447d131	keep	pack softwareName github and title	0	1	0	20
+169	672abbe435c643481944ef4dd4f07b31acb88b7e	keep	pack tidyToolName and TOOL_SKIP	0	1	0	20
+170	00bd516977cee1893e9b55e309adba96e9a40719	keep	pack tidyTechniqueObject	0	1	0	20
+171	1e5e2959033c24977618c7052ff63c00d9c5d24b	keep	pack techniquesFromProse add and match walks	0	1	0	20
+172	a259184265da1bdcd544a251b878d5168d5aa085	keep	pack RFC_CAT one line	0	1	0	20
+173	f84413930675d9ac1ab2e88b10ed170ba30dc4a1	keep	pack tidySoftwareObject and softwareLeadIs	0	1	0	20
+174	c3025cee99f57ea202d14df0606fd4bb2ad29cac	keep	pack rfcEdgeInverses	0	1	0	20
+175	b451fcdcbc15b15397760b8d8921d1ddf09bfe30	keep	pack extractDurable rem and seen	0	1	0	20
+176	553fef7467f1aedf13d8971d22cbeba8b70af3d8	keep	pack AgentMemory constructor and remember	0	1	0	20
+177	57d425d277bcfc7355e480e1691f20049a8c48d4	keep	pack wantsCapitalTable	0	1	0	20
+178	de9b4f3eefe3587215eb25d0cff3edab407a2bc1	keep	pack triplesFromPage start and isCapitalListUrl	0	1	0	20
+179	1a060a91e8b9b3d94a97250eb000e824b7135e86	keep	pack ldTypes	0	1	0	20
+180	1921687311d634ada11f4edc05993ae178f32ee4	keep	pack walkLd Country capital iso lang tel arms	0	1	0	20

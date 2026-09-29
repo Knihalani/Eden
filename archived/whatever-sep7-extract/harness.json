@@ -1,0 +1,34 @@
+{
+  "goal": "build the retrieval and extraction system fully for maximum accuracy, optimised compute and memory usage, speed and quality",
+  "branch": "whatever/sep7-extract",
+  "timeout_sec": 180,
+  "epsilon": 0.01,
+  "scope": ["src", "packages/know/src"],
+  "out_of_scope": [".whatever", ".gauntlet", "archived"],
+  "primary": {
+    "id": "extract-miss",
+    "cmd": "bun .whatever/benches/extract-retrieve.ts",
+    "direction": "lower",
+    "extract": { "kind": "prefix", "prefix": "metric:" }
+  },
+  "guards": [
+    {
+      "id": "extract-tests",
+      "cmd": "bun test packages/cli/src/memory-hook.test.ts packages/know/src/extract-crawl.test.ts packages/know/src/inject-rank.test.ts",
+      "direction": "higher",
+      "extract": { "kind": "exit" }
+    },
+    {
+      "id": "junk",
+      "cmd": "bun .whatever/benches/extract-retrieve.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "junk:" }
+    },
+    {
+      "id": "cost-ms",
+      "cmd": "bun .whatever/benches/extract-retrieve.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "cost_ms:" }
+    }
+  ]
+}

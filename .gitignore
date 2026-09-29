@@ -58,3 +58,6 @@ benchmarks/lme-v2/last-run.json
 benchmarks/lme-v2/RESULTS.smoke.md
 benchmarks/lme-v2/debug-sample.jsonl
 
+
+# Editor scratch
+.cursor-tmp/

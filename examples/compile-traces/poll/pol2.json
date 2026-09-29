@@ -1,0 +1,55 @@
+{
+  "id": "pol2",
+  "llmCalls": 4,
+  "duration_ms": 40,
+  "cost_cents": 4,
+  "complete": true,
+  "input": {
+    "ns": "n2"
+  },
+  "events": [
+    {
+      "name": "getRollout",
+      "args": {
+        "ns": "n2"
+      },
+      "result": {
+        "ready": false
+      },
+      "ok": true
+    },
+    {
+      "name": "getRollout",
+      "args": {
+        "ns": "n2"
+      },
+      "result": {
+        "ready": false
+      },
+      "ok": true
+    },
+    {
+      "name": "getRollout",
+      "args": {
+        "ns": "n2"
+      },
+      "result": {
+        "ready": true
+      },
+      "ok": true
+    },
+    {
+      "name": "cutOver",
+      "args": {
+        "ns": "n2"
+      },
+      "result": {
+        "cut": true
+      },
+      "ok": true
+    }
+  ],
+  "output": {
+    "cut": true
+  }
+}

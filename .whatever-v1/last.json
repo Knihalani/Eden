@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "errors": [],
+  "values": {
+    "brain-miss": 1775,
+    "mem-tests": 1,
+    "junk": 0,
+    "losses": 0,
+    "cost-ms": 0
+  },
+  "at": "2026-09-09T10:43:58.912Z"
+}

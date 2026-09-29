@@ -1,0 +1,163 @@
+{
+  "id": "off0",
+  "llmCalls": 10,
+  "duration_ms": 40,
+  "cost_cents": 8,
+  "complete": true,
+  "input": {
+    "project": "gl-0"
+  },
+  "events": [
+    {
+      "name": "listIssues",
+      "args": {
+        "project": "gl-0",
+        "page": 1,
+        "limit": 2
+      },
+      "result": {
+        "items": [
+          {
+            "iid": 1
+          },
+          {
+            "iid": 2
+          }
+        ],
+        "page": 1,
+        "limit": 2,
+        "totalPages": 3
+      },
+      "ok": true
+    },
+    {
+      "name": "listIssues",
+      "args": {
+        "project": "gl-0",
+        "page": 2,
+        "limit": 2
+      },
+      "result": {
+        "items": [
+          {
+            "iid": 3
+          },
+          {
+            "iid": 4
+          }
+        ],
+        "page": 2,
+        "limit": 2,
+        "totalPages": 3
+      },
+      "ok": true
+    },
+    {
+      "name": "listIssues",
+      "args": {
+        "project": "gl-0",
+        "page": 3,
+        "limit": 2
+      },
+      "result": {
+        "items": [
+          {
+            "iid": 5
+          },
+          {
+            "iid": 6
+          }
+        ],
+        "page": 3,
+        "limit": 2,
+        "totalPages": 3
+      },
+      "ok": true
+    },
+    {
+      "name": "commentIssue",
+      "args": {
+        "project": "gl-0",
+        "iid": 1
+      },
+      "result": {
+        "commented": true,
+        "iid": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "commentIssue",
+      "args": {
+        "project": "gl-0",
+        "iid": 2
+      },
+      "result": {
+        "commented": true,
+        "iid": 2
+      },
+      "ok": true
+    },
+    {
+      "name": "commentIssue",
+      "args": {
+        "project": "gl-0",
+        "iid": 3
+      },
+      "result": {
+        "commented": true,
+        "iid": 3
+      },
+      "ok": true
+    },
+    {
+      "name": "commentIssue",
+      "args": {
+        "project": "gl-0",
+        "iid": 4
+      },
+      "result": {
+        "commented": true,
+        "iid": 4
+      },
+      "ok": true
+    },
+    {
+      "name": "commentIssue",
+      "args": {
+        "project": "gl-0",
+        "iid": 5
+      },
+      "result": {
+        "commented": true,
+        "iid": 5
+      },
+      "ok": true
+    },
+    {
+      "name": "commentIssue",
+      "args": {
+        "project": "gl-0",
+        "iid": 6
+      },
+      "result": {
+        "commented": true,
+        "iid": 6
+      },
+      "ok": true
+    },
+    {
+      "name": "closeBoard",
+      "args": {
+        "project": "gl-0"
+      },
+      "result": {
+        "closed": true
+      },
+      "ok": true
+    }
+  ],
+  "output": {
+    "closed": true
+  }
+}

@@ -1,0 +1,10 @@
+import { derive, listFiles, stats } from "./scope";
+import { VARIANTS } from "./run";
+const [n, vi, filt] = process.argv.slice(2);
+const root = n === "Eden" ? "/Users/kaiavnihalani/Downloads/Eden" : import.meta.dir + "/repos/" + n;
+const files = await listFiles(root);
+const r = derive(root, files, VARIANTS[+vi]);
+const e = [...r.counts.entries()].filter(([s]) => !filt || s.includes(filt)).sort((a, b) => a[0] < b[0] ? -1 : 1);
+console.log(VARIANTS[+vi].name, "scopes", r.scopes.size, "shown", e.length);
+for (const [s, c] of e.slice(0, +(process.env.N ?? 60))) console.log(c.toString().padStart(6), s || '""');
+process.exit(0);

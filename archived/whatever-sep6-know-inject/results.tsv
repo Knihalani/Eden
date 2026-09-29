@@ -1,0 +1,71 @@
+n	commit	status	description	primary:open-miss	guard:inject-tests	guard:inject-us	guard:false-inject
+0	476be7e5f689ec641bdbbef9d8a463dc54e67bcd	baseline	unmodified	0.717948717948718	1	14.142418181818183	0
+1	6de1046d7f8c9da5bdcd9502a2cea1cea60e4640	discard	read thinking fields (latency guard)	0.5128205128205128	1	20.04849090909091	0
+2	d09e393baa5f8663fc75b5c357f65ecf9f6f74c2	discard	fast-path thinking fields (latency guard)	0.5128205128205128	1	20.192418181818184	0
+3	e1803731ff8189ab9e761ebdcf7a7824e19941a9	discard	open CoT+thinking (latency guard)	0.05128205128205132	1	22.695454545454545	0
+4	91f3cb6f86107866fd5c98d3f537010c91c2450d	discard	thinking+injectMaybe RFC regex too tight	0.5128205128205128	0	17.229545454545455	0
+5	bd9053e1dd8885e14ad3aa4d9501747d9bbf242b	discard	thinking+injectMaybe (latency guard)	0.5128205128205128	1	35.243945454545454	0
+6	16a1cc32a4130ef393c4d1a7a10d1c0fc3939f39	keep	first useful card, drop scoring	0.717948717948718	1	11.681818181818182	0
+7	f3ea865fc2b8cab33da1942946c7755a788c56d5	keep	thinking channels with memoized factFor	0.5128205128205128	1	9.997727272727271	0
+8	a83682756bbdb784ec87232bb3f9ac98f950db70	keep	uncued open-CoT technique probes	0.02564102564102566	1	9.44090909090909	0
+9	8167d0969c791c02c8baf188bc47f8e8669bb42a	discard	RFC is NNNN lookup (latency, still missed)	0.02564102564102566	1	11.45909090909091	0
+10	12b7d65efae91a9f1bedf0665efa4fcf0720c7bf	discard	RFC is NNNN before technique (latency, pack miss)	0.02564102564102566	1	9.640163636363637	0
+11	88174774d7926545b8ffcf0a80f8e3cec1cecdd5	discard	RFC is NNNN 100% miss but 9.62 vs 9.44us	0	1	9.620454545454546	0
+12	60d06d49c31a64a965e7ae21353b5d9ca9d77af0	discard	RFC copula 100% miss, latency noise	0	1	9.8644	0
+13	1355225049278e5977f9e453d8b1d8453af41495	discard	used-for k=1 stole jq to python	0.33333333333333337	0	13.009854545454546	0.125
+14	2e596ebf5c4476ffad7385e6c4028f322f8973c5	keep	RFC is NNNN copula short-circuit, 100% open-miss	0	1	9.20150909090909	0
+15	1eb32481ce63ee0af928de29247d37026a94e1ad	keep	collapse RFC matchers (simpler, faster)	0	1	8.936363636363636	0
+16	0b30c94941ec9dafcc74bb3284419f405a833c35	keep	fold open-CoT into need detectors (simpler)	0	1	8.968945454545453	0
+17	83a7596aca3f0c4f488cf218c8368bfc99b0c9e0	keep	drop redundant nested-JSON matcher (simpler)	0	1	8.983345454545455	0
+18	c615f5fdb2f7df4dcf7c131dafa3400184bd3ddf	discard	tighter matchers not simpler (net +1 line)	0	1	8.779545454545454	0
+19	5e81796e544267b05e57fe91763176be669ec4ad	discard	tighter matchers latency spike	0	1	12.305309090909091	0
+20	6789c38140125ccd818d382cd55186d2c62dd215	keep	indexOf RFC gate, drop comments (simpler, faster)	0	1	8.681054545454547	0
+21	ad4d209ca	discard	hoist RFC scan: primary 0, net 0, cannot --simpler	0	1	8.5606	0
+22	67bbd55a4cfcad8e0741ba0f8f65bc28190743d4	keep	shared RFC scan + drop comments (simpler)	0	1	8.7606	0
+23	12da129c49e5e1e4ea4bab3c628c735364c1fe59	discard	comment-only messageText strip: inject-us noise 9.91	0	1	9.914399999999999	0
+24	26ec63f4575aa2af9616959c4560f3e576244983	discard	fold successor lookup: inject-us 9.73	0	1	9.733327272727273	0
+25	5e5fea3ca7478dd6735617c893bd697b349d6f70	keep	compile RFC regex once per number (simpler)	0	1	8.758327272727273	0
+26	3703d6cad2b733d4e5068f6782a48cf908ff43b6	discard	dedupe need detectors: tests failed (and would add whole need.ts)	0	0	6.137872727272727	0
+27	fb8086aaad9094f23b1774bcb84115dffc0711ec	keep	single python gate (simpler)	0	1	8.69090909090909	0
+28	c07cb09bf2564b2e2e37168614e8514858a559f6	keep	JSON_STRUCT once in jsonCliNeed (simpler)	0	1	8.76210909090909	0
+29	c2808b18735cd4e6410a848162a60910c5046965	discard	fold jsonToolArgs: inject-us 12.0	0	1	12.00378181818182	0
+30	ce994b18db90a7b0f6913a3332e98e12d7540a49	keep	jsonTaskToken indexOf json gate (simpler, 8.15us)	0	1	8.152272727272727	0
+31	6832e5efadcef010ce4d526c4c76cbe5b0bf6d7c	keep	typescriptRunNeed indexOf gate (simpler)	0	1	8.233345454545455	0
+32	3e43c19ec35d891fab920a49a986fe92bf9f7a2e	keep	pythonInstallNeed indexOf gate (simpler)	0	1	8.249236363636363	0
+33	42d67af77e91d2b0d9f5636bb0adcd1b08405dc5	discard	repoSearchNeed indexOf gate: inject-us 8.57	0	1	8.573472727272726	0
+34	3bff06d53284cee9a77c4311b19088ddc0d9c167	keep	successor RFC search k=3 (simpler)	0	1	8.197727272727272	0
+35	52b7cc1224869c269ff1574644e5743f2e68e2aa	keep	findFilesNeed indexOf gate (simpler, 8.09us)	0	1	8.087127272727272	0
+36	69803da0653a50df66e46c80762a64a1ed43f419	keep	rust indexOf gate (simpler, 7.95us)	0	1	7.954545454545455	0
+37	16d8999ea1fd205c77368b5095f7ffc0004ad658	keep	TASK_OBJ_HIT before TASK_FWD (simpler, 7.80us)	0	1	7.797727272727273	0
+38	d1746eef40ebd1bb62af87b619780a216a15b863	keep	skip RFC-block regex when RFC is absent (simpler, 7.66us)	0	1	7.656072727272727	0
+39	0892e6504b114265548a6f10b329056e958b4cfa	discard	technique TASK_OBJ before replace: 7.57us but net 0, cannot --simpler	0	1	7.568181818181818	0
+40	f807b7dd384bfafb00a638244a6586a29fa4d1d1	keep	technique TASK_OBJ before replace (simpler, 7.50us)	0	1	7.497727272727273	0
+41	2f21c13b1303faa6f954e4b14450e07ebcd4ac10	discard	jsonWrongWay grep indexOf: inject-us 7.66 (rg/cat false hits)	0	1	7.661363636363636	0
+42	ec6b53e43d002f225bbdd87c1f979ab45a8a126a	discard	cue-word gate missed TypeScript should/use (tests+miss)	0.02564102564102566	0	7.138636363636364	0
+43	89db5a5dcd99b4dc87f52b4fdc472c11c5d537d5	keep	successor needs digit; relation indexOf (simpler)	0	1	7.525763636363637	0
+44	92bd483768c82053e93dec9562602545ad311b8d	discard	jsonCliNeed terminal indexOf: inject-us 8.06	0	1	8.056818181818182	0
+45	dcce6d63bce15b67fa9607610bfe406ac7d818a1	keep	skip implicit whitespace collapse (simpler, 6.81us)	0	1	6.809854545454545	0
+46	238230f8a522fb162c1c08d05ed7a23f7f676009	keep	skip jsonTaskToken replace without application (simpler)	0	1	6.8174363636363635	0
+47	f28202a5bf08beed3afe89b95f1445553cb1f38c	keep	skip technique cue whitespace collapse (simpler, 6.43us)	0	1	6.431818181818182	0
+48	f389655cd9771e1c2596c59843d43529d5930085	keep	skip jsonCliNeed application replace (simpler)	0	1	6.428036363636363	0
+49	485ba6f2145bbedc1835121a425c5a357b151b5c	keep	configJsonPath .json gate (simpler, 6.34us)	0	1	6.340163636363636	0
+50	e0b5e8dc63ac7d7bc022130f1b4a680a417156c5	discard	jsonTaskToken memo 6.23us but net +1, cannot --simpler	0	1	6.228781818181818	0
+51	aa54291b114d99eb34c87089a308c17068bc5d88	discard	jsonTaskToken memo + worth skip: inject-us 7.73	0	1	7.727272727272727	0
+52	94a86a23f262bf577cc0fb4b87888646ecd8c3cf	keep	jsonTaskToken last-result memo (simpler, 6.24us)	0	1	6.243927272727273	0
+53	b9e41a025e0619c2789b07534015e669a33665aa	keep	drop duplicate injectWorthQuery (simpler)	0	1	6.2916727272727275	0
+54	4e9738b6a1239e3e9aa55c677c4e5ba9fa5bda43	discard	RFC copula is-gate 6.19us but net 0, cannot --simpler	0	1	6.191672727272728	0
+55	cf8a5b6c1e7062b4b64a570a65a2605dcd08cdfc	discard	RFC copula is-gate: inject-us 6.42 vs 6.29	0	1	6.4189454545454545	0
+56	ef5465413ed74da67a4e3a20c07811195882b981	discard	boundMention indexOf gate: inject-us 8.4	0	1	8.4	0
+57	ad1f5c4b66c6e1f665371b00a7e0e1510f6b8e4c	keep	inline RFC copula with is-gate (simpler, 6.28us)	0	1	6.280290909090909	0
+58	b59a82e871348d4b48dac8f9eb71dbf49e9fa5b0	keep	fold successor obsoletes/updates (simpler)	0	1	6.281818181818182	0
+59	3a41ae7dc9361a39c6203a9b5cc7716b64b6a0c4	discard	subjectMentioned one regex: inject-us 6.36	0	1	6.357581818181819	0
+60	89c625ec4a69b3b2a4d48a2184e57447fed454f1	discard	injectWorthQuery regex: inject-us 6.52	0	1	6.521963636363636	0
+61	5b88cc0620d13adb2250317ef8bbde942afd5978	keep	messageText single walk for reasoning (simpler)	0	1	6.309090909090909	0
+62	047dfa3198d10af29768b78d3c9a01852b15feac	keep	skip usefulInjectFact trim (simpler, 6.14us)	0	1	6.137872727272727	0
+63	6cdbe8eb978c5d4d377af8a7d56db0313c3a9154	discard	skip short-string slice: inject-us 6.20	0	1	6.200763636363637	0
+64	5f9dda07e396912a89a7273bad874838e267f711	keep	skip subjectMentioned trim (simpler)	0	1	6.162127272727273	0
+65	12f5ca24ce9b36e500eeb2ee97b5b87c473f81ce	discard	GREP_LINE memo: inject-us 6.26 net +1	0	1	6.259090909090909	0
+66	6ed6f588039f53a59765d0520a565e3603dbc4f7	keep	skip RFC fact regex unless RFC (simpler)	0	1	6.2106	0
+67	ebe7354ac627bebb574a90d48e856392de3135cb	discard	skip join slice if <16k: inject-us 6.28	0	1	6.284836363636364	0
+68	bcc437060c902cd2f19db447847d7ab4028a7aef	keep	hoist messageText keys (simpler, 6.06us)	0	1	6.057581818181818	0
+69	bf6ed733fd961f96e2cbaea81060e3fbf106093e	keep	no messages.slice copy (simpler, 6.04us)	0	1	6.037127272727273	0

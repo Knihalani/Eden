@@ -1,0 +1,49 @@
+{
+  "id": "p1-2",
+  "llmCalls": 3,
+  "duration_ms": 30,
+  "cost_cents": 3,
+  "complete": true,
+  "input": {
+    "id": 22
+  },
+  "events": [
+    {
+      "name": "getAlert",
+      "args": {
+        "id": 22
+      },
+      "result": {
+        "sev": "p1",
+        "alert": "al-22"
+      },
+      "ok": true
+    },
+    {
+      "name": "createTicket",
+      "args": {
+        "alert": "al-22"
+      },
+      "result": {
+        "acked": true,
+        "alert": "al-22"
+      },
+      "ok": true
+    },
+    {
+      "name": "sendAckTicket",
+      "args": {
+        "alert": "al-22"
+      },
+      "result": {
+        "done": true,
+        "alert": "al-22"
+      },
+      "ok": true
+    }
+  ],
+  "output": {
+    "done": true,
+    "alert": "al-22"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "goal": "Never forget when needed in real use: gold in a small Claude-hook packet after 56-turn fat threads, live session bloat during the trial (facts stored mid-trial, then more bloat; live turns are real recap walls not qx-tagged throwaways), fat tool logs, overwrites, hops, stemming, and a 960-sentence paste-then-ask; silence math and chatter. Dump-all must not score 0. Stay fast on that fat inject.",
+  "branch": "whatever/sep26-real-use",
+  "timeout_sec": 7200,
+  "epsilon": 0.02,
+  "scope": ["src", "packages/cli/src/memory-hook.ts", "packages/wrap/src"],
+  "out_of_scope": [".whatever", "benchmarks", "archived", "apps", "docs"],
+  "primary": {
+    "id": "need-miss",
+    "cmd": "bun .whatever/benches/use.ts",
+    "direction": "lower",
+    "extract": { "kind": "prefix", "prefix": "metric:" }
+  },
+  "guards": [
+    {
+      "id": "leak",
+      "cmd": "node -e \"const fs=require('fs');const t=fs.readFileSync('.whatever/logs/need-miss.log','utf8');const m=t.match(/^leak: ([0-9.]+)/m);if(!m)process.exit(1);console.log('leak: '+m[1])\"",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "leak:" }
+    },
+    {
+      "id": "holdout",
+      "cmd": "bun .whatever/benches/holdout.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "holdout:" }
+    },
+    {
+      "id": "inject-ms",
+      "cmd": "node -e \"const fs=require('fs');const t=fs.readFileSync('.whatever/logs/need-miss.log','utf8');const m=t.match(/^ms: ([0-9.]+)/m);if(!m)process.exit(1);console.log('ms: '+m[1])\"",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "ms:" }
+    },
+    {
+      "id": "tests",
+      "cmd": "bun test ./.whatever/benches/contract.test.ts",
+      "direction": "higher",
+      "extract": { "kind": "exit" }
+    }
+  ]
+}

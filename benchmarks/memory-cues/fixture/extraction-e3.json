@@ -1,0 +1,2555 @@
+[
+ {
+  "batch": "A",
+  "i": 0,
+  "text": "fix the failing test in apps/api/src/routes/users.test.ts",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 1,
+  "text": "can you add a loading spinner to the checkout button",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 2,
+  "text": "why is the dashboard page so slow to load",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 3,
+  "text": "rename getUserById to findUser everywhere",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 4,
+  "text": "add pagination to the /invoices endpoint",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 5,
+  "text": "look at the worker logs and tell me why jobs are stuck",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 6,
+  "text": "write a unit test for the formatMoney helper",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 7,
+  "text": "the sidebar overlaps the header on mobile, fix it",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 8,
+  "text": "explain what this regex does: ^(?=.*\\d)[a-z]{3,}$",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 9,
+  "text": "refactor the auth middleware so it's easier to read",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 10,
+  "text": "can you bump the timeout on the health check to 10s",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 11,
+  "text": "add a --verbose flag to the cli",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 12,
+  "text": "what does the retry option in bullmq do",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 13,
+  "text": "make the table columns sortable",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 14,
+  "text": "clean up the unused imports in apps/web/components",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 15,
+  "text": "continue",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 16,
+  "text": "keep going",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 17,
+  "text": "yes do it",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 18,
+  "text": "thanks, that worked",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 19,
+  "text": "ok now do the same for the orders page",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 20,
+  "text": "can you check if there are any type errors",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 21,
+  "text": "run the tests and tell me what fails",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 22,
+  "text": "add an index on orders.created_at",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 23,
+  "text": "the modal doesn't close when you press escape",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 24,
+  "text": "summarize what changed in the last 3 commits",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 25,
+  "text": "write a migration that adds a status column to subscriptions",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 26,
+  "text": "port this function from python to typescript",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 27,
+  "text": "why does next build fail with Can't resolve 'fs'",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 28,
+  "text": "add dark mode support to the settings page",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 29,
+  "text": "can you make the error message more helpful when the config file is missing",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 30,
+  "text": "move the date utils into packages/shared",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 31,
+  "text": "investigate why the webhook signature check fails in staging",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 32,
+  "text": "add rate limiting to the login route",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 33,
+  "text": "the build is taking 6 minutes now, can you see why",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 34,
+  "text": "generate types from the openapi spec",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 35,
+  "text": "write a readme section on how to run the worker locally",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 36,
+  "text": "replace moment with date-fns in apps/web",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 37,
+  "text": "add sentry to the api",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 38,
+  "text": "lets try a different approach, use a map instead of the nested loops",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 39,
+  "text": "can you double check the edge cases in parseDuration",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 40,
+  "text": "implement the forgot password flow",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 41,
+  "text": "fix the lint errors",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 42,
+  "text": "add a retry with backoff around the s3 upload",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 43,
+  "text": "show me where we set the cookie domain",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 44,
+  "text": "undo the last change to the navbar",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 45,
+  "text": "profile the image resize job, it's using too much memory",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 46,
+  "text": "add a playwright test for the signup flow",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 47,
+  "text": "convert this class component to hooks",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 48,
+  "text": "wire up the new pricing api to the plans page",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 49,
+  "text": "what's the difference between these two approaches",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 50,
+  "text": "try again",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 51,
+  "text": "go ahead",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 52,
+  "text": "sounds good, proceed",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 53,
+  "text": "the ci job for the cli package is red, have a look",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 54,
+  "text": "add a flag to skip the cache in the fetchPlans call",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 55,
+  "text": "can you write a script that seeds 100 fake users",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 56,
+  "text": "tighten the zod schema for the create order body",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 57,
+  "text": "why is this component re-rendering so much",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 58,
+  "text": "split the big utils.ts file into smaller modules",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 59,
+  "text": "add aria labels to the icon buttons",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 60,
+  "text": "check the terraform plan output for anything scary",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 61,
+  "text": "add a new env var STRIPE_WEBHOOK_SECRET to the example file",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 62,
+  "text": "help me debug this hydration mismatch",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 63,
+  "text": "add logging around the queue consumer",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 64,
+  "text": "make the cli print a nicer help message",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 65,
+  "text": "the api returns 500 when the body is empty, handle that",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 66,
+  "text": "write the changelog entry for this release",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 67,
+  "text": "can you review my changes in apps/web/app/billing",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 68,
+  "text": "dedupe the two fetch wrappers",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 69,
+  "text": "add a test for the redirect loop fix",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 70,
+  "text": "upgrade the chart library to the latest minor",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 71,
+  "text": "look into the flaky e2e test on the dashboard",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 72,
+  "text": "make the worker concurrency configurable",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 73,
+  "text": "how do i run just one test file",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 74,
+  "text": "create a new route for /api/health/deep",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 75,
+  "text": "add optimistic updates to the todo list",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 76,
+  "text": "fix the typo in the onboarding email",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 77,
+  "text": "add a check that the migration is idempotent",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 78,
+  "text": "let's pause here, what's left on the list?",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 79,
+  "text": "rewrite the query to avoid the n+1",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 80,
+  "text": "can you explain the error in plain words",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 81,
+  "text": "set up a github action that runs the lint job on PRs",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 82,
+  "text": "add a staging config for the worker",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 83,
+  "text": "compare these two libraries for us: zod vs valibot",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 84,
+  "text": "find where the session token gets refreshed",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 85,
+  "text": "the date picker shows the wrong timezone",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 86,
+  "text": "remove the old feature flag for new-checkout",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 87,
+  "text": "write a benchmark for the parser",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 88,
+  "text": "add jsdoc to the public functions in packages/cli/src/index.ts",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 89,
+  "text": "the image upload fails for files over 5mb",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 90,
+  "text": "make the tests pass",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 91,
+  "text": "add a Dockerfile for the api",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 92,
+  "text": "can we cache the pricing response for 5 minutes",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 93,
+  "text": "handle the case where the user has no org",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 94,
+  "text": "fix the broken link in the footer",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 95,
+  "text": "what's using port 3000",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 96,
+  "text": "add a confirm dialog before deleting a project in the UI",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 97,
+  "text": "let me know when the refactor is finished",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 98,
+  "text": "please re-run the failing job",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 99,
+  "text": "give me a plan before you start coding",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 100,
+  "text": "add the new column to the csv export",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 101,
+  "text": "set the log level to debug for this run",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 102,
+  "text": "what does ERR_REQUIRE_ESM mean here",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 103,
+  "text": "migrate the settings form to react-hook-form",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 104,
+  "text": "fix the memory leak in the websocket handler",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 105,
+  "text": "write tests for the cents conversion",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 106,
+  "text": "add a skeleton loader to the invoices table",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 107,
+  "text": "check whether the lockfile is out of date",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 108,
+  "text": "hmm that's not right, the total should include tax",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 109,
+  "text": "make the retry count 5 instead of 3 for the email job",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 110,
+  "text": "add request ids to the api logs",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 111,
+  "text": "can you add a test for when stripe returns a 402",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 112,
+  "text": "tidy up the terraform variables file",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 113,
+  "text": "what's the best way to structure the feature folders",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 114,
+  "text": "paginate the audit log query",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 115,
+  "text": "fix the eslint warning about exhaustive deps",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 116,
+  "text": "the preview deploy is showing the old version",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 117,
+  "text": "add a max length to the bio field",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 118,
+  "text": "rename the env var API_URL to PUBLIC_API_URL",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 119,
+  "text": "why is the queue backing up after 5pm",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 120,
+  "text": "please write the migration and the model change together",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 121,
+  "text": "add an e2e test that logs in and creates an invoice",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 122,
+  "text": "don't worry about the tests for now, just get the form rendering",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 123,
+  "text": "never mind, delete that file",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 124,
+  "text": "why does it always fail when I merge main into my branch",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 125,
+  "text": "don't forget to push the branch when you're done",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 126,
+  "text": "merge the two helper functions into one",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 127,
+  "text": "can you land this?",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 128,
+  "text": "ok push it",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 129,
+  "text": "go ahead and open the PR",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 130,
+  "text": "delete the unused migration file",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 131,
+  "text": "deploy the preview again",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 132,
+  "text": "install zod in the api package",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 133,
+  "text": "we use this helper in three places, can you extract it",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 134,
+  "text": "use a Set for the lookup instead of an array",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 135,
+  "text": "use the existing Button component for this",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 136,
+  "text": "switch to the dark theme in the storybook preview",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 137,
+  "text": "the tests always time out on the first run, why",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 138,
+  "text": "never seen this error before, what is it",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 139,
+  "text": "don't know why but the build is slower",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 140,
+  "text": "always the same error: ECONNREFUSED 127.0.0.1:5432",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 141,
+  "text": "I don't think we need the extra query, remove it",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 142,
+  "text": "using the new API, fetch the invoices for the last month",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 143,
+  "text": "use vitest's fake timers in this test",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 144,
+  "text": "we moved the helpers to packages/shared last week, update the imports",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 145,
+  "text": "delete the logs older than a week",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 146,
+  "text": "rebase onto main and fix the conflicts",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 147,
+  "text": "squash these commits into one",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 148,
+  "text": "drop the temp table after the backfill",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 149,
+  "text": "the node version on CI is different from mine, why",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 150,
+  "text": "use npx to run it once",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 151,
+  "text": "don't the tests cover this already?",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 152,
+  "text": "auth is broken",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 153,
+  "text": "the db is down again",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 154,
+  "text": "tests are flaky today",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 155,
+  "text": "the ci is failing on main",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 156,
+  "text": "the formatter is weird, it keeps moving my imports",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 157,
+  "text": "deploy is slow",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 158,
+  "text": "the linter is annoying, it flags everything",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 159,
+  "text": "node is fine on my machine",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 160,
+  "text": "the orm is wrong here, it generates a bad join",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 161,
+  "text": "auth: fixed now",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 162,
+  "text": "database: working again",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 163,
+  "text": "the test runner is done, all green",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 164,
+  "text": "framework is new to me, can you explain the layout file",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 165,
+  "text": "ci: down",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 166,
+  "text": "the package manager is being slow today",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 167,
+  "text": "we use pnpm here",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=pnpm"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 168,
+  "text": "the package manager is pnpm",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=pnpm"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 169,
+  "text": "use pnpm not npm",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=pnpm",
+   "slot pkg.manager!=npm"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 170,
+  "text": "use pnpm instead of yarn please",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=pnpm",
+   "slot pkg.manager!=yarn"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 171,
+  "text": "we switched from jest to vitest",
+  "cat": "slot",
+  "annotations": [
+   "slot test.runner=vitest",
+   "slot test.runner!=jest"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 172,
+  "text": "we migrated to Postgres from MySQL last month",
+  "cat": "slot",
+  "annotations": [
+   "slot db.engine=postgres",
+   "slot db.engine!=mysql"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 173,
+  "text": "we moved to Clerk",
+  "cat": "slot",
+  "annotations": [
+   "slot auth.provider=clerk"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 174,
+  "text": "auth is Clerk now",
+  "cat": "slot",
+  "annotations": [
+   "slot auth.provider=clerk"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 175,
+  "text": "orm: drizzle",
+  "cat": "slot",
+  "annotations": [
+   "slot orm=drizzle"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 176,
+  "text": "we're using Drizzle for the ORM",
+  "cat": "slot",
+  "annotations": [
+   "slot orm=drizzle"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 177,
+  "text": "use vitest for tests",
+  "cat": "slot",
+  "annotations": [
+   "slot test.runner=vitest"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 178,
+  "text": "use biome for formatting, not prettier",
+  "cat": "slot",
+  "annotations": [
+   "slot formatter=biome",
+   "slot formatter!=prettier"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 179,
+  "text": "the linter is eslint with the flat config",
+  "cat": "slot",
+  "annotations": [
+   "slot linter=eslint"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 180,
+  "text": "node version is 20.11",
+  "cat": "slot",
+  "annotations": [
+   "slot node.version=20.11"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 181,
+  "text": "we're on node 22 now",
+  "cat": "slot",
+  "annotations": [
+   "slot node.version=22"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 182,
+  "text": "we deploy to Vercel",
+  "cat": "slot",
+  "annotations": [
+   "slot deploy.target=vercel"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 183,
+  "text": "deploy target: fly.io",
+  "cat": "slot",
+  "annotations": [
+   "slot deploy.target=fly.io"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 184,
+  "text": "CI is GitHub Actions",
+  "cat": "slot",
+  "annotations": [
+   "slot ci.system=github actions"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 185,
+  "text": "we use conventional commits",
+  "cat": "slot",
+  "annotations": [
+   "slot commit.style=conventional commits"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 186,
+  "text": "the base branch is develop, not main",
+  "cat": "slot",
+  "annotations": [
+   "slot branch.base=develop",
+   "slot branch.base!=main"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 187,
+  "text": "use my work account acme-dev for gh",
+  "cat": "slot",
+  "annotations": [
+   "slot gh.account=acme-dev"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 188,
+  "text": "typescript version is 5.6",
+  "cat": "slot",
+  "annotations": [
+   "slot lang.version=5.6"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 189,
+  "text": "the framework is Remix now, we dropped next",
+  "cat": "slot",
+  "annotations": [
+   "slot framework=remix",
+   "slot framework!=next.js"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 190,
+  "text": "we don't use yarn anymore",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager!=yarn"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 191,
+  "text": "we no longer use prettier",
+  "cat": "slot",
+  "annotations": [
+   "slot formatter!=prettier"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 192,
+  "text": "actually scratch that, the db is still mysql",
+  "cat": "slot",
+  "annotations": [
+   "slot db.engine=mysql"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 193,
+  "text": "we're not on heroku anymore, it's render",
+  "cat": "slot",
+  "annotations": [
+   "slot deploy.target=render",
+   "slot deploy.target!=heroku"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 194,
+  "text": "use bun not npm for scripts",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=bun",
+   "slot pkg.manager!=npm"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 195,
+  "text": "i always use pnpm",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=pnpm"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 196,
+  "text": "with prisma for the orm",
+  "cat": "slot",
+  "annotations": [
+   "slot orm=prisma"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 197,
+  "text": "we switched to Biome",
+  "cat": "slot",
+  "annotations": [
+   "slot formatter=biome|linter=biome"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 198,
+  "text": "our tests run on playwright",
+  "cat": "slot",
+  "annotations": [
+   "slot test.runner=playwright"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 199,
+  "text": "never merge PRs yourself",
+  "cat": "policy",
+  "annotations": [
+   "policy integrate neg pr|*"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 200,
+  "text": "don't merge anything, I do the merging",
+  "cat": "policy",
+  "annotations": [
+   "policy integrate neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 201,
+  "text": "always work on a branch, never commit directly to main",
+  "cat": "policy",
+  "annotations": [
+   "policy branch pos *",
+   "policy commit neg main"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 202,
+  "text": "don't push to the remote without asking",
+  "cat": "policy",
+  "annotations": [
+   "policy push-upstream neg *|remote"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 203,
+  "text": "ask before adding new dependencies",
+  "cat": "policy",
+  "annotations": [
+   "policy dependency neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 204,
+  "text": "never force-push",
+  "cat": "policy",
+  "annotations": [
+   "policy history-rewrite neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 205,
+  "text": "don't deploy to prod from your side, ever",
+  "cat": "policy",
+  "annotations": [
+   "policy deploy neg prod"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 206,
+  "text": "never delete migrations",
+  "cat": "policy",
+  "annotations": [
+   "policy delete neg migrations"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 207,
+  "text": "do not touch the .env file",
+  "cat": "policy",
+  "annotations": [
+   "policy other neg .env"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 208,
+  "text": "always squash when merging",
+  "cat": "policy",
+  "annotations": [
+   "policy history-rewrite|integrate pos *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 209,
+  "text": "don't install packages without asking me first",
+  "cat": "policy",
+  "annotations": [
+   "policy dependency neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 210,
+  "text": "never run a migrate reset on the shared db",
+  "cat": "policy",
+  "annotations": [
+   "policy destructive-db neg db|*"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 211,
+  "text": "don't commit generated files in dist/",
+  "cat": "policy",
+  "annotations": [
+   "policy commit|generated neg dist|generated"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 212,
+  "text": "never rebase shared branches",
+  "cat": "policy",
+  "annotations": [
+   "policy history-rewrite neg branch|*"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 213,
+  "text": "always ask before you delete a branch",
+  "cat": "policy",
+  "annotations": [
+   "policy delete neg branch"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 214,
+  "text": "only merge after CI is green",
+  "cat": "policy",
+  "annotations": [
+   "policy integrate neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 215,
+  "text": "don't open pull requests on your own",
+  "cat": "policy",
+  "annotations": [
+   "policy review neg pr|*"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 216,
+  "text": "never touch billing code without asking",
+  "cat": "policy",
+  "annotations": [
+   "policy billing neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 217,
+  "text": "don't bump major versions of dependencies",
+  "cat": "policy",
+  "annotations": [
+   "policy dependency neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 218,
+  "text": "never publish the cli package yourself",
+  "cat": "policy",
+  "annotations": [
+   "policy deploy neg *|cli"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 219,
+  "text": "I handle all merges, you never merge",
+  "cat": "policy",
+  "annotations": [
+   "policy integrate neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 220,
+  "text": "don't amend commits that are already pushed",
+  "cat": "policy",
+  "annotations": [
+   "policy history-rewrite neg commit|*"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 221,
+  "text": "always open a draft PR, never a ready one",
+  "cat": "policy",
+  "annotations": [
+   "policy review pos pr"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 222,
+  "text": "never drop tables in the prod database",
+  "cat": "policy",
+  "annotations": [
+   "policy destructive-db neg table|db"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 223,
+  "text": "don't stash my changes, commit them to a wip branch",
+  "cat": "policy",
+  "annotations": [
+   "policy stash neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 224,
+  "text": "don't open the PR yet",
+  "cat": "intent",
+  "annotations": [
+   "intent review neg pr q=yet"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 225,
+  "text": "don't merge until I've reviewed it",
+  "cat": "intent",
+  "annotations": [
+   "intent integrate neg * q=until"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 226,
+  "text": "hold off on pushing for now",
+  "cat": "intent",
+  "annotations": [
+   "intent push-upstream neg * q=for-now"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 227,
+  "text": "don't deploy before the demo on friday",
+  "cat": "intent",
+  "annotations": [
+   "intent deploy neg * q=before"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 228,
+  "text": "don't push this time, I want to look first",
+  "cat": "intent",
+  "annotations": [
+   "intent push-upstream neg * q=this-time"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 229,
+  "text": "don't add any dependencies in this PR",
+  "cat": "intent",
+  "annotations": [
+   "intent dependency neg * q=in-this-pr"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 230,
+  "text": "not yet, don't commit",
+  "cat": "intent",
+  "annotations": [
+   "intent commit neg * q=yet"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 231,
+  "text": "don't merge it yet, wait for the design review",
+  "cat": "intent",
+  "annotations": [
+   "intent integrate neg * q=yet"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 232,
+  "text": "don't delete the old tables until the backfill is verified",
+  "cat": "intent",
+  "annotations": [
+   "intent delete|destructive-db neg table q=until"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 233,
+  "text": "leave the PR as a draft until I say so",
+  "cat": "intent",
+  "annotations": [
+   "intent review neg pr q=until"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 234,
+  "text": "don't release before QA signs off",
+  "cat": "intent",
+  "annotations": [
+   "intent deploy neg * q=before"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 235,
+  "text": "don't rebase for now, just merge main in",
+  "cat": "intent",
+  "annotations": [
+   "intent history-rewrite neg * q=for-now"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 236,
+  "text": "don't touch main until the release is out",
+  "cat": "intent",
+  "annotations": [
+   "intent branch|commit|push-upstream neg main q=until"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 237,
+  "text": "don't push after this commit, I'll take it from here",
+  "cat": "intent",
+  "annotations": [
+   "intent push-upstream neg * q=after"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 238,
+  "text": "please don't open a pull request yet, I'm still testing",
+  "cat": "intent",
+  "annotations": [
+   "intent review neg pr q=yet"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 239,
+  "text": "no merging until monday",
+  "cat": "intent",
+  "annotations": [
+   "intent integrate neg * q=until"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 240,
+  "text": "don't upgrade next for now",
+  "cat": "intent",
+  "annotations": [
+   "intent dependency neg next|* q=for-now"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 241,
+  "text": "wait before you deploy, the migration isn't done",
+  "cat": "intent",
+  "annotations": [
+   "intent deploy neg * q=before"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 242,
+  "text": "fix the lint errors, and remember we use biome not eslint",
+  "cat": "mixed",
+  "annotations": [
+   "slot linter=biome",
+   "slot linter!=eslint"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 243,
+  "text": "add the date-fns dependency with pnpm, we use pnpm not npm",
+  "cat": "mixed",
+  "annotations": [
+   "slot pkg.manager=pnpm",
+   "slot pkg.manager!=npm"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 244,
+  "text": "finish the refactor but don't open the PR yet",
+  "cat": "mixed",
+  "annotations": [
+   "intent review neg pr q=yet"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 245,
+  "text": "implement the search endpoint, and never merge on your own",
+  "cat": "mixed",
+  "annotations": [
+   "policy integrate neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 246,
+  "text": "write the tests with vitest, we switched from jest",
+  "cat": "mixed",
+  "annotations": [
+   "slot test.runner=vitest",
+   "slot test.runner!=jest"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 247,
+  "text": "add the column and run the migration, but don't push until I check",
+  "cat": "mixed",
+  "annotations": [
+   "intent push-upstream neg * q=until"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 248,
+  "text": "update the deploy workflow; we deploy to fly.io now",
+  "cat": "mixed",
+  "annotations": [
+   "slot deploy.target=fly.io"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 249,
+  "text": "fix the flaky test and always ask before force-pushing",
+  "cat": "mixed",
+  "annotations": [
+   "policy history-rewrite neg *"
+  ]
+ },
+ {
+  "batch": "A",
+  "i": 250,
+  "text": "can you look at this?\n```\nError: never merge conflicts detected in src/app.ts\n    at merge (git.js:10:5)\n```",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 251,
+  "text": "what does this mean\n> Always use pnpm for installs. Never commit .env files.\n> -- CONTRIBUTING.md",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 252,
+  "text": "<pasted_content id=1>\n## Workflow\nNever push directly to main. Always open a PR.\nWe use yarn for package management.\n</pasted_content id=1>\nsummarize this doc",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 253,
+  "text": "here's the log\nauth service is down\ndb connection refused\nretrying in 5s\nretrying in 10s",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 254,
+  "text": "```ts\n// don't merge this until the flag is removed\nexport const FLAG = true;\n```\nwhat does this flag do",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 255,
+  "text": "the ci output:\n```\n> pnpm test\nFAIL src/cents.test.ts\n  expected 100 received 1\n```",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 256,
+  "text": "> we switched from jest to vitest in 2023\nis that still true for the cli package?",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 257,
+  "text": "<pasted_content id=2>\nThe package manager is npm.\nNode version is 18.\nDeploy target: Heroku.\n</pasted_content id=2>\nthis is from an old wiki page, ignore anything outdated",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 258,
+  "text": "stack trace:\n```\nTypeError: Cannot read properties of undefined (reading 'id')\n    at getUser (users.ts:42:13)\n```\nfix it",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 259,
+  "text": "```\nhint: Updates were rejected because the tip of your current branch is behind\nhint: its remote counterpart. Integrate the remote changes (e.g.\nhint: 'git pull ...') before pushing again.\n```\nwhat now",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 260,
+  "text": "from the PR template:\n> - [ ] Never merge without two approvals\n> - [ ] Always squash\ndo we follow this?",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 261,
+  "text": "docker output\nStep 5/12 : RUN pnpm install\n ---> Running in 3f2a\nERR_PNPM_OUTDATED_LOCKFILE",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 262,
+  "text": "```yaml\n# always deploy from the release branch\non:\n  push:\n    branches: [release]\n```\nwhy doesn't this trigger",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 263,
+  "text": "<pasted_content id=3>\nDon't delete the migrations folder.\nAsk before adding dependencies.\n</pasted_content id=3>\nturn this into a checklist for the README",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 264,
+  "text": "```\n$ gh pr merge 123 --squash\n! Pull request #123 is not mergeable: the base branch policy prohibits the merge.\n```",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 265,
+  "text": "error log\nWARN deprecated\nWARN the orm is drizzle 0.30\nWARN peer dep missing\nhow do i fix the peer dep",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 266,
+  "text": "> the linter is eslint, the formatter is prettier\nthat's what the old doc says, is it right?",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 267,
+  "text": "```sql\n-- never run this on prod\nDROP TABLE audit_log;\n```\nwhat does this migration do",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 268,
+  "text": "the output was\n```\nnode v18.19.0\npnpm 8.15.1\n```\nis that ok?",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "A",
+  "i": 269,
+  "text": "<pasted_content id=4>\nWe use Auth0 for login and MySQL for the database.\n</pasted_content id=4>\ncompare this with what the code actually does",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 0,
+  "text": "pls dont merge my PRs, ever. i review and merge them",
+  "cat": "policy",
+  "annotations": [
+   "policy integrate neg pr|*"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 1,
+  "text": "from now on, never push directly to main",
+  "cat": "policy",
+  "annotations": [
+   "policy push-upstream|branch neg main"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 2,
+  "text": "you should always run the full test suite before you say it's done",
+  "cat": "policy",
+  "annotations": [
+   "policy complete pos *"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 3,
+  "text": "please never git push --force on shared branches",
+  "cat": "policy",
+  "annotations": [
+   "policy history-rewrite neg branch|*"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 4,
+  "text": "don't run terraform apply locally, that goes through CI",
+  "cat": "policy",
+  "annotations": [
+   "policy deploy neg *"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 5,
+  "text": "no new npm packages without checking with me",
+  "cat": "policy",
+  "annotations": [
+   "policy dependency neg *"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 6,
+  "text": "always create a new branch for each task",
+  "cat": "policy",
+  "annotations": [
+   "policy branch pos *"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 7,
+  "text": "never delete anything under infra/ without asking",
+  "cat": "policy",
+  "annotations": [
+   "policy delete neg *|infra"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 8,
+  "text": "don't commit directly, just leave the changes staged",
+  "cat": "policy",
+  "annotations": [
+   "policy commit neg *"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 9,
+  "text": "rule: never touch the stripe webhooks",
+  "cat": "policy",
+  "annotations": [
+   "policy billing neg *"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 10,
+  "text": "please don't open the pull request until i've tested it locally",
+  "cat": "intent",
+  "annotations": [
+   "intent review neg pr q=until"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 11,
+  "text": "dont push yet",
+  "cat": "intent",
+  "annotations": [
+   "intent push-upstream neg * q=yet"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 12,
+  "text": "for now don't bump any deps",
+  "cat": "intent",
+  "annotations": [
+   "intent dependency neg * q=for-now"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 13,
+  "text": "leave it unmerged until tomorrow",
+  "cat": "intent",
+  "annotations": [
+   "intent integrate neg * q=until"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 14,
+  "text": "don't deploy this week",
+  "cat": "intent",
+  "annotations": [
+   "intent deploy neg * q=this-time"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 15,
+  "text": "don't squash yet, I want to see the individual commits",
+  "cat": "intent",
+  "annotations": [
+   "intent history-rewrite neg * q=yet"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 16,
+  "text": "before you merge, wait for my ok",
+  "cat": "intent",
+  "annotations": [
+   "intent integrate neg * q=before"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 17,
+  "text": "don't delete the feature flag until after launch",
+  "cat": "intent",
+  "annotations": [
+   "intent delete neg * q=until"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 18,
+  "text": "we use yarn berry in this repo",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=yarn"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 19,
+  "text": "package manager: bun",
+  "cat": "slot",
+  "annotations": [
+   "slot pkg.manager=bun"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 20,
+  "text": "our db is sqlite for local dev and postgres in prod",
+  "cat": "slot",
+  "annotations": [
+   "slot db.engine=postgres"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 21,
+  "text": "we moved from Auth0 to Clerk in the spring",
+  "cat": "slot",
+  "annotations": [
+   "slot auth.provider=clerk",
+   "slot auth.provider!=auth0"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 22,
+  "text": "the test runner is vitest",
+  "cat": "slot",
+  "annotations": [
+   "slot test.runner=vitest"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 23,
+  "text": "use Kysely for queries, not Prisma",
+  "cat": "slot",
+  "annotations": [
+   "slot orm=kysely",
+   "slot orm!=prisma"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 24,
+  "text": "switched the api to fastify from express",
+  "cat": "slot",
+  "annotations": [
+   "slot framework=fastify",
+   "slot framework!=express"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 25,
+  "text": "node is 20 LTS",
+  "cat": "slot",
+  "annotations": [
+   "slot node.version=20"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 26,
+  "text": "formatter is prettier with the tailwind plugin",
+  "cat": "slot",
+  "annotations": [
+   "slot formatter=prettier"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 27,
+  "text": "we host on AWS, EKS specifically",
+  "cat": "slot",
+  "annotations": [
+   "slot deploy.target=eks|deploy.target=aws"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 28,
+  "text": "we're dropping jest, everything is vitest now",
+  "cat": "slot",
+  "annotations": [
+   "slot test.runner=vitest",
+   "slot test.runner!=jest"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 29,
+  "text": "PRs go against develop",
+  "cat": "slot",
+  "annotations": [
+   "slot branch.base=develop"
+  ]
+ },
+ {
+  "batch": "B",
+  "i": 30,
+  "text": "the auth is flaky again",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 31,
+  "text": "db: slow",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 32,
+  "text": "prettier is broken on this file",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 33,
+  "text": "node is weird on windows",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 34,
+  "text": "vitest is failing on ci",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 35,
+  "text": "the linter is fine",
+  "cat": "status",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 36,
+  "text": "never mind the tests, commit what you have",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 37,
+  "text": "always the same flaky test, ugh, can you look",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 38,
+  "text": "don't forget to delete the debug logs before you finish",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 39,
+  "text": "merge the configs into one file",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 40,
+  "text": "use pnpm dlx to scaffold it",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 41,
+  "text": "just deploy it",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 42,
+  "text": "push the fix",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 43,
+  "text": "we use this pattern in the api too, copy it",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 44,
+  "text": "remove the console.logs and commit",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 45,
+  "text": "why doesn't jest pick up the tsconfig paths",
+  "cat": "trap",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 46,
+  "text": "add a script that runs pnpm install then builds",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 47,
+  "text": "refactor the retry logic into a shared helper",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 48,
+  "text": "what's the best way to mock prisma in tests",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 49,
+  "text": "can you make the button disabled while saving",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 50,
+  "text": "write a migration to rename users.name to full_name",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 51,
+  "text": "the api is returning dates in UTC, convert them in the ui",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 52,
+  "text": "figure out why the docker image is 2gb",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 53,
+  "text": "add error boundaries to the dashboard",
+  "cat": "request",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 54,
+  "text": "```\nnever push to main\nalways squash\n```\nturn these into a CONTRIBUTING section",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 55,
+  "text": "> package manager: npm\nthat's outdated right?",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 56,
+  "text": "<pasted_content id=9>\nWe use Jest for tests and ESLint + Prettier.\n</pasted_content id=9>\nupdate this paragraph",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 57,
+  "text": "npm ERR! code ERESOLVE\nnpm ERR! ERESOLVE unable to resolve dependency tree\nnpm ERR! Found: react@19",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 58,
+  "text": "```\n$ git push origin main\n ! [rejected] main -> main (fetch first)\n```\nhelp",
+  "cat": "paste",
+  "annotations": []
+ },
+ {
+  "batch": "B",
+  "i": 59,
+  "text": "the doc says:\n> Don't merge on Fridays.\nshould we add that to the PR template?",
+  "cat": "paste",
+  "annotations": []
+ }
+]

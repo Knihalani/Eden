@@ -1,0 +1,22 @@
+{
+  "goal": "Mechanism-level optimization of Eden memory+know (graph/neuro/low-level), judged on 5 gates: brain-opt primary + held-out BrainMemory bench + know-sota + know-v2 + memory-bakeoff; no overfitting to one corpus",
+  "branch": "whatever/sep8-brain-opt",
+  "timeout_sec": 900,
+  "epsilon": 0.02,
+  "scope": ["src", "packages/know/src"],
+  "out_of_scope": [".whatever", ".whatever-v1", ".gauntlet", "archived", "benchmarks"],
+  "primary": { "id": "brain-miss", "cmd": "bun .whatever/benches/brain-opt.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "metric:" } },
+  "guards": [
+    { "id": "mem-tests", "cmd": "bun test packages/cli/src/memory-hook.test.ts packages/know/src/extract-crawl.test.ts packages/know/src/inject-rank.test.ts", "direction": "higher", "extract": { "kind": "exit" } },
+    { "id": "junk", "cmd": "bun .whatever/benches/brain-opt.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "junk:" } },
+    { "id": "losses", "cmd": "bun .whatever/benches/brain-opt.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "losses:" } },
+    { "id": "cost-ms", "cmd": "bun .whatever/benches/brain-opt.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "cost_ms:" } },
+    { "id": "holdout-miss", "cmd": "bun .whatever/benches/brain-holdout.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "holdout_miss:" } },
+    { "id": "holdout-junk", "cmd": "bun .whatever/benches/brain-holdout.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "holdout_junk:" } },
+    { "id": "holdout-losses", "cmd": "bun .whatever/benches/brain-holdout.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "holdout_losses:" } },
+    { "id": "sota-holdout", "cmd": "bun .whatever/benches/gate-know-sota.ts", "direction": "higher", "extract": { "kind": "prefix", "prefix": "sota_holdout_hits:" } },
+    { "id": "v2-gold", "cmd": "bun .whatever/benches/gate-know-v2.ts", "direction": "higher", "extract": { "kind": "prefix", "prefix": "v2_gold_hit:" } },
+    { "id": "bakeoff-rec5", "cmd": "bun .whatever/benches/gate-bakeoff.ts", "direction": "higher", "extract": { "kind": "prefix", "prefix": "bakeoff_rec5:" } },
+    { "id": "bakeoff-junkfp", "cmd": "bun .whatever/benches/gate-bakeoff.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "bakeoff_junkfp:" } }
+  ]
+}

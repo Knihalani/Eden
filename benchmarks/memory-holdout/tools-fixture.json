@@ -1,0 +1,119 @@
+{
+  "id": "m2.4-ama-tool-trace",
+  "schema": 1,
+  "part": "M2.4",
+  "report": "SOTA-GAP-REPORT.md §11.2 AMA-Bench [arxiv:2602.22769]",
+  "api_under_test": "hook-inject",
+  "product": ["respondToHook", "memoryHookResponse", "openMemory"],
+  "k": "default",
+  "k_default": 6,
+  "expect": "FAIL",
+  "bans": [
+    "cortex: false as a published column",
+    "k=40",
+    "hay",
+    "LoCoMo 92",
+    "bakeoff rec5"
+  ],
+  "notes": "AMA-shaped coding-agent cases: store a tool trace on PostToolUse, then a later UserPromptSubmit cue. Score = whether inject/additionalContext contains the gold needles. Rotation is AMA-Bench SWE (OpenHands / SWE-bench Verified-shaped) plus LME-V2 trajectory-style tool logs, not bakeoff rec5. Pre-registered expect is FAIL until the hook observes tools (M2.2). Do not tune the ranker.",
+  "cases": [
+    {
+      "id": "test-exit",
+      "title": "Non-zero test exit / FAIL in a PostToolUse tool result",
+      "ama_type": "A",
+      "ama_ability": "recall",
+      "source": "AMA-Bench Software Engineering (SWE-bench Verified + OpenHands-shaped pytest observation). Not bakeoff rec5.",
+      "session_id": "ama-swe-test-exit",
+      "observe": [
+        {
+          "hook_event_name": "PostToolUse",
+          "session_id": "ama-swe-test-exit",
+          "cwd": "/tmp/ama-swe-session",
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "pytest tests/test_session.py -q --tb=line"
+          },
+          "tool_response": "=========================== FAILURES ===========================\nFAILED tests/test_session.py::test_refresh_token - AssertionError: expected 200, got 401\n1 failed, 4 passed in 2.31s\nexit code 1\nAMA-NEEDLE:EXIT_NONZERO=1",
+          "tool_output": "=========================== FAILURES ===========================\nFAILED tests/test_session.py::test_refresh_token - AssertionError: expected 200, got 401\n1 failed, 4 passed in 2.31s\nexit code 1\nAMA-NEEDLE:EXIT_NONZERO=1",
+          "is_error": true
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "ama-swe-test-exit",
+        "cwd": "/tmp/ama-swe-session",
+        "prompt": "What was the pytest exit status for tests/test_session.py, and which test FAILED?"
+      },
+      "gold_needles": [
+        "exit code 1",
+        "test_refresh_token",
+        "AMA-NEEDLE:EXIT_NONZERO=1"
+      ]
+    },
+    {
+      "id": "git-sha",
+      "title": "Git commit sha in a PostToolUse tool result",
+      "ama_type": "A",
+      "ama_ability": "recall",
+      "source": "AMA-Bench SWE / LME-V2 coding-agent trajectory (git log observation as a later colleague cue). Not bakeoff rec5.",
+      "session_id": "ama-swe-git-sha",
+      "observe": [
+        {
+          "hook_event_name": "PostToolUse",
+          "session_id": "ama-swe-git-sha",
+          "cwd": "/tmp/ama-swe-session",
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git log -1 --format='%H %s'"
+          },
+          "tool_response": "c3f8a91b2e4d7a0c5b6e8f1a3d9c2e7b4a1f6c80 pin session nonce in refresh_token\nAMA-NEEDLE:GIT_SHA=c3f8a91b2e4d7a0c5b6e8f1a3d9c2e7b4a1f6c80",
+          "tool_output": "c3f8a91b2e4d7a0c5b6e8f1a3d9c2e7b4a1f6c80 pin session nonce in refresh_token\nAMA-NEEDLE:GIT_SHA=c3f8a91b2e4d7a0c5b6e8f1a3d9c2e7b4a1f6c80"
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "ama-swe-git-sha",
+        "cwd": "/tmp/ama-swe-session",
+        "prompt": "Which commit sha did the last git log -1 print for this repo?"
+      },
+      "gold_needles": [
+        "c3f8a91b2e4d7a0c5b6e8f1a3d9c2e7b4a1f6c80",
+        "AMA-NEEDLE:GIT_SHA=c3f8a91b2e4d7a0c5b6e8f1a3d9c2e7b4a1f6c80"
+      ]
+    },
+    {
+      "id": "flake-log",
+      "title": "Flake / intermittent failure log in a PostToolUse tool result",
+      "ama_type": "A",
+      "ama_ability": "recall",
+      "source": "LME-V2-shaped colleague experience on an AMA-Bench SWE tool log (pytest --count flake). Not bakeoff rec5.",
+      "session_id": "ama-swe-flake-log",
+      "observe": [
+        {
+          "hook_event_name": "PostToolUse",
+          "session_id": "ama-swe-flake-log",
+          "cwd": "/tmp/ama-swe-session",
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "pytest tests/test_auth_race.py --count=7 -q"
+          },
+          "tool_response": "FLAKY tests/test_auth_race.py::test_concurrent_login failed 2 of 7 runs\nIntermittent failure: RuntimeError: token already used\nFLAKE-SIG:auth-race-token-reuse\nlast fail at 2026-04-11T19:02:14Z\nAMA-NEEDLE:FLAKE_LOG=auth-race-token-reuse",
+          "tool_output": "FLAKY tests/test_auth_race.py::test_concurrent_login failed 2 of 7 runs\nIntermittent failure: RuntimeError: token already used\nFLAKE-SIG:auth-race-token-reuse\nlast fail at 2026-04-11T19:02:14Z\nAMA-NEEDLE:FLAKE_LOG=auth-race-token-reuse",
+          "is_error": true
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "ama-swe-flake-log",
+        "cwd": "/tmp/ama-swe-session",
+        "prompt": "Which test flaked in the last pytest --count run, and what was the flake signature?"
+      },
+      "gold_needles": [
+        "test_concurrent_login",
+        "failed 2 of 7",
+        "FLAKE-SIG:auth-race-token-reuse",
+        "AMA-NEEDLE:FLAKE_LOG=auth-race-token-reuse"
+      ]
+    }
+  ]
+}

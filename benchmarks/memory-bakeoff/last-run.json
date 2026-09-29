@@ -1,0 +1,932 @@
+{
+  "when": "2026-09-11T20:29:15.952Z",
+  "protocol": {
+    "k": 5,
+    "lastk": 8,
+    "locomoCats": "1-4 (skip adversarial 5)",
+    "locomoMetric": "retrieval hit@5, no LLM judge",
+    "llm": "skipped (no live vendor key)",
+    "note": "Vendor LoCoMo/LongMemEval scores use an answerer+judge LLM. This run measures whether gold is in retrieved notes."
+  },
+  "verdictHint": "Eden is a local heuristic memory for engineering chat + a packed knowledge graph. It is not a Mem0/Zep/Letta replacement.",
+  "passive": {
+    "eden": {
+      "capture": 28,
+      "captureN": 29,
+      "byFamily": {
+        "eng": {
+          "ok": 17,
+          "n": 17
+        },
+        "paraphrase": {
+          "ok": 2,
+          "n": 2
+        },
+        "buried": {
+          "ok": 1,
+          "n": 1
+        },
+        "update": {
+          "ok": 2,
+          "n": 2
+        },
+        "personal": {
+          "ok": 6,
+          "n": 7
+        }
+      },
+      "junkFp": 0,
+      "junkN": 8,
+      "storedJunk": 0,
+      "ingestMs": 1.1797528275862061,
+      "retrieveMs": 0.3334381724137971,
+      "misses": [
+        "per-terse"
+      ],
+      "rows": [
+        {
+          "id": "eng-tz",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-hours",
+          "family": "paraphrase",
+          "hit": true
+        },
+        {
+          "id": "eng-flyctl",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-prefer",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-env",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-dsn",
+          "family": "buried",
+          "hit": true
+        },
+        {
+          "id": "eng-distroless",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-bun",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-depot",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-due",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-ns",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-list",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-flag",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-tabs",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-pd",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-standup",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-rps",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-redis",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-multi",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "upd-tz",
+          "family": "update",
+          "hit": true
+        },
+        {
+          "id": "per-sister",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-veg",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-city",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-stay",
+          "family": "paraphrase",
+          "hit": true
+        },
+        {
+          "id": "per-dog",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-bday",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-terse",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-job",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "upd-city",
+          "family": "update",
+          "hit": true
+        }
+      ]
+    },
+    "lastk": {
+      "capture": 5,
+      "captureN": 29,
+      "byFamily": {
+        "eng": {
+          "ok": 4,
+          "n": 17
+        },
+        "paraphrase": {
+          "ok": 0,
+          "n": 2
+        },
+        "buried": {
+          "ok": 0,
+          "n": 1
+        },
+        "update": {
+          "ok": 0,
+          "n": 2
+        },
+        "personal": {
+          "ok": 1,
+          "n": 7
+        }
+      },
+      "junkFp": 8,
+      "junkN": 8,
+      "storedJunk": 8,
+      "ingestMs": 0.0032815862068987216,
+      "retrieveMs": 0.0009208965517228174,
+      "misses": [
+        "eng-tz",
+        "eng-hours",
+        "eng-flyctl",
+        "eng-prefer",
+        "eng-env",
+        "eng-dsn",
+        "eng-distroless",
+        "eng-due",
+        "eng-list",
+        "eng-tabs",
+        "eng-pd",
+        "eng-standup",
+        "eng-rps",
+        "eng-redis",
+        "eng-multi",
+        "upd-tz",
+        "per-sister",
+        "per-veg",
+        "per-city",
+        "per-stay",
+        "per-dog",
+        "per-bday",
+        "per-terse",
+        "upd-city"
+      ],
+      "rows": [
+        {
+          "id": "eng-tz",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-hours",
+          "family": "paraphrase",
+          "hit": false
+        },
+        {
+          "id": "eng-flyctl",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-prefer",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-env",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-dsn",
+          "family": "buried",
+          "hit": false
+        },
+        {
+          "id": "eng-distroless",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-bun",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-depot",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-due",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-ns",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-list",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-flag",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-tabs",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-pd",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-standup",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-rps",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-redis",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-multi",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "upd-tz",
+          "family": "update",
+          "hit": false
+        },
+        {
+          "id": "per-sister",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-veg",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-city",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-stay",
+          "family": "paraphrase",
+          "hit": false
+        },
+        {
+          "id": "per-dog",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-bday",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-terse",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-job",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "upd-city",
+          "family": "update",
+          "hit": false
+        }
+      ]
+    },
+    "storeall-overlap": {
+      "capture": 23,
+      "captureN": 29,
+      "byFamily": {
+        "eng": {
+          "ok": 16,
+          "n": 17
+        },
+        "paraphrase": {
+          "ok": 1,
+          "n": 2
+        },
+        "buried": {
+          "ok": 1,
+          "n": 1
+        },
+        "update": {
+          "ok": 1,
+          "n": 2
+        },
+        "personal": {
+          "ok": 4,
+          "n": 7
+        }
+      },
+      "junkFp": 0,
+      "junkN": 8,
+      "storedJunk": 7,
+      "ingestMs": 0.04631186206896818,
+      "retrieveMs": 0.05150010344827404,
+      "misses": [
+        "eng-standup",
+        "per-veg",
+        "per-stay",
+        "per-dog",
+        "per-terse",
+        "upd-city"
+      ],
+      "rows": [
+        {
+          "id": "eng-tz",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-hours",
+          "family": "paraphrase",
+          "hit": true
+        },
+        {
+          "id": "eng-flyctl",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-prefer",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-env",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-dsn",
+          "family": "buried",
+          "hit": true
+        },
+        {
+          "id": "eng-distroless",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-bun",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-depot",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-due",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-ns",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-list",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-flag",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-tabs",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-pd",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-standup",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-rps",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-redis",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-multi",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "upd-tz",
+          "family": "update",
+          "hit": true
+        },
+        {
+          "id": "per-sister",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-veg",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-city",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-stay",
+          "family": "paraphrase",
+          "hit": false
+        },
+        {
+          "id": "per-dog",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-bday",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-terse",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-job",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "upd-city",
+          "family": "update",
+          "hit": false
+        }
+      ]
+    },
+    "storeall-bm25": {
+      "capture": 23,
+      "captureN": 29,
+      "byFamily": {
+        "eng": {
+          "ok": 16,
+          "n": 17
+        },
+        "paraphrase": {
+          "ok": 1,
+          "n": 2
+        },
+        "buried": {
+          "ok": 1,
+          "n": 1
+        },
+        "update": {
+          "ok": 1,
+          "n": 2
+        },
+        "personal": {
+          "ok": 4,
+          "n": 7
+        }
+      },
+      "junkFp": 0,
+      "junkN": 8,
+      "storedJunk": 7,
+      "ingestMs": 0.03971265517241293,
+      "retrieveMs": 0.0675977586206882,
+      "misses": [
+        "eng-standup",
+        "per-veg",
+        "per-stay",
+        "per-dog",
+        "per-terse",
+        "upd-city"
+      ],
+      "rows": [
+        {
+          "id": "eng-tz",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-hours",
+          "family": "paraphrase",
+          "hit": true
+        },
+        {
+          "id": "eng-flyctl",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-prefer",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-env",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-dsn",
+          "family": "buried",
+          "hit": true
+        },
+        {
+          "id": "eng-distroless",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-bun",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-depot",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-due",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-ns",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-list",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-flag",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-tabs",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-pd",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-standup",
+          "family": "eng",
+          "hit": false
+        },
+        {
+          "id": "eng-rps",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-redis",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "eng-multi",
+          "family": "eng",
+          "hit": true
+        },
+        {
+          "id": "upd-tz",
+          "family": "update",
+          "hit": true
+        },
+        {
+          "id": "per-sister",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-veg",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-city",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-stay",
+          "family": "paraphrase",
+          "hit": false
+        },
+        {
+          "id": "per-dog",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-bday",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "per-terse",
+          "family": "personal",
+          "hit": false
+        },
+        {
+          "id": "per-job",
+          "family": "personal",
+          "hit": true
+        },
+        {
+          "id": "upd-city",
+          "family": "update",
+          "hit": false
+        }
+      ]
+    }
+  },
+  "locomo": {
+    "eden": {
+      "rec5": 695,
+      "n": 1540,
+      "byCat": {
+        "1": {
+          "ok": 85,
+          "n": 282
+        },
+        "2": {
+          "ok": 33,
+          "n": 321
+        },
+        "3": {
+          "ok": 13,
+          "n": 96
+        },
+        "4": {
+          "ok": 564,
+          "n": 841
+        }
+      },
+      "ingestMs": 5355.548625999997,
+      "queryMs": 12.655967101298705
+    },
+    "lastk": {
+      "rec5": 20,
+      "n": 1540,
+      "byCat": {
+        "1": {
+          "ok": 6,
+          "n": 282
+        },
+        "2": {
+          "ok": 2,
+          "n": 321
+        },
+        "3": {
+          "ok": 4,
+          "n": 96
+        },
+        "4": {
+          "ok": 8,
+          "n": 841
+        }
+      },
+      "ingestMs": 0.12358400000084657,
+      "queryMs": 0.00040382272736088135
+    },
+    "storeall-overlap": {
+      "rec5": 237,
+      "n": 1540,
+      "byCat": {
+        "1": {
+          "ok": 5,
+          "n": 282
+        },
+        "2": {
+          "ok": 9,
+          "n": 321
+        },
+        "3": {
+          "ok": 5,
+          "n": 96
+        },
+        "4": {
+          "ok": 218,
+          "n": 841
+        }
+      },
+      "ingestMs": 59.586121999996976,
+      "queryMs": 4.907848384415666
+    },
+    "storeall-bm25": {
+      "rec5": 271,
+      "n": 1540,
+      "byCat": {
+        "1": {
+          "ok": 5,
+          "n": 282
+        },
+        "2": {
+          "ok": 6,
+          "n": 321
+        },
+        "3": {
+          "ok": 4,
+          "n": 96
+        },
+        "4": {
+          "ok": 256,
+          "n": 841
+        }
+      },
+      "ingestMs": 52.85679499999969,
+      "queryMs": 5.74189491883112
+    }
+  },
+  "knowInject": {
+    "ok": 2,
+    "n": 5,
+    "rows": [
+      {
+        "id": "know-jq",
+        "hit": false,
+        "got": ""
+      },
+      {
+        "id": "know-rg",
+        "hit": false,
+        "got": ""
+      },
+      {
+        "id": "know-rfc",
+        "hit": false,
+        "got": ""
+      },
+      {
+        "id": "know-junk",
+        "hit": true,
+        "got": ""
+      },
+      {
+        "id": "know-asdf",
+        "hit": true,
+        "got": ""
+      }
+    ]
+  },
+  "knowQuery": {
+    "ok": 4,
+    "n": 5,
+    "rows": [
+      {
+        "id": "kq-kenya",
+        "hit": true,
+        "got": "The capital of Kenya is Nairobi."
+      },
+      {
+        "id": "kq-kenya-s",
+        "hit": true,
+        "got": "The capital of Kenya is Nairobi."
+      },
+      {
+        "id": "kq-rfc",
+        "hit": true,
+        "got": "RFC 9110 is HTTP Semantics."
+      },
+      {
+        "id": "kq-jq",
+        "hit": true,
+        "got": "jq is used for filtering JSON on the command line."
+      },
+      {
+        "id": "kq-rg",
+        "hit": false,
+        "got": ""
+      }
+    ]
+  },
+  "elapsedMs": 42513.285458
+}

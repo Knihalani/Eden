@@ -1,0 +1,63 @@
+---
+next: 51
+---
+
+# Memory wave status
+
+**Next wave:** done  
+**Slash command:** removed (M50 shipped; `.cursor/commands/memory-wave.md` deleted)
+
+This file is the only pointer the command uses. Do not skip rows. A wave is `closed` only after all four Done-whens in `docs/MEMORY-WAVES.md` hold **and leftovers are none**. **50 waves.** M37 does not delete `/memory-wave`. M50 does. The M15 evidence table in MEMORY-WAVES is the M16.1 copy source.
+
+| Wave | Status | Closed | Evidence |
+|---|---|---|---|
+| M1 | closed | 2026-09-16 | `benchmarks/memoryagentbench/{INJECT-API.md,PROTOCOL.md,BASELINE.md}` + `src/memory-char.test.ts` (CI wrapper in that folder); swallow metric in `inject` catch only |
+| M2 | closed | 2026-09-16 | `src/memory-encode.test.ts` + hook PostToolUse JSONL + `packages/wrap/src/tool-observe.ts` + `benchmarks/memory-holdout/TOOLS-RESULTS.md` (hook inject PASS 3/3) |
+| M3 | closed | 2026-09-17 | `src/memory-order.test.ts` + `cueFor`/`inject` this-turn cue; Anthropic notesFor-then-observe; hook prompt cue; 3× `bun test` 111 pass / 0 fail |
+| M4 | closed | 2026-09-17 | `src/memory-ranker.test.ts` (20 pass ×3); `queryHay` tokenize+skip only; `noteBonus`/`pinEnvFact` gone; `pathCues` keeps `auth.ts`; Clerk survives “Auth is failing” |
+| M5 | closed | 2026-09-17 | lock+atomic+`EDEN_MEMORY_STORE_CAP`; hook `session_id`→`<dir>/<session>/memories.jsonl` same `ep`; `sal>=0.6` pin + notesFor cues; ghost `/forget` gone from plugin README |
+| M6 | closed | 2026-09-17 | `benchmarks/memory-holdout/RESULTS.md` Gate 1 WIN 8/0/0 inject-only; `inject-only.test.ts` dual-API; `src/memory-struggle.test.ts` fail-open+torn heal; `BASELINE.md` M6.4 p50 0.048 / p95 0.133 (better; bytes +244 documented) |
+| M7 | closed | 2026-09-17 | `src/sleep.ts` + SemanticStore LWW/tombstone + GistStore; Stop/SessionEnd `consolidate`; SessionStart pins+gists; leftover system/content cannot resurrect postgres; 3× `src/sleep.test.ts` 25 pass; suite 151 pass / 0 fail / 595 expects |
+| M8 | closed | 2026-09-17 | `src/assemble.ts` max(t) on inject; CLS fuse G>B (no skipSemantic); `src/cls/complete.ts` last-hop Belgium `[fact]` on inject; labeled packet; wrap Anthropic uses `inject()`; 3× 193 pass / 0 fail / 748 expects |
+| M9 | closed | 2026-09-18 | `src/tool-trace.ts` + wrap/hook `{name,args,files,exit,order}` beside prose; `src/howto-store.ts` shell; `src/memory-howto.test.ts` 14 pass ×3; chat-only zero how-to; Stop keeps traces |
+| M10 | closed | 2026-09-18 | `src/sleep.ts` promoteHowTo + `src/howto-store.ts` revisions/`pruneStale`; flake Stop/sleep writes verify+files+order; exit≠0/ICL/read-only stay episodic; 3× `src/memory-howto.test.ts` 31 pass / 0 fail / 187 expects |
+| M11 | closed | 2026-09-18 | `src/howto-retrieve.ts` `retrieveHowTo` gaps+k≤3+token cap; `omitStalePlace`; `mergeSharedPrefix`+sleep watermark (no chimera); 3× `src/memory-howto.test.ts` 43 pass / 0 fail / 337 expects; wrap/hook no `[procedure]` |
+| M12 | closed | 2026-09-18 | `src/index.ts` `relevant` how-to lane + `formatNote` `[procedure]`; schema-rename `command`→`cmd`; 3× howto+packet+ranker+hook+wrap **124 pass / 0 fail**; Start pins+gists only; `rg memory_search` wrap/hook/setup/doctor = 0 |
+| M13 | closed | 2026-09-18 | `EDEN_MEMORY=0\|readonly\|on`; Stop scrub session/email/cwd; `memoryHooksCheck` lists 7 events; 3× `bun test src/memory-off.test.ts packages/cli/src/{memory-hook,doctor}.test.ts packages/wrap/src/know-inject.test.ts` **82 pass / 0 fail** |
+| M14 | closed | 2026-09-18 | wrap+hook share root `howto.jsonl` (`AgentMemory.howtoDir`); leftover session howto migrates; Codex live `hooks.json` PostToolUse (dead `post_tool` is half-wired); 3× `bun test src/memory-howto.test.ts packages/cli/src/{memory-hook,doctor,setup}.test.ts packages/wrap/src/know-inject.test.ts src/sleep.test.ts src/memory-off.test.ts` **201 pass / 0 fail** |
+| M15 | closed | 2026-09-19 | Table 3 inject LOSS overall **30.0** (AR 52.4 / TTL 32.4 / LRU 4.5 / SF 30.5) NIM `google/gemma-4-31b-it` k=10; LME n=300 **42.7**; LME-V2 Small **2.7%** n=451 LOSS; TB Δ **−20.0 pp** Harbor 2-task subset (on-arm infra errors); `protocol.test.ts` 15 pass ×3 |
+| M16 | closed | 2026-09-19 | `benchmarks/memoryagentbench/M15-EVIDENCE.md` overall **30.0** (AR 52.4 / TTL 32.4 / LRU 4.5 / SF 30.5) NIM `google/gemma-4-31b-it`; `src/memory-lanes.ts` kinds; extract-tax `WAVE-FIX: M17`; FC-MH hop miss `WAVE-FIX: M22` |
+| M17 | closed | 2026-09-19 | `encodeLane` ICL/narrative store-all (chat still `extractDurable`); JSONL `lane` + ICL-over-chat eviction; M16.3 flipped; observe FC-SH still latest; 3× `bun test src/memory-lanes.test.ts src/memory-lane-persist.test.ts src/assemble.test.ts` **36 pass / 0 fail / 165 expects** |
+| M18 | closed | 2026-09-19 | EventQA 534k inject **64** n=100 (M15 56→64; LOSS vs BM25 74.6); `src/chunk-store.ts` + BM25 k=10; `benchmarks/memoryagentbench/EVENTQA-M18.md` |
+| M19 | closed | 2026-09-20 | ICL index k=10 MCC **53.6** (71/83/75/33/6) vs M15 51.2; TREC-F **6** published LOSS; clinic 83 not collapse; EventQA 64 / FC-SH 54 kept; `benchmarks/memoryagentbench/MCC-M19.md` |
+| M20 | closed | 2026-09-20 | `src/assemble.ts` extractCandidates: numbered lists + became; `8. The chairperson is X` → t=8; Finland ice hockey t=2 / basketball t=8; kind/lane icl\|narrative → 0 triples; `FACT_CHAR_CAP` 1200 `[fact]`; 3× `bun test src/assemble.test.ts src/memory-packet.test.ts` **51 pass / 0 fail / 239 expects** |
+| M21 | closed | 2026-09-20 | FC-SH 262k inject **60** n=100 (M15 54→60; LOSS vs 82); serial assemble + live-winner packet; 3× `bun test src/assemble.test.ts` **51 pass / 0 fail**; `benchmarks/memoryagentbench/FC-SH-M21.md` |
+| M22 | closed | 2026-09-20 | `src/cls/complete.ts` CAR + last hop first; M16.4 flipped; FC-MH 262k inject **12** n=100 (M15 7→12; LOSS vs 27); `benchmarks/memoryagentbench/FC-MH-M22.md` |
+| M23 | closed | 2026-09-20 | `src/experience-store.ts` + wrap/hook `putExperienceFromTool`; AX on `{root}/experience/*.jsonl` not extractDurable JSONL; `EDEN_EXPERIENCE_BYTES` ≠ store cap; ENOENT fail-open; 3× `src/memory-experience.test.ts` **25 pass / 0 fail / 140 expects** |
+| M24 | closed | 2026-09-20 | `src/experience-retrieve.ts` + `mergeExperienceLane` silent `[episode]` slices; q25 Change-request gold_in_packet; Start/empty cue no traj dump; wrap/hook `memory_search`=0; 3× related suite **272 pass / 0 fail / 1591 expects** |
+| M25 | closed | 2026-09-20 | `src/sleep.ts` `replayExperience` + `promoteExperienceHowTo`; files remain; exit 0+verify → how-to; chat-only zero; `benchmarks/lme-v2/RESULTS.md` 29 gotchas **skipped (named LOSS)** not 74.9; 3× `bun test src/sleep.test.ts src/memory-experience.test.ts src/memory-experience-sleep.test.ts benchmarks/lme-v2/results.test.ts` **79 pass / 0 fail / 433 expects** |
+| M26 | closed | 2026-09-20 | `benchmarks/lme-v2/RESULTS.md` inject n=451 acc **3.5%** (16/451) LOSS vs RAG 42.8 / AgentRunbook-C 74.9; gold_in_packet **82/226** (M15 73); empty 0/451; inject p50/p95 913/1560 ms in-process not CLI; 200 experience files; 3× `bun test benchmarks/lme-v2/{run,results}.test.ts` **25 pass / 0 fail** |
+| M27 | closed | 2026-09-21 | `src/cls/controller.ts` `fuseArHits` + chunk BM25 pool; `benchmarks/memoryagentbench/SH-M27.md` inject **64** n=100 LOSS vs BM25 66 / HippoRAG 76; ICL isolation `memory-lanes.test.ts`; unit BM25 5/5 = fused 5/5 |
+| M28 | closed | 2026-09-21 | `benchmarks/memoryagentbench/MH-M28.md` inject **43.0** n=100 LOSS vs BM25 56 / HippoRAG 66 / M15 45; AR **53.4** |
+| M29 | closed | 2026-09-21 | `SUMM-M29.md` inject **37.0** n=100 WIN vs BM25 19 (M15 9.0); `gist-retrieve.ts` + mergeGistLane; 3× `src/memory-gist.test.ts` 16 pass |
+| M30 | closed | 2026-09-21 | `DETQA-M30.md` inject **73.2** n=71 WIN vs BM25 52.1; LRU **55.1** = mean(Summ 37.0, DetQA 73.2); `src/memory-router.ts` four routes; `src/gist-retrieve.ts` gist-then-chunk |
+| M31 | closed | 2026-09-21 | Recsys store-all atoms; `RECSYS-M31.md` inject **15.7** n=200 WIN vs M15 13.7 / HippoRAG 10.2, LOSS vs TE3-L 16.2; TTL **34.6** = mean(MCC 53.6, Recsys 15.7); `src/memory-recsys.test.ts` 16 pass ×3 |
+| M32 | closed | 2026-09-21 | `benchmarks/terminal-bench/RESULTS.md` Harbor ran=yes k=5 n=2 inject Δ **+10.0 pp** (40.0%→50.0%, tokens +26941, $0); silence empty/junk/on_cue/no_inject off 5/0/0/5 on 0/0/5/5; GLM dirs cannot block Gemma; no 89-task claim |
+| M33 | closed | 2026-09-22 | `routeMemory` on `AgentMemory.relevant`; `DENSE_RAG=false` reject; `src/memory-router-inject.test.ts` misroute 0/4; holdout Gate 1 WIN 8/0/0 after router |
+| M34 | closed | 2026-09-22 | WAL `memories.jsonl.wal` + compact@32/close; retrieve skip zero-hit bags (no hay); packet k 6–10 / procedure 300 tok / slice 300 vs M32 +27759; BASELINE p50/p95 0.590/1.016 slower vs M6.4 (M7–M33 inject path, documented); holdout Gate 1 WIN 8/0/0 |
+| M35 | closed | 2026-09-22 | `NEGATIVE.md` Δ≈0 on vs off; `SAVINGS.md` helped 9 / no-lift 1 / harmed 0 + CI no-control ban; leftover identity packet/gists/slices/Start; fail-open+`command`→`cmd`; 3× **212 pass / 0 fail** |
+| M36 | closed | 2026-09-22 | `src/memory-walkthrough.test.ts` 1–10 wrap+hook; probe empty-cue/unicode/k=40/identity; `src/memory-audit.test.ts` dual-API via `inject-gate.ts`; 3× **751 pass / 0 fail / 5449 expects** |
+| M37 | closed | 2026-09-24 | Table 3 overall **44.8** (AR 57.3 / TTL 34.6 / LRU 53.8 / SF 33.5) NIM `google/gemma-4-31b-it` k=10; LME-V2 n=451 **1.8%** LOSS; TB Δ **−10.0 pp** Harbor k=5; walkthrough 36 pass ×3; command stays |
+| M38 | closed | 2026-09-24 | `EDEN_MEMORY_MIN` default 0.15 + `memoryInjectSilent`; wrap/hook omit chrome; Start still briefs; `SILENCE.md` WIN 4/0 omitted; 3× `src/memory-silence.test.ts` **9 pass / 0 fail** |
+| M39 | closed | 2026-09-24 | `src/index.ts` `dedupSelect`/`suppressPacketNearDups`/`mixPacketBudget`; `src/icl-index.ts` no clone-refill; 10 sqlite clones → 1 slot; ICL gold `label: 7` kept; `src/memory-packet.test.ts` 22 pass ×3 |
+| M40 | closed | 2026-09-24 | `src/memory-provenance.ts` + `formatNote` `[fact · 0m · user]` / `[procedure · verified]`; assemble still drops postgres; `EDEN_MEMORY_LOG=1` stderr ids+ages default off; 3× `bun test src/memory-packet.test.ts src/assemble.test.ts` **92 pass / 0 fail / 569 expects** |
+| M41 | closed | 2026-09-24 | `placePathsFrom`/`attachPlaceCues`; hook `open_files` + wrap last-user/`x-eden-open-files`; `cueFor` still this-turn; 3× `bun test src/memory-order.test.ts` **18 pass / 0 fail / 79 expects** |
+| M42 | closed | 2026-09-24 | `src/sleep.ts` incremental+clock; Stop still `mode:"full"`; 3× `bun test src/sleep.test.ts` **38 pass / 0 fail / 228 expects**; inject does not await sleep |
+| M43 | closed | 2026-09-24 | `src/memory-forget.ts` + pin sal; forget postgres absent next inject; don’t-forget false-positive; `src/memory-consent.test.ts` 24 pass ×3 wrap+hook; sleep does not resurrect |
+| M44 | closed | 2026-09-24 | `mergeRootIdentity` + `pinsFromRoot`; session B inject sqlite `[fact]`; Start B gist/pin, no traj dump; wrap `bun -e` restart; `src/memory-project.test.ts` 9 pass ×3 |
+| M45 | closed | 2026-09-24 | `childSessionName` `parent--child`; child injects parent sqlite; child forget ≠ root tombstone; failed child prune keeps parent how-to; 3× `bun test src/memory-subagent.test.ts packages/cli/src/memory-hook.test.ts src/memory-howto.test.ts` **119 pass / 0 fail** |
+| M46 | closed | 2026-09-24 | `eden memory import <path>` + `packages/cli/src/memory-import.ts`; dry-run kinds; encodeLane ICL/chat/tools/skip; doctor names command; 3× `bun test packages/cli/src/memory-import.test.ts` **9 pass / 0 fail / 77 expects**; wrap+hook sqlite inject / math silent |
+| M47 | closed | 2026-09-24 | `HELP.md` wrap+hook helped 10 / no-lift 2 / harmed 0 (`EDEN_MEMORY=0`); `markHarmed` omit; `HELP-TOKENS.md` Δ 408 B tokens-up&accΔ≤0 = 0; 3× `bun test src/memory-harmed.test.ts benchmarks/memory-holdout/{help,savings}.test.ts` **25 pass / 0 fail / 210 expects** |
+| M48 | closed | 2026-09-24 | `benchmarks/memory-holdout/RESULTS.md` Gate 1 WIN 8/0/0 + Multi-session PASS (Clerk A→B) + Silence PASS; `decidedAll` in `src/assemble.ts`; 3× `inject-only.test.ts` 6 pass |
+| M49 | closed | 2026-09-25 | `eden setup` writes 7 events without a wrap key; doctor `count=7`; BASELINE M49.2 2k p50/p95 24.542/28.403; wrap streams in-process; walkthrough first-session wrap+hook; CLI README env=code |
+| M50 | closed | 2026-09-25 | Plan §7 wrap+hook walkthrough 38 pass ×3; `M50-SCOREBOARD.md` certifies Table 3 overall **44.8** / LME **1.8%** LOSS / TB Δ **−10.0 pp** LOSS (pre-silence M37, Gemma); HELP.md helped **10** / no-lift **2** / harmed **0**; Gate 1 WIN 8/0/0; Dense/PreToolUse/MCP rejected; `/memory-wave` deleted |

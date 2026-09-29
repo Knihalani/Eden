@@ -1,0 +1,6 @@
+{
+  "exam": "Table 3",
+  "eventqa_length": 64000,
+  "k": 40,
+  "note": "example / bad-protocol fixture — must be rejected by assertMabProtocol"
+}

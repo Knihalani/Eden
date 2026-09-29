@@ -1,0 +1,5 @@
+holdout: 3
+holdout_n: 42
+seed_threads: 56
+live_threads: 64
+missed: dlq-pubsub:no-packet,lease-zk:no-packet,sidecar-linkerd:no-packet

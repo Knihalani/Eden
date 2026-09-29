@@ -1,0 +1,49 @@
+{
+  "id": "p0-0",
+  "llmCalls": 3,
+  "duration_ms": 30,
+  "cost_cents": 3,
+  "complete": true,
+  "input": {
+    "id": 10
+  },
+  "events": [
+    {
+      "name": "getAlert",
+      "args": {
+        "id": 10
+      },
+      "result": {
+        "sev": "p0",
+        "alert": "al-10"
+      },
+      "ok": true
+    },
+    {
+      "name": "createPage",
+      "args": {
+        "alert": "al-10"
+      },
+      "result": {
+        "acked": true,
+        "alert": "al-10"
+      },
+      "ok": true
+    },
+    {
+      "name": "sendAckPage",
+      "args": {
+        "alert": "al-10"
+      },
+      "result": {
+        "done": true,
+        "alert": "al-10"
+      },
+      "ok": true
+    }
+  ],
+  "output": {
+    "done": true,
+    "alert": "al-10"
+  }
+}

@@ -1,0 +1,11 @@
+metric: 7
+leak: 4
+ms: 2.086
+gold_only_miss: 7
+need_n: 83
+seed_threads: 56
+live_threads: 64
+paste_sentences: 960
+missed: alias-flags,gate-ld,locale-crowdin,dlq-sqs,lease-etcd,outbox-debezium,sidecar-istio
+why: alias-flags:gold-miss,gate-ld:gold-miss,locale-crowdin:gold-miss,dlq-sqs:gold-miss,lease-etcd:gold-miss,outbox-debezium:gold-miss,sidecar-istio:gold-miss
+leaked: got it,nice,cool,will do

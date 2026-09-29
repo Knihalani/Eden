@@ -1,0 +1,216 @@
+# id|scope|kind|subject|text|superseded_by
+# scope "" = repo root. kinds: fact, constraint (rule), procedure, episode (decision/gotcha), preference
+r01||fact|package manager|The package manager is pnpm 9; do not use npm or yarn in this repo.|
+r02||fact|node version|Node version is pinned to 20.11 in .nvmrc; run nvm use before installing.|
+r03||fact|monorepo|The monorepo is orchestrated with Turborepo; pipelines live in turbo.json.|
+r04||constraint|env files|Never commit .env files; only .env.example is tracked.|
+r05||procedure|env setup|For local env, copy .env.example to .env.local and pull secrets from the 1Password vault acme-dev.|
+r06||constraint|commits|Commit messages follow Conventional Commits (feat:, fix:, chore:).|
+r07||constraint|pull requests|Every PR needs one approval from CODEOWNERS and green CI before merge.|
+r08||fact|ci|CI runs on GitHub Actions; workflows are in .github/workflows/ci.yml.|
+r09||fact|linter|Linting and formatting use Biome; run pnpm lint at the root.|
+r10||episode|eslint|Decided to drop ESLint and Prettier in favor of Biome in March.|
+r11||fact|module system|All packages are ESM: package.json has "type": "module".|
+r12||episode|ERR_REQUIRE_ESM|ERR_REQUIRE_ESM fix: set "type": "module" in the package and import with the .js extension instead of require().|
+r13||fact|path aliases|TypeScript path aliases use the @acme/* prefix, defined in tsconfig.base.json.|
+r14||preference|exports|Prefer named exports; no default exports except Next.js pages.|
+r15||fact|unit tests|Unit tests use Vitest across all packages.|
+r16||fact|e2e tests|End-to-end tests use Playwright.|
+r17||constraint|coverage|Coverage threshold is 80% lines; CI fails below it.|
+r18||fact|dependency updates|Renovate opens dependency update PRs every Monday; automerge only for patch updates.|
+r19||procedure|versioning|Versioning uses Changesets: run pnpm changeset for any user-facing change.|
+r20||preference|answer style|User prefers concise answers with the code first and the explanation after.|
+r21||preference|lodash|Avoid lodash; use native array methods or remeda.|
+r22||fact|validation|Runtime validation uses zod everywhere.|
+r23||fact|dates|Use date-fns for dates; moment is banned.|
+r24||fact|logging|Structured logging uses pino.|
+r25||fact|error tracking|Errors are reported to Sentry; the DSN comes from SENTRY_DSN.|
+r26||fact|feature flags|Feature flags are managed in GrowthBook.|
+r27||fact|analytics|Product analytics use PostHog.|
+r28||fact|time zone|All timestamps are stored in UTC; convert to local time only in the UI.|
+r29||fact|git hooks|Git hooks run through lefthook; husky was removed.|
+r30||fact|python|Python scripts in tools/ use Python 3.12 managed by uv.|
+r31||constraint|sudo|Never run pnpm install with sudo; fix permissions instead.|
+r32||fact|ports|Local ports: web 3000, api 4000, worker metrics 9464, Postgres 5432, Redis 6379.|
+r33||fact|docker|Local containers run on OrbStack instead of Docker Desktop.|
+r34||procedure|local services|Start Postgres and Redis locally with docker compose up -d db redis.|
+r35||procedure|dev server|pnpm dev at the root starts web, api and worker together via Turborepo.|
+r36||fact|staging|Staging is at staging.acme.dev and deploys automatically from main.|
+r37||fact|production|Production deploys happen from git tags v*; the release workflow is release.yml.|
+r38||constraint|main branch|Never force-push to main; it is a protected branch.|
+r39||fact|codeowners|The platform team owns infra/ and .github/ in CODEOWNERS.|
+r40||preference|comments|User wants no comments that restate the code; comment only the why.|
+r41||fact|editor|Recommended VS Code extensions are listed in .vscode/extensions.json.|
+r42||episode|pnpm lockfile|Gotcha: CI uses pnpm install --frozen-lockfile, so always commit pnpm-lock.yaml after adding a dependency.|
+r43||fact|secrets manager|Team secrets live in the 1Password vault acme-dev; production secrets are in AWS Secrets Manager.|
+r44||episode|apple silicon|On Apple Silicon, the sharp and canvas packages need Rosetta-free builds: run pnpm rebuild sharp after switching Node versions.|
+r45||fact|typescript|TypeScript runs in strict mode with noUncheckedIndexedAccess enabled.|
+r46||fact|issue tracker|Issues are tracked in Linear under the ACME team; branch names start with the Linear id like acme-123.|
+r47||constraint|console.log|Do not leave console.log in committed code; use the pino logger.|
+r48||fact|license|The repo is proprietary; the CLI package is MIT licensed.|
+r49||fact|package manager|The package manager is yarn 1.|r01
+r50||fact|node version|Node version is 18 LTS.|r02
+w01|apps/web|fact|web framework|The web app is Next.js 15 with the App Router.|
+w02|apps/web|fact|auth provider|The web auth provider is Clerk.|
+w03|apps/web|fact|auth provider|The web auth provider is Auth0.|w02
+w04|apps/web|fact|auth middleware|Clerk middleware lives in apps/web/middleware.ts and protects everything except publicRoutes.|
+w05|apps/web|fact|login page|The login page is apps/web/app/login/page.tsx and renders Clerk's SignIn component.|
+w06|apps/web|episode|redirect loop|Gotcha: the sign-in redirect loop happens when /login is missing from publicRoutes in middleware.ts; also set afterSignInUrl to /dashboard.|
+w07|apps/web|fact|styling|Styling is Tailwind CSS v4; config is CSS-first in app/globals.css.|
+w08|apps/web|fact|ui components|UI components come from shadcn/ui and live in apps/web/components/ui.|
+w09|apps/web|fact|server state|Server state uses TanStack Query; client state uses zustand.|
+w10|apps/web|episode|redux|Decided not to use Redux in the web app.|
+w11|apps/web|fact|forms|Forms use react-hook-form with zod resolvers.|
+w12|apps/web|fact|images|Remote images must be allowed in next.config.ts remotePatterns; the CDN host is cdn.acme.dev.|
+w13|apps/web|constraint|public env vars|Only env vars prefixed NEXT_PUBLIC_ are exposed to the browser; never put secrets in them.|
+w14|apps/web|procedure|web tests|Run web unit tests with pnpm --filter web test.|
+w15|apps/web|procedure|web e2e|Run web end-to-end tests with pnpm --filter web e2e; it needs the dev server on port 3000.|
+w16|apps/web|fact|storybook|Storybook runs on port 6006 with pnpm --filter web storybook.|
+w17|apps/web|episode|hydration mismatch|Hydration mismatch fix: format dates on the client inside useEffect, or use suppressHydrationWarning on the time element.|
+w18|apps/web|fact|i18n|Translations use next-intl; messages are in apps/web/messages/*.json.|
+w19|apps/web|fact|icons|Icons come from lucide-react.|
+w20|apps/web|fact|dark mode|Dark mode is handled by next-themes with the class strategy.|
+w21|apps/web|fact|api client|All browser calls to the API go through apps/web/lib/api.ts, a fetch wrapper that sends credentials: include.|
+w22|apps/web|fact|analytics provider|The PostHog provider is mounted in apps/web/app/providers.tsx.|
+w23|apps/web|episode|can't resolve fs|Build error "Module not found: Can't resolve 'fs'" fix: add import "server-only" and keep the module out of client components.|
+w24|apps/web|fact|preview deploys|The web app deploys on Vercel; every PR gets a preview deployment.|
+w25|apps/web|fact|caching|Marketing pages use ISR with revalidate = 60.|
+w26|apps/web|fact|security headers|CSP and security headers are set in next.config.ts headers().|
+w27|apps/web|fact|fonts|The Inter font is loaded with next/font/google in app/layout.tsx.|
+w28|apps/web|fact|payments|Checkout uses Stripe Checkout redirect; the web app never sees card data.|
+w29|apps/web|constraint|accessibility|Icon-only buttons must have an aria-label.|
+w30|apps/web|procedure|bundle size|Inspect bundle size with ANALYZE=true pnpm --filter web build.|
+w31|apps/web|fact|route groups|Authenticated pages live in the app/(dashboard) route group; public pages in app/(marketing).|
+w32|apps/web|episode|server actions|Decided to use server actions for form posts instead of API routes in the web app.|
+w33|apps/web|fact|error pages|Global errors are handled in app/global-error.tsx which reports to Sentry.|
+w34|apps/web|preference|components style|User prefers small components under 150 lines and colocated tests.|
+w35|apps/web|fact|web env|The web app reads the API base URL from NEXT_PUBLIC_API_URL.|
+w36|apps/web|episode|clerk keys|Gotcha: Clerk dev instance keys start with pk_test_; production builds fail if pk_test_ keys are used.|
+w37|apps/web|fact|web framework|The web app is Next.js 13 with the pages router.|w01
+a01|apps/api|fact|api framework|The API is built with Fastify 5.|
+a02|apps/api|fact|database|The database is Postgres 16.|
+a03|apps/api|fact|orm|The ORM is Drizzle; schema is in apps/api/src/db/schema.ts.|
+a04|apps/api|procedure|db migrations|Apply migrations with pnpm --filter api db:migrate.|
+a05|apps/api|procedure|generate migration|Generate a new migration with pnpm --filter api drizzle-kit generate after editing schema.ts.|
+a06|apps/api|fact|api auth|The API verifies Clerk session JWTs with @clerk/backend in src/plugins/auth.ts.|
+a07|apps/api|fact|rate limit|Rate limit is 100 requests per minute per IP, stored in Redis via @fastify/rate-limit.|
+a08|apps/api|fact|api versioning|Routes are versioned under /v1.|
+a09|apps/api|fact|openapi|The OpenAPI spec is generated from zod schemas into apps/api/openapi.yaml.|
+a10|apps/api|fact|api tests|API tests run against a real Postgres started by Testcontainers.|
+a11|apps/api|procedure|auth tests|Run only the auth tests with pnpm --filter api test -- auth.|
+a12|apps/api|episode|stripe webhook|Gotcha: the Stripe webhook route /v1/webhooks/stripe needs the raw body; register fastify-raw-body or signature verification fails.|
+a13|apps/api|constraint|error format|Errors are returned as RFC 7807 problem+json.|
+a14|apps/api|fact|pagination|List endpoints use cursor pagination, never offset.|
+a15|apps/api|fact|soft delete|Rows are soft-deleted with a deleted_at column.|
+a16|apps/api|constraint|money|Money is stored as integer cents, never floats.|
+a17|apps/api|fact|ids|Primary keys are UUID v7.|
+a18|apps/api|fact|connection pool|The Postgres pool max is 10 connections per pod.|
+a19|apps/api|episode|pgbouncer|Gotcha: PgBouncer runs in transaction mode, so prepared statements must be disabled (prepare: false).|
+a20|apps/api|fact|database url|The API reads the database connection string from DATABASE_URL.|
+a21|apps/api|procedure|seed data|Seed local data with pnpm --filter api db:seed.|
+a22|apps/api|fact|email|Transactional email is sent through Resend; templates are React Email in apps/api/emails.|
+a23|apps/api|fact|jobs|The API enqueues background jobs to the worker with BullMQ.|
+a24|apps/api|fact|cors|CORS allows only origins listed in CORS_ORIGINS.|
+a25|apps/api|fact|health check|The health endpoint is GET /healthz and checks Postgres and Redis.|
+a26|apps/api|fact|request ids|Every request log carries a requestId header x-request-id.|
+a27|apps/api|constraint|timeouts|Outbound HTTP calls must set a 10 second timeout.|
+a28|apps/api|episode|n+1|Gotcha: the orders list had an N+1 query; use the with: relations option in Drizzle to batch.|
+a29|apps/api|fact|file uploads|File uploads go directly to S3 with presigned URLs from POST /v1/uploads.|
+a30|apps/api|fact|search|Full-text search uses Postgres tsvector columns, not Elasticsearch.|
+a31|apps/api|episode|orm choice|Switched from Prisma to Drizzle in May because of cold-start time.|
+a32|apps/api|fact|api port|The API listens on port 4000 locally.|
+a33|apps/api|constraint|migrations|Never edit a migration that has been merged; add a new one.|
+a34|apps/api|fact|multi tenancy|Every table has an org_id column and queries must filter by it.|
+a35|apps/api|fact|webhooks out|Outgoing webhooks are signed with HMAC SHA-256 in the X-Acme-Signature header.|
+a36|apps/api|episode|jwt clock skew|Gotcha: intermittent 401s came from JWT clock skew; allow 5 seconds of leeway in auth.ts.|
+a37|apps/api|fact|database|The database is MySQL 8.|a02
+a38|apps/api|fact|api framework|The API is built with Express 4.|a01
+c01|packages/cli|fact|cli framework|The CLI is built with commander.|
+c02|packages/cli|fact|cli bundler|The CLI is bundled with tsup into dist/index.js.|
+c03|packages/cli|fact|cli package|The CLI is published to npm as @acme/cli and the binary is named acme.|
+c04|packages/cli|fact|cli config|The CLI stores its config in ~/.acme/config.json.|
+c05|packages/cli|fact|cli tests|CLI tests use Vitest snapshot tests of stdout.|
+c06|packages/cli|procedure|cli release|Release the CLI by merging the Changesets version PR; the publish job runs npm publish --provenance.|
+c07|packages/cli|constraint|node support|The CLI must support Node 18 and later; no newer APIs without a fallback.|
+c08|packages/cli|episode|cli esm|The CLI is ESM-only; the ERR_REQUIRE_ESM error from users means they are on an old Node, tell them to upgrade to 18.|
+c09|packages/cli|fact|cli auth|acme login uses the OAuth device code flow and stores the token in the OS keychain via keytar.|
+c10|packages/cli|procedure|cli local run|Run the CLI locally with pnpm --filter @acme/cli dev -- <args>.|
+c11|packages/cli|fact|cli colors|Terminal colors use picocolors, not chalk.|
+c12|packages/cli|fact|cli prompts|Interactive prompts use @clack/prompts.|
+c13|packages/cli|constraint|cli output|Commands must support --json output for scripting.|
+c14|packages/cli|fact|cli telemetry|CLI telemetry is opt-out with ACME_TELEMETRY=0.|
+c15|packages/cli|episode|windows paths|Gotcha: on Windows, config path joins broke; always use path.join and os.homedir().|
+c16|packages/cli|fact|cli update check|The CLI checks for updates once a day using update-notifier.|
+c17|packages/cli|fact|cli exit codes|Exit code 2 means usage error, 1 means runtime error.|
+c18|packages/cli|procedure|cli link|To test the CLI globally, run pnpm --filter @acme/cli build then npm link in packages/cli.|
+c19|packages/cli|fact|cli framework|The CLI is built with yargs.|c01
+s01|services/worker|fact|queue|The worker consumes BullMQ queues on Redis 7.|
+s02|services/worker|fact|queue names|Queue names are email, images, billing-sync and webhooks.|
+s03|services/worker|fact|concurrency|Worker concurrency is 5 jobs per process.|
+s04|services/worker|fact|retries|Jobs retry 3 times with exponential backoff starting at 1 second.|
+s05|services/worker|fact|scheduled jobs|Cron jobs are BullMQ repeatable jobs defined in src/schedules.ts.|
+s06|services/worker|episode|sharp alpine|Gotcha: sharp fails on the Alpine image; the Dockerfile uses node:20-slim with libvips instead.|
+s07|services/worker|fact|dead letter|Failed jobs after the last retry move to the dead-letter queue dlq and alert in Slack #alerts.|
+s08|services/worker|fact|worker metrics|The worker exposes Prometheus metrics on port 9464 at /metrics.|
+s09|services/worker|procedure|worker dev|Run the worker locally with pnpm --filter worker dev; it needs Redis running.|
+s10|services/worker|fact|job dashboard|Bull Board is mounted at /admin/queues on the worker, behind basic auth.|
+s11|services/worker|constraint|idempotency|Every job handler must be idempotent; use the job id as the idempotency key.|
+s12|services/worker|fact|billing sync|billing-sync pulls Stripe invoices every 15 minutes.|
+s13|services/worker|episode|redis memory|Gotcha: Redis ran out of memory because completed jobs were kept; set removeOnComplete: 1000.|
+s14|services/worker|fact|worker shutdown|The worker drains jobs on SIGTERM with a 30 second grace period.|
+s15|services/worker|fact|image jobs|Image jobs resize uploads to 3 sizes and write WebP to S3.|
+s16|services/worker|procedure|worker tests|Run worker tests with pnpm --filter worker test; they use an in-memory Redis mock (ioredis-mock).|
+s17|services/worker|fact|queue|The worker consumes RabbitMQ queues.|s01
+i01|infra|fact|iac|Infrastructure is Terraform 1.8 in infra/terraform.|
+i02|infra|fact|terraform state|Terraform state lives in the S3 bucket acme-tfstate with a DynamoDB lock table.|
+i03|infra|fact|cloud region|AWS region is us-east-1 for everything.|
+i04|infra|fact|kubernetes|The API and worker run on EKS; the cluster is named acme-prod.|
+i05|infra|fact|helm|Helm charts live in infra/helm, one chart per service.|
+i06|infra|constraint|terraform apply|Never run terraform apply from a laptop; only the CI plan/apply workflow applies.|
+i07|infra|procedure|terraform plan|Run make plan ENV=staging to see a Terraform plan locally.|
+i08|infra|fact|k8s secrets|Kubernetes secrets come from AWS Secrets Manager through External Secrets Operator.|
+i09|infra|fact|dns|DNS is on Cloudflare; the zone is acme.dev.|
+i10|infra|fact|monitoring|Metrics and logs go to Grafana Cloud; dashboards are in infra/grafana.|
+i11|infra|fact|alerting|Alerts page the on-call through PagerDuty.|
+i12|infra|procedure|kube context|Switch kubectl context with aws eks update-kubeconfig --name acme-prod --region us-east-1.|
+i13|infra|fact|container registry|Images are pushed to ECR repositories named acme/<service>.|
+i14|infra|fact|database hosting|Production Postgres is RDS with Multi-AZ; backups are kept for 14 days.|
+i15|infra|fact|redis hosting|Production Redis is ElastiCache.|
+i16|infra|episode|eks upgrade|Gotcha: the EKS 1.29 upgrade broke the ingress; the AWS Load Balancer Controller must be upgraded first.|
+i17|infra|fact|ingress|Ingress uses the AWS Load Balancer Controller with ACM certificates.|
+i18|infra|constraint|infra changes|Infra changes need a review from the platform team and a plan output pasted in the PR.|
+i19|infra|fact|autoscaling|The worker scales with KEDA on queue length; the API uses HPA on CPU at 70%.|
+i20|infra|fact|cost|Cost tags: every resource needs the tags team and env.|
+i21|infra|fact|vpn|Access to the prod database goes through Tailscale; no public endpoint.|
+i22|infra|episode|rds failover|RDS failover took 90 seconds in the last game day; the API retries connections for 2 minutes.|
+i23|infra|fact|iac|Infrastructure is Pulumi in TypeScript.|i01
+p01||constraint|merge policy|Never merge pull requests yourself; push to the PR branch and let the user merge.|
+p02||constraint|pr timing|Do not open a pull request until the user says the work is ready.|
+p03||constraint|branching|Always work on a feature branch; never commit directly on main.|
+p04||constraint|pushing|Do not push to the upstream remote without asking first.|
+p05||constraint|verification|Before saying a task is done, re-check the work for bugs and security issues.|
+p06||constraint|e2e before pr|Test changes end to end before opening a PR, not only unit tests.|
+p07||preference|explanations|Explain things plainly, without jargon.|
+p08||preference|research depth|When asked to research, go deep: read primary sources and cite them.|
+p09||constraint|deletion|Do not delete files or branches without confirmation.|
+p10||constraint|friday deploys|Never deploy to production on Fridays.|
+p11||preference|pr size|Keep diffs small: one concern per pull request.|
+p12||constraint|new dependencies|Ask before adding a new dependency.|
+p13||constraint|generated files|Never hand-edit generated files under dist/ or *.gen.ts.|
+p14||constraint|destructive db|Do not run destructive database commands (drop, truncate, reset) without asking.|
+p15||constraint|full suite|Run the full test suite, not only the changed tests, before pushing.|
+p16||constraint|history rewrite|Do not rewrite or squash commits that are already pushed.|
+p17||preference|summaries|End-of-task summaries should be a short bullet list.|
+p18||preference|plan first|Show a plan before large refactors and wait for approval.|
+p19||preference|git stash|Do not use git stash; commit work in progress to the branch instead.|
+p20||constraint|skipped tests|Never skip or disable failing tests to make CI green.|
+p21||preference|github cli|Use the gh CLI for GitHub operations.|
+p22||constraint|billing code|Do not change billing code without the user's review.|
+p23||preference|emojis|No emojis in code, commits or docs.|
+p24||preference|commit body|Commit messages use the imperative mood with a short body explaining why.|
+p25||constraint|major upgrades|Do not bump major versions of dependencies without asking.|
+p26||preference|script language|Prefer TypeScript over JavaScript for new scripts.|
+p27||constraint|secrets in logs|Keep secrets and tokens out of logs and error messages.|
+p28||preference|uncertainty|When a fix is uncertain, say so instead of guessing.|
+p29||constraint|docs updates|Update the docs/ pages when public behavior changes.|
+p30||constraint|ci benchmarks|Do not run long benchmarks on the shared CI runners.|

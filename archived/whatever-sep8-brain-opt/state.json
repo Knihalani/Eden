@@ -1,0 +1,5 @@
+{
+  "n": 16,
+  "next_idea": "eden2 thread fully closed (clean negative, 0.65%). New moonshot: fix AgentMemory extractDrop bucket (197/845 eden5 misses - content never extracted). best 1376/holdout 47/rec5 695",
+  "last_status": "discard"
+}

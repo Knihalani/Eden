@@ -1,0 +1,567 @@
+[
+{
+"batch": "A",
+"i": 250,
+"ex": [],
+"parsed": true,
+"latency_s": 73.38631200790405,
+"usage": {
+"prompt_tokens": 1025,
+"completion_tokens": 7,
+"total_tokens": 1032
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 251,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "pnpm"
+},
+{
+"kind": "policy",
+"cls": "commit",
+"pol": "neg",
+"obj": ".env",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 4.7573161125183105,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 84,
+"total_tokens": 1107
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"pkg.manager\",\n      \"op\": \"set\",\n      \"value\": \"pnpm\"\n    },\n    {\n      \"kind\": \"policy\",\n      \"class\": \"commit\",\n      \"polarity\": \"neg\",\n      \"object\": \".env\",\n      \"qualifier\": null\n    }\n  ]\n}"
+},
+{
+"batch": "A",
+"i": 252,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "yarn"
+},
+{
+"kind": "policy",
+"cls": "branch",
+"pol": "neg",
+"obj": "main",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "integrate",
+"pol": "pos",
+"obj": "pr",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 3.54620099067688,
+"usage": {
+"prompt_tokens": 1037,
+"completion_tokens": 125,
+"total_tokens": 1162
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"pkg.manager\",\n      \"op\": \"set\",\n      \"value\": \"yarn\"\n    },\n    {\n      \"kind\": \"policy\",\n      \"class\": \"branch\",\n      \"polarity\": \"neg\",\n      \"object\": \"main\",\n      \"qualifier\": null\n    },\n    {\n      \"kind\": \"policy\",\n      \"class\": \"integrate\",\n      \"polarity\": \"pos\",\n      \"object\": \"pr\",\n      \"qualifier\": null\n    }\n  ]\n}"
+},
+{
+"batch": "A",
+"i": 253,
+"ex": [],
+"parsed": true,
+"latency_s": 13.837978839874268,
+"usage": {
+"prompt_tokens": 1025,
+"completion_tokens": 6,
+"total_tokens": 1031
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 254,
+"ex": [],
+"parsed": true,
+"latency_s": 58.738221168518066,
+"usage": {
+"prompt_tokens": 1021,
+"completion_tokens": 6,
+"total_tokens": 1027
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 255,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "pnpm"
+}
+],
+"parsed": true,
+"latency_s": 11.781187772750854,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 44,
+"total_tokens": 1067
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"pkg.manager\",\n      \"op\": \"set\",\n      \"value\": \"pnpm\"\n    }\n  ]\n}"
+},
+{
+"batch": "A",
+"i": 256,
+"ex": [
+{
+"kind": "slot",
+"slot": "test.runner",
+"op": "set",
+"value": "vitest"
+}
+],
+"parsed": true,
+"latency_s": 35.183671951293945,
+"usage": {
+"prompt_tokens": 1018,
+"completion_tokens": 35,
+"total_tokens": 1053
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"test.runner\", \"op\": \"set\", \"value\": \"vitest\"}]}"
+},
+{
+"batch": "A",
+"i": 257,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "npm"
+},
+{
+"kind": "slot",
+"slot": "node.version",
+"op": "set",
+"value": "18"
+},
+{
+"kind": "slot",
+"slot": "deploy.target",
+"op": "set",
+"value": "Heroku"
+}
+],
+"parsed": true,
+"latency_s": 50.222042083740234,
+"usage": {
+"prompt_tokens": 1040,
+"completion_tokens": 112,
+"total_tokens": 1152
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"pkg.manager\",\n      \"op\": \"set\",\n      \"value\": \"npm\"\n    },\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"node.version\",\n      \"op\": \"set\",\n      \"value\": \"18\"\n    },\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"deploy.target\",\n      \"op\": \"set\",\n      \"value\": \"Heroku\"\n    }\n  ]\n}"
+},
+{
+"batch": "A",
+"i": 258,
+"ex": [],
+"parsed": true,
+"latency_s": 0.6180977821350098,
+"usage": {
+"prompt_tokens": 1029,
+"completion_tokens": 6,
+"total_tokens": 1035
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 259,
+"ex": [],
+"parsed": true,
+"latency_s": 0.5849771499633789,
+"usage": {
+"prompt_tokens": 1043,
+"completion_tokens": 6,
+"total_tokens": 1049
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 260,
+"ex": [
+{
+"kind": "policy",
+"cls": "history-rewrite",
+"pol": "pos",
+"obj": "squash",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "integrate",
+"pol": "neg",
+"obj": "pr",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 0.8401217460632324,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 74,
+"total_tokens": 1097
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"history-rewrite\", \"polarity\": \"pos\", \"object\": \"squash\", \"qualifier\": null}, {\"kind\": \"policy\", \"class\": \"integrate\", \"polarity\": \"neg\", \"object\": \"pr\", \"qualifier\": null}]}"
+},
+{
+"batch": "A",
+"i": 261,
+"ex": [],
+"parsed": true,
+"latency_s": 3.3705637454986572,
+"usage": {
+"prompt_tokens": 1030,
+"completion_tokens": 6,
+"total_tokens": 1036
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 262,
+"ex": [],
+"parsed": true,
+"latency_s": 8.268954277038574,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 6,
+"total_tokens": 1029
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 263,
+"ex": [
+{
+"kind": "policy",
+"cls": "dependency",
+"pol": "neg",
+"obj": "dependencies",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "history-rewrite",
+"pol": "neg",
+"obj": "migrations",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 2.2452762126922607,
+"usage": {
+"prompt_tokens": 1030,
+"completion_tokens": 72,
+"total_tokens": 1102
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"dependency\", \"polarity\": \"neg\", \"object\": \"dependencies\", \"qualifier\": null}, {\"kind\": \"policy\", \"class\": \"history-rewrite\", \"polarity\": \"neg\", \"object\": \"migrations\", \"qualifier\": null}]}"
+},
+{
+"batch": "A",
+"i": 264,
+"ex": [],
+"parsed": true,
+"latency_s": 0.5655648708343506,
+"usage": {
+"prompt_tokens": 1030,
+"completion_tokens": 6,
+"total_tokens": 1036
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 265,
+"ex": [
+{
+"kind": "slot",
+"slot": "orm",
+"op": "set",
+"value": "drizzle 0.30"
+}
+],
+"parsed": true,
+"latency_s": 1.3424961566925049,
+"usage": {
+"prompt_tokens": 1029,
+"completion_tokens": 49,
+"total_tokens": 1078
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"orm\",\n      \"op\": \"set\",\n      \"value\": \"drizzle 0.30\"\n    }\n  ]\n}"
+},
+{
+"batch": "A",
+"i": 266,
+"ex": [
+{
+"kind": "slot",
+"slot": "linter",
+"op": "set",
+"value": "eslint"
+},
+{
+"kind": "slot",
+"slot": "formatter",
+"op": "set",
+"value": "prettier"
+}
+],
+"parsed": true,
+"latency_s": 2.2174949645996094,
+"usage": {
+"prompt_tokens": 1019,
+"completion_tokens": 77,
+"total_tokens": 1096
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"linter\",\n      \"op\": \"set\",\n      \"value\": \"eslint\"\n    },\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"formatter\",\n      \"op\": \"set\",\n      \"value\": \"prettier\"\n    }\n  ]\n}"
+},
+{
+"batch": "A",
+"i": 267,
+"ex": [
+{
+"kind": "policy",
+"cls": "destructive-db",
+"pol": "neg",
+"obj": "table",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 55.88958406448364,
+"usage": {
+"prompt_tokens": 1017,
+"completion_tokens": 53,
+"total_tokens": 1070
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"policy\",\n      \"class\": \"destructive-db\",\n      \"polarity\": \"neg\",\n      \"object\": \"table\",\n      \"qualifier\": null\n    }\n  ]\n}"
+},
+{
+"batch": "A",
+"i": 268,
+"ex": [
+{
+"kind": "slot",
+"slot": "node.version",
+"op": "set",
+"value": "v18.19.0"
+},
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "pnpm 8.15.1"
+}
+],
+"parsed": true,
+"latency_s": 5.052624940872192,
+"usage": {
+"prompt_tokens": 1024,
+"completion_tokens": 71,
+"total_tokens": 1095
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"node.version\", \"op\": \"set\", \"value\": \"v18.19.0\"}, {\"kind\": \"slot\", \"slot\": \"pkg.manager\", \"op\": \"set\", \"value\": \"pnpm 8.15.1\"}]}"
+},
+{
+"batch": "A",
+"i": 269,
+"ex": [
+{
+"kind": "slot",
+"slot": "auth.provider",
+"op": "set",
+"value": "auth0"
+},
+{
+"kind": "slot",
+"slot": "db.engine",
+"op": "set",
+"value": "mysql"
+}
+],
+"parsed": true,
+"latency_s": 2.398996114730835,
+"usage": {
+"prompt_tokens": 1031,
+"completion_tokens": 78,
+"total_tokens": 1109
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"auth.provider\",\n      \"op\": \"set\",\n      \"value\": \"auth0\"\n    },\n    {\n      \"kind\": \"slot\",\n      \"slot\": \"db.engine\",\n      \"op\": \"set\",\n      \"value\": \"mysql\"\n    }\n  ]\n}"
+},
+{
+"batch": "B",
+"i": 54,
+"ex": [
+{
+"kind": "policy",
+"cls": "branch",
+"pol": "neg",
+"obj": "main",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "history-rewrite",
+"pol": "pos",
+"obj": "squash",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 5.745559930801392,
+"usage": {
+"prompt_tokens": 1016,
+"completion_tokens": 95,
+"total_tokens": 1111
+},
+"cached": false,
+"raw": "{\n  \"extractions\": [\n    {\n      \"kind\": \"policy\",\n      \"class\": \"branch\",\n      \"polarity\": \"neg\",\n      \"object\": \"main\",\n      \"qualifier\": null\n    },\n    {\n      \"kind\": \"policy\",\n      \"class\": \"history-rewrite\",\n      \"polarity\": \"pos\",\n      \"object\": \"squash\",\n      \"qualifier\": null\n    }\n  ]\n}"
+},
+{
+"batch": "B",
+"i": 55,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "invalidate",
+"value": "npm"
+}
+],
+"parsed": true,
+"latency_s": 1.1331689357757568,
+"usage": {
+"prompt_tokens": 1005,
+"completion_tokens": 32,
+"total_tokens": 1037
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"pkg.manager\", \"op\": \"invalidate\", \"value\": \"npm\"}]}"
+},
+{
+"batch": "B",
+"i": 56,
+"ex": [
+{
+"kind": "slot",
+"slot": "test.runner",
+"op": "set",
+"value": "jest"
+},
+{
+"kind": "slot",
+"slot": "formatter",
+"op": "set",
+"value": "prettier"
+},
+{
+"kind": "slot",
+"slot": "linter",
+"op": "set",
+"value": "eslint"
+}
+],
+"parsed": true,
+"latency_s": 2.390435218811035,
+"usage": {
+"prompt_tokens": 1026,
+"completion_tokens": 83,
+"total_tokens": 1109
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"test.runner\", \"op\": \"set\", \"value\": \"jest\"}, {\"kind\": \"slot\", \"slot\": \"formatter\", \"op\": \"set\", \"value\": \"prettier\"}, {\"kind\": \"slot\", \"slot\": \"linter\", \"op\": \"set\", \"value\": \"eslint\"}]}"
+},
+{
+"batch": "B",
+"i": 57,
+"ex": [],
+"parsed": true,
+"latency_s": 6.998380184173584,
+"usage": {
+"prompt_tokens": 1026,
+"completion_tokens": 6,
+"total_tokens": 1032
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "B",
+"i": 58,
+"ex": [],
+"parsed": true,
+"latency_s": 19.821901082992554,
+"usage": {
+"prompt_tokens": 1016,
+"completion_tokens": 6,
+"total_tokens": 1022
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "B",
+"i": 59,
+"ex": [
+{
+"kind": "policy",
+"cls": "integrate",
+"pol": "neg",
+"obj": "pr",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 1.1203069686889648,
+"usage": {
+"prompt_tokens": 1015,
+"completion_tokens": 38,
+"total_tokens": 1053
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"integrate\", \"polarity\": \"neg\", \"object\": \"pr\", \"qualifier\": null}]}"
+}
+]

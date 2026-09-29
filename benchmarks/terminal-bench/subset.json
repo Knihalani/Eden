@@ -1,0 +1,14 @@
+{
+  "id": "eden-m15.3-tb21-locked-subset",
+  "schema": 1,
+  "dataset": "terminal-bench/terminal-bench-2-1",
+  "harness": "harbor",
+  "agent": "terminus-2",
+  "k": 5,
+  "public_board": false,
+  "note": "Locked subset of Terminal-Bench 2.1. Not the 89-task public leaderboard. Same tasks/k/model/harness on both arms.",
+  "tasks": [
+    "terminal-bench/openssl-selfsigned-cert",
+    "terminal-bench/regex-log"
+  ]
+}

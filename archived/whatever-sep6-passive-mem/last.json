@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "errors": [],
+  "values": {
+    "capture-miss": 0,
+    "inject-tests": 1,
+    "junk-store": 0,
+    "probe-miss": 0
+  },
+  "at": "2026-09-06T15:22:31.258Z"
+}

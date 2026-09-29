@@ -1,0 +1,40 @@
+{
+  "goal": "Make the injection system in Eden Know work with 100% accuracy on open reasoning from the model, ie no specific whatever the model just has to think, and make sure it's extremely fast and efficient",
+  "branch": "whatever/sep6-know-inject",
+  "timeout_sec": 180,
+  "epsilon": 0.01,
+  "scope": [
+    "packages/know/src",
+    "packages/wrap/src"
+  ],
+  "out_of_scope": [
+    ".whatever",
+    ".gauntlet"
+  ],
+  "primary": {
+    "id": "open-miss",
+    "cmd": "bun .whatever/benches/open-inject.ts",
+    "direction": "lower",
+    "extract": { "kind": "prefix", "prefix": "metric:" }
+  },
+  "guards": [
+    {
+      "id": "inject-tests",
+      "cmd": "bun test packages/know/src/need.test.ts packages/know/src/gold-gauntlet.test.ts packages/know/src/inject-rank.test.ts packages/know/src/talk.test.ts packages/wrap/src/know-inject.test.ts packages/wrap/src/intent.test.ts",
+      "direction": "higher",
+      "extract": { "kind": "exit" }
+    },
+    {
+      "id": "inject-us",
+      "cmd": "bun .whatever/benches/open-inject.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "inject_p50_us:" }
+    },
+    {
+      "id": "false-inject",
+      "cmd": "bun .whatever/benches/open-inject.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "false_inject:" }
+    }
+  ]
+}

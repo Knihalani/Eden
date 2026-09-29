@@ -1,0 +1,185 @@
+{
+  "id": "m6.1-gate1-coding-holdout",
+  "schema": 1,
+  "part": "M6.1",
+  "report": "SOTA-GAP-REPORT.md §5 coding-holdout, Gate 1 acceptance, §11.1 item 4",
+  "api_under_test": "hook-inject",
+  "product": ["respondToHook", "memoryHookResponse", "openMemory"],
+  "k": "default",
+  "k_default": 6,
+  "expect": "FAIL",
+  "bans": [
+    "BrainMemory",
+    "BrainMemory.retrieve",
+    "cortex: false as a published column",
+    "k=40",
+    "hay",
+    "LoCoMo 92",
+    "bakeoff rec5",
+    "dual-API"
+  ],
+  "notes": "Gate 1 coding-holdout on hook inject: flake, ADR, file rule, version, junk. Plus M2.4 tool-trace via run-tools.ts. Rotation is Report §5 / Gate 1, not bakeoff rec5. Pre-register expect FAIL per case before looking at inject. Do not tune the ranker. Dual-API forbidden. inject path only.",
+  "m2_4": "benchmarks/memory-holdout/tools.md",
+  "cases": [
+    {
+      "id": "flake",
+      "title": "Flake in auth.test.ts recalled on a later cue",
+      "gate1": "flake remembered on inject",
+      "source": "Report §5 / Gate 1 coding-holdout. Not bakeoff rec5.",
+      "expect": "FAIL",
+      "session_id": "holdout-flake",
+      "observe": [
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-flake",
+          "cwd": "/tmp/eden-holdout-flake",
+          "prompt": "Please fix the flake in auth.test.ts"
+        },
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-flake",
+          "cwd": "/tmp/eden-holdout-flake",
+          "prompt": "FAIL auth.test.ts\nIntermittent flake on login."
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "holdout-flake",
+        "cwd": "/tmp/eden-holdout-flake",
+        "prompt": "Which file had the flake I asked you to fix?"
+      },
+      "gold_needles": ["auth.test.ts", "flake"]
+    },
+    {
+      "id": "adr",
+      "title": "ADR survives paraphrase (Clerk / SSO)",
+      "gate1": "ADR survives paraphrase",
+      "source": "Report §5 / Gate 1. Not bakeoff rec5.",
+      "expect": "FAIL",
+      "session_id": "holdout-adr",
+      "observe": [
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-adr",
+          "cwd": "/tmp/eden-holdout-adr",
+          "prompt": "We decided to use Clerk for auth because SSO."
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "holdout-adr",
+        "cwd": "/tmp/eden-holdout-adr",
+        "prompt": "what auth provider?"
+      },
+      "gold_needles": ["Clerk"]
+    },
+    {
+      "id": "file-rule",
+      "title": "Commit-shaped cue surfaces the test-before-commit rule",
+      "gate1": "commit surfaces test rule",
+      "source": "Report §5 / Gate 1 prospective file rule. Not bakeoff rec5.",
+      "expect": "FAIL",
+      "session_id": "holdout-file-rule",
+      "observe": [
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-file-rule",
+          "cwd": "/tmp/eden-holdout-file-rule",
+          "prompt": "Always run tests before committing."
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "holdout-file-rule",
+        "cwd": "/tmp/eden-holdout-file-rule",
+        "prompt": "commit these changes"
+      },
+      "gold_needles": ["tests", "before committing"]
+    },
+    {
+      "id": "version",
+      "title": "CI Node 16 then Node 18 — newest wins without deleting CI",
+      "gate1": "Node 16→18 newest wins without deleting CI",
+      "source": "Report §5 / Gate 1. subjectKey supersedes same key. Not bakeoff rec5.",
+      "expect": "FAIL",
+      "session_id": "holdout-version",
+      "observe": [
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-version",
+          "cwd": "/tmp/eden-holdout-version",
+          "prompt": "CI is Node 16."
+        },
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-version",
+          "cwd": "/tmp/eden-holdout-version",
+          "prompt": "CI is Node 18."
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "holdout-version",
+        "cwd": "/tmp/eden-holdout-version",
+        "prompt": "what Node version does CI use?"
+      },
+      "gold_needles": ["Node 18"],
+      "stale_needles": ["Node 16"],
+      "keep_needles": ["CI"]
+    },
+    {
+      "id": "junk",
+      "title": "Junk chatter then one durable fact — inject the fact, not only junk",
+      "gate1": "junk does not drown the durable fact",
+      "source": "Report §5 / Gate 1. Not bakeoff rec5.",
+      "expect": "FAIL",
+      "session_id": "holdout-junk",
+      "observe": [
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-junk",
+          "cwd": "/tmp/eden-holdout-junk",
+          "prompt": "asdf asdf asdf"
+        },
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-junk",
+          "cwd": "/tmp/eden-holdout-junk",
+          "prompt": "qwerty qwerty qwerty"
+        },
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-junk",
+          "cwd": "/tmp/eden-holdout-junk",
+          "prompt": "lol"
+        },
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-junk",
+          "cwd": "/tmp/eden-holdout-junk",
+          "prompt": "thanks"
+        },
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-junk",
+          "cwd": "/tmp/eden-holdout-junk",
+          "prompt": "ok thanks"
+        },
+        {
+          "hook_event_name": "UserPromptSubmit",
+          "session_id": "holdout-junk",
+          "cwd": "/tmp/eden-holdout-junk",
+          "prompt": "Postgres is the session store."
+        }
+      ],
+      "cue": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "holdout-junk",
+        "cwd": "/tmp/eden-holdout-junk",
+        "prompt": "What is the session store?"
+      },
+      "gold_needles": ["postgres", "session store"],
+      "junk_needles": ["asdf", "qwerty", "lol", "thanks"]
+    }
+  ]
+}
