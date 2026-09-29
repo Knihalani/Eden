@@ -1079,10 +1079,7 @@ export class AgentMemory {
             || route === "sf-assemble" || route === "icl-index";
           if (!silent && cue && retrieved.length) {
             if (route === "icl-index") packet = retrieved;
-            else if (!(isIclCue(cue) || retrieved.some((n) => n.lane === "icl" || isIclExemplar(String(n.text ?? "")))) && /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
-              keepHopOrder = true;
-              packet = retrieved;
-            } else if (route === "sf-assemble") {
+            else if (route === "sf-assemble") {
               keepHopOrder = true;
               packet = assembleNotes(retrieved, this.dir);
             } else {
