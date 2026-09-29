@@ -1,6 +1,9 @@
 # Memory ship pack
 
-**Start here:** [ROADMAP.md](./ROADMAP.md) (v2, 2026-09-29) for the build order, and [DECISIONS.md](./DECISIONS.md) for every choice and the evidence behind it.
+**Start here:**
+- [PROGRESS.md](./PROGRESS.md): what is done and what is next. Run `/next` in Claude Code to advance it.
+- [ROADMAP.md](./ROADMAP.md) (v2, 2026-09-29): the build order.
+- [DECISIONS.md](./DECISIONS.md): every choice and the evidence behind it.
 
 | Doc | Role |
 |---|---|

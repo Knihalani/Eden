@@ -52,17 +52,19 @@ Sizes: **S** ≤ 1 day · **M** ≤ 3 days · **L** ≤ 2 weeks. Every gate is a
 State on 2026-09-29, after the merge to `main` on `Knihalani/Eden`:
 - **Done:**
   - the `whatever` loop is parked (STOP files);
-  - project permission rules deny agent merges and pushes to `main` or force-pushes, and ask before `gh pr create`;
-  - the untracked product files are now tracked.
+  - full agent autonomy is set up: local `bypassPermissions`, with agents merging their own PRs behind mandatory gates (`CLAUDE.md`, `/next`, `/slice`, the `slice-reviewer` subagent, `PROGRESS.md`);
+  - the untracked product files are now tracked;
+  - the `session → cwd` snapshot is taken.
 - **Open, user:**
   - rotate the leaked token;
   - protect `main` on GitHub once CI is green;
   - consider making `main` the default branch (today `feat/compiled-tools-horizon`);
   - opt in to real-negative collection.
-- **Open, agent:**
+- **Open, agent** (run `/next`):
   - P0.−1 (below);
-  - the formatter/reformat PR for the line-joined files;
-  - the `session → cwd` snapshot before Claude Code's 30-day transcript sweep.
+  - the formatter/reformat PR for the line-joined files (R-5).
+
+**How to build:** run `/next` in Claude Code at the repo root. Progress is tracked in [PROGRESS.md](PROGRESS.md).
 
 ## Phase 0 — Floor: stop the bleeding, make it correct, make it safe
 
