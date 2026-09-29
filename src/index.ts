@@ -484,13 +484,10 @@ export class AgentMemory {
     const list = Array.isArray(messages) ? messages : [];
     try {
       try { if (memoryConsent() === "off") return list; } catch { return list; }
-      const blob = convBlob(list);
-      const notes: { role: "system"; content: string }[] = [];
-      const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
+      const blob = convBlob(list), notes: { role: "system"; content: string }[] = [], cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
       if (!blob.includes(MEMORY_MARK)) {
         let silent = false; try { if (cue && isNoopCue(cue)) silent = true; else if (hookLane(cue) === "none") silent = true; } catch {}
-        const retrieved = !silent && cue ? this.notesFor(cue) : [];
-        let packet = retrieved;
+        const retrieved = !silent && cue ? this.notesFor(cue) : []; let packet = retrieved;
         try { if (retrieved.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(retrieved, this.dir); } catch {}
         if (packet.length) { try { logMemoryNotes(packet); } catch {} const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap())); if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") }); }
       }
