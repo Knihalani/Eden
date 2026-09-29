@@ -414,7 +414,8 @@ function load(path: string): Compiled[] {
   for (const t of raw.split("\n")) {
     if (!t) continue;
     try {
-      const rec = JSON.parse(t) as MemoryRecord;
+      const parsed = JSON.parse(t);
+      const rec = (Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2] } : parsed) as MemoryRecord;
       if (rec?.id && rec.text) {
         if (!rec.kind) rec.kind = "episode";
         const c = compileNeedles(rec);
@@ -618,7 +619,6 @@ export class AgentMemory {
   private seenLower = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
   private knownIds = new Set<string>();
-  private hopShort: MemoryRecord[] = [];
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
@@ -770,17 +770,11 @@ export class AgentMemory {
   private ensureIndex() {
     if (this.post) return;
     const post = new Map<string, Compiled[]>();
-    const shorts: MemoryRecord[] = [];
     for (const c of this.compiled) {
       if (c.rec.kind === "digest") continue;
       if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
       if (this.project && c.rec.project !== this.project) continue;
       if (!isLiveRow(c.rec)) continue;
-      if (c.needles.length <= 12 && String(c.rec.text ?? "").trim() && c.rec.lane !== "icl" && c.rec.kind !== "icl") {
-        let icl = false;
-        try { icl = isIclExemplar(c.rec.text); } catch {}
-        if (!icl) shorts.push(c.rec);
-      }
       for (const w of c.needles) {
         if (w.length < 3 || STOP.has(w)) continue;
         let arr = post.get(w);
@@ -789,7 +783,6 @@ export class AgentMemory {
       }
     }
     this.post = post;
-    this.hopShort = shorts;
   }
 
   observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
@@ -948,7 +941,12 @@ export class AgentMemory {
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
         } catch {}
         try { this.trimToStoreCap(); } catch {}
-        writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec.kind === "episode" ? { ...x.rec, kind: undefined } : x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
+        writeFileAtomic(this.path, this.compiled.map((x) => {
+          const r = x.rec;
+          if ((r.kind === "episode" || !r.kind) && !r.tags && !r.lane && !r.agent && !r.project && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal)
+            return JSON.stringify([r.id, r.text, r.at]);
+          return JSON.stringify(r.kind === "episode" ? { ...r, kind: undefined } : r);
+        }).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
       });
@@ -1162,40 +1160,6 @@ export class AgentMemory {
             else if (!skipNarrativeComplete(retrieved, cue) && /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
               keepHopOrder = true;
               let hopPool = retrieved;
-              const hopStore = (() => {
-                const out: MemoryRecord[] = [];
-                const seen = new Set<string>();
-                const push = (m: MemoryRecord) => {
-                  const text = String(m.text ?? "").trim();
-                  if (!text || seen.has(m.id) || seen.has(text.toLowerCase())) return;
-                  seen.add(m.id);
-                  seen.add(text.toLowerCase());
-                  out.push(m);
-                };
-                try {
-                  for (const ch of new ChunkStore(this.howtoDir).all()) {
-                    const text = String(ch.text ?? "").trim();
-                    if (!text) continue;
-                    push({
-                      id: ch.id || `chunk:${ch.src || "anon"}:${ch.i}`,
-                      text,
-                      kind: "episode",
-                      lane: "narrative",
-                      tags: ["chunk"],
-                      at: Number.isFinite(ch.t) ? ch.t : 0,
-                    });
-                  }
-                } catch {}
-                try {
-                  for (const m of this.hopShort) {
-                    if (m.lane === "icl" || isIclExemplar(m.text)) continue;
-                    if (isNarrativeNote(m) && !(m.tags ?? []).includes("chunk")) continue;
-                    push(m);
-                  }
-                } catch {}
-                return out;
-              })();
-              try { hopPool = hopStore.length ? hopStore : retrieved; } catch {}
               try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
               packet = completeNotes(cue, retrieved, hopPool);
               try { packet = assembleNotes(packet, this.dir); } catch {}
