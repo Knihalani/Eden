@@ -282,11 +282,9 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       return null;
     }
     const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
-    const notes = prompt
-      ? mem.inject([{ role: "user", content: prompt }]).map((m) => asRec(m)).filter((o) => o.role === "system" && typeof o.content === "string" && o.content.includes(MEMORY_MARK)).map((o) => String(o.content)).join("\n\n")
-      : "";
+    const notes = prompt ? notesFromInject(mem.inject([{ role: "user", content: prompt }])) : "";
     if (writes && prior.length) mem.observe(prior);
-    return notes ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } } : null;
+    return additional(event, notes);
     } finally {
       try { mem.close(); } catch {}
     }
