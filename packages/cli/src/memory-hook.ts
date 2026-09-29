@@ -65,15 +65,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
       if (seen.has(key)) continue;
       seen.add(key);
       let line = text;
-      try {
-        line = applyProvenanceLabel({
-          id: `gist:${opaqueId(text)}`,
-          text,
-          kind: "gist",
-          tags: ["gist"],
-          at: g.t,
-        }, text);
-      } catch { line = `[gist] ${text}`; }
+      try { line = applyProvenanceLabel({ id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t }, text); } catch { line = `[gist] ${text}`; }
       lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
     }
   } catch {}
