@@ -401,15 +401,13 @@ export class AgentMemory {
     const now = incoming.at ?? Date.now();
     const incomingSerial = leadingSerial(incoming.text);
     for (const c of this.compiled) {
-      if (c.rec.id === incoming.id) continue;
-      if (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt)) continue;
+      if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt))) continue;
       let other: ReturnType<typeof objectAsserted>;
       try { other = objectAsserted(c.rec.text); } catch { continue; }
       if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
       if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
       const liveSerial = leadingSerial(c.rec.text);
-      if (incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) continue;
-      if (incomingSerial == null && liveSerial != null) continue;
+      if ((incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) || (incomingSerial == null && liveSerial != null)) continue;
       c.rec.invalidAt = now;
     }
   }
