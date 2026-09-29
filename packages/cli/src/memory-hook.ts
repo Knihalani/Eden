@@ -102,7 +102,6 @@ export function messagesFromTranscript(path: string): { role: string; content: s
   try {
     const out: { role: string; content: string }[] = [];
     for (const line of readFileSync(path, "utf8").split("\n")) {
-      if (!line) continue;
       try {
         const o = asRec(JSON.parse(line));
         const msg = asRec(o.message ?? o);
