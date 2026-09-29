@@ -282,9 +282,9 @@ function load(path: string): Compiled[] {
   for (const t of raw.split("\n")) {
     try {
       const parsed = JSON.parse(t);
-      const rec = (Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2] } : parsed) as MemoryRecord;
+      const rec = (Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2], kind: "episode" } : parsed) as MemoryRecord;
       if (rec?.id && rec.text) {
-        if (!rec.kind) rec.kind = "episode";
+        if (!rec.kind) rec.kind = "fact";
         const c = compileNeedles(rec);
         const at = idx.get(rec.id);
         if (at != null) out[at] = c;
@@ -688,7 +688,7 @@ export class AgentMemory {
         this.trimToStoreCap();
         writeFileAtomic(this.path, this.compiled.map((x) => {
           const r = x.rec;
-          return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "episode" ? undefined : r.kind, at: undefined });
+          return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined });
         }).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
@@ -774,14 +774,7 @@ export class AgentMemory {
       if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
       try { const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, "")); if (!fact) return n; return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` }; } catch { return n; }
     });
-    try {
-      return kept.map((r) => {
-        const stripped = stripPacketLabel(r.text).body;
-        return { ...r, text: applyProvenanceLabel(r, capMemoryBody(r, stripped)) };
-      });
-    } catch {
-      return kept;
-    }
+    try { return kept.map((r) => ({ ...r, text: applyProvenanceLabel(r, capMemoryBody(r, stripPacketLabel(r.text).body)) })); } catch { return kept; }
   }
 
   inject(messages: unknown[]): unknown[] {
