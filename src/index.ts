@@ -280,7 +280,6 @@ function load(path: string): Compiled[] {
   let raw = "";
   try { raw = readFileSync(path, "utf8"); } catch { return out; }
   for (const t of raw.split("\n")) {
-    if (!t) continue;
     try {
       const parsed = JSON.parse(t);
       const rec = (Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2] } : parsed) as MemoryRecord;
