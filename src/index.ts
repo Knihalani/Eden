@@ -1002,7 +1002,6 @@ export class AgentMemory {
       recs = mergeIclLane([], text, cap, this.dir, this.compiled.map((c) => c.rec));
     } else {
       recs = this.relevant(text, k);
-      recs = recs.filter((r) => r.lane !== "icl" && r.kind !== "icl");
       if (route === "gist-chunk") {
         try { recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); } catch {}
       }
