@@ -88,9 +88,7 @@ function capMemoryBody(r: MemoryRecord, body: string): string {
 function omitConflictingIdentity(text: string, store: SemanticStore): string {
   const raw = String(text ?? "").trim();
   if (!raw) return "";
-  const parts = sentenceParts(raw);
-  const units = parts.length ? parts : [raw];
-  const kept: string[] = [];
+  const parts = sentenceParts(raw), units = parts.length ? parts : [raw], kept: string[] = [];
   for (const s of units) {
     try { const fact = objectAsserted(s); if (fact) { const live = store.get(fact.s, fact.p); if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue; if (store.supersededObject(fact.o)) continue; } } catch {}
     kept.push(s);
@@ -112,11 +110,9 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
     let a: ReturnType<typeof objectAsserted>;
     try { a = objectAsserted(row.rec.text); } catch { a = undefined; }
     if (!a) { rest.push(row); continue; }
-    const k = `${a.s}\0${a.p}`;
-    const prev = byKey.get(k);
+    const k = `${a.s}\0${a.p}`, prev = byKey.get(k);
     if (!prev) { byKey.set(k, row); continue; }
-    const serial = leadingSerial(row.rec.text);
-    const prevSerial = leadingSerial(prev.rec.text);
+    const serial = leadingSerial(row.rec.text), prevSerial = leadingSerial(prev.rec.text);
     if (serial != null && prevSerial != null) { if (serial >= prevSerial) byKey.set(k, row); continue; }
     if (serial != null) { byKey.set(k, row); continue; }
     if (prevSerial != null) continue;
@@ -157,8 +153,7 @@ function convBlob(list: unknown[]): string {
   const parts: string[] = [];
   for (const m of list) {
     if (!m || typeof m !== "object") continue;
-    const o = m as Record<string, unknown>, c = o.content ?? o.llmContent;
-    const role = String(o.role ?? "").toLowerCase();
+    const o = m as Record<string, unknown>, c = o.content ?? o.llmContent, role = String(o.role ?? "").toLowerCase();
     if (TOOL_ROLES.has(role)) continue;
     if (typeof c === "string" && c) parts.push(c);
     else if (Array.isArray(c) || Array.isArray(o.parts) || (c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).parts))) {
@@ -175,8 +170,7 @@ export function cueFor(list: unknown[]): string {
   const m = Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined;
   const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
   if (!raw) return "";
-  const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean);
-  const ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
+  const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean), ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
   return ask(paras.at(-1)!) ? paras.at(-1)! : ask(paras[0]!) ? paras[0]! : paras.at(-1)!;
 }
 
@@ -430,8 +424,7 @@ export class AgentMemory {
   private trimToStoreCap(): void {
     const cap = memoryStoreCap();
     if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
-    const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint";
-    const keep = this.compiled.filter((c) => pinned(c.rec)), rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => a.rec.at - b.rec.at);
+    const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint", keep = this.compiled.filter((c) => pinned(c.rec)), rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => a.rec.at - b.rec.at);
     this.compiled = keep.concat(rest.slice(Math.max(0, rest.length - Math.max(0, cap - keep.length)))); this.post = null;
   }
 
