@@ -9,8 +9,7 @@ import { noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
 import { ChunkStore } from "./chunk-store";
 import { retrieveNarrativeChunks } from "./chunk-retrieve";
 import * as howtoRetrieve from "./howto-retrieve";
-import { IclIndex } from "./icl-index";
-import * as iclIndex from "./icl-index";
+import { IclIndex, retrieveIcl } from "./icl-index";
 import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
 import { dropHarmed } from "./memory-harmed";
@@ -517,7 +516,7 @@ function mergeIclLane(_lexical: MemoryRecord[], text: string, cap: number, dir: 
   if (!q) return [];
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0)));
   if (!k) return [];
-  const hits = iclIndex.retrieveIcl(dir, q, { k, fallback: compiled });
+  const hits = retrieveIcl(dir, q, { k, fallback: compiled });
   if (!Array.isArray(hits) || !hits.length) return [];
   const out: MemoryRecord[] = [];
   const seen = new Set<string>();
@@ -1047,14 +1046,7 @@ export class AgentMemory {
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     if (!text) return [];
     const cap = Math.max(0, Math.floor(Number(k) || 0));
-    const route = (() => {
-      const r = routeMemory(text);
-      if (r === "icl-index") return r;
-      try {
-        if (this.compiled.length && this.compiled.every((c) => c.rec.lane === "icl" || c.rec.kind === "icl")) return "icl-index";
-      } catch {}
-      return r;
-    })();
+    const route = routeMemory(text);
     let recs: MemoryRecord[] = [];
     if (route === "icl-index") {
       recs = mergeIclLane([], text, cap, this.howtoDir, this.compiled.map((c) => c.rec));
