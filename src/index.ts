@@ -966,8 +966,7 @@ export class AgentMemory {
       const blob = convBlob(list);
       const notes: { role: "system"; content: string }[] = [];
       if (!blob.includes(MEMORY_MARK)) {
-        const lastUser = Array.isArray(list) ? list.findLast((x) => x && typeof x === "object" && ["user", "human"].includes(String((x as { role?: unknown }).role ?? "").toLowerCase())) : undefined;
-        const cue = attachPlaceCues(cueFor(list), [...placePathsFrom(list), ...(lastUser ? placePathsFrom(lastUser) : [])]);
+        const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
         let silent = false;
         try {
           if (cue && isNoopCue(cue)) silent = true;
