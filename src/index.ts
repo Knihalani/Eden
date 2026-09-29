@@ -160,12 +160,8 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
 export type MemoryOptions = { dir?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
-  if (typeof raw !== "string") return undefined;
-  const s = raw.trim();
-  if (!s || s.includes("\0") || s.includes("/") || s.includes("\\")) return undefined;
-  if (s.split("--").join("").includes("..")) return undefined;
-  if (!/^[A-Za-z0-9._-]+$/.test(s) || s === "." || s === "..") return undefined;
-  return s;
+  const s = typeof raw === "string" ? raw.trim() : "";
+  return s && !s.includes("\0") && !s.includes("/") && !s.includes("\\") && !s.split("--").join("").includes("..") && /^[A-Za-z0-9._-]+$/.test(s) && s !== "." && s !== ".." ? s : undefined;
 }
 
 export function childSessionName(parent?: string, child?: string): string | undefined {
