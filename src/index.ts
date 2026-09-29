@@ -61,15 +61,11 @@ function sentenceParts(t: string): string[] {
 
 /** Encode lane for observe. Chat still extractDurable; ICL/narrative/recsys store-all. Never throws. */
 export function encodeLane(text: string): MemoryLaneKind {
-  try {
-    const t = String(text ?? "").trim();
-    if (!t) return "chat";
-    if (isIclExemplar(t)) return "icl";
-    if (t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150)) return "narrative";
-    return "chat";
-  } catch {
-    return "chat";
-  }
+  const t = String(text ?? "").trim();
+  if (!t) return "chat";
+  if (isIclExemplar(t)) return "icl";
+  if (t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150)) return "narrative";
+  return "chat";
 }
 
 function leadingSerial(text: string): number | undefined {
