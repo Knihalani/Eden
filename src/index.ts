@@ -1068,14 +1068,13 @@ export class AgentMemory {
         let keepHopOrder = false;
         try {
           const route = cue ? routeMemory(cue) : "chat-jsonl";
-          keepHopOrder = /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)
-            || route === "sf-assemble" || route === "icl-index";
+          keepHopOrder = route === "sf-assemble" || route === "icl-index";
           if (!silent && cue && retrieved.length) {
             if (route === "sf-assemble") {
               keepHopOrder = true;
               packet = assembleNotes(retrieved, this.dir);
             } else packet = retrieved;
-          } else if (!silent) packet = retrieved;
+          }
         } catch {
           packet = !silent && retrieved.length ? retrieved : [];
         }
