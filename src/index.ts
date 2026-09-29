@@ -350,13 +350,10 @@ export class AgentMemory {
     this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
     const session = memorySessionName(opts.session);
-    this.session = session;
-    this.child = opts.child === true;
+    this.session = session; this.child = opts.child === true;
     if (session) mkdirSync(join(this.dir, session), { recursive: true });
     this.path = join(this.dir, session || "", "memories.jsonl");
-    this.compiled = load(this.path);
-    this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
-    this.rebuildSeen();
+    this.compiled = load(this.path); this.knownIds = new Set(this.compiled.map((c) => c.rec.id)); this.rebuildSeen();
   }
 
   get jsonlDir(): string { return join(this.dir, this.session || ""); }
