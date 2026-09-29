@@ -235,11 +235,6 @@ export function cueFor(list: unknown[]): string {
   const m = Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined;
   const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
   if (!raw) return "";
-  if (raw.length > 800) {
-    const nl = raw.lastIndexOf("\n");
-    const lastLine = (nl >= 0 ? raw.slice(nl + 1) : raw).trim();
-    if (lastLine.length >= 8 && lastLine.length <= 280 && !/^\s*at\s+/.test(lastLine)) return lastLine;
-  }
   const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean);
   if (!paras.length) return raw;
   const last = paras.at(-1)!;
