@@ -778,7 +778,7 @@ export class AgentMemory {
         try { this.trimToStoreCap(); } catch {}
         writeFileAtomic(this.path, this.compiled.map((x) => {
           const r = x.rec;
-          if ((r.kind === "episode" || !r.kind) && !r.tags && !r.lane && !r.agent && !r.project && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal)
+          if ((r.kind === "episode" || !r.kind) && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal)
             return JSON.stringify([r.id, r.text]);
           return JSON.stringify(r.kind === "episode" ? { ...r, kind: undefined } : r);
         }).join("\n") + (this.compiled.length ? "\n" : ""));
@@ -1042,8 +1042,6 @@ export function processMemory(): AgentMemory {
   }
   return (proc ??= openMemory({
     dir,
-    agent: process.env.EDEN_MEMORY_AGENT || undefined,
-    project: process.env.EDEN_MEMORY_PROJECT || undefined,
     session,
     child,
   }));
