@@ -161,8 +161,7 @@ function extractDurable(blob: string): string[] {
 
 function load(path: string): Compiled[] {
   const out: Compiled[] = [], idx = new Map<string, number>();
-  let raw = "";
-  try { raw = readFileSync(path, "utf8"); } catch { return out; }
+  let raw = ""; try { raw = readFileSync(path, "utf8"); } catch { return out; }
   for (const t of raw.split("\n")) {
     try { const parsed = JSON.parse(t); const rec = (Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2], kind: "episode" } : parsed) as MemoryRecord; if (rec?.id && rec.text) { if (!rec.kind) rec.kind = "fact"; const c = compileNeedles(rec), at = idx.get(rec.id); if (at != null) out[at] = c; else idx.set(rec.id, out.length), out.push(c); } } catch {}
   }
@@ -182,8 +181,7 @@ export function memoryStoreCap(): number {
 }
 
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
-  const q = String(text ?? "").trim();
-  if (!q) return lexical;
+  const q = String(text ?? "").trim(); if (!q) return lexical;
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled }), chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
   if (!hits.length) return chat.length ? chat : lexical;
   const chunks: MemoryRecord[] = [];
@@ -195,8 +193,7 @@ function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, 
 }
 
 function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
-  const q = String(text ?? "").trim();
-  if (!q) return [];
+  const q = String(text ?? "").trim(); if (!q) return [];
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveIcl(dir, q, { k, fallback: compiled });
   if (!hits.length) return [];
   const out: MemoryRecord[] = [], seen = new Set<string>();
@@ -256,16 +253,13 @@ export class AgentMemory {
     if (!rec.tags.length) delete rec.tags;
     try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
     try { const fact = objectAsserted(rec.text); if (fact && !STATUS_OBJECT.test(fact.o)) { const live = this.semantic().get(fact.s, fact.p); const serial = leadingSerial(rec.text); if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at); } } catch {}
-    const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
-    i >= 0 && this.compiled.splice(i, 1);
-    try { this.invalidateSameCopula(rec); } catch {}
+    const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id); i >= 0 && this.compiled.splice(i, 1); try { this.invalidateSameCopula(rec); } catch {}
     this.compiled.push(c); this.knownIds.add(rec.id); this.post = null; this.seenLower.add(rec.text.toLowerCase());
     return this.flush(true), rec;
   }
 
   private invalidateSameCopula(incoming: MemoryRecord): void {
-    let asserted: ReturnType<typeof objectAsserted>; try { asserted = objectAsserted(incoming.text); } catch { return; }
-    if (!asserted) return;
+    let asserted: ReturnType<typeof objectAsserted>; try { asserted = objectAsserted(incoming.text); } catch { return; } if (!asserted) return;
     const now = incoming.at ?? Date.now(), incomingSerial = leadingSerial(incoming.text);
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt))) continue;
