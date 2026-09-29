@@ -59,10 +59,8 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
     for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) {
       let text = g.text.trim();
     try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {}
-      if (!text) continue;
-      const key = text.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
+      if (!text || seen.has(text.toLowerCase())) continue;
+      seen.add(text.toLowerCase());
       let line = text;
       try { line = applyProvenanceLabel({ id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t }, text); } catch { line = `[gist] ${text}`; }
       lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
