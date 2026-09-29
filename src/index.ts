@@ -707,10 +707,7 @@ export class AgentMemory {
 
   /** Idle/Stop only. Inject must not await this. */
   async sleep(opts?: { session?: string }): Promise<void> {
-    try {
-      const { consolidate } = await import("./sleep");
-      consolidate(this, { session: opts?.session ?? this.session, mode: "full" });
-    } catch {}
+    try { const { consolidate } = await import("./sleep"); consolidate(this, { session: opts?.session ?? this.session, mode: "full" }); } catch {}
   }
 }
 
