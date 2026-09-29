@@ -578,11 +578,7 @@ export class AgentMemory {
   }
 
   memories(): MemoryRecord[] {
-    return this.compiled.map((c) => {
-      const r = c.rec;
-      const tags = writeAliasTags(r.tags ?? [], r.text).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
-      return { ...r, kind: r.kind ?? "episode", tags };
-    }).filter((r) => !this.project || r.project === this.project);
+    return this.compiled.map((c) => c.rec).filter((r) => !this.project || r.project === this.project);
   }
 
   private persistText(text: string): string {
