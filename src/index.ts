@@ -61,14 +61,11 @@ function sentenceParts(t: string): string[] {
 
 export function encodeLane(text: string): MemoryLaneKind {
   const t = String(text ?? "").trim();
-  if (!t) return "chat";
-  if (isIclExemplar(t)) return "icl";
-  return t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150) ? "narrative" : "chat";
+  return !t ? "chat" : isIclExemplar(t) ? "icl" : t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150) ? "narrative" : "chat";
 }
 
 function leadingSerial(text: string): number | undefined {
-  const n = Number(String(text ?? "").trim().replace(/^\[[^\]]+\]\s+/, "").match(/^(\d+)[.)]\s+\S/)?.[1]);
-  return Number.isFinite(n) ? n : undefined;
+  const n = Number(String(text ?? "").trim().replace(/^\[[^\]]+\]\s+/, "").match(/^(\d+)[.)]\s+\S/)?.[1]); return Number.isFinite(n) ? n : undefined;
 }
 
 function rankKindBoost(r: MemoryRecord): number {
@@ -103,11 +100,9 @@ function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
 }
 
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
-  const byKey = new Map<string, T>();
-  const rest: T[] = [];
+  const byKey = new Map<string, T>(), rest: T[] = [];
   for (const row of rows) {
-    let a: ReturnType<typeof objectAsserted>;
-    try { a = objectAsserted(row.rec.text); } catch { a = undefined; }
+    let a: ReturnType<typeof objectAsserted>; try { a = objectAsserted(row.rec.text); } catch { a = undefined; }
     if (!a) { rest.push(row); continue; }
     const k = `${a.s}\0${a.p}`, prev = byKey.get(k);
     if (!prev) { byKey.set(k, row); continue; }
@@ -274,19 +269,15 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
 let memSeq = 0;
 
 export class AgentMemory {
-  readonly dir: string; readonly session?: string; readonly child: boolean;
-  private scrubSession?: string; private scrubCwd?: string;
-  private compiled: Compiled[]; private path: string;
-  private batch = 0; private dirty = false; private seenLower = new Set<string>();
-  private post: Map<string, Compiled[]> | null = null; private knownIds = new Set<string>();
-  private sem?: SemanticStore;
+  readonly dir: string; readonly session?: string; readonly child: boolean; private scrubSession?: string; private scrubCwd?: string;
+  private compiled: Compiled[]; private path: string; private batch = 0; private dirty = false; private seenLower = new Set<string>();
+  private post: Map<string, Compiled[]> | null = null; private knownIds = new Set<string>(); private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
     this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined; this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
     const session = memorySessionName(opts.session); this.session = session; this.child = opts.child === true;
-    if (session) mkdirSync(join(this.dir, session), { recursive: true });
-    this.path = join(this.dir, session || "", "memories.jsonl");
+    if (session) mkdirSync(join(this.dir, session), { recursive: true }); this.path = join(this.dir, session || "", "memories.jsonl");
     this.compiled = load(this.path); this.knownIds = new Set(this.compiled.map((c) => c.rec.id)); this.rebuildSeen();
   }
 
@@ -325,8 +316,7 @@ export class AgentMemory {
     const now = incoming.at ?? Date.now(), incomingSerial = leadingSerial(incoming.text);
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt))) continue;
-      let other: ReturnType<typeof objectAsserted>;
-      try { other = objectAsserted(c.rec.text); } catch { continue; }
+      let other: ReturnType<typeof objectAsserted>; try { other = objectAsserted(c.rec.text); } catch { continue; }
       if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
       if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
       const liveSerial = leadingSerial(c.rec.text);
