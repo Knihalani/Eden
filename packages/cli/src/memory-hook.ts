@@ -22,9 +22,7 @@ function flattenContent(content: unknown): string {
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
 
-function isPinnedIntention(r: MemoryRecord): boolean {
-  return r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
-}
+function isPinnedIntention(r: MemoryRecord): boolean { return r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t)); }
 
 function additional(event: string, text: string): Record<string, unknown> | null {
   const notes = String(text ?? "").trim(); return notes && notes.includes(MEMORY_MARK) ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } } : null;
