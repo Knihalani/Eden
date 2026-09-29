@@ -101,14 +101,7 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
   const units = parts.length ? parts : [raw];
   const kept: string[] = [];
   for (const s of units) {
-    try {
-      const fact = objectAsserted(s);
-      if (fact) {
-        const live = store.get(fact.s, fact.p);
-        if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue;
-        if (store.supersededObject(fact.o)) continue;
-      }
-    } catch {}
+    try { const fact = objectAsserted(s); if (fact) { const live = store.get(fact.s, fact.p); if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue; if (store.supersededObject(fact.o)) continue; } } catch {}
     kept.push(s);
   }
   return kept.join(" ").trim();
@@ -470,7 +463,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
-      id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-2)}`,
+      id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-1)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
