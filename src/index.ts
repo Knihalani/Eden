@@ -566,8 +566,6 @@ export class AgentMemory {
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
-      agent: opts.agent || this.agent,
-      project: opaqueProject(opts.project || this.project),
       at: now,
       ...(opts.lane ? { lane: opts.lane } : {}),
       ...(this.session ? { ep: opaqueId(this.session) } : {}),
