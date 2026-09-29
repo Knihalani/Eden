@@ -1124,8 +1124,7 @@ export class AgentMemory {
       dirty = true;
       return compileNeedles({ ...c.rec, text: next });
     });
-    if (dirty) this.post = null;
-    if (dirty) this.flush(true);
+    if (dirty) this.post = null, this.flush(true);
   }
 
   patchWhere(fn: (r: MemoryRecord) => MemoryRecord | undefined): void {
@@ -1137,8 +1136,7 @@ export class AgentMemory {
       dirty = true;
       return compileNeedles(next);
     });
-    if (dirty) this.post = null;
-    if (dirty) this.flush(true);
+    if (dirty) this.post = null, this.flush(true);
   }
 
   close() {
