@@ -636,10 +636,6 @@ export class AgentMemory {
     return this.session ? join(this.dir, this.session) : this.dir;
   }
 
-  get howtoDir(): string {
-    return this.dir;
-  }
-
   private semantic(): SemanticStore {
     return (this.sem ??= new SemanticStore(this.dir));
   }
@@ -1037,14 +1033,14 @@ export class AgentMemory {
     const route = routeMemory(text);
     let recs: MemoryRecord[] = [];
     if (route === "icl-index") {
-      recs = mergeIclLane([], text, cap, this.howtoDir, this.compiled.map((c) => c.rec));
+      recs = mergeIclLane([], text, cap, this.dir, this.compiled.map((c) => c.rec));
     } else {
       recs = this.relevant(text, k);
       recs = recs.filter((r) => r.lane !== "icl" && r.kind !== "icl");
       if (route === "gist-chunk") {
-        try { recs = mergeNarrativeLane(recs, text, cap, this.howtoDir, this.compiled.map((c) => c.rec)); } catch {}
+        try { recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); } catch {}
       }
-      try { recs = mergeHowtoLane(recs, text, cap, this.howtoDir); } catch {}
+      try { recs = mergeHowtoLane(recs, text, cap, this.dir); } catch {}
     }
     if (!recs.length) return [];
     let kept = recs;
