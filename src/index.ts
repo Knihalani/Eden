@@ -712,7 +712,7 @@ export class AgentMemory {
           this.compiled = [...byId.values()];
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
         } catch {}
-        try { this.trimToStoreCap(); } catch {}
+        this.trimToStoreCap();
         writeFileAtomic(this.path, this.compiled.map((x) => {
           const r = x.rec;
           if ((r.kind === "episode" || !r.kind) && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal)
@@ -722,10 +722,9 @@ export class AgentMemory {
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
       });
-      try { this.rebuildSeen(); } catch {}
+      this.rebuildSeen();
       this.dirty = false;
-    } catch {
-    }
+    } catch {}
   }
 
   /** Persist-only. Sleep heat does not call this. Pins/constraints kept; oldest unpinned dropped. */
