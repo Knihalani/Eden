@@ -814,10 +814,7 @@ export class AgentMemory {
           if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
         }
       }
-      try {
-        const skipStore = !cue || isNoopCue(cue) || /^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim());
-        if (!skipStore) this.observe(list, { deferSleep: true });
-      } catch {}
+      try { if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim())) this.observe(list, { deferSleep: true }); } catch {}
       if (!notes.length) return list;
       const next = list.slice(), i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
       return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
