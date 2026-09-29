@@ -557,11 +557,7 @@ export class AgentMemory {
     try { fn(); } finally { try { sem.endBatch(); } catch {} this.batch--; this.flush(false); }
   }
 
-  dropWhere(pred: (r: MemoryRecord) => boolean): void {
-    this.compiled = this.compiled.filter((c) => !pred(c.rec));
-    this.post = null;
-    this.flush(true);
-  }
+  dropWhere(pred: (r: MemoryRecord) => boolean): void { this.compiled = this.compiled.filter((c) => !pred(c.rec)); this.post = null; this.flush(true); }
 
   rewriteWhere(pred: (r: MemoryRecord) => string | undefined): void {
     let dirty = false;
