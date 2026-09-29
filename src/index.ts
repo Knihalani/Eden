@@ -68,9 +68,7 @@ export function encodeLane(text: string): MemoryLaneKind {
 }
 
 function leadingSerial(text: string): number | undefined {
-  const m = String(text ?? "").trim().replace(/^\[[^\]]+\]\s+/, "").match(/^(\d+)[.)]\s+\S/);
-  if (!m) return undefined;
-  const n = Number(m[1]);
+  const n = Number(String(text ?? "").trim().replace(/^\[[^\]]+\]\s+/, "").match(/^(\d+)[.)]\s+\S/)?.[1]);
   return Number.isFinite(n) ? n : undefined;
 }
 
