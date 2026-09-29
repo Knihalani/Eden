@@ -501,10 +501,7 @@ export class AgentMemory {
       return Object.values(WRITE_ALIASES).some((a) => a.includes(t));
     });
     if (!rec.tags.length) delete rec.tags;
-    try {
-      const until = parseRuleTime(rec.text)?.until;
-      if (typeof until === "number") rec.validUntil = until;
-    } catch {}
+    try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
     try {
       const fact = objectAsserted(rec.text);
       if (fact) {
