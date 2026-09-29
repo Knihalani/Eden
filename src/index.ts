@@ -944,7 +944,7 @@ export class AgentMemory {
         writeFileAtomic(this.path, this.compiled.map((x) => {
           const r = x.rec;
           if ((r.kind === "episode" || !r.kind) && !r.tags && !r.lane && !r.agent && !r.project && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal)
-            return JSON.stringify([r.id, r.text, r.at]);
+            return JSON.stringify([r.id, r.text]);
           return JSON.stringify(r.kind === "episode" ? { ...r, kind: undefined } : r);
         }).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
@@ -1163,7 +1163,6 @@ export class AgentMemory {
               try { hopPool = dropHarmed(this.dir, hopPool); } catch {}
               packet = completeNotes(cue, retrieved, hopPool);
               try { packet = assembleNotes(packet, this.dir); } catch {}
-              try { packet = completeNotes(cue, packet, hopPool); } catch {}
             } else if (route === "sf-assemble") {
               keepHopOrder = true;
               packet = assembleNotes(retrieved, this.dir);
