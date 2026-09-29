@@ -303,19 +303,7 @@ export class AgentMemory {
         let text = raw;
         try { const asserted = objectAsserted(text); if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`; } catch {}
         text = this.persistText(text);
-        try {
-          const fact = objectAsserted(text);
-          if (fact) {
-            const store = this.semantic();
-            const live = store.get(fact.s, fact.p);
-            if (opts.keepLiveIdentity) {
-              const obj = fact.o.trim().toLowerCase(), slot = `${fact.s}\0${fact.p}`, fromBatch = batchLive.get(slot);
-              if (!(fromBatch && fromBatch !== obj)) { if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; } if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; } }
-            }
-            const serial = leadingSerial(text);
-            if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) && !STATUS_OBJECT.test(fact.o)) { store.put(fact.s, fact.p, fact.o, serial ?? Date.now()); batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase()); }
-          }
-        } catch {}
+        try { const fact = objectAsserted(text); if (fact) { const store = this.semantic(), live = store.get(fact.s, fact.p); if (opts.keepLiveIdentity) { const obj = fact.o.trim().toLowerCase(), slot = `${fact.s}\0${fact.p}`, fromBatch = batchLive.get(slot); if (!(fromBatch && fromBatch !== obj)) { if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; } if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; } } } const serial = leadingSerial(text); if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) && !STATUS_OBJECT.test(fact.o)) { store.put(fact.s, fact.p, fact.o, serial ?? Date.now()); batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase()); } } } catch {}
         if (this.seenLower.has(text.toLowerCase())) continue;
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text), asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
         let kind: MemoryKind = asQuestion ? "episode" : pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) || (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text)) ? "episode" : "fact";
