@@ -99,19 +99,7 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
 }
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-export type MemoryRecord = {
-  id: string;
-  text: string;
-  kind: MemoryKind;
-  tags: string[];
-  at: number;
-  ep?: string;
-  sal?: number;
-  lane?: MemoryLaneKind;
-  invalidAt?: number;
-  validUntil?: number;
-  heat?: number;
-};
+export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; at: number; ep?: string; sal?: number; lane?: MemoryLaneKind; invalidAt?: number; validUntil?: number; heat?: number; };
 
 function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
   return !(typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
