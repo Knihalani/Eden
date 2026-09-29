@@ -416,7 +416,7 @@ function load(path: string): Compiled[] {
     try {
       const rec = JSON.parse(t) as MemoryRecord;
       if (rec?.id && rec.text) {
-        if (!rec.kind) rec.kind = "fact";
+        if (!rec.kind) rec.kind = "episode";
         const c = compileNeedles(rec);
         const at = idx.get(rec.id);
         if (at != null) out[at] = c;
@@ -661,7 +661,7 @@ export class AgentMemory {
     return this.compiled.map((c) => {
       const r = c.rec;
       const tags = writeAliasTags(r.tags ?? [], r.text).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
-      return { ...r, kind: r.kind ?? "fact", tags };
+      return { ...r, kind: r.kind ?? "episode", tags };
     }).filter((r) => !this.project || r.project === this.project);
   }
 
@@ -948,7 +948,7 @@ export class AgentMemory {
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
         } catch {}
         try { this.trimToStoreCap(); } catch {}
-        writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec.kind === "fact" ? { ...x.rec, kind: undefined } : x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
+        writeFileAtomic(this.path, this.compiled.map((x) => JSON.stringify(x.rec.kind === "episode" ? { ...x.rec, kind: undefined } : x.rec)).join("\n") + (this.compiled.length ? "\n" : ""));
         try { chmodSync(this.path, 0o600); } catch {}
         try { unlinkSync(`${this.path}.wal`); } catch {}
       });
@@ -1047,10 +1047,6 @@ export class AgentMemory {
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
-    return this.lookupNotes(text, k);
-  }
-
-  private lookupNotes(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     if (!text) return [];
     const cap = Math.max(0, Math.floor(Number(k) || 0));
     const route = (() => {
