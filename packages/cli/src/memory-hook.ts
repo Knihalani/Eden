@@ -30,9 +30,7 @@ function additional(event: string, text: string): Record<string, unknown> | null
 
 /** SessionStart: pins + gists only. Not procedures, ICL, or narrative dump. */
 function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
-  const seen = new Set<string>();
-  const lines: string[] = [];
-  const pins = mem.memories().filter(isPinnedIntention).sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at).slice(0, 8);
+  const seen = new Set<string>(), lines: string[] = [], pins = mem.memories().filter(isPinnedIntention).sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at).slice(0, 8);
   for (const r of pins) { let text = r.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ ...r, text }, text); } catch { line = `[rule] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
   try {
     for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) { let text = g.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t }, text); } catch { line = `[gist] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
@@ -70,9 +68,8 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const consent = memoryConsent(); if (consent === "off") return null;
     const r = asRec(raw), event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
-    const writes = consent === "on";
+    const writes = consent === "on", cwd = typeof r.cwd === "string" && r.cwd ? r.cwd : undefined;
     if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd")) return null;
-    const cwd = typeof r.cwd === "string" && r.cwd ? r.cwd : undefined;
     let resolved: { session?: string; child: boolean } = { child: false };
     try {
       const parent = [r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean), childId = [r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
@@ -84,10 +81,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const transPath = typeof r.transcript_path === "string" ? r.transcript_path : typeof r.transcriptPath === "string" ? r.transcriptPath : "", fromFile = messagesFromTranscript(transPath), fromPayload = payloadMessages(r), prior = (fromPayload.length ? fromPayload : fromFile).slice(-40);
     if (event === "PostToolUse" || event === "SubagentStop") {
       try {
-        const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
-        const original = r.tool_response ?? r.tool_output ?? r.result ?? r.output;
-        const result = flattenContent(original == null || original === "" ? "" : redact(original));
-        const text = result ? `The ${name || "subagent"} tool result is ${result}.` : "";
+        const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined, original = r.tool_response ?? r.tool_output ?? r.result ?? r.output, result = flattenContent(original == null || original === "" ? "" : redact(original)), text = result ? `The ${name || "subagent"} tool result is ${result}.` : "";
         if (text) mem.observe([{ role: "user", content: text }]); else if (event === "SubagentStop" && prior.length) mem.observe(prior);
         try { persistToolTraces(mem.jsonlDir, parseHookToolTraces(r)); } catch {}
       } catch {}
