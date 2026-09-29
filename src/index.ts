@@ -842,19 +842,17 @@ export class AgentMemory {
         if (!skippedIdentity && !isNoopCue(it.text) && !CHAT.test(it.text.trim()) && safe.length >= 8) {
           let identityTurn = false;
           try { identityTurn = !!objectAsserted(safe); } catch {}
-          if (opts.keepLiveIdentity && identityTurn) {
-            // SessionStart replay: copula already in SemanticStore; do not re-store the instead-of tail.
-          } else {
-          const cover = coveredChars / Math.max(1, safe.length);
-          if (out.length === before || cover < 0.85) {
-            const key = safe.replace(/[.!?]+$/g, "").toLowerCase();
-            const dup = this.seenLower.has(safe.toLowerCase())
-              || out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key)
-              || [...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key);
-            if (!dup) {
-              out.push(this.remember(safe, { kind: "episode" }));
+          if (!(opts.keepLiveIdentity && identityTurn)) {
+            const cover = coveredChars / Math.max(1, safe.length);
+            if (out.length === before || cover < 0.85) {
+              const key = safe.replace(/[.!?]+$/g, "").toLowerCase();
+              const dup = this.seenLower.has(safe.toLowerCase())
+                || out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key)
+                || [...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key);
+              if (!dup) {
+                out.push(this.remember(safe, { kind: "episode" }));
+              }
             }
-          }
           }
         }
       } catch {}
