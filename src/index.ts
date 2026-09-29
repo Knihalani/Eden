@@ -506,17 +506,13 @@ export class AgentMemory {
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
     try { if (memoryConsent() === "off") return body; } catch { return body; }
-    const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages";
-    const m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [];
-    const sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
+    const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages", m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [], sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
     try {
-      const paths = placePathsFrom(body);
-      let msgs = m;
+      const paths = placePathsFrom(body); let msgs = m;
       if (paths.length) { msgs = m.slice(); const idx = msgs.findLastIndex((o) => { if (!o || typeof o !== "object") return false; const role = String((o as { role?: unknown }).role ?? "").toLowerCase(); return role === "user" || role === "human"; }); if (idx >= 0) { const last = { ...(msgs[idx] as Record<string, unknown>) }; last.open_files = [...placePathsFrom(last), ...paths]; msgs[idx] = last; } }
       const next = this.inject(msgs);
       if (sys) try { this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], { keepLiveIdentity: true }); } catch {}
-      if (next === m) return body;
-      return { ...body, [key]: next };
+      return next === m ? body : { ...body, [key]: next };
     } catch { memoryInjectSwallows.n++; return body; }
   }
 
