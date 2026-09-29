@@ -534,17 +534,8 @@ export class AgentMemory {
   private persistText(text: string): string {
     let t = String(text ?? "");
     try {
-      t = t.replace(SECRET_INLINE, "[REDACTED]");
-    } catch {}
-    try {
       const redacted = redact(t);
       if (typeof redacted === "string") t = redacted;
-    } catch {}
-    try {
-      t = t.replace(
-        /\b((?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+)[^\s,.;]+/gi,
-        "$1[REDACTED]",
-      );
     } catch {}
     try {
       t = scrubMemoryText(t, { session: this.scrubSession, cwd: this.scrubCwd });
