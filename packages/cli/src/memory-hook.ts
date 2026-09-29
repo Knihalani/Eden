@@ -180,7 +180,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
           result = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n") || flattenContent(redacted);
           if (!result) try { result = JSON.stringify(redacted); } catch { result = ""; }
         }
-        result = (typeof redact(result) === "string" ? String(redact(result)) : result).trim().replace(/\s+/g, " ");
+        result = result.trim().replace(/\s+/g, " ");
         if (result.length > 360) result = result.slice(0, 360);
         const who = (name || "subagent").replace(/\s+/g, " ").replace(/([.!?])\s+/g, "; ").trim() || "subagent";
         let text = "";
@@ -190,9 +190,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
             if (/RootWebArea|\[landmark\]|accessibility_tree/i.test(blob)) text = `The ${who} tool was called.`;
           } catch {}
         } else {
-          const sentence = `The ${who} tool result is ${result}.`;
-          const safe = redact(sentence);
-          text = typeof safe === "string" ? safe : sentence;
+          text = `The ${who} tool result is ${result}.`;
         }
         if (text) mem.observe([{ role: "user", content: text }]);
         else if (event === "SubagentStop" && prior.length) mem.observe(prior);
