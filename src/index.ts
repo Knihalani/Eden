@@ -447,7 +447,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
-      id: opts.id || `${process.pid.toString(36)}${(++memSeq).toString(36)}`,
+      id: opts.id || `${(process.pid % 1296).toString(36)}${(++memSeq).toString(36)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
@@ -535,10 +535,7 @@ export class AgentMemory {
           try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
         }
         if (text && !this.seenLower.has(text.toLowerCase())) {
-          const rec = this.remember(text, {
-            kind: lane === "narrative" ? "episode" : "fact",
-            lane,
-          });
+          const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane });
           out.push(rec);
           try { if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); else new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
         }
