@@ -686,13 +686,7 @@ export class AgentMemory {
 
   patchWhere(fn: (r: MemoryRecord) => MemoryRecord | undefined): void {
     let dirty = false;
-    this.compiled = this.compiled.map((c) => {
-      let next: MemoryRecord | undefined;
-      try { next = fn(c.rec); } catch { return c; }
-      if (!next || next === c.rec) return c;
-      dirty = true;
-      return compileNeedles(next);
-    });
+    this.compiled = this.compiled.map((c) => { let next: MemoryRecord | undefined; try { next = fn(c.rec); } catch { return c; } if (!next || next === c.rec) return c; dirty = true; return compileNeedles(next); });
     if (dirty) this.post = null, this.flush(true);
   }
 
