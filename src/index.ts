@@ -537,11 +537,7 @@ export class AgentMemory {
     let recs: MemoryRecord[] = [];
     if (route === "icl-index") recs = mergeIclLane(text, cap, this.dir, this.compiled.map((c) => c.rec));
     else { recs = this.relevant(text, k); if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); recs = mergeHowtoLane(recs, text, cap, this.dir); }
-    const kept = recs.map((n) => {
-      const raw = String(n.text ?? "");
-      if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
-      try { const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, "")); if (!fact) return n; return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` }; } catch { return n; }
-    });
+    const kept = recs.map((n) => { const raw = String(n.text ?? ""); if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n; try { const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, "")); if (!fact) return n; return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` }; } catch { return n; } });
     try { return kept.map((r) => ({ ...r, text: applyProvenanceLabel(r, capMemoryBody(r, stripPacketLabel(r.text).body)) })); } catch { return kept; }
   }
 
