@@ -76,10 +76,7 @@ function leadingSerial(text: string): number | undefined {
 
 function rankKindBoost(r: MemoryRecord): number {
   const k = String(r.kind ?? "");
-  if (k === "constraint") return 50;
-  if (k === "procedure") return 40;
-  if (k === "fact" || k === "preference") return 25;
-  return 0;
+  return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
 }
 
 function capMemoryBody(r: MemoryRecord, body: string): string {
