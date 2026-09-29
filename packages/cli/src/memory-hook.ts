@@ -178,7 +178,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         else if (redacted && typeof redacted === "object") {
           const o = asRec(redacted);
           result = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n") || flattenContent(redacted);
-          if (!result) try { result = JSON.stringify(redacted); } catch { result = ""; }
         }
         result = result.trim().replace(/\s+/g, " ");
         if (result.length > 360) result = result.slice(0, 360);
