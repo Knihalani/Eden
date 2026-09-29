@@ -30,24 +30,29 @@ They are enforced mechanically where possible, so nobody has to repeat them. Tha
 
 ## 1. Day-0 reset (before P0.0)
 
-Measured on 2026-09-29 (R9 §3):
-- The main checkout is on `whatever/sep28-scale`, **1,251 commits ahead of `main`**.
-- The autonomous loop's primary metric reached its floor (misses 1 → 0) at **experiment 1 of 321**. The remaining 290 "keep" commits were accepted by a net-line-deletion rule. They shrank `src/index.ts` from 1,444 to 379 lines mostly by **joining lines**: 48 lines are now over 200 characters, and the longest is 1,001. These are the functions P0.2–P0.6 rewrite.
-- The memory product is largely **untracked** (165 untracked entries; `git ls-files src` = `index.ts`).
+**State as of 2026-09-29, after the merge** (R9 §3, updated):
+- **Remote.** The repository is **`Knihalani/Eden`** (private). The `origin` URL was updated.
+  - Its GitHub **default branch is still `feat/compiled-tools-horizon`**. Every slice branches from and targets **`main`**.
+- **Merge.** The user chose to merge everything. `main` was fast-forwarded to `11c3101c3` (1,700 commits; no history rewritten). It now contains:
+  - the whole `whatever/sep28-scale` loop history, including its ~290 line-joining "pack" commits;
+  - the previously untracked memory product files, tests and benches;
+  - the memory-ship docs.
+- **The loop.** Its primary metric saturated at **experiment 1 of 321** (misses 1 → 0). The remaining keeps passed only a net-line-deletion rule. `src/index.ts` went from 1,444 to 379 lines, mostly by joining lines: 48 lines exceed 200 characters, and the longest is 1,001.
+- **CI is red on `main`.** `bun run typecheck` fails with **112 errors**, mostly `packages/know/src/pack.ts`, plus `packages/know/src/store.ts` and `apps/site/src/assets.ts`. Tests and the CLI build never run. `main` was already red before this merge (every run since 2026-08-25).
 - 8 of 10 registered worktrees are prunable.
 
-| # | Action | Owner | Why |
-|---|---|---|---|
-| R-1 | **Revoke or rotate the pasted API token** (`cfat_…`) found in the Claude transcripts | user | Rotation removes its power; scrubbing only removes copies (R9 §1.5 R5.2) |
-| R-2 | Park the loop: do not restart `.whatever` on `sep28-scale`. **Do not merge the branch.** | user | Goodhart on a saturated metric (X9) |
-| R-3 | Salvage: from `.whatever/results.tsv`, cherry-pick onto `mem/salvage` only the keeps whose primary or a guard **changed** (row 1: "skip WH-question inject store"), plus a reviewed handful of genuine deletions. Drop the pure pack commits. Open a normal PR | agent → user merges | Keep real improvements, drop proxy-gaming |
-| R-4 | Decide the base. Cut the program's branches from `main` **plus** the P0.1 packaging PR, which brings the untracked product files in from the working tree as it stands. If `sep28-scale` has behaviour changes worth keeping that `mem/salvage` lacks, they go through R-3 | user | A clean, reviewable baseline |
-| R-5 | Hygiene PR: add a formatter config with a max line length (the repo has none); reformat `src/index.ts` so the 1,001-char lines become readable before anyone edits them. `git worktree prune` | agent | Reviewability of every later diff |
-| R-6 | Project permission rules in `.claude/settings.json`: `deny` `Bash(gh pr merge*)`, `Bash(git push* main*)`, `Bash(git push --force*)`; `ask` `Bash(gh pr create*)`. Protect `main` on GitHub: require a PR and the `test` check | user | The user's norms, enforced by the harness |
-| R-7 | Snapshot `session_id → cwd` for every existing Claude transcript into `~/.eden/migrate/session-map.json`, **now** | agent (script) | Claude Code deletes transcripts after 30 days by default; the migration (P0.5) needs this map |
-| R-8 | Start opt-in text collection for the real-negative set (§8) as soon as P0.1's `eden doctor` ships | user opts in | 300+ real negatives cannot come from today's 178 prompts; expect 4–8 weeks |
-
----
+| # | Action | Owner | Status | Why |
+|---|---|---|---|---|
+| R-1 | **Revoke or rotate the pasted API token** (`cfat_…`) found in the Claude transcripts | user | **open** | Rotation removes its power; scrubbing only removes copies (R9 §1.5 R5.2) |
+| R-2 | Park the loop | agent | **done 2026-09-29**: `.whatever/STOP` and `.whatever-v1/STOP` written. The `whatever` skill finishes on any wake while STOP exists | Goodhart on a saturated metric (X9) |
+| R-3 | ~~Salvage metric-moving keeps instead of merging~~ | — | **superseded**: the branch was merged by the user's decision. Its useful change (skip WH-question store) is on `main` with the rest. R-5 handles readability | — |
+| R-4 | Base for all slices | — | **decided**: branch from `main` (`mem/<slice>-<slug>`) | A single baseline |
+| R-5 | **Hygiene PR**: add a formatter config with a max line length (the repo has none); reformat `src/index.ts`, `src/memory-sota.ts` and the other pack-touched files so no line exceeds the limit; `git worktree prune`. Behaviour-neutral: the diff must be formatting only, verified by an identical test run before and after | agent → user merges | open | Every later diff in those files must be reviewable |
+| R-6 | Project permission rules in `.claude/settings.json` | agent | **done 2026-09-29**: `deny` `Bash(gh pr merge*)`, `Bash(git push* main*)`, `Bash(git push*:main*)`, `Bash(git push --force*)`, `Bash(git push -f*)`; `ask` `Bash(gh pr create*)`. Agents can no longer push to `main` or merge; `main` changes only through a PR the user merges | The user's norms, enforced by the harness |
+| R-6b | On GitHub: protect `main` (require a PR; require the `test` check **after** R-9 makes it green); consider setting `main` as the default branch | user | open | Server-side enforcement; a required check that always fails would block every PR |
+| R-7 | Snapshot `session_id → cwd` for every existing Claude transcript into `~/.eden/migrate/session-map.json`, **now** | agent (script) | open | Claude Code deletes transcripts after 30 days by default; the migration (P0.5) needs this map |
+| R-8 | Start opt-in text collection for the real-negative set (§8) as soon as P0.1's `eden doctor` ships | user opts in | open | 300+ real negatives cannot come from today's 178 prompts; expect 4–8 weeks |
+| **R-9** | **Green CI baseline** (ROADMAP **P0.−1**): fix the 112 typecheck errors, then make `bun run test` and `bash scripts/build-cli.sh` pass (or quarantine named failing tests with an issue each) | agent → user merges | **open; blocks P0.0** | Every slice's definition of done (§3 step 4) requires green CI; a red baseline hides every regression |
 
 ## 2. Unit of work and branching (X1–X3)
 
@@ -63,7 +68,7 @@ Measured on 2026-09-29 (R9 §3):
 
 | Lane | Slices |
 |---|---|
-| A | P0.1 → P0.2 → P0.7 |
+| A | P0.−1 (first, alone) → P0.1 → P0.2 → P0.7 |
 | B | P0.3 → P0.5 → P0.6 → P1.1 → P1.2 |
 | C | P0.4 → P0.8 → P2.1 → P2.2 (pure functions, parallel with B) |
 
@@ -335,7 +340,7 @@ Every store carries `format.json`; a reader seeing an unknown major version does
 
 | Week | Lane A | Lane B | Lane C | User gates |
 |---|---|---|---|---|
-| 0 | Day-0 reset R-1…R-8; hygiene PR | — | — | rotate token; permission rules; review salvage PR |
+| 0 | **P0.−1 green CI** (R-9); hygiene/format PR (R-5); session-map snapshot (R-7) | — | — | rotate token (R-1); protect `main` once CI is green (R-6b); review the CI and format PRs |
 | 1–2 | **P0.0 harness** (4 PRs); A/A run | — | — | G-prereg ×4 |
 | 3 | P0.1 packaging + doctor (+ session map, opt-in collection) | P0.3 ids/clocks | P0.4 trust gate | G-PR ×3 |
 | 4 | P0.2 stop the bleeding → **stage 1 shadow** | P0.5 repo identity + migrate dry-run | P0.8 flags/shadow/wide events | G-migrate (dry-run) |
@@ -353,7 +358,8 @@ This is the minimal viable delivery (ROADMAP) by about week 11. The upper bound 
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Rewrite collides with ongoing loop commits | high today | high | R-2, R-3, X9 scope rule |
+| Rewrite collides with loop commits | low (loop parked) | high | R-2 STOP file; X9 scope rule; R-5 reformat before editing |
+| Red CI hides regressions | certain until R-9 | high | P0.−1 before P0.0; no slice PR while `main` is red |
 | Real-negative set too small to certify FIR | high | medium | R-8 start now; point-estimate gate + printed CI; R1 hard negatives meanwhile |
 | Guard `ask` annoys (false or stale policies) | medium | high | stages 5→6, precision ≥ 0.9, decline tracking → revoke proposal, `(class, polarity, object)` keys, intents expire |
 | Transcripts expire before the migration maps them | certain after 30 days | medium | R-7 snapshot now |

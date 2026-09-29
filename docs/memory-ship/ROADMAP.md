@@ -49,21 +49,28 @@ Sizes: **S** ≤ 1 day · **M** ≤ 3 days · **L** ≤ 2 weeks. Every gate is a
 
 ## Day-0 reset (EXECUTION §1)
 
-Before P0.0:
-- rotate the leaked token;
-- park the `whatever` loop and do not merge `whatever/sep28-scale` (1,251 commits ahead of `main`; its metric saturated at experiment 1 and 290 keeps only joined lines);
-- salvage the metric-moving keeps into a normal PR;
-- add a formatter and reformat `src/index.ts`;
-- add permission rules (deny `gh pr merge`, ask `gh pr create`) and protect `main`;
-- snapshot `session → cwd` before Claude Code's 30-day transcript sweep;
-- start opt-in real-negative collection.
+State on 2026-09-29, after the merge to `main` on `Knihalani/Eden`:
+- **Done:**
+  - the `whatever` loop is parked (STOP files);
+  - project permission rules deny agent merges and pushes to `main` or force-pushes, and ask before `gh pr create`;
+  - the untracked product files are now tracked.
+- **Open, user:**
+  - rotate the leaked token;
+  - protect `main` on GitHub once CI is green;
+  - consider making `main` the default branch (today `feat/compiled-tools-horizon`);
+  - opt in to real-negative collection.
+- **Open, agent:**
+  - P0.−1 (below);
+  - the formatter/reformat PR for the line-joined files;
+  - the `session → cwd` snapshot before Claude Code's 30-day transcript sweep.
 
 ## Phase 0 — Floor: stop the bleeding, make it correct, make it safe
 
 | Slice | Build | Size | Gate |
 |---|---|---|---|
+| **P0.−1 Green CI baseline** | `main` fails `bun run typecheck` with 112 errors (mostly `packages/know/src/pack.ts`; also `packages/know/src/store.ts`, `apps/site/src/assets.ts`: Buffer/Uint8Array generics, possibly-undefined values, SQLite API shape). Fix them; then run `bun run test` and `bash scripts/build-cli.sh` and fix or quarantine (one tracked issue per quarantined test). No behaviour change | M | the CI `test` workflow green on `main`; afterwards it is the required check (EXECUTION R-6b) |
 | **P0.0 Harness v2** | Claude-shaped events for every delivery point; process per event; real transcript format (attachments, `parentUuid` rewinds, subagent files, task-notification submits, compaction); world oracle; simulated context window; annotated cues; ≥ 300 real-negative prompts (scrubbed, kept local). Land every arm in A5 §4 **red first** | L | Arms fail on today's code for the documented reasons |
-| **P0.1 Packaging** | Track every module `src/index.ts` imports plus wrap/plugin files and tests; fix or delete dead tests (`memory-wal`, `memory-env-docs`); `eden doctor` (modules load, hooks registered, repo key, scope catalog, guard on/off); the plugin's silent fallback logs once; the plugin's fallback chain obeys the 150 ms budget (no 8 s fetch/spawn timeouts on Submit) | S | Fresh clone passes; doctor green |
+| **P0.1 Packaging** | ~~Track every module `src/index.ts` imports plus wrap/plugin files and tests~~ (done in `11c3101c3`); verify a fresh clone loads them; fix or delete dead tests (`memory-wal`, `memory-env-docs`); `eden doctor` (modules load, hooks registered, repo key, scope catalog, guard on/off); the plugin's silent fallback logs once; the plugin's fallback chain obeys the 150 ms budget (no 8 s fetch/spawn timeouts on Submit) | S | Fresh clone passes; doctor green |
 | **P0.2 Stop the bleeding** | Silence on non-human submits (D24) and on `ack`/chatter turns (A7 §2). Variable bullet count: stop at the first empty stage (D28). Declarative wording (D14). Human-turn counter | S | `nonhuman`, `continue` arms; replaying R6's transcripts gives packet rate ≤ 30% and bullet volume ≤ 20% of today |
 | **P0.3 Ids, clocks, validity** | ULIDs; per-repo `seq` under `flock` (+ `pending.jsonl`); persist `t`, `invalid_at`, `valid_until`; order by `seq`; delete the numbered-list-beats-everything rule; real ages | M | `spawn-writers`, `reload-stale`, `numbered-list` |
 | **P0.4 Trust gate** | Authority by entry type + paste stripping (D12); `sanitizeForStore` with gitleaks rules + keyword rule (D13); assistant/tool/compaction text → episodes only; `purge`, `forget` | M | `secrets`, `poison` |
@@ -144,7 +151,7 @@ Every slice follows the lifecycle and definition of done in EXECUTION §3. New b
 
 ## Minimal viable delivery
 
-**Day-0 reset → P0.0–P0.8 → P1.1–P1.3 → P2.1–P2.5 → P3.1–P3.3 → P4.1.**
+**Day-0 reset → P0.−1 → P0.0–P0.8 → P1.1–P1.3 → P2.1–P2.5 → P3.1–P3.3 → P4.1.**
 
 That set already delivers:
 - memory that survives sessions and worktrees
@@ -154,7 +161,7 @@ That set already delivers:
 - the right folder
 - situation cues
 
-Upper bound at the sizes above: 53 working days (~11 weeks) for one engineer; expected 6–8 weeks.
+Upper bound at the sizes above: 53 working days (~11 weeks) for one engineer, plus P0.−1 (≤ 3 days); expected 6–8 weeks.
 
 ## Hygiene carried over
 
