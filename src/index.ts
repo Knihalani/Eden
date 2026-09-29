@@ -48,11 +48,9 @@ function rankKindBoost(r: MemoryRecord): number {
 }
 
 function capMemoryBody(r: MemoryRecord, body: string): string {
-  const text = String(body ?? "");
-  if (r.lane === "icl" || isIclExemplar(text)) return text;
+  const text = String(body ?? ""); if (r.lane === "icl" || isIclExemplar(text)) return text;
   if (r.kind === "procedure") { const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180)); return text.length <= cap ? text : text.slice(-cap); }
-  if (/\d+[.)]\s+\S/.test(text) || text.length <= FACT_CHAR_CAP) return text;
-  return text.slice(0, FACT_CHAR_CAP);
+  return /\d+[.)]\s+\S/.test(text) || text.length <= FACT_CHAR_CAP ? text : text.slice(0, FACT_CHAR_CAP);
 }
 
 function omitConflictingIdentity(text: string, store: SemanticStore): string {
@@ -233,8 +231,7 @@ export class AgentMemory {
 
   constructor(opts: MemoryOptions = {}) {
     this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined; this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
-    mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
-    const session = memorySessionName(opts.session); this.session = session; this.child = opts.child === true;
+    mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true }); const session = memorySessionName(opts.session); this.session = session; this.child = opts.child === true;
     if (session) mkdirSync(join(this.dir, session), { recursive: true }); this.path = join(this.dir, session || "", "memories.jsonl");
     this.compiled = load(this.path); this.knownIds = new Set(this.compiled.map((c) => c.rec.id)); this.rebuildSeen();
   }
@@ -254,8 +251,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const rec: MemoryRecord = { id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => String(t).toLowerCase()), at: Date.now(), ...(opts.lane ? { lane: opts.lane } : {}), ...(this.session ? { ep: opaqueId(this.session) } : {}) };
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
-    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
-    if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
+    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text); if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
     rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => { if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false; if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true; return Object.values(WRITE_ALIASES).some((a) => a.includes(t)); });
     if (!rec.tags.length) delete rec.tags;
     try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
@@ -325,8 +321,7 @@ export class AgentMemory {
   }
 
   private trimToStoreCap(): void {
-    const cap = memoryStoreCap();
-    if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
+    const cap = memoryStoreCap(); if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
     const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint", keep = this.compiled.filter((c) => pinned(c.rec)), rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => a.rec.at - b.rec.at);
     this.compiled = keep.concat(rest.slice(Math.max(0, rest.length - Math.max(0, cap - keep.length)))); this.post = null;
   }
@@ -346,9 +341,8 @@ export class AgentMemory {
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
     const cap = Math.max(0, Math.floor(Number(k) || 0)), route = routeMemory(text);
-    let recs: MemoryRecord[] = [];
-    if (route === "icl-index") recs = mergeIclLane(text, cap, this.dir, this.compiled.map((c) => c.rec));
-    else { recs = this.relevant(text, k); if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); recs = mergeHowtoLane(recs, text, cap, this.dir); }
+    let recs: MemoryRecord[] = route === "icl-index" ? mergeIclLane(text, cap, this.dir, this.compiled.map((c) => c.rec)) : this.relevant(text, k);
+    if (route !== "icl-index") { if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); recs = mergeHowtoLane(recs, text, cap, this.dir); }
     const kept = recs.map((n) => { const raw = String(n.text ?? ""); if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n; try { const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, "")); if (!fact) return n; return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` }; } catch { return n; } });
     try { return kept.map((r) => ({ ...r, text: applyProvenanceLabel(r, capMemoryBody(r, stripPacketLabel(r.text).body)) })); } catch { return kept; }
   }
