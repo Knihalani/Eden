@@ -35,8 +35,7 @@ function isPinnedIntention(r: MemoryRecord): boolean {
 
 function additional(event: string, text: string): Record<string, unknown> | null {
   const notes = String(text ?? "").trim();
-  if (!notes || !notes.includes(MEMORY_MARK)) return null;
-  return { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } };
+  return notes && notes.includes(MEMORY_MARK) ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } } : null;
 }
 
 /** SessionStart: pins + gists only. Not procedures, ICL, or narrative dump. */
