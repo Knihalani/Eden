@@ -229,7 +229,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     }
     const mem = hookMemory({
       dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
-      project: cwd || process.env.EDEN_MEMORY_PROJECT || undefined,
       session: resolved.session,
       child: resolved.child,
       cwd,
