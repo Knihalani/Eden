@@ -711,19 +711,8 @@ export class AgentMemory {
       let msgs = m;
       if (paths.length) {
         msgs = m.slice();
-        let idx = -1;
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const o = msgs[i];
-          if (!o || typeof o !== "object") continue;
-          const role = String((o as { role?: unknown }).role ?? "").toLowerCase();
-          if (role === "user" || role === "human") { idx = i; break; }
-        }
-        if (idx >= 0) {
-          const last = { ...(msgs[idx] as Record<string, unknown>) };
-          const existing = placePathsFrom(last);
-          last.open_files = [...existing, ...paths];
-          msgs[idx] = last;
-        }
+        const idx = msgs.findLastIndex((o) => { if (!o || typeof o !== "object") return false; const role = String((o as { role?: unknown }).role ?? "").toLowerCase(); return role === "user" || role === "human"; });
+        if (idx >= 0) { const last = { ...(msgs[idx] as Record<string, unknown>) }; last.open_files = [...placePathsFrom(last), ...paths]; msgs[idx] = last; }
       }
       const next = this.inject(msgs);
       if (sys) try { this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], { keepLiveIdentity: true }); } catch {}
