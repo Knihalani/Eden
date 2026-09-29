@@ -540,10 +540,7 @@ export class AgentMemory {
     } finally {
       this.batch--;
       this.flush(false);
-      if (!opts.deferSleep) {
-        try { noteSleepActivity(this); } catch {}
-        try { scheduleIncrementalSleep(this, { session: this.session }); } catch {}
-      }
+      if (!opts.deferSleep) { try { noteSleepActivity(this); } catch {} try { scheduleIncrementalSleep(this, { session: this.session }); } catch {} }
     }
   }
 
