@@ -3,7 +3,6 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { redact } from "../packages/ir/src/redact";
-import { completeNotes } from "./cls/complete";
 import { assembleNotes, splitNumberedItems } from "./assemble";
 import { noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
 import { ChunkStore } from "./chunk-store";
@@ -1082,9 +1081,7 @@ export class AgentMemory {
             if (route === "icl-index") packet = retrieved;
             else if (!(isIclCue(cue) || retrieved.some((n) => n.lane === "icl" || isIclExemplar(String(n.text ?? "")))) && /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)) {
               keepHopOrder = true;
-              const hopPool = retrieved;
-              packet = completeNotes(cue, retrieved, hopPool);
-              try { packet = assembleNotes(packet, this.dir); } catch {}
+              packet = retrieved;
             } else if (route === "sf-assemble") {
               keepHopOrder = true;
               packet = assembleNotes(retrieved, this.dir);
