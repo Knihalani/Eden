@@ -1048,8 +1048,6 @@ export class AgentMemory {
     }
     if (!recs.length) return [];
     let kept = recs;
-    try { kept = dropHarmed(this.dir, recs); } catch { kept = recs; }
-    if (!kept.length) return [];
     try {
       if (kept.length) {
         const store = this.semantic();
