@@ -379,11 +379,7 @@ export class AgentMemory {
     }
   }
 
-  private rebuildSeen() {
-    this.seenLower = new Set();
-    this.post = null;
-    for (const c of this.compiled) this.seenLower.add(c.rec.text.toLowerCase());
-  }
+  private rebuildSeen() { this.seenLower = new Set(); this.post = null; for (const c of this.compiled) this.seenLower.add(c.rec.text.toLowerCase()); }
 
   private ensureIndex() {
     if (this.post) return;
