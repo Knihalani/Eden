@@ -47,8 +47,7 @@ function additional(event: string, text: string): Record<string, unknown> | null
 function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const seen = new Set<string>();
   const lines: string[] = [];
-  let pinRows = mem.memories().filter(isPinnedIntention);
-  const pins = pinRows.sort((a, b) =>
+  const pins = mem.memories().filter(isPinnedIntention).sort((a, b) =>
     Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at
   ).slice(0, 8);
   for (const r of pins) {
