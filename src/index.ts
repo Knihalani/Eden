@@ -292,12 +292,7 @@ function howtoProcedureRecord(view: ReturnType<typeof howtoRetrieve.retrieveHowT
   }
   let verify = typeof view.verify === "string" ? view.verify.trim() : "";
   if (!verify && Array.isArray(view.steps)) {
-    for (let i = view.steps.length - 1; i >= 0; i--) {
-      const args = view.steps[i]?.args;
-      if (!args) continue;
-      for (const k of ["command", "cmd", "script"] as const) { const v = args[k]; if (typeof v === "string" && v.trim()) { verify = v.trim(); break; } }
-      if (verify) break;
-    }
+    for (let i = view.steps.length - 1; i >= 0; i--) { const args = view.steps[i]?.args; if (!args) continue; for (const k of ["command", "cmd", "script"] as const) { const v = args[k]; if (typeof v === "string" && v.trim()) { verify = v.trim(); break; } } if (verify) break; }
   }
   let text = cue;
   if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" ");
