@@ -70,10 +70,8 @@ function payloadMessages(r: Record<string, unknown>): { role: string; content: s
 
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
   try {
-    const consent = memoryConsent();
-    if (consent === "off") return null;
-    const r = asRec(raw);
-    const event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
+    const consent = memoryConsent(); if (consent === "off") return null;
+    const r = asRec(raw), event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     if (!MEMORY_EVENTS.has(event)) return null;
     const writes = consent === "on";
     if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd")) return null;
