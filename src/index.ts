@@ -525,11 +525,7 @@ export class AgentMemory {
       if (lane === "icl" || lane === "narrative") {
         let text = safe;
         if (lane === "narrative" && opts.keepLiveIdentity) try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
-        if (text && !this.seenLower.has(text.toLowerCase())) {
-          const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane });
-          out.push(rec);
-          try { if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); else new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {}
-        }
+        if (text && !this.seenLower.has(text.toLowerCase())) { const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane }); out.push(rec); try { if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); else new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {} }
         continue;
       }
       const before = out.length;
