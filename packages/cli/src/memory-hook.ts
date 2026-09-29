@@ -92,11 +92,6 @@ function pinsFromRoot(root: string): MemoryRecord[] {
   return [...byId.values()];
 }
 
-function pinPacketRecord(r: MemoryRecord): MemoryRecord {
-  if (r.kind === "fact" || r.kind === "preference") return { ...r, kind: "constraint" };
-  return r;
-}
-
 function additional(event: string, text: string): Record<string, unknown> | null {
   const notes = String(text ?? "").trim();
   if (!notes || !notes.includes(MEMORY_MARK)) return null;
@@ -112,8 +107,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const pins = pinRows.sort((a, b) =>
     Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at
   ).slice(0, 8);
-  for (const raw of pins) {
-    const r = pinPacketRecord(raw);
+  for (const r of pins) {
     let text = r.text.trim();
     try {
       const cleaned = scrubTombstonedIdentity(text, mem.dir);
