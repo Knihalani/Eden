@@ -816,7 +816,6 @@ export class AgentMemory {
     } finally {
       this.batch--;
       this.flush(false);
-      try { if (!this.post) this.ensureIndex(); } catch {}
       if (!opts.deferSleep) {
         try { noteSleepActivity(this); } catch {}
         try { scheduleIncrementalSleep(this, { session: this.session }); } catch {}
