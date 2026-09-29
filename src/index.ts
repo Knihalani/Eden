@@ -807,9 +807,7 @@ export class AgentMemory {
         try { if (cue && isNoopCue(cue)) silent = true; else if (hookLane(cue) === "none") silent = true; } catch {}
         const retrieved = !silent && cue ? this.notesFor(cue) : [];
         let packet = retrieved;
-        try {
-          if (retrieved.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(retrieved, this.dir);
-        } catch {}
+        try { if (retrieved.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(retrieved, this.dir); } catch {}
         if (packet.length) {
           try { logMemoryNotes(packet); } catch {}
           const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
