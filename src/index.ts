@@ -675,12 +675,9 @@ export class AgentMemory {
           try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
         }
         if (text && !this.seenLower.has(text.toLowerCase())) {
-          const tags: string[] = [];
-          try { if (isRecsysShot(it.text)) tags.push("recsys"); } catch {}
           const rec = this.remember(text, {
             kind: lane === "narrative" ? "episode" : "fact",
             lane,
-            ...(tags.length ? { tags } : {}),
           });
           out.push(rec);
           if (lane === "narrative") {
