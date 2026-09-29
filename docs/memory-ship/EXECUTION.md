@@ -6,21 +6,26 @@
 - Evidence: `research/R9-execution-methodology-research.md` (practices, statistics, repo facts; 45 references) and `research/R8-nim-experiments.md` (offline models).
 - Execution decisions are numbered **X1–X12** and cited from the ROADMAP.
 
-The rules below encode the working norms the user restated most across sessions (R6 §6):
-- work on a branch;
-- agents never merge;
-- open a PR only when it is ready;
+**Operating model (decided by the user, 2026-09-29): full agent autonomy.**
+- Agents run with all permissions (local `bypassPermissions`).
+- They commit, push, open PRs, **merge their own PRs** and flip rollout stages.
+- The user's involvement is reading reports and labelling the few packets the stages need.
+
+Because nothing mechanical blocks a bad merge, quality comes from process, and these rules are mandatory:
+- work on a branch in its own worktree;
+- open and merge a PR only when the definition of done (§3) is met;
+- an independent reviewer agent must approve;
 - verify end to end;
 - research deeply, with primary sources.
 
-They are enforced mechanically where possible, so nobody has to repeat them. That is the product's own promise applied to how it is built.
+The rules live in `CLAUDE.md` (loaded by every agent), the `/next` and `/slice` commands and the `slice-reviewer` subagent. That way nobody has to repeat them.
 
 ---
 
 ## 0. Principles
 
 1. **Evidence before code.** Every slice starts with a pre-registered target and failing tests that fail *for the documented reason*.
-2. **Merge dark, enable in stages.** New behaviour merges behind a flag set to `off`/`shadow`. Turning it on is a separate, reversible, user-owned step backed by shadow evidence.
+2. **Merge dark, enable in stages.** New behaviour merges behind a flag set to `off`/`shadow`. Turning it on is a separate, reversible step taken by the agent only when the stage's entry criteria and minimum soak time are met (§5). The evidence is recorded in `reports/stage-<n>.md`.
 3. **One change at a time is attributable.** One slice per PR; one delivery point per rollout stage.
 4. **Fail open, always exit 0.** Eden must never break, block or slow a turn beyond its budget.
 5. **Loops tune parameters; humans decide designs.** The autonomous optimizer never touches schemas, trust, scope or delivery semantics.
@@ -48,9 +53,9 @@ They are enforced mechanically where possible, so nobody has to repeat them. Tha
 | R-3 | ~~Salvage metric-moving keeps instead of merging~~ | — | **superseded**: the branch was merged by the user's decision. Its useful change (skip WH-question store) is on `main` with the rest. R-5 handles readability | — |
 | R-4 | Base for all slices | — | **decided**: branch from `main` (`mem/<slice>-<slug>`) | A single baseline |
 | R-5 | **Hygiene PR**: add a formatter config with a max line length (the repo has none); reformat `src/index.ts`, `src/memory-sota.ts` and the other pack-touched files so no line exceeds the limit; `git worktree prune`. Behaviour-neutral: the diff must be formatting only, verified by an identical test run before and after | agent → user merges | open | Every later diff in those files must be reviewable |
-| R-6 | Project permission rules in `.claude/settings.json` | agent | **done 2026-09-29**: `deny` `Bash(gh pr merge*)`, `Bash(git push* main*)`, `Bash(git push*:main*)`, `Bash(git push --force*)`, `Bash(git push -f*)`; `ask` `Bash(gh pr create*)`. Agents can no longer push to `main` or merge; `main` changes only through a PR the user merges | The user's norms, enforced by the harness |
-| R-6b | On GitHub: protect `main` (require a PR; require the `test` check **after** R-9 makes it green); consider setting `main` as the default branch | user | open | Server-side enforcement; a required check that always fails would block every PR |
-| R-7 | Snapshot `session_id → cwd` for every existing Claude transcript into `~/.eden/migrate/session-map.json`, **now** | agent (script) | open | Claude Code deletes transcripts after 30 days by default; the migration (P0.5) needs this map |
+| R-6 | Agent permissions | agent | **done 2026-09-29, then superseded the same day by the user's choice of full autonomy.** Now: `.claude/settings.local.json` sets `defaultMode: bypassPermissions` (personal, git-ignored); the shared `.claude/settings.json` has no restrictions. Superseded first version: `deny` `Bash(gh pr merge*)`, `Bash(git push* main*)`, `Bash(git push*:main*)`, `Bash(git push --force*)`, `Bash(git push -f*)`; `ask` `Bash(gh pr create*)`. Agents can no longer push to `main` or merge; `main` changes only through a PR the user merges | The user's norms, enforced by the harness |
+| R-6b | On GitHub, after R-9 makes CI green: require the `test` check on `main` (agents merge through PRs, so a required check is the one mechanical gate that remains); consider setting `main` as the default branch | user (or agent via `gh api`) | open | Server-side enforcement; a required check that always fails would block every PR |
+| R-7 | Snapshot `session_id → cwd` for every existing Claude transcript into `~/.eden/migrate/session-map.json`, **now** | agent (script) | **done 2026-09-29**: 40 sessions, 8 distinct cwds, file mode 0600 | Claude Code deletes transcripts after 30 days by default; the migration (P0.5) needs this map |
 | R-8 | Start opt-in text collection for the real-negative set (§8) as soon as P0.1's `eden doctor` ships | user opts in | open | 300+ real negatives cannot come from today's 178 prompts; expect 4–8 weeks |
 | **R-9** | **Green CI baseline** (ROADMAP **P0.−1**): fix the 112 typecheck errors, then make `bun run test` and `bash scripts/build-cli.sh` pass (or quarantine named failing tests with an issue each) | agent → user merges | **open; blocks P0.0** | Every slice's definition of done (§3 step 4) requires green CI; a red baseline hides every regression |
 
@@ -82,7 +87,7 @@ Each slice runs these steps in order. **The PR is opened only after step 9.**
 
 | # | Step | Artifact |
 |---|---|---|
-| 1 | **Pre-register** (first commit): target metric, baseline, delta, arms, tolerance table, counter-metric, `harness_sha`, analysis for sampled metrics. ≤ 15 lines. The user reads it (G-prereg, ~2 min) | `docs/memory-ship/prereg/<slice>.md` |
+| 1 | **Pre-register** (first commit): target metric, baseline, delta, arms, tolerance table, counter-metric, `harness_sha`, analysis for sampled metrics. ≤ 15 lines. It is committed before any code; the reviewer checks it was not edited after results | `docs/memory-ship/prereg/<slice>.md` |
 | 2 | **Red arms** (their own commit): the slice's A5 arms, each with `reason` asserted in `benchmarks/memory-long-horizon/arms.json`. CI fails if a red arm fails for a different reason | `arms.json` diff |
 | 3 | **Implement.** Fixture or oracle edits go in separate `fixture:` commits with the reason; reviewers read those first | code |
 | 4 | **Local CI**: `bun run typecheck`, `bun run test`, `bash scripts/build-cli.sh` (the CI workflow's steps) | green |
@@ -91,16 +96,19 @@ Each slice runs these steps in order. **The PR is opened only after step 9.**
 | 7 | **End to end in real Claude Code**: build and install the plugin on this machine; run the slice scenario by hand; attach `hook.log` wide events (ids only) and the transcript excerpt of the packet or ask | PR body |
 | 8 | **Fresh-context review**: `/code-review` or a reviewer subagent that sees only the diff and the prereg. `/security-review` for P0.4, P0.5, P2.3 and every migration. Fix correctness findings; style is optional | review log |
 | 9 | **Five hand-read packets** from the replay, one-line verdict each; DECISIONS/A4 updated if behaviour differs; ROADMAP row gets the PR link | PR body |
-| 10 | `gh pr create` (permission rule asks the user) → **user merges** (G-PR) | merged PR |
-| 11 | Later, separately: **stage flip** per §5 (G-stage) | `flags.json` change |
+| 10 | Rebase; `gh pr create` with the report as the body; `gh pr checks --watch` green (or, until P0.−1 lands, no new failures versus `main`); **`gh pr merge --rebase --delete-branch` by the agent** | merged PR |
+| 11 | Later, separately: **stage flip** by the agent per §5, only when entry criteria and soak are met; the evidence goes to `reports/stage-<n>.md` | `flags.json` change |
 
-**Slice agent brief** (the prompt given to a Claude Code agent executing a slice):
-- slice id;
-- links to its DECISIONS rows, A4/A7 sections and A5 arms;
-- the prereg;
-- the rules: worktree only; test stores under a temp `EDEN_MEMORY_DIR`; never read the private holdout; no `gh pr create` until steps 1–9 are complete;
-- the definition of done above;
-- a report-back format: the A5 table, the e2e evidence, open questions.
+**Running it.** The brief lives in the repo, so there is nothing to paste:
+- `CLAUDE.md` (auto-loaded): lifecycle, engineering rules, report format.
+- `.claude/commands/slice.md` (`/slice <id>`) and `.claude/commands/next.md` (`/next`): the full procedure. `/next` picks the first eligible row of `PROGRESS.md`.
+- `.claude/agents/slice-reviewer.md`: the independent reviewer that must return `APPROVE` before a merge.
+- `docs/memory-ship/PROGRESS.md`: status, dependencies and gates for every slice and stage.
+
+Typical use:
+- `claude` in the repo, then `/next`. The agent runs one slice to merge and ends with the report.
+- For unattended runs, `/loop /next` runs slices back to back.
+- Up to 3 parallel sessions may each run `/next`. Each claims its slice by marking it `in-progress` in its first commit, so pull first.
 
 ---
 
@@ -203,7 +211,7 @@ Dwell times are **[U]** until stage 1 measures the real prompt rate.
 - Every hook exits 0 and prints nothing on error. On UserPromptSubmit, exit code 2 **erases the user's prompt**, and other non-zero codes show stderr to the user.
 - A test injects a throw into each entry point and asserts exit 0 with empty stdout and stderr.
 - Budget per point: `abort_rate` ≤ 0.5%, unhandled exceptions ≤ 0.1%, user-visible errors 0.
-- **Circuit breaker:** a point that exceeds its budget over its last 200 invocations is forced to `shadow` for 24 h via `~/.eden/flags.auto.json`. `eden doctor` and the next SessionStart say so once. Only the user re-enables.
+- **Circuit breaker:** a point that exceeds its budget over its last 200 invocations is forced to `shadow` for 24 h via `~/.eden/flags.auto.json`. `eden doctor` and the next SessionStart say so once. Re-enabling needs a new stage evaluation (`/next stages`) that shows the cause is fixed.
 
 **Kill switches**, narrowest first:
 1. per-point flag in `flags.json` (next event);
@@ -308,7 +316,7 @@ Decided in DECISIONS **D37** from `research/R8-nim-experiments.md`.
 3. **Drop, don't redact**, any prompt with a secret-rule hit.
 4. Normalize user paths and hosts.
 5. **Canary test:** inject 5 synthetic secrets; the build aborts if any survives.
-6. The user labels each prompt `negative` / `positive` / `drop` (30–60 min for 300–500 prompts; this is also the privacy review).
+6. The user labels each prompt `negative` / `positive` / `drop` (30–60 min for 300–500 prompts; this is also the privacy review). This is one of the two places the process still needs a human: an agent cannot certify its own holdout.
 7. Freeze with a sha256.
 
 Agents see only aggregates and the ids of false fires. CI prints `skipped: private set absent`. The P4.3 gate is run locally and its output attached to the PR.
@@ -338,12 +346,12 @@ Every store carries `format.json`; a reader seeing an unknown major version does
 
 ## 10. Calendar (one engineer + agents; ≤ 3 lanes)
 
-| Week | Lane A | Lane B | Lane C | User gates |
+| Week | Lane A | Lane B | Lane C | User touchpoints |
 |---|---|---|---|---|
-| 0 | **P0.−1 green CI** (R-9); hygiene/format PR (R-5); session-map snapshot (R-7) | — | — | rotate token (R-1); protect `main` once CI is green (R-6b); review the CI and format PRs |
-| 1–2 | **P0.0 harness** (4 PRs); A/A run | — | — | G-prereg ×4 |
-| 3 | P0.1 packaging + doctor (+ session map, opt-in collection) | P0.3 ids/clocks | P0.4 trust gate | G-PR ×3 |
-| 4 | P0.2 stop the bleeding → **stage 1 shadow** | P0.5 repo identity + migrate dry-run | P0.8 flags/shadow/wide events | G-migrate (dry-run) |
+| 0 | **P0.−1 green CI** (R-9); hygiene/format PR (R-5); session-map snapshot (R-7) | — | — | rotate token (R-1); require the `test` check once CI is green (R-6b); read reports |
+| 1–2 | **P0.0 harness** (4 PRs); A/A run | — | — | read reports |
+| 3 | P0.1 packaging + doctor (+ session map, opt-in collection) | P0.3 ids/clocks | P0.4 trust gate | read reports |
+| 4 | P0.2 stop the bleeding → **stage 1 shadow** | P0.5 repo identity + migrate dry-run | P0.8 flags/shadow/wide events | read the migration dry-run report |
 | 5 | P0.7 cache placement | P0.6 delta encode | P2.1 extraction | **stage 2** (Submit on) |
 | 6–7 | P1.3 residual + shadow | P1.1 ledger → P1.2 epochs | P2.2 triggers → P2.3 guard (shadow) | stage 3 |
 | 8 | P2.4 promotion, P2.5 SessionStart/Subagent | P3.1 scope catalog | P3.3 slots | stage 4 |
