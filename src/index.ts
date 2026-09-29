@@ -89,19 +89,15 @@ function rankKindBoost(r: MemoryRecord): number {
 
 function capMemoryBody(r: MemoryRecord, body: string): string {
   const text = String(body ?? "");
-  try {
-    if (r.lane === "icl" || isIclExemplar(text)) return text;
-    if (r.kind === "procedure") {
-      const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180));
-      if (text.length <= cap) return text;
-      return text.slice(-cap);
-    }
-    if (/\d+[.)]\s+\S/.test(text)) return text;
-    if (text.length <= FACT_CHAR_CAP) return text;
-    return text.slice(0, FACT_CHAR_CAP);
-  } catch {
-    return text;
+  if (r.lane === "icl" || isIclExemplar(text)) return text;
+  if (r.kind === "procedure") {
+    const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180));
+    if (text.length <= cap) return text;
+    return text.slice(-cap);
   }
+  if (/\d+[.)]\s+\S/.test(text)) return text;
+  if (text.length <= FACT_CHAR_CAP) return text;
+  return text.slice(0, FACT_CHAR_CAP);
 }
 
 function omitConflictingIdentity(text: string, store: SemanticStore): string {
