@@ -1061,14 +1061,7 @@ export class AgentMemory {
     } else {
       recs = this.relevant(text, k);
       recs = recs.filter((r) => r.lane !== "icl" && r.kind !== "icl");
-      let wantNar = route === "gist-chunk";
-      if (!wantNar) {
-        try {
-          const hay = queryHay(text);
-          wantNar = this.compiled.some((c) => c.rec.lane === "narrative" && c.needles.some((n) => hay.has(n)));
-        } catch {}
-      }
-      if (wantNar) {
+      if (route === "gist-chunk") {
         try { recs = mergeNarrativeLane(recs, text, cap, this.howtoDir, this.compiled.map((c) => c.rec)); } catch {}
       }
       try { recs = mergeHowtoLane(recs, text, cap, this.howtoDir); } catch {}
