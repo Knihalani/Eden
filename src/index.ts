@@ -900,7 +900,6 @@ export class AgentMemory {
     } catch {
       rows = [];
     }
-    if (!rows.length) return [];
     const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
     for (const c of rows) {
       let n = 0;
