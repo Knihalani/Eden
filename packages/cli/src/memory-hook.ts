@@ -28,7 +28,6 @@ function additional(event: string, text: string): Record<string, unknown> | null
   const notes = String(text ?? "").trim(); return notes && notes.includes(MEMORY_MARK) ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } } : null;
 }
 
-/** SessionStart: pins + gists only. Not procedures, ICL, or narrative dump. */
 function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const seen = new Set<string>(), lines: string[] = [], pins = mem.memories().filter(isPinnedIntention).sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at).slice(0, 8);
   for (const r of pins) { let text = r.text.trim(); try { text = scrubTombstonedIdentity(text, mem.dir).trim(); } catch {} if (!text || seen.has(text.toLowerCase())) continue; seen.add(text.toLowerCase()); let line = text; try { line = applyProvenanceLabel({ ...r, text }, text); } catch { line = `[rule] ${text}`; } lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`); }
