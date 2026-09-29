@@ -93,8 +93,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       } catch {}
       return null;
     }
-    const stop = event === "Stop" || event === "SessionEnd";
-    const extra = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.prompt_response, r.response, r.output, r.completion, r.result, r.answer, r.reply, r.last_user_message, r.user_text, r.assistant_message, r.last_assistant_message, r.final_response, r.assistant_text, r.content].filter((x) => typeof x === "string" && x).join("\n");
+    const stop = event === "Stop" || event === "SessionEnd", extra = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.prompt_response, r.response, r.output, r.completion, r.result, r.answer, r.reply, r.last_user_message, r.user_text, r.assistant_message, r.last_assistant_message, r.final_response, r.assistant_text, r.content].filter((x) => typeof x === "string" && x).join("\n");
     if (event === "SessionStart") {
       if (writes && (prior.length || extra)) try { mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true }); } catch {}
       return additional(event, briefing(mem, resolved.session));
@@ -103,8 +102,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       if (writes) { try { if (prior.length || extra) mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true }); } catch {} try { consolidate(mem, { session: resolved.session, mode: "full" }); } catch {} }
       return null;
     }
-    const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
-    const notes = prompt ? notesFromInject(mem.inject([{ role: "user", content: prompt }])) : "";
+    const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "", notes = prompt ? notesFromInject(mem.inject([{ role: "user", content: prompt }])) : "";
     if (writes && prior.length) mem.observe(prior);
     return additional(event, notes);
     } finally { try { mem.close(); } catch {} }
