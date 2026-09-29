@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
@@ -278,7 +278,6 @@ function extractDurable(blob: string): string[] {
 function load(path: string): Compiled[] {
   const out: Compiled[] = [];
   const idx = new Map<string, number>();
-  if (!existsSync(path)) return out;
   let raw = "";
   try { raw = readFileSync(path, "utf8"); } catch { return out; }
   for (const t of raw.split("\n")) {
