@@ -85,9 +85,7 @@ export function messagesFromTranscript(path: string): { role: string; content: s
         const o = asRec(JSON.parse(line));
         const msg = asRec(o.message ?? o);
         const rawRole = String(msg.role || o.type || o.role || "");
-        const role = rawRole === "human" || rawRole === "Human" || rawRole === "user" ? "user"
-          : rawRole === "model" || rawRole === "Model" || rawRole === "ai" || rawRole === "AI" || rawRole === "assistant" ? "assistant"
-          : "";
+        const role = rawRole === "human" || rawRole === "Human" || rawRole === "user" ? "user" : rawRole === "model" || rawRole === "Model" || rawRole === "ai" || rawRole === "AI" || rawRole === "assistant" ? "assistant" : "";
         const content = flattenContent(msg.content ?? o.content ?? msg.parts);
         if ((role === "user" || role === "assistant") && content) out.push({ role, content });
       } catch {}
