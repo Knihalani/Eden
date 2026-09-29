@@ -65,26 +65,6 @@ export { sleep } from "./sleep";
 export const MEMORY_MARK = "Eden Memory:";
 export const memoryInjectSwallows = { n: 0 };
 
-const FUNC_WORD = new Set([
-  "i","we","you","he","she","they","my","our","your","his","her","their","me","us","him","them",
-  "is","are","was","were","am","be","been","being","has","have","had","having",
-  "do","does","did","will","would","can","could","should","must","might","may",
-  "the","a","an","and","but","of","to","in","on","at","for","with","from","by","as","that","this",
-  "these","those","it","its","because","if","so","also","when","who","which","not","no",
-]);
-
-function tokList(s: string): string[] {
-  return (String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []);
-}
-
-function looksNarrative(t: string): boolean {
-  const toks = tokList(t);
-  if (toks.length < 4) return false;
-  let fw = 0;
-  for (const w of toks) if (FUNC_WORD.has(w) && ++fw >= 2) return true;
-  return false;
-}
-
 function sentenceParts(t: string): string[] {
   return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
 }
@@ -105,7 +85,7 @@ function isNarrativeProse(t: string): boolean {
   const text = t.trim();
   if (isIclExemplar(text) || isFactList(text)) return false;
   if (text.length > 400) return true;
-  return sentenceParts(text).length >= 2 && text.length >= 150 && looksNarrative(text);
+  return sentenceParts(text).length >= 2 && text.length >= 150;
 }
 
 /** Encode lane for observe. Chat still extractDurable; ICL/narrative/recsys store-all. Never throws. */
