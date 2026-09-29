@@ -644,7 +644,6 @@ export class AgentMemory {
     const post = new Map<string, Compiled[]>();
     for (const c of this.compiled) {
       if (c.rec.kind === "digest") continue;
-      if (this.agent && c.rec.agent && c.rec.agent !== this.agent) continue;
       if (this.project && c.rec.project !== this.project) continue;
       if (!isLiveRow(c.rec)) continue;
       for (const w of c.needles) {
