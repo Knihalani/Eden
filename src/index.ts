@@ -689,11 +689,7 @@ export class AgentMemory {
         const retrieved = !silent && cue ? this.notesFor(cue) : [];
         let packet = retrieved;
         try { if (retrieved.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(retrieved, this.dir); } catch {}
-        if (packet.length) {
-          try { logMemoryNotes(packet); } catch {}
-          const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
-          if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
-        }
+        if (packet.length) { try { logMemoryNotes(packet); } catch {} const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap())); if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") }); }
       }
       try { if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim())) this.observe(list, { deferSleep: true }); } catch {}
       if (!notes.length) return list;
