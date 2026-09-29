@@ -108,9 +108,7 @@ function convBlob(list: unknown[]): string {
   if (list.length === 1) { const o = list[0] as Record<string, unknown> | undefined; if (TOOL_ROLES.has(String(o?.role ?? "").toLowerCase())) return ""; if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content; }
   const parts: string[] = [];
   for (const m of list) {
-    if (!m || typeof m !== "object") continue;
-    const o = m as Record<string, unknown>, c = o.content ?? o.llmContent, role = String(o.role ?? "").toLowerCase();
-    if (TOOL_ROLES.has(role)) continue;
+    if (!m || typeof m !== "object") continue; const o = m as Record<string, unknown>, c = o.content ?? o.llmContent, role = String(o.role ?? "").toLowerCase(); if (TOOL_ROLES.has(role)) continue;
     if (typeof c === "string" && c) parts.push(c);
     else if (Array.isArray(c) || Array.isArray(o.parts) || (c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).parts))) {
       for (const b of (Array.isArray(c) ? c : Array.isArray(o.parts) ? o.parts as unknown[] : (c as Record<string, unknown>).parts as unknown[])) {
@@ -144,8 +142,7 @@ function extractDurable(blob: string): string[] {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "").replace(SECRET_INLINE, "[REDACTED]");
     if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || CHAT.test(t) || /qx\d+z/i.test(t)) continue;
     if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
-    const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1]!.trim();
-    t = t.replace(/^[.\s]+|[.\s]+$/g, "");
+    const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1]!.trim(); t = t.replace(/^[.\s]+|[.\s]+$/g, "");
     if (SPEAKER_LABEL.test(t)) { const sp = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])((t.match(SPEAKER_LABEL)?.[1] || "").replace(/:$/, ""))); if (!(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(t).some((w) => !sp.has(w) && (w.length >= 5 || /^\d/.test(w)) && !STOP.has(w))) continue; }
     if (t.length >= 8 && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.push(t); }
   }
@@ -283,9 +280,7 @@ export class AgentMemory {
       }
       const before = out.length; let coveredChars = 0, skippedIdentity = false;
       for (const raw of extractDurable(it.text)) {
-        let text = raw;
-        try { const asserted = objectAsserted(text); if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`; } catch {}
-        text = this.persistText(text);
+        let text = raw; try { const asserted = objectAsserted(text); if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`; } catch {} text = this.persistText(text);
         try { const fact = objectAsserted(text); if (fact) { const store = this.semantic(), live = store.get(fact.s, fact.p); if (opts.keepLiveIdentity) { const obj = fact.o.trim().toLowerCase(), slot = `${fact.s}\0${fact.p}`, fromBatch = batchLive.get(slot); if (!(fromBatch && fromBatch !== obj)) { if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; } if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; } } } const serial = leadingSerial(text); if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) && !STATUS_OBJECT.test(fact.o)) { store.put(fact.s, fact.p, fact.o, serial ?? Date.now()); batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase()); } } } catch {}
         if (this.seenLower.has(text.toLowerCase())) continue;
         const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text), asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
