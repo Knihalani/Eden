@@ -259,8 +259,7 @@ export const PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
 
 export function memoryRetrieveCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_CAP);
-  if (!Number.isFinite(raw) || raw <= 0) return PACKET_CHAT_K_MIN;
-  return Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
+  return !Number.isFinite(raw) || raw <= 0 ? PACKET_CHAT_K_MIN : Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
 }
 
 /** JSONL cap. Distinct from retrieve k. Unset → 2000. */
