@@ -506,14 +506,7 @@ export class AgentMemory {
   private ensureIndex() {
     if (this.post) return;
     const post = new Map<string, Compiled[]>();
-    for (const c of this.compiled) {
-      if (!isLiveRow(c.rec)) continue;
-      for (const w of c.needles) {
-        let arr = post.get(w);
-        if (!arr) post.set(w, arr = []);
-        arr.push(c);
-      }
-    }
+    for (const c of this.compiled) if (isLiveRow(c.rec)) for (const w of c.needles) { let arr = post.get(w); if (!arr) post.set(w, arr = []); arr.push(c); }
     this.post = post;
   }
 
