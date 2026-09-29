@@ -131,16 +131,10 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   for (const row of rows) {
     let a: ReturnType<typeof objectAsserted>;
     try { a = objectAsserted(row.rec.text); } catch { a = undefined; }
-    if (!a) {
-      rest.push(row);
-      continue;
-    }
+    if (!a) { rest.push(row); continue; }
     const k = `${a.s}\0${a.p}`;
     const prev = byKey.get(k);
-    if (!prev) {
-      byKey.set(k, row);
-      continue;
-    }
+    if (!prev) { byKey.set(k, row); continue; }
     const serial = leadingSerial(row.rec.text);
     const prevSerial = leadingSerial(prev.rec.text);
     if (serial != null && prevSerial != null) { if (serial >= prevSerial) byKey.set(k, row); continue; }
