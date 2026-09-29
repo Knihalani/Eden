@@ -1017,15 +1017,14 @@ export class AgentMemory {
         return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` };
       } catch { return n; }
     });
-    return kept.map((r) => {
-      try {
+    try {
+      return kept.map((r) => {
         const stripped = stripPacketLabel(r.text).body;
-        const capped = capMemoryBody(r, stripped);
-        return { ...r, text: applyProvenanceLabel(r, capped) };
-      } catch {
-        return r;
-      }
-    });
+        return { ...r, text: applyProvenanceLabel(r, capMemoryBody(r, stripped)) };
+      });
+    } catch {
+      return kept;
+    }
   }
 
   inject(messages: unknown[]): unknown[] {
