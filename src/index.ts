@@ -400,11 +400,7 @@ export class AgentMemory {
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
     const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
     if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
-    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => {
-      if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false;
-      if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true;
-      return Object.values(WRITE_ALIASES).some((a) => a.includes(t));
-    });
+    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => { if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false; if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true; return Object.values(WRITE_ALIASES).some((a) => a.includes(t)); });
     if (!rec.tags.length) delete rec.tags;
     try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
     try { const fact = objectAsserted(rec.text); if (fact && !STATUS_OBJECT.test(fact.o)) { const live = this.semantic().get(fact.s, fact.p); const serial = leadingSerial(rec.text); if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at); } } catch {}
