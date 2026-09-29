@@ -831,11 +831,7 @@ export class AgentMemory {
         }
       }
       const next = this.inject(msgs);
-      if (sys) {
-        try {
-          this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], { keepLiveIdentity: true });
-        } catch {}
-      }
+      if (sys) try { this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], { keepLiveIdentity: true }); } catch {}
       if (next === m) return body;
       return { ...body, [key]: next };
     } catch {
