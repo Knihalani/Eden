@@ -124,10 +124,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       return additional(event, briefing(mem, resolved.session));
     }
     if (stop) {
-      if (writes) {
-        try { if (prior.length || extra) mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true }); } catch {}
-        try { consolidate(mem, { session: resolved.session, mode: "full" }); } catch {}
-      }
+      if (writes) { try { if (prior.length || extra) mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true }); } catch {} try { consolidate(mem, { session: resolved.session, mode: "full" }); } catch {} }
       return null;
     }
     const prompt = [r.prompt, r.text, r.input, r.message, r.body, r.query, r.user_message, r.response, r.last_user_message, r.user_text, r.content].find((x) => typeof x === "string" && x) as string || "";
