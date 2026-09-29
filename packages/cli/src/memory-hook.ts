@@ -74,11 +74,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
 }
 
 export function notesFromInject(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => asRec(m))
-    .filter((o) => o.role === "system" && typeof o.content === "string" && String(o.content).includes(MEMORY_MARK))
-    .map((o) => String(o.content))
-    .join("\n\n");
+  return (Array.isArray(messages) ? messages : []).map((m) => asRec(m)).filter((o) => o.role === "system" && typeof o.content === "string" && String(o.content).includes(MEMORY_MARK)).map((o) => String(o.content)).join("\n\n");
 }
 
 export function messagesFromTranscript(path: string): { role: string; content: string }[] {
