@@ -558,7 +558,6 @@ export class AgentMemory {
     if (session) {
       const sub = join(this.dir, session);
       mkdirSync(sub, { recursive: true });
-      try { chmodSync(sub, 0o700); } catch {}
       this.path = join(sub, "memories.jsonl");
     } else {
       this.path = join(this.dir, "memories.jsonl");
