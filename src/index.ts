@@ -497,11 +497,9 @@ export class AgentMemory {
               }
             }
             const serial = leadingSerial(text);
-            if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`))) {
-              if (!STATUS_OBJECT.test(fact.o)) {
-                store.put(fact.s, fact.p, fact.o, serial ?? Date.now());
-                batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase());
-              }
+            if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) && !STATUS_OBJECT.test(fact.o)) {
+              store.put(fact.s, fact.p, fact.o, serial ?? Date.now());
+              batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase());
             }
           }
         } catch {}
