@@ -310,18 +310,11 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
 let memSeq = 0;
 
 export class AgentMemory {
-  readonly dir: string;
-  readonly session?: string;
-  readonly child: boolean;
-  private scrubSession?: string;
-  private scrubCwd?: string;
-  private compiled: Compiled[];
-  private path: string;
-  private batch = 0;
-  private dirty = false;
-  private seenLower = new Set<string>();
-  private post: Map<string, Compiled[]> | null = null;
-  private knownIds = new Set<string>();
+  readonly dir: string; readonly session?: string; readonly child: boolean;
+  private scrubSession?: string; private scrubCwd?: string;
+  private compiled: Compiled[]; private path: string;
+  private batch = 0; private dirty = false; private seenLower = new Set<string>();
+  private post: Map<string, Compiled[]> | null = null; private knownIds = new Set<string>();
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
