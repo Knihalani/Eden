@@ -962,8 +962,8 @@ export class AgentMemory {
       try { if (memoryConsent() === "off") return list; } catch { return list; }
       const blob = convBlob(list);
       const notes: { role: "system"; content: string }[] = [];
+      const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
       if (!blob.includes(MEMORY_MARK)) {
-        const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
         let silent = false;
         try {
           if (cue && isNoopCue(cue)) silent = true;
@@ -981,8 +981,7 @@ export class AgentMemory {
         }
       }
       try {
-        const q = cueFor(list);
-        const skipStore = !q || isNoopCue(q) || /^(?:what|which|who|where|when|why|how)\b/i.test(q.trim());
+        const skipStore = !cue || isNoopCue(cue) || /^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim());
         if (!skipStore) this.observe(list, { deferSleep: true });
       } catch {}
       if (!notes.length) return list;
