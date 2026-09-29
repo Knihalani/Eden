@@ -443,13 +443,8 @@ export class AgentMemory {
     const session = memorySessionName(opts.session);
     this.session = session;
     this.child = opts.child === true;
-    if (session) {
-      const sub = join(this.dir, session);
-      mkdirSync(sub, { recursive: true });
-      this.path = join(sub, "memories.jsonl");
-    } else {
-      this.path = join(this.dir, "memories.jsonl");
-    }
+    if (session) mkdirSync(join(this.dir, session), { recursive: true });
+    this.path = join(this.dir, session || "", "memories.jsonl");
     this.compiled = load(this.path);
     this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
