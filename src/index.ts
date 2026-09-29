@@ -191,7 +191,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   return [...byKey.values(), ...rest];
 }
 
-export type MemoryOptions = { dir?: string; agent?: string; project?: string; session?: string; cwd?: string; child?: boolean };
+export type MemoryOptions = { dir?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;

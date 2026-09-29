@@ -213,7 +213,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     const writes = consent === "on";
     if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd")) return null;
     const cwd = typeof r.cwd === "string" && r.cwd ? r.cwd : undefined;
-    const agent = [process.env.EDEN_MEMORY_AGENT, r.agent].find((x) => typeof x === "string" && x);
     let resolved: { session?: string; child: boolean } = { child: false };
     try {
       const parent = [r.session_id, r.sessionID, r.sessionId, r.parent_session_id, process.env.EDEN_MEMORY_PARENT, process.env.EDEN_MEMORY_SESSION].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean);
@@ -230,7 +229,6 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     }
     const mem = hookMemory({
       dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
-      agent: typeof agent === "string" ? agent : undefined,
       project: cwd || process.env.EDEN_MEMORY_PROJECT || undefined,
       session: resolved.session,
       child: resolved.child,
