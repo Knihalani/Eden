@@ -69,21 +69,8 @@ function sentenceParts(t: string): string[] {
   return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
 }
 
-function isFactList(t: string): boolean {
-  const numbered = t.split(/\n/).filter((l) => /^\s*(?:\[[a-z][a-z0-9_-]*(?:\s*[·|][^\]]*)?\]\s+)?\d+[.)]\s+/.test(l));
-  if (numbered.length >= 2) return true;
-  const sents = sentenceParts(t);
-  if (sents.length < 2) return false;
-  let copula = 0;
-  for (const s of sents) {
-    try { if (objectAsserted(s)) copula++; } catch {}
-  }
-  return copula >= 2 && copula * 2 >= sents.length;
-}
-
 function isNarrativeProse(t: string): boolean {
   const text = t.trim();
-  if (isIclExemplar(text) || isFactList(text)) return false;
   if (text.length > 400) return true;
   return sentenceParts(text).length >= 2 && text.length >= 150;
 }
