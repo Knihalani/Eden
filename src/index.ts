@@ -436,10 +436,7 @@ export class AgentMemory {
             const live = store.get(fact.s, fact.p);
             if (opts.keepLiveIdentity) {
               const obj = fact.o.trim().toLowerCase(), slot = `${fact.s}\0${fact.p}`, fromBatch = batchLive.get(slot);
-              if (!(fromBatch && fromBatch !== obj)) {
-                if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; }
-                if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; }
-              }
+              if (!(fromBatch && fromBatch !== obj)) { if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; } if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; } }
             }
             const serial = leadingSerial(text);
             if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) && !STATUS_OBJECT.test(fact.o)) {
