@@ -504,12 +504,10 @@ export class AgentMemory {
     try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
     try {
       const fact = objectAsserted(rec.text);
-      if (fact) {
+      if (fact && !STATUS_OBJECT.test(fact.o)) {
         const live = this.semantic().get(fact.s, fact.p);
         const serial = leadingSerial(rec.text);
-        if (!(serial == null && live && live.t < 1e11)) {
-          if (!STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at);
-        }
+        if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at);
       }
     } catch {}
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id);
