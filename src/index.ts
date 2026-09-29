@@ -190,9 +190,7 @@ function extractDurable(blob: string): string[] {
   const seen = new Set<string>(), out: string[] = [];
   let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
   if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1))) whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
-  const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?");
-  const numberedWhole = /^\d+[.)]\s+\S/.test(whole);
-  const label = whole.match(SPEAKER_LABEL)?.[1];
+  const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"), numberedWhole = /^\d+[.)]\s+\S/.test(whole), label = whole.match(SPEAKER_LABEL)?.[1];
   const chunks = labeledWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/).flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
   for (const raw of chunks) {
     let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "");
@@ -310,8 +308,7 @@ export class AgentMemory {
   constructor(opts: MemoryOptions = {}) {
     this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined; this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
-    const session = memorySessionName(opts.session);
-    this.session = session; this.child = opts.child === true;
+    const session = memorySessionName(opts.session); this.session = session; this.child = opts.child === true;
     if (session) mkdirSync(join(this.dir, session), { recursive: true });
     this.path = join(this.dir, session || "", "memories.jsonl");
     this.compiled = load(this.path); this.knownIds = new Set(this.compiled.map((c) => c.rec.id)); this.rebuildSeen();
@@ -355,8 +352,7 @@ export class AgentMemory {
     let asserted: ReturnType<typeof objectAsserted>;
     try { asserted = objectAsserted(incoming.text); } catch { return; }
     if (!asserted) return;
-    const now = incoming.at ?? Date.now();
-    const incomingSerial = leadingSerial(incoming.text);
+    const now = incoming.at ?? Date.now(), incomingSerial = leadingSerial(incoming.text);
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt))) continue;
       let other: ReturnType<typeof objectAsserted>;
