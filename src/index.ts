@@ -59,7 +59,6 @@ function sentenceParts(t: string): string[] {
   return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
 }
 
-/** Encode lane for observe. Chat still extractDurable; ICL/narrative/recsys store-all. Never throws. */
 export function encodeLane(text: string): MemoryLaneKind {
   const t = String(text ?? "").trim();
   if (!t) return "chat";
@@ -220,7 +219,6 @@ export function memoryRetrieveCap(): number {
   return !Number.isFinite(raw) || raw <= 0 ? PACKET_CHAT_K_MIN : Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
 }
 
-/** JSONL cap. Distinct from retrieve k. Unset → 2000. */
 export function memoryStoreCap(): number {
   const raw = Number(process.env.EDEN_MEMORY_STORE_CAP);
   return !Number.isFinite(raw) || raw <= 0 ? 2000 : Math.floor(raw);
@@ -341,7 +339,6 @@ export class AgentMemory {
     return this.flush(true), rec;
   }
 
-  /** Same entity + same relation only. Stamp invalidAt; do not delete. Prefer max leading serial. */
   private invalidateSameCopula(incoming: MemoryRecord): void {
     let asserted: ReturnType<typeof objectAsserted>;
     try { asserted = objectAsserted(incoming.text); } catch { return; }
@@ -420,7 +417,6 @@ export class AgentMemory {
     try { withFileLock(`${this.path}.lock`, () => { try { const mine = new Set(this.compiled.map((c) => c.rec.id)), byId = new Map<string, Compiled>(); for (const c of load(this.path)) if (mine.has(c.rec.id) || !this.knownIds.has(c.rec.id)) byId.set(c.rec.id, c); for (const c of this.compiled) byId.set(c.rec.id, c); this.compiled = [...byId.values()]; for (const c of this.compiled) this.knownIds.add(c.rec.id); } catch {} this.trimToStoreCap(); writeFileAtomic(this.path, this.compiled.map((x) => { const r = x.rec; return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined, invalidAt: undefined, validUntil: undefined }); }).join("\n") + (this.compiled.length ? "\n" : "")); try { chmodSync(this.path, 0o600); } catch {} try { unlinkSync(`${this.path}.wal`); } catch {} }); this.rebuildSeen(); this.dirty = false; } catch {}
   }
 
-  /** Persist-only. Sleep heat does not call this. Pins/constraints kept; oldest unpinned dropped. */
   private trimToStoreCap(): void {
     const cap = memoryStoreCap();
     if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
@@ -488,7 +484,6 @@ export class AgentMemory {
     } catch { memoryInjectSwallows.n++; return body; }
   }
 
-  /** One JSONL flush after many observes. Nested with SemanticStore quiet. */
   quiet(fn: () => void) { this.batch++; const sem = this.semantic(); sem.beginBatch(); try { fn(); } finally { try { sem.endBatch(); } catch {} this.batch--; this.flush(false); } }
 
   dropWhere(pred: (r: MemoryRecord) => boolean): void { this.compiled = this.compiled.filter((c) => !pred(c.rec)); this.post = null; this.flush(true); }
@@ -499,7 +494,6 @@ export class AgentMemory {
 
   close() { this.flush(false); }
 
-  /** Idle/Stop only. Inject must not await this. */
   async sleep(opts?: { session?: string }): Promise<void> { try { const { consolidate } = await import("./sleep"); consolidate(this, { session: opts?.session ?? this.session, mode: "full" }); } catch {} }
 }
 
