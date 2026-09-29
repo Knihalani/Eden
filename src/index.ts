@@ -646,7 +646,7 @@ export class AgentMemory {
       id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-2)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
-      tags: writeAliasTags((opts.tags || []).map((t) => t.toLowerCase()), String(text || "")),
+      tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
       agent: opts.agent || this.agent,
       project: opaqueProject(opts.project || this.project),
       at: now,
@@ -655,8 +655,7 @@ export class AgentMemory {
     };
     if (!rec.text) return rec;
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
-    const uttered = `${text ?? ""}\n${rec.text}`;
-    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(uttered);
+    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
     if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
     rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => {
       if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false;
