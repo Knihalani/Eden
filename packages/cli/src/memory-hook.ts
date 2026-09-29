@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { redact } from "@eden/ir";
 import { childSessionName, MEMORY_MARK, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
-import { dropHarmed } from "../../../src/memory-harmed";
 import { memoryConsent } from "../../../src/memory-consent";
 import { applyProvenanceLabel } from "../../../src/memory-provenance";
 import { opaqueId } from "../../../src/memory-scrub";
@@ -49,7 +48,6 @@ function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const seen = new Set<string>();
   const lines: string[] = [];
   let pinRows = mem.memories().filter(isPinnedIntention);
-  try { pinRows = dropHarmed(mem.dir, pinRows); } catch {}
   const pins = pinRows.sort((a, b) =>
     Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at
   ).slice(0, 8);
