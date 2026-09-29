@@ -445,11 +445,7 @@ export function memoryStoreCap(): number {
 }
 
 function isIclCue(text: string): boolean {
-  try {
-    if (encodeLane(text) === "icl") return true;
-    if (isIclExemplar(text) || /\blabel\s*:/i.test(text)) return true;
-  } catch {}
-  return false;
+  try { return encodeLane(text) === "icl" || isIclExemplar(text) || /\blabel\s*:/i.test(text); } catch { return false; }
 }
 
 function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
@@ -655,7 +651,7 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; agent?: string; project?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const now = Date.now();
     const rec: MemoryRecord = {
-      id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-3)}`,
+      id: opts.id || `${process.pid.toString(36)}${(++this.nid).toString(36)}${now.toString(36).slice(-2)}`,
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: writeAliasTags((opts.tags || []).map((t) => t.toLowerCase()), String(text || "")),
