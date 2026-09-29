@@ -60,9 +60,7 @@ export function messagesFromTranscript(path: string): { role: string; content: s
       } catch {}
     }
     return out;
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 function payloadMessages(r: Record<string, unknown>): { role: string; content: string }[] {
