@@ -13,7 +13,7 @@ import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
 import { opaqueId, opaqueProject, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
-import { isIclExemplar, isRecsysShot, objectAsserted, SemanticStore } from "./semantic-store";
+import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { applyProvenanceLabel, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import {
@@ -75,7 +75,6 @@ export function encodeLane(text: string): MemoryLaneKind {
     const t = String(text ?? "").trim();
     if (!t) return "chat";
     if (isIclExemplar(t)) return "icl";
-    if (isRecsysShot(t)) return "narrative";
     if (t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150)) return "narrative";
     return "chat";
   } catch {
