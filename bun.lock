@@ -79,6 +79,15 @@
       "bin": {
         "eden": "./dist/eden.js",
       },
+      "devDependencies": {
+        "@eden/control": "workspace:*",
+        "@eden/core": "workspace:*",
+        "@eden/ir": "workspace:*",
+        "@eden/know": "workspace:*",
+        "@eden/measure": "workspace:*",
+        "@eden/shadow": "workspace:*",
+        "@eden/wrap": "workspace:*",
+      },
     },
     "packages/compile": {
       "name": "@eden/compile",
