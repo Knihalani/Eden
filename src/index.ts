@@ -536,8 +536,7 @@ export class AgentMemory {
       const notes: { role: "system"; content: string }[] = [];
       const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
       if (!blob.includes(MEMORY_MARK)) {
-        let silent = false;
-        try { if (cue && isNoopCue(cue)) silent = true; else if (hookLane(cue) === "none") silent = true; } catch {}
+        let silent = false; try { if (cue && isNoopCue(cue)) silent = true; else if (hookLane(cue) === "none") silent = true; } catch {}
         const retrieved = !silent && cue ? this.notesFor(cue) : [];
         let packet = retrieved;
         try { if (retrieved.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(retrieved, this.dir); } catch {}
