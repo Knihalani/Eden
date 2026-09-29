@@ -306,9 +306,7 @@ function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRe
     if (!body) continue;
     const id = hit.id || `icl:${out.length}`;
     if (seen.has(id) || seen.has(body.toLowerCase())) continue;
-    seen.add(id);
-    seen.add(body.toLowerCase());
-    out.push({ id, text: body, kind: "fact", lane: "icl", tags: ["icl"], at: Number.isFinite(hit.t) ? hit.t : 0 });
+    seen.add(id); seen.add(body.toLowerCase()); out.push({ id, text: body, kind: "fact", lane: "icl", tags: ["icl"], at: Number.isFinite(hit.t) ? hit.t : 0 });
   }
   return out;
 }
