@@ -1019,23 +1019,15 @@ export class AgentMemory {
       try { recs = mergeHowtoLane(recs, text, cap, this.dir); } catch {}
     }
     if (!recs.length) return [];
-    let kept = recs;
-    try {
-      const store = this.semantic();
-      kept = kept.map((n) => {
-        let fact: ReturnType<typeof objectAsserted>;
-        try { fact = objectAsserted(String(n.text ?? "").replace(/^\[[^\]]+\]\s+/, "")); } catch { return n; }
+    const kept = recs.map((n) => {
+      const raw = String(n.text ?? "");
+      if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
+      try {
+        const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, ""));
         if (!fact) return n;
-        const live = store.get(fact.s, fact.p);
-        if (!live) return n;
-        const lo = live.o.replace(/\s+/g, " ").trim();
-        const fo = fact.o.replace(/\s+/g, " ").trim();
-        const needsPeel = /\b(?:instead of|rather than)\b/i.test(String(n.text ?? ""));
-        if (lo.toLowerCase() === fo.toLowerCase() && !needsPeel) return n;
-        const next = fact.p === "uses" ? `${fact.s} uses ${live.o}.` : `The ${fact.s} is ${live.o}.`;
-        return { ...n, text: next };
-      });
-    } catch {}
+        return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` };
+      } catch { return n; }
+    });
     return kept.map((r) => {
       try {
         const stripped = stripPacketLabel(r.text).body;
