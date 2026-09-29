@@ -728,7 +728,6 @@ export class AgentMemory {
     const room = Math.max(0, cap - keep.length);
     const keptRest = rest.slice(Math.max(0, rest.length - room));
     const next = keep.concat(keptRest);
-    if (next.length === this.compiled.length) return;
     this.compiled = next;
     this.post = null;
   }
