@@ -510,10 +510,7 @@ export class AgentMemory {
     const hay = queryHay(text);
     try {
       this.ensureIndex();
-      const ranked = [...hay].filter((t) => t.length >= 3 && !STOP.has(t))
-        .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
-        .filter((x) => x.df > 0)
-        .sort((a, b) => a.df - b.df);
+      const ranked = [...hay].filter((t) => t.length >= 3 && !STOP.has(t)).map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 })).filter((x) => x.df > 0).sort((a, b) => a.df - b.df);
       const poolCap = Math.max(cap * 6, 30);
       const seen = new Set<Compiled>();
       const pool: Compiled[] = [];
