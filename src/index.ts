@@ -571,9 +571,7 @@ export class AgentMemory {
     if (dirty) this.post = null, this.flush(true);
   }
 
-  close() {
-    this.flush(false);
-  }
+  close() { this.flush(false); }
 
   /** Idle/Stop only. Inject must not await this. */
   async sleep(opts?: { session?: string }): Promise<void> {
