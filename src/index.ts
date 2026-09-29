@@ -1068,23 +1068,7 @@ export class AgentMemory {
         });
       }
     } catch {}
-    const aligned = kept;
     try { kept = preferObservationOverSources(kept, gistTextsFor(this.dir, kept)); } catch {}
-    try {
-      const store = this.semantic();
-      const ids = new Set(kept.map((n) => n.id));
-      for (const n of aligned) {
-        if (ids.has(n.id)) continue;
-        let fact: ReturnType<typeof objectAsserted>;
-        try { fact = objectAsserted(String(n.text ?? "").replace(/^\[[^\]]+\]\s+/, "")); } catch { continue; }
-        if (!fact) continue;
-        const live = store.get(fact.s, fact.p);
-        if (!live) continue;
-        if (live.o.replace(/\s+/g, " ").trim().toLowerCase() !== fact.o.replace(/\s+/g, " ").trim().toLowerCase()) continue;
-        kept.push(n);
-        ids.add(n.id);
-      }
-    } catch {}
     try {
       if (kept.some((n) => n.lane === "narrative" || (n.tags ?? []).includes("chunk"))) {
         const store = this.semantic();
