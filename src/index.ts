@@ -1071,8 +1071,7 @@ export class AgentMemory {
           keepHopOrder = /\b(?:country|sport|based in|incident rotation|author|continent|region owns)\b/i.test(cue)
             || route === "sf-assemble" || route === "icl-index";
           if (!silent && cue && retrieved.length) {
-            if (route === "icl-index") packet = retrieved;
-            else if (route === "sf-assemble") {
+            if (route === "sf-assemble") {
               keepHopOrder = true;
               packet = assembleNotes(retrieved, this.dir);
             } else packet = retrieved;
