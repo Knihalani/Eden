@@ -1,0 +1,323 @@
+
+## vercel_turborepo files=5816 ls=134ms decls=… products=130
+v0-spec                      scopes= 1185 root%=  2.1 p50=   2 p90=    9 tiny=  874 susp= 1080 nested=1005 agree= 43.2 over= 56.1 under=  0.7 recall=98 leak=0.6 ms=187.6
+F0 glob-needs-manifest       scopes= 1165 root%=  2.1 p50=   2 p90=    9 tiny=  853 susp= 1060 nested= 985 agree= 43.2 over= 56.1 under=  0.7 recall=98 leak=0.6 ms=100.4
+F0+F1 deny                   scopes=  106 root%= 14.8 p50=   7 p90=   50 tiny=   37 susp=    1 nested=  10 agree= 57.8 over=  0.3 under=   42 recall=73 leak=13.4 ms=30
+F0+F2 membership             scopes= 1070 root%=  4.3 p50=   2 p90=    9 tiny=  765 susp=  975 nested= 903 agree= 44.8 over=   52 under=  3.3 recall=97 leak=2.9 ms=103.6
+F0+F1+F2                     scopes=   96 root%= 14.9 p50=   7 p90=   62 tiny=   28 susp=    1 nested=   1 agree= 57.8 over=  0.1 under= 42.1 recall=72 leak=13.5 ms=33.8
+F0+F1+bucket                 scopes=  106 root%= 14.8 p50=   7 p90=   50 tiny=   37 susp=    1 nested=  10 agree= 57.8 over=  0.3 under=   42 recall=73 leak=13.4 ms=28.6
+F0+F1+bucket+min2            scopes=   98 root%= 14.8 p50=   7 p90=   58 tiny=   29 susp=    1 nested=   2 agree= 57.9 over=  0.2 under=   42 recall=73 leak=13.4 ms=32.3
+F0+F1+bucket+min3            scopes=   92 root%=   15 p50=   8 p90=   58 tiny=   23 susp=    1 nested=   2 agree= 57.7 over=  0.2 under= 42.2 recall=68 leak=13.6 ms=36
+F0+F1+bucket+depth4          scopes=  106 root%= 14.8 p50=   7 p90=   50 tiny=   37 susp=    1 nested=  10 agree= 57.8 over=  0.3 under=   42 recall=73 leak=13.4 ms=33.2
+F0+F1+bucket+min2+poly       scopes=   98 root%= 14.8 p50=   7 p90=   58 tiny=   29 susp=    1 nested=   2 agree= 57.9 over=  0.2 under=   42 recall=73 leak=13.4 ms=30.4
+…+top200 (any repo)          scopes=   98 root%= 14.8 p50=   7 p90=   58 tiny=   29 susp=    1 nested=   2 agree= 57.9 over=  0.2 under=   42 recall=73 leak=13.4 ms=32.7
+REC (…+top200 bazel-only)    scopes=   98 root%= 14.8 p50=   7 p90=   58 tiny=   29 susp=    1 nested=   2 agree= 57.9 over=  0.2 under=   42 recall=73 leak=13.4 ms=31.1
+REC but bucket all test/fixture scopes=  102 root%=  1.4 p50=   7 p90=   58 tiny=   30 susp=    5 nested=   4 agree= 43.4 over=   28 under= 28.6 recall=73 leak=0 ms=36.8
+R3-F9 literal                scopes=   95 root%= 43.6 p50=   7 p90=   52 tiny=   28 susp=    0 nested=   1 agree= 57.9 over=    0 under= 42.1 recall=72 leak=42.1 ms=101.3
+bazel BUILD as manifest      scopes=  106 root%= 14.8 p50=   7 p90=   50 tiny=   37 susp=    1 nested=  10 agree= 57.8 over=  0.3 under=   42 recall=73 leak=13.4 ms=30.1
+
+## vercel_next.js files=33374 ls=139ms decls=… products=331
+v0-spec                      scopes=  543 root%= 63.7 p50=   3 p90=   15 tiny=  349 susp=  395 nested= 271 agree= 72.1 over= 14.8 under= 13.1 recall=30 leak=13.1 ms=144.3
+F0 glob-needs-manifest       scopes=  522 root%= 64.5 p50=   3 p90=   15 tiny=  337 susp=  382 nested= 259 agree= 71.6 over= 14.6 under= 13.8 recall=29 leak=13.8 ms=107.8
+F0+F1 deny                   scopes=  141 root%= 67.3 p50=   6 p90=   51 tiny=   47 susp=    1 nested=  32 agree= 80.1 over=    6 under= 13.9 recall=29 leak=13.9 ms=78
+F0+F2 membership             scopes=  116 root%= 67.2 p50=   7 p90=   91 tiny=   30 susp=   10 nested=  12 agree= 77.1 over=  8.7 under= 14.2 recall=29 leak=14.2 ms=106.4
+F0+F1+F2                     scopes=  107 root%= 67.7 p50=   7 p90=   94 tiny=   26 susp=    1 nested=   8 agree= 80.3 over=  5.4 under= 14.3 recall=29 leak=14.3 ms=80.9
+F0+F1+bucket                 scopes=  142 root%= 55.1 p50=   6 p90=   51 tiny=   47 susp=    2 nested=  32 agree= 80.1 over=    6 under= 13.9 recall=29 leak=1.8 ms=81.1
+F0+F1+bucket+min2            scopes=  140 root%= 55.1 p50=   6 p90=   53 tiny=   44 susp=    2 nested=  30 agree= 80.1 over=    6 under= 13.9 recall=29 leak=1.8 ms=85
+F0+F1+bucket+min3            scopes=  121 root%= 55.2 p50=   8 p90=   94 tiny=   25 susp=    2 nested=  21 agree= 80.1 over=    6 under=   14 recall=26 leak=1.8 ms=87.2
+F0+F1+bucket+depth4          scopes=  125 root%= 55.1 p50=   8 p90=   53 tiny=   33 susp=    1 nested=  15 agree= 85.3 over=  0.8 under= 13.9 recall=29 leak=1.8 ms=82.4
+F0+F1+bucket+min2+poly       scopes=  140 root%= 55.1 p50=   6 p90=   53 tiny=   44 susp=    2 nested=  30 agree= 80.1 over=    6 under= 13.9 recall=29 leak=1.8 ms=90
+…+top200 (any repo)          scopes=  143 root%= 52.6 p50=   7 p90=   94 tiny=   44 susp=    2 nested=  51 agree= 80.4 over=  6.8 under= 12.8 recall=29 leak=0 ms=115
+REC (…+top200 bazel-only)    scopes=  140 root%= 55.1 p50=   6 p90=   53 tiny=   44 susp=    2 nested=  30 agree= 80.1 over=    6 under= 13.9 recall=29 leak=1.8 ms=89
+REC but bucket all test/fixture scopes=  143 root%=  5.1 p50=   6 p90=   53 tiny=   44 susp=    5 nested=  32 agree= 23.4 over= 62.7 under= 13.9 recall=29 leak=1.8 ms=95.5
+R3-F9 literal                scopes=  108 root%= 67.4 p50=   7 p90=   91 tiny=   26 susp=    2 nested=   8 agree= 85.1 over=  0.6 under= 14.3 recall=29 leak=14.3 ms=114
+bazel BUILD as manifest      scopes=  142 root%= 55.1 p50=   6 p90=   51 tiny=   47 susp=    2 nested=  32 agree= 80.1 over=    6 under= 13.9 recall=29 leak=1.8 ms=78.7
+
+## nrwl_nx files=10913 ls=112ms decls=… products=136
+v0-spec                      scopes= 1269 root%=  2.8 p50=   1 p90=    8 tiny= 1127 susp=   56 nested=1130 agree= 84.7 over= 15.2 under=    0 recall=96 leak=0 ms=34.5
+F0 glob-needs-manifest       scopes= 1263 root%=  2.9 p50=   1 p90=    8 tiny= 1121 susp=   56 nested=1130 agree= 84.6 over= 15.2 under=  0.1 recall=92 leak=0.1 ms=22.9
+F0+F1 deny                   scopes= 1243 root%=  6.6 p50=   1 p90=    3 tiny= 1120 susp=   36 nested=1127 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=3.9 ms=13.3
+F0+F2 membership             scopes= 1262 root%=    3 p50=   1 p90=    7 tiny= 1121 susp=   56 nested=1130 agree= 84.6 over= 15.2 under=  0.2 recall=92 leak=0.2 ms=22.7
+F0+F1+F2                     scopes= 1242 root%=  6.7 p50=   1 p90=    3 tiny= 1120 susp=   36 nested=1127 agree= 84.6 over= 11.5 under=  3.9 recall=91 leak=3.9 ms=13.3
+F0+F1+bucket                 scopes= 1244 root%=  2.8 p50=   1 p90=    3 tiny= 1120 susp=   37 nested=1127 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=0.1 ms=15.1
+F0+F1+bucket+min2            scopes=  234 root%=  2.8 p50=  11 p90=   95 tiny=   10 susp=   37 nested= 117 agree= 84.7 over= 11.5 under=  3.9 recall=91 leak=0.1 ms=17.8
+F0+F1+bucket+min3            scopes=  234 root%=  2.8 p50=  11 p90=   95 tiny=   10 susp=   37 nested= 117 agree= 84.7 over= 11.5 under=  3.9 recall=91 leak=0.1 ms=17.9
+F0+F1+bucket+depth4          scopes=  244 root%=  2.8 p50=  11 p90=   94 tiny=   20 susp=   37 nested= 127 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=0.1 ms=13.2
+F0+F1+bucket+min2+poly       scopes=  236 root%=  2.8 p50=  11 p90=   95 tiny=   11 susp=   37 nested= 119 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=0.1 ms=18.6
+…+top200 (any repo)          scopes=  236 root%=  2.8 p50=  11 p90=   95 tiny=   11 susp=   37 nested= 119 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=0.1 ms=21.4
+REC (…+top200 bazel-only)    scopes=  236 root%=  2.8 p50=  11 p90=   95 tiny=   11 susp=   37 nested= 119 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=0.1 ms=16
+REC but bucket all test/fixture scopes=  236 root%=  2.8 p50=  11 p90=   95 tiny=   11 susp=   37 nested= 119 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=0.1 ms=16.5
+R3-F9 literal                scopes= 1206 root%=   11 p50=   1 p90=    1 tiny= 1120 susp=    0 nested=1127 agree= 80.3 over= 11.5 under=  8.3 recall=65 leak=8.3 ms=18.8
+bazel BUILD as manifest      scopes= 1244 root%=  2.8 p50=   1 p90=    3 tiny= 1120 susp=   37 nested=1127 agree= 84.6 over= 11.6 under=  3.9 recall=91 leak=0.1 ms=11.9
+
+## microsoft_vscode files=19549 ls=50ms decls=… products=109
+v0-spec                      scopes=  143 root%= 61.8 p50=   8 p90=   52 tiny=   16 susp=   35 nested= 125 agree= 97.5 over=  2.3 under=  0.1 recall=96 leak=0.1 ms=36.7
+F0 glob-needs-manifest       scopes=  143 root%= 61.8 p50=   8 p90=   52 tiny=   16 susp=   35 nested= 125 agree= 97.5 over=  2.3 under=  0.1 recall=96 leak=0.1 ms=19.9
+F0+F1 deny                   scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=18.2
+F0+F2 membership             scopes=  143 root%= 61.8 p50=   8 p90=   52 tiny=   16 susp=   35 nested= 125 agree= 97.5 over=  2.3 under=  0.1 recall=96 leak=0.1 ms=20.4
+F0+F1+F2                     scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=19.2
+F0+F1+bucket                 scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=16.6
+F0+F1+bucket+min2            scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=24.7
+F0+F1+bucket+min3            scopes=  107 root%= 65.5 p50=   9 p90=   60 tiny=    2 susp=    0 nested= 103 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=26.4
+F0+F1+bucket+depth4          scopes=  107 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 103 agree= 95.8 over=  0.7 under=  3.5 recall=90 leak=3.5 ms=17.5
+F0+F1+bucket+min2+poly       scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=26
+…+top200 (any repo)          scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=40.1
+REC (…+top200 bazel-only)    scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=25.7
+REC but bucket all test/fixture scopes=  111 root%=   64 p50=  10 p90=   90 tiny=    3 susp=    3 nested= 105 agree= 89.8 over=  6.7 under=  3.5 recall=90 leak=2.3 ms=25.2
+R3-F9 literal                scopes=  124 root%=   63 p50=   8 p90=   60 tiny=    8 susp=   16 nested= 115 agree= 96.9 over=    2 under=  1.2 recall=91 leak=1.1 ms=17.4
+bazel BUILD as manifest      scopes=  108 root%= 65.5 p50=   9 p90=   60 tiny=    3 susp=    0 nested= 104 agree= 95.2 over=  1.3 under=  3.5 recall=90 leak=3.5 ms=18.5
+
+## facebook_react files=7252 ls=35ms decls=… products=77
+v0-spec                      scopes=  106 root%=  4.1 p50=  13 p90=   71 tiny=    6 susp=   35 nested=  28 agree= 93.2 over=  5.5 under=  1.3 recall=90 leak=1.3 ms=28.5
+F0 glob-needs-manifest       scopes=  106 root%=  4.1 p50=  13 p90=   71 tiny=    6 susp=   35 nested=  28 agree= 93.2 over=  5.5 under=  1.3 recall=90 leak=1.3 ms=6.8
+F0+F1 deny                   scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=6.6
+F0+F2 membership             scopes=   64 root%= 11.6 p50=  15 p90=   94 tiny=    5 susp=    0 nested=  22 agree= 88.4 over=  2.9 under=  8.7 recall=64 leak=7.8 ms=7.2
+F0+F1+F2                     scopes=   64 root%= 11.6 p50=  15 p90=   94 tiny=    5 susp=    0 nested=  22 agree= 88.4 over=  2.9 under=  8.7 recall=64 leak=7.8 ms=7.1
+F0+F1+bucket                 scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=7.2
+F0+F1+bucket+min2            scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=10.5
+F0+F1+bucket+min3            scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=10.6
+F0+F1+bucket+depth4          scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=7.8
+F0+F1+bucket+min2+poly       scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=11.2
+…+top200 (any repo)          scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=13.5
+REC (…+top200 bazel-only)    scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=10.6
+REC but bucket all test/fixture scopes=   73 root%=  2.8 p50=  14 p90=   89 tiny=    5 susp=    2 nested=  26 agree=   88 over=  4.2 under=  7.8 recall=65 leak=0 ms=10.7
+R3-F9 literal                scopes=   64 root%= 11.6 p50=  15 p90=   94 tiny=    5 susp=    0 nested=  22 agree= 88.4 over=  2.9 under=  8.7 recall=64 leak=7.8 ms=7.4
+bazel BUILD as manifest      scopes=   71 root%= 10.5 p50=  14 p90=   89 tiny=    5 susp=    0 nested=  25 agree= 88.1 over=  4.2 under=  7.8 recall=65 leak=7.8 ms=7.4
+
+## tokio-rs_tokio files=882 ls=20ms decls=… products=10
+v0-spec                      scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=3.9
+F0 glob-needs-manifest       scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=1.1
+F0+F1 deny                   scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=0.9
+F0+F2 membership             scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=0.9
+F0+F1+F2                     scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=0.9
+F0+F1+bucket                 scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=0.9
+F0+F1+bucket+min2            scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=1.2
+F0+F1+bucket+min3            scopes=   12 root%=  4.3 p50=  19 p90=   94 tiny=    2 susp=    1 nested=   2 agree= 99.1 over=  0.7 under=  0.2 recall=90 leak=0.2 ms=1.2
+F0+F1+bucket+depth4          scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=0.8
+F0+F1+bucket+min2+poly       scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=1.3
+…+top200 (any repo)          scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=1.4
+REC (…+top200 bazel-only)    scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=1.2
+REC but bucket all test/fixture scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=1.3
+R3-F9 literal                scopes=   12 root%=  6.6 p50=  14 p90=   94 tiny=    3 susp=    0 nested=   2 agree= 96.8 over=  0.7 under=  2.5 recall=90 leak=2.5 ms=1
+bazel BUILD as manifest      scopes=   13 root%=  4.1 p50=  19 p90=   94 tiny=    3 susp=    1 nested=   2 agree= 99.3 over=  0.7 under=    0 recall=100 leak=0 ms=0.9
+
+## rust-lang_cargo files=3073 ls=81ms decls=… products=27
+v0-spec                      scopes=  660 root%= 58.5 p50=   2 p90=    3 tiny=  641 susp=  631 nested= 200 agree= 66.1 over= 33.6 under=  0.3 recall=96 leak=0.3 ms=130.6
+F0 glob-needs-manifest       scopes=  659 root%= 58.5 p50=   2 p90=    3 tiny=  640 susp=  630 nested= 199 agree= 66.1 over= 33.6 under=  0.3 recall=96 leak=0.3 ms=84.8
+F0+F1 deny                   scopes=   29 root%=   92 p50=   5 p90=   20 tiny=   10 susp=    0 nested=   2 agree= 99.5 over=  0.1 under=  0.3 recall=96 leak=0.3 ms=16.9
+F0+F2 membership             scopes=  565 root%= 63.5 p50=   2 p90=    2 tiny=  545 susp=  538 nested= 185 agree= 71.2 over= 28.5 under=  0.3 recall=96 leak=0.3 ms=94
+F0+F1+F2                     scopes=   27 root%=   92 p50=   5 p90=   21 tiny=    8 susp=    0 nested=   0 agree= 99.7 over=    0 under=  0.3 recall=96 leak=0.3 ms=19.2
+F0+F1+bucket                 scopes=   29 root%=   92 p50=   5 p90=   20 tiny=   10 susp=    0 nested=   2 agree= 99.5 over=  0.1 under=  0.3 recall=96 leak=0.3 ms=15.2
+F0+F1+bucket+min2            scopes=   29 root%=   92 p50=   5 p90=   20 tiny=   10 susp=    0 nested=   2 agree= 99.5 over=  0.1 under=  0.3 recall=96 leak=0.3 ms=16.7
+F0+F1+bucket+min3            scopes=   21 root%= 92.4 p50=   7 p90=   40 tiny=    2 susp=    0 nested=   0 agree= 99.3 over=    0 under=  0.7 recall=74 leak=0.7 ms=15.6
+F0+F1+bucket+depth4          scopes=   27 root%=   92 p50=   5 p90=   21 tiny=    8 susp=    0 nested=   0 agree= 99.7 over=    0 under=  0.3 recall=96 leak=0.3 ms=14.8
+F0+F1+bucket+min2+poly       scopes=   29 root%=   92 p50=   5 p90=   20 tiny=   10 susp=    0 nested=   2 agree= 99.5 over=  0.1 under=  0.3 recall=96 leak=0.3 ms=16.1
+…+top200 (any repo)          scopes=   29 root%=   92 p50=   5 p90=   20 tiny=   10 susp=    0 nested=   2 agree= 99.5 over=  0.1 under=  0.3 recall=96 leak=0.3 ms=17.7
+REC (…+top200 bazel-only)    scopes=   29 root%=   92 p50=   5 p90=   20 tiny=   10 susp=    0 nested=   2 agree= 99.5 over=  0.1 under=  0.3 recall=96 leak=0.3 ms=16.2
+REC but bucket all test/fixture scopes=   30 root%= 19.4 p50=   5 p90=   40 tiny=   10 susp=    1 nested=   2 agree=   27 over= 72.7 under=  0.3 recall=96 leak=0.3 ms=15.8
+R3-F9 literal                scopes=   27 root%=   92 p50=   5 p90=   21 tiny=    8 susp=    0 nested=   0 agree= 99.7 over=    0 under=  0.3 recall=96 leak=0.3 ms=81.6
+bazel BUILD as manifest      scopes=   29 root%=   92 p50=   5 p90=   20 tiny=   10 susp=    0 nested=   2 agree= 99.5 over=  0.1 under=  0.3 recall=96 leak=0.3 ms=16.1
+
+## golang_tools files=2870 ls=20ms decls=… products=1
+v0-spec                      scopes=    4 root%= 56.3 p50=  54 p90= 1195 tiny=    0 susp=    1 nested=   1 agree= 97.9 over=  2.1 under=    0 recall=100 leak=0 ms=3
+F0 glob-needs-manifest       scopes=    4 root%= 56.3 p50=  54 p90= 1195 tiny=    0 susp=    1 nested=   1 agree= 97.9 over=  2.1 under=    0 recall=100 leak=0 ms=1.7
+F0+F1 deny                   scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=1.5
+F0+F2 membership             scopes=    4 root%= 56.3 p50=  54 p90= 1195 tiny=    0 susp=    1 nested=   1 agree= 97.9 over=  2.1 under=    0 recall=100 leak=0 ms=1.6
+F0+F1+F2                     scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=1.6
+F0+F1+bucket                 scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=2.1
+F0+F1+bucket+min2            scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=2.9
+F0+F1+bucket+min3            scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=3.4
+F0+F1+bucket+depth4          scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=2
+F0+F1+bucket+min2+poly       scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=3.4
+…+top200 (any repo)          scopes=    5 root%=  9.1 p50= 931 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 50.8 over= 49.2 under=    0 recall=100 leak=0 ms=3.8
+REC (…+top200 bazel-only)    scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=2.9
+REC but bucket all test/fixture scopes=    4 root%=   52 p50= 130 p90= 1195 tiny=    0 susp=    1 nested=   1 agree= 93.6 over=  6.4 under=    0 recall=100 leak=0 ms=3.1
+R3-F9 literal                scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=1.9
+bazel BUILD as manifest      scopes=    3 root%= 56.5 p50=1195 p90= 1195 tiny=    0 susp=    0 nested=   1 agree= 98.1 over=  1.9 under=    0 recall=100 leak=0 ms=1.7
+
+## kubernetes_kubernetes files=31425 ls=44ms decls=… products=108
+v0-spec                      scopes=   51 root%= 46.3 p50=  29 p90=  765 tiny=    4 susp=   14 nested=  15 agree= 72.4 over=  1.5 under= 26.1 recall=31 leak=26.1 ms=39.5
+F0 glob-needs-manifest       scopes=   39 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    2 nested=   4 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=35.7
+F0+F1 deny                   scopes=   37 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    0 nested=   2 agree= 73.8 over=  0.2 under= 26.1 recall=31 leak=26.1 ms=31.2
+F0+F2 membership             scopes=   39 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    2 nested=   4 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=35.6
+F0+F1+F2                     scopes=   37 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    0 nested=   2 agree= 73.8 over=  0.2 under= 26.1 recall=31 leak=26.1 ms=33
+F0+F1+bucket                 scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=32.4
+F0+F1+bucket+min2            scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=43.2
+F0+F1+bucket+min3            scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=40.5
+F0+F1+bucket+depth4          scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=29.8
+F0+F1+bucket+min2+poly       scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=46
+…+top200 (any repo)          scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=56
+REC (…+top200 bazel-only)    scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=47.9
+REC but bucket all test/fixture scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=47
+R3-F9 literal                scopes=   38 root%= 46.6 p50=  58 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 73.7 over=  0.2 under= 26.1 recall=31 leak=26.1 ms=38.4
+bazel BUILD as manifest      scopes=   38 root%= 46.6 p50=  63 p90= 1325 tiny=    0 susp=    1 nested=   3 agree= 72.7 over=  1.2 under= 26.1 recall=31 leak=26.1 ms=31.5
+
+## langchain-ai_langchain files=3169 ls=40ms decls=… products=23
+v0-spec                      scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=14.2
+F0 glob-needs-manifest       scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=2.7
+F0+F1 deny                   scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=2.8
+F0+F2 membership             scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=2.8
+F0+F1+F2                     scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=3.2
+F0+F1+bucket                 scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=2.9
+F0+F1+bucket+min2            scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=3.7
+F0+F1+bucket+min3            scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=3.5
+F0+F1+bucket+depth4          scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=2.7
+F0+F1+bucket+min2+poly       scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=4.2
+…+top200 (any repo)          scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=4.6
+REC (…+top200 bazel-only)    scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=3.8
+REC but bucket all test/fixture scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=4.1
+R3-F9 literal                scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=2.5
+bazel BUILD as manifest      scopes=   23 root%=  3.7 p50=  36 p90=  200 tiny=    0 susp=    0 nested=   0 agree= 99.9 over=    0 under=  0.1 recall=96 leak=0.1 ms=3.2
+
+## apache_airflow files=14404 ls=48ms decls=… products=135
+v0-spec                      scopes=  155 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  12 agree= 91.4 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=30.2
+F0 glob-needs-manifest       scopes=  155 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  12 agree= 91.4 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=16.5
+F0+F1 deny                   scopes=  155 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  12 agree= 91.4 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=17.4
+F0+F2 membership             scopes=  154 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  11 agree= 91.5 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=18.2
+F0+F1+F2                     scopes=  154 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  11 agree= 91.5 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=18.4
+F0+F1+bucket                 scopes=  155 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  12 agree= 91.4 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=17.9
+F0+F1+bucket+min2            scopes=  155 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  12 agree= 91.4 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=21.7
+F0+F1+bucket+min3            scopes=  155 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  12 agree= 91.4 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=22.4
+F0+F1+bucket+depth4          scopes=  151 root%=  3.1 p50=  40 p90=  161 tiny=    1 susp=    1 nested=   8 agree= 92.9 over=  6.4 under=  0.7 recall=99 leak=0.7 ms=16.7
+F0+F1+bucket+min2+poly       scopes=  168 root%=  2.4 p50=  39 p90=  108 tiny=    7 susp=    2 nested=  24 agree= 91.6 over=  8.4 under=    0 recall=99 leak=0 ms=23
+…+top200 (any repo)          scopes=  168 root%=  2.4 p50=  39 p90=  108 tiny=    7 susp=    2 nested=  24 agree= 91.6 over=  8.4 under=    0 recall=99 leak=0 ms=26
+REC (…+top200 bazel-only)    scopes=  168 root%=  2.4 p50=  39 p90=  108 tiny=    7 susp=    2 nested=  24 agree= 91.6 over=  8.4 under=    0 recall=99 leak=0 ms=22.5
+REC but bucket all test/fixture scopes=  169 root%=  2.4 p50=  39 p90=  115 tiny=    7 susp=    3 nested=  25 agree= 86.8 over= 13.2 under=    0 recall=99 leak=0 ms=23.4
+R3-F9 literal                scopes=  154 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    0 nested=  11 agree= 91.5 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=18.1
+bazel BUILD as manifest      scopes=  155 root%=  3.1 p50=  40 p90=  115 tiny=    1 susp=    1 nested=  12 agree= 91.4 over=  7.8 under=  0.7 recall=99 leak=0.7 ms=20.3
+
+## sindresorhus_got files=132 ls=20ms decls=… products=0
+v0-spec                      scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.7
+F0 glob-needs-manifest       scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.2
+F0+F1 deny                   scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.4
+F0+F2 membership             scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.3
+F0+F1+F2                     scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket                 scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket+min2            scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket+min3            scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket+depth4          scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket+min2+poly       scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.2
+…+top200 (any repo)          scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.2
+REC (…+top200 bazel-only)    scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+REC but bucket all test/fixture scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+R3-F9 literal                scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+bazel BUILD as manifest      scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+
+## psf_requests files=130 ls=19ms decls=… products=0
+v0-spec                      scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.7
+F0 glob-needs-manifest       scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.3
+F0+F1 deny                   scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.4
+F0+F2 membership             scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.2
+F0+F1+F2                     scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket                 scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket+min2            scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket+min3            scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.2
+F0+F1+bucket+depth4          scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+F0+F1+bucket+min2+poly       scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.3
+…+top200 (any repo)          scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.2
+REC (…+top200 bazel-only)    scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+REC but bucket all test/fixture scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+R3-F9 literal                scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.2
+bazel BUILD as manifest      scopes=    1 root%=  100 p50=   0 p90=    0 tiny=    0 susp=    0 nested=   0 agree=  100 over=    0 under=    0 recall=100 leak=0 ms=0.1
+
+## apache_arrow files=5335 ls=38ms decls=… products=14
+v0-spec                      scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=4.5
+F0 glob-needs-manifest       scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.8
+F0+F1 deny                   scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.7
+F0+F2 membership             scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.5
+F0+F1+F2                     scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.8
+F0+F1+bucket                 scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.8
+F0+F1+bucket+min2            scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=4.3
+F0+F1+bucket+min3            scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=4
+F0+F1+bucket+depth4          scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.7
+F0+F1+bucket+min2+poly       scopes=   16 root%= 14.3 p50= 116 p90=  608 tiny=    0 susp=    1 nested=   1 agree= 96.8 over=  3.2 under=  0.1 recall=93 leak=0.1 ms=17.5
+…+top200 (any repo)          scopes=   16 root%= 14.3 p50= 116 p90=  608 tiny=    0 susp=    1 nested=   1 agree= 96.8 over=  3.2 under=  0.1 recall=93 leak=0.1 ms=7.6
+REC (…+top200 bazel-only)    scopes=   16 root%= 14.3 p50= 116 p90=  608 tiny=    0 susp=    1 nested=   1 agree= 96.8 over=  3.2 under=  0.1 recall=93 leak=0.1 ms=6.7
+REC but bucket all test/fixture scopes=   16 root%= 14.3 p50= 116 p90=  608 tiny=    0 susp=    1 nested=   1 agree= 96.8 over=  3.2 under=  0.1 recall=93 leak=0.1 ms=7
+R3-F9 literal                scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.7
+bazel BUILD as manifest      scopes=    2 root%= 94.5 p50= 291 p90=  291 tiny=    0 susp=    0 nested=   0 agree= 21.9 over=    0 under= 78.1 recall=7 leak=78.1 ms=2.6
+
+## buildbuddy-io_buildbuddy files=3525 ls=78ms decls=… products=6
+v0-spec                      scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=3.9
+F0 glob-needs-manifest       scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=1.9
+F0+F1 deny                   scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=2
+F0+F2 membership             scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=2
+F0+F1+F2                     scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=2
+F0+F1+bucket                 scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=1.9
+F0+F1+bucket+min2            scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=2.7
+F0+F1+bucket+min3            scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=2.7
+F0+F1+bucket+depth4          scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=1.8
+F0+F1+bucket+min2+poly       scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=3.1
+…+top200 (any repo)          scopes=    6 root%= 20.2 p50= 519 p90= 1025 tiny=    0 susp=    0 nested=   0 agree=   98 over=    0 under=    2 recall=83 leak=2 ms=4.2
+REC (…+top200 bazel-only)    scopes=    6 root%= 20.2 p50= 519 p90= 1025 tiny=    0 susp=    0 nested=   0 agree=   98 over=    0 under=    2 recall=83 leak=2 ms=4.1
+REC but bucket all test/fixture scopes=    6 root%= 20.2 p50= 519 p90= 1025 tiny=    0 susp=    0 nested=   0 agree=   98 over=    0 under=    2 recall=83 leak=2 ms=4.1
+R3-F9 literal                scopes=    2 root%= 85.3 p50= 519 p90=  519 tiny=    0 susp=    0 nested=   0 agree= 32.9 over=    0 under= 67.1 recall=17 leak=67.1 ms=2.3
+bazel BUILD as manifest      scopes=  794 root%=    5 p50=   3 p90=    5 tiny=  711 susp=    0 nested= 757 agree= 21.2 over= 78.6 under=  0.2 recall=83 leak=0.2 ms=2.9
+
+## babel_babel files=27735 ls=49ms decls=… products=155
+v0-spec                      scopes=  172 root%=  0.6 p50=  24 p90=  215 tiny=   15 susp=   14 nested=   8 agree= 99.6 over=  0.4 under=    0 recall=100 leak=0 ms=44.7
+F0 glob-needs-manifest       scopes=  172 root%=  0.6 p50=  24 p90=  215 tiny=   15 susp=   14 nested=   8 agree= 99.6 over=  0.4 under=    0 recall=100 leak=0 ms=33.8
+F0+F1 deny                   scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=31
+F0+F2 membership             scopes=  163 root%=  0.6 p50=  26 p90=  242 tiny=    6 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=29
+F0+F1+F2                     scopes=  163 root%=  0.6 p50=  26 p90=  242 tiny=    6 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=30.1
+F0+F1+bucket                 scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=28.9
+F0+F1+bucket+min2            scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=41.1
+F0+F1+bucket+min3            scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=41.6
+F0+F1+bucket+depth4          scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=27.4
+F0+F1+bucket+min2+poly       scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=41.1
+…+top200 (any repo)          scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=59.5
+REC (…+top200 bazel-only)    scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=45
+REC but bucket all test/fixture scopes=  166 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    8 nested=   2 agree=   98 over=    2 under=    0 recall=100 leak=0 ms=42.5
+R3-F9 literal                scopes=  157 root%=  0.7 p50=  27 p90=  249 tiny=    1 susp=    0 nested=   0 agree= 99.8 over=  0.2 under=    0 recall=100 leak=0 ms=29.9
+bazel BUILD as manifest      scopes=  164 root%=  0.6 p50=  26 p90=  242 tiny=    7 susp=    6 nested=   0 agree= 99.7 over=  0.3 under=    0 recall=100 leak=0 ms=30.5
+
+## supabase_supabase files=17669 ls=43ms decls=… products=93
+v0-spec                      scopes=   66 root%=  6.1 p50=  20 p90=  192 tiny=    3 susp=   41 nested=   0 agree= 95.4 over=  0.5 under=  4.1 recall=62 leak=4 ms=23.4
+F0 glob-needs-manifest       scopes=   66 root%=  6.1 p50=  20 p90=  192 tiny=    3 susp=   41 nested=   0 agree= 95.4 over=  0.5 under=  4.1 recall=62 leak=4 ms=13.9
+F0+F1 deny                   scopes=   29 root%= 10.3 p50=  66 p90= 2810 tiny=    2 susp=    4 nested=   0 agree= 91.8 over=    0 under=  8.2 recall=30 leak=8.2 ms=13.6
+F0+F2 membership             scopes=   32 root%= 10.2 p50=  20 p90=  597 tiny=    3 susp=    7 nested=   0 agree= 91.9 over=    0 under=    8 recall=32 leak=8 ms=13.3
+F0+F1+F2                     scopes=   29 root%= 10.3 p50=  66 p90= 2810 tiny=    2 susp=    4 nested=   0 agree= 91.8 over=    0 under=  8.2 recall=30 leak=8.2 ms=13.3
+F0+F1+bucket                 scopes=   30 root%=  1.9 p50=  66 p90= 2810 tiny=    2 susp=    5 nested=   0 agree= 91.6 over=  0.2 under=  8.2 recall=30 leak=0 ms=17.7
+F0+F1+bucket+min2            scopes=   30 root%=  1.9 p50=  66 p90= 2810 tiny=    2 susp=    5 nested=   0 agree= 91.6 over=  0.2 under=  8.2 recall=30 leak=0 ms=18.6
+F0+F1+bucket+min3            scopes=   30 root%=  1.9 p50=  66 p90= 2810 tiny=    2 susp=    5 nested=   0 agree= 91.6 over=  0.2 under=  8.2 recall=30 leak=0 ms=18.7
+F0+F1+bucket+depth4          scopes=   30 root%=  1.9 p50=  66 p90= 2810 tiny=    2 susp=    5 nested=   0 agree= 91.6 over=  0.2 under=  8.2 recall=30 leak=0 ms=12.5
+F0+F1+bucket+min2+poly       scopes=   32 root%=  1.9 p50=  51 p90= 1486 tiny=    2 susp=    5 nested=   1 agree= 91.5 over=  0.3 under=  8.2 recall=30 leak=0 ms=21.2
+…+top200 (any repo)          scopes=   32 root%=  1.9 p50=  51 p90= 1486 tiny=    2 susp=    5 nested=   1 agree= 91.5 over=  0.3 under=  8.2 recall=30 leak=0 ms=26.2
+REC (…+top200 bazel-only)    scopes=   32 root%=  1.9 p50=  51 p90= 1486 tiny=    2 susp=    5 nested=   1 agree= 91.5 over=  0.3 under=  8.2 recall=30 leak=0 ms=21.2
+REC but bucket all test/fixture scopes=   32 root%=  1.9 p50=  51 p90= 1486 tiny=    2 susp=    5 nested=   1 agree= 91.5 over=  0.3 under=  8.2 recall=30 leak=0 ms=19.6
+R3-F9 literal                scopes=   25 root%=   11 p50=  85 p90= 2810 tiny=    2 susp=    0 nested=   0 agree= 91.2 over=    0 under=  8.8 recall=26 leak=8.8 ms=12
+bazel BUILD as manifest      scopes=   30 root%=  1.9 p50=  66 p90= 2810 tiny=    2 susp=    5 nested=   0 agree= 91.6 over=  0.2 under=  8.2 recall=30 leak=0 ms=12
+
+## denoland_deno files=14896 ls=138ms decls=… products=74
+v0-spec                      scopes=  529 root%= 11.1 p50=   3 p90=    9 tiny=  400 susp=  457 nested= 237 agree= 79.9 over=  9.9 under= 10.2 recall=93 leak=10.2 ms=140.9
+F0 glob-needs-manifest       scopes=  526 root%= 11.1 p50=   3 p90=    9 tiny=  397 susp=  454 nested= 234 agree= 79.9 over=  9.9 under= 10.2 recall=93 leak=10.2 ms=73.2
+F0+F1 deny                   scopes=   85 root%= 15.1 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  12 agree= 84.9 over=  0.9 under= 14.2 recall=92 leak=14.2 ms=46
+F0+F2 membership             scopes=  519 root%= 11.3 p50=   3 p90=    9 tiny=  393 susp=  454 nested= 232 agree= 79.7 over=  9.9 under= 10.4 recall=86 leak=10.4 ms=65.6
+F0+F1+F2                     scopes=   78 root%= 15.3 p50=  10 p90=  125 tiny=   15 susp=   13 nested=  10 agree= 84.7 over=  0.9 under= 14.4 recall=85 leak=14.4 ms=46.4
+F0+F1+bucket                 scopes=   85 root%= 15.1 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  12 agree= 84.9 over=  0.9 under= 14.2 recall=92 leak=14.2 ms=46.7
+F0+F1+bucket+min2            scopes=   85 root%= 15.1 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  12 agree= 84.9 over=  0.9 under= 14.2 recall=92 leak=14.2 ms=49.5
+F0+F1+bucket+min3            scopes=   80 root%= 15.1 p50=  10 p90=  125 tiny=   14 susp=   12 nested=   9 agree=   85 over=  0.8 under= 14.2 recall=92 leak=14.2 ms=46.3
+F0+F1+bucket+depth4          scopes=   85 root%= 15.1 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  12 agree= 84.9 over=  0.9 under= 14.2 recall=92 leak=14.2 ms=43.6
+F0+F1+bucket+min2+poly       scopes=   87 root%= 14.6 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  14 agree= 84.5 over=  1.4 under= 14.2 recall=92 leak=14.2 ms=49.7
+…+top200 (any repo)          scopes=   87 root%= 14.6 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  14 agree= 84.5 over=  1.4 under= 14.2 recall=92 leak=14.2 ms=55.4
+REC (…+top200 bazel-only)    scopes=   87 root%= 14.6 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  14 agree= 84.5 over=  1.4 under= 14.2 recall=92 leak=14.2 ms=52.9
+REC but bucket all test/fixture scopes=   89 root%=  0.4 p50=  10 p90=  125 tiny=   19 susp=   15 nested=  27 agree= 84.4 over=  1.4 under= 14.2 recall=92 leak=0 ms=47.7
+R3-F9 literal                scopes=   65 root%= 85.7 p50=  10 p90=   56 tiny=   14 susp=    0 nested=   9 agree= 14.7 over=  0.5 under= 84.8 recall=73 leak=84.8 ms=59.6
+bazel BUILD as manifest      scopes=   85 root%= 15.1 p50=  10 p90=  111 tiny=   19 susp=   13 nested=  12 agree= 84.9 over=  0.9 under= 14.2 recall=92 leak=14.2 ms=43.8
+
+## Eden files=5289 ls=43ms decls=… products=34
+v0-spec                      scopes=   36 root%=  4.1 p50=  24 p90=  118 tiny=    3 susp=   12 nested=  10 agree=   89 over= 10.3 under=  0.8 recall=88 leak=0.7 ms=9.9
+F0 glob-needs-manifest       scopes=   27 root%=    7 p50=  36 p90=  509 tiny=    1 susp=   11 nested=  10 agree= 86.1 over= 10.3 under=  3.6 recall=62 leak=3.6 ms=3.4
+F0+F1 deny                   scopes=   16 root%=   86 p50=  36 p90=  114 tiny=    1 susp=    0 nested=   0 agree= 17.3 over=    0 under= 82.7 recall=44 leak=82.7 ms=3.4
+F0+F2 membership             scopes=   23 root%=    7 p50=  33 p90=  114 tiny=    1 susp=    7 nested=   6 agree= 78.9 over=  0.5 under= 20.7 recall=56 leak=3.6 ms=3.2
+F0+F1+F2                     scopes=   16 root%=   86 p50=  36 p90=  114 tiny=    1 susp=    0 nested=   0 agree= 17.3 over=    0 under= 82.7 recall=44 leak=82.7 ms=3.2
+F0+F1+bucket                 scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=3.3
+F0+F1+bucket+min2            scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=4.9
+F0+F1+bucket+min3            scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=5.1
+F0+F1+bucket+depth4          scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=3.6
+F0+F1+bucket+min2+poly       scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=6.3
+…+top200 (any repo)          scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=7.3
+REC (…+top200 bazel-only)    scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=5.9
+REC but bucket all test/fixture scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=6
+R3-F9 literal                scopes=   16 root%=   86 p50=  36 p90=  114 tiny=    1 susp=    0 nested=   0 agree= 17.3 over=    0 under= 82.7 recall=44 leak=82.7 ms=3.8
+bazel BUILD as manifest      scopes=   17 root%=    7 p50=  39 p90=  118 tiny=    1 susp=    1 nested=   0 agree= 76.9 over=    0 under= 23.1 recall=47 leak=3.6 ms=3.8

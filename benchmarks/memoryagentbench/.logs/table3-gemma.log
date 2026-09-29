@@ -1,0 +1,4 @@
+NIM smoke: (True, "ok model=google/gemma-4-31b-it reply='pong'")
+
+========== fc_sh configs/data_conf/Conflict_Resolution/Factconsolidation_sh_262k.yaml ==========
+

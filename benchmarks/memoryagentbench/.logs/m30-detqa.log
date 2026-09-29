@@ -1,0 +1,1198 @@
+NIM smoke: (True, "ok model=google/gemma-4-31b-it reply='pong'")
+
+========== detqa configs/data_conf/Long_Range_Understanding/Detective_QA.yaml ==========
+
+archived stale /tmp/MemoryAgentBench/outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json → /tmp/MemoryAgentBench/outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/archive/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.pre-force-1.json
+
+
+Using agent-specific chunk_size: 4096
+
+
+09/21/2026 16:33:44 - INFO - conversation_creator - Running test on detective_qa
+Dataset: detective_qa
+Loading detective_qa from Hugging Face dataset: ai-hyz/MemoryAgentBench
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+09/21/2026 16:33:45 - WARNING - huggingface_hub.utils._http - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loaded 110 samples from Long_Range_Understanding
+Filtered to 10 samples matching source 'detective_qa' (from 110 total)
+Dataset length: 10, each sample has 6 qa pairs
+  0%|          | 0/10 [00:00<?, ?it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 1/10:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 1/10: 100%|██████████| 25/25 [00:00<00:00, 3748.13it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 6 queries for context 0!!!!!
+
+
+  0%|          | 0/6 [00:00<?, ?it/s][AEden inject flush stored=206
+NIM reader using google/gemma-4-31b-it
+09/21/2026 16:34:21 - INFO - __main__ - exact_match: 100.00
+09/21/2026 16:34:21 - INFO - __main__ - f1: 100.00
+09/21/2026 16:34:21 - INFO - __main__ - substring_exact_match: 100.00
+09/21/2026 16:34:21 - INFO - __main__ - rougeL_f1: 100.00
+09/21/2026 16:34:21 - INFO - __main__ - rougeL_recall: 100.00
+09/21/2026 16:34:21 - INFO - __main__ - rougeLsum_f1: 100.00
+09/21/2026 16:34:21 - INFO - __main__ - rougeLsum_recall: 100.00
+09/21/2026 16:34:21 - INFO - __main__ - input_len: 5078.00
+09/21/2026 16:34:21 - INFO - __main__ - output_len: 227.00
+09/21/2026 16:34:21 - INFO - __main__ - memory_construction_time: 0.79
+09/21/2026 16:34:21 - INFO - __main__ - query_time_len: 31.60
+09/21/2026 16:34:21 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 17%|█▋        | 1/6 [00:32<02:41, 32.39s/it][AEden inject flush stored=207
+09/21/2026 16:34:53 - INFO - __main__ - exact_match: 100.00
+09/21/2026 16:34:53 - INFO - __main__ - f1: 100.00
+09/21/2026 16:34:53 - INFO - __main__ - substring_exact_match: 100.00
+09/21/2026 16:34:53 - INFO - __main__ - rougeL_f1: 100.00
+09/21/2026 16:34:53 - INFO - __main__ - rougeL_recall: 100.00
+09/21/2026 16:34:53 - INFO - __main__ - rougeLsum_f1: 100.00
+09/21/2026 16:34:53 - INFO - __main__ - rougeLsum_recall: 100.00
+09/21/2026 16:34:53 - INFO - __main__ - input_len: 5052.50
+09/21/2026 16:34:53 - INFO - __main__ - output_len: 214.50
+09/21/2026 16:34:53 - INFO - __main__ - memory_construction_time: 0.41
+09/21/2026 16:34:53 - INFO - __main__ - query_time_len: 31.98
+09/21/2026 16:34:53 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 33%|███▎      | 2/6 [01:04<02:09, 32.39s/it][AEden inject flush stored=208
+09/21/2026 16:35:25 - INFO - __main__ - exact_match: 66.67
+09/21/2026 16:35:25 - INFO - __main__ - f1: 66.67
+09/21/2026 16:35:25 - INFO - __main__ - substring_exact_match: 66.67
+09/21/2026 16:35:25 - INFO - __main__ - rougeL_f1: 66.67
+09/21/2026 16:35:25 - INFO - __main__ - rougeL_recall: 66.67
+09/21/2026 16:35:25 - INFO - __main__ - rougeLsum_f1: 66.67
+09/21/2026 16:35:25 - INFO - __main__ - rougeLsum_recall: 66.67
+09/21/2026 16:35:25 - INFO - __main__ - input_len: 4984.33
+09/21/2026 16:35:25 - INFO - __main__ - output_len: 186.67
+09/21/2026 16:35:25 - INFO - __main__ - memory_construction_time: 0.28
+09/21/2026 16:35:25 - INFO - __main__ - query_time_len: 32.08
+09/21/2026 16:35:25 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 3/6 [01:37<01:37, 32.36s/it][AEden inject flush stored=209
+09/21/2026 16:36:03 - INFO - __main__ - exact_match: 75.00
+09/21/2026 16:36:03 - INFO - __main__ - f1: 75.00
+09/21/2026 16:36:03 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 16:36:03 - INFO - __main__ - rougeL_f1: 75.00
+09/21/2026 16:36:03 - INFO - __main__ - rougeL_recall: 75.00
+09/21/2026 16:36:03 - INFO - __main__ - rougeLsum_f1: 75.00
+09/21/2026 16:36:03 - INFO - __main__ - rougeLsum_recall: 75.00
+09/21/2026 16:36:03 - INFO - __main__ - input_len: 4991.25
+09/21/2026 16:36:03 - INFO - __main__ - output_len: 181.50
+09/21/2026 16:36:03 - INFO - __main__ - memory_construction_time: 0.22
+09/21/2026 16:36:03 - INFO - __main__ - query_time_len: 33.37
+09/21/2026 16:36:03 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 67%|██████▋   | 4/6 [02:14<01:08, 34.29s/it][AEden inject flush stored=211
+09/21/2026 16:36:39 - INFO - __main__ - exact_match: 80.00
+09/21/2026 16:36:39 - INFO - __main__ - f1: 80.00
+09/21/2026 16:36:39 - INFO - __main__ - substring_exact_match: 80.00
+09/21/2026 16:36:39 - INFO - __main__ - rougeL_f1: 80.00
+09/21/2026 16:36:39 - INFO - __main__ - rougeL_recall: 80.00
+09/21/2026 16:36:39 - INFO - __main__ - rougeLsum_f1: 80.00
+09/21/2026 16:36:39 - INFO - __main__ - rougeLsum_recall: 80.00
+09/21/2026 16:36:39 - INFO - __main__ - input_len: 4898.80
+09/21/2026 16:36:39 - INFO - __main__ - output_len: 175.00
+09/21/2026 16:36:39 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 16:36:39 - INFO - __main__ - query_time_len: 33.89
+09/21/2026 16:36:39 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 83%|████████▎ | 5/6 [02:50<00:34, 34.91s/it][AEden inject flush stored=212
+09/21/2026 16:37:15 - INFO - __main__ - exact_match: 83.33
+09/21/2026 16:37:15 - INFO - __main__ - f1: 83.33
+09/21/2026 16:37:15 - INFO - __main__ - substring_exact_match: 83.33
+09/21/2026 16:37:15 - INFO - __main__ - rougeL_f1: 83.33
+09/21/2026 16:37:15 - INFO - __main__ - rougeL_recall: 83.33
+09/21/2026 16:37:15 - INFO - __main__ - rougeLsum_f1: 83.33
+09/21/2026 16:37:15 - INFO - __main__ - rougeLsum_recall: 83.33
+09/21/2026 16:37:15 - INFO - __main__ - input_len: 4730.50
+09/21/2026 16:37:15 - INFO - __main__ - output_len: 180.50
+09/21/2026 16:37:15 - INFO - __main__ - memory_construction_time: 0.16
+09/21/2026 16:37:15 - INFO - __main__ - query_time_len: 34.34
+09/21/2026 16:37:15 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 6/6 [03:26<00:00, 35.49s/it][A100%|██████████| 6/6 [03:26<00:00, 34.50s/it]
+ 10%|█         | 1/10 [03:27<31:03, 207.07s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 2/10:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 2/10: 100%|██████████| 25/25 [00:00<00:00, 4132.97it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 6 queries for context 1!!!!!
+
+
+  0%|          | 0/6 [00:00<?, ?it/s][AEden inject flush stored=244
+09/21/2026 16:37:47 - INFO - __main__ - exact_match: 71.43
+09/21/2026 16:37:47 - INFO - __main__ - f1: 71.43
+09/21/2026 16:37:47 - INFO - __main__ - substring_exact_match: 71.43
+09/21/2026 16:37:47 - INFO - __main__ - rougeL_f1: 71.43
+09/21/2026 16:37:47 - INFO - __main__ - rougeL_recall: 71.43
+09/21/2026 16:37:47 - INFO - __main__ - rougeLsum_f1: 71.43
+09/21/2026 16:37:47 - INFO - __main__ - rougeLsum_recall: 71.43
+09/21/2026 16:37:47 - INFO - __main__ - input_len: 4758.29
+09/21/2026 16:37:47 - INFO - __main__ - output_len: 193.14
+09/21/2026 16:37:47 - INFO - __main__ - memory_construction_time: 0.27
+09/21/2026 16:37:47 - INFO - __main__ - query_time_len: 33.90
+09/21/2026 16:37:47 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 17%|█▋        | 1/6 [00:32<02:40, 32.18s/it][AEden inject flush stored=245
+09/21/2026 16:38:20 - INFO - __main__ - exact_match: 62.50
+09/21/2026 16:38:20 - INFO - __main__ - f1: 64.58
+09/21/2026 16:38:20 - INFO - __main__ - substring_exact_match: 62.50
+09/21/2026 16:38:20 - INFO - __main__ - rougeL_f1: 64.42
+09/21/2026 16:38:20 - INFO - __main__ - rougeL_recall: 65.00
+09/21/2026 16:38:20 - INFO - __main__ - rougeLsum_f1: 64.42
+09/21/2026 16:38:20 - INFO - __main__ - rougeLsum_recall: 65.00
+09/21/2026 16:38:20 - INFO - __main__ - input_len: 4710.88
+09/21/2026 16:38:20 - INFO - __main__ - output_len: 199.25
+09/21/2026 16:38:20 - INFO - __main__ - memory_construction_time: 0.24
+09/21/2026 16:38:20 - INFO - __main__ - query_time_len: 33.76
+09/21/2026 16:38:20 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 33%|███▎      | 2/6 [01:05<02:10, 32.56s/it][AEden inject flush stored=246
+09/21/2026 16:39:05 - INFO - __main__ - exact_match: 66.67
+09/21/2026 16:39:05 - INFO - __main__ - f1: 68.52
+09/21/2026 16:39:05 - INFO - __main__ - substring_exact_match: 66.67
+09/21/2026 16:39:05 - INFO - __main__ - rougeL_f1: 68.38
+09/21/2026 16:39:05 - INFO - __main__ - rougeL_recall: 68.89
+09/21/2026 16:39:05 - INFO - __main__ - rougeLsum_f1: 68.38
+09/21/2026 16:39:05 - INFO - __main__ - rougeLsum_recall: 68.89
+09/21/2026 16:39:05 - INFO - __main__ - input_len: 4672.11
+09/21/2026 16:39:05 - INFO - __main__ - output_len: 197.22
+09/21/2026 16:39:05 - INFO - __main__ - memory_construction_time: 0.22
+09/21/2026 16:39:05 - INFO - __main__ - query_time_len: 34.95
+09/21/2026 16:39:05 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 3/6 [01:49<01:54, 38.04s/it][AEden inject flush stored=247
+09/21/2026 16:39:52 - INFO - __main__ - exact_match: 70.00
+09/21/2026 16:39:52 - INFO - __main__ - f1: 71.67
+09/21/2026 16:39:52 - INFO - __main__ - substring_exact_match: 70.00
+09/21/2026 16:39:52 - INFO - __main__ - rougeL_f1: 71.54
+09/21/2026 16:39:52 - INFO - __main__ - rougeL_recall: 72.00
+09/21/2026 16:39:52 - INFO - __main__ - rougeLsum_f1: 71.54
+09/21/2026 16:39:52 - INFO - __main__ - rougeLsum_recall: 72.00
+09/21/2026 16:39:52 - INFO - __main__ - input_len: 4605.40
+09/21/2026 16:39:52 - INFO - __main__ - output_len: 191.80
+09/21/2026 16:39:52 - INFO - __main__ - memory_construction_time: 0.20
+09/21/2026 16:39:52 - INFO - __main__ - query_time_len: 36.14
+09/21/2026 16:39:52 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 67%|██████▋   | 4/6 [02:36<01:23, 41.53s/it][AEden inject flush stored=248
+09/21/2026 16:40:38 - INFO - __main__ - exact_match: 72.73
+09/21/2026 16:40:38 - INFO - __main__ - f1: 74.24
+09/21/2026 16:40:38 - INFO - __main__ - substring_exact_match: 72.73
+09/21/2026 16:40:38 - INFO - __main__ - rougeL_f1: 74.13
+09/21/2026 16:40:38 - INFO - __main__ - rougeL_recall: 74.55
+09/21/2026 16:40:38 - INFO - __main__ - rougeLsum_f1: 74.13
+09/21/2026 16:40:38 - INFO - __main__ - rougeLsum_recall: 74.55
+09/21/2026 16:40:38 - INFO - __main__ - input_len: 4490.91
+09/21/2026 16:40:38 - INFO - __main__ - output_len: 193.27
+09/21/2026 16:40:38 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 16:40:38 - INFO - __main__ - query_time_len: 37.02
+09/21/2026 16:40:38 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 83%|████████▎ | 5/6 [03:22<00:43, 43.07s/it][AEden inject flush stored=249
+09/21/2026 16:41:29 - INFO - __main__ - exact_match: 75.00
+09/21/2026 16:41:29 - INFO - __main__ - f1: 76.39
+09/21/2026 16:41:29 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 16:41:29 - INFO - __main__ - rougeL_f1: 76.28
+09/21/2026 16:41:29 - INFO - __main__ - rougeL_recall: 76.67
+09/21/2026 16:41:29 - INFO - __main__ - rougeLsum_f1: 76.28
+09/21/2026 16:41:29 - INFO - __main__ - rougeLsum_recall: 76.67
+09/21/2026 16:41:29 - INFO - __main__ - input_len: 4459.50
+09/21/2026 16:41:29 - INFO - __main__ - output_len: 191.33
+09/21/2026 16:41:29 - INFO - __main__ - memory_construction_time: 0.17
+09/21/2026 16:41:29 - INFO - __main__ - query_time_len: 38.24
+09/21/2026 16:41:29 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 6/6 [04:13<00:00, 46.02s/it][A100%|██████████| 6/6 [04:13<00:00, 42.33s/it]
+ 20%|██        | 2/10 [07:41<31:17, 234.68s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 3/10:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 3/10: 100%|██████████| 25/25 [00:00<00:00, 5482.46it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 8 queries for context 2!!!!!
+
+
+  0%|          | 0/8 [00:00<?, ?it/s][AEden inject flush stored=259
+09/21/2026 16:42:21 - INFO - __main__ - exact_match: 76.92
+09/21/2026 16:42:21 - INFO - __main__ - f1: 78.21
+09/21/2026 16:42:21 - INFO - __main__ - substring_exact_match: 76.92
+09/21/2026 16:42:21 - INFO - __main__ - rougeL_f1: 78.11
+09/21/2026 16:42:21 - INFO - __main__ - rougeL_recall: 78.46
+09/21/2026 16:42:21 - INFO - __main__ - rougeLsum_f1: 78.11
+09/21/2026 16:42:21 - INFO - __main__ - rougeLsum_recall: 78.46
+09/21/2026 16:42:21 - INFO - __main__ - input_len: 4508.85
+09/21/2026 16:42:21 - INFO - __main__ - output_len: 184.62
+09/21/2026 16:42:21 - INFO - __main__ - memory_construction_time: 0.22
+09/21/2026 16:42:21 - INFO - __main__ - query_time_len: 39.25
+09/21/2026 16:42:21 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 12%|█▎        | 1/8 [00:52<06:05, 52.17s/it][AEden inject flush stored=260
+09/21/2026 16:42:52 - INFO - __main__ - exact_match: 71.43
+09/21/2026 16:42:52 - INFO - __main__ - f1: 72.62
+09/21/2026 16:42:52 - INFO - __main__ - substring_exact_match: 71.43
+09/21/2026 16:42:52 - INFO - __main__ - rougeL_f1: 72.53
+09/21/2026 16:42:52 - INFO - __main__ - rougeL_recall: 72.86
+09/21/2026 16:42:52 - INFO - __main__ - rougeLsum_f1: 72.53
+09/21/2026 16:42:52 - INFO - __main__ - rougeLsum_recall: 72.86
+09/21/2026 16:42:52 - INFO - __main__ - input_len: 4513.79
+09/21/2026 16:42:52 - INFO - __main__ - output_len: 182.50
+09/21/2026 16:42:52 - INFO - __main__ - memory_construction_time: 0.21
+09/21/2026 16:42:52 - INFO - __main__ - query_time_len: 38.61
+09/21/2026 16:42:52 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 25%|██▌       | 2/8 [01:22<03:55, 39.29s/it][AEden inject flush stored=261
+09/21/2026 16:43:58 - INFO - __main__ - exact_match: 73.33
+09/21/2026 16:43:58 - INFO - __main__ - f1: 74.44
+09/21/2026 16:43:58 - INFO - __main__ - substring_exact_match: 73.33
+09/21/2026 16:43:58 - INFO - __main__ - rougeL_f1: 74.36
+09/21/2026 16:43:58 - INFO - __main__ - rougeL_recall: 74.67
+09/21/2026 16:43:58 - INFO - __main__ - rougeLsum_f1: 74.36
+09/21/2026 16:43:58 - INFO - __main__ - rougeLsum_recall: 74.67
+09/21/2026 16:43:58 - INFO - __main__ - input_len: 4514.53
+09/21/2026 16:43:58 - INFO - __main__ - output_len: 181.33
+09/21/2026 16:43:58 - INFO - __main__ - memory_construction_time: 0.20
+09/21/2026 16:43:58 - INFO - __main__ - query_time_len: 40.45
+09/21/2026 16:43:58 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 38%|███▊      | 3/8 [02:28<04:18, 51.61s/it][AEden inject flush stored=264
+09/21/2026 16:44:46 - INFO - __main__ - exact_match: 75.00
+09/21/2026 16:44:46 - INFO - __main__ - f1: 76.04
+09/21/2026 16:44:46 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 16:44:46 - INFO - __main__ - rougeL_f1: 75.96
+09/21/2026 16:44:46 - INFO - __main__ - rougeL_recall: 76.25
+09/21/2026 16:44:46 - INFO - __main__ - rougeLsum_f1: 75.96
+09/21/2026 16:44:46 - INFO - __main__ - rougeLsum_recall: 76.25
+09/21/2026 16:44:46 - INFO - __main__ - input_len: 4545.88
+09/21/2026 16:44:46 - INFO - __main__ - output_len: 179.88
+09/21/2026 16:44:46 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 16:44:46 - INFO - __main__ - query_time_len: 40.90
+09/21/2026 16:44:46 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 4/8 [03:16<03:20, 50.11s/it][AEden inject flush stored=267
+09/21/2026 16:45:38 - INFO - __main__ - exact_match: 76.47
+09/21/2026 16:45:38 - INFO - __main__ - f1: 77.45
+09/21/2026 16:45:38 - INFO - __main__ - substring_exact_match: 76.47
+09/21/2026 16:45:38 - INFO - __main__ - rougeL_f1: 77.38
+09/21/2026 16:45:38 - INFO - __main__ - rougeL_recall: 77.65
+09/21/2026 16:45:38 - INFO - __main__ - rougeLsum_f1: 77.38
+09/21/2026 16:45:38 - INFO - __main__ - rougeLsum_recall: 77.65
+09/21/2026 16:45:38 - INFO - __main__ - input_len: 4558.06
+09/21/2026 16:45:38 - INFO - __main__ - output_len: 180.12
+09/21/2026 16:45:38 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 16:45:38 - INFO - __main__ - query_time_len: 41.54
+09/21/2026 16:45:38 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 62%|██████▎   | 5/8 [04:08<02:32, 50.69s/it][AEden inject flush stored=268
+09/21/2026 16:47:32 - INFO - __main__ - exact_match: 77.78
+09/21/2026 16:47:32 - INFO - __main__ - f1: 78.70
+09/21/2026 16:47:32 - INFO - __main__ - substring_exact_match: 77.78
+09/21/2026 16:47:32 - INFO - __main__ - rougeL_f1: 78.63
+09/21/2026 16:47:32 - INFO - __main__ - rougeL_recall: 78.89
+09/21/2026 16:47:32 - INFO - __main__ - rougeLsum_f1: 78.63
+09/21/2026 16:47:32 - INFO - __main__ - rougeLsum_recall: 78.89
+09/21/2026 16:47:32 - INFO - __main__ - input_len: 4577.50
+09/21/2026 16:47:32 - INFO - __main__ - output_len: 179.61
+09/21/2026 16:47:32 - INFO - __main__ - memory_construction_time: 0.17
+09/21/2026 16:47:32 - INFO - __main__ - query_time_len: 45.61
+09/21/2026 16:47:32 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 75%|███████▌  | 6/8 [06:03<02:25, 72.50s/it][AEden inject flush stored=269
+09/21/2026 16:49:27 - INFO - __main__ - exact_match: 73.68
+09/21/2026 16:49:27 - INFO - __main__ - f1: 74.56
+09/21/2026 16:49:27 - INFO - __main__ - substring_exact_match: 73.68
+09/21/2026 16:49:27 - INFO - __main__ - rougeL_f1: 74.49
+09/21/2026 16:49:27 - INFO - __main__ - rougeL_recall: 74.74
+09/21/2026 16:49:27 - INFO - __main__ - rougeLsum_f1: 74.49
+09/21/2026 16:49:27 - INFO - __main__ - rougeLsum_recall: 74.74
+09/21/2026 16:49:27 - INFO - __main__ - input_len: 4578.16
+09/21/2026 16:49:27 - INFO - __main__ - output_len: 180.68
+09/21/2026 16:49:27 - INFO - __main__ - memory_construction_time: 0.16
+09/21/2026 16:49:27 - INFO - __main__ - query_time_len: 49.25
+09/21/2026 16:49:27 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 88%|████████▊ | 7/8 [07:57<01:26, 86.35s/it][AEden inject flush stored=270
+09/21/2026 16:50:16 - INFO - __main__ - exact_match: 75.00
+09/21/2026 16:50:16 - INFO - __main__ - f1: 75.83
+09/21/2026 16:50:16 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 16:50:16 - INFO - __main__ - rougeL_f1: 75.77
+09/21/2026 16:50:16 - INFO - __main__ - rougeL_recall: 76.00
+09/21/2026 16:50:16 - INFO - __main__ - rougeLsum_f1: 75.77
+09/21/2026 16:50:16 - INFO - __main__ - rougeLsum_recall: 76.00
+09/21/2026 16:50:16 - INFO - __main__ - input_len: 4600.45
+09/21/2026 16:50:16 - INFO - __main__ - output_len: 181.95
+09/21/2026 16:50:16 - INFO - __main__ - memory_construction_time: 0.16
+09/21/2026 16:50:16 - INFO - __main__ - query_time_len: 49.25
+09/21/2026 16:50:16 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 8/8 [08:47<00:00, 74.53s/it][A100%|██████████| 8/8 [08:47<00:00, 65.90s/it]
+ 30%|███       | 3/10 [16:28<42:57, 368.25s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 4/10:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 4/10: 100%|██████████| 29/29 [00:00<00:00, 5280.43it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 6 queries for context 3!!!!!
+
+
+  0%|          | 0/6 [00:00<?, ?it/s][AEden inject flush stored=300
+09/21/2026 16:52:22 - INFO - __main__ - exact_match: 71.43
+09/21/2026 16:52:22 - INFO - __main__ - f1: 72.22
+09/21/2026 16:52:22 - INFO - __main__ - substring_exact_match: 71.43
+09/21/2026 16:52:22 - INFO - __main__ - rougeL_f1: 72.16
+09/21/2026 16:52:22 - INFO - __main__ - rougeL_recall: 72.38
+09/21/2026 16:52:22 - INFO - __main__ - rougeLsum_f1: 72.16
+09/21/2026 16:52:22 - INFO - __main__ - rougeLsum_recall: 72.38
+09/21/2026 16:52:22 - INFO - __main__ - input_len: 4616.76
+09/21/2026 16:52:22 - INFO - __main__ - output_len: 179.24
+09/21/2026 16:52:22 - INFO - __main__ - memory_construction_time: 0.20
+09/21/2026 16:52:22 - INFO - __main__ - query_time_len: 52.82
+09/21/2026 16:52:22 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 17%|█▋        | 1/6 [02:05<10:26, 125.32s/it][AEden inject flush stored=301
+09/21/2026 16:54:34 - INFO - __main__ - exact_match: 72.73
+09/21/2026 16:54:34 - INFO - __main__ - f1: 73.48
+09/21/2026 16:54:34 - INFO - __main__ - substring_exact_match: 72.73
+09/21/2026 16:54:34 - INFO - __main__ - rougeL_f1: 73.43
+09/21/2026 16:54:34 - INFO - __main__ - rougeL_recall: 73.64
+09/21/2026 16:54:34 - INFO - __main__ - rougeLsum_f1: 73.43
+09/21/2026 16:54:34 - INFO - __main__ - rougeLsum_recall: 73.64
+09/21/2026 16:54:34 - INFO - __main__ - input_len: 4625.32
+09/21/2026 16:54:34 - INFO - __main__ - output_len: 178.23
+09/21/2026 16:54:34 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 16:54:34 - INFO - __main__ - query_time_len: 56.44
+09/21/2026 16:54:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 33%|███▎      | 2/6 [04:17<08:38, 129.62s/it][AEden inject flush stored=302
+09/21/2026 16:56:46 - INFO - __main__ - exact_match: 69.57
+09/21/2026 16:56:46 - INFO - __main__ - f1: 70.29
+09/21/2026 16:56:46 - INFO - __main__ - substring_exact_match: 69.57
+09/21/2026 16:56:46 - INFO - __main__ - rougeL_f1: 70.23
+09/21/2026 16:56:46 - INFO - __main__ - rougeL_recall: 70.43
+09/21/2026 16:56:46 - INFO - __main__ - rougeLsum_f1: 70.23
+09/21/2026 16:56:46 - INFO - __main__ - rougeLsum_recall: 70.43
+09/21/2026 16:56:46 - INFO - __main__ - input_len: 4628.22
+09/21/2026 16:56:46 - INFO - __main__ - output_len: 181.35
+09/21/2026 16:56:46 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 16:56:46 - INFO - __main__ - query_time_len: 59.72
+09/21/2026 16:56:46 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 3/6 [06:29<06:31, 130.59s/it][AEden inject flush stored=303
+09/21/2026 16:57:15 - INFO - __main__ - exact_match: 66.67
+09/21/2026 16:57:15 - INFO - __main__ - f1: 67.36
+09/21/2026 16:57:15 - INFO - __main__ - substring_exact_match: 66.67
+09/21/2026 16:57:15 - INFO - __main__ - rougeL_f1: 67.31
+09/21/2026 16:57:15 - INFO - __main__ - rougeL_recall: 67.50
+09/21/2026 16:57:15 - INFO - __main__ - rougeLsum_f1: 67.31
+09/21/2026 16:57:15 - INFO - __main__ - rougeLsum_recall: 67.50
+09/21/2026 16:57:15 - INFO - __main__ - input_len: 4598.04
+09/21/2026 16:57:15 - INFO - __main__ - output_len: 178.21
+09/21/2026 16:57:15 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 16:57:15 - INFO - __main__ - query_time_len: 58.43
+09/21/2026 16:57:15 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 67%|██████▋   | 4/6 [06:58<03:00, 90.41s/it] [AEden inject flush stored=304
+09/21/2026 16:57:53 - INFO - __main__ - exact_match: 68.00
+09/21/2026 16:57:53 - INFO - __main__ - f1: 68.67
+09/21/2026 16:57:53 - INFO - __main__ - substring_exact_match: 68.00
+09/21/2026 16:57:53 - INFO - __main__ - rougeL_f1: 68.62
+09/21/2026 16:57:53 - INFO - __main__ - rougeL_recall: 68.80
+09/21/2026 16:57:53 - INFO - __main__ - rougeLsum_f1: 68.62
+09/21/2026 16:57:53 - INFO - __main__ - rougeLsum_recall: 68.80
+09/21/2026 16:57:53 - INFO - __main__ - input_len: 4600.40
+09/21/2026 16:57:53 - INFO - __main__ - output_len: 179.84
+09/21/2026 16:57:53 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 16:57:53 - INFO - __main__ - query_time_len: 57.62
+09/21/2026 16:57:53 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 83%|████████▎ | 5/6 [07:36<01:11, 71.67s/it][AEden inject flush stored=305
+09/21/2026 16:58:27 - INFO - __main__ - exact_match: 69.23
+09/21/2026 16:58:27 - INFO - __main__ - f1: 69.87
+09/21/2026 16:58:27 - INFO - __main__ - substring_exact_match: 69.23
+09/21/2026 16:58:27 - INFO - __main__ - rougeL_f1: 69.82
+09/21/2026 16:58:27 - INFO - __main__ - rougeL_recall: 70.00
+09/21/2026 16:58:27 - INFO - __main__ - rougeLsum_f1: 69.82
+09/21/2026 16:58:27 - INFO - __main__ - rougeLsum_recall: 70.00
+09/21/2026 16:58:27 - INFO - __main__ - input_len: 4594.81
+09/21/2026 16:58:27 - INFO - __main__ - output_len: 178.23
+09/21/2026 16:58:27 - INFO - __main__ - memory_construction_time: 0.17
+09/21/2026 16:58:27 - INFO - __main__ - query_time_len: 56.68
+09/21/2026 16:58:27 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 6/6 [08:10<00:00, 58.56s/it][A100%|██████████| 6/6 [08:10<00:00, 81.68s/it]
+ 40%|████      | 4/10 [24:38<41:38, 416.34s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 5/10:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 5/10: 100%|██████████| 29/29 [00:00<00:00, 4628.07it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 8 queries for context 4!!!!!
+
+
+  0%|          | 0/8 [00:00<?, ?it/s][AEden inject flush stored=348
+09/21/2026 16:59:02 - INFO - __main__ - exact_match: 70.37
+09/21/2026 16:59:02 - INFO - __main__ - f1: 70.99
+09/21/2026 16:59:02 - INFO - __main__ - substring_exact_match: 70.37
+09/21/2026 16:59:02 - INFO - __main__ - rougeL_f1: 70.94
+09/21/2026 16:59:02 - INFO - __main__ - rougeL_recall: 71.11
+09/21/2026 16:59:02 - INFO - __main__ - rougeLsum_f1: 70.94
+09/21/2026 16:59:02 - INFO - __main__ - rougeLsum_recall: 71.11
+09/21/2026 16:59:02 - INFO - __main__ - input_len: 4588.00
+09/21/2026 16:59:02 - INFO - __main__ - output_len: 176.59
+09/21/2026 16:59:02 - INFO - __main__ - memory_construction_time: 0.21
+09/21/2026 16:59:02 - INFO - __main__ - query_time_len: 55.85
+09/21/2026 16:59:02 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 12%|█▎        | 1/8 [00:35<04:08, 35.46s/it][AEden inject flush stored=349
+09/21/2026 16:59:31 - INFO - __main__ - exact_match: 71.43
+09/21/2026 16:59:31 - INFO - __main__ - f1: 72.02
+09/21/2026 16:59:31 - INFO - __main__ - substring_exact_match: 71.43
+09/21/2026 16:59:31 - INFO - __main__ - rougeL_f1: 71.98
+09/21/2026 16:59:31 - INFO - __main__ - rougeL_recall: 72.14
+09/21/2026 16:59:31 - INFO - __main__ - rougeLsum_f1: 71.98
+09/21/2026 16:59:31 - INFO - __main__ - rougeLsum_recall: 72.14
+09/21/2026 16:59:31 - INFO - __main__ - input_len: 4570.71
+09/21/2026 16:59:31 - INFO - __main__ - output_len: 175.46
+09/21/2026 16:59:31 - INFO - __main__ - memory_construction_time: 0.20
+09/21/2026 16:59:31 - INFO - __main__ - query_time_len: 54.88
+09/21/2026 16:59:31 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 25%|██▌       | 2/8 [01:04<03:08, 31.50s/it][AEden inject flush stored=350
+09/21/2026 17:00:03 - INFO - __main__ - exact_match: 72.41
+09/21/2026 17:00:03 - INFO - __main__ - f1: 72.99
+09/21/2026 17:00:03 - INFO - __main__ - substring_exact_match: 72.41
+09/21/2026 17:00:03 - INFO - __main__ - rougeL_f1: 72.94
+09/21/2026 17:00:03 - INFO - __main__ - rougeL_recall: 73.10
+09/21/2026 17:00:03 - INFO - __main__ - rougeLsum_f1: 72.94
+09/21/2026 17:00:03 - INFO - __main__ - rougeLsum_recall: 73.10
+09/21/2026 17:00:03 - INFO - __main__ - input_len: 4554.21
+09/21/2026 17:00:03 - INFO - __main__ - output_len: 173.76
+09/21/2026 17:00:03 - INFO - __main__ - memory_construction_time: 0.20
+09/21/2026 17:00:03 - INFO - __main__ - query_time_len: 54.11
+09/21/2026 17:00:03 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 38%|███▊      | 3/8 [01:36<02:39, 31.94s/it][AEden inject flush stored=351
+09/21/2026 17:00:41 - INFO - __main__ - exact_match: 73.33
+09/21/2026 17:00:41 - INFO - __main__ - f1: 73.89
+09/21/2026 17:00:41 - INFO - __main__ - substring_exact_match: 73.33
+09/21/2026 17:00:41 - INFO - __main__ - rougeL_f1: 73.85
+09/21/2026 17:00:41 - INFO - __main__ - rougeL_recall: 74.00
+09/21/2026 17:00:41 - INFO - __main__ - rougeLsum_f1: 73.85
+09/21/2026 17:00:41 - INFO - __main__ - rougeLsum_recall: 74.00
+09/21/2026 17:00:41 - INFO - __main__ - input_len: 4508.77
+09/21/2026 17:00:41 - INFO - __main__ - output_len: 174.70
+09/21/2026 17:00:41 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 17:00:41 - INFO - __main__ - query_time_len: 53.55
+09/21/2026 17:00:41 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 4/8 [02:13<02:16, 34.07s/it][AEden inject flush stored=351
+09/21/2026 17:01:49 - INFO - __main__ - exact_match: 74.19
+09/21/2026 17:01:49 - INFO - __main__ - f1: 74.73
+09/21/2026 17:01:49 - INFO - __main__ - substring_exact_match: 74.19
+09/21/2026 17:01:49 - INFO - __main__ - rougeL_f1: 74.69
+09/21/2026 17:01:49 - INFO - __main__ - rougeL_recall: 74.84
+09/21/2026 17:01:49 - INFO - __main__ - rougeLsum_f1: 74.69
+09/21/2026 17:01:49 - INFO - __main__ - rougeLsum_recall: 74.84
+09/21/2026 17:01:49 - INFO - __main__ - input_len: 4466.52
+09/21/2026 17:01:49 - INFO - __main__ - output_len: 174.81
+09/21/2026 17:01:49 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 17:01:49 - INFO - __main__ - query_time_len: 54.01
+09/21/2026 17:01:49 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 62%|██████▎   | 5/8 [03:22<02:18, 46.32s/it][AEden inject flush stored=352
+09/21/2026 17:03:00 - INFO - __main__ - exact_match: 75.00
+09/21/2026 17:03:00 - INFO - __main__ - f1: 75.52
+09/21/2026 17:03:00 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 17:03:00 - INFO - __main__ - rougeL_f1: 75.48
+09/21/2026 17:03:00 - INFO - __main__ - rougeL_recall: 75.62
+09/21/2026 17:03:00 - INFO - __main__ - rougeLsum_f1: 75.48
+09/21/2026 17:03:00 - INFO - __main__ - rougeLsum_recall: 75.62
+09/21/2026 17:03:00 - INFO - __main__ - input_len: 4477.50
+09/21/2026 17:03:00 - INFO - __main__ - output_len: 176.31
+09/21/2026 17:03:00 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:03:00 - INFO - __main__ - query_time_len: 54.55
+09/21/2026 17:03:00 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 75%|███████▌  | 6/8 [04:33<01:49, 54.80s/it][AEden inject flush stored=353
+09/21/2026 17:03:40 - INFO - __main__ - exact_match: 75.76
+09/21/2026 17:03:40 - INFO - __main__ - f1: 76.26
+09/21/2026 17:03:40 - INFO - __main__ - substring_exact_match: 75.76
+09/21/2026 17:03:40 - INFO - __main__ - rougeL_f1: 76.22
+09/21/2026 17:03:40 - INFO - __main__ - rougeL_recall: 76.36
+09/21/2026 17:03:40 - INFO - __main__ - rougeLsum_f1: 76.22
+09/21/2026 17:03:40 - INFO - __main__ - rougeLsum_recall: 76.36
+09/21/2026 17:03:40 - INFO - __main__ - input_len: 4425.64
+09/21/2026 17:03:40 - INFO - __main__ - output_len: 175.42
+09/21/2026 17:03:40 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:03:40 - INFO - __main__ - query_time_len: 54.11
+09/21/2026 17:03:40 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 88%|████████▊ | 7/8 [05:13<00:50, 50.02s/it][AEden inject flush stored=354
+09/21/2026 17:05:47 - INFO - __main__ - exact_match: 76.47
+09/21/2026 17:05:47 - INFO - __main__ - f1: 76.96
+09/21/2026 17:05:47 - INFO - __main__ - substring_exact_match: 76.47
+09/21/2026 17:05:47 - INFO - __main__ - rougeL_f1: 76.92
+09/21/2026 17:05:47 - INFO - __main__ - rougeL_recall: 77.06
+09/21/2026 17:05:47 - INFO - __main__ - rougeLsum_f1: 76.92
+09/21/2026 17:05:47 - INFO - __main__ - rougeLsum_recall: 77.06
+09/21/2026 17:05:47 - INFO - __main__ - input_len: 4393.53
+09/21/2026 17:05:47 - INFO - __main__ - output_len: 174.18
+09/21/2026 17:05:47 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:05:47 - INFO - __main__ - query_time_len: 56.26
+09/21/2026 17:05:47 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 8/8 [07:20<00:00, 74.60s/it][A100%|██████████| 8/8 [07:20<00:00, 55.09s/it]
+ 50%|█████     | 5/10 [31:59<35:25, 425.12s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 6/10:   0%|          | 0/27 [00:00<?, ?it/s][AProcessing experiments 6/10: 100%|██████████| 27/27 [00:00<00:00, 4607.44it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 10 queries for context 5!!!!!
+
+
+  0%|          | 0/10 [00:00<?, ?it/s][AEden inject flush stored=256
+09/21/2026 17:06:57 - INFO - __main__ - exact_match: 77.14
+09/21/2026 17:06:57 - INFO - __main__ - f1: 77.62
+09/21/2026 17:06:57 - INFO - __main__ - substring_exact_match: 77.14
+09/21/2026 17:06:57 - INFO - __main__ - rougeL_f1: 77.58
+09/21/2026 17:06:57 - INFO - __main__ - rougeL_recall: 77.71
+09/21/2026 17:06:57 - INFO - __main__ - rougeLsum_f1: 77.58
+09/21/2026 17:06:57 - INFO - __main__ - rougeLsum_recall: 77.71
+09/21/2026 17:06:57 - INFO - __main__ - input_len: 4411.29
+09/21/2026 17:06:57 - INFO - __main__ - output_len: 174.80
+09/21/2026 17:06:57 - INFO - __main__ - memory_construction_time: 0.20
+09/21/2026 17:06:57 - INFO - __main__ - query_time_len: 56.61
+09/21/2026 17:06:57 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 10%|█         | 1/10 [01:09<10:26, 69.59s/it][AEden inject flush stored=257
+09/21/2026 17:07:48 - INFO - __main__ - exact_match: 77.78
+09/21/2026 17:07:48 - INFO - __main__ - f1: 78.24
+09/21/2026 17:07:48 - INFO - __main__ - substring_exact_match: 77.78
+09/21/2026 17:07:48 - INFO - __main__ - rougeL_f1: 78.21
+09/21/2026 17:07:48 - INFO - __main__ - rougeL_recall: 78.33
+09/21/2026 17:07:48 - INFO - __main__ - rougeLsum_f1: 78.21
+09/21/2026 17:07:48 - INFO - __main__ - rougeLsum_recall: 78.33
+09/21/2026 17:07:48 - INFO - __main__ - input_len: 4424.56
+09/21/2026 17:07:48 - INFO - __main__ - output_len: 173.06
+09/21/2026 17:07:48 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 17:07:48 - INFO - __main__ - query_time_len: 56.45
+09/21/2026 17:07:48 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 20%|██        | 2/10 [02:00<07:48, 58.50s/it][AEden inject flush stored=258
+09/21/2026 17:08:32 - INFO - __main__ - exact_match: 78.38
+09/21/2026 17:08:32 - INFO - __main__ - f1: 78.83
+09/21/2026 17:08:32 - INFO - __main__ - substring_exact_match: 78.38
+09/21/2026 17:08:32 - INFO - __main__ - rougeL_f1: 78.79
+09/21/2026 17:08:32 - INFO - __main__ - rougeL_recall: 78.92
+09/21/2026 17:08:32 - INFO - __main__ - rougeLsum_f1: 78.79
+09/21/2026 17:08:32 - INFO - __main__ - rougeLsum_recall: 78.92
+09/21/2026 17:08:32 - INFO - __main__ - input_len: 4434.24
+09/21/2026 17:08:32 - INFO - __main__ - output_len: 174.32
+09/21/2026 17:08:32 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 17:08:32 - INFO - __main__ - query_time_len: 56.11
+09/21/2026 17:08:32 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 30%|███       | 3/10 [02:44<06:03, 51.94s/it][AEden inject flush stored=259
+09/21/2026 17:09:04 - INFO - __main__ - exact_match: 78.95
+09/21/2026 17:09:04 - INFO - __main__ - f1: 79.39
+09/21/2026 17:09:04 - INFO - __main__ - substring_exact_match: 78.95
+09/21/2026 17:09:04 - INFO - __main__ - rougeL_f1: 79.35
+09/21/2026 17:09:04 - INFO - __main__ - rougeL_recall: 79.47
+09/21/2026 17:09:04 - INFO - __main__ - rougeLsum_f1: 79.35
+09/21/2026 17:09:04 - INFO - __main__ - rougeLsum_recall: 79.47
+09/21/2026 17:09:04 - INFO - __main__ - input_len: 4446.08
+09/21/2026 17:09:04 - INFO - __main__ - output_len: 174.24
+09/21/2026 17:09:04 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 17:09:04 - INFO - __main__ - query_time_len: 55.48
+09/21/2026 17:09:04 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 40%|████      | 4/10 [03:16<04:24, 44.09s/it][AEden inject flush stored=259
+09/21/2026 17:10:05 - INFO - __main__ - exact_match: 79.49
+09/21/2026 17:10:05 - INFO - __main__ - f1: 79.91
+09/21/2026 17:10:05 - INFO - __main__ - substring_exact_match: 79.49
+09/21/2026 17:10:05 - INFO - __main__ - rougeL_f1: 79.88
+09/21/2026 17:10:05 - INFO - __main__ - rougeL_recall: 80.00
+09/21/2026 17:10:05 - INFO - __main__ - rougeLsum_f1: 79.88
+09/21/2026 17:10:05 - INFO - __main__ - rougeLsum_recall: 80.00
+09/21/2026 17:10:05 - INFO - __main__ - input_len: 4444.21
+09/21/2026 17:10:05 - INFO - __main__ - output_len: 175.15
+09/21/2026 17:10:05 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:10:05 - INFO - __main__ - query_time_len: 55.61
+09/21/2026 17:10:05 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 5/10 [04:17<04:10, 50.10s/it][AEden inject flush stored=260
+09/21/2026 17:11:08 - INFO - __main__ - exact_match: 80.00
+09/21/2026 17:11:08 - INFO - __main__ - f1: 80.42
+09/21/2026 17:11:08 - INFO - __main__ - substring_exact_match: 80.00
+09/21/2026 17:11:08 - INFO - __main__ - rougeL_f1: 80.38
+09/21/2026 17:11:08 - INFO - __main__ - rougeL_recall: 80.50
+09/21/2026 17:11:08 - INFO - __main__ - rougeLsum_f1: 80.38
+09/21/2026 17:11:08 - INFO - __main__ - rougeLsum_recall: 80.50
+09/21/2026 17:11:08 - INFO - __main__ - input_len: 4455.85
+09/21/2026 17:11:08 - INFO - __main__ - output_len: 174.68
+09/21/2026 17:11:08 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:11:08 - INFO - __main__ - query_time_len: 55.81
+09/21/2026 17:11:08 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 60%|██████    | 6/10 [05:20<03:38, 54.65s/it][AEden inject flush stored=261
+09/21/2026 17:11:47 - INFO - __main__ - exact_match: 80.49
+09/21/2026 17:11:47 - INFO - __main__ - f1: 80.89
+09/21/2026 17:11:47 - INFO - __main__ - substring_exact_match: 80.49
+09/21/2026 17:11:47 - INFO - __main__ - rougeL_f1: 80.86
+09/21/2026 17:11:47 - INFO - __main__ - rougeL_recall: 80.98
+09/21/2026 17:11:47 - INFO - __main__ - rougeLsum_f1: 80.86
+09/21/2026 17:11:47 - INFO - __main__ - rougeLsum_recall: 80.98
+09/21/2026 17:11:47 - INFO - __main__ - input_len: 4445.54
+09/21/2026 17:11:47 - INFO - __main__ - output_len: 175.00
+09/21/2026 17:11:47 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:11:47 - INFO - __main__ - query_time_len: 55.39
+09/21/2026 17:11:47 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 70%|███████   | 7/10 [05:59<02:28, 49.40s/it][AEden inject flush stored=261
+09/21/2026 17:12:22 - INFO - __main__ - exact_match: 80.95
+09/21/2026 17:12:22 - INFO - __main__ - f1: 81.35
+09/21/2026 17:12:22 - INFO - __main__ - substring_exact_match: 80.95
+09/21/2026 17:12:22 - INFO - __main__ - rougeL_f1: 81.32
+09/21/2026 17:12:22 - INFO - __main__ - rougeL_recall: 81.43
+09/21/2026 17:12:22 - INFO - __main__ - rougeLsum_f1: 81.32
+09/21/2026 17:12:22 - INFO - __main__ - rougeLsum_recall: 81.43
+09/21/2026 17:12:22 - INFO - __main__ - input_len: 4452.12
+09/21/2026 17:12:22 - INFO - __main__ - output_len: 174.05
+09/21/2026 17:12:22 - INFO - __main__ - memory_construction_time: 0.17
+09/21/2026 17:12:22 - INFO - __main__ - query_time_len: 54.90
+09/21/2026 17:12:22 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 80%|████████  | 8/10 [06:34<01:29, 44.84s/it][AEden inject flush stored=261
+09/21/2026 17:12:47 - INFO - __main__ - exact_match: 81.40
+09/21/2026 17:12:47 - INFO - __main__ - f1: 81.78
+09/21/2026 17:12:47 - INFO - __main__ - substring_exact_match: 81.40
+09/21/2026 17:12:47 - INFO - __main__ - rougeL_f1: 81.75
+09/21/2026 17:12:47 - INFO - __main__ - rougeL_recall: 81.86
+09/21/2026 17:12:47 - INFO - __main__ - rougeLsum_f1: 81.75
+09/21/2026 17:12:47 - INFO - __main__ - rougeLsum_recall: 81.86
+09/21/2026 17:12:47 - INFO - __main__ - input_len: 4458.93
+09/21/2026 17:12:47 - INFO - __main__ - output_len: 174.77
+09/21/2026 17:12:47 - INFO - __main__ - memory_construction_time: 0.17
+09/21/2026 17:12:47 - INFO - __main__ - query_time_len: 54.21
+09/21/2026 17:12:47 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 90%|█████████ | 9/10 [06:59<00:38, 38.61s/it][AEden inject flush stored=263
+09/21/2026 17:13:49 - INFO - __main__ - exact_match: 79.55
+09/21/2026 17:13:49 - INFO - __main__ - f1: 79.92
+09/21/2026 17:13:49 - INFO - __main__ - substring_exact_match: 79.55
+09/21/2026 17:13:49 - INFO - __main__ - rougeL_f1: 79.90
+09/21/2026 17:13:49 - INFO - __main__ - rougeL_recall: 80.00
+09/21/2026 17:13:49 - INFO - __main__ - rougeLsum_f1: 79.90
+09/21/2026 17:13:49 - INFO - __main__ - rougeLsum_recall: 80.00
+09/21/2026 17:13:49 - INFO - __main__ - input_len: 4465.59
+09/21/2026 17:13:49 - INFO - __main__ - output_len: 176.00
+09/21/2026 17:13:49 - INFO - __main__ - memory_construction_time: 0.17
+09/21/2026 17:13:49 - INFO - __main__ - query_time_len: 54.39
+09/21/2026 17:13:49 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 10/10 [08:01<00:00, 45.97s/it][A100%|██████████| 10/10 [08:01<00:00, 48.18s/it]
+ 60%|██████    | 6/10 [40:00<29:37, 444.39s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 7/10:   0%|          | 0/30 [00:00<?, ?it/s][AProcessing experiments 7/10: 100%|██████████| 30/30 [00:00<00:00, 5021.92it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 6 queries for context 6!!!!!
+
+
+  0%|          | 0/6 [00:00<?, ?it/s][AEden inject flush stored=605
+09/21/2026 17:14:23 - INFO - __main__ - exact_match: 77.78
+09/21/2026 17:14:23 - INFO - __main__ - f1: 78.15
+09/21/2026 17:14:23 - INFO - __main__ - substring_exact_match: 77.78
+09/21/2026 17:14:23 - INFO - __main__ - rougeL_f1: 78.12
+09/21/2026 17:14:23 - INFO - __main__ - rougeL_recall: 78.22
+09/21/2026 17:14:23 - INFO - __main__ - rougeLsum_f1: 78.12
+09/21/2026 17:14:23 - INFO - __main__ - rougeLsum_recall: 78.22
+09/21/2026 17:14:23 - INFO - __main__ - input_len: 4476.33
+09/21/2026 17:14:23 - INFO - __main__ - output_len: 176.40
+09/21/2026 17:14:23 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 17:14:23 - INFO - __main__ - query_time_len: 53.92
+09/21/2026 17:14:23 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 17%|█▋        | 1/6 [00:34<02:51, 34.33s/it][AEden inject flush stored=606
+09/21/2026 17:15:19 - INFO - __main__ - exact_match: 76.09
+09/21/2026 17:15:19 - INFO - __main__ - f1: 77.32
+09/21/2026 17:15:19 - INFO - __main__ - substring_exact_match: 76.09
+09/21/2026 17:15:19 - INFO - __main__ - rougeL_f1: 78.60
+09/21/2026 17:15:19 - INFO - __main__ - rougeL_recall: 78.70
+09/21/2026 17:15:19 - INFO - __main__ - rougeLsum_f1: 78.60
+09/21/2026 17:15:19 - INFO - __main__ - rougeLsum_recall: 78.70
+09/21/2026 17:15:19 - INFO - __main__ - input_len: 4493.26
+09/21/2026 17:15:19 - INFO - __main__ - output_len: 175.96
+09/21/2026 17:15:19 - INFO - __main__ - memory_construction_time: 0.19
+09/21/2026 17:15:19 - INFO - __main__ - query_time_len: 53.95
+09/21/2026 17:15:19 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 33%|███▎      | 2/6 [01:29<03:06, 46.61s/it][AEden inject flush stored=607
+09/21/2026 17:16:08 - INFO - __main__ - exact_match: 74.47
+09/21/2026 17:16:08 - INFO - __main__ - f1: 75.67
+09/21/2026 17:16:08 - INFO - __main__ - substring_exact_match: 74.47
+09/21/2026 17:16:08 - INFO - __main__ - rougeL_f1: 76.92
+09/21/2026 17:16:08 - INFO - __main__ - rougeL_recall: 77.02
+09/21/2026 17:16:08 - INFO - __main__ - rougeLsum_f1: 76.92
+09/21/2026 17:16:08 - INFO - __main__ - rougeLsum_recall: 77.02
+09/21/2026 17:16:08 - INFO - __main__ - input_len: 4515.53
+09/21/2026 17:16:08 - INFO - __main__ - output_len: 175.77
+09/21/2026 17:16:08 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:16:08 - INFO - __main__ - query_time_len: 53.85
+09/21/2026 17:16:08 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 3/6 [02:19<02:24, 48.01s/it][AEden inject flush stored=608
+09/21/2026 17:17:37 - INFO - __main__ - exact_match: 75.00
+09/21/2026 17:17:37 - INFO - __main__ - f1: 76.18
+09/21/2026 17:17:37 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 17:17:37 - INFO - __main__ - rougeL_f1: 77.40
+09/21/2026 17:17:37 - INFO - __main__ - rougeL_recall: 77.50
+09/21/2026 17:17:37 - INFO - __main__ - rougeLsum_f1: 77.40
+09/21/2026 17:17:37 - INFO - __main__ - rougeLsum_recall: 77.50
+09/21/2026 17:17:37 - INFO - __main__ - input_len: 4527.48
+09/21/2026 17:17:37 - INFO - __main__ - output_len: 177.21
+09/21/2026 17:17:37 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:17:37 - INFO - __main__ - query_time_len: 54.58
+09/21/2026 17:17:37 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 67%|██████▋   | 4/6 [03:47<02:08, 64.08s/it][AEden inject flush stored=609
+NIM retry 1/16 google/gemma-4-31b-it after 8s: APIConnectionError
+09/21/2026 17:21:24 - INFO - __main__ - exact_match: 75.51
+09/21/2026 17:21:24 - INFO - __main__ - f1: 76.67
+09/21/2026 17:21:24 - INFO - __main__ - substring_exact_match: 75.51
+09/21/2026 17:21:24 - INFO - __main__ - rougeL_f1: 77.86
+09/21/2026 17:21:24 - INFO - __main__ - rougeL_recall: 77.96
+09/21/2026 17:21:24 - INFO - __main__ - rougeLsum_f1: 77.86
+09/21/2026 17:21:24 - INFO - __main__ - rougeLsum_recall: 77.96
+09/21/2026 17:21:24 - INFO - __main__ - input_len: 4537.71
+09/21/2026 17:21:24 - INFO - __main__ - output_len: 176.94
+09/21/2026 17:21:24 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:21:24 - INFO - __main__ - query_time_len: 58.09
+09/21/2026 17:21:24 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 83%|████████▎ | 5/6 [07:34<02:02, 122.76s/it][AEden inject flush stored=610
+09/21/2026 17:22:16 - INFO - __main__ - exact_match: 76.00
+09/21/2026 17:22:16 - INFO - __main__ - f1: 77.13
+09/21/2026 17:22:16 - INFO - __main__ - substring_exact_match: 76.00
+09/21/2026 17:22:16 - INFO - __main__ - rougeL_f1: 78.31
+09/21/2026 17:22:16 - INFO - __main__ - rougeL_recall: 78.40
+09/21/2026 17:22:16 - INFO - __main__ - rougeLsum_f1: 78.31
+09/21/2026 17:22:16 - INFO - __main__ - rougeLsum_recall: 78.40
+09/21/2026 17:22:16 - INFO - __main__ - input_len: 4546.54
+09/21/2026 17:22:16 - INFO - __main__ - output_len: 177.12
+09/21/2026 17:22:16 - INFO - __main__ - memory_construction_time: 0.18
+09/21/2026 17:22:16 - INFO - __main__ - query_time_len: 57.97
+09/21/2026 17:22:16 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 6/6 [08:26<00:00, 98.74s/it] [A100%|██████████| 6/6 [08:26<00:00, 84.47s/it]
+ 70%|███████   | 7/10 [48:27<23:14, 464.81s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 8/10:   0%|          | 0/41 [00:00<?, ?it/s][AProcessing experiments 8/10: 100%|██████████| 41/41 [00:00<00:00, 4938.58it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 6 queries for context 7!!!!!
+
+
+  0%|          | 0/6 [00:00<?, ?it/s][AEden inject flush stored=769
+09/21/2026 17:22:57 - INFO - __main__ - exact_match: 76.47
+09/21/2026 17:22:57 - INFO - __main__ - f1: 77.58
+09/21/2026 17:22:57 - INFO - __main__ - substring_exact_match: 76.47
+09/21/2026 17:22:57 - INFO - __main__ - rougeL_f1: 78.73
+09/21/2026 17:22:57 - INFO - __main__ - rougeL_recall: 78.82
+09/21/2026 17:22:57 - INFO - __main__ - rougeLsum_f1: 78.73
+09/21/2026 17:22:57 - INFO - __main__ - rougeLsum_recall: 78.82
+09/21/2026 17:22:57 - INFO - __main__ - input_len: 4549.84
+09/21/2026 17:22:57 - INFO - __main__ - output_len: 176.47
+09/21/2026 17:22:57 - INFO - __main__ - memory_construction_time: 0.22
+09/21/2026 17:22:57 - INFO - __main__ - query_time_len: 57.59
+09/21/2026 17:22:57 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 17%|█▋        | 1/6 [00:40<03:24, 40.91s/it][AEden inject flush stored=769
+09/21/2026 17:23:20 - INFO - __main__ - exact_match: 75.00
+09/21/2026 17:23:20 - INFO - __main__ - f1: 76.09
+09/21/2026 17:23:20 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 17:23:20 - INFO - __main__ - rougeL_f1: 77.22
+09/21/2026 17:23:20 - INFO - __main__ - rougeL_recall: 77.31
+09/21/2026 17:23:20 - INFO - __main__ - rougeLsum_f1: 77.22
+09/21/2026 17:23:20 - INFO - __main__ - rougeLsum_recall: 77.31
+09/21/2026 17:23:20 - INFO - __main__ - input_len: 4564.73
+09/21/2026 17:23:20 - INFO - __main__ - output_len: 176.58
+09/21/2026 17:23:20 - INFO - __main__ - memory_construction_time: 0.21
+09/21/2026 17:23:20 - INFO - __main__ - query_time_len: 56.93
+09/21/2026 17:23:20 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 33%|███▎      | 2/6 [01:03<02:01, 30.42s/it][AEden inject flush stored=770
+09/21/2026 17:23:43 - INFO - __main__ - exact_match: 75.47
+09/21/2026 17:23:43 - INFO - __main__ - f1: 76.54
+09/21/2026 17:23:43 - INFO - __main__ - substring_exact_match: 75.47
+09/21/2026 17:23:43 - INFO - __main__ - rougeL_f1: 77.65
+09/21/2026 17:23:43 - INFO - __main__ - rougeL_recall: 77.74
+09/21/2026 17:23:43 - INFO - __main__ - rougeLsum_f1: 77.65
+09/21/2026 17:23:43 - INFO - __main__ - rougeLsum_recall: 77.74
+09/21/2026 17:23:43 - INFO - __main__ - input_len: 4560.94
+09/21/2026 17:23:43 - INFO - __main__ - output_len: 176.58
+09/21/2026 17:23:43 - INFO - __main__ - memory_construction_time: 0.21
+09/21/2026 17:23:43 - INFO - __main__ - query_time_len: 56.29
+09/21/2026 17:23:43 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 3/6 [01:27<01:21, 27.06s/it][AEden inject flush stored=772
+09/21/2026 17:24:35 - INFO - __main__ - exact_match: 75.93
+09/21/2026 17:24:35 - INFO - __main__ - f1: 76.98
+09/21/2026 17:24:35 - INFO - __main__ - substring_exact_match: 75.93
+09/21/2026 17:24:35 - INFO - __main__ - rougeL_f1: 78.06
+09/21/2026 17:24:35 - INFO - __main__ - rougeL_recall: 78.15
+09/21/2026 17:24:35 - INFO - __main__ - rougeLsum_f1: 78.06
+09/21/2026 17:24:35 - INFO - __main__ - rougeLsum_recall: 78.15
+09/21/2026 17:24:35 - INFO - __main__ - input_len: 4566.39
+09/21/2026 17:24:35 - INFO - __main__ - output_len: 175.93
+09/21/2026 17:24:35 - INFO - __main__ - memory_construction_time: 0.21
+09/21/2026 17:24:35 - INFO - __main__ - query_time_len: 56.21
+09/21/2026 17:24:35 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 67%|██████▋   | 4/6 [02:19<01:13, 36.90s/it][AEden inject flush stored=773
+09/21/2026 17:25:03 - INFO - __main__ - exact_match: 76.36
+09/21/2026 17:25:03 - INFO - __main__ - f1: 77.39
+09/21/2026 17:25:03 - INFO - __main__ - substring_exact_match: 76.36
+09/21/2026 17:25:03 - INFO - __main__ - rougeL_f1: 78.46
+09/21/2026 17:25:03 - INFO - __main__ - rougeL_recall: 78.55
+09/21/2026 17:25:03 - INFO - __main__ - rougeLsum_f1: 78.46
+09/21/2026 17:25:03 - INFO - __main__ - rougeLsum_recall: 78.55
+09/21/2026 17:25:03 - INFO - __main__ - input_len: 4574.60
+09/21/2026 17:25:03 - INFO - __main__ - output_len: 176.49
+09/21/2026 17:25:03 - INFO - __main__ - memory_construction_time: 0.21
+09/21/2026 17:25:03 - INFO - __main__ - query_time_len: 55.70
+09/21/2026 17:25:03 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 83%|████████▎ | 5/6 [02:47<00:33, 33.88s/it][AEden inject flush stored=774
+09/21/2026 17:26:03 - INFO - __main__ - exact_match: 76.79
+09/21/2026 17:26:03 - INFO - __main__ - f1: 77.80
+09/21/2026 17:26:03 - INFO - __main__ - substring_exact_match: 76.79
+09/21/2026 17:26:03 - INFO - __main__ - rougeL_f1: 78.85
+09/21/2026 17:26:03 - INFO - __main__ - rougeL_recall: 78.93
+09/21/2026 17:26:03 - INFO - __main__ - rougeLsum_f1: 78.85
+09/21/2026 17:26:03 - INFO - __main__ - rougeLsum_recall: 78.93
+09/21/2026 17:26:03 - INFO - __main__ - input_len: 4568.98
+09/21/2026 17:26:03 - INFO - __main__ - output_len: 176.98
+09/21/2026 17:26:03 - INFO - __main__ - memory_construction_time: 0.20
+09/21/2026 17:26:03 - INFO - __main__ - query_time_len: 55.77
+09/21/2026 17:26:03 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 6/6 [03:47<00:00, 42.63s/it][A100%|██████████| 6/6 [03:47<00:00, 37.86s/it]
+ 80%|████████  | 8/10 [52:14<12:58, 389.16s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 9/10:   0%|          | 0/50 [00:00<?, ?it/s][AProcessing experiments 9/10: 100%|██████████| 50/50 [00:00<00:00, 5200.62it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 9 queries for context 8!!!!!
+
+
+  0%|          | 0/9 [00:00<?, ?it/s][AEden inject flush stored=530
+09/21/2026 17:27:02 - INFO - __main__ - exact_match: 75.44
+09/21/2026 17:27:02 - INFO - __main__ - f1: 76.43
+09/21/2026 17:27:02 - INFO - __main__ - substring_exact_match: 75.44
+09/21/2026 17:27:02 - INFO - __main__ - rougeL_f1: 77.46
+09/21/2026 17:27:02 - INFO - __main__ - rougeL_recall: 77.54
+09/21/2026 17:27:02 - INFO - __main__ - rougeLsum_f1: 77.46
+09/21/2026 17:27:02 - INFO - __main__ - rougeLsum_recall: 77.54
+09/21/2026 17:27:02 - INFO - __main__ - input_len: 4571.58
+09/21/2026 17:27:02 - INFO - __main__ - output_len: 176.89
+09/21/2026 17:27:02 - INFO - __main__ - memory_construction_time: 0.24
+09/21/2026 17:27:02 - INFO - __main__ - query_time_len: 55.78
+09/21/2026 17:27:02 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 11%|█         | 1/9 [00:58<07:48, 58.56s/it][AEden inject flush stored=531
+09/21/2026 17:27:50 - INFO - __main__ - exact_match: 75.86
+09/21/2026 17:27:50 - INFO - __main__ - f1: 76.84
+09/21/2026 17:27:50 - INFO - __main__ - substring_exact_match: 75.86
+09/21/2026 17:27:50 - INFO - __main__ - rougeL_f1: 77.85
+09/21/2026 17:27:50 - INFO - __main__ - rougeL_recall: 77.93
+09/21/2026 17:27:50 - INFO - __main__ - rougeLsum_f1: 77.85
+09/21/2026 17:27:50 - INFO - __main__ - rougeLsum_recall: 77.93
+09/21/2026 17:27:50 - INFO - __main__ - input_len: 4575.19
+09/21/2026 17:27:50 - INFO - __main__ - output_len: 176.69
+09/21/2026 17:27:50 - INFO - __main__ - memory_construction_time: 0.24
+09/21/2026 17:27:50 - INFO - __main__ - query_time_len: 55.65
+09/21/2026 17:27:50 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 22%|██▏       | 2/9 [01:47<06:08, 52.70s/it][AEden inject flush stored=532
+09/21/2026 17:28:34 - INFO - __main__ - exact_match: 76.27
+09/21/2026 17:28:34 - INFO - __main__ - f1: 77.23
+09/21/2026 17:28:34 - INFO - __main__ - substring_exact_match: 76.27
+09/21/2026 17:28:34 - INFO - __main__ - rougeL_f1: 78.23
+09/21/2026 17:28:34 - INFO - __main__ - rougeL_recall: 78.31
+09/21/2026 17:28:34 - INFO - __main__ - rougeLsum_f1: 78.23
+09/21/2026 17:28:34 - INFO - __main__ - rougeLsum_recall: 78.31
+09/21/2026 17:28:34 - INFO - __main__ - input_len: 4591.86
+09/21/2026 17:28:34 - INFO - __main__ - output_len: 178.32
+09/21/2026 17:28:34 - INFO - __main__ - memory_construction_time: 0.24
+09/21/2026 17:28:34 - INFO - __main__ - query_time_len: 55.46
+09/21/2026 17:28:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 33%|███▎      | 3/9 [02:31<04:52, 48.82s/it][AEden inject flush stored=533
+09/21/2026 17:29:22 - INFO - __main__ - exact_match: 75.00
+09/21/2026 17:29:22 - INFO - __main__ - f1: 76.57
+09/21/2026 17:29:22 - INFO - __main__ - substring_exact_match: 75.00
+09/21/2026 17:29:22 - INFO - __main__ - rougeL_f1: 77.71
+09/21/2026 17:29:22 - INFO - __main__ - rougeL_recall: 78.11
+09/21/2026 17:29:22 - INFO - __main__ - rougeLsum_f1: 77.71
+09/21/2026 17:29:22 - INFO - __main__ - rougeLsum_recall: 78.11
+09/21/2026 17:29:22 - INFO - __main__ - input_len: 4596.03
+09/21/2026 17:29:22 - INFO - __main__ - output_len: 178.03
+09/21/2026 17:29:22 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:29:22 - INFO - __main__ - query_time_len: 55.32
+09/21/2026 17:29:22 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 44%|████▍     | 4/9 [03:18<04:01, 48.20s/it][AEden inject flush stored=534
+09/21/2026 17:30:31 - INFO - __main__ - exact_match: 73.77
+09/21/2026 17:30:31 - INFO - __main__ - f1: 75.31
+09/21/2026 17:30:31 - INFO - __main__ - substring_exact_match: 73.77
+09/21/2026 17:30:31 - INFO - __main__ - rougeL_f1: 76.43
+09/21/2026 17:30:31 - INFO - __main__ - rougeL_recall: 76.83
+09/21/2026 17:30:31 - INFO - __main__ - rougeLsum_f1: 76.43
+09/21/2026 17:30:31 - INFO - __main__ - rougeLsum_recall: 76.83
+09/21/2026 17:30:31 - INFO - __main__ - input_len: 4592.90
+09/21/2026 17:30:31 - INFO - __main__ - output_len: 179.36
+09/21/2026 17:30:31 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:30:31 - INFO - __main__ - query_time_len: 55.54
+09/21/2026 17:30:31 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 56%|█████▌    | 5/9 [04:27<03:42, 55.64s/it][AEden inject flush stored=534
+09/21/2026 17:32:24 - INFO - __main__ - exact_match: 74.19
+09/21/2026 17:32:24 - INFO - __main__ - f1: 75.71
+09/21/2026 17:32:24 - INFO - __main__ - substring_exact_match: 74.19
+09/21/2026 17:32:24 - INFO - __main__ - rougeL_f1: 76.81
+09/21/2026 17:32:24 - INFO - __main__ - rougeL_recall: 77.20
+09/21/2026 17:32:24 - INFO - __main__ - rougeLsum_f1: 76.81
+09/21/2026 17:32:24 - INFO - __main__ - rougeLsum_recall: 77.20
+09/21/2026 17:32:24 - INFO - __main__ - input_len: 4592.82
+09/21/2026 17:32:24 - INFO - __main__ - output_len: 178.97
+09/21/2026 17:32:24 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:32:24 - INFO - __main__ - query_time_len: 56.48
+09/21/2026 17:32:24 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 67%|██████▋   | 6/9 [06:21<03:46, 75.40s/it][AEden inject flush stored=535
+09/21/2026 17:33:00 - INFO - __main__ - exact_match: 73.02
+09/21/2026 17:33:00 - INFO - __main__ - f1: 74.51
+09/21/2026 17:33:00 - INFO - __main__ - substring_exact_match: 73.02
+09/21/2026 17:33:00 - INFO - __main__ - rougeL_f1: 75.59
+09/21/2026 17:33:00 - INFO - __main__ - rougeL_recall: 75.98
+09/21/2026 17:33:00 - INFO - __main__ - rougeLsum_f1: 75.59
+09/21/2026 17:33:00 - INFO - __main__ - rougeLsum_recall: 75.98
+09/21/2026 17:33:00 - INFO - __main__ - input_len: 4584.44
+09/21/2026 17:33:00 - INFO - __main__ - output_len: 178.86
+09/21/2026 17:33:00 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:33:00 - INFO - __main__ - query_time_len: 56.15
+09/21/2026 17:33:00 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 78%|███████▊  | 7/9 [06:57<02:05, 62.52s/it][AEden inject flush stored=536
+09/21/2026 17:33:43 - INFO - __main__ - exact_match: 73.44
+09/21/2026 17:33:43 - INFO - __main__ - f1: 74.91
+09/21/2026 17:33:43 - INFO - __main__ - substring_exact_match: 73.44
+09/21/2026 17:33:43 - INFO - __main__ - rougeL_f1: 75.98
+09/21/2026 17:33:43 - INFO - __main__ - rougeL_recall: 76.35
+09/21/2026 17:33:43 - INFO - __main__ - rougeLsum_f1: 75.98
+09/21/2026 17:33:43 - INFO - __main__ - rougeLsum_recall: 76.35
+09/21/2026 17:33:43 - INFO - __main__ - input_len: 4584.70
+09/21/2026 17:33:43 - INFO - __main__ - output_len: 179.17
+09/21/2026 17:33:43 - INFO - __main__ - memory_construction_time: 0.22
+09/21/2026 17:33:43 - INFO - __main__ - query_time_len: 55.94
+09/21/2026 17:33:43 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 89%|████████▉ | 8/9 [07:39<00:56, 56.19s/it][AEden inject flush stored=537
+09/21/2026 17:34:28 - INFO - __main__ - exact_match: 72.31
+09/21/2026 17:34:28 - INFO - __main__ - f1: 73.76
+09/21/2026 17:34:28 - INFO - __main__ - substring_exact_match: 72.31
+09/21/2026 17:34:28 - INFO - __main__ - rougeL_f1: 74.81
+09/21/2026 17:34:28 - INFO - __main__ - rougeL_recall: 75.18
+09/21/2026 17:34:28 - INFO - __main__ - rougeLsum_f1: 74.81
+09/21/2026 17:34:28 - INFO - __main__ - rougeLsum_recall: 75.18
+09/21/2026 17:34:28 - INFO - __main__ - input_len: 4590.68
+09/21/2026 17:34:28 - INFO - __main__ - output_len: 178.98
+09/21/2026 17:34:28 - INFO - __main__ - memory_construction_time: 0.22
+09/21/2026 17:34:28 - INFO - __main__ - query_time_len: 55.77
+09/21/2026 17:34:28 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 9/9 [08:24<00:00, 52.69s/it][A100%|██████████| 9/9 [08:24<00:00, 56.09s/it]
+ 90%|█████████ | 9/10 [1:00:39<07:05, 425.33s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 10/10:   0%|          | 0/35 [00:00<?, ?it/s][AProcessing experiments 10/10: 100%|██████████| 35/35 [00:00<00:00, 5067.51it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 6 queries for context 9!!!!!
+
+
+  0%|          | 0/6 [00:00<?, ?it/s][AEden inject flush stored=408
+09/21/2026 17:36:34 - INFO - __main__ - exact_match: 72.73
+09/21/2026 17:36:34 - INFO - __main__ - f1: 74.15
+09/21/2026 17:36:34 - INFO - __main__ - substring_exact_match: 72.73
+09/21/2026 17:36:34 - INFO - __main__ - rougeL_f1: 75.19
+09/21/2026 17:36:34 - INFO - __main__ - rougeL_recall: 75.56
+09/21/2026 17:36:34 - INFO - __main__ - rougeLsum_f1: 75.19
+09/21/2026 17:36:34 - INFO - __main__ - rougeLsum_recall: 75.56
+09/21/2026 17:36:34 - INFO - __main__ - input_len: 4605.82
+09/21/2026 17:36:34 - INFO - __main__ - output_len: 179.38
+09/21/2026 17:36:34 - INFO - __main__ - memory_construction_time: 0.24
+09/21/2026 17:36:34 - INFO - __main__ - query_time_len: 56.81
+09/21/2026 17:36:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 17%|█▋        | 1/6 [02:06<10:30, 126.03s/it][AEden inject flush stored=410
+09/21/2026 17:37:10 - INFO - __main__ - exact_match: 73.13
+09/21/2026 17:37:10 - INFO - __main__ - f1: 74.54
+09/21/2026 17:37:10 - INFO - __main__ - substring_exact_match: 73.13
+09/21/2026 17:37:10 - INFO - __main__ - rougeL_f1: 75.56
+09/21/2026 17:37:10 - INFO - __main__ - rougeL_recall: 75.92
+09/21/2026 17:37:10 - INFO - __main__ - rougeLsum_f1: 75.56
+09/21/2026 17:37:10 - INFO - __main__ - rougeLsum_recall: 75.92
+09/21/2026 17:37:10 - INFO - __main__ - input_len: 4610.55
+09/21/2026 17:37:10 - INFO - __main__ - output_len: 180.03
+09/21/2026 17:37:10 - INFO - __main__ - memory_construction_time: 0.24
+09/21/2026 17:37:10 - INFO - __main__ - query_time_len: 56.51
+09/21/2026 17:37:10 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 33%|███▎      | 2/6 [02:42<04:53, 73.35s/it] [AEden inject flush stored=412
+09/21/2026 17:39:28 - INFO - __main__ - exact_match: 73.53
+09/21/2026 17:39:28 - INFO - __main__ - f1: 74.91
+09/21/2026 17:39:28 - INFO - __main__ - substring_exact_match: 73.53
+09/21/2026 17:39:28 - INFO - __main__ - rougeL_f1: 75.92
+09/21/2026 17:39:28 - INFO - __main__ - rougeL_recall: 76.27
+09/21/2026 17:39:28 - INFO - __main__ - rougeLsum_f1: 75.92
+09/21/2026 17:39:28 - INFO - __main__ - rougeLsum_recall: 76.27
+09/21/2026 17:39:28 - INFO - __main__ - input_len: 4624.59
+09/21/2026 17:39:28 - INFO - __main__ - output_len: 180.03
+09/21/2026 17:39:28 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:39:28 - INFO - __main__ - query_time_len: 57.70
+09/21/2026 17:39:28 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 50%|█████     | 3/6 [05:00<05:08, 102.76s/it][AEden inject flush stored=413
+09/21/2026 17:40:06 - INFO - __main__ - exact_match: 72.46
+09/21/2026 17:40:06 - INFO - __main__ - f1: 73.83
+09/21/2026 17:40:06 - INFO - __main__ - substring_exact_match: 72.46
+09/21/2026 17:40:06 - INFO - __main__ - rougeL_f1: 74.82
+09/21/2026 17:40:06 - INFO - __main__ - rougeL_recall: 75.17
+09/21/2026 17:40:06 - INFO - __main__ - rougeLsum_f1: 74.82
+09/21/2026 17:40:06 - INFO - __main__ - rougeLsum_recall: 75.17
+09/21/2026 17:40:06 - INFO - __main__ - input_len: 4637.17
+09/21/2026 17:40:06 - INFO - __main__ - output_len: 178.46
+09/21/2026 17:40:06 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:40:06 - INFO - __main__ - query_time_len: 57.42
+09/21/2026 17:40:06 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 67%|██████▋   | 4/6 [05:38<02:34, 77.20s/it] [AEden inject flush stored=414
+09/21/2026 17:40:42 - INFO - __main__ - exact_match: 72.86
+09/21/2026 17:40:42 - INFO - __main__ - f1: 74.20
+09/21/2026 17:40:42 - INFO - __main__ - substring_exact_match: 72.86
+09/21/2026 17:40:42 - INFO - __main__ - rougeL_f1: 75.18
+09/21/2026 17:40:42 - INFO - __main__ - rougeL_recall: 75.52
+09/21/2026 17:40:42 - INFO - __main__ - rougeLsum_f1: 75.18
+09/21/2026 17:40:42 - INFO - __main__ - rougeLsum_recall: 75.52
+09/21/2026 17:40:42 - INFO - __main__ - input_len: 4640.61
+09/21/2026 17:40:42 - INFO - __main__ - output_len: 178.91
+09/21/2026 17:40:42 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:40:42 - INFO - __main__ - query_time_len: 57.10
+09/21/2026 17:40:42 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+ 83%|████████▎ | 5/6 [06:13<01:02, 62.17s/it][AEden inject flush stored=415
+09/21/2026 17:41:15 - INFO - __main__ - exact_match: 73.24
+09/21/2026 17:41:15 - INFO - __main__ - f1: 74.57
+09/21/2026 17:41:15 - INFO - __main__ - substring_exact_match: 73.24
+09/21/2026 17:41:15 - INFO - __main__ - rougeL_f1: 75.53
+09/21/2026 17:41:15 - INFO - __main__ - rougeL_recall: 75.87
+09/21/2026 17:41:15 - INFO - __main__ - rougeLsum_f1: 75.53
+09/21/2026 17:41:15 - INFO - __main__ - rougeLsum_recall: 75.87
+09/21/2026 17:41:15 - INFO - __main__ - input_len: 4645.42
+09/21/2026 17:41:15 - INFO - __main__ - output_len: 177.77
+09/21/2026 17:41:15 - INFO - __main__ - memory_construction_time: 0.23
+09/21/2026 17:41:15 - INFO - __main__ - query_time_len: 56.77
+09/21/2026 17:41:15 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/detective_qa_unknown_in200000_size2000_shotsunknown_max_samples10_k10_chunk4096_results.json
+
+100%|██████████| 6/6 [06:47<00:00, 52.43s/it][A100%|██████████| 6/6 [06:47<00:00, 67.88s/it]
+100%|██████████| 10/10 [1:07:27<00:00, 419.77s/it]100%|██████████| 10/10 [1:07:27<00:00, 404.70s/it]
+09/21/2026 17:41:15 - INFO - __main__ - Total time taken: 4051.1492738723755
+leaf detqa: ok n=71 score=73.23943661971832
+Wrote /Users/kaiavnihalani/Downloads/Eden/benchmarks/memoryagentbench/TABLE3-RESULTS.md

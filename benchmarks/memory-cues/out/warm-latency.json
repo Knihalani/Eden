@@ -1,0 +1,46 @@
+{
+ "index_build_bm25f_205_ms": 2.102500000000001,
+ "index_build_bm25f_aliases_205_ms": 2.216958,
+ "M1 BM25F score-all N=205": {
+  "p50_ms": 0.053,
+  "p95_ms": 0.108
+ },
+ "M3 BM25F+aliases score-all N=205": {
+  "p50_ms": 0.062,
+  "p95_ms": 0.107
+ },
+ "M4 b8 embed+dot N=205": {
+  "p50_ms": 0.046,
+  "p95_ms": 0.056
+ },
+ "M4 r32 embed+dot N=205": {
+  "p50_ms": 0.093,
+  "p95_ms": 0.132
+ },
+ "index_build_bm25f_20000_ms": 68.42654199999998,
+ "index_build_bm25f_aliases_20000_ms": 71.01433399999999,
+ "M1 BM25F score-all N=20000": {
+  "p50_ms": 5.488,
+  "p95_ms": 8.245
+ },
+ "M3 BM25F+aliases score-all N=20000": {
+  "p50_ms": 5.91,
+  "p95_ms": 8.883
+ },
+ "M4 b8 embed+dot N=20000": {
+  "p50_ms": 3.58,
+  "p95_ms": 3.6
+ },
+ "M4 r32 embed+dot N=20000": {
+  "p50_ms": 7.33,
+  "p95_ms": 7.373
+ },
+ "M5 bge-small q8 query embed (transformers.js/onnxruntime-node)": {
+  "p50_ms": 1.306,
+  "p95_ms": 2.022
+ },
+ "M8 CE q8 rerank 20 pairs": {
+  "p50_ms": 30.108,
+  "p95_ms": 33.629
+ }
+}

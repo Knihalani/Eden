@@ -1,0 +1,3232 @@
+NIM smoke: (True, "ok model=google/gemma-4-31b-it reply='pong'")
+
+========== summ configs/data_conf/Long_Range_Understanding/InfBench_sum.yaml ==========
+
+archived stale /tmp/MemoryAgentBench/outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json → /tmp/MemoryAgentBench/outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/archive/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.pre-force.json
+
+
+Using agent-specific chunk_size: 4096
+
+
+09/21/2026 12:04:45 - INFO - conversation_creator - Running test on infbench_sum_eng_shots2
+Dataset: infbench_sum_eng_shots2
+Loading infbench_sum_eng_shots2 from Hugging Face dataset: ai-hyz/MemoryAgentBench
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+09/21/2026 12:04:45 - WARNING - huggingface_hub.utils._http - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loaded 110 samples from Long_Range_Understanding
+Filtered to 100 samples matching source 'infbench_sum_eng_shots2' (from 110 total)
+Dataset length: 100, each sample has 1 qa pairs
+  0%|          | 0/100 [00:00<?, ?it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 1/100:   0%|          | 0/95 [00:00<?, ?it/s][AProcessing experiments 1/100: 100%|██████████| 95/95 [00:00<00:00, 5916.77it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 0!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1566
+NIM reader using google/gemma-4-31b-it
+09/21/2026 12:06:19 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:06:19 - INFO - __main__ - f1: 29.69
+09/21/2026 12:06:19 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:06:19 - INFO - __main__ - rougeL_f1: 12.27
+09/21/2026 12:06:19 - INFO - __main__ - rougeL_recall: 16.77
+09/21/2026 12:06:19 - INFO - __main__ - rougeLsum_f1: 25.16
+09/21/2026 12:06:19 - INFO - __main__ - rougeLsum_recall: 34.39
+09/21/2026 12:06:19 - INFO - __main__ - input_len: 5334.00
+09/21/2026 12:06:19 - INFO - __main__ - output_len: 1024.00
+09/21/2026 12:06:19 - INFO - __main__ - memory_construction_time: 7.81
+09/21/2026 12:06:19 - INFO - __main__ - query_time_len: 68.92
+09/21/2026 12:06:19 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:16<00:00, 76.89s/it][A100%|██████████| 1/1 [01:16<00:00, 76.89s/it]
+  1%|          | 1/100 [01:16<2:07:01, 76.98s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 2/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 2/100: 100%|██████████| 22/22 [00:00<00:00, 4328.08it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 1!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=230
+09/21/2026 12:06:48 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:06:48 - INFO - __main__ - f1: 32.67
+09/21/2026 12:06:48 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:06:48 - INFO - __main__ - rougeL_f1: 13.89
+09/21/2026 12:06:48 - INFO - __main__ - rougeL_recall: 17.10
+09/21/2026 12:06:48 - INFO - __main__ - rougeLsum_f1: 30.19
+09/21/2026 12:06:48 - INFO - __main__ - rougeLsum_recall: 36.98
+09/21/2026 12:06:48 - INFO - __main__ - input_len: 5363.50
+09/21/2026 12:06:48 - INFO - __main__ - output_len: 1052.50
+09/21/2026 12:06:48 - INFO - __main__ - memory_construction_time: 4.24
+09/21/2026 12:06:48 - INFO - __main__ - query_time_len: 48.75
+09/21/2026 12:06:48 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:29<00:00, 29.51s/it][A100%|██████████| 1/1 [00:29<00:00, 29.51s/it]
+  2%|▏         | 2/100 [01:46<1:20:07, 49.06s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 3/100:   0%|          | 0/58 [00:00<?, ?it/s][AProcessing experiments 3/100: 100%|██████████| 58/58 [00:00<00:00, 3895.80it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 2!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=856
+09/21/2026 12:09:20 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:09:20 - INFO - __main__ - f1: 33.58
+09/21/2026 12:09:20 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:09:20 - INFO - __main__ - rougeL_f1: 14.59
+09/21/2026 12:09:20 - INFO - __main__ - rougeL_recall: 15.70
+09/21/2026 12:09:20 - INFO - __main__ - rougeLsum_f1: 32.20
+09/21/2026 12:09:20 - INFO - __main__ - rougeLsum_recall: 34.40
+09/21/2026 12:09:20 - INFO - __main__ - input_len: 5351.67
+09/21/2026 12:09:20 - INFO - __main__ - output_len: 966.00
+09/21/2026 12:09:20 - INFO - __main__ - memory_construction_time: 3.86
+09/21/2026 12:09:20 - INFO - __main__ - query_time_len: 81.81
+09/21/2026 12:09:20 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:31<00:00, 151.29s/it][A100%|██████████| 1/1 [02:31<00:00, 151.29s/it]
+  3%|▎         | 3/100 [04:17<2:34:47, 95.75s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 4/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 4/100: 100%|██████████| 23/23 [00:00<00:00, 5970.72it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 3!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=453
+09/21/2026 12:09:46 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:09:46 - INFO - __main__ - f1: 34.96
+09/21/2026 12:09:46 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:09:46 - INFO - __main__ - rougeL_f1: 15.43
+09/21/2026 12:09:46 - INFO - __main__ - rougeL_recall: 15.94
+09/21/2026 12:09:46 - INFO - __main__ - rougeLsum_f1: 33.90
+09/21/2026 12:09:46 - INFO - __main__ - rougeLsum_recall: 34.85
+09/21/2026 12:09:46 - INFO - __main__ - input_len: 5267.25
+09/21/2026 12:09:46 - INFO - __main__ - output_len: 973.00
+09/21/2026 12:09:46 - INFO - __main__ - memory_construction_time: 3.10
+09/21/2026 12:09:46 - INFO - __main__ - query_time_len: 67.63
+09/21/2026 12:09:46 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:26<00:00, 26.19s/it][A100%|██████████| 1/1 [00:26<00:00, 26.19s/it]
+  4%|▍         | 4/100 [04:44<1:49:15, 68.29s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 5/100:   0%|          | 0/33 [00:00<?, ?it/s][AProcessing experiments 5/100: 100%|██████████| 33/33 [00:00<00:00, 4559.93it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 4!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=325
+09/21/2026 12:10:16 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:10:16 - INFO - __main__ - f1: 35.96
+09/21/2026 12:10:16 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:10:16 - INFO - __main__ - rougeL_f1: 15.67
+09/21/2026 12:10:16 - INFO - __main__ - rougeL_recall: 15.81
+09/21/2026 12:10:16 - INFO - __main__ - rougeLsum_f1: 34.83
+09/21/2026 12:10:16 - INFO - __main__ - rougeLsum_recall: 34.96
+09/21/2026 12:10:16 - INFO - __main__ - input_len: 5366.40
+09/21/2026 12:10:16 - INFO - __main__ - output_len: 933.60
+09/21/2026 12:10:16 - INFO - __main__ - memory_construction_time: 2.72
+09/21/2026 12:10:16 - INFO - __main__ - query_time_len: 59.77
+09/21/2026 12:10:16 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:29<00:00, 29.77s/it][A100%|██████████| 1/1 [00:29<00:00, 29.77s/it]
+  5%|▌         | 5/100 [05:13<1:26:08, 54.40s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 6/100:   0%|          | 0/35 [00:00<?, ?it/s][AProcessing experiments 6/100: 100%|██████████| 35/35 [00:00<00:00, 6873.65it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 5!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=731
+09/21/2026 12:11:14 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:11:14 - INFO - __main__ - f1: 36.39
+09/21/2026 12:11:14 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:11:14 - INFO - __main__ - rougeL_f1: 15.81
+09/21/2026 12:11:14 - INFO - __main__ - rougeL_recall: 15.69
+09/21/2026 12:11:14 - INFO - __main__ - rougeLsum_f1: 35.34
+09/21/2026 12:11:14 - INFO - __main__ - rougeLsum_recall: 34.91
+09/21/2026 12:11:14 - INFO - __main__ - input_len: 5366.33
+09/21/2026 12:11:14 - INFO - __main__ - output_len: 966.17
+09/21/2026 12:11:14 - INFO - __main__ - memory_construction_time: 2.53
+09/21/2026 12:11:14 - INFO - __main__ - query_time_len: 59.26
+09/21/2026 12:11:14 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:58<00:00, 58.71s/it][A100%|██████████| 1/1 [00:58<00:00, 58.71s/it]
+  6%|▌         | 6/100 [06:12<1:27:31, 55.87s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 7/100:   0%|          | 0/38 [00:00<?, ?it/s][AProcessing experiments 7/100: 100%|██████████| 38/38 [00:00<00:00, 4815.65it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 6!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=420
+09/21/2026 12:11:56 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:11:56 - INFO - __main__ - f1: 36.49
+09/21/2026 12:11:56 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:11:56 - INFO - __main__ - rougeL_f1: 15.99
+09/21/2026 12:11:56 - INFO - __main__ - rougeL_recall: 15.48
+09/21/2026 12:11:56 - INFO - __main__ - rougeLsum_f1: 35.61
+09/21/2026 12:11:56 - INFO - __main__ - rougeLsum_recall: 34.36
+09/21/2026 12:11:56 - INFO - __main__ - input_len: 5426.00
+09/21/2026 12:11:56 - INFO - __main__ - output_len: 954.00
+09/21/2026 12:11:56 - INFO - __main__ - memory_construction_time: 2.37
+09/21/2026 12:11:56 - INFO - __main__ - query_time_len: 56.45
+09/21/2026 12:11:56 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:41<00:00, 41.27s/it][A100%|██████████| 1/1 [00:41<00:00, 41.27s/it]
+  7%|▋         | 7/100 [06:53<1:19:12, 51.10s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 8/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 8/100: 100%|██████████| 23/23 [00:00<00:00, 6373.06it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 7!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=195
+09/21/2026 12:12:30 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:12:30 - INFO - __main__ - f1: 35.83
+09/21/2026 12:12:30 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:12:30 - INFO - __main__ - rougeL_f1: 15.83
+09/21/2026 12:12:30 - INFO - __main__ - rougeL_recall: 14.93
+09/21/2026 12:12:30 - INFO - __main__ - rougeLsum_f1: 35.24
+09/21/2026 12:12:30 - INFO - __main__ - rougeLsum_recall: 33.14
+09/21/2026 12:12:30 - INFO - __main__ - input_len: 5475.75
+09/21/2026 12:12:30 - INFO - __main__ - output_len: 968.00
+09/21/2026 12:12:30 - INFO - __main__ - memory_construction_time: 2.16
+09/21/2026 12:12:30 - INFO - __main__ - query_time_len: 53.57
+09/21/2026 12:12:30 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:34<00:00, 34.72s/it][A100%|██████████| 1/1 [00:34<00:00, 34.72s/it]
+  8%|▊         | 8/100 [07:28<1:10:21, 45.89s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 9/100:   0%|          | 0/62 [00:00<?, ?it/s][AProcessing experiments 9/100: 100%|██████████| 62/62 [00:00<00:00, 4654.67it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 8!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=528
+09/21/2026 12:15:33 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:15:33 - INFO - __main__ - f1: 36.19
+09/21/2026 12:15:33 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:15:33 - INFO - __main__ - rougeL_f1: 15.83
+09/21/2026 12:15:33 - INFO - __main__ - rougeL_recall: 14.99
+09/21/2026 12:15:33 - INFO - __main__ - rougeLsum_f1: 35.47
+09/21/2026 12:15:33 - INFO - __main__ - rougeLsum_recall: 33.49
+09/21/2026 12:15:33 - INFO - __main__ - input_len: 5514.56
+09/21/2026 12:15:33 - INFO - __main__ - output_len: 971.78
+09/21/2026 12:15:33 - INFO - __main__ - memory_construction_time: 2.20
+09/21/2026 12:15:33 - INFO - __main__ - query_time_len: 67.60
+09/21/2026 12:15:33 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [03:02<00:00, 182.64s/it][A100%|██████████| 1/1 [03:02<00:00, 182.64s/it]
+  9%|▉         | 9/100 [10:31<2:14:26, 88.65s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 10/100:   0%|          | 0/131 [00:00<?, ?it/s][AProcessing experiments 10/100: 100%|██████████| 131/131 [00:00<00:00, 4533.82it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 9!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1924
+09/21/2026 12:16:47 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:16:47 - INFO - __main__ - f1: 35.98
+09/21/2026 12:16:47 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:16:47 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 12:16:47 - INFO - __main__ - rougeL_recall: 14.95
+09/21/2026 12:16:47 - INFO - __main__ - rougeLsum_f1: 35.37
+09/21/2026 12:16:47 - INFO - __main__ - rougeLsum_recall: 33.19
+09/21/2026 12:16:47 - INFO - __main__ - input_len: 5526.10
+09/21/2026 12:16:47 - INFO - __main__ - output_len: 970.90
+09/21/2026 12:16:47 - INFO - __main__ - memory_construction_time: 3.17
+09/21/2026 12:16:47 - INFO - __main__ - query_time_len: 66.98
+09/21/2026 12:16:47 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:13<00:00, 73.60s/it][A100%|██████████| 1/1 [01:13<00:00, 73.60s/it]
+ 10%|█         | 10/100 [11:44<2:06:00, 84.01s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 11/100:   0%|          | 0/89 [00:00<?, ?it/s][AProcessing experiments 11/100: 100%|██████████| 89/89 [00:00<00:00, 7384.63it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 10!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=858
+09/21/2026 12:17:26 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:17:26 - INFO - __main__ - f1: 35.27
+09/21/2026 12:17:26 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:17:26 - INFO - __main__ - rougeL_f1: 15.84
+09/21/2026 12:17:26 - INFO - __main__ - rougeL_recall: 14.86
+09/21/2026 12:17:26 - INFO - __main__ - rougeLsum_f1: 35.03
+09/21/2026 12:17:26 - INFO - __main__ - rougeLsum_recall: 32.81
+09/21/2026 12:17:26 - INFO - __main__ - input_len: 5481.73
+09/21/2026 12:17:26 - INFO - __main__ - output_len: 984.00
+09/21/2026 12:17:26 - INFO - __main__ - memory_construction_time: 3.14
+09/21/2026 12:17:26 - INFO - __main__ - query_time_len: 64.17
+09/21/2026 12:17:26 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:39<00:00, 39.31s/it][A100%|██████████| 1/1 [00:39<00:00, 39.31s/it]
+ 11%|█         | 11/100 [12:24<1:44:19, 70.33s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 12/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 12/100: 100%|██████████| 22/22 [00:00<00:00, 4313.72it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 11!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=189
+09/21/2026 12:17:57 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:17:57 - INFO - __main__ - f1: 35.32
+09/21/2026 12:17:57 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:17:57 - INFO - __main__ - rougeL_f1: 15.75
+09/21/2026 12:17:57 - INFO - __main__ - rougeL_recall: 14.69
+09/21/2026 12:17:57 - INFO - __main__ - rougeLsum_f1: 35.08
+09/21/2026 12:17:57 - INFO - __main__ - rougeLsum_recall: 32.66
+09/21/2026 12:17:57 - INFO - __main__ - input_len: 5526.92
+09/21/2026 12:17:57 - INFO - __main__ - output_len: 982.83
+09/21/2026 12:17:57 - INFO - __main__ - memory_construction_time: 2.94
+09/21/2026 12:17:57 - INFO - __main__ - query_time_len: 61.33
+09/21/2026 12:17:57 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:31<00:00, 31.14s/it][A100%|██████████| 1/1 [00:31<00:00, 31.14s/it]
+ 12%|█▏        | 12/100 [12:55<1:25:40, 58.41s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 13/100:   0%|          | 0/64 [00:00<?, ?it/s][AProcessing experiments 13/100: 100%|██████████| 64/64 [00:00<00:00, 4585.90it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 12!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=648
+09/21/2026 12:18:59 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:18:59 - INFO - __main__ - f1: 34.72
+09/21/2026 12:18:59 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:18:59 - INFO - __main__ - rougeL_f1: 15.67
+09/21/2026 12:18:59 - INFO - __main__ - rougeL_recall: 14.72
+09/21/2026 12:18:59 - INFO - __main__ - rougeLsum_f1: 34.59
+09/21/2026 12:18:59 - INFO - __main__ - rougeLsum_recall: 32.41
+09/21/2026 12:18:59 - INFO - __main__ - input_len: 5533.62
+09/21/2026 12:18:59 - INFO - __main__ - output_len: 996.00
+09/21/2026 12:18:59 - INFO - __main__ - memory_construction_time: 2.95
+09/21/2026 12:18:59 - INFO - __main__ - query_time_len: 61.12
+09/21/2026 12:18:59 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:01<00:00, 61.85s/it][A100%|██████████| 1/1 [01:01<00:00, 61.85s/it]
+ 13%|█▎        | 13/100 [13:57<1:26:12, 59.46s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 14/100:   0%|          | 0/50 [00:00<?, ?it/s][AProcessing experiments 14/100: 100%|██████████| 50/50 [00:00<00:00, 5914.97it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 13!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=561
+09/21/2026 12:19:57 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:19:57 - INFO - __main__ - f1: 35.35
+09/21/2026 12:19:57 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:19:57 - INFO - __main__ - rougeL_f1: 15.76
+09/21/2026 12:19:57 - INFO - __main__ - rougeL_recall: 14.97
+09/21/2026 12:19:57 - INFO - __main__ - rougeLsum_f1: 35.05
+09/21/2026 12:19:57 - INFO - __main__ - rougeLsum_recall: 33.26
+09/21/2026 12:19:57 - INFO - __main__ - input_len: 5545.64
+09/21/2026 12:19:57 - INFO - __main__ - output_len: 999.29
+09/21/2026 12:19:57 - INFO - __main__ - memory_construction_time: 2.90
+09/21/2026 12:19:57 - INFO - __main__ - query_time_len: 60.70
+09/21/2026 12:19:57 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:57<00:00, 57.89s/it][A100%|██████████| 1/1 [00:57<00:00, 57.89s/it]
+ 14%|█▍        | 14/100 [14:55<1:24:32, 58.99s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 15/100:   0%|          | 0/182 [00:00<?, ?it/s][AProcessing experiments 15/100: 100%|██████████| 182/182 [00:00<00:00, 4473.40it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 14!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=3032
+09/21/2026 12:21:01 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:21:01 - INFO - __main__ - f1: 34.91
+09/21/2026 12:21:01 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:21:01 - INFO - __main__ - rougeL_f1: 15.71
+09/21/2026 12:21:01 - INFO - __main__ - rougeL_recall: 14.90
+09/21/2026 12:21:01 - INFO - __main__ - rougeLsum_f1: 34.78
+09/21/2026 12:21:01 - INFO - __main__ - rougeLsum_recall: 32.93
+09/21/2026 12:21:01 - INFO - __main__ - input_len: 5524.27
+09/21/2026 12:21:01 - INFO - __main__ - output_len: 1009.40
+09/21/2026 12:21:01 - INFO - __main__ - memory_construction_time: 4.30
+09/21/2026 12:21:01 - INFO - __main__ - query_time_len: 59.34
+09/21/2026 12:21:01 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:04<00:00, 64.56s/it][A100%|██████████| 1/1 [01:04<00:00, 64.56s/it]
+ 15%|█▌        | 15/100 [15:59<1:25:57, 60.68s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 16/100:   0%|          | 0/148 [00:00<?, ?it/s][AProcessing experiments 16/100: 100%|██████████| 148/148 [00:00<00:00, 6044.96it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 15!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=2345
+09/21/2026 12:25:35 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:25:35 - INFO - __main__ - f1: 35.09
+09/21/2026 12:25:35 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:25:35 - INFO - __main__ - rougeL_f1: 15.69
+09/21/2026 12:25:35 - INFO - __main__ - rougeL_recall: 14.80
+09/21/2026 12:25:35 - INFO - __main__ - rougeLsum_f1: 34.83
+09/21/2026 12:25:35 - INFO - __main__ - rougeLsum_recall: 32.81
+09/21/2026 12:25:35 - INFO - __main__ - input_len: 5509.19
+09/21/2026 12:25:35 - INFO - __main__ - output_len: 1009.56
+09/21/2026 12:25:35 - INFO - __main__ - memory_construction_time: 4.98
+09/21/2026 12:25:35 - INFO - __main__ - query_time_len: 71.73
+09/21/2026 12:25:35 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [04:33<00:00, 273.18s/it][A100%|██████████| 1/1 [04:33<00:00, 273.18s/it]
+ 16%|█▌        | 16/100 [20:32<2:54:30, 124.65s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 17/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 17/100: 100%|██████████| 20/20 [00:00<00:00, 4257.96it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 16!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=328
+NIM retry 1/16 google/gemma-4-31b-it after 8s: APIConnectionError
+09/21/2026 12:31:02 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:31:02 - INFO - __main__ - f1: 34.92
+09/21/2026 12:31:02 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:31:02 - INFO - __main__ - rougeL_f1: 15.74
+09/21/2026 12:31:02 - INFO - __main__ - rougeL_recall: 15.44
+09/21/2026 12:31:02 - INFO - __main__ - rougeLsum_f1: 34.57
+09/21/2026 12:31:02 - INFO - __main__ - rougeLsum_recall: 33.67
+09/21/2026 12:31:02 - INFO - __main__ - input_len: 5510.00
+09/21/2026 12:31:02 - INFO - __main__ - output_len: 1009.65
+09/21/2026 12:31:02 - INFO - __main__ - memory_construction_time: 4.72
+09/21/2026 12:31:02 - INFO - __main__ - query_time_len: 86.71
+09/21/2026 12:31:02 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [05:27<00:00, 327.18s/it][A100%|██████████| 1/1 [05:27<00:00, 327.18s/it]
+ 17%|█▋        | 17/100 [26:00<4:16:40, 185.55s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 18/100:   0%|          | 0/33 [00:00<?, ?it/s][AProcessing experiments 18/100: 100%|██████████| 33/33 [00:00<00:00, 6457.89it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 17!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=403
+NIM retry 1/16 google/gemma-4-31b-it after 8s: APIConnectionError
+09/21/2026 12:39:59 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:39:59 - INFO - __main__ - f1: 34.65
+09/21/2026 12:39:59 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:39:59 - INFO - __main__ - rougeL_f1: 15.58
+09/21/2026 12:39:59 - INFO - __main__ - rougeL_recall: 15.68
+09/21/2026 12:39:59 - INFO - __main__ - rougeLsum_f1: 34.22
+09/21/2026 12:39:59 - INFO - __main__ - rougeLsum_recall: 34.20
+09/21/2026 12:39:59 - INFO - __main__ - input_len: 5516.17
+09/21/2026 12:39:59 - INFO - __main__ - output_len: 1011.89
+09/21/2026 12:39:59 - INFO - __main__ - memory_construction_time: 4.53
+09/21/2026 12:39:59 - INFO - __main__ - query_time_len: 111.66
+09/21/2026 12:39:59 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [08:57<00:00, 537.12s/it][A100%|██████████| 1/1 [08:57<00:00, 537.12s/it]
+ 18%|█▊        | 18/100 [34:57<6:37:58, 291.20s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 19/100:   0%|          | 0/65 [00:00<?, ?it/s][AProcessing experiments 19/100: 100%|██████████| 65/65 [00:00<00:00, 4652.23it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 18!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=717
+09/21/2026 12:40:53 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:40:53 - INFO - __main__ - f1: 34.47
+09/21/2026 12:40:53 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:40:53 - INFO - __main__ - rougeL_f1: 15.60
+09/21/2026 12:40:53 - INFO - __main__ - rougeL_recall: 15.47
+09/21/2026 12:40:53 - INFO - __main__ - rougeLsum_f1: 34.12
+09/21/2026 12:40:53 - INFO - __main__ - rougeLsum_recall: 33.64
+09/21/2026 12:40:53 - INFO - __main__ - input_len: 5520.68
+09/21/2026 12:40:53 - INFO - __main__ - output_len: 1021.79
+09/21/2026 12:40:53 - INFO - __main__ - memory_construction_time: 4.46
+09/21/2026 12:40:53 - INFO - __main__ - query_time_len: 108.43
+09/21/2026 12:40:53 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:54<00:00, 54.30s/it][A100%|██████████| 1/1 [00:54<00:00, 54.30s/it]
+ 19%|█▉        | 19/100 [35:51<4:57:04, 220.05s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 20/100:   0%|          | 0/99 [00:00<?, ?it/s][AProcessing experiments 20/100: 100%|██████████| 99/99 [00:00<00:00, 6467.25it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 19!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1219
+09/21/2026 12:41:28 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:41:28 - INFO - __main__ - f1: 34.55
+09/21/2026 12:41:28 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:41:28 - INFO - __main__ - rougeL_f1: 15.60
+09/21/2026 12:41:28 - INFO - __main__ - rougeL_recall: 15.48
+09/21/2026 12:41:28 - INFO - __main__ - rougeLsum_f1: 34.13
+09/21/2026 12:41:28 - INFO - __main__ - rougeLsum_recall: 33.70
+09/21/2026 12:41:28 - INFO - __main__ - input_len: 5527.60
+09/21/2026 12:41:28 - INFO - __main__ - output_len: 1023.90
+09/21/2026 12:41:28 - INFO - __main__ - memory_construction_time: 4.43
+09/21/2026 12:41:28 - INFO - __main__ - query_time_len: 104.53
+09/21/2026 12:41:28 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:34<00:00, 34.65s/it][A100%|██████████| 1/1 [00:34<00:00, 34.65s/it]
+ 20%|██        | 20/100 [36:26<3:39:11, 164.39s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 21/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 21/100: 100%|██████████| 23/23 [00:00<00:00, 4624.81it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 20!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=324
+09/21/2026 12:43:50 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:43:50 - INFO - __main__ - f1: 34.79
+09/21/2026 12:43:50 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:43:50 - INFO - __main__ - rougeL_f1: 15.62
+09/21/2026 12:43:50 - INFO - __main__ - rougeL_recall: 15.81
+09/21/2026 12:43:50 - INFO - __main__ - rougeLsum_f1: 33.86
+09/21/2026 12:43:50 - INFO - __main__ - rougeLsum_recall: 33.98
+09/21/2026 12:43:50 - INFO - __main__ - input_len: 5521.33
+09/21/2026 12:43:50 - INFO - __main__ - output_len: 1016.00
+09/21/2026 12:43:50 - INFO - __main__ - memory_construction_time: 4.26
+09/21/2026 12:43:50 - INFO - __main__ - query_time_len: 106.29
+09/21/2026 12:43:50 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:22<00:00, 142.29s/it][A100%|██████████| 1/1 [02:22<00:00, 142.29s/it]
+ 21%|██        | 21/100 [38:48<3:27:43, 157.76s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 22/100:   0%|          | 0/36 [00:00<?, ?it/s][AProcessing experiments 22/100: 100%|██████████| 36/36 [00:00<00:00, 4684.05it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 21!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=596
+09/21/2026 12:46:00 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:46:00 - INFO - __main__ - f1: 34.91
+09/21/2026 12:46:00 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:46:00 - INFO - __main__ - rougeL_f1: 15.67
+09/21/2026 12:46:00 - INFO - __main__ - rougeL_recall: 15.73
+09/21/2026 12:46:00 - INFO - __main__ - rougeLsum_f1: 33.95
+09/21/2026 12:46:00 - INFO - __main__ - rougeLsum_recall: 33.80
+09/21/2026 12:46:00 - INFO - __main__ - input_len: 5513.82
+09/21/2026 12:46:00 - INFO - __main__ - output_len: 1017.41
+09/21/2026 12:46:00 - INFO - __main__ - memory_construction_time: 4.13
+09/21/2026 12:46:00 - INFO - __main__ - query_time_len: 107.25
+09/21/2026 12:46:00 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:09<00:00, 129.34s/it][A100%|██████████| 1/1 [02:09<00:00, 129.34s/it]
+ 22%|██▏       | 22/100 [40:57<3:14:00, 149.23s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 23/100:   0%|          | 0/51 [00:00<?, ?it/s][AProcessing experiments 23/100: 100%|██████████| 51/51 [00:00<00:00, 7330.69it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 22!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=560
+09/21/2026 12:46:46 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:46:46 - INFO - __main__ - f1: 35.07
+09/21/2026 12:46:46 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:46:46 - INFO - __main__ - rougeL_f1: 15.70
+09/21/2026 12:46:46 - INFO - __main__ - rougeL_recall: 15.83
+09/21/2026 12:46:46 - INFO - __main__ - rougeLsum_f1: 33.97
+09/21/2026 12:46:46 - INFO - __main__ - rougeLsum_recall: 33.99
+09/21/2026 12:46:46 - INFO - __main__ - input_len: 5542.87
+09/21/2026 12:46:46 - INFO - __main__ - output_len: 1010.17
+09/21/2026 12:46:46 - INFO - __main__ - memory_construction_time: 4.02
+09/21/2026 12:46:46 - INFO - __main__ - query_time_len: 104.54
+09/21/2026 12:46:46 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:46<00:00, 46.53s/it][A100%|██████████| 1/1 [00:46<00:00, 46.53s/it]
+ 23%|██▎       | 23/100 [41:44<2:31:58, 118.42s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 24/100:   0%|          | 0/30 [00:00<?, ?it/s][AProcessing experiments 24/100: 100%|██████████| 30/30 [00:00<00:00, 4532.91it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 23!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=675
+09/21/2026 12:50:27 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:50:27 - INFO - __main__ - f1: 34.54
+09/21/2026 12:50:27 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:50:27 - INFO - __main__ - rougeL_f1: 15.62
+09/21/2026 12:50:27 - INFO - __main__ - rougeL_recall: 16.27
+09/21/2026 12:50:27 - INFO - __main__ - rougeLsum_f1: 33.52
+09/21/2026 12:50:27 - INFO - __main__ - rougeLsum_recall: 34.39
+09/21/2026 12:50:27 - INFO - __main__ - input_len: 5572.46
+09/21/2026 12:50:27 - INFO - __main__ - output_len: 1010.54
+09/21/2026 12:50:27 - INFO - __main__ - memory_construction_time: 3.90
+09/21/2026 12:50:27 - INFO - __main__ - query_time_len: 109.34
+09/21/2026 12:50:27 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [03:41<00:00, 221.18s/it][A100%|██████████| 1/1 [03:41<00:00, 221.18s/it]
+ 24%|██▍       | 24/100 [45:25<3:09:03, 149.26s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 25/100:   0%|          | 0/43 [00:00<?, ?it/s][AProcessing experiments 25/100: 100%|██████████| 43/43 [00:00<00:00, 5611.37it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 24!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=437
+09/21/2026 12:50:57 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:50:57 - INFO - __main__ - f1: 34.67
+09/21/2026 12:50:57 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:50:57 - INFO - __main__ - rougeL_f1: 15.71
+09/21/2026 12:50:57 - INFO - __main__ - rougeL_recall: 16.24
+09/21/2026 12:50:57 - INFO - __main__ - rougeLsum_f1: 33.75
+09/21/2026 12:50:57 - INFO - __main__ - rougeLsum_recall: 34.40
+09/21/2026 12:50:57 - INFO - __main__ - input_len: 5601.76
+09/21/2026 12:50:57 - INFO - __main__ - output_len: 1003.24
+09/21/2026 12:50:57 - INFO - __main__ - memory_construction_time: 3.83
+09/21/2026 12:50:57 - INFO - __main__ - query_time_len: 106.08
+09/21/2026 12:50:57 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:30<00:00, 30.20s/it][A100%|██████████| 1/1 [00:30<00:00, 30.20s/it]
+ 25%|██▌       | 25/100 [45:55<2:21:55, 113.54s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 26/100:   0%|          | 0/45 [00:00<?, ?it/s][AProcessing experiments 26/100: 100%|██████████| 45/45 [00:00<00:00, 6587.91it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 25!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1041
+09/21/2026 12:51:26 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:51:26 - INFO - __main__ - f1: 34.53
+09/21/2026 12:51:26 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:51:26 - INFO - __main__ - rougeL_f1: 15.74
+09/21/2026 12:51:26 - INFO - __main__ - rougeL_recall: 16.33
+09/21/2026 12:51:26 - INFO - __main__ - rougeLsum_f1: 33.67
+09/21/2026 12:51:26 - INFO - __main__ - rougeLsum_recall: 34.46
+09/21/2026 12:51:26 - INFO - __main__ - input_len: 5627.35
+09/21/2026 12:51:26 - INFO - __main__ - output_len: 1002.85
+09/21/2026 12:51:26 - INFO - __main__ - memory_construction_time: 3.77
+09/21/2026 12:51:26 - INFO - __main__ - query_time_len: 103.01
+09/21/2026 12:51:26 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:28<00:00, 28.74s/it][A100%|██████████| 1/1 [00:28<00:00, 28.74s/it]
+ 26%|██▌       | 26/100 [46:24<1:48:39, 88.10s/it] Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 27/100:   0%|          | 0/48 [00:00<?, ?it/s][AProcessing experiments 27/100: 100%|██████████| 48/48 [00:00<00:00, 6758.65it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 26!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=819
+09/21/2026 12:51:58 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:51:58 - INFO - __main__ - f1: 34.59
+09/21/2026 12:51:58 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:51:58 - INFO - __main__ - rougeL_f1: 15.76
+09/21/2026 12:51:58 - INFO - __main__ - rougeL_recall: 16.35
+09/21/2026 12:51:58 - INFO - __main__ - rougeLsum_f1: 33.78
+09/21/2026 12:51:58 - INFO - __main__ - rougeLsum_recall: 34.58
+09/21/2026 12:51:58 - INFO - __main__ - input_len: 5650.48
+09/21/2026 12:51:58 - INFO - __main__ - output_len: 1006.26
+09/21/2026 12:51:58 - INFO - __main__ - memory_construction_time: 3.71
+09/21/2026 12:51:58 - INFO - __main__ - query_time_len: 100.28
+09/21/2026 12:51:58 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:31<00:00, 31.71s/it][A100%|██████████| 1/1 [00:31<00:00, 31.71s/it]
+ 27%|██▋       | 27/100 [46:56<1:26:36, 71.18s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 28/100:   0%|          | 0/53 [00:00<?, ?it/s][AProcessing experiments 28/100: 100%|██████████| 53/53 [00:00<00:00, 6848.37it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 27!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=762
+09/21/2026 12:52:26 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:52:26 - INFO - __main__ - f1: 34.78
+09/21/2026 12:52:26 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:52:26 - INFO - __main__ - rougeL_f1: 15.73
+09/21/2026 12:52:26 - INFO - __main__ - rougeL_recall: 16.26
+09/21/2026 12:52:26 - INFO - __main__ - rougeLsum_f1: 33.91
+09/21/2026 12:52:26 - INFO - __main__ - rougeLsum_recall: 34.59
+09/21/2026 12:52:26 - INFO - __main__ - input_len: 5677.82
+09/21/2026 12:52:26 - INFO - __main__ - output_len: 1003.75
+09/21/2026 12:52:26 - INFO - __main__ - memory_construction_time: 3.67
+09/21/2026 12:52:26 - INFO - __main__ - query_time_len: 97.59
+09/21/2026 12:52:26 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:27<00:00, 27.65s/it][A100%|██████████| 1/1 [00:27<00:00, 27.65s/it]
+ 28%|██▊       | 28/100 [47:23<1:09:45, 58.13s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 29/100:   0%|          | 0/64 [00:00<?, ?it/s][AProcessing experiments 29/100: 100%|██████████| 64/64 [00:00<00:00, 6984.69it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 28!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1095
+09/21/2026 12:53:06 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:53:06 - INFO - __main__ - f1: 34.78
+09/21/2026 12:53:06 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:53:06 - INFO - __main__ - rougeL_f1: 15.70
+09/21/2026 12:53:06 - INFO - __main__ - rougeL_recall: 16.19
+09/21/2026 12:53:06 - INFO - __main__ - rougeLsum_f1: 33.99
+09/21/2026 12:53:06 - INFO - __main__ - rougeLsum_recall: 34.57
+09/21/2026 12:53:06 - INFO - __main__ - input_len: 5704.34
+09/21/2026 12:53:06 - INFO - __main__ - output_len: 1006.38
+09/21/2026 12:53:06 - INFO - __main__ - memory_construction_time: 3.66
+09/21/2026 12:53:06 - INFO - __main__ - query_time_len: 95.47
+09/21/2026 12:53:06 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:40<00:00, 40.16s/it][A100%|██████████| 1/1 [00:40<00:00, 40.16s/it]
+ 29%|██▉       | 29/100 [48:04<1:02:24, 52.74s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 30/100:   0%|          | 0/18 [00:00<?, ?it/s][AProcessing experiments 30/100: 100%|██████████| 18/18 [00:00<00:00, 6105.25it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 29!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=312
+09/21/2026 12:53:34 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:53:34 - INFO - __main__ - f1: 34.95
+09/21/2026 12:53:34 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:53:34 - INFO - __main__ - rougeL_f1: 15.79
+09/21/2026 12:53:34 - INFO - __main__ - rougeL_recall: 16.29
+09/21/2026 12:53:34 - INFO - __main__ - rougeLsum_f1: 34.16
+09/21/2026 12:53:34 - INFO - __main__ - rougeLsum_recall: 34.81
+09/21/2026 12:53:34 - INFO - __main__ - input_len: 5719.33
+09/21/2026 12:53:34 - INFO - __main__ - output_len: 1003.23
+09/21/2026 12:53:34 - INFO - __main__ - memory_construction_time: 3.56
+09/21/2026 12:53:34 - INFO - __main__ - query_time_len: 93.21
+09/21/2026 12:53:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:28<00:00, 28.44s/it][A100%|██████████| 1/1 [00:28<00:00, 28.44s/it]
+ 30%|███       | 30/100 [48:32<53:01, 45.45s/it]  Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 31/100:   0%|          | 0/36 [00:00<?, ?it/s][AProcessing experiments 31/100: 100%|██████████| 36/36 [00:00<00:00, 6176.93it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 30!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=398
+09/21/2026 12:54:23 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:54:23 - INFO - __main__ - f1: 35.14
+09/21/2026 12:54:23 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:54:23 - INFO - __main__ - rougeL_f1: 15.79
+09/21/2026 12:54:23 - INFO - __main__ - rougeL_recall: 16.31
+09/21/2026 12:54:23 - INFO - __main__ - rougeLsum_f1: 34.25
+09/21/2026 12:54:23 - INFO - __main__ - rougeLsum_recall: 34.93
+09/21/2026 12:54:23 - INFO - __main__ - input_len: 5738.97
+09/21/2026 12:54:23 - INFO - __main__ - output_len: 1004.19
+09/21/2026 12:54:23 - INFO - __main__ - memory_construction_time: 3.49
+09/21/2026 12:54:23 - INFO - __main__ - query_time_len: 91.74
+09/21/2026 12:54:23 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:49<00:00, 49.11s/it][A100%|██████████| 1/1 [00:49<00:00, 49.11s/it]
+ 31%|███       | 31/100 [49:21<53:32, 46.55s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 32/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 32/100: 100%|██████████| 23/23 [00:00<00:00, 6285.85it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 31!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=208
+09/21/2026 12:55:00 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:55:00 - INFO - __main__ - f1: 35.20
+09/21/2026 12:55:00 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:55:00 - INFO - __main__ - rougeL_f1: 15.83
+09/21/2026 12:55:00 - INFO - __main__ - rougeL_recall: 16.42
+09/21/2026 12:55:00 - INFO - __main__ - rougeLsum_f1: 34.23
+09/21/2026 12:55:00 - INFO - __main__ - rougeLsum_recall: 35.07
+09/21/2026 12:55:00 - INFO - __main__ - input_len: 5764.41
+09/21/2026 12:55:00 - INFO - __main__ - output_len: 1009.50
+09/21/2026 12:55:00 - INFO - __main__ - memory_construction_time: 3.40
+09/21/2026 12:55:00 - INFO - __main__ - query_time_len: 90.00
+09/21/2026 12:55:00 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:36<00:00, 36.95s/it][A100%|██████████| 1/1 [00:36<00:00, 36.95s/it]
+ 32%|███▏      | 32/100 [49:58<49:29, 43.67s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 33/100:   0%|          | 0/51 [00:00<?, ?it/s][AProcessing experiments 33/100: 100%|██████████| 51/51 [00:00<00:00, 6119.74it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 32!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=596
+09/21/2026 12:57:05 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:57:05 - INFO - __main__ - f1: 35.25
+09/21/2026 12:57:05 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:57:05 - INFO - __main__ - rougeL_f1: 15.84
+09/21/2026 12:57:05 - INFO - __main__ - rougeL_recall: 16.34
+09/21/2026 12:57:05 - INFO - __main__ - rougeLsum_f1: 34.26
+09/21/2026 12:57:05 - INFO - __main__ - rougeLsum_recall: 34.92
+09/21/2026 12:57:05 - INFO - __main__ - input_len: 5783.79
+09/21/2026 12:57:05 - INFO - __main__ - output_len: 1007.15
+09/21/2026 12:57:05 - INFO - __main__ - memory_construction_time: 3.37
+09/21/2026 12:57:05 - INFO - __main__ - query_time_len: 90.96
+09/21/2026 12:57:05 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:04<00:00, 124.69s/it][A100%|██████████| 1/1 [02:04<00:00, 124.69s/it]
+ 33%|███▎      | 33/100 [52:03<1:15:54, 67.98s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 34/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 34/100: 100%|██████████| 29/29 [00:00<00:00, 6358.00it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 33!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=735
+09/21/2026 12:58:34 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:58:34 - INFO - __main__ - f1: 35.04
+09/21/2026 12:58:34 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:58:34 - INFO - __main__ - rougeL_f1: 15.81
+09/21/2026 12:58:34 - INFO - __main__ - rougeL_recall: 16.23
+09/21/2026 12:58:34 - INFO - __main__ - rougeLsum_f1: 34.17
+09/21/2026 12:58:34 - INFO - __main__ - rougeLsum_recall: 34.66
+09/21/2026 12:58:34 - INFO - __main__ - input_len: 5792.47
+09/21/2026 12:58:34 - INFO - __main__ - output_len: 1007.32
+09/21/2026 12:58:34 - INFO - __main__ - memory_construction_time: 3.31
+09/21/2026 12:58:34 - INFO - __main__ - query_time_len: 90.84
+09/21/2026 12:58:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:28<00:00, 88.53s/it][A100%|██████████| 1/1 [01:28<00:00, 88.53s/it]
+ 34%|███▍      | 34/100 [53:31<1:21:33, 74.15s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 35/100:   0%|          | 0/30 [00:00<?, ?it/s][AProcessing experiments 35/100: 100%|██████████| 30/30 [00:00<00:00, 5234.81it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 34!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=489
+09/21/2026 12:59:00 - INFO - __main__ - exact_match: 0.00
+09/21/2026 12:59:00 - INFO - __main__ - f1: 35.09
+09/21/2026 12:59:00 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 12:59:00 - INFO - __main__ - rougeL_f1: 15.84
+09/21/2026 12:59:00 - INFO - __main__ - rougeL_recall: 16.28
+09/21/2026 12:59:00 - INFO - __main__ - rougeLsum_f1: 34.13
+09/21/2026 12:59:00 - INFO - __main__ - rougeLsum_recall: 34.68
+09/21/2026 12:59:00 - INFO - __main__ - input_len: 5802.89
+09/21/2026 12:59:00 - INFO - __main__ - output_len: 1006.26
+09/21/2026 12:59:00 - INFO - __main__ - memory_construction_time: 3.25
+09/21/2026 12:59:00 - INFO - __main__ - query_time_len: 88.95
+09/21/2026 12:59:00 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:25<00:00, 25.98s/it][A100%|██████████| 1/1 [00:25<00:00, 25.98s/it]
+ 35%|███▌      | 35/100 [53:57<1:04:40, 59.70s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 36/100:   0%|          | 0/92 [00:00<?, ?it/s][AProcessing experiments 36/100: 100%|██████████| 92/92 [00:00<00:00, 6754.82it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 35!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1387
+09/21/2026 13:00:15 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:00:15 - INFO - __main__ - f1: 35.01
+09/21/2026 13:00:15 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:00:15 - INFO - __main__ - rougeL_f1: 15.77
+09/21/2026 13:00:15 - INFO - __main__ - rougeL_recall: 16.17
+09/21/2026 13:00:15 - INFO - __main__ - rougeLsum_f1: 34.05
+09/21/2026 13:00:15 - INFO - __main__ - rougeLsum_recall: 34.53
+09/21/2026 13:00:15 - INFO - __main__ - input_len: 5811.64
+09/21/2026 13:00:15 - INFO - __main__ - output_len: 1008.25
+09/21/2026 13:00:15 - INFO - __main__ - memory_construction_time: 3.33
+09/21/2026 13:00:15 - INFO - __main__ - query_time_len: 88.40
+09/21/2026 13:00:15 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:15<00:00, 75.74s/it][A100%|██████████| 1/1 [01:15<00:00, 75.74s/it]
+ 36%|███▌      | 36/100 [55:13<1:08:49, 64.52s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 37/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 37/100: 100%|██████████| 19/19 [00:00<00:00, 6615.62it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 36!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=195
+09/21/2026 13:04:08 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:04:08 - INFO - __main__ - f1: 35.09
+09/21/2026 13:04:08 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:04:08 - INFO - __main__ - rougeL_f1: 15.78
+09/21/2026 13:04:08 - INFO - __main__ - rougeL_recall: 16.20
+09/21/2026 13:04:08 - INFO - __main__ - rougeLsum_f1: 34.09
+09/21/2026 13:04:08 - INFO - __main__ - rougeLsum_recall: 34.61
+09/21/2026 13:04:08 - INFO - __main__ - input_len: 5819.43
+09/21/2026 13:04:08 - INFO - __main__ - output_len: 1010.24
+09/21/2026 13:04:08 - INFO - __main__ - memory_construction_time: 3.26
+09/21/2026 13:04:08 - INFO - __main__ - query_time_len: 92.27
+09/21/2026 13:04:08 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [03:52<00:00, 232.59s/it][A100%|██████████| 1/1 [03:52<00:00, 232.60s/it]
+ 37%|███▋      | 37/100 [59:06<2:00:41, 114.94s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 38/100:   0%|          | 0/59 [00:00<?, ?it/s][AProcessing experiments 38/100: 100%|██████████| 59/59 [00:00<00:00, 5285.43it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 37!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=887
+09/21/2026 13:04:52 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:04:52 - INFO - __main__ - f1: 35.09
+09/21/2026 13:04:52 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:04:52 - INFO - __main__ - rougeL_f1: 15.76
+09/21/2026 13:04:52 - INFO - __main__ - rougeL_recall: 16.13
+09/21/2026 13:04:52 - INFO - __main__ - rougeLsum_f1: 34.19
+09/21/2026 13:04:52 - INFO - __main__ - rougeLsum_recall: 34.59
+09/21/2026 13:04:52 - INFO - __main__ - input_len: 5837.21
+09/21/2026 13:04:52 - INFO - __main__ - output_len: 1007.11
+09/21/2026 13:04:52 - INFO - __main__ - memory_construction_time: 3.26
+09/21/2026 13:04:52 - INFO - __main__ - query_time_len: 90.92
+09/21/2026 13:04:52 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:44<00:00, 44.62s/it][A100%|██████████| 1/1 [00:44<00:00, 44.62s/it]
+ 38%|███▊      | 38/100 [59:50<1:36:58, 93.85s/it] Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 39/100:   0%|          | 0/40 [00:00<?, ?it/s][AProcessing experiments 39/100: 100%|██████████| 40/40 [00:00<00:00, 6672.45it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 38!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=461
+09/21/2026 13:05:26 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:05:26 - INFO - __main__ - f1: 35.16
+09/21/2026 13:05:26 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:05:26 - INFO - __main__ - rougeL_f1: 15.79
+09/21/2026 13:05:26 - INFO - __main__ - rougeL_recall: 16.19
+09/21/2026 13:05:26 - INFO - __main__ - rougeLsum_f1: 34.22
+09/21/2026 13:05:26 - INFO - __main__ - rougeLsum_recall: 34.70
+09/21/2026 13:05:26 - INFO - __main__ - input_len: 5854.23
+09/21/2026 13:05:26 - INFO - __main__ - output_len: 1007.33
+09/21/2026 13:05:26 - INFO - __main__ - memory_construction_time: 3.22
+09/21/2026 13:05:26 - INFO - __main__ - query_time_len: 89.40
+09/21/2026 13:05:26 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:33<00:00, 33.24s/it][A100%|██████████| 1/1 [00:33<00:00, 33.24s/it]
+ 39%|███▉      | 39/100 [1:00:24<1:16:55, 75.67s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 40/100:   0%|          | 0/28 [00:00<?, ?it/s][AProcessing experiments 40/100: 100%|██████████| 28/28 [00:00<00:00, 6369.48it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 39!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=263
+09/21/2026 13:07:13 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:07:13 - INFO - __main__ - f1: 35.13
+09/21/2026 13:07:13 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:07:13 - INFO - __main__ - rougeL_f1: 15.79
+09/21/2026 13:07:13 - INFO - __main__ - rougeL_recall: 16.39
+09/21/2026 13:07:13 - INFO - __main__ - rougeLsum_f1: 34.13
+09/21/2026 13:07:13 - INFO - __main__ - rougeLsum_recall: 35.01
+09/21/2026 13:07:13 - INFO - __main__ - input_len: 5862.60
+09/21/2026 13:07:13 - INFO - __main__ - output_len: 1005.75
+09/21/2026 13:07:13 - INFO - __main__ - memory_construction_time: 3.16
+09/21/2026 13:07:13 - INFO - __main__ - query_time_len: 89.82
+09/21/2026 13:07:13 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:47<00:00, 107.25s/it][A100%|██████████| 1/1 [01:47<00:00, 107.25s/it]
+ 40%|████      | 40/100 [1:02:11<1:25:08, 85.14s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 41/100:   0%|          | 0/43 [00:00<?, ?it/s][AProcessing experiments 41/100: 100%|██████████| 43/43 [00:00<00:00, 6371.39it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 40!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=566
+09/21/2026 13:08:32 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:08:32 - INFO - __main__ - f1: 35.23
+09/21/2026 13:08:32 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:08:32 - INFO - __main__ - rougeL_f1: 15.82
+09/21/2026 13:08:32 - INFO - __main__ - rougeL_recall: 16.38
+09/21/2026 13:08:32 - INFO - __main__ - rougeLsum_f1: 34.23
+09/21/2026 13:08:32 - INFO - __main__ - rougeLsum_recall: 35.04
+09/21/2026 13:08:32 - INFO - __main__ - input_len: 5868.44
+09/21/2026 13:08:32 - INFO - __main__ - output_len: 1009.90
+09/21/2026 13:08:32 - INFO - __main__ - memory_construction_time: 3.13
+09/21/2026 13:08:32 - INFO - __main__ - query_time_len: 89.51
+09/21/2026 13:08:32 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:19<00:00, 79.39s/it][A100%|██████████| 1/1 [01:19<00:00, 79.39s/it]
+ 41%|████      | 41/100 [1:03:30<1:22:01, 83.42s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 42/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 42/100: 100%|██████████| 22/22 [00:00<00:00, 6002.39it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 41!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=309
+09/21/2026 13:09:01 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:09:01 - INFO - __main__ - f1: 35.36
+09/21/2026 13:09:01 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:09:01 - INFO - __main__ - rougeL_f1: 15.87
+09/21/2026 13:09:01 - INFO - __main__ - rougeL_recall: 16.39
+09/21/2026 13:09:01 - INFO - __main__ - rougeLsum_f1: 34.38
+09/21/2026 13:09:01 - INFO - __main__ - rougeLsum_recall: 35.10
+09/21/2026 13:09:01 - INFO - __main__ - input_len: 5870.90
+09/21/2026 13:09:01 - INFO - __main__ - output_len: 1007.14
+09/21/2026 13:09:01 - INFO - __main__ - memory_construction_time: 3.07
+09/21/2026 13:09:01 - INFO - __main__ - query_time_len: 88.03
+09/21/2026 13:09:01 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:28<00:00, 28.23s/it][A100%|██████████| 1/1 [00:28<00:00, 28.23s/it]
+ 42%|████▏     | 42/100 [1:03:58<1:04:38, 66.87s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 43/100:   0%|          | 0/49 [00:00<?, ?it/s][AProcessing experiments 43/100: 100%|██████████| 49/49 [00:00<00:00, 6329.76it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 42!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=818
+09/21/2026 13:09:33 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:09:33 - INFO - __main__ - f1: 35.57
+09/21/2026 13:09:33 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:09:33 - INFO - __main__ - rougeL_f1: 15.89
+09/21/2026 13:09:33 - INFO - __main__ - rougeL_recall: 16.45
+09/21/2026 13:09:33 - INFO - __main__ - rougeLsum_f1: 34.51
+09/21/2026 13:09:33 - INFO - __main__ - rougeLsum_recall: 35.33
+09/21/2026 13:09:33 - INFO - __main__ - input_len: 5876.37
+09/21/2026 13:09:33 - INFO - __main__ - output_len: 1011.63
+09/21/2026 13:09:33 - INFO - __main__ - memory_construction_time: 3.06
+09/21/2026 13:09:33 - INFO - __main__ - query_time_len: 86.67
+09/21/2026 13:09:33 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:32<00:00, 32.62s/it][A100%|██████████| 1/1 [00:32<00:00, 32.62s/it]
+ 43%|████▎     | 43/100 [1:04:31<53:46, 56.60s/it]  Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 44/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 44/100: 100%|██████████| 25/25 [00:00<00:00, 6012.82it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 43!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=490
+09/21/2026 13:10:40 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:10:40 - INFO - __main__ - f1: 35.71
+09/21/2026 13:10:40 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:10:40 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 13:10:40 - INFO - __main__ - rougeL_recall: 16.44
+09/21/2026 13:10:40 - INFO - __main__ - rougeLsum_f1: 34.65
+09/21/2026 13:10:40 - INFO - __main__ - rougeLsum_recall: 35.41
+09/21/2026 13:10:40 - INFO - __main__ - input_len: 5878.27
+09/21/2026 13:10:40 - INFO - __main__ - output_len: 1013.25
+09/21/2026 13:10:40 - INFO - __main__ - memory_construction_time: 3.01
+09/21/2026 13:10:40 - INFO - __main__ - query_time_len: 86.20
+09/21/2026 13:10:40 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:07<00:00, 67.11s/it][A100%|██████████| 1/1 [01:07<00:00, 67.11s/it]
+ 44%|████▍     | 44/100 [1:05:38<55:46, 59.75s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 45/100:   0%|          | 0/35 [00:00<?, ?it/s][AProcessing experiments 45/100: 100%|██████████| 35/35 [00:00<00:00, 6434.96it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 44!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=731
+09/21/2026 13:11:33 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:11:33 - INFO - __main__ - f1: 35.68
+09/21/2026 13:11:33 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:11:33 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 13:11:33 - INFO - __main__ - rougeL_recall: 16.36
+09/21/2026 13:11:33 - INFO - __main__ - rougeLsum_f1: 34.69
+09/21/2026 13:11:33 - INFO - __main__ - rougeLsum_recall: 35.30
+09/21/2026 13:11:33 - INFO - __main__ - input_len: 5881.16
+09/21/2026 13:11:33 - INFO - __main__ - output_len: 1010.18
+09/21/2026 13:11:33 - INFO - __main__ - memory_construction_time: 2.98
+09/21/2026 13:11:33 - INFO - __main__ - query_time_len: 85.41
+09/21/2026 13:11:33 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:52<00:00, 52.63s/it][A100%|██████████| 1/1 [00:52<00:00, 52.63s/it]
+ 45%|████▌     | 45/100 [1:06:31<52:49, 57.62s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 46/100:   0%|          | 0/37 [00:00<?, ?it/s][AProcessing experiments 46/100: 100%|██████████| 37/37 [00:00<00:00, 6966.66it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 45!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=388
+09/21/2026 13:12:34 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:12:34 - INFO - __main__ - f1: 35.70
+09/21/2026 13:12:34 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:12:34 - INFO - __main__ - rougeL_f1: 15.89
+09/21/2026 13:12:34 - INFO - __main__ - rougeL_recall: 16.27
+09/21/2026 13:12:34 - INFO - __main__ - rougeLsum_f1: 34.75
+09/21/2026 13:12:34 - INFO - __main__ - rougeLsum_recall: 35.17
+09/21/2026 13:12:34 - INFO - __main__ - input_len: 5891.78
+09/21/2026 13:12:34 - INFO - __main__ - output_len: 1011.48
+09/21/2026 13:12:34 - INFO - __main__ - memory_construction_time: 2.94
+09/21/2026 13:12:34 - INFO - __main__ - query_time_len: 84.86
+09/21/2026 13:12:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:01<00:00, 61.39s/it][A100%|██████████| 1/1 [01:01<00:00, 61.39s/it]
+ 46%|████▌     | 46/100 [1:07:32<52:52, 58.75s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 47/100:   0%|          | 0/45 [00:00<?, ?it/s][AProcessing experiments 47/100: 100%|██████████| 45/45 [00:00<00:00, 2321.37it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 46!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=563
+09/21/2026 13:13:31 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:13:31 - INFO - __main__ - f1: 35.67
+09/21/2026 13:13:31 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:13:31 - INFO - __main__ - rougeL_f1: 15.86
+09/21/2026 13:13:31 - INFO - __main__ - rougeL_recall: 16.42
+09/21/2026 13:13:31 - INFO - __main__ - rougeLsum_f1: 34.59
+09/21/2026 13:13:31 - INFO - __main__ - rougeLsum_recall: 35.38
+09/21/2026 13:13:31 - INFO - __main__ - input_len: 5894.72
+09/21/2026 13:13:31 - INFO - __main__ - output_len: 1012.06
+09/21/2026 13:13:31 - INFO - __main__ - memory_construction_time: 2.91
+09/21/2026 13:13:31 - INFO - __main__ - query_time_len: 84.20
+09/21/2026 13:13:31 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:56<00:00, 56.13s/it][A100%|██████████| 1/1 [00:56<00:00, 56.13s/it]
+ 47%|████▋     | 47/100 [1:08:28<51:12, 57.97s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 48/100:   0%|          | 0/49 [00:00<?, ?it/s][AProcessing experiments 48/100: 100%|██████████| 49/49 [00:00<00:00, 6437.21it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 47!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=972
+09/21/2026 13:14:37 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:14:37 - INFO - __main__ - f1: 35.76
+09/21/2026 13:14:37 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:14:37 - INFO - __main__ - rougeL_f1: 15.87
+09/21/2026 13:14:37 - INFO - __main__ - rougeL_recall: 16.43
+09/21/2026 13:14:37 - INFO - __main__ - rougeLsum_f1: 34.63
+09/21/2026 13:14:37 - INFO - __main__ - rougeLsum_recall: 35.41
+09/21/2026 13:14:37 - INFO - __main__ - input_len: 5894.79
+09/21/2026 13:14:37 - INFO - __main__ - output_len: 1011.65
+09/21/2026 13:14:37 - INFO - __main__ - memory_construction_time: 2.91
+09/21/2026 13:14:37 - INFO - __main__ - query_time_len: 83.77
+09/21/2026 13:14:37 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:06<00:00, 66.24s/it][A100%|██████████| 1/1 [01:06<00:00, 66.24s/it]
+ 48%|████▊     | 48/100 [1:09:35<52:23, 60.46s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 49/100:   0%|          | 0/57 [00:00<?, ?it/s][AProcessing experiments 49/100: 100%|██████████| 57/57 [00:00<00:00, 7155.16it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 48!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1033
+09/21/2026 13:16:03 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:16:03 - INFO - __main__ - f1: 35.73
+09/21/2026 13:16:03 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:16:03 - INFO - __main__ - rougeL_f1: 15.88
+09/21/2026 13:16:03 - INFO - __main__ - rougeL_recall: 16.46
+09/21/2026 13:16:03 - INFO - __main__ - rougeLsum_f1: 34.59
+09/21/2026 13:16:03 - INFO - __main__ - rougeLsum_recall: 35.43
+09/21/2026 13:16:03 - INFO - __main__ - input_len: 5898.20
+09/21/2026 13:16:03 - INFO - __main__ - output_len: 1012.47
+09/21/2026 13:16:03 - INFO - __main__ - memory_construction_time: 2.91
+09/21/2026 13:16:03 - INFO - __main__ - query_time_len: 83.75
+09/21/2026 13:16:03 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:26<00:00, 86.17s/it][A100%|██████████| 1/1 [01:26<00:00, 86.17s/it]
+ 49%|████▉     | 49/100 [1:11:01<57:56, 68.18s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 50/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 50/100: 100%|██████████| 22/22 [00:00<00:00, 7163.63it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 49!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=319
+09/21/2026 13:16:34 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:16:34 - INFO - __main__ - f1: 35.81
+09/21/2026 13:16:34 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:16:34 - INFO - __main__ - rougeL_f1: 15.94
+09/21/2026 13:16:34 - INFO - __main__ - rougeL_recall: 16.49
+09/21/2026 13:16:34 - INFO - __main__ - rougeLsum_f1: 34.72
+09/21/2026 13:16:34 - INFO - __main__ - rougeLsum_recall: 35.50
+09/21/2026 13:16:34 - INFO - __main__ - input_len: 5909.88
+09/21/2026 13:16:34 - INFO - __main__ - output_len: 1010.46
+09/21/2026 13:16:34 - INFO - __main__ - memory_construction_time: 2.86
+09/21/2026 13:16:34 - INFO - __main__ - query_time_len: 82.68
+09/21/2026 13:16:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:30<00:00, 30.97s/it][A100%|██████████| 1/1 [00:30<00:00, 30.97s/it]
+ 50%|█████     | 50/100 [1:11:32<47:30, 57.02s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 51/100:   0%|          | 0/48 [00:00<?, ?it/s][AProcessing experiments 51/100: 100%|██████████| 48/48 [00:00<00:00, 4529.08it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 50!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=572
+09/21/2026 13:20:31 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:20:31 - INFO - __main__ - f1: 35.39
+09/21/2026 13:20:31 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:20:31 - INFO - __main__ - rougeL_f1: 15.84
+09/21/2026 13:20:31 - INFO - __main__ - rougeL_recall: 16.78
+09/21/2026 13:20:31 - INFO - __main__ - rougeLsum_f1: 34.31
+09/21/2026 13:20:31 - INFO - __main__ - rougeLsum_recall: 35.59
+09/21/2026 13:20:31 - INFO - __main__ - input_len: 5913.41
+09/21/2026 13:20:31 - INFO - __main__ - output_len: 1011.84
+09/21/2026 13:20:31 - INFO - __main__ - memory_construction_time: 2.85
+09/21/2026 13:20:31 - INFO - __main__ - query_time_len: 85.60
+09/21/2026 13:20:31 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [03:56<00:00, 236.77s/it][A100%|██████████| 1/1 [03:56<00:00, 236.77s/it]
+ 51%|█████     | 51/100 [1:15:29<1:30:36, 110.95s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 52/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 52/100: 100%|██████████| 25/25 [00:00<00:00, 299.07it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 51!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=430
+09/21/2026 13:24:47 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:24:47 - INFO - __main__ - f1: 35.34
+09/21/2026 13:24:47 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:24:47 - INFO - __main__ - rougeL_f1: 15.84
+09/21/2026 13:24:47 - INFO - __main__ - rougeL_recall: 16.68
+09/21/2026 13:24:47 - INFO - __main__ - rougeLsum_f1: 34.30
+09/21/2026 13:24:47 - INFO - __main__ - rougeLsum_recall: 35.38
+09/21/2026 13:24:47 - INFO - __main__ - input_len: 5925.58
+09/21/2026 13:24:47 - INFO - __main__ - output_len: 1011.17
+09/21/2026 13:24:47 - INFO - __main__ - memory_construction_time: 2.88
+09/21/2026 13:24:47 - INFO - __main__ - query_time_len: 88.79
+09/21/2026 13:24:47 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [04:16<00:00, 256.13s/it][A100%|██████████| 1/1 [04:16<00:00, 256.13s/it]
+ 52%|█████▏    | 52/100 [1:19:45<2:03:38, 154.55s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 53/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 53/100: 100%|██████████| 20/20 [00:00<00:00, 6548.48it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 52!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=184
+09/21/2026 13:25:20 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:25:20 - INFO - __main__ - f1: 35.30
+09/21/2026 13:25:20 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:25:20 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 13:25:20 - INFO - __main__ - rougeL_recall: 16.60
+09/21/2026 13:25:20 - INFO - __main__ - rougeLsum_f1: 34.29
+09/21/2026 13:25:20 - INFO - __main__ - rougeLsum_recall: 35.19
+09/21/2026 13:25:20 - INFO - __main__ - input_len: 5934.57
+09/21/2026 13:25:20 - INFO - __main__ - output_len: 1009.74
+09/21/2026 13:25:20 - INFO - __main__ - memory_construction_time: 2.83
+09/21/2026 13:25:20 - INFO - __main__ - query_time_len: 87.72
+09/21/2026 13:25:20 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:32<00:00, 32.71s/it][A100%|██████████| 1/1 [00:32<00:00, 32.71s/it]
+ 53%|█████▎    | 53/100 [1:20:18<1:32:26, 118.00s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 54/100:   0%|          | 0/24 [00:00<?, ?it/s][AProcessing experiments 54/100: 100%|██████████| 24/24 [00:00<00:00, 6031.72it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 53!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=474
+09/21/2026 13:27:02 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:27:02 - INFO - __main__ - f1: 35.35
+09/21/2026 13:27:02 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:27:02 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 13:27:02 - INFO - __main__ - rougeL_recall: 16.58
+09/21/2026 13:27:02 - INFO - __main__ - rougeLsum_f1: 34.34
+09/21/2026 13:27:02 - INFO - __main__ - rougeLsum_recall: 35.21
+09/21/2026 13:27:02 - INFO - __main__ - input_len: 5939.02
+09/21/2026 13:27:02 - INFO - __main__ - output_len: 1012.06
+09/21/2026 13:27:02 - INFO - __main__ - memory_construction_time: 2.80
+09/21/2026 13:27:02 - INFO - __main__ - query_time_len: 87.96
+09/21/2026 13:27:02 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:42<00:00, 102.41s/it][A100%|██████████| 1/1 [01:42<00:00, 102.41s/it]
+ 54%|█████▍    | 54/100 [1:22:00<1:26:53, 113.33s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 55/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 55/100: 100%|██████████| 25/25 [00:00<00:00, 6142.44it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 54!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=403
+09/21/2026 13:28:23 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:28:23 - INFO - __main__ - f1: 35.38
+09/21/2026 13:28:23 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:28:23 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 13:28:23 - INFO - __main__ - rougeL_recall: 16.59
+09/21/2026 13:28:23 - INFO - __main__ - rougeLsum_f1: 34.40
+09/21/2026 13:28:23 - INFO - __main__ - rougeLsum_recall: 35.19
+09/21/2026 13:28:23 - INFO - __main__ - input_len: 5945.15
+09/21/2026 13:28:23 - INFO - __main__ - output_len: 1005.78
+09/21/2026 13:28:23 - INFO - __main__ - memory_construction_time: 2.76
+09/21/2026 13:28:23 - INFO - __main__ - query_time_len: 87.82
+09/21/2026 13:28:23 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:21<00:00, 81.16s/it][A100%|██████████| 1/1 [01:21<00:00, 81.16s/it]
+ 55%|█████▌    | 55/100 [1:23:21<1:17:45, 103.68s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 56/100:   0%|          | 0/17 [00:00<?, ?it/s][AProcessing experiments 56/100: 100%|██████████| 17/17 [00:00<00:00, 4030.02it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 55!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=441
+09/21/2026 13:28:36 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:28:36 - INFO - __main__ - f1: 35.17
+09/21/2026 13:28:36 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:28:36 - INFO - __main__ - rougeL_f1: 15.86
+09/21/2026 13:28:36 - INFO - __main__ - rougeL_recall: 16.47
+09/21/2026 13:28:36 - INFO - __main__ - rougeLsum_f1: 34.23
+09/21/2026 13:28:36 - INFO - __main__ - rougeLsum_recall: 34.89
+09/21/2026 13:28:36 - INFO - __main__ - input_len: 5941.20
+09/21/2026 13:28:36 - INFO - __main__ - output_len: 995.21
+09/21/2026 13:28:36 - INFO - __main__ - memory_construction_time: 2.72
+09/21/2026 13:28:36 - INFO - __main__ - query_time_len: 86.46
+09/21/2026 13:28:36 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:12<00:00, 12.59s/it][A100%|██████████| 1/1 [00:12<00:00, 12.59s/it]
+ 56%|█████▌    | 56/100 [1:23:34<55:59, 76.36s/it]   Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 57/100:   0%|          | 0/18 [00:00<?, ?it/s][AProcessing experiments 57/100: 100%|██████████| 18/18 [00:00<00:00, 5903.31it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 56!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=195
+09/21/2026 13:29:02 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:29:02 - INFO - __main__ - f1: 35.24
+09/21/2026 13:29:02 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:29:02 - INFO - __main__ - rougeL_f1: 15.89
+09/21/2026 13:29:02 - INFO - __main__ - rougeL_recall: 16.54
+09/21/2026 13:29:02 - INFO - __main__ - rougeLsum_f1: 34.28
+09/21/2026 13:29:02 - INFO - __main__ - rougeLsum_recall: 35.05
+09/21/2026 13:29:02 - INFO - __main__ - input_len: 5951.14
+09/21/2026 13:29:02 - INFO - __main__ - output_len: 995.14
+09/21/2026 13:29:02 - INFO - __main__ - memory_construction_time: 2.68
+09/21/2026 13:29:02 - INFO - __main__ - query_time_len: 85.39
+09/21/2026 13:29:02 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:26<00:00, 26.04s/it][A100%|██████████| 1/1 [00:26<00:00, 26.04s/it]
+ 57%|█████▋    | 57/100 [1:24:00<43:54, 61.26s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 58/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 58/100: 100%|██████████| 20/20 [00:00<00:00, 6252.22it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 57!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=346
+09/21/2026 13:31:32 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:31:32 - INFO - __main__ - f1: 35.23
+09/21/2026 13:31:32 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:31:32 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 13:31:32 - INFO - __main__ - rougeL_recall: 16.49
+09/21/2026 13:31:32 - INFO - __main__ - rougeLsum_f1: 34.34
+09/21/2026 13:31:32 - INFO - __main__ - rougeLsum_recall: 34.98
+09/21/2026 13:31:32 - INFO - __main__ - input_len: 5952.00
+09/21/2026 13:31:32 - INFO - __main__ - output_len: 992.98
+09/21/2026 13:31:32 - INFO - __main__ - memory_construction_time: 2.65
+09/21/2026 13:31:32 - INFO - __main__ - query_time_len: 86.49
+09/21/2026 13:31:32 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:29<00:00, 149.87s/it][A100%|██████████| 1/1 [02:29<00:00, 149.87s/it]
+ 58%|█████▊    | 58/100 [1:26:30<1:01:29, 87.85s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 59/100:   0%|          | 0/16 [00:00<?, ?it/s][AProcessing experiments 59/100: 100%|██████████| 16/16 [00:00<00:00, 6725.68it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 58!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=139
+09/21/2026 13:33:22 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:33:22 - INFO - __main__ - f1: 35.04
+09/21/2026 13:33:22 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:33:22 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 13:33:22 - INFO - __main__ - rougeL_recall: 16.39
+09/21/2026 13:33:22 - INFO - __main__ - rougeLsum_f1: 34.16
+09/21/2026 13:33:22 - INFO - __main__ - rougeLsum_recall: 34.71
+09/21/2026 13:33:22 - INFO - __main__ - input_len: 5961.93
+09/21/2026 13:33:22 - INFO - __main__ - output_len: 987.24
+09/21/2026 13:33:22 - INFO - __main__ - memory_construction_time: 2.61
+09/21/2026 13:33:22 - INFO - __main__ - query_time_len: 86.87
+09/21/2026 13:33:22 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:50<00:00, 110.04s/it][A100%|██████████| 1/1 [01:50<00:00, 110.04s/it]
+ 59%|█████▉    | 59/100 [1:28:20<1:04:34, 94.51s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 60/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 60/100: 100%|██████████| 23/23 [00:00<00:00, 5909.64it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 59!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=629
+09/21/2026 13:35:33 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:35:33 - INFO - __main__ - f1: 35.04
+09/21/2026 13:35:33 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:35:33 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 13:35:33 - INFO - __main__ - rougeL_recall: 16.42
+09/21/2026 13:35:33 - INFO - __main__ - rougeLsum_f1: 34.10
+09/21/2026 13:35:33 - INFO - __main__ - rougeLsum_recall: 34.73
+09/21/2026 13:35:33 - INFO - __main__ - input_len: 5961.88
+09/21/2026 13:35:33 - INFO - __main__ - output_len: 984.18
+09/21/2026 13:35:33 - INFO - __main__ - memory_construction_time: 2.59
+09/21/2026 13:35:33 - INFO - __main__ - query_time_len: 87.59
+09/21/2026 13:35:33 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:10<00:00, 130.97s/it][A100%|██████████| 1/1 [02:10<00:00, 130.97s/it]
+ 60%|██████    | 60/100 [1:30:31<1:10:17, 105.45s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 61/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 61/100: 100%|██████████| 29/29 [00:00<00:00, 6678.83it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 60!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=421
+09/21/2026 13:36:05 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:36:05 - INFO - __main__ - f1: 34.96
+09/21/2026 13:36:05 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:36:05 - INFO - __main__ - rougeL_f1: 15.84
+09/21/2026 13:36:05 - INFO - __main__ - rougeL_recall: 16.59
+09/21/2026 13:36:05 - INFO - __main__ - rougeLsum_f1: 34.01
+09/21/2026 13:36:05 - INFO - __main__ - rougeLsum_recall: 34.96
+09/21/2026 13:36:05 - INFO - __main__ - input_len: 5965.70
+09/21/2026 13:36:05 - INFO - __main__ - output_len: 982.70
+09/21/2026 13:36:05 - INFO - __main__ - memory_construction_time: 2.56
+09/21/2026 13:36:05 - INFO - __main__ - query_time_len: 86.66
+09/21/2026 13:36:05 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:32<00:00, 32.02s/it][A100%|██████████| 1/1 [00:32<00:00, 32.02s/it]
+ 61%|██████    | 61/100 [1:31:03<54:13, 83.42s/it]   Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 62/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 62/100: 100%|██████████| 19/19 [00:00<00:00, 6283.35it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 61!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=323
+09/21/2026 13:38:18 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:38:18 - INFO - __main__ - f1: 34.94
+09/21/2026 13:38:18 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:38:18 - INFO - __main__ - rougeL_f1: 15.86
+09/21/2026 13:38:18 - INFO - __main__ - rougeL_recall: 16.52
+09/21/2026 13:38:18 - INFO - __main__ - rougeLsum_f1: 34.00
+09/21/2026 13:38:18 - INFO - __main__ - rougeLsum_recall: 34.81
+09/21/2026 13:38:18 - INFO - __main__ - input_len: 5968.16
+09/21/2026 13:38:18 - INFO - __main__ - output_len: 983.55
+09/21/2026 13:38:18 - INFO - __main__ - memory_construction_time: 2.53
+09/21/2026 13:38:18 - INFO - __main__ - query_time_len: 87.39
+09/21/2026 13:38:18 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:13<00:00, 133.08s/it][A100%|██████████| 1/1 [02:13<00:00, 133.08s/it]
+ 62%|██████▏   | 62/100 [1:33:16<1:02:16, 98.32s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 63/100:   0%|          | 0/46 [00:00<?, ?it/s][AProcessing experiments 63/100: 100%|██████████| 46/46 [00:00<00:00, 5838.29it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 62!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1849
+09/21/2026 13:40:32 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:40:32 - INFO - __main__ - f1: 34.90
+09/21/2026 13:40:32 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:40:32 - INFO - __main__ - rougeL_f1: 15.92
+09/21/2026 13:40:32 - INFO - __main__ - rougeL_recall: 16.61
+09/21/2026 13:40:32 - INFO - __main__ - rougeLsum_f1: 34.00
+09/21/2026 13:40:32 - INFO - __main__ - rougeLsum_recall: 34.86
+09/21/2026 13:40:32 - INFO - __main__ - input_len: 5993.40
+09/21/2026 13:40:32 - INFO - __main__ - output_len: 978.33
+09/21/2026 13:40:32 - INFO - __main__ - memory_construction_time: 2.54
+09/21/2026 13:40:32 - INFO - __main__ - query_time_len: 88.08
+09/21/2026 13:40:32 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:14<00:00, 134.42s/it][A100%|██████████| 1/1 [02:14<00:00, 134.42s/it]
+ 63%|██████▎   | 63/100 [1:35:30<1:07:18, 109.15s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 64/100:   0%|          | 0/21 [00:00<?, ?it/s][AProcessing experiments 64/100: 100%|██████████| 21/21 [00:00<00:00, 5624.19it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 63!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=213
+09/21/2026 13:40:58 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:40:58 - INFO - __main__ - f1: 34.78
+09/21/2026 13:40:58 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:40:58 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 13:40:58 - INFO - __main__ - rougeL_recall: 16.62
+09/21/2026 13:40:58 - INFO - __main__ - rougeLsum_f1: 33.94
+09/21/2026 13:40:58 - INFO - __main__ - rougeLsum_recall: 34.86
+09/21/2026 13:40:58 - INFO - __main__ - input_len: 6022.36
+09/21/2026 13:40:58 - INFO - __main__ - output_len: 979.17
+09/21/2026 13:40:58 - INFO - __main__ - memory_construction_time: 2.51
+09/21/2026 13:40:58 - INFO - __main__ - query_time_len: 87.08
+09/21/2026 13:40:58 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:25<00:00, 25.14s/it][A100%|██████████| 1/1 [00:25<00:00, 25.14s/it]
+ 64%|██████▍   | 64/100 [1:35:55<50:22, 83.95s/it]   Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 65/100:   0%|          | 0/30 [00:00<?, ?it/s][AProcessing experiments 65/100: 100%|██████████| 30/30 [00:00<00:00, 7092.56it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 64!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=404
+NIM retry 1/16 google/gemma-4-31b-it after 8s: APIConnectionError
+09/21/2026 13:48:55 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:48:55 - INFO - __main__ - f1: 34.77
+09/21/2026 13:48:55 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:48:55 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 13:48:55 - INFO - __main__ - rougeL_recall: 16.68
+09/21/2026 13:48:55 - INFO - __main__ - rougeLsum_f1: 33.92
+09/21/2026 13:48:55 - INFO - __main__ - rougeLsum_recall: 34.95
+09/21/2026 13:48:55 - INFO - __main__ - input_len: 6044.38
+09/21/2026 13:48:55 - INFO - __main__ - output_len: 977.25
+09/21/2026 13:48:55 - INFO - __main__ - memory_construction_time: 2.49
+09/21/2026 13:48:55 - INFO - __main__ - query_time_len: 93.07
+09/21/2026 13:48:55 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [07:57<00:00, 477.24s/it][A100%|██████████| 1/1 [07:57<00:00, 477.24s/it]
+ 65%|██████▌   | 65/100 [1:43:53<1:57:47, 201.94s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 66/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 66/100: 100%|██████████| 29/29 [00:00<00:00, 5916.09it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 65!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=458
+09/21/2026 13:49:18 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:49:18 - INFO - __main__ - f1: 34.71
+09/21/2026 13:49:18 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:49:18 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 13:49:18 - INFO - __main__ - rougeL_recall: 16.60
+09/21/2026 13:49:18 - INFO - __main__ - rougeLsum_f1: 33.92
+09/21/2026 13:49:18 - INFO - __main__ - rougeLsum_recall: 34.80
+09/21/2026 13:49:18 - INFO - __main__ - input_len: 6065.92
+09/21/2026 13:49:18 - INFO - __main__ - output_len: 976.03
+09/21/2026 13:49:18 - INFO - __main__ - memory_construction_time: 2.47
+09/21/2026 13:49:18 - INFO - __main__ - query_time_len: 91.99
+09/21/2026 13:49:18 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:23<00:00, 23.51s/it][A100%|██████████| 1/1 [00:23<00:00, 23.51s/it]
+ 66%|██████▌   | 66/100 [1:44:16<1:24:06, 148.41s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 67/100:   0%|          | 0/44 [00:00<?, ?it/s][AProcessing experiments 67/100: 100%|██████████| 44/44 [00:00<00:00, 6222.58it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 66!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=769
+09/21/2026 13:49:45 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:49:45 - INFO - __main__ - f1: 34.74
+09/21/2026 13:49:45 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:49:45 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 13:49:45 - INFO - __main__ - rougeL_recall: 16.62
+09/21/2026 13:49:45 - INFO - __main__ - rougeLsum_f1: 33.90
+09/21/2026 13:49:45 - INFO - __main__ - rougeLsum_recall: 34.83
+09/21/2026 13:49:45 - INFO - __main__ - input_len: 6091.36
+09/21/2026 13:49:45 - INFO - __main__ - output_len: 973.18
+09/21/2026 13:49:45 - INFO - __main__ - memory_construction_time: 2.46
+09/21/2026 13:49:45 - INFO - __main__ - query_time_len: 90.99
+09/21/2026 13:49:45 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:27<00:00, 27.05s/it][A100%|██████████| 1/1 [00:27<00:00, 27.05s/it]
+ 67%|██████▋   | 67/100 [1:44:43<1:01:36, 112.01s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 68/100:   0%|          | 0/35 [00:00<?, ?it/s][AProcessing experiments 68/100: 100%|██████████| 35/35 [00:00<00:00, 5966.54it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 67!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=372
+09/21/2026 13:50:08 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:50:08 - INFO - __main__ - f1: 34.74
+09/21/2026 13:50:08 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:50:08 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 13:50:08 - INFO - __main__ - rougeL_recall: 16.60
+09/21/2026 13:50:08 - INFO - __main__ - rougeLsum_f1: 33.87
+09/21/2026 13:50:08 - INFO - __main__ - rougeLsum_recall: 34.78
+09/21/2026 13:50:08 - INFO - __main__ - input_len: 6113.22
+09/21/2026 13:50:08 - INFO - __main__ - output_len: 972.84
+09/21/2026 13:50:08 - INFO - __main__ - memory_construction_time: 2.44
+09/21/2026 13:50:08 - INFO - __main__ - query_time_len: 89.96
+09/21/2026 13:50:08 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:22<00:00, 22.59s/it][A100%|██████████| 1/1 [00:22<00:00, 22.59s/it]
+ 68%|██████▊   | 68/100 [1:45:06<45:25, 85.18s/it]   Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 69/100:   0%|          | 0/21 [00:00<?, ?it/s][AProcessing experiments 69/100: 100%|██████████| 21/21 [00:00<00:00, 6169.39it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 68!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=213
+09/21/2026 13:50:34 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:50:34 - INFO - __main__ - f1: 34.72
+09/21/2026 13:50:34 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:50:34 - INFO - __main__ - rougeL_f1: 15.88
+09/21/2026 13:50:34 - INFO - __main__ - rougeL_recall: 16.59
+09/21/2026 13:50:34 - INFO - __main__ - rougeLsum_f1: 33.84
+09/21/2026 13:50:34 - INFO - __main__ - rougeLsum_recall: 34.78
+09/21/2026 13:50:34 - INFO - __main__ - input_len: 6135.29
+09/21/2026 13:50:34 - INFO - __main__ - output_len: 972.35
+09/21/2026 13:50:34 - INFO - __main__ - memory_construction_time: 2.42
+09/21/2026 13:50:34 - INFO - __main__ - query_time_len: 89.01
+09/21/2026 13:50:34 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:25<00:00, 25.56s/it][A100%|██████████| 1/1 [00:25<00:00, 25.56s/it]
+ 69%|██████▉   | 69/100 [1:45:31<34:46, 67.30s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 70/100:   0%|          | 0/31 [00:00<?, ?it/s][AProcessing experiments 70/100: 100%|██████████| 31/31 [00:00<00:00, 6562.53it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 69!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=360
+09/21/2026 13:51:06 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:51:06 - INFO - __main__ - f1: 34.56
+09/21/2026 13:51:06 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:51:06 - INFO - __main__ - rougeL_f1: 15.84
+09/21/2026 13:51:06 - INFO - __main__ - rougeL_recall: 16.53
+09/21/2026 13:51:06 - INFO - __main__ - rougeLsum_f1: 33.79
+09/21/2026 13:51:06 - INFO - __main__ - rougeLsum_recall: 34.69
+09/21/2026 13:51:06 - INFO - __main__ - input_len: 6158.79
+09/21/2026 13:51:06 - INFO - __main__ - output_len: 971.90
+09/21/2026 13:51:06 - INFO - __main__ - memory_construction_time: 2.40
+09/21/2026 13:51:06 - INFO - __main__ - query_time_len: 88.18
+09/21/2026 13:51:06 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:32<00:00, 32.14s/it][A100%|██████████| 1/1 [00:32<00:00, 32.15s/it]
+ 70%|███████   | 70/100 [1:46:04<28:22, 56.76s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 71/100:   0%|          | 0/42 [00:00<?, ?it/s][AProcessing experiments 71/100: 100%|██████████| 42/42 [00:00<00:00, 6733.20it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 70!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=459
+NIM retry 1/16 google/gemma-4-31b-it after 8s: APIConnectionError
+09/21/2026 13:56:38 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:56:38 - INFO - __main__ - f1: 34.41
+09/21/2026 13:56:38 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:56:38 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 13:56:38 - INFO - __main__ - rougeL_recall: 16.66
+09/21/2026 13:56:38 - INFO - __main__ - rougeLsum_f1: 33.60
+09/21/2026 13:56:38 - INFO - __main__ - rougeLsum_recall: 34.79
+09/21/2026 13:56:38 - INFO - __main__ - input_len: 6182.49
+09/21/2026 13:56:38 - INFO - __main__ - output_len: 973.62
+09/21/2026 13:56:38 - INFO - __main__ - memory_construction_time: 2.38
+09/21/2026 13:56:38 - INFO - __main__ - query_time_len: 91.60
+09/21/2026 13:56:38 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [05:32<00:00, 332.31s/it][A100%|██████████| 1/1 [05:32<00:00, 332.31s/it]
+ 71%|███████   | 71/100 [1:51:36<1:07:23, 139.43s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 72/100:   0%|          | 0/32 [00:00<?, ?it/s][AProcessing experiments 72/100: 100%|██████████| 32/32 [00:00<00:00, 5264.06it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 71!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=938
+09/21/2026 13:57:42 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:57:42 - INFO - __main__ - f1: 34.38
+09/21/2026 13:57:42 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:57:42 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 13:57:42 - INFO - __main__ - rougeL_recall: 16.70
+09/21/2026 13:57:42 - INFO - __main__ - rougeLsum_f1: 33.55
+09/21/2026 13:57:42 - INFO - __main__ - rougeLsum_recall: 34.81
+09/21/2026 13:57:42 - INFO - __main__ - input_len: 6201.42
+09/21/2026 13:57:42 - INFO - __main__ - output_len: 972.44
+09/21/2026 13:57:42 - INFO - __main__ - memory_construction_time: 2.37
+09/21/2026 13:57:42 - INFO - __main__ - query_time_len: 91.19
+09/21/2026 13:57:42 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:03<00:00, 63.78s/it][A100%|██████████| 1/1 [01:03<00:00, 63.78s/it]
+ 72%|███████▏  | 72/100 [1:52:40<54:28, 116.74s/it]  Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 73/100:   0%|          | 0/32 [00:00<?, ?it/s][AProcessing experiments 73/100: 100%|██████████| 32/32 [00:00<00:00, 6266.00it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 72!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=346
+09/21/2026 13:59:53 - INFO - __main__ - exact_match: 0.00
+09/21/2026 13:59:53 - INFO - __main__ - f1: 34.42
+09/21/2026 13:59:53 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 13:59:53 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 13:59:53 - INFO - __main__ - rougeL_recall: 16.67
+09/21/2026 13:59:53 - INFO - __main__ - rougeLsum_f1: 33.59
+09/21/2026 13:59:53 - INFO - __main__ - rougeLsum_recall: 34.77
+09/21/2026 13:59:53 - INFO - __main__ - input_len: 6227.04
+09/21/2026 13:59:53 - INFO - __main__ - output_len: 967.49
+09/21/2026 13:59:53 - INFO - __main__ - memory_construction_time: 2.36
+09/21/2026 13:59:53 - INFO - __main__ - query_time_len: 91.71
+09/21/2026 13:59:53 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [02:10<00:00, 130.74s/it][A100%|██████████| 1/1 [02:10<00:00, 130.74s/it]
+ 73%|███████▎  | 73/100 [1:54:50<54:25, 120.94s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 74/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 74/100: 100%|██████████| 20/20 [00:00<00:00, 1549.06it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 73!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=266
+09/21/2026 14:00:29 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:00:29 - INFO - __main__ - f1: 34.47
+09/21/2026 14:00:29 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:00:29 - INFO - __main__ - rougeL_f1: 15.85
+09/21/2026 14:00:29 - INFO - __main__ - rougeL_recall: 16.65
+09/21/2026 14:00:29 - INFO - __main__ - rougeLsum_f1: 33.66
+09/21/2026 14:00:29 - INFO - __main__ - rougeLsum_recall: 34.81
+09/21/2026 14:00:29 - INFO - __main__ - input_len: 6248.19
+09/21/2026 14:00:29 - INFO - __main__ - output_len: 966.11
+09/21/2026 14:00:29 - INFO - __main__ - memory_construction_time: 2.33
+09/21/2026 14:00:29 - INFO - __main__ - query_time_len: 90.95
+09/21/2026 14:00:29 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:36<00:00, 36.52s/it][A100%|██████████| 1/1 [00:36<00:00, 36.52s/it]
+ 74%|███████▍  | 74/100 [1:55:27<41:26, 95.62s/it] Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 75/100:   0%|          | 0/76 [00:00<?, ?it/s][AProcessing experiments 75/100: 100%|██████████| 76/76 [00:00<00:00, 6385.05it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 74!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1475
+09/21/2026 14:01:20 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:01:20 - INFO - __main__ - f1: 34.53
+09/21/2026 14:01:20 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:01:20 - INFO - __main__ - rougeL_f1: 15.87
+09/21/2026 14:01:20 - INFO - __main__ - rougeL_recall: 16.63
+09/21/2026 14:01:20 - INFO - __main__ - rougeLsum_f1: 33.73
+09/21/2026 14:01:20 - INFO - __main__ - rougeLsum_recall: 34.80
+09/21/2026 14:01:20 - INFO - __main__ - input_len: 6266.12
+09/21/2026 14:01:20 - INFO - __main__ - output_len: 969.23
+09/21/2026 14:01:20 - INFO - __main__ - memory_construction_time: 2.38
+09/21/2026 14:01:20 - INFO - __main__ - query_time_len: 90.33
+09/21/2026 14:01:20 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:50<00:00, 50.87s/it][A100%|██████████| 1/1 [00:50<00:00, 50.87s/it]
+ 75%|███████▌  | 75/100 [1:56:18<34:15, 82.20s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 76/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 76/100: 100%|██████████| 25/25 [00:00<00:00, 5909.13it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 75!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=768
+09/21/2026 14:01:40 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:01:40 - INFO - __main__ - f1: 34.53
+09/21/2026 14:01:40 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:01:40 - INFO - __main__ - rougeL_f1: 15.86
+09/21/2026 14:01:40 - INFO - __main__ - rougeL_recall: 16.60
+09/21/2026 14:01:40 - INFO - __main__ - rougeLsum_f1: 33.70
+09/21/2026 14:01:40 - INFO - __main__ - rougeLsum_recall: 34.75
+09/21/2026 14:01:40 - INFO - __main__ - input_len: 6286.75
+09/21/2026 14:01:40 - INFO - __main__ - output_len: 966.72
+09/21/2026 14:01:40 - INFO - __main__ - memory_construction_time: 2.37
+09/21/2026 14:01:40 - INFO - __main__ - query_time_len: 89.39
+09/21/2026 14:01:40 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:19<00:00, 19.73s/it][A100%|██████████| 1/1 [00:19<00:00, 19.73s/it]
+ 76%|███████▌  | 76/100 [1:56:38<25:23, 63.46s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 77/100:   0%|          | 0/38 [00:00<?, ?it/s][AProcessing experiments 77/100: 100%|██████████| 38/38 [00:00<00:00, 6498.29it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 76!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=370
+09/21/2026 14:02:03 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:02:03 - INFO - __main__ - f1: 34.52
+09/21/2026 14:02:03 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:02:03 - INFO - __main__ - rougeL_f1: 15.86
+09/21/2026 14:02:03 - INFO - __main__ - rougeL_recall: 16.64
+09/21/2026 14:02:03 - INFO - __main__ - rougeLsum_f1: 33.68
+09/21/2026 14:02:03 - INFO - __main__ - rougeLsum_recall: 34.79
+09/21/2026 14:02:03 - INFO - __main__ - input_len: 6308.09
+09/21/2026 14:02:03 - INFO - __main__ - output_len: 963.03
+09/21/2026 14:02:03 - INFO - __main__ - memory_construction_time: 2.35
+09/21/2026 14:02:03 - INFO - __main__ - query_time_len: 88.51
+09/21/2026 14:02:03 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:23<00:00, 23.08s/it][A100%|██████████| 1/1 [00:23<00:00, 23.08s/it]
+ 77%|███████▋  | 77/100 [1:57:01<19:41, 51.35s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 78/100:   0%|          | 0/17 [00:00<?, ?it/s][AProcessing experiments 78/100: 100%|██████████| 17/17 [00:00<00:00, 4679.61it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 77!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=245
+09/21/2026 14:02:57 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:02:57 - INFO - __main__ - f1: 34.58
+09/21/2026 14:02:57 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:02:57 - INFO - __main__ - rougeL_f1: 15.87
+09/21/2026 14:02:57 - INFO - __main__ - rougeL_recall: 16.66
+09/21/2026 14:02:57 - INFO - __main__ - rougeLsum_f1: 33.71
+09/21/2026 14:02:57 - INFO - __main__ - rougeLsum_recall: 34.86
+09/21/2026 14:02:57 - INFO - __main__ - input_len: 6326.79
+09/21/2026 14:02:57 - INFO - __main__ - output_len: 960.23
+09/21/2026 14:02:57 - INFO - __main__ - memory_construction_time: 2.33
+09/21/2026 14:02:57 - INFO - __main__ - query_time_len: 88.05
+09/21/2026 14:02:57 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:53<00:00, 53.98s/it][A100%|██████████| 1/1 [00:53<00:00, 53.98s/it]
+ 78%|███████▊  | 78/100 [1:57:55<19:07, 52.14s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 79/100:   0%|          | 0/63 [00:00<?, ?it/s][AProcessing experiments 79/100: 100%|██████████| 63/63 [00:00<00:00, 877.72it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 78!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1055
+09/21/2026 14:03:42 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:03:42 - INFO - __main__ - f1: 34.61
+09/21/2026 14:03:42 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:03:42 - INFO - __main__ - rougeL_f1: 15.86
+09/21/2026 14:03:42 - INFO - __main__ - rougeL_recall: 16.62
+09/21/2026 14:03:42 - INFO - __main__ - rougeLsum_f1: 33.72
+09/21/2026 14:03:42 - INFO - __main__ - rougeLsum_recall: 34.79
+09/21/2026 14:03:42 - INFO - __main__ - input_len: 6345.61
+09/21/2026 14:03:42 - INFO - __main__ - output_len: 960.70
+09/21/2026 14:03:42 - INFO - __main__ - memory_construction_time: 2.39
+09/21/2026 14:03:42 - INFO - __main__ - query_time_len: 87.41
+09/21/2026 14:03:42 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:45<00:00, 45.35s/it][A100%|██████████| 1/1 [00:45<00:00, 45.35s/it]
+ 79%|███████▉  | 79/100 [1:58:40<17:32, 50.13s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 80/100:   0%|          | 0/29 [00:00<?, ?it/s][AProcessing experiments 80/100: 100%|██████████| 29/29 [00:00<00:00, 7061.12it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 79!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=323
+09/21/2026 14:04:10 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:04:10 - INFO - __main__ - f1: 34.59
+09/21/2026 14:04:10 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:04:10 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 14:04:10 - INFO - __main__ - rougeL_recall: 16.77
+09/21/2026 14:04:10 - INFO - __main__ - rougeLsum_f1: 33.69
+09/21/2026 14:04:10 - INFO - __main__ - rougeLsum_recall: 34.96
+09/21/2026 14:04:10 - INFO - __main__ - input_len: 6362.74
+09/21/2026 14:04:10 - INFO - __main__ - output_len: 960.52
+09/21/2026 14:04:10 - INFO - __main__ - memory_construction_time: 2.37
+09/21/2026 14:04:10 - INFO - __main__ - query_time_len: 86.65
+09/21/2026 14:04:10 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:27<00:00, 27.47s/it][A100%|██████████| 1/1 [00:27<00:00, 27.47s/it]
+ 80%|████████  | 80/100 [1:59:08<14:26, 43.33s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 81/100:   0%|          | 0/28 [00:00<?, ?it/s][AProcessing experiments 81/100: 100%|██████████| 28/28 [00:00<00:00, 4790.36it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 80!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=768
+09/21/2026 14:05:14 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:05:14 - INFO - __main__ - f1: 34.59
+09/21/2026 14:05:14 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:05:14 - INFO - __main__ - rougeL_f1: 15.89
+09/21/2026 14:05:14 - INFO - __main__ - rougeL_recall: 16.70
+09/21/2026 14:05:14 - INFO - __main__ - rougeLsum_f1: 33.68
+09/21/2026 14:05:14 - INFO - __main__ - rougeLsum_recall: 34.85
+09/21/2026 14:05:14 - INFO - __main__ - input_len: 6378.68
+09/21/2026 14:05:14 - INFO - __main__ - output_len: 960.09
+09/21/2026 14:05:14 - INFO - __main__ - memory_construction_time: 2.36
+09/21/2026 14:05:14 - INFO - __main__ - query_time_len: 86.34
+09/21/2026 14:05:14 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:03<00:00, 63.80s/it][A100%|██████████| 1/1 [01:03<00:00, 63.80s/it]
+ 81%|████████  | 81/100 [2:00:11<15:40, 49.48s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 82/100:   0%|          | 0/96 [00:00<?, ?it/s][AProcessing experiments 82/100: 100%|██████████| 96/96 [00:00<00:00, 5664.39it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 81!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1404
+09/21/2026 14:06:56 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:06:56 - INFO - __main__ - f1: 34.64
+09/21/2026 14:06:56 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:06:56 - INFO - __main__ - rougeL_f1: 15.89
+09/21/2026 14:06:56 - INFO - __main__ - rougeL_recall: 16.68
+09/21/2026 14:06:56 - INFO - __main__ - rougeLsum_f1: 33.72
+09/21/2026 14:06:56 - INFO - __main__ - rougeLsum_recall: 34.84
+09/21/2026 14:06:56 - INFO - __main__ - input_len: 6391.90
+09/21/2026 14:06:56 - INFO - __main__ - output_len: 959.40
+09/21/2026 14:06:56 - INFO - __main__ - memory_construction_time: 2.39
+09/21/2026 14:06:56 - INFO - __main__ - query_time_len: 86.47
+09/21/2026 14:06:56 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:42<00:00, 102.12s/it][A100%|██████████| 1/1 [01:42<00:00, 102.12s/it]
+ 82%|████████▏ | 82/100 [2:01:54<19:34, 65.28s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 83/100:   0%|          | 0/25 [00:00<?, ?it/s][AProcessing experiments 83/100: 100%|██████████| 25/25 [00:00<00:00, 3894.00it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 82!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=488
+09/21/2026 14:07:16 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:07:16 - INFO - __main__ - f1: 34.75
+09/21/2026 14:07:16 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:07:16 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 14:07:16 - INFO - __main__ - rougeL_recall: 16.68
+09/21/2026 14:07:16 - INFO - __main__ - rougeLsum_f1: 33.84
+09/21/2026 14:07:16 - INFO - __main__ - rougeLsum_recall: 34.92
+09/21/2026 14:07:16 - INFO - __main__ - input_len: 6407.30
+09/21/2026 14:07:16 - INFO - __main__ - output_len: 959.92
+09/21/2026 14:07:16 - INFO - __main__ - memory_construction_time: 2.38
+09/21/2026 14:07:16 - INFO - __main__ - query_time_len: 85.66
+09/21/2026 14:07:16 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:20<00:00, 20.40s/it][A100%|██████████| 1/1 [00:20<00:00, 20.40s/it]
+ 83%|████████▎ | 83/100 [2:02:14<14:40, 51.82s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 84/100:   0%|          | 0/20 [00:00<?, ?it/s][AProcessing experiments 84/100: 100%|██████████| 20/20 [00:00<00:00, 6702.31it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 83!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=345
+09/21/2026 14:11:14 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:11:14 - INFO - __main__ - f1: 34.74
+09/21/2026 14:11:14 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:11:14 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 14:11:14 - INFO - __main__ - rougeL_recall: 16.67
+09/21/2026 14:11:14 - INFO - __main__ - rougeLsum_f1: 33.87
+09/21/2026 14:11:14 - INFO - __main__ - rougeLsum_recall: 34.93
+09/21/2026 14:11:14 - INFO - __main__ - input_len: 6422.33
+09/21/2026 14:11:14 - INFO - __main__ - output_len: 959.36
+09/21/2026 14:11:14 - INFO - __main__ - memory_construction_time: 2.36
+09/21/2026 14:11:14 - INFO - __main__ - query_time_len: 87.46
+09/21/2026 14:11:14 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [03:57<00:00, 237.73s/it][A100%|██████████| 1/1 [03:57<00:00, 237.73s/it]
+ 84%|████████▍ | 84/100 [2:06:12<28:41, 107.59s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 85/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 85/100: 100%|██████████| 19/19 [00:00<00:00, 7290.44it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 84!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=327
+09/21/2026 14:12:36 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:12:36 - INFO - __main__ - f1: 34.74
+09/21/2026 14:12:36 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:12:36 - INFO - __main__ - rougeL_f1: 15.92
+09/21/2026 14:12:36 - INFO - __main__ - rougeL_recall: 16.66
+09/21/2026 14:12:36 - INFO - __main__ - rougeLsum_f1: 33.88
+09/21/2026 14:12:36 - INFO - __main__ - rougeLsum_recall: 34.91
+09/21/2026 14:12:36 - INFO - __main__ - input_len: 6442.55
+09/21/2026 14:12:36 - INFO - __main__ - output_len: 958.68
+09/21/2026 14:12:36 - INFO - __main__ - memory_construction_time: 2.33
+09/21/2026 14:12:36 - INFO - __main__ - query_time_len: 87.39
+09/21/2026 14:12:36 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [01:21<00:00, 81.97s/it][A100%|██████████| 1/1 [01:21<00:00, 81.97s/it]
+ 85%|████████▌ | 85/100 [2:07:34<24:58, 99.91s/it] Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 86/100:   0%|          | 0/22 [00:00<?, ?it/s][AProcessing experiments 86/100: 100%|██████████| 22/22 [00:00<00:00, 5000.25it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 85!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=223
+09/21/2026 14:12:57 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:12:57 - INFO - __main__ - f1: 34.76
+09/21/2026 14:12:57 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:12:57 - INFO - __main__ - rougeL_f1: 15.92
+09/21/2026 14:12:57 - INFO - __main__ - rougeL_recall: 16.62
+09/21/2026 14:12:57 - INFO - __main__ - rougeLsum_f1: 33.93
+09/21/2026 14:12:57 - INFO - __main__ - rougeLsum_recall: 34.87
+09/21/2026 14:12:57 - INFO - __main__ - input_len: 6460.13
+09/21/2026 14:12:57 - INFO - __main__ - output_len: 959.64
+09/21/2026 14:12:57 - INFO - __main__ - memory_construction_time: 2.31
+09/21/2026 14:12:57 - INFO - __main__ - query_time_len: 86.61
+09/21/2026 14:12:57 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:21<00:00, 21.53s/it][A100%|██████████| 1/1 [00:21<00:00, 21.53s/it]
+ 86%|████████▌ | 86/100 [2:07:55<17:49, 76.40s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 87/100:   0%|          | 0/23 [00:00<?, ?it/s][AProcessing experiments 87/100: 100%|██████████| 23/23 [00:00<00:00, 6506.31it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 86!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=422
+09/21/2026 14:13:14 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:13:14 - INFO - __main__ - f1: 34.81
+09/21/2026 14:13:14 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:13:14 - INFO - __main__ - rougeL_f1: 15.95
+09/21/2026 14:13:14 - INFO - __main__ - rougeL_recall: 16.71
+09/21/2026 14:13:14 - INFO - __main__ - rougeLsum_f1: 33.96
+09/21/2026 14:13:14 - INFO - __main__ - rougeLsum_recall: 35.02
+09/21/2026 14:13:14 - INFO - __main__ - input_len: 6470.99
+09/21/2026 14:13:14 - INFO - __main__ - output_len: 956.52
+09/21/2026 14:13:14 - INFO - __main__ - memory_construction_time: 2.29
+09/21/2026 14:13:14 - INFO - __main__ - query_time_len: 85.80
+09/21/2026 14:13:14 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:16<00:00, 16.69s/it][A100%|██████████| 1/1 [00:16<00:00, 16.69s/it]
+ 87%|████████▋ | 87/100 [2:08:12<12:40, 58.49s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 88/100:   0%|          | 0/19 [00:00<?, ?it/s][AProcessing experiments 88/100: 100%|██████████| 19/19 [00:00<00:00, 6899.12it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 87!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=559
+09/21/2026 14:13:36 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:13:36 - INFO - __main__ - f1: 34.76
+09/21/2026 14:13:36 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:13:36 - INFO - __main__ - rougeL_f1: 15.93
+09/21/2026 14:13:36 - INFO - __main__ - rougeL_recall: 16.67
+09/21/2026 14:13:36 - INFO - __main__ - rougeLsum_f1: 33.93
+09/21/2026 14:13:36 - INFO - __main__ - rougeLsum_recall: 34.95
+09/21/2026 14:13:36 - INFO - __main__ - input_len: 6483.50
+09/21/2026 14:13:36 - INFO - __main__ - output_len: 954.88
+09/21/2026 14:13:36 - INFO - __main__ - memory_construction_time: 2.28
+09/21/2026 14:13:36 - INFO - __main__ - query_time_len: 85.06
+09/21/2026 14:13:36 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:21<00:00, 21.58s/it][A100%|██████████| 1/1 [00:21<00:00, 21.58s/it]
+ 88%|████████▊ | 88/100 [2:08:33<09:29, 47.42s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 89/100:   0%|          | 0/53 [00:00<?, ?it/s][AProcessing experiments 89/100: 100%|██████████| 53/53 [00:00<00:00, 6368.66it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 88!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=605
+09/21/2026 14:14:31 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:14:31 - INFO - __main__ - f1: 34.74
+09/21/2026 14:14:31 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:14:31 - INFO - __main__ - rougeL_f1: 15.94
+09/21/2026 14:14:31 - INFO - __main__ - rougeL_recall: 16.62
+09/21/2026 14:14:31 - INFO - __main__ - rougeLsum_f1: 33.95
+09/21/2026 14:14:31 - INFO - __main__ - rougeLsum_recall: 34.84
+09/21/2026 14:14:31 - INFO - __main__ - input_len: 6498.79
+09/21/2026 14:14:31 - INFO - __main__ - output_len: 956.33
+09/21/2026 14:14:31 - INFO - __main__ - memory_construction_time: 2.28
+09/21/2026 14:14:31 - INFO - __main__ - query_time_len: 84.68
+09/21/2026 14:14:31 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:54<00:00, 54.99s/it][A100%|██████████| 1/1 [00:54<00:00, 54.99s/it]
+ 89%|████████▉ | 89/100 [2:09:28<09:06, 49.69s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 90/100:   0%|          | 0/73 [00:00<?, ?it/s][AProcessing experiments 90/100: 100%|██████████| 73/73 [00:00<00:00, 6150.62it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 89!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1098
+09/21/2026 14:14:55 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:14:55 - INFO - __main__ - f1: 34.67
+09/21/2026 14:14:55 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:14:55 - INFO - __main__ - rougeL_f1: 15.96
+09/21/2026 14:14:55 - INFO - __main__ - rougeL_recall: 16.65
+09/21/2026 14:14:55 - INFO - __main__ - rougeLsum_f1: 33.91
+09/21/2026 14:14:55 - INFO - __main__ - rougeLsum_recall: 34.85
+09/21/2026 14:14:55 - INFO - __main__ - input_len: 6512.64
+09/21/2026 14:14:55 - INFO - __main__ - output_len: 957.41
+09/21/2026 14:14:55 - INFO - __main__ - memory_construction_time: 2.30
+09/21/2026 14:14:55 - INFO - __main__ - query_time_len: 83.96
+09/21/2026 14:14:55 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:24<00:00, 24.04s/it][A100%|██████████| 1/1 [00:24<00:00, 24.04s/it]
+ 90%|█████████ | 90/100 [2:09:53<07:00, 42.00s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 91/100:   0%|          | 0/18 [00:00<?, ?it/s][AProcessing experiments 91/100: 100%|██████████| 18/18 [00:00<00:00, 6325.19it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 90!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=464
+09/21/2026 14:15:21 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:15:21 - INFO - __main__ - f1: 34.66
+09/21/2026 14:15:21 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:15:21 - INFO - __main__ - rougeL_f1: 15.95
+09/21/2026 14:15:21 - INFO - __main__ - rougeL_recall: 16.68
+09/21/2026 14:15:21 - INFO - __main__ - rougeLsum_f1: 33.91
+09/21/2026 14:15:21 - INFO - __main__ - rougeLsum_recall: 34.94
+09/21/2026 14:15:21 - INFO - __main__ - input_len: 6526.62
+09/21/2026 14:15:21 - INFO - __main__ - output_len: 957.67
+09/21/2026 14:15:21 - INFO - __main__ - memory_construction_time: 2.28
+09/21/2026 14:15:21 - INFO - __main__ - query_time_len: 83.31
+09/21/2026 14:15:21 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:26<00:00, 26.17s/it][A100%|██████████| 1/1 [00:26<00:00, 26.17s/it]
+ 91%|█████████ | 91/100 [2:10:19<05:35, 37.26s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 92/100:   0%|          | 0/17 [00:00<?, ?it/s][AProcessing experiments 92/100: 100%|██████████| 17/17 [00:00<00:00, 6077.67it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 91!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=254
+09/21/2026 14:15:51 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:15:51 - INFO - __main__ - f1: 34.73
+09/21/2026 14:15:51 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:15:51 - INFO - __main__ - rougeL_f1: 15.94
+09/21/2026 14:15:51 - INFO - __main__ - rougeL_recall: 16.67
+09/21/2026 14:15:51 - INFO - __main__ - rougeLsum_f1: 33.95
+09/21/2026 14:15:51 - INFO - __main__ - rougeLsum_recall: 35.00
+09/21/2026 14:15:51 - INFO - __main__ - input_len: 6539.60
+09/21/2026 14:15:51 - INFO - __main__ - output_len: 960.17
+09/21/2026 14:15:51 - INFO - __main__ - memory_construction_time: 2.26
+09/21/2026 14:15:51 - INFO - __main__ - query_time_len: 82.73
+09/21/2026 14:15:51 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:30<00:00, 30.32s/it][A100%|██████████| 1/1 [00:30<00:00, 30.32s/it]
+ 92%|█████████▏| 92/100 [2:10:49<04:41, 35.18s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 93/100:   0%|          | 0/26 [00:00<?, ?it/s][AProcessing experiments 93/100: 100%|██████████| 26/26 [00:00<00:00, 5643.63it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 92!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=417
+09/21/2026 14:16:18 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:16:18 - INFO - __main__ - f1: 34.65
+09/21/2026 14:16:18 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:16:18 - INFO - __main__ - rougeL_f1: 15.92
+09/21/2026 14:16:18 - INFO - __main__ - rougeL_recall: 16.61
+09/21/2026 14:16:18 - INFO - __main__ - rougeLsum_f1: 33.90
+09/21/2026 14:16:18 - INFO - __main__ - rougeLsum_recall: 34.85
+09/21/2026 14:16:18 - INFO - __main__ - input_len: 6550.11
+09/21/2026 14:16:18 - INFO - __main__ - output_len: 960.10
+09/21/2026 14:16:18 - INFO - __main__ - memory_construction_time: 2.25
+09/21/2026 14:16:18 - INFO - __main__ - query_time_len: 82.11
+09/21/2026 14:16:18 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:26<00:00, 26.69s/it][A100%|██████████| 1/1 [00:26<00:00, 26.70s/it]
+ 93%|█████████▎| 93/100 [2:11:16<03:48, 32.63s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 94/100:   0%|          | 0/68 [00:00<?, ?it/s][AProcessing experiments 94/100: 100%|██████████| 68/68 [00:00<00:00, 5854.48it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 93!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1004
+09/21/2026 14:20:03 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:20:03 - INFO - __main__ - f1: 34.67
+09/21/2026 14:20:03 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:20:03 - INFO - __main__ - rougeL_f1: 15.91
+09/21/2026 14:20:03 - INFO - __main__ - rougeL_recall: 16.56
+09/21/2026 14:20:03 - INFO - __main__ - rougeLsum_f1: 33.91
+09/21/2026 14:20:03 - INFO - __main__ - rougeLsum_recall: 34.79
+09/21/2026 14:20:03 - INFO - __main__ - input_len: 6563.07
+09/21/2026 14:20:03 - INFO - __main__ - output_len: 961.05
+09/21/2026 14:20:03 - INFO - __main__ - memory_construction_time: 2.27
+09/21/2026 14:20:03 - INFO - __main__ - query_time_len: 83.59
+09/21/2026 14:20:03 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [03:45<00:00, 225.25s/it][A100%|██████████| 1/1 [03:45<00:00, 225.25s/it]
+ 94%|█████████▍| 94/100 [2:15:01<09:02, 90.42s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 95/100:   0%|          | 0/111 [00:00<?, ?it/s][AProcessing experiments 95/100: 100%|██████████| 111/111 [00:00<00:00, 4037.08it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 94!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1819
+09/21/2026 14:20:35 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:20:35 - INFO - __main__ - f1: 34.67
+09/21/2026 14:20:35 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:20:35 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 14:20:35 - INFO - __main__ - rougeL_recall: 16.52
+09/21/2026 14:20:35 - INFO - __main__ - rougeLsum_f1: 33.93
+09/21/2026 14:20:35 - INFO - __main__ - rougeLsum_recall: 34.75
+09/21/2026 14:20:35 - INFO - __main__ - input_len: 6576.93
+09/21/2026 14:20:35 - INFO - __main__ - output_len: 962.58
+09/21/2026 14:20:35 - INFO - __main__ - memory_construction_time: 2.35
+09/21/2026 14:20:35 - INFO - __main__ - query_time_len: 82.94
+09/21/2026 14:20:35 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:32<00:00, 32.23s/it][A100%|██████████| 1/1 [00:32<00:00, 32.24s/it]
+ 95%|█████████▌| 95/100 [2:15:33<06:04, 72.98s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 96/100:   0%|          | 0/60 [00:00<?, ?it/s][AProcessing experiments 96/100: 100%|██████████| 60/60 [00:00<00:00, 5062.02it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 95!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=859
+09/21/2026 14:21:06 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:21:06 - INFO - __main__ - f1: 34.66
+09/21/2026 14:21:06 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:21:06 - INFO - __main__ - rougeL_f1: 15.90
+09/21/2026 14:21:06 - INFO - __main__ - rougeL_recall: 16.51
+09/21/2026 14:21:06 - INFO - __main__ - rougeLsum_f1: 33.89
+09/21/2026 14:21:06 - INFO - __main__ - rougeLsum_recall: 34.67
+09/21/2026 14:21:06 - INFO - __main__ - input_len: 6585.24
+09/21/2026 14:21:06 - INFO - __main__ - output_len: 961.57
+09/21/2026 14:21:06 - INFO - __main__ - memory_construction_time: 2.35
+09/21/2026 14:21:06 - INFO - __main__ - query_time_len: 82.36
+09/21/2026 14:21:06 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:30<00:00, 30.97s/it][A100%|██████████| 1/1 [00:30<00:00, 30.97s/it]
+ 96%|█████████▌| 96/100 [2:16:04<04:01, 60.38s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 97/100:   0%|          | 0/37 [00:00<?, ?it/s][AProcessing experiments 97/100: 100%|██████████| 37/37 [00:00<00:00, 3963.97it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 96!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=471
+09/21/2026 14:21:23 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:21:23 - INFO - __main__ - f1: 34.72
+09/21/2026 14:21:23 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:21:23 - INFO - __main__ - rougeL_f1: 15.93
+09/21/2026 14:21:23 - INFO - __main__ - rougeL_recall: 16.50
+09/21/2026 14:21:23 - INFO - __main__ - rougeLsum_f1: 33.95
+09/21/2026 14:21:23 - INFO - __main__ - rougeLsum_recall: 34.67
+09/21/2026 14:21:23 - INFO - __main__ - input_len: 6595.88
+09/21/2026 14:21:23 - INFO - __main__ - output_len: 959.35
+09/21/2026 14:21:23 - INFO - __main__ - memory_construction_time: 2.35
+09/21/2026 14:21:23 - INFO - __main__ - query_time_len: 81.66
+09/21/2026 14:21:23 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:16<00:00, 16.21s/it][A100%|██████████| 1/1 [00:16<00:00, 16.21s/it]
+ 97%|█████████▋| 97/100 [2:16:20<02:21, 47.14s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 98/100:   0%|          | 0/55 [00:00<?, ?it/s][AProcessing experiments 98/100: 100%|██████████| 55/55 [00:00<00:00, 4602.50it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 97!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=1685
+09/21/2026 14:21:48 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:21:48 - INFO - __main__ - f1: 34.71
+09/21/2026 14:21:48 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:21:48 - INFO - __main__ - rougeL_f1: 15.94
+09/21/2026 14:21:48 - INFO - __main__ - rougeL_recall: 16.50
+09/21/2026 14:21:48 - INFO - __main__ - rougeLsum_f1: 33.98
+09/21/2026 14:21:48 - INFO - __main__ - rougeLsum_recall: 34.69
+09/21/2026 14:21:48 - INFO - __main__ - input_len: 6607.43
+09/21/2026 14:21:48 - INFO - __main__ - output_len: 960.39
+09/21/2026 14:21:48 - INFO - __main__ - memory_construction_time: 2.37
+09/21/2026 14:21:48 - INFO - __main__ - query_time_len: 81.04
+09/21/2026 14:21:48 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:24<00:00, 24.90s/it][A100%|██████████| 1/1 [00:24<00:00, 24.90s/it]
+ 98%|█████████▊| 98/100 [2:16:45<01:20, 40.47s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 99/100:   0%|          | 0/32 [00:00<?, ?it/s][AProcessing experiments 99/100: 100%|██████████| 32/32 [00:00<00:00, 6164.69it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 98!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=368
+09/21/2026 14:22:11 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:22:11 - INFO - __main__ - f1: 34.76
+09/21/2026 14:22:11 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:22:11 - INFO - __main__ - rougeL_f1: 15.94
+09/21/2026 14:22:11 - INFO - __main__ - rougeL_recall: 16.48
+09/21/2026 14:22:11 - INFO - __main__ - rougeLsum_f1: 34.01
+09/21/2026 14:22:11 - INFO - __main__ - rougeLsum_recall: 34.67
+09/21/2026 14:22:11 - INFO - __main__ - input_len: 6620.72
+09/21/2026 14:22:11 - INFO - __main__ - output_len: 959.30
+09/21/2026 14:22:11 - INFO - __main__ - memory_construction_time: 2.35
+09/21/2026 14:22:11 - INFO - __main__ - query_time_len: 80.44
+09/21/2026 14:22:11 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:23<00:00, 23.66s/it][A100%|██████████| 1/1 [00:23<00:00, 23.66s/it]
+ 99%|█████████▉| 99/100 [2:17:09<00:35, 35.43s/it]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 100/100:   0%|          | 0/57 [00:00<?, ?it/s][AProcessing experiments 100/100: 100%|██████████| 57/57 [00:00<00:00, 4453.13it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 1 queries for context 99!!!!!
+
+
+  0%|          | 0/1 [00:00<?, ?it/s][AEden inject flush stored=761
+09/21/2026 14:22:38 - INFO - __main__ - exact_match: 0.00
+09/21/2026 14:22:38 - INFO - __main__ - f1: 34.84
+09/21/2026 14:22:38 - INFO - __main__ - substring_exact_match: 0.00
+09/21/2026 14:22:38 - INFO - __main__ - rougeL_f1: 15.98
+09/21/2026 14:22:38 - INFO - __main__ - rougeL_recall: 16.50
+09/21/2026 14:22:38 - INFO - __main__ - rougeLsum_f1: 34.09
+09/21/2026 14:22:38 - INFO - __main__ - rougeLsum_recall: 34.71
+09/21/2026 14:22:38 - INFO - __main__ - input_len: 6633.56
+09/21/2026 14:22:38 - INFO - __main__ - output_len: 959.71
+09/21/2026 14:22:38 - INFO - __main__ - memory_construction_time: 2.36
+09/21/2026 14:22:38 - INFO - __main__ - query_time_len: 79.88
+09/21/2026 14:22:38 - INFO - __main__ - Results saved at ./outputs/eden-inject-gemma-4-31b-it/Long_Range_Understanding/infbench_sum_eng_shots2_unknown_in1200000_size1200_shots2_max_samples100_k10_chunk4096_results.json
+
+100%|██████████| 1/1 [00:26<00:00, 26.77s/it][A100%|██████████| 1/1 [00:26<00:00, 26.77s/it]
+100%|██████████| 100/100 [2:17:36<00:00, 32.84s/it]100%|██████████| 100/100 [2:17:36<00:00, 82.56s/it]
+09/21/2026 14:22:38 - INFO - __main__ - Total time taken: 8272.997090816498
+leaf summ: judging n=100 (next leaf may overlap)
+NIM judge 25/100 labeled=25
+NIM judge 50/100 labeled=50
+NIM judge 75/100 labeled=75
+NIM judge 100/100 labeled=100
+leaf summ: ok n=100 score=37.0
+Wrote /Users/kaiavnihalani/Downloads/Eden/benchmarks/memoryagentbench/TABLE3-RESULTS.md

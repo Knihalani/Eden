@@ -1,0 +1,5 @@
+{
+  "n": 69,
+  "last_status": "keep",
+  "next_idea": "Hold open-miss=0. Fastest keep 6.14us (n=62 skip usefulInjectFact trim); HEAD 6.21us. Next: skip messageText join slice when length<=16000 without a per-string branch (n=63 per-string slice lost). Do not GREP_LINE memo. Do not git add untracked need.ts."
+}

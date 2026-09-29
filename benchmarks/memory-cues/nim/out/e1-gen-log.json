@@ -1,0 +1,6599 @@
+[
+ {
+  "mid": "a01",
+  "kind": "para",
+  "kept": [
+   "Why did our route hooks change behavior after the server upgrade to version 5?",
+   "Can you adjust the backend plugins for the new v5 lifecycle and error handling?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.32262396812439,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 341,
+     "total_tokens": 668,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 293
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a02",
+  "kind": "para",
+  "kept": [
+   "writing a migration for apps/api, does our SQL engine support generated columns yet?",
+   "setting up the api locally \u2014 which server version should I install for the relational backend?"
+  ],
+  "rejected": [
+   [
+    "the api needs to talk to the data store \u2014 what version are we running on the backend?",
+    [
+     "data~database"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 32.3482141494751,
+    "usage": {
+     "prompt_tokens": 319,
+     "completion_tokens": 95,
+     "total_tokens": 414,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 43
+     }
+    },
+    "cached": true
+   },
+   {
+    "latency_s": 31.964909076690674,
+    "usage": {
+     "prompt_tokens": 357,
+     "completion_tokens": 48,
+     "total_tokens": 405,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 15
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a03",
+  "kind": "para",
+  "kept": [
+   "add a column to the users table in the fastify service and write the query for it",
+   "where are the tables defined in the postgres backend? i need to join orders with customers"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.161028146743774,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 257,
+     "total_tokens": 599,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 204
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a04",
+  "kind": "para",
+  "kept": [
+   "the backend keeps crashing on startup, looks like the new columns aren't in postgres yet \u2014 how do I push the schema changes?",
+   "hey, just pulled latest and the server errors on missing tables. what's the command to run the pending schema updates?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.15838384628296,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 102,
+     "total_tokens": 437,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 37
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a05",
+  "kind": "para",
+  "kept": [
+   "how do i add a column and roll out the database change for users",
+   "after adding a field, which command refreshes the server data model safely"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 49.923407793045044,
+    "usage": {
+     "prompt_tokens": 349,
+     "completion_tokens": 516,
+     "total_tokens": 865,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 472
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a06",
+  "kind": "para",
+  "kept": [
+   "users keep getting 401s on the web app even though they're logged in, can you check how the server validates their identity?",
+   "I need to swap out the token checking logic in the fastify service to support a new identity provider, where does that live?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.97386598587036,
+    "usage": {
+     "prompt_tokens": 346,
+     "completion_tokens": 109,
+     "total_tokens": 455,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 40
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a07",
+  "kind": "para",
+  "kept": [
+   "users hitting 429s on the api when they hammer the login endpoint, how are we throttling that?",
+   "need to bump how many calls a client can make to the api each min \u2014 where's that configured?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.97431683540344,
+    "usage": {
+     "prompt_tokens": 354,
+     "completion_tokens": 133,
+     "total_tokens": 487,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 73
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a08",
+  "kind": "para",
+  "kept": [
+   "web calls to /users keep 404ing; did the backend move everything under a prefix?",
+   "add a Fastify endpoint for invoices and make sure the path matches the rest of the backend"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 82.41503715515137,
+    "usage": {
+     "prompt_tokens": 329,
+     "completion_tokens": 509,
+     "total_tokens": 838,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 456
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a09",
+  "kind": "para",
+  "kept": [
+   "the docs for our REST endpoints are stale \u2014 where do they actually come from, I don't want to hand-edit them",
+   "I changed a validation model in the backend, how do I refresh the contract file that describes the routes?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.90414500236511,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 134,
+     "total_tokens": 475,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 72
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a10",
+  "kind": "para",
+  "kept": [
+   "Why do the service checks need a live database instead of mocks in CI?",
+   "My local suite fails without Docker; what backend dependency should I provision first?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 44.92103385925293,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 363,
+     "total_tokens": 699,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 317
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a11",
+  "kind": "para",
+  "kept": [
+   "the login flow specs keep failing in the server package \u2014 how do I execute just those?",
+   "full suite on the backend takes forever, only want the sign-in related checks this time"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.30458378791809,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 89,
+     "total_tokens": 425,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 37
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a12",
+  "kind": "para",
+  "kept": [
+   "payments endpoint keeps rejecting events from the processor even though the secret is right, any idea why?",
+   "hooking up the billing provider's event callback in apps/api and it errors out on every request, can you take a look?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.235109090805054,
+    "usage": {
+     "prompt_tokens": 365,
+     "completion_tokens": 75,
+     "total_tokens": 440,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 13
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a13",
+  "kind": "para",
+  "kept": [
+   "hey, when the api rejects a bad request what shape should the response body have? frontend folks are asking",
+   "writing tests for apps/api 404s \u2014 how should the failure payload look so I can assert on it?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.442891120910645,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 117,
+     "total_tokens": 453,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 56
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a14",
+  "kind": "para",
+  "kept": [
+   "Add a GET route in apps/api to fetch all users for the admin dashboard, front-end wants paging controls",
+   "the /api/orders page loads way too slow once the table gets big, can we stop fetching everything at once?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.6828339099884,
+    "usage": {
+     "prompt_tokens": 328,
+     "completion_tokens": 108,
+     "total_tokens": 436,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 45
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a15",
+  "kind": "para",
+  "kept": [
+   "when a user removes a record in apps/api, should I actually drop it from postgres or keep it around somehow?",
+   "qa says removed accounts still show up in the admin list endpoint \u2014 how is that supposed to work here?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 34.691489934921265,
+    "usage": {
+     "prompt_tokens": 329,
+     "completion_tokens": 109,
+     "total_tokens": 438,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 48
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a16",
+  "kind": "para",
+  "kept": [
+   "Why does the API return 1299 for a $12.99 price, and how should I format totals?",
+   "Can you add a checkout total field without rounding errors from decimal math in responses?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.2522509098053,
+    "usage": {
+     "prompt_tokens": 329,
+     "completion_tokens": 312,
+     "total_tokens": 641,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 257
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a17",
+  "kind": "para",
+  "kept": [
+   "adding a new table to the api schema \u2014 what should I use for the row identifiers here?",
+   "the migration I generated uses serial ints, but the existing tables look different, what's the convention?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.470383167266846,
+    "usage": {
+     "prompt_tokens": 325,
+     "completion_tokens": 148,
+     "total_tokens": 473,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 93
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a18",
+  "kind": "para",
+  "kept": [
+   "api is throwing 'too many clients' errors under load, how do I raise that limit?",
+   "db calls time out when traffic spikes \u2014 can we bump how many concurrent db links one api instance can open?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 40.25762104988098,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 224,
+     "total_tokens": 556,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 166
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a19",
+  "kind": "para",
+  "kept": [
+   "api throws 42P05 duplicate query name after prisma connects through pooler; what config flips?",
+   "Why do Fastify handlers fail only behind the db proxy with cached plan errors?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 50.25699782371521,
+    "usage": {
+     "prompt_tokens": 357,
+     "completion_tokens": 463,
+     "total_tokens": 820,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 410
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a21",
+  "kind": "para",
+  "kept": [
+   "just set up the repo and the web app shows nothing \u2014 how do I get test records into postgres?",
+   "the backend keeps returning empty lists \u2014 how do I load some fixture rows into my dev Postgres?"
+  ],
+  "rejected": [
+   [
+    "how do I populate my dev database with some sample rows? the backend keeps returning empty lists",
+    [
+     "database~data"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 66.15191507339478,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 86,
+     "total_tokens": 422,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 29
+     }
+    },
+    "cached": true
+   },
+   {
+    "latency_s": 40.32241225242615,
+    "usage": {
+     "prompt_tokens": 374,
+     "completion_tokens": 235,
+     "total_tokens": 609,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 200
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a22",
+  "kind": "para",
+  "kept": [
+   "users say the password reset notice never arrives; where is delivery wired up in this repo?",
+   "I need to tweak the welcome copy and add a footer link; which folder holds those JSX mail views?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.90270495414734,
+    "usage": {
+     "prompt_tokens": 343,
+     "completion_tokens": 330,
+     "total_tokens": 673,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 275
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a23",
+  "kind": "para",
+  "kept": [
+   "the report generation endpoint returns instantly but nothing ever gets processed, where does the task go?",
+   "add a delayed email reminder for trial expiry \u2014 how do we hand that off from the web service?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.61185002326965,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 92,
+     "total_tokens": 425,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 37
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a24",
+  "kind": "para",
+  "kept": [
+   "browser keeps blocking requests from the web app to the api, preflight fails \u2014 what's wrong?",
+   "frontend on staging can't hit the api, getting blocked by the browser. where do I fix that?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.9161422252655,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 145,
+     "total_tokens": 472,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 89
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a25",
+  "kind": "para",
+  "kept": [
+   "In apps/api, what route should I curl to confirm the service is up and its dependencies are reachable?",
+   "The load balancer keeps marking apps/api down; which URL should it probe, and what does it verify?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.974263191223145,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 283,
+     "total_tokens": 619,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 225
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a26",
+  "kind": "para",
+  "kept": [
+   "In apps/api, which trace field should I echo back so support can match one failing call across entries?",
+   "Support gave me a correlation value from the client; where do I read it in apps/api and include it in responses?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 50.09157729148865,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 433,
+     "total_tokens": 770,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 372
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a27",
+  "kind": "para",
+  "kept": [
+   "The /api/invoices route hangs whenever Stripe is sluggish; can we cap how long we wait on it?",
+   "Users see spinning loaders when the tax service stalls; add a hard ceiling for that dependency in apps/api."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 49.08251881599426,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 486,
+     "total_tokens": 819,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 427
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a28",
+  "kind": "para",
+  "kept": [
+   "the /customers endpoint is slow; it fires one db call per row when loading each customer's invoices",
+   "api responses crawl on /accounts; looks like a separate postgres hit for every nested item"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.9708948135376,
+    "usage": {
+     "prompt_tokens": 351,
+     "completion_tokens": 338,
+     "total_tokens": 689,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 286
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a29",
+  "kind": "para",
+  "kept": [
+   "how do I let users attach a profile photo in the api? do we stream it through the server?",
+   "the endpoint for sending big attachments keeps timing out on large payloads, what's the right way to handle this?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 34.69036889076233,
+    "usage": {
+     "prompt_tokens": 345,
+     "completion_tokens": 93,
+     "total_tokens": 438,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 34
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a30",
+  "kind": "para",
+  "kept": [
+   "the API's keyword lookup endpoint is slow, should we spin up an external indexing engine to speed it up?",
+   "thinking of adding a dedicated indexing service for finding records in the api \u2014 what's already in place?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.138505935668945,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 106,
+     "total_tokens": 441,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 48
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a31",
+  "kind": "para",
+  "kept": [
+   "apps/api feels sluggish on fresh deploys; which db layer are we using now?",
+   "Can you trim boot latency in apps/api without changing the Postgres schema?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 40.17008185386658,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 256,
+     "total_tokens": 598,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 209
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a33",
+  "kind": "para",
+  "kept": [
+   "can we tweak last week's SQL file directly, or should I create a follow-up script for the API?",
+   "deploy blew up after a teammate touched an old db revision; how do we roll forward safely?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.79824995994568,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 404,
+     "total_tokens": 737,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 348
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a34",
+  "kind": "para",
+  "kept": [
+   "apps/api: customers can see other workspaces' invoices after login\u2014where should the repo scope lookups?",
+   "Before I add a Fastify route for billing, what check stops one account reading another account's rows?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 49.82752823829651,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 432,
+     "total_tokens": 774,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 375
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a35",
+  "kind": "para",
+  "kept": [
+   "partner says the event notifications we send them fail their authenticity check, how do we generate that proof value?",
+   "adding a new endpoint that pings customer servers \u2014 what do we need to attach so receivers can verify it's really from us?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.498046875,
+    "usage": {
+     "prompt_tokens": 352,
+     "completion_tokens": 88,
+     "total_tokens": 440,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 26
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "a36",
+  "kind": "para",
+  "kept": [
+   "users keep getting kicked out at random even with fresh login tokens; what should I check in apps/api?",
+   "API calls randomly fail as denied right after deploy, though credentials look fine\u2014any known drift issue?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 49.09163737297058,
+    "usage": {
+     "prompt_tokens": 361,
+     "completion_tokens": 566,
+     "total_tokens": 927,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 509
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c01",
+  "kind": "para",
+  "kept": [
+   "I need to add a new subcommand with flags to the packages tool \u2014 what's the argument-parsing setup here?",
+   "the --help output for our node tool in packages looks off, where do I tweak option definitions?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 30.999026775360107,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 85,
+     "total_tokens": 408,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 25
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "c02",
+  "kind": "para",
+  "kept": [
+   "how is the acme command-line tool packaged for release? I need to add a new dependency",
+   "running the tool from source works but the published artifact crashes \u2014 where does the build output come from?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.630615234375,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 222,
+     "total_tokens": 559,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 165
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "c03",
+  "kind": "para",
+  "kept": [
+   "What should I type in the terminal after installing our tool globally?",
+   "Users say command not found after install; is our console entrypoint mismatched again?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.211493253707886,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 249,
+     "total_tokens": 591,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 203
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c04",
+  "kind": "para",
+  "kept": [
+   "where does the command line tool keep its settings file? I want to tweak the default endpoint by hand",
+   "my coworker's terminal picks up different defaults than mine \u2014 is there a per-user file for the package tool under my home directory?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.94600796699524,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 104,
+     "total_tokens": 435,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 40
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c05",
+  "kind": "para",
+  "kept": [
+   "how should I write checks for the command-line package in packages? what's the convention there",
+   "my new spec for the terminal tool keeps failing on output formatting, what am I doing wrong"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 33.404988050460815,
+    "usage": {
+     "prompt_tokens": 329,
+     "completion_tokens": 72,
+     "total_tokens": 401,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c06",
+  "kind": "para",
+  "kept": [
+   "How do I get a fresh build of the command-line tool out to users?",
+   "Tag cut is green; what step actually pushes the package to the registry?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 57.574400186538696,
+    "usage": {
+     "prompt_tokens": 353,
+     "completion_tokens": 332,
+     "total_tokens": 685,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 285
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c07",
+  "kind": "para",
+  "kept": [
+   "users on v18 are crashing on startup, crypto.hash isn't there \u2014 can we use something that works for them?",
+   "before you add that fancy builtin, check it actually runs on 18, some of our installs are still on it"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.22894811630249,
+    "usage": {
+     "prompt_tokens": 343,
+     "completion_tokens": 147,
+     "total_tokens": 490,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 84
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c08",
+  "kind": "para",
+  "kept": [
+   "folks running our command-line tool on ancient javascript runtimes keep getting a weird crash about module loading, what should i tell them",
+   "someone hit a failure launching the bundled binary on an outdated runtime, complaining about import syntax \u2014 how do i respond"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 34.64687705039978,
+    "usage": {
+     "prompt_tokens": 361,
+     "completion_tokens": 112,
+     "total_tokens": 473,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 45
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c09",
+  "kind": "para",
+  "kept": [
+   "how does the terminal tool remember who I am between runs? I never have to sign in twice",
+   "users on headless boxes can't open a browser \u2014 how do they get the command line tool connected to their account?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 34.15696883201599,
+    "usage": {
+     "prompt_tokens": 361,
+     "completion_tokens": 83,
+     "total_tokens": 444,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 23
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c10",
+  "kind": "para",
+  "kept": [
+   "How do I start the Node command-line package from my machine and pass it a few options?",
+   "The workspace tool won\u2019t launch on my laptop; what\u2019s the right way to invoke it with flags?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 62.85859489440918,
+    "usage": {
+     "prompt_tokens": 347,
+     "completion_tokens": 600,
+     "total_tokens": 947,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 544
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c11",
+  "kind": "para",
+  "kept": [
+   "reviewing a PR that adds a new dependency for styling text output in our command-line package \u2014 is that the right choice?",
+   "before I add ANSI styling to the command-line output in packages, which dependency should I import for that?"
+  ],
+  "rejected": [
+   [
+    "the output styling in packages/cli is inconsistent \u2014 which lib are we supposed to use for the ANSI styling there?",
+    [
+     "cli"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 39.57553505897522,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 119,
+     "total_tokens": 449,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 55
+     }
+    },
+    "cached": true
+   },
+   {
+    "latency_s": 32.21210789680481,
+    "usage": {
+     "prompt_tokens": 369,
+     "completion_tokens": 111,
+     "total_tokens": 480,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 74
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c12",
+  "kind": "para",
+  "kept": [
+   "the terminal tool asks the user questions on startup \u2014 what library do we use for those menus again?",
+   "adding a yes/no confirmation to the setup wizard in the node tool, want it to match the existing spinners and selects"
+  ],
+  "rejected": [
+   [
+    "adding a new confirmation step to the init flow in packages/cli, want it to match the existing spinners and selects",
+    [
+     "cli"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 32.56517004966736,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 107,
+     "total_tokens": 434,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 47
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 33.39344096183777,
+    "usage": {
+     "prompt_tokens": 368,
+     "completion_tokens": 117,
+     "total_tokens": 485,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 77
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "c13",
+  "kind": "para",
+  "kept": [
+   "can you make the acme tool print results in a machine-readable format? I'm piping it into other tools",
+   "when I pipe the tool's results into jq it chokes on the table layout, can we add a machine-readable mode?"
+  ],
+  "rejected": [
+   [
+    "hey, I need to parse the tool's results from a shell script but the text layout keeps breaking my parsing",
+    [
+     "script~scripting"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 35.671165227890015,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 92,
+     "total_tokens": 423,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 31
+     }
+    },
+    "cached": true
+   },
+   {
+    "latency_s": 33.55830502510071,
+    "usage": {
+     "prompt_tokens": 374,
+     "completion_tokens": 110,
+     "total_tokens": 484,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 69
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c14",
+  "kind": "para",
+  "kept": [
+   "Does the terminal tool send usage stats by default, and how do I turn that off for CI?",
+   "Our build runners shouldn't phone home; which env var disables analytics for the command-line package?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.24864101409912,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 407,
+     "total_tokens": 738,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 353
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c15",
+  "kind": "para",
+  "kept": [
+   "CLI fails on Win11: it writes settings under C:\\Users\\me, not the real profile folder.",
+   "Why does the CLI mash directories with slashes? On Win10 it lands in the wrong account directory."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 57.75666403770447,
+    "usage": {
+     "prompt_tokens": 352,
+     "completion_tokens": 754,
+     "total_tokens": 1106,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 696
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "c16",
+  "kind": "para",
+  "kept": [
+   "The terminal tool keeps nagging about a newer release; can we make it quiet except once every 24 hours?",
+   "Why does our command print that obsolete-version banner on every run, and where is the throttle configured?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.3420889377594,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 432,
+     "total_tokens": 764,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 373
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "c17",
+  "kind": "para",
+  "kept": [
+   "the acme command-line tool just blew up with status 2 after I mistyped a flag \u2014 what does that number tell me?",
+   "my script checks the status from the acme terminal tool and I got a 1 vs a 2, how should I handle each?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.48846793174744,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 111,
+     "total_tokens": 448,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 39
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "c18",
+  "kind": "para",
+  "kept": [
+   "How do I make the command-line tool available system-wide so I can invoke it from any folder?",
+   "The terminal says command not found when I call our dev tool outside its directory \u2014 what step did I miss?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.333441972732544,
+    "usage": {
+     "prompt_tokens": 355,
+     "completion_tokens": 192,
+     "total_tokens": 547,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 133
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i01",
+  "kind": "para",
+  "kept": [
+   "Which tool and version should I use for the EKS cluster definitions, and where do those files live?",
+   "CI failed while applying cloud changes for the worker; what HCL version is pinned in this repo?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.198444843292236,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 282,
+     "total_tokens": 609,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 225
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "i02",
+  "kind": "para",
+  "kept": [
+   "Two applies collided and now the cloud plan is wedged; where should I point the backend config?",
+   "I\u2019m switching CI to a fresh account; what remote store and mutex does our infra tooling expect?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.14501190185547,
+    "usage": {
+     "prompt_tokens": 351,
+     "completion_tokens": 497,
+     "total_tokens": 848,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 440
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i03",
+  "kind": "para",
+  "kept": [
+   "terraform plan keeps failing \u2014 do you know which location our infra is supposed to deploy to?",
+   "setting up the worker's env vars, what's the geographic placement we use for our resources?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.143710136413574,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 79,
+     "total_tokens": 406,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 26
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "i04",
+  "kind": "para",
+  "kept": [
+   "Which kube context should I use for the live backend before I roll out the fix?",
+   "Deploy failed again\u2014what namespace and environment are our Fastify and BullMQ pieces actually on?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.947818994522095,
+    "usage": {
+     "prompt_tokens": 345,
+     "completion_tokens": 304,
+     "total_tokens": 649,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 252
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "i05",
+  "kind": "para",
+  "kept": [
+   "I need to tweak the worker's deployment config \u2014 where do we keep the k8s packaging for each app?",
+   "adding a new api replica setting, which directory holds the templated manifests for the worker?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 30.94576406478882,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 98,
+     "total_tokens": 429,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 40
+     }
+    },
+    "cached": true
+   }
+  ]
+ },
+ {
+  "mid": "i06",
+  "kind": "para",
+  "kept": [
+   "Can I push the infra changes straight from my machine, or does automation handle them?",
+   "My shell is in infra; is it safe to provision the EKS tweak by hand?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.33462977409363,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 277,
+     "total_tokens": 617,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 226
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i07",
+  "kind": "para",
+  "kept": [
+   "How do I preview infra changes for the pre-prod cluster from my laptop before applying them?",
+   "make: *** No rule to make target `preview'. Stop. \u2014 what target shows the diff for our EKS stack?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.785627126693726,
+    "usage": {
+     "prompt_tokens": 334,
+     "completion_tokens": 538,
+     "total_tokens": 872,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 478
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i08",
+  "kind": "para",
+  "kept": [
+   "I'm adding a new API token for the staging cluster \u2014 where do I actually put it so the pods pick it up?",
+   "why does the worker keep crashing with missing env vars right after I updated the values in the cloud console?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.40634107589722,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 104,
+     "total_tokens": 445,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 38
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i09",
+  "kind": "para",
+  "kept": [
+   "the prod domain isn't resolving after the terraform apply, where do our nameservers actually live?",
+   "need to add a CNAME for the new api subdomain \u2014 which provider manages our records?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.10376977920532,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 121,
+     "total_tokens": 452,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 68
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i10",
+  "kind": "para",
+  "kept": [
+   "where do I check API error rates and traces for the EKS service?",
+   "the worker is backed up\u2014where are its alerts and runtime charts kept?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.026251792907715,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 251,
+     "total_tokens": 586,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 205
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i11",
+  "kind": "para",
+  "kept": [
+   "prod is down and nobody got notified; where is the incident escalation hooked up in infra?",
+   "Users see 500s but ops stayed silent; which Terraform wires severity breaches to the human rotation?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.14900302886963,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 318,
+     "total_tokens": 645,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 264
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i12",
+  "kind": "para",
+  "kept": [
+   "My terminal is pointing at the wrong cluster again; how do I load fresh credentials for the live one?",
+   "Port-forward fails because my CLI still targets staging; remind me how to authenticate against the real cluster."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 53.6830039024353,
+    "usage": {
+     "prompt_tokens": 358,
+     "completion_tokens": 441,
+     "total_tokens": 799,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 384
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i13",
+  "kind": "para",
+  "kept": [
+   "where do i publish the worker build in aws? need the exact target path",
+   "ci failed: no such aws artifact destination for api; what's the correct prefix?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.57838177680969,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 491,
+     "total_tokens": 831,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 444
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i14",
+  "kind": "para",
+  "kept": [
+   "before launch, is our live sql cluster resilient if one zone goes down, and how far can we restore?",
+   "what's the retention window for point-in-time recovery on the main sql instance?"
+  ],
+  "rejected": [
+   [
+    "before we ship, is the live sql store resilient to a zone outage and how long can we roll back?",
+    [
+     "back~backup"
+    ]
+   ],
+   [
+    "can you check our infra setup \u2014 if the main db node dies, will we failover and how far back can we restore?",
+    [
+     "back~backup"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 36.76242208480835,
+    "usage": {
+     "prompt_tokens": 346,
+     "completion_tokens": 104,
+     "total_tokens": 450,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 40
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 46.80802798271179,
+    "usage": {
+     "prompt_tokens": 420,
+     "completion_tokens": 460,
+     "total_tokens": 880,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 405
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i15",
+  "kind": "para",
+  "kept": [
+   "For the live deploy, should the worker use our AWS managed cache endpoint instead of the local container one?",
+   "The BullMQ board is fine on my laptop but times out after release; which broker URL should Terraform inject?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.98592710494995,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 398,
+     "total_tokens": 721,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 339
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i16",
+  "kind": "para",
+  "kept": [
+   "cluster's on 1.29 now and external traffic just 404s, any idea what's wrong?",
+   "after the kubernetes version bump our routing layer stopped working, what do I check before redeploying?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.71024990081787,
+    "usage": {
+     "prompt_tokens": 358,
+     "completion_tokens": 93,
+     "total_tokens": 451,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 35
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i17",
+  "kind": "para",
+  "kept": [
+   "Why is https on the EKS web app still serving a self-signed TLS chain after the DNS cutover?",
+   "Before I edit the DNS zone, which component terminates public TLS for apps/web in our cluster?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.70811414718628,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 447,
+     "total_tokens": 780,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 390
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i18",
+  "kind": "para",
+  "kept": [
+   "i tweaked the eks terraform, does this need anything special before i open a pull request?",
+   "updating the staging cluster config \u2014 who has to sign off on this and what goes in the description?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.649473905563354,
+    "usage": {
+     "prompt_tokens": 344,
+     "completion_tokens": 291,
+     "total_tokens": 635,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 235
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i19",
+  "kind": "para",
+  "kept": [
+   "Why do the background consumers spike with backlog while the web tier only adds pods after high load?",
+   "Before I change thresholds in Terraform, which component reacts to backlog and which one watches processor use?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 64.70469880104065,
+    "usage": {
+     "prompt_tokens": 350,
+     "completion_tokens": 499,
+     "total_tokens": 849,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 445
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i20",
+  "kind": "para",
+  "kept": [
+   "adding a new s3 bucket in the terraform module, anything i need to set on it before apply?",
+   "finance flagged our eks cluster in the billing report as unattributed, can you check what's missing"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.19861030578613,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 91,
+     "total_tokens": 421,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 35
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i21",
+  "kind": "para",
+  "kept": [
+   "psql to the live Postgres host just times out from my laptop\u2014what network path should I use?",
+   "Trying to run a migration against the live Postgres from my laptop but the host won't resolve\u2014what network do I need to be on?"
+  ],
+  "rejected": [
+   [
+    "Need to run a migration against the live data store, but the host isn\u2019t reachable from here\u2014how do I route in?",
+    [
+     "data~database"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 46.07723379135132,
+    "usage": {
+     "prompt_tokens": 338,
+     "completion_tokens": 405,
+     "total_tokens": 743,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 342
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 37.96157908439636,
+    "usage": {
+     "prompt_tokens": 383,
+     "completion_tokens": 98,
+     "total_tokens": 481,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 55
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "i22",
+  "kind": "para",
+  "kept": [
+   "db went down during the chaos drill, how long does our service keep hammering before it gives up?",
+   "whenever the database blips the backend just hangs forever \u2014 is that expected or should we shorten the wait?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.38682413101196,
+    "usage": {
+     "prompt_tokens": 352,
+     "completion_tokens": 101,
+     "total_tokens": 453,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 41
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p01",
+  "kind": "para",
+  "kept": [
+   "Everything's approved and green \u2014 go ahead and land it on main for me, thanks",
+   "CI finally passed, can you just hit the green button and close it out?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.183624029159546,
+    "usage": {
+     "prompt_tokens": 343,
+     "completion_tokens": 227,
+     "total_tokens": 570,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 176
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p02",
+  "kind": "para",
+  "kept": [
+   "can you push this branch and create the merge proposal on github now?",
+   "go ahead and submit my changes for review, i'm done tweaking the api fix"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.22360706329346,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 77,
+     "total_tokens": 418,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 31
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p03",
+  "kind": "para",
+  "kept": [
+   "I need the login fix isolated from trunk and ready for review; can you set that up?",
+   "Why did my edits land straight on trunk instead of a safe reviewable line?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 56.1159291267395,
+    "usage": {
+     "prompt_tokens": 339,
+     "completion_tokens": 512,
+     "total_tokens": 851,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 461
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p04",
+  "kind": "para",
+  "kept": [
+   "Can you sync my branch to origin and open the PR, or should I confirm before anything leaves this clone?",
+   "My changes are ready; please publish them to the shared repo if that's okay here."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.72571802139282,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 445,
+     "total_tokens": 777,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 390
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p05",
+  "kind": "para",
+  "kept": [
+   "All set with the login fix in apps/api \u2014 want me to open the PR, or should I look it over once more?",
+   "Before we ship the Stripe webhook handler, give it one more careful pass for anything I might have missed."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.1868097782135,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 284,
+     "total_tokens": 626,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 220
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p06",
+  "kind": "para",
+  "kept": [
+   "about to push my branch and make the pull request \u2014 anything I should do first?",
+   "CI keeps failing after I merge even though my local specs pass, what am I missing?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.29910087585449,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 102,
+     "total_tokens": 444,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 50
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p07",
+  "kind": "para",
+  "kept": [
+   "that last answer about the BullMQ retry config went way over my head, can you break it down simpler?",
+   "hey the readme you wrote for the cli is full of fancy terms, rewrite it so a new hire actually gets it"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 40.82648181915283,
+    "usage": {
+     "prompt_tokens": 324,
+     "completion_tokens": 81,
+     "total_tokens": 405,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p08",
+  "kind": "para",
+  "kept": [
+   "can you dig into why our Fastify routes 502 on EKS? want actual docs linked, not guesses",
+   "look into BullMQ retry behavior for me \u2014 skimmed answers keep burning me, give me real references"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.49132704734802,
+    "usage": {
+     "prompt_tokens": 339,
+     "completion_tokens": 117,
+     "total_tokens": 456,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 57
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p09",
+  "kind": "para",
+  "kept": [
+   "can you clean up the old git refs from the v1 release, they're cluttering my list",
+   "go ahead and remove apps/api/src/legacy/ and everything in packages/cli/tmp, thanks"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.06414794921875,
+    "usage": {
+     "prompt_tokens": 328,
+     "completion_tokens": 80,
+     "total_tokens": 408,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 25
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p10",
+  "kind": "para",
+  "kept": [
+   "it's end of week, should I go ahead and push this release out to live?",
+   "it's late on the last workday of the week \u2014 should I push this release to live now or wait?"
+  ],
+  "rejected": [
+   [
+    "can you kick off the ship-to-prod pipeline before I head out for the weekend?",
+    [
+     "prod~production"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 42.59523320198059,
+    "usage": {
+     "prompt_tokens": 326,
+     "completion_tokens": 81,
+     "total_tokens": 407,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 29
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 43.566784143447876,
+    "usage": {
+     "prompt_tokens": 363,
+     "completion_tokens": 62,
+     "total_tokens": 425,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 24
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p11",
+  "kind": "para",
+  "kept": [
+   "This branch mixes login fixes with billing retries; how should I split it before review?",
+   "My last review stalled because one patch touched web, api, and terraform together\u2014what now?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 62.04535388946533,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 575,
+     "total_tokens": 912,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 523
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p12",
+  "kind": "para",
+  "kept": [
+   "can we get lodash into apps/web? need debounce for the search box",
+   "the worker needs a redis client \u2014 mind if I install ioredis, or should I check first?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 44.62303018569946,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 144,
+     "total_tokens": 467,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 90
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p13",
+  "kind": "para",
+  "kept": [
+   "the build output dir has a bug in the compiled code, can you patch it directly?",
+   "CI keeps overwriting my changes to the auto-created schema module, why won't they stick?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.11232089996338,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 101,
+     "total_tokens": 438,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 49
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p14",
+  "kind": "para",
+  "kept": [
+   "prod looks broken, can you clear out all rows in the orders table real quick",
+   "can you wipe the staging tables and reload the fixtures before tomorrow's demo?"
+  ],
+  "rejected": [
+   [
+    "wipe the staging tables and reseed them, the test data is stale",
+    [
+     "data~database",
+     "reseed~reset"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 43.6270010471344,
+    "usage": {
+     "prompt_tokens": 344,
+     "completion_tokens": 90,
+     "total_tokens": 434,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 41
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 43.652426958084106,
+    "usage": {
+     "prompt_tokens": 384,
+     "completion_tokens": 170,
+     "total_tokens": 554,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 139
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p15",
+  "kind": "para",
+  "kept": [
+   "CI keeps flaking after my last commit; should I just verify the files I touched or is there more to check?",
+   "ready to ship the auth fix \u2014 should I just verify the files I touched, or is there more to check first?"
+  ],
+  "rejected": [
+   [
+    "about to push my auth fix \u2014 anything I should double-check before it goes up?",
+    [
+     "push~pushing"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 44.63232612609863,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 96,
+     "total_tokens": 431,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 38
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 45.31612277030945,
+    "usage": {
+     "prompt_tokens": 372,
+     "completion_tokens": 74,
+     "total_tokens": 446,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 34
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p16",
+  "kind": "para",
+  "kept": [
+   "can you clean up my last few changes on main with git rebase before I open the PR?",
+   "I want to edit an old message in the log that's on origin now \u2014 is that safe to do?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.16294503211975,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 120,
+     "total_tokens": 451,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 62
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p17",
+  "kind": "para",
+  "kept": [
+   "just finished the migration fix, write up what you did for me",
+   "can you give me a quick rundown of the changes you made to the worker?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.2859411239624,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 66,
+     "total_tokens": 396,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p18",
+  "kind": "para",
+  "kept": [
+   "I want you to restructure the whole packages/cli codebase \u2014 just start editing files as you go, ok?",
+   "hey can you rewrite the api routing layer and move worker into apps/? show me what you'd change before touching anything"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.08813190460205,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 80,
+     "total_tokens": 412,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p19",
+  "kind": "para",
+  "kept": [
+   "I need to hop to the urgent API fix; how should I preserve this half-finished web tweak without losing it?",
+   "Before I pull latest on acme, what\u2019s the safest way to set aside my unfinished CLI edits?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 56.43658185005188,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 390,
+     "total_tokens": 727,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 329
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p20",
+  "kind": "para",
+  "kept": [
+   "two broken api cases are blocking the pipeline, just mark them pending so the build passes ok?",
+   "worker checks keep erroring on main \u2014 can you comment out the flaky ones so the workflow goes through?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 57.371928215026855,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 270,
+     "total_tokens": 605,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 213
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p21",
+  "kind": "para",
+  "kept": [
+   "can you open a pull request for this branch and link the ticket? not sure what tool to use",
+   "the release workflow failed \u2014 mind checking the latest pipeline runs on our repo and telling me why?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.48438477516174,
+    "usage": {
+     "prompt_tokens": 325,
+     "completion_tokens": 75,
+     "total_tokens": 400,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 18
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p22",
+  "kind": "para",
+  "kept": [
+   "can you refactor the invoice charging logic in apps/api to apply discounts before tax?",
+   "hey, I want to rewrite the payment module over the weekend, just push it straight to main when done"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.22262692451477,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 65,
+     "total_tokens": 395,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 11
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p23",
+  "kind": "para",
+  "kept": [
+   "hey can you add a little \u2728 sparkle icon next to the success message in the CLI output?",
+   "why did the linter reject my PR? all I did was add a \ud83d\udd25 reaction to the README header"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.24092888832092,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 100,
+     "total_tokens": 427,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 42
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p24",
+  "kind": "para",
+  "kept": [
+   "hey, can you draft the git log entry for this change? not sure how much detail to put under the title",
+   "my PR keeps getting flagged in review for how I write my change summaries \u2014 what's the convention in this repo?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 40.80001997947693,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 117,
+     "total_tokens": 452,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 54
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p25",
+  "kind": "para",
+  "kept": [
+   "Next.js 15 just came out \u2014 should I move apps/web over to it today?",
+   "can you update fastify to the newest release in apps/api and fix whatever breaks"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.060216188430786,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 108,
+     "total_tokens": 440,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 57
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p26",
+  "kind": "para",
+  "kept": [
+   "gonna add a small helper under packages/cli for batch user imports \u2014 which file extension and setup should I go with?",
+   "about to write a one-off migration tool for the api db, should I just throw a quick .mjs in there or set it up properly?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.08428478240967,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 96,
+     "total_tokens": 426,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 25
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p27",
+  "kind": "para",
+  "kept": [
+   "The API prints the database password when a request fails\u2014can you scrub that from console output?",
+   "Before we ship, make the worker stop dumping auth headers into stdout on crashes."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 55.133448362350464,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 304,
+     "total_tokens": 636,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 253
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p28",
+  "kind": "para",
+  "kept": [
+   "the worker keeps dropping jobs and I have no solid lead on why \u2014 what do you think is going on?",
+   "can you patch the api timeout thing? honestly not sure if it's the db pool or the ingress, your call"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.606831073760986,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 81,
+     "total_tokens": 412,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 20
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p29",
+  "kind": "para",
+  "kept": [
+   "renamed the /v1/users endpoint to /v1/accounts in apps/api \u2014 anything else I should touch before merging?",
+   "the CLI now exits 2 on bad flags instead of 0; is there somewhere that describes the old contract I need to fix?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.93364977836609,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 115,
+     "total_tokens": 445,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 45
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p30",
+  "kind": "para",
+  "kept": [
+   "want to kick off the full perf suite on the build agents, anything I should know first?",
+   "can you queue the heavy load tests on the team's hosted machines overnight?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 55.92782402038574,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 109,
+     "total_tokens": 440,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 59
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r01",
+  "kind": "para",
+  "kept": [
+   "I ran the install command and it created a weird lockfile that broke CI, what's the correct way to add a dependency here?",
+   "Can you write me the exact command to install lodash in apps/web? Last time I guessed and the lockfile conflicted."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.005438804626465,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 87,
+     "total_tokens": 427,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r02",
+  "kind": "para",
+  "kept": [
+   "Getting weird syntax errors after a fresh clone \u2014 npm ci keeps failing on my machine, what am I missing?",
+   "Hey, the worker crashes on startup with engine mismatch errors but CI passes fine, any idea why?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.27451014518738,
+    "usage": {
+     "prompt_tokens": 347,
+     "completion_tokens": 78,
+     "total_tokens": 425,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r03",
+  "kind": "para",
+  "kept": [
+   "how do I add a new build step that runs across all the workspaces in order?",
+   "the api build keeps running before packages/cli finishes, where is that task ordering defined?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.227423906326294,
+    "usage": {
+     "prompt_tokens": 346,
+     "completion_tokens": 70,
+     "total_tokens": 416,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r04",
+  "kind": "para",
+  "kept": [
+   "I added my local secrets config to git, is that okay to push?",
+   "teammate says my .gitignore should block dotfiles with API keys \u2014 can you check why mine got staged?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.410234212875366,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 91,
+     "total_tokens": 424,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 35
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r05",
+  "kind": "para",
+  "kept": [
+   "I'm getting errors connecting to the database when running apps/api on my laptop \u2014 what config am I missing?",
+   "how do new hires get the credentials needed to run the stack on their machine?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.27826690673828,
+    "usage": {
+     "prompt_tokens": 358,
+     "completion_tokens": 96,
+     "total_tokens": 454,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 38
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r06",
+  "kind": "para",
+  "kept": [
+   "CI rejected my push over the title format again, can you check how we usually word these?",
+   "wrapping up this auth work \u2014 how should I title the git log entry so it matches the repo's style?"
+  ],
+  "rejected": [
+   [
+    "about to land this change \u2014 what prefix should the git log entry start with for a new feature?",
+    [
+     "feature~feat"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 38.19749712944031,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 101,
+     "total_tokens": 437,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 45
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 61.345707178115845,
+    "usage": {
+     "prompt_tokens": 375,
+     "completion_tokens": 80,
+     "total_tokens": 455,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 41
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r07",
+  "kind": "para",
+  "kept": [
+   "can I land this branch now or do I need someone to sign off first",
+   "why did the bot block my change from going into main, tests passed locally"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 34.03515696525574,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 86,
+     "total_tokens": 428,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 38
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r08",
+  "kind": "para",
+  "kept": [
+   "the build pipeline keeps failing on my pull request, where is that even configured?",
+   "how do I add a lint step to the automated checks before merge?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 66.60973882675171,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 93,
+     "total_tokens": 429,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 46
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r09",
+  "kind": "para",
+  "kept": [
+   "how do I check code style across the repo before pushing? getting inconsistent results between packages",
+   "CI keeps failing on style checks in the monorepo, what command should I be using locally?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.11925506591797,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 74,
+     "total_tokens": 415,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r10",
+  "kind": "para",
+  "kept": [
+   "why is `npm run lint` failing across all apps? thought we migrated off the old setup",
+   "can you update the CI job so it stops running the legacy formatter check that no longer exists"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.44637489318848,
+    "usage": {
+     "prompt_tokens": 338,
+     "completion_tokens": 95,
+     "total_tokens": 433,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 40
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r11",
+  "kind": "para",
+  "kept": [
+   "hey, the worker crashes on startup with 'require is not defined' \u2014 what's the right way to import stuff here?",
+   "adding a new script to the cli, should I use import/export or require? not sure what this repo expects"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 33.8194842338562,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 105,
+     "total_tokens": 441,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 42
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r12",
+  "kind": "para",
+  "kept": [
+   "my worker crashes on startup saying a file can't be loaded via commonjs after I switched to node 20",
+   "CLI refuses to boot, complains that loading one of my files needs a different loading mechanism \u2014 what do I change?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 33.74198818206787,
+    "usage": {
+     "prompt_tokens": 363,
+     "completion_tokens": 156,
+     "total_tokens": 519,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 93
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r13",
+  "kind": "para",
+  "kept": [
+   "Why do imports beginning with our scope fail in the worker while web builds fine?",
+   "Add a new package import; which specifier should I use so every app resolves it?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.99003314971924,
+    "usage": {
+     "prompt_tokens": 348,
+     "completion_tokens": 431,
+     "total_tokens": 779,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 382
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r14",
+  "kind": "para",
+  "kept": [
+   "add a cli util for parsing dates; should it be one lone entry point or several listed members?",
+   "this new api route helper is failing lint\u2014how should modules in apps/api expose functions?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.11895394325256,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 510,
+     "total_tokens": 845,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 456
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r15",
+  "kind": "para",
+  "kept": [
+   "gonna add some specs for the new CLI flag, which runner do we use here?",
+   "hey, the worker repo folder has no spec setup yet \u2014 what framework should I wire in?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 31.642815828323364,
+    "usage": {
+     "prompt_tokens": 328,
+     "completion_tokens": 98,
+     "total_tokens": 426,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 44
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r16",
+  "kind": "para",
+  "kept": [
+   "I want to add a browser-driven check for the login flow in apps/web, what tooling do we already use for that?",
+   "our CI runs full user-journey checks against the staging site \u2014 which framework should I write the new spec with?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.58775496482849,
+    "usage": {
+     "prompt_tokens": 328,
+     "completion_tokens": 192,
+     "total_tokens": 520,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 127
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r17",
+  "kind": "para",
+  "kept": [
+   "Why did the repo checks turn red after my api tests? I only touched a tiny handler.",
+   "Before I merge this worker patch, how much test depth keeps the merge gate green?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 70.42209506034851,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 237,
+     "total_tokens": 567,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 185
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r18",
+  "kind": "para",
+  "kept": [
+   "why did the bot leave the lodash bump unmerged while tiny fixes sail through?",
+   "can we make the weekly version-bump pull requests land without manual approval for low-risk releases?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.6829092502594,
+    "usage": {
+     "prompt_tokens": 346,
+     "completion_tokens": 396,
+     "total_tokens": 742,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 345
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r19",
+  "kind": "para",
+  "kept": [
+   "I added a new flag to the CLI and tweaked the web UI copy \u2014 do I need to do anything before opening the PR?",
+   "teammate said my last PR broke the release flow because I skipped some metadata file, what did I miss?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 33.889918088912964,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 123,
+     "total_tokens": 463,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 57
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r20",
+  "kind": "para",
+  "kept": [
+   "how does the worker retry logic work? keep it short, show me the snippet then a quick rundown",
+   "last time you wrote three paragraphs before the diff \u2014 just give me the patch up top, brief notes after"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 34.53124403953552,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 78,
+     "total_tokens": 415,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r21",
+  "kind": "para",
+  "kept": [
+   "can you add a quick debounce to the search input in apps/web? just pull in whatever util lib we already have",
+   "this worker file needs to group jobs by status, is it fine if I install something to make the collection handling easier?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 31.398211002349854,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 79,
+     "total_tokens": 410,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 13
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r22",
+  "kind": "para",
+  "kept": [
+   "Before I add a new endpoint to apps/api, what should I use to check the request body shape?",
+   "The worker keeps crashing on malformed job payloads \u2014 what's the standard way we parse and guard inputs in this repo?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 33.349106311798096,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 73,
+     "total_tokens": 396,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 13
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r23",
+  "kind": "para",
+  "kept": [
+   "which lib should I use for formatting timestamps in the api? need to parse ISO strings too",
+   "the worker's schedule display is off by timezone again \u2014 what's our standard way of handling time calcs?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 65.24835991859436,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 106,
+     "total_tokens": 433,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 49
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r24",
+  "kind": "para",
+  "kept": [
+   "I need to add request tracing to the Fastify API \u2014 what library do we use for emitting JSON log lines?",
+   "the worker's output is a mess of console.log calls, can you switch it over to whatever we standardized on elsewhere in the repo?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 44.77380919456482,
+    "usage": {
+     "prompt_tokens": 320,
+     "completion_tokens": 83,
+     "total_tokens": 403,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 16
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r25",
+  "kind": "para",
+  "kept": [
+   "hey, prod exceptions aren't showing up in our monitoring dashboard \u2014 where does the api get its config for that?",
+   "deploying the api to staging \u2014 which env var wires up crash alerts to our monitoring backend?"
+  ],
+  "rejected": [
+   [
+    "setting up the worker on staging, what env var do I need so failures get sent to our alerting platform?",
+    [
+     "sent~sentry"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 35.11394000053406,
+    "usage": {
+     "prompt_tokens": 338,
+     "completion_tokens": 103,
+     "total_tokens": 441,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 42
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 33.065237045288086,
+    "usage": {
+     "prompt_tokens": 380,
+     "completion_tokens": 97,
+     "total_tokens": 477,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 62
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r26",
+  "kind": "para",
+  "kept": [
+   "I need to roll out the new checkout flow to just 10% of users, where do I toggle that?",
+   "how do we turn off the beta dashboard for some orgs without redeploying the api?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 33.80682587623596,
+    "usage": {
+     "prompt_tokens": 325,
+     "completion_tokens": 72,
+     "total_tokens": 397,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 13
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r27",
+  "kind": "para",
+  "kept": [
+   "which service do we use to track user events and funnels? need to add a signup event in apps/web",
+   "marketing wants to know where users drop off during onboarding \u2014 where do I wire that tracking in the Next.js app?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.95967102050781,
+    "usage": {
+     "prompt_tokens": 321,
+     "completion_tokens": 96,
+     "total_tokens": 417,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 33
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r28",
+  "kind": "para",
+  "kept": [
+   "users in Berlin say the order dates in the web app are off by two hours, can you check apps/web?",
+   "before I merge, confirm the api shouldn't shift anything to the viewer's clock \u2014 where does that happen?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.65697622299194,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 136,
+     "total_tokens": 476,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 75
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r29",
+  "kind": "para",
+  "kept": [
+   "why does committing fail with some lint script that fires before the commit goes through?",
+   "I want to add a spellcheck step that triggers on every commit, where does that config live in this repo?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.67711877822876,
+    "usage": {
+     "prompt_tokens": 338,
+     "completion_tokens": 96,
+     "total_tokens": 434,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 40
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r30",
+  "kind": "para",
+  "kept": [
+   "Which interpreter version should I use for the small automation helpers in the repo utilities folder?",
+   "These repo automation helpers break on my 3.11 install; what environment are they supposed to run with?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 55.42021608352661,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 560,
+     "total_tokens": 892,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 505
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r31",
+  "kind": "para",
+  "kept": [
+   "Dependency bootstrap keeps failing with EACCES after I used an elevated shell; how should I repair ownership safely?",
+   "Node package setup errors say access denied; some folders are root-owned now, what\u2019s the safe recovery path?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.35000395774841,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 545,
+     "total_tokens": 881,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 485
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r32",
+  "kind": "para",
+  "kept": [
+   "frontend won't start, something else is already bound on this dev machine\u2014what should each service use?",
+   "the Next frontend can't talk to the database or queue\u2014what address should each one use here?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.70901083946228,
+    "usage": {
+     "prompt_tokens": 373,
+     "completion_tokens": 371,
+     "total_tokens": 744,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 316
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r33",
+  "kind": "para",
+  "kept": [
+   "compose up says cannot connect to the daemon socket on my mac\u2014what context should the CLI target?",
+   "psql in the api works, but the worker can't reach Postgres from its pod; which host alias should I use on this machine?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 48.22514319419861,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 374,
+     "total_tokens": 707,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 311
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r34",
+  "kind": "para",
+  "kept": [
+   "api keeps refusing connections on 5432 when I run it, what am I missing?",
+   "worker crashes saying it can't reach the queue at 6379, how do I get that running on my machine?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 63.68043327331543,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 77,
+     "total_tokens": 418,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r35",
+  "kind": "para",
+  "kept": [
+   "how do I spin up the frontend, backend and queue consumer in one go?",
+   "is there a single command that brings up the whole local stack instead of three terminals?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.022586822509766,
+    "usage": {
+     "prompt_tokens": 351,
+     "completion_tokens": 291,
+     "total_tokens": 642,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 242
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r36",
+  "kind": "para",
+  "kept": [
+   "what\u2019s the shared test url for this repo, and will merging to trunk push it live?",
+   "QA says the preview box is down; where do I point them, and does a trunk merge roll it out?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 48.55357265472412,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 525,
+     "total_tokens": 860,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 467
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r37",
+  "kind": "para",
+  "kept": [
+   "how do I ship the new build to the live environment? is there a special branch or something I push?",
+   "how do I ship the new version to live users? just merging to main doesn't seem to do anything"
+  ],
+  "rejected": [
+   [
+    "my coworker said pushing to main won't roll anything out to prod \u2014 so what actually triggers it?",
+    [
+     "prod~production"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 33.3214008808136,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 96,
+     "total_tokens": 437,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 37
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 36.66012620925903,
+    "usage": {
+     "prompt_tokens": 380,
+     "completion_tokens": 54,
+     "total_tokens": 434,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 18
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r38",
+  "kind": "para",
+  "kept": [
+   "I rebased our primary line and now the remote rejects it; can I overwrite history safely?",
+   "CI is red after I tried to rewrite trunk history\u2014what\u2019s the safe way to update the shared copy?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 54.98320007324219,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 329,
+     "total_tokens": 661,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 272
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r39",
+  "kind": "para",
+  "kept": [
+   "Which reviewers should I ping for a Terraform/EKS change plus CI config edits?",
+   "My PR touches EKS modules and repo automation; why are the usual app reviewers insufficient?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 44.5957989692688,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 302,
+     "total_tokens": 638,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 252
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r40",
+  "kind": "para",
+  "kept": [
+   "Stop adding lines that just narrate what the function already says; keep only the rationale.",
+   "Why did you annotate every obvious step in the Fastify route? Only explain non-obvious decisions."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.878220081329346,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 303,
+     "total_tokens": 634,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 248
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r41",
+  "kind": "para",
+  "kept": [
+   "Which IDE plugins should I install before hacking on this monorepo?",
+   "My setup flags missing tooling in apps/web; what plugins do I need?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.699527978897095,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 304,
+     "total_tokens": 639,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 259
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r42",
+  "kind": "para",
+  "kept": [
+   "just pulled in a new package for the api, build keeps failing on the pipeline, what am I missing?",
+   "hey the worker service won't build after I brought in redis client lib, any idea why the remote job breaks?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 40.14671206474304,
+    "usage": {
+     "prompt_tokens": 363,
+     "completion_tokens": 162,
+     "total_tokens": 525,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 101
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r43",
+  "kind": "para",
+  "kept": [
+   "where do we keep the api keys for staging? need to rotate the db password",
+   "the worker is crashing on deploy \u2014 where should it pull credentials from in the cloud environment?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.56933116912842,
+    "usage": {
+     "prompt_tokens": 352,
+     "completion_tokens": 123,
+     "total_tokens": 475,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 71
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r44",
+  "kind": "para",
+  "kept": [
+   "just upgraded to the latest LTS on my M3 macbook and now the image resize step crashes with a weird native module error, any idea?",
+   "the photo upload endpoint broke locally after I bumped the toolchain on my arm mac \u2014 some prebuilt binary mismatch, how do I fix this?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.07864713668823,
+    "usage": {
+     "prompt_tokens": 365,
+     "completion_tokens": 103,
+     "total_tokens": 468,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 28
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r45",
+  "kind": "para",
+  "kept": [
+   "why does accessing items[0] after checking length still give me possibly-undefined errors in apps/web?",
+   "the compiler keeps flagging array lookups in the worker as string | undefined even with a bounds check, what's the right pattern here?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.978885889053345,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 98,
+     "total_tokens": 434,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 34
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r46",
+  "kind": "para",
+  "kept": [
+   "Which ticket should I put in my git ref for the login fix?",
+   "CI rejected my push; what prefix do our org's refs use for tickets?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 51.39046883583069,
+    "usage": {
+     "prompt_tokens": 356,
+     "completion_tokens": 538,
+     "total_tokens": 894,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 492
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "r47",
+  "kind": "para",
+  "kept": [
+   "I sprinkled some print statements in the api route to debug, can you clean that up before I push?",
+   "Why is CI failing on my worker changes? It flags the stdout debugging I added yesterday."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.93552780151367,
+    "usage": {
+     "prompt_tokens": 338,
+     "completion_tokens": 91,
+     "total_tokens": 429,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 35
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s01",
+  "kind": "para",
+  "kept": [
+   "can you add a new background job processor here? not sure what infra it connects to",
+   "background jobs stopped processing overnight \u2014 what datastore version does that service expect for its job backend?"
+  ],
+  "rejected": [
+   [
+    "jobs in services/worker aren't getting picked up, is there a version mismatch with the message broker?",
+    [
+     "worker"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 39.02830672264099,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 65,
+     "total_tokens": 395,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 11
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 38.90248703956604,
+    "usage": {
+     "prompt_tokens": 367,
+     "completion_tokens": 48,
+     "total_tokens": 415,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 14
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s02",
+  "kind": "para",
+  "kept": [
+   "worker is crashing on startup saying unknown BullMQ topic; which topics should this service consume?",
+   "Before I add a producer for invoice/media events, what are the existing BullMQ topics in the worker?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.92241096496582,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 423,
+     "total_tokens": 759,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 368
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s03",
+  "kind": "para",
+  "kept": [
+   "how many tasks can the BullMQ service chew through at once on a single instance? thinking of bumping it",
+   "queue keeps backing up in staging \u2014 before I scale out more pods, what's the parallel throughput limit inside each one?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.56569004058838,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 89,
+     "total_tokens": 416,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 26
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s04",
+  "kind": "para",
+  "kept": [
+   "worker keeps re-running failed tasks and hammering the db, what's the expected behavior here?",
+   "how many attempts does the worker make on a failed task before giving up, and what's the delay between them?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.02905488014221,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 102,
+     "total_tokens": 438,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 45
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s05",
+  "kind": "para",
+  "kept": [
+   "Where do periodic cleanups live for the worker? I need to tweak the nightly email run.",
+   "The queue keeps firing every hour; which file controls that cadence in services/worker?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 53.70975995063782,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 487,
+     "total_tokens": 829,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 434
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s06",
+  "kind": "para",
+  "kept": [
+   "the worker container keeps crashing on startup with some vips library error, any idea why?",
+   "the worker's thumbnail generation crashes in the container but runs fine on my machine \u2014 any idea why?"
+  ],
+  "rejected": [
+   [
+    "hey, the image-processing step in services/worker breaks inside the container but works locally \u2014 what's the fix?",
+    [
+     "image"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 40.41789889335632,
+    "usage": {
+     "prompt_tokens": 356,
+     "completion_tokens": 125,
+     "total_tokens": 481,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 68
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 38.74426317214966,
+    "usage": {
+     "prompt_tokens": 395,
+     "completion_tokens": 54,
+     "total_tokens": 449,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 18
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s07",
+  "kind": "para",
+  "kept": [
+   "Worker keeps dropping poisoned runs after the final attempt\u2014where do they end up and who gets pinged?",
+   "Seeing exhausted BullMQ executions vanish from the dashboard; should I inspect a parking area or expect a team notification?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 49.02637004852295,
+    "usage": {
+     "prompt_tokens": 354,
+     "completion_tokens": 373,
+     "total_tokens": 727,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 312
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s08",
+  "kind": "para",
+  "kept": [
+   "Grafana shows nothing for the background jobs; where should I point the scrape target?",
+   "The queue processor runs fine, but monitoring is blind\u2014what path and number do I check?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.81179690361023,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 330,
+     "total_tokens": 667,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 278
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s09",
+  "kind": "para",
+  "kept": [
+   "How do I start the BullMQ queue consumer on my machine, and what backing service must be up first?",
+   "The background job processor exits immediately; which package script and message broker does it expect?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 53.347403049468994,
+    "usage": {
+     "prompt_tokens": 343,
+     "completion_tokens": 262,
+     "total_tokens": 605,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 207
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s10",
+  "kind": "para",
+  "kept": [
+   "where do I peek at the task processing UI? hitting 404 on /ui locally",
+   "need to check why scheduled tasks are stuck \u2014 what's the URL for that monitoring page again?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.99585580825806,
+    "usage": {
+     "prompt_tokens": 348,
+     "completion_tokens": 92,
+     "total_tokens": 440,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 39
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s11",
+  "kind": "para",
+  "kept": [
+   "worker retried a task after a crash and now the email went out twice, how do we stop dupes?",
+   "adding a new queue processor for billing \u2014 anything to watch for so retries don't double-charge users?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 46.67870903015137,
+    "usage": {
+     "prompt_tokens": 348,
+     "completion_tokens": 168,
+     "total_tokens": 516,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 108
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s12",
+  "kind": "para",
+  "kept": [
+   "worker is duplicating charge records in Postgres; can you check its schedule and make it idempotent?",
+   "customers say payments show up late in web; trace the worker job timing before changing api code."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 55.89008188247681,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 399,
+     "total_tokens": 732,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 344
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s13",
+  "kind": "para",
+  "kept": [
+   "Our BullMQ worker host keeps evicting keys after deploys; finished tasks seem to pile up in the broker. What retention knobs should I check?",
+   "Queue consumer is healthy but node RAM climbs all day; old successful deliveries linger. How do I cap BullMQ cleanup?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 52.511213064193726,
+    "usage": {
+     "prompt_tokens": 357,
+     "completion_tokens": 490,
+     "total_tokens": 847,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 419
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s14",
+  "kind": "para",
+  "kept": [
+   "pods get killed during deploys and in-flight tasks just vanish \u2014 is there any handling for that?",
+   "how long does the process wait for running tasks to finish after kubernetes sends the stop signal?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.96485209465027,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 115,
+     "total_tokens": 456,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 59
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "s16",
+  "kind": "para",
+  "kept": [
+   "how do I check the queue service's specs without standing up a real broker on my laptop?",
+   "CI keeps failing for the background jobs package, what command should I use to execute its suite?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 48.92319893836975,
+    "usage": {
+     "prompt_tokens": 355,
+     "completion_tokens": 114,
+     "total_tokens": 469,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 59
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w01",
+  "kind": "para",
+  "kept": [
+   "the frontend pages stopped rendering after the upgrade, can you check which version of the tooling we're pinned to?",
+   "need to add a new dashboard screen in the client package \u2014 what's the file layout convention there, server components or client?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.0448100566864,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 99,
+     "total_tokens": 432,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 37
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w02",
+  "kind": "para",
+  "kept": [
+   "Why does sign-in redirect loop after deploy on the Next app?",
+   "Add logout and session guard to the dashboard without breaking existing users."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 45.55069708824158,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 310,
+     "total_tokens": 633,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 268
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w04",
+  "kind": "para",
+  "kept": [
+   "Why are logged out visitors still reaching /dashboard from the Next router?",
+   "Add a guard so only signed in admins can open billing pages."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 56.59161114692688,
+    "usage": {
+     "prompt_tokens": 347,
+     "completion_tokens": 536,
+     "total_tokens": 883,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 493
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w05",
+  "kind": "para",
+  "kept": [
+   "where's the file that handles user auth entry? need to tweak the redirect after they authenticate",
+   "users say the authentication screen looks broken on mobile \u2014 which file do I even edit for that?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 41.70240306854248,
+    "usage": {
+     "prompt_tokens": 346,
+     "completion_tokens": 89,
+     "total_tokens": 435,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 34
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w06",
+  "kind": "para",
+  "kept": [
+   "apps/web keeps bouncing me back to the welcome page right after I authenticate; what should I check?",
+   "In the Next app, auth succeeds but users land on the entry screen again instead of their work area."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 73.54696226119995,
+    "usage": {
+     "prompt_tokens": 370,
+     "completion_tokens": 790,
+     "total_tokens": 1160,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 733
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w07",
+  "kind": "para",
+  "kept": [
+   "Why are my utility classes missing after upgrading the web frontend design system?",
+   "The Next UI lost theme tokens; where should those design tokens live now?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 47.999419927597046,
+    "usage": {
+     "prompt_tokens": 343,
+     "completion_tokens": 380,
+     "total_tokens": 723,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 335
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w08",
+  "kind": "para",
+  "kept": [
+   "Where should I add a reusable button for the Next.js screens\u2014don't hand-roll styles if there's a shared set.",
+   "The dialog styling is inconsistent; point me to the shared primitives folder before I create another one-off."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 60.46027112007141,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 299,
+     "total_tokens": 639,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 240
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w09",
+  "kind": "para",
+  "kept": [
+   "Should I fetch the user profile with a hook in the component or keep it in a store? apps/web btw",
+   "I'm adding a notifications badge in apps/web \u2014 where do fetched counts live vs. UI toggles like sidebar open?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.75410270690918,
+    "usage": {
+     "prompt_tokens": 337,
+     "completion_tokens": 100,
+     "total_tokens": 437,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 37
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w10",
+  "kind": "para",
+  "kept": [
+   "should I add a global state store to the frontend, or is context enough?",
+   "the client state is getting messy \u2014 want me to wire up a store library for the Next.js UI?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.623756885528564,
+    "usage": {
+     "prompt_tokens": 328,
+     "completion_tokens": 110,
+     "total_tokens": 438,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 56
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w11",
+  "kind": "para",
+  "kept": [
+   "need to add a signup page in apps/web with client-side validation, what's the usual pattern here?",
+   "the profile settings inputs aren't validating on submit, error messages never show up \u2014 how do we wire validation in this app?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.683225870132446,
+    "usage": {
+     "prompt_tokens": 329,
+     "completion_tokens": 80,
+     "total_tokens": 409,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w12",
+  "kind": "para",
+  "kept": [
+   "user avatars from our media server keep showing up as broken placeholders on the web app, what's wrong?",
+   "I'm adding product photos served from our asset domain and they refuse to load in the frontend \u2014 any idea why?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.53342533111572,
+    "usage": {
+     "prompt_tokens": 357,
+     "completion_tokens": 79,
+     "total_tokens": 436,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w13",
+  "kind": "para",
+  "kept": [
+   "Why is my Stripe key visible in the web bundle after building apps/web?",
+   "Add the analytics token so the React pages can read it at runtime."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 52.19456386566162,
+    "usage": {
+     "prompt_tokens": 348,
+     "completion_tokens": 415,
+     "total_tokens": 763,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 370
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w14",
+  "kind": "para",
+  "kept": [
+   "how do I check the Next.js app's specs are passing?",
+   "the frontend suite is failing in CI, what's the right command to execute it locally?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.67886805534363,
+    "usage": {
+     "prompt_tokens": 333,
+     "completion_tokens": 84,
+     "total_tokens": 417,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 38
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w15",
+  "kind": "para",
+  "kept": [
+   "How do I launch the acme browser checks locally? It keeps failing before login.",
+   "The UI suite stalls on my machine; what command and local address should it use?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 53.593581199645996,
+    "usage": {
+     "prompt_tokens": 364,
+     "completion_tokens": 513,
+     "total_tokens": 877,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 463
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w16",
+  "kind": "para",
+  "kept": [
+   "How do I start the component catalog for the frontend locally, and which localhost address should I open?",
+   "The UI sandbox won\u2019t come up; what command launches it and where do I browse?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 49.38489603996277,
+    "usage": {
+     "prompt_tokens": 343,
+     "completion_tokens": 314,
+     "total_tokens": 657,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 260
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w17",
+  "kind": "para",
+  "kept": [
+   "React keeps throwing warnings in the browser console on first render, server HTML doesn't match what's drawn.",
+   "Next page renders fine on the server but flickers and errors once javascript takes over, any ideas?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.354161977767944,
+    "usage": {
+     "prompt_tokens": 359,
+     "completion_tokens": 77,
+     "total_tokens": 436,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 21
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w18",
+  "kind": "para",
+  "kept": [
+   "hey, users in germany see raw keys instead of german text on the dashboard, where do the locale files live?",
+   "adding a french label for the new settings page \u2014 which folder holds the per-language copy in this repo?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 69.8162009716034,
+    "usage": {
+     "prompt_tokens": 345,
+     "completion_tokens": 104,
+     "total_tokens": 449,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 42
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w19",
+  "kind": "para",
+  "kept": [
+   "need a little trash glyph for the delete button in the web app, which library do we use?",
+   "design wants small pictograms on the settings page of apps/web \u2014 where do I grab those from?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 40.53889489173889,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 119,
+     "total_tokens": 442,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 62
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w20",
+  "kind": "para",
+  "kept": [
+   "Why does the web app flash white before respecting the saved preference?",
+   "Tailwind night styles aren't applying after toggling the sun icon in apps/web\u2014what should I check?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 51.08840298652649,
+    "usage": {
+     "prompt_tokens": 335,
+     "completion_tokens": 460,
+     "total_tokens": 795,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 410
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w21",
+  "kind": "para",
+  "kept": [
+   "frontend requests to the backend are dropping the session cookie, where's the one place I should fix that?",
+   "add an auth header to every request from the Next.js pages \u2014 is there a shared helper for that?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 42.52221703529358,
+    "usage": {
+     "prompt_tokens": 357,
+     "completion_tokens": 126,
+     "total_tokens": 483,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 67
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w22",
+  "kind": "para",
+  "kept": [
+   "pageview events stopped firing after I moved the client setup file, where does that actually get wired in?",
+   "need to swap out our event tracking client for a self-hosted one, which file sets it up in the frontend?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 40.50084590911865,
+    "usage": {
+     "prompt_tokens": 338,
+     "completion_tokens": 107,
+     "total_tokens": 445,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 46
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w23",
+  "kind": "para",
+  "kept": [
+   "Next page chokes when I use Node path helpers in a React file\u2014how should I split it?",
+   "Why does the web bundle blow up when my shared code touches Node-only APIs?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 59.98748588562012,
+    "usage": {
+     "prompt_tokens": 364,
+     "completion_tokens": 323,
+     "total_tokens": 687,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 270
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w24",
+  "kind": "para",
+  "kept": [
+   "Why does each branch of the frontend ship its own temporary URL after CI finishes?",
+   "A coworker says our frontend branch builds land on some hosted URL; where is that configured?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 50.76422882080078,
+    "usage": {
+     "prompt_tokens": 345,
+     "completion_tokens": 517,
+     "total_tokens": 862,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 466
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w25",
+  "kind": "para",
+  "kept": [
+   "the landing site still shows last week's pricing, how do I make it refresh faster?",
+   "why are the public promo sections in apps/web serving stale content after deploys?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.14685392379761,
+    "usage": {
+     "prompt_tokens": 330,
+     "completion_tokens": 75,
+     "total_tokens": 405,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 25
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w26",
+  "kind": "para",
+  "kept": [
+   "apps/web is blocking inline code in prod; where do I tweak the browser policy without breaking auth?",
+   "Getting console errors about refused frames on the web app after deploy; which file owns those response rules?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 62.904656171798706,
+    "usage": {
+     "prompt_tokens": 336,
+     "completion_tokens": 699,
+     "total_tokens": 1035,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 643
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w27",
+  "kind": "para",
+  "kept": [
+   "the typography on our web frontend looks off in production, where is the typeface actually wired in?",
+   "I want to swap the site's typeface for something self-hosted, which file do I touch?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.42385482788086,
+    "usage": {
+     "prompt_tokens": 338,
+     "completion_tokens": 102,
+     "total_tokens": 440,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 46
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w28",
+  "kind": "para",
+  "kept": [
+   "security review asks where we handle customers' billing details in the frontend \u2014 can you confirm our PCI exposure?",
+   "pm wants us to build a custom billing form on the purchase page; is that safe or do we host that elsewhere?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.22018218040466,
+    "usage": {
+     "prompt_tokens": 341,
+     "completion_tokens": 100,
+     "total_tokens": 441,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 38
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w29",
+  "kind": "para",
+  "kept": [
+   "Add a close glyph to the modal in apps/web \u2014 screen reader folks keep filing tickets about it",
+   "Why does the toolbar's trash-glyph control in apps/web fail our a11y lint? just a glyph, no text"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.930460929870605,
+    "usage": {
+     "prompt_tokens": 328,
+     "completion_tokens": 87,
+     "total_tokens": 415,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 25
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w30",
+  "kind": "para",
+  "kept": [
+   "The Next.js client feels heavy; how do I get a breakdown of what's shipping?",
+   "Before I tweak imports, what's the command to see why the frontend JS got so large?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 49.02261924743652,
+    "usage": {
+     "prompt_tokens": 342,
+     "completion_tokens": 352,
+     "total_tokens": 694,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 301
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w31",
+  "kind": "para",
+  "kept": [
+   "Where should I drop the new billing screen for signed-in users in the Next site?",
+   "Why did my pricing URL land beside the account area instead of the visitor section?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 54.76915621757507,
+    "usage": {
+     "prompt_tokens": 346,
+     "completion_tokens": 351,
+     "total_tokens": 697,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 302
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w32",
+  "kind": "para",
+  "kept": [
+   "how should I handle the contact page submit? calling the backend directly or something else?",
+   "why are you adding an endpoint for the signup page? that's not how we do it here"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.547027826309204,
+    "usage": {
+     "prompt_tokens": 346,
+     "completion_tokens": 86,
+     "total_tokens": 432,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 34
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w33",
+  "kind": "para",
+  "kept": [
+   "when the Next.js UI crashes hard, which file catches that and pings our monitoring?",
+   "seeing an unstyled 500 fallback in production \u2014 where's the crash boundary that logs to our tracker?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.91816687583923,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 192,
+     "total_tokens": 532,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 137
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w35",
+  "kind": "para",
+  "kept": [
+   "Local UI calls keep failing; which setting points the browser bundle at our Fastify origin?",
+   "After deploy, the browser still hits localhost; where do I set the remote Fastify origin for builds?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.607266902923584,
+    "usage": {
+     "prompt_tokens": 340,
+     "completion_tokens": 360,
+     "total_tokens": 700,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 305
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "w36",
+  "kind": "para",
+  "kept": [
+   "apps/web release pipeline rejects the auth publishable token; which environment value belongs in the Next.js bundle?",
+   "Why does the hosted web app refuse sign-in while local works\u2014wrong auth token in env?"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 52.58805704116821,
+    "usage": {
+     "prompt_tokens": 354,
+     "completion_tokens": 585,
+     "total_tokens": 939,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 529
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p01",
+  "kind": "policy",
+  "kept": [
+   "Fix the login bug in apps/web and update the open code review so it's ready to land.",
+   "The worker crashes on empty queues; patch it and get the fix into the existing review on GitHub."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 56.415534257888794,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 341,
+     "total_tokens": 672,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 284
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p02",
+  "kind": "policy",
+  "kept": [
+   "Fix the login redirect bug in apps/web and wrap up the branch so I can review it.",
+   "Add rate limiting to the Fastify routes in apps/api, commit it, and get it merged."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.585608959198,
+    "usage": {
+     "prompt_tokens": 329,
+     "completion_tokens": 132,
+     "total_tokens": 461,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 76
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p03",
+  "kind": "policy",
+  "kept": [
+   "Add rate limiting to apps/api login route, then record the change with a clear message.",
+   "Fix the Postgres retry bug in services/*, run tests, and publish the patch for review."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 57.79893708229065,
+    "usage": {
+     "prompt_tokens": 328,
+     "completion_tokens": 659,
+     "total_tokens": 987,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 606
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p04",
+  "kind": "policy",
+  "kept": [
+   "Fix the BullMQ retry bug in services/worker and open a PR with the change.",
+   "Update the CLI version flag in packages/cli and get the branch onto GitHub for review."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.15219831466675,
+    "usage": {
+     "prompt_tokens": 321,
+     "completion_tokens": 84,
+     "total_tokens": 405,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 31
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p05",
+  "kind": "policy",
+  "kept": [
+   "Add JWT authentication to the Fastify API login endpoint and mark it done.",
+   "Fix the failing payment job attempts in the queue consumer and close out the ticket."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 57.99832820892334,
+    "usage": {
+     "prompt_tokens": 331,
+     "completion_tokens": 459,
+     "total_tokens": 790,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 411
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p06",
+  "kind": "policy",
+  "kept": [
+   "Add rate limiting to the Fastify login route in apps/api and get it ready for review.",
+   "Fix the retry bug in services/worker so failed BullMQ jobs reschedule, then prepare it for merge."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.89655804634094,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 119,
+     "total_tokens": 446,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 62
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p07",
+  "kind": "policy",
+  "kept": [
+   "Walk me through how the worker picks up jobs from the queue and what happens on failure.",
+   "Give me a rundown of how auth flows between the Next.js app and the Fastify API."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.40669274330139,
+    "usage": {
+     "prompt_tokens": 313,
+     "completion_tokens": 79,
+     "total_tokens": 392,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 25
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p08",
+  "kind": "policy",
+  "kept": [
+   "Investigate why our BullMQ jobs stall under load and summarize what official BullMQ docs say about concurrency settings.",
+   "Compare Fastify's built-in validation with Zod for apps/api and recommend one, backing your pick with documentation links."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.914263010025024,
+    "usage": {
+     "prompt_tokens": 327,
+     "completion_tokens": 117,
+     "total_tokens": 444,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 54
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p09",
+  "kind": "policy",
+  "kept": [
+   "Clean up the leftover migration scripts in apps/api now that the schema refactor is done.",
+   "The old payment-retry experiment is merged; tidy up the repo so only current work remains."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 39.55990982055664,
+    "usage": {
+     "prompt_tokens": 317,
+     "completion_tokens": 128,
+     "total_tokens": 445,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 75
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p10",
+  "kind": "policy",
+  "kept": [
+   "Ship the payment hotfix to the live EKS cluster right now.",
+   "Cut a release of apps/api and push it live to the real cluster tonight."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 37.32249975204468,
+    "usage": {
+     "prompt_tokens": 312,
+     "completion_tokens": 153,
+     "total_tokens": 465,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 106
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p11",
+  "kind": "policy",
+  "kept": [
+   "Add rate limiting to the Fastify API and also update the Next.js web UI to show friendly 429 errors.",
+   "Migrate the worker to BullMQ v5 and rename the queue env vars across terraform and the CLI."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 83.62740993499756,
+    "usage": {
+     "prompt_tokens": 325,
+     "completion_tokens": 482,
+     "total_tokens": 807,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 422
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p12",
+  "kind": "policy",
+  "kept": [
+   "Set up request rate limiting in apps/api and wire it into the Fastify server.",
+   "The worker needs to retry failed jobs with exponential backoff\u2014get that working in services/worker."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 38.231569051742554,
+    "usage": {
+     "prompt_tokens": 311,
+     "completion_tokens": 102,
+     "total_tokens": 413,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 49
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p13",
+  "kind": "policy",
+  "kept": [
+   "Patch the shipped web bundle so login works before the deploy window closes",
+   "The API client stub is stale; refresh the checked-in schema artifact for the new billing route"
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 57.68165707588196,
+    "usage": {
+     "prompt_tokens": 325,
+     "completion_tokens": 726,
+     "total_tokens": 1051,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 679
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p14",
+  "kind": "policy",
+  "kept": [
+   "The staging Postgres tables are full of junk from load testing; clear everything out before tomorrow's demo.",
+   "My local Postgres schema is a mess after the rebase; blow it away and rebuild from the migrations."
+  ],
+  "rejected": [
+   [
+    "The staging Postgres instance is full of junk test data; clean it out so we can start fresh before the demo.",
+    [
+     "data~database"
+    ]
+   ],
+   [
+    "The migration history in apps/api got tangled after the rebase; wipe local data and rebuild the schema from scratch.",
+    [
+     "data~database"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 38.13987421989441,
+    "usage": {
+     "prompt_tokens": 332,
+     "completion_tokens": 90,
+     "total_tokens": 422,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 26
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 38.75681018829346,
+    "usage": {
+     "prompt_tokens": 406,
+     "completion_tokens": 248,
+     "total_tokens": 654,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 190
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p15",
+  "kind": "policy",
+  "kept": [
+   "Fix the flaky login redirect bug in apps/web and get it merged to main today.",
+   "Bump the Fastify version in apps/api, confirm nothing else broke across the monorepo, and open a PR."
+  ],
+  "rejected": [
+   [
+    "Bump the Fastify version in apps/api, verify everything still works, then push the branch.",
+    [
+     "push~pushing"
+    ]
+   ]
+  ],
+  "attempts": 2,
+  "calls": [
+   {
+    "latency_s": 39.94758701324463,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 101,
+     "total_tokens": 424,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 48
+     }
+    },
+    "cached": false
+   },
+   {
+    "latency_s": 32.58563494682312,
+    "usage": {
+     "prompt_tokens": 362,
+     "completion_tokens": 140,
+     "total_tokens": 502,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 100
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p16",
+  "kind": "policy",
+  "kept": [
+   "Clean up my messy WIP changes on the feature branch into one tidy change before merging.",
+   "Amend my last change on the shared develop branch to include the fix I forgot."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.56826186180115,
+    "usage": {
+     "prompt_tokens": 319,
+     "completion_tokens": 70,
+     "total_tokens": 389,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 18
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p17",
+  "kind": "policy",
+  "kept": [
+   "Fix the failing Postgres migration in apps/api and get the test suite passing again.",
+   "Add a --dry-run flag to the deploy command in packages/cli and verify it works."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.23479890823364,
+    "usage": {
+     "prompt_tokens": 319,
+     "completion_tokens": 133,
+     "total_tokens": 452,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 82
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p18",
+  "kind": "policy",
+  "kept": [
+   "Rewrite the worker's job-processing layer to use typed queues and shared schemas from packages.",
+   "Migrate apps/api route handlers to a new plugin-based architecture and split the monolith routes into modules."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.24183177947998,
+    "usage": {
+     "prompt_tokens": 320,
+     "completion_tokens": 107,
+     "total_tokens": 427,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 53
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p19",
+  "kind": "policy",
+  "kept": [
+   "Switch over to the hotfix checkout and run the failing login tests there.",
+   "Pull the latest main from origin and rebase my pending local edits on top."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 36.4234721660614,
+    "usage": {
+     "prompt_tokens": 325,
+     "completion_tokens": 243,
+     "total_tokens": 568,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 195
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p20",
+  "kind": "policy",
+  "kept": [
+   "Three worker specs broke after the queue change; make the pipeline pass so I can deploy today.",
+   "The web suite has been red all week and the merge is blocked; get it through however works."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 43.31211471557617,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 365,
+     "total_tokens": 688,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 309
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p21",
+  "kind": "policy",
+  "kept": [
+   "Open a pull request for the worker retry fix and request review from the team.",
+   "Check the review comments on my open pull request and address the feedback."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.517629861831665,
+    "usage": {
+     "prompt_tokens": 313,
+     "completion_tokens": 75,
+     "total_tokens": 388,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 28
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p22",
+  "kind": "policy",
+  "kept": [
+   "Fix the Stripe webhook handler in apps/api so failed invoice payments retry three times before marking accounts delinquent.",
+   "Refactor the invoice generation logic in apps/api to prorate mid-cycle plan upgrades and update the worker jobs accordingly."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 32.26367473602295,
+    "usage": {
+     "prompt_tokens": 318,
+     "completion_tokens": 109,
+     "total_tokens": 427,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 47
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p23",
+  "kind": "policy",
+  "kept": [
+   "Add a celebratory success banner to the CLI output when a deployment finishes, with some fun visual flair.",
+   "Write a friendly Slack notification message the worker sends when a job completes, make it lively and expressive."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 30.76034712791443,
+    "usage": {
+     "prompt_tokens": 315,
+     "completion_tokens": 109,
+     "total_tokens": 424,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 51
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p24",
+  "kind": "policy",
+  "kept": [
+   "Fix the failing login test in apps/web and save your work to git.",
+   "Add a retry option to the CLI deploy command and record the change in the repo history."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 30.565348148345947,
+    "usage": {
+     "prompt_tokens": 323,
+     "completion_tokens": 67,
+     "total_tokens": 390,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 17
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p25",
+  "kind": "policy",
+  "kept": [
+   "Migrate apps/web from Next.js 13 to 14 and fix any breaking changes along the way.",
+   "Move apps/api from Fastify 4 to 5 and update the plugins so the server starts cleanly."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.912209272384644,
+    "usage": {
+     "prompt_tokens": 320,
+     "completion_tokens": 89,
+     "total_tokens": 409,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 31
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p26",
+  "kind": "policy",
+  "kept": [
+   "Add a small utility under packages/cli that backfills missing slugs in the Postgres posts table.",
+   "Create a one-off tool in infra that rotates stale EKS kubeconfig entries for the team."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 30.57202386856079,
+    "usage": {
+     "prompt_tokens": 318,
+     "completion_tokens": 98,
+     "total_tokens": 416,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 43
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p27",
+  "kind": "policy",
+  "kept": [
+   "Add debug output to apps/api so failed database connection attempts print the full connection details for troubleshooting.",
+   "Write a script in packages/cli that prints the environment config it loaded so I can verify auth credentials are picked up."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 34.98834991455078,
+    "usage": {
+     "prompt_tokens": 319,
+     "completion_tokens": 86,
+     "total_tokens": 405,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 27
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p28",
+  "kind": "policy",
+  "kept": [
+   "The worker keeps dropping jobs under load in staging. Track down the root cause and patch it.",
+   "Intermittent 500s from apps/api after the last deploy \u2014 investigate and resolve it."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.602123975753784,
+    "usage": {
+     "prompt_tokens": 320,
+     "completion_tokens": 74,
+     "total_tokens": 394,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 19
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p29",
+  "kind": "policy",
+  "kept": [
+   "Add a --json flag to the CLI's deploy command that prints machine-readable output.",
+   "Add a new GET /v1/usage endpoint to the Fastify API returning per-org request counts."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.70939588546753,
+    "usage": {
+     "prompt_tokens": 318,
+     "completion_tokens": 131,
+     "total_tokens": 449,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 76
+     }
+    },
+    "cached": false
+   }
+  ]
+ },
+ {
+  "mid": "p30",
+  "kind": "policy",
+  "kept": [
+   "Measure apps/api p99 latency under heavy load and publish the numbers from our build fleet.",
+   "Time a full production build of apps/web on the hosted agents and report how it compares."
+  ],
+  "rejected": [],
+  "attempts": 1,
+  "calls": [
+   {
+    "latency_s": 35.89336657524109,
+    "usage": {
+     "prompt_tokens": 319,
+     "completion_tokens": 105,
+     "total_tokens": 424,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 52
+     }
+    },
+    "cached": false
+   }
+  ]
+ }
+]

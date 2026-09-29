@@ -1,0 +1,202 @@
+{
+  "id": "cur2",
+  "llmCalls": 16,
+  "duration_ms": 40,
+  "cost_cents": 8,
+  "complete": true,
+  "input": {
+    "batch": "C2"
+  },
+  "events": [
+    {
+      "name": "listPage",
+      "args": {
+        "cursor": null,
+        "batch": "C2"
+      },
+      "result": {
+        "items": [
+          "P-a",
+          "P-b"
+        ],
+        "nextCursor": "1"
+      },
+      "ok": true
+    },
+    {
+      "name": "listPage",
+      "args": {
+        "cursor": "1",
+        "batch": "C2"
+      },
+      "result": {
+        "items": [
+          "P-c",
+          "P-d"
+        ],
+        "nextCursor": "2"
+      },
+      "ok": true
+    },
+    {
+      "name": "listPage",
+      "args": {
+        "cursor": "2",
+        "batch": "C2"
+      },
+      "result": {
+        "items": [
+          "P-e",
+          "P-f"
+        ],
+        "nextCursor": null
+      },
+      "ok": true
+    },
+    {
+      "name": "getItem",
+      "args": {
+        "id": "P-a"
+      },
+      "result": {
+        "id": "P-a",
+        "ok": true
+      },
+      "ok": true
+    },
+    {
+      "name": "writeItem",
+      "args": {
+        "id": "P-a"
+      },
+      "result": {
+        "written": true,
+        "id": "P-a"
+      },
+      "ok": true
+    },
+    {
+      "name": "getItem",
+      "args": {
+        "id": "P-b"
+      },
+      "result": {
+        "id": "P-b",
+        "ok": true
+      },
+      "ok": true
+    },
+    {
+      "name": "writeItem",
+      "args": {
+        "id": "P-b"
+      },
+      "result": {
+        "written": true,
+        "id": "P-b"
+      },
+      "ok": true
+    },
+    {
+      "name": "getItem",
+      "args": {
+        "id": "P-c"
+      },
+      "result": {
+        "id": "P-c",
+        "ok": true
+      },
+      "ok": true
+    },
+    {
+      "name": "writeItem",
+      "args": {
+        "id": "P-c"
+      },
+      "result": {
+        "written": true,
+        "id": "P-c"
+      },
+      "ok": true
+    },
+    {
+      "name": "getItem",
+      "args": {
+        "id": "P-d"
+      },
+      "result": {
+        "id": "P-d",
+        "ok": true
+      },
+      "ok": true
+    },
+    {
+      "name": "writeItem",
+      "args": {
+        "id": "P-d"
+      },
+      "result": {
+        "written": true,
+        "id": "P-d"
+      },
+      "ok": true
+    },
+    {
+      "name": "getItem",
+      "args": {
+        "id": "P-e"
+      },
+      "result": {
+        "id": "P-e",
+        "ok": true
+      },
+      "ok": true
+    },
+    {
+      "name": "writeItem",
+      "args": {
+        "id": "P-e"
+      },
+      "result": {
+        "written": true,
+        "id": "P-e"
+      },
+      "ok": true
+    },
+    {
+      "name": "getItem",
+      "args": {
+        "id": "P-f"
+      },
+      "result": {
+        "id": "P-f",
+        "ok": true
+      },
+      "ok": true
+    },
+    {
+      "name": "writeItem",
+      "args": {
+        "id": "P-f"
+      },
+      "result": {
+        "written": true,
+        "id": "P-f"
+      },
+      "ok": true
+    },
+    {
+      "name": "sealBatch",
+      "args": {
+        "batch": "C2"
+      },
+      "result": {
+        "sealed": true
+      },
+      "ok": true
+    }
+  ],
+  "output": {
+    "sealed": true
+  }
+}

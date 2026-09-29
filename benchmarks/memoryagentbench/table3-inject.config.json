@@ -1,0 +1,11 @@
+{
+  "exam": "Table 3",
+  "k": 10,
+  "eventqa": 534000,
+  "fc": 262000,
+  "sh": 197000,
+  "mh": 421000,
+  "labelStrip": false,
+  "reader": "google/gemma-4-31b-it",
+  "api": "openMemory inject"
+}

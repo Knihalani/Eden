@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "errors": [],
+  "values": {
+    "brain-miss": 1375,
+    "mem-tests": 1,
+    "junk": 0,
+    "losses": 0,
+    "cost-ms": 0,
+    "holdout-miss": 47,
+    "holdout-junk": 36,
+    "holdout-losses": 30,
+    "sota-holdout": 15,
+    "v2-gold": 1000,
+    "bakeoff-rec5": 696,
+    "bakeoff-junkfp": 0
+  },
+  "at": "2026-09-11T15:57:45.600Z"
+}

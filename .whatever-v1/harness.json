@@ -1,0 +1,40 @@
+{
+  "goal": "Using deep research into memory graphs, knowledge bases, neuroscience of storage/retrieval, and low-level optimization (language, data structures, algorithms), iteratively and massively optimize Eden memory+know until it is perfected: maximize retrieval quality and evidence ceiling, minimize junk/cost, without overfitting a single toy benchmark.",
+  "branch": "whatever/sep8-brain-opt",
+  "timeout_sec": 480,
+  "epsilon": 0.01,
+  "scope": ["src", "packages/know/src"],
+  "out_of_scope": [".whatever", ".gauntlet", "archived", "benchmarks/memory-bakeoff"],
+  "primary": {
+    "id": "brain-miss",
+    "cmd": "bun .whatever/benches/brain-opt.ts",
+    "direction": "lower",
+    "extract": { "kind": "prefix", "prefix": "metric:" }
+  },
+  "guards": [
+    {
+      "id": "mem-tests",
+      "cmd": "bun test packages/cli/src/memory-hook.test.ts packages/know/src/extract-crawl.test.ts packages/know/src/inject-rank.test.ts",
+      "direction": "higher",
+      "extract": { "kind": "exit" }
+    },
+    {
+      "id": "junk",
+      "cmd": "bun .whatever/benches/brain-opt.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "junk:" }
+    },
+    {
+      "id": "losses",
+      "cmd": "bun .whatever/benches/brain-opt.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "losses:" }
+    },
+    {
+      "id": "cost-ms",
+      "cmd": "bun .whatever/benches/brain-opt.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "cost_ms:" }
+    }
+  ]
+}

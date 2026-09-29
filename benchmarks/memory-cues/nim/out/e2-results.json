@@ -1,0 +1,1934 @@
+{
+ "baseline": {
+  "0.05": {
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5690747782002535,
+    "fir": 0.04285714285714286,
+    "prec": 0.7169811320754716
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5797101449275363,
+    "fir": 0.15,
+    "prec": 0.7575757575757576
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.25510204081632654,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "0.0": {
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.49556400506970844,
+    "fir": 0.0,
+    "prec": 0.8461538461538461
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.4980237154150198,
+    "fir": 0.075,
+    "prec": 0.8648648648648649
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.1326530612244898,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  }
+ },
+ "blind": {
+  "phi35(R1)|raw|fixed-gate|0.05": {
+   "n_alias": 1639,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.6749049429657795,
+    "fir": 0.14285714285714285,
+    "prec": 0.6232876712328768
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6429512516469039,
+    "fir": 0.1875,
+    "prec": 0.6335877862595419
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.06086956521739131,
+    "fir": null,
+    "prec": 0.040172166427546625
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.06896551724137931,
+    "fir": null,
+    "prec": 0.04519774011299435
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.05263157894736842,
+    "fir": null,
+    "prec": 0.03498542274052478
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.41836734693877553,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "phi35(R1)|raw|fixed-gate|0.0": {
+   "n_alias": 1639,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5906210392902409,
+    "fir": 0.08571428571428572,
+    "prec": 0.7181818181818181
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5724637681159419,
+    "fir": 0.1375,
+    "prec": 0.7616580310880829
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.04565217391304348,
+    "fir": null,
+    "prec": 0.052109181141439205
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0603448275862069,
+    "fir": null,
+    "prec": 0.06572769953051644
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.03070175438596491,
+    "fir": null,
+    "prec": 0.03684210526315789
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.24489795918367346,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "phi35(R1)|capped|fixed-gate|0.05": {
+   "n_alias": 486,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5956907477820026,
+    "fir": 0.04285714285714286,
+    "prec": 0.6926406926406926
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6073781291172596,
+    "fir": 0.175,
+    "prec": 0.7696078431372549
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.013043478260869565,
+    "fir": null,
+    "prec": 0.014598540145985401
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.008620689655172414,
+    "fir": null,
+    "prec": 0.010050251256281407
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.017543859649122806,
+    "fir": null,
+    "prec": 0.018867924528301886
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.29591836734693877,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "phi35(R1)|capped|fixed-gate|0.0": {
+   "n_alias": 486,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5335868187579214,
+    "fir": 0.0,
+    "prec": 0.7932960893854749
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.541501976284585,
+    "fir": 0.075,
+    "prec": 0.8742138364779874
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.006521739130434782,
+    "fir": null,
+    "prec": 0.01694915254237288
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.004310344827586207,
+    "fir": null,
+    "prec": 0.011111111111111112
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.008771929824561403,
+    "fir": null,
+    "prec": 0.022988505747126436
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.17346938775510204,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "gemma-4-31b|raw|fixed-gate|0.05": {
+   "n_alias": 1640,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.752851711026616,
+    "fir": 0.11428571428571428,
+    "prec": 0.6101190476190477
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.7028985507246376,
+    "fir": 0.175,
+    "prec": 0.6678832116788321
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.30869565217391304,
+    "fir": null,
+    "prec": 0.17191283292978207
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.3146551724137931,
+    "fir": null,
+    "prec": 0.16666666666666666
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.3026315789473684,
+    "fir": null,
+    "prec": 0.17783505154639176
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.3673469387755102,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.1,
+    "fir": null,
+    "prec": 0.07692307692307693
+   }
+  },
+  "gemma-4-31b|raw|fixed-gate|0.0": {
+   "n_alias": 1640,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.6749049429657795,
+    "fir": 0.05714285714285714,
+    "prec": 0.7458333333333333
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6429512516469039,
+    "fir": 0.1125,
+    "prec": 0.7942583732057417
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.22608695652173913,
+    "fir": null,
+    "prec": 0.21666666666666667
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.23275862068965517,
+    "fir": null,
+    "prec": 0.21176470588235294
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.21929824561403508,
+    "fir": null,
+    "prec": 0.2222222222222222
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.22448979591836735,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.08333333333333333,
+    "fir": null,
+    "prec": 0.13157894736842105
+   }
+  },
+  "gemma-4-31b|capped|fixed-gate|0.05": {
+   "n_alias": 565,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.6387832699619772,
+    "fir": 0.08571428571428572,
+    "prec": 0.7307692307692307
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6034255599472992,
+    "fir": 0.175,
+    "prec": 0.7358490566037735
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.06304347826086956,
+    "fir": null,
+    "prec": 0.06636155606407322
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.07758620689655173,
+    "fir": null,
+    "prec": 0.07929515418502203
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.04824561403508772,
+    "fir": null,
+    "prec": 0.05238095238095238
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.2755102040816326,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.03333333333333333,
+    "fir": null,
+    "prec": 0.041666666666666664
+   }
+  },
+  "gemma-4-31b|capped|fixed-gate|0.0": {
+   "n_alias": 565,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5500633713561471,
+    "fir": 0.02857142857142857,
+    "prec": 0.8258426966292135
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5335968379446641,
+    "fir": 0.0875,
+    "prec": 0.845679012345679
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.02826086956521739,
+    "fir": null,
+    "prec": 0.06914893617021277
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.03017241379310345,
+    "fir": null,
+    "prec": 0.07216494845360824
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.02631578947368421,
+    "fir": null,
+    "prec": 0.06593406593406594
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.14285714285714285,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.016666666666666666,
+    "fir": null,
+    "prec": 0.05263157894736842
+   }
+  },
+  "nemotron-3-super|raw|fixed-gate|0.05": {
+   "n_alias": 1580,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.7179974651457541,
+    "fir": 0.11428571428571428,
+    "prec": 0.6153846153846154
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6956521739130435,
+    "fir": 0.2,
+    "prec": 0.6498194945848376
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.24782608695652175,
+    "fir": null,
+    "prec": 0.15595075239398085
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.27586206896551724,
+    "fir": null,
+    "prec": 0.165374677002584
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.21929824561403508,
+    "fir": null,
+    "prec": 0.14534883720930233
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.336734693877551,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.08333333333333333,
+    "fir": null,
+    "prec": 0.06097560975609756
+   }
+  },
+  "nemotron-3-super|raw|fixed-gate|0.0": {
+   "n_alias": 1580,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.6115335868187578,
+    "fir": 0.04285714285714286,
+    "prec": 0.7652582159624414
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5770750988142292,
+    "fir": 0.125,
+    "prec": 0.7956989247311828
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.2,
+    "fir": null,
+    "prec": 0.22276029055690072
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.23275862068965517,
+    "fir": null,
+    "prec": 0.23580786026200873
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.16666666666666666,
+    "fir": null,
+    "prec": 0.20652173913043478
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.22448979591836735,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.08333333333333333,
+    "fir": null,
+    "prec": 0.125
+   }
+  },
+  "nemotron-3-super|capped|fixed-gate|0.05": {
+   "n_alias": 580,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.6394169835234474,
+    "fir": 0.05714285714285714,
+    "prec": 0.7125
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6212121212121213,
+    "fir": 0.1625,
+    "prec": 0.7692307692307693
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.07608695652173914,
+    "fir": null,
+    "prec": 0.08293838862559241
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.07758620689655173,
+    "fir": null,
+    "prec": 0.08411214953271028
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.07456140350877193,
+    "fir": null,
+    "prec": 0.08173076923076923
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.29591836734693877,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.016666666666666666,
+    "fir": null,
+    "prec": 0.020833333333333332
+   }
+  },
+  "nemotron-3-super|capped|fixed-gate|0.0": {
+   "n_alias": 580,
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5430925221799746,
+    "fir": 0.0,
+    "prec": 0.8333333333333334
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5276679841897233,
+    "fir": 0.0875,
+    "prec": 0.8709677419354839
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.03695652173913044,
+    "fir": null,
+    "prec": 0.09042553191489362
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.03879310344827586,
+    "fir": null,
+    "prec": 0.09782608695652174
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.03508771929824561,
+    "fir": null,
+    "prec": 0.08333333333333333
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.20408163265306123,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.016666666666666666,
+    "fir": null,
+    "prec": 0.045454545454545456
+   }
+  }
+ },
+ "miss": {
+  "fold1|lex|0.05": {
+   "stats": {
+    "train": "dev",
+    "proposer": "lex",
+    "misses": 136,
+    "proposals": 347,
+    "supported_ge2": 8,
+    "accepted": 8,
+    "rows_with_alias": 6,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "a16": [
+      "amount"
+     ],
+     "c10": [
+      "try",
+      "command"
+     ],
+     "s11": [
+      "twice"
+     ],
+     "s13": [
+      "queue"
+     ],
+     "i07": [
+      "preview",
+      "change"
+     ],
+     "i09": [
+      "domain"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.593789607097592,
+    "fir": 0.04285714285714286,
+    "prec": 0.7327188940092166
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5797101449275363,
+    "fir": 0.15,
+    "prec": 0.75
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.25510204081632654,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold1|lex|0.0": {
+   "stats": {
+    "train": "dev",
+    "proposer": "lex",
+    "misses": 156,
+    "proposals": 386,
+    "supported_ge2": 10,
+    "accepted": 10,
+    "rows_with_alias": 8,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r20": [
+      "response"
+     ],
+     "w13": [
+      "key"
+     ],
+     "a16": [
+      "amount"
+     ],
+     "c10": [
+      "try",
+      "command"
+     ],
+     "s11": [
+      "twice"
+     ],
+     "s13": [
+      "queue"
+     ],
+     "i07": [
+      "preview",
+      "change"
+     ],
+     "i09": [
+      "domain"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5259822560202788,
+    "fir": 0.0,
+    "prec": 0.8484848484848485
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.4980237154150198,
+    "fir": 0.075,
+    "prec": 0.8648648648648649
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.1326530612244898,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold1|llm:google/gemma-4-31b-it|0.05": {
+   "stats": {
+    "train": "dev",
+    "proposer": "google/gemma-4-31b-it",
+    "misses": 136,
+    "proposals": 288,
+    "supported_ge2": 12,
+    "accepted": 12,
+    "rows_with_alias": 9,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "s04": [
+      "task"
+     ],
+     "s07": [
+      "task"
+     ],
+     "a16": [
+      "amount"
+     ],
+     "c10": [
+      "try",
+      "command"
+     ],
+     "s11": [
+      "run",
+      "twice"
+     ],
+     "s13": [
+      "queue"
+     ],
+     "i07": [
+      "preview",
+      "change"
+     ],
+     "i09": [
+      "domain"
+     ],
+     "p22": [
+      "invoice"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.6013941698352345,
+    "fir": 0.04285714285714286,
+    "prec": 0.7318181818181818
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5797101449275363,
+    "fir": 0.15,
+    "prec": 0.75
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.25510204081632654,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold1|llm:google/gemma-4-31b-it|0.0": {
+   "stats": {
+    "train": "dev",
+    "proposer": "google/gemma-4-31b-it",
+    "misses": 156,
+    "proposals": 313,
+    "supported_ge2": 13,
+    "accepted": 13,
+    "rows_with_alias": 10,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r20": [
+      "response"
+     ],
+     "s04": [
+      "task"
+     ],
+     "s07": [
+      "task"
+     ],
+     "a16": [
+      "amount"
+     ],
+     "c10": [
+      "try",
+      "command"
+     ],
+     "s11": [
+      "run",
+      "twice"
+     ],
+     "s13": [
+      "queue"
+     ],
+     "i07": [
+      "preview",
+      "change"
+     ],
+     "i09": [
+      "domain"
+     ],
+     "p22": [
+      "invoice"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5259822560202788,
+    "fir": 0.0,
+    "prec": 0.8484848484848485
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.49407114624505927,
+    "fir": 0.075,
+    "prec": 0.8639455782312925
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.1326530612244898,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold1|llm:nvidia/nemotron-3-super-120b-a12b|0.05": {
+   "stats": {
+    "train": "dev",
+    "proposer": "nvidia/nemotron-3-super-120b-a12b",
+    "misses": 136,
+    "proposals": 347,
+    "supported_ge2": 14,
+    "accepted": 14,
+    "rows_with_alias": 11,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r20": [
+      "format"
+     ],
+     "s04": [
+      "task"
+     ],
+     "s07": [
+      "task"
+     ],
+     "a16": [
+      "amount",
+      "storage"
+     ],
+     "c10": [
+      "try",
+      "command"
+     ],
+     "s11": [
+      "twice"
+     ],
+     "s13": [
+      "queue"
+     ],
+     "i07": [
+      "preview",
+      "change"
+     ],
+     "r40": [
+      "style"
+     ],
+     "i09": [
+      "domain"
+     ],
+     "p22": [
+      "invoice"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.6026615969581749,
+    "fir": 0.04285714285714286,
+    "prec": 0.7330316742081447
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5797101449275363,
+    "fir": 0.15,
+    "prec": 0.75
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.25510204081632654,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold1|llm:nvidia/nemotron-3-super-120b-a12b|0.0": {
+   "stats": {
+    "train": "dev",
+    "proposer": "nvidia/nemotron-3-super-120b-a12b",
+    "misses": 156,
+    "proposals": 379,
+    "supported_ge2": 16,
+    "accepted": 16,
+    "rows_with_alias": 12,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r20": [
+      "response",
+      "format"
+     ],
+     "s04": [
+      "task"
+     ],
+     "s07": [
+      "task"
+     ],
+     "w13": [
+      "key"
+     ],
+     "a16": [
+      "amount",
+      "storage"
+     ],
+     "c10": [
+      "try",
+      "command"
+     ],
+     "s11": [
+      "twice"
+     ],
+     "s13": [
+      "queue"
+     ],
+     "i07": [
+      "preview",
+      "change"
+     ],
+     "r40": [
+      "style"
+     ],
+     "i09": [
+      "domain"
+     ],
+     "p22": [
+      "invoice"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5259822560202788,
+    "fir": 0.0,
+    "prec": 0.8588957055214724
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.49407114624505927,
+    "fir": 0.075,
+    "prec": 0.8639455782312925
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.1326530612244898,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold2|lex|0.05": {
+   "stats": {
+    "train": "test",
+    "proposer": "lex",
+    "misses": 134,
+    "proposals": 344,
+    "supported_ge2": 12,
+    "accepted": 12,
+    "rows_with_alias": 10,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r01": [
+      "dependency",
+      "installer"
+     ],
+     "r02": [
+      "release"
+     ],
+     "r43": [
+      "credential"
+     ],
+     "w18": [
+      "site"
+     ],
+     "a05": [
+      "column"
+     ],
+     "a33": [
+      "column"
+     ],
+     "a35": [
+      "callback"
+     ],
+     "r46": [
+      "ticket"
+     ],
+     "r10": [
+      "switched"
+     ],
+     "r11": [
+      "project",
+      "es"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5690747782002535,
+    "fir": 0.04285714285714286,
+    "prec": 0.7102803738317757
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6126482213438735,
+    "fir": 0.15,
+    "prec": 0.7692307692307693
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.25510204081632654,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold2|lex|0.0": {
+   "stats": {
+    "train": "test",
+    "proposer": "lex",
+    "misses": 156,
+    "proposals": 387,
+    "supported_ge2": 13,
+    "accepted": 13,
+    "rows_with_alias": 11,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r01": [
+      "dependency",
+      "installer"
+     ],
+     "r02": [
+      "release"
+     ],
+     "r23": [
+      "library"
+     ],
+     "r43": [
+      "credential"
+     ],
+     "w18": [
+      "site"
+     ],
+     "a05": [
+      "column"
+     ],
+     "a33": [
+      "column"
+     ],
+     "a35": [
+      "callback"
+     ],
+     "r46": [
+      "ticket"
+     ],
+     "r10": [
+      "switched"
+     ],
+     "r11": [
+      "project",
+      "es"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.49556400506970844,
+    "fir": 0.0,
+    "prec": 0.8354430379746836
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5210803689064559,
+    "fir": 0.075,
+    "prec": 0.8709677419354839
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.1326530612244898,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold2|llm:google/gemma-4-31b-it|0.05": {
+   "stats": {
+    "train": "test",
+    "proposer": "google/gemma-4-31b-it",
+    "misses": 134,
+    "proposals": 284,
+    "supported_ge2": 13,
+    "accepted": 13,
+    "rows_with_alias": 11,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r01": [
+      "dependency",
+      "installer"
+     ],
+     "r02": [
+      "release"
+     ],
+     "r43": [
+      "credential"
+     ],
+     "w18": [
+      "localization"
+     ],
+     "a05": [
+      "column"
+     ],
+     "a33": [
+      "column"
+     ],
+     "a04": [
+      "database"
+     ],
+     "a35": [
+      "callback",
+      "verify"
+     ],
+     "i14": [
+      "retention"
+     ],
+     "r10": [
+      "switched"
+     ],
+     "r11": [
+      "es"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5690747782002535,
+    "fir": 0.04285714285714286,
+    "prec": 0.7102803738317757
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6185770750988142,
+    "fir": 0.15,
+    "prec": 0.7703349282296651
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.25510204081632654,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold2|llm:google/gemma-4-31b-it|0.0": {
+   "stats": {
+    "train": "test",
+    "proposer": "google/gemma-4-31b-it",
+    "misses": 156,
+    "proposals": 315,
+    "supported_ge2": 16,
+    "accepted": 16,
+    "rows_with_alias": 14,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "r01": [
+      "dependency",
+      "installer"
+     ],
+     "a03": [
+      "database"
+     ],
+     "r02": [
+      "release"
+     ],
+     "r23": [
+      "library"
+     ],
+     "r43": [
+      "credential"
+     ],
+     "w18": [
+      "localization"
+     ],
+     "w17": [
+      "server"
+     ],
+     "a05": [
+      "column"
+     ],
+     "a33": [
+      "column"
+     ],
+     "a04": [
+      "database"
+     ],
+     "a35": [
+      "callback",
+      "verify"
+     ],
+     "i14": [
+      "retention"
+     ],
+     "r10": [
+      "switched"
+     ],
+     "r11": [
+      "es"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.49556400506970844,
+    "fir": 0.0,
+    "prec": 0.8354430379746836
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5250329380764164,
+    "fir": 0.075,
+    "prec": 0.8717948717948718
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.1326530612244898,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold2|llm:nvidia/nemotron-3-super-120b-a12b|0.05": {
+   "stats": {
+    "train": "test",
+    "proposer": "nvidia/nemotron-3-super-120b-a12b",
+    "misses": 134,
+    "proposals": 334,
+    "supported_ge2": 23,
+    "accepted": 23,
+    "rows_with_alias": 13,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "a33": [
+      "schema",
+      "column",
+      "change",
+      "database"
+     ],
+     "r01": [
+      "add",
+      "dependency",
+      "install",
+      "installer",
+      "tool",
+      "setup"
+     ],
+     "r43": [
+      "credential"
+     ],
+     "a34": [
+      "tenant"
+     ],
+     "a05": [
+      "column"
+     ],
+     "r02": [
+      "install"
+     ],
+     "a35": [
+      "verify",
+      "callback"
+     ],
+     "r46": [
+      "ticket"
+     ],
+     "i14": [
+      "duration",
+      "retention"
+     ],
+     "p02": [
+      "review"
+     ],
+     "p05": [
+      "complete"
+     ],
+     "p17": [
+      "recap"
+     ],
+     "r11": [
+      "es"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.5690747782002535,
+    "fir": 0.05714285714285714,
+    "prec": 0.7102803738317757
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.6152832674571805,
+    "fir": 0.15,
+    "prec": 0.7692307692307693
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.25510204081632654,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  },
+  "fold2|llm:nvidia/nemotron-3-super-120b-a12b|0.0": {
+   "stats": {
+    "train": "test",
+    "proposer": "nvidia/nemotron-3-super-120b-a12b",
+    "misses": 156,
+    "proposals": 363,
+    "supported_ge2": 28,
+    "accepted": 28,
+    "rows_with_alias": 18,
+    "rejected_by_replay": 0,
+    "accepted_list": {
+     "a33": [
+      "schema",
+      "column",
+      "change",
+      "database"
+     ],
+     "r01": [
+      "add",
+      "dependency",
+      "install",
+      "installer",
+      "tool",
+      "setup"
+     ],
+     "w30": [
+      "check"
+     ],
+     "a03": [
+      "location"
+     ],
+     "i01": [
+      "version"
+     ],
+     "r23": [
+      "library"
+     ],
+     "r43": [
+      "credential"
+     ],
+     "a34": [
+      "tenant"
+     ],
+     "a05": [
+      "column"
+     ],
+     "r02": [
+      "install"
+     ],
+     "i19": [
+      "scaling"
+     ],
+     "a35": [
+      "verify",
+      "callback"
+     ],
+     "r46": [
+      "ticket"
+     ],
+     "i14": [
+      "duration",
+      "retention"
+     ],
+     "p02": [
+      "review"
+     ],
+     "p05": [
+      "complete"
+     ],
+     "p17": [
+      "recap"
+     ],
+     "r11": [
+      "es"
+     ]
+    }
+   },
+   "dev": {
+    "n_pos": 263,
+    "n_neg": 70,
+    "r4": 0.49556400506970844,
+    "fir": 0.014285714285714285,
+    "prec": 0.8354430379746836
+   },
+   "test": {
+    "n_pos": 253,
+    "n_neg": 80,
+    "r4": 0.5316205533596838,
+    "fir": 0.075,
+    "prec": 0.8782051282051282
+   },
+   "test_nim_pos": {
+    "n_pos": 460,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_devmem": {
+    "n_pos": 232,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_testmem": {
+    "n_pos": 228,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   },
+   "test_nim_neg": {
+    "n_pos": 0,
+    "n_neg": 98,
+    "r4": null,
+    "fir": 0.1326530612244898,
+    "prec": null
+   },
+   "test_nim_policy": {
+    "n_pos": 60,
+    "n_neg": 0,
+    "r4": 0.0,
+    "fir": null,
+    "prec": 0.0
+   }
+  }
+ }
+}

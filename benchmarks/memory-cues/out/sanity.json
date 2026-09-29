@@ -1,0 +1,48 @@
+{
+ "memories_straddling_splits": [],
+ "exact_dup_cues_across_splits": 0,
+ "near_dup_cues_across_splits": 1,
+ "near_examples": [
+  "q140~q150: \"how do I run the tests for this?\" / \"run just these tests\""
+ ],
+ "overlap_by_cat_author": {
+  "lex/hand": {
+   "none": 0,
+   "common": 2,
+   "rare": 85
+  },
+  "para/hand": {
+   "none": 41,
+   "common": 8,
+   "rare": 36
+  },
+  "ctx/hand": {
+   "none": 20,
+   "common": 8,
+   "rare": 27
+  },
+  "indirect/hand": {
+   "none": 13,
+   "common": 8,
+   "rare": 18
+  },
+  "policy/hand": {
+   "none": 33,
+   "common": 8,
+   "rare": 19
+  },
+  "para/qwen2.5-3b": {
+   "none": 3,
+   "common": 7,
+   "rare": 85
+  },
+  "natural/qwen2.5-3b": {
+   "none": 0,
+   "common": 4,
+   "rare": 91
+  }
+ },
+ "negatives": 150,
+ "negatives_sharing_any_indexed_token": 94,
+ "negatives_sharing_rare_token_df_le5": 90
+}

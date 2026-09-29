@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "errors": [],
+  "values": {
+    "user-gaps": 0,
+    "hook-tests": 1,
+    "junk-store": 0,
+    "capture-miss": 0
+  },
+  "at": "2026-09-06T19:46:06.200Z"
+}

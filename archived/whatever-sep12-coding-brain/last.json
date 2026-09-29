@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "errors": [],
+  "values": {
+    "coding-miss": 0,
+    "junk": 14,
+    "ms": 168,
+    "chars": 727,
+    "holdout2-miss": 40,
+    "holdout2-losses": 46,
+    "generic-miss": 47,
+    "generic-losses": 29,
+    "locomo-miss": 1420,
+    "tests": 1
+  },
+  "at": "2026-09-15T16:27:10.803Z"
+}

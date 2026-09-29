@@ -1,0 +1,1714 @@
+[
+{
+"id": "r01",
+"scope": "",
+"kind": "fact",
+"subject": "package manager",
+"text": "The package manager is pnpm 9; do not use npm or yarn in this repo.",
+"superseded_by": null
+},
+{
+"id": "r02",
+"scope": "",
+"kind": "fact",
+"subject": "node version",
+"text": "Node version is pinned to 20.11 in .nvmrc; run nvm use before installing.",
+"superseded_by": null
+},
+{
+"id": "r03",
+"scope": "",
+"kind": "fact",
+"subject": "monorepo",
+"text": "The monorepo is orchestrated with Turborepo; pipelines live in turbo.json.",
+"superseded_by": null
+},
+{
+"id": "r04",
+"scope": "",
+"kind": "constraint",
+"subject": "env files",
+"text": "Never commit .env files; only .env.example is tracked.",
+"superseded_by": null
+},
+{
+"id": "r05",
+"scope": "",
+"kind": "procedure",
+"subject": "env setup",
+"text": "For local env, copy .env.example to .env.local and pull secrets from the 1Password vault acme-dev.",
+"superseded_by": null
+},
+{
+"id": "r06",
+"scope": "",
+"kind": "constraint",
+"subject": "commits",
+"text": "Commit messages follow Conventional Commits (feat:, fix:, chore:).",
+"superseded_by": null
+},
+{
+"id": "r07",
+"scope": "",
+"kind": "constraint",
+"subject": "pull requests",
+"text": "Every PR needs one approval from CODEOWNERS and green CI before merge.",
+"superseded_by": null
+},
+{
+"id": "r08",
+"scope": "",
+"kind": "fact",
+"subject": "ci",
+"text": "CI runs on GitHub Actions; workflows are in .github/workflows/ci.yml.",
+"superseded_by": null
+},
+{
+"id": "r09",
+"scope": "",
+"kind": "fact",
+"subject": "linter",
+"text": "Linting and formatting use Biome; run pnpm lint at the root.",
+"superseded_by": null
+},
+{
+"id": "r10",
+"scope": "",
+"kind": "episode",
+"subject": "eslint",
+"text": "Decided to drop ESLint and Prettier in favor of Biome in March.",
+"superseded_by": null
+},
+{
+"id": "r11",
+"scope": "",
+"kind": "fact",
+"subject": "module system",
+"text": "All packages are ESM: package.json has \"type\": \"module\".",
+"superseded_by": null
+},
+{
+"id": "r12",
+"scope": "",
+"kind": "episode",
+"subject": "ERR_REQUIRE_ESM",
+"text": "ERR_REQUIRE_ESM fix: set \"type\": \"module\" in the package and import with the .js extension instead of require().",
+"superseded_by": null
+},
+{
+"id": "r13",
+"scope": "",
+"kind": "fact",
+"subject": "path aliases",
+"text": "TypeScript path aliases use the @acme/* prefix, defined in tsconfig.base.json.",
+"superseded_by": null
+},
+{
+"id": "r14",
+"scope": "",
+"kind": "preference",
+"subject": "exports",
+"text": "Prefer named exports; no default exports except Next.js pages.",
+"superseded_by": null
+},
+{
+"id": "r15",
+"scope": "",
+"kind": "fact",
+"subject": "unit tests",
+"text": "Unit tests use Vitest across all packages.",
+"superseded_by": null
+},
+{
+"id": "r16",
+"scope": "",
+"kind": "fact",
+"subject": "e2e tests",
+"text": "End-to-end tests use Playwright.",
+"superseded_by": null
+},
+{
+"id": "r17",
+"scope": "",
+"kind": "constraint",
+"subject": "coverage",
+"text": "Coverage threshold is 80% lines; CI fails below it.",
+"superseded_by": null
+},
+{
+"id": "r18",
+"scope": "",
+"kind": "fact",
+"subject": "dependency updates",
+"text": "Renovate opens dependency update PRs every Monday; automerge only for patch updates.",
+"superseded_by": null
+},
+{
+"id": "r19",
+"scope": "",
+"kind": "procedure",
+"subject": "versioning",
+"text": "Versioning uses Changesets: run pnpm changeset for any user-facing change.",
+"superseded_by": null
+},
+{
+"id": "r20",
+"scope": "",
+"kind": "preference",
+"subject": "answer style",
+"text": "User prefers concise answers with the code first and the explanation after.",
+"superseded_by": null
+},
+{
+"id": "r21",
+"scope": "",
+"kind": "preference",
+"subject": "lodash",
+"text": "Avoid lodash; use native array methods or remeda.",
+"superseded_by": null
+},
+{
+"id": "r22",
+"scope": "",
+"kind": "fact",
+"subject": "validation",
+"text": "Runtime validation uses zod everywhere.",
+"superseded_by": null
+},
+{
+"id": "r23",
+"scope": "",
+"kind": "fact",
+"subject": "dates",
+"text": "Use date-fns for dates; moment is banned.",
+"superseded_by": null
+},
+{
+"id": "r24",
+"scope": "",
+"kind": "fact",
+"subject": "logging",
+"text": "Structured logging uses pino.",
+"superseded_by": null
+},
+{
+"id": "r25",
+"scope": "",
+"kind": "fact",
+"subject": "error tracking",
+"text": "Errors are reported to Sentry; the DSN comes from SENTRY_DSN.",
+"superseded_by": null
+},
+{
+"id": "r26",
+"scope": "",
+"kind": "fact",
+"subject": "feature flags",
+"text": "Feature flags are managed in GrowthBook.",
+"superseded_by": null
+},
+{
+"id": "r27",
+"scope": "",
+"kind": "fact",
+"subject": "analytics",
+"text": "Product analytics use PostHog.",
+"superseded_by": null
+},
+{
+"id": "r28",
+"scope": "",
+"kind": "fact",
+"subject": "time zone",
+"text": "All timestamps are stored in UTC; convert to local time only in the UI.",
+"superseded_by": null
+},
+{
+"id": "r29",
+"scope": "",
+"kind": "fact",
+"subject": "git hooks",
+"text": "Git hooks run through lefthook; husky was removed.",
+"superseded_by": null
+},
+{
+"id": "r30",
+"scope": "",
+"kind": "fact",
+"subject": "python",
+"text": "Python scripts in tools/ use Python 3.12 managed by uv.",
+"superseded_by": null
+},
+{
+"id": "r31",
+"scope": "",
+"kind": "constraint",
+"subject": "sudo",
+"text": "Never run pnpm install with sudo; fix permissions instead.",
+"superseded_by": null
+},
+{
+"id": "r32",
+"scope": "",
+"kind": "fact",
+"subject": "ports",
+"text": "Local ports: web 3000, api 4000, worker metrics 9464, Postgres 5432, Redis 6379.",
+"superseded_by": null
+},
+{
+"id": "r33",
+"scope": "",
+"kind": "fact",
+"subject": "docker",
+"text": "Local containers run on OrbStack instead of Docker Desktop.",
+"superseded_by": null
+},
+{
+"id": "r34",
+"scope": "",
+"kind": "procedure",
+"subject": "local services",
+"text": "Start Postgres and Redis locally with docker compose up -d db redis.",
+"superseded_by": null
+},
+{
+"id": "r35",
+"scope": "",
+"kind": "procedure",
+"subject": "dev server",
+"text": "pnpm dev at the root starts web, api and worker together via Turborepo.",
+"superseded_by": null
+},
+{
+"id": "r36",
+"scope": "",
+"kind": "fact",
+"subject": "staging",
+"text": "Staging is at staging.acme.dev and deploys automatically from main.",
+"superseded_by": null
+},
+{
+"id": "r37",
+"scope": "",
+"kind": "fact",
+"subject": "production",
+"text": "Production deploys happen from git tags v*; the release workflow is release.yml.",
+"superseded_by": null
+},
+{
+"id": "r38",
+"scope": "",
+"kind": "constraint",
+"subject": "main branch",
+"text": "Never force-push to main; it is a protected branch.",
+"superseded_by": null
+},
+{
+"id": "r39",
+"scope": "",
+"kind": "fact",
+"subject": "codeowners",
+"text": "The platform team owns infra/ and .github/ in CODEOWNERS.",
+"superseded_by": null
+},
+{
+"id": "r40",
+"scope": "",
+"kind": "preference",
+"subject": "comments",
+"text": "User wants no comments that restate the code; comment only the why.",
+"superseded_by": null
+},
+{
+"id": "r41",
+"scope": "",
+"kind": "fact",
+"subject": "editor",
+"text": "Recommended VS Code extensions are listed in .vscode/extensions.json.",
+"superseded_by": null
+},
+{
+"id": "r42",
+"scope": "",
+"kind": "episode",
+"subject": "pnpm lockfile",
+"text": "Gotcha: CI uses pnpm install --frozen-lockfile, so always commit pnpm-lock.yaml after adding a dependency.",
+"superseded_by": null
+},
+{
+"id": "r43",
+"scope": "",
+"kind": "fact",
+"subject": "secrets manager",
+"text": "Team secrets live in the 1Password vault acme-dev; production secrets are in AWS Secrets Manager.",
+"superseded_by": null
+},
+{
+"id": "r44",
+"scope": "",
+"kind": "episode",
+"subject": "apple silicon",
+"text": "On Apple Silicon, the sharp and canvas packages need Rosetta-free builds: run pnpm rebuild sharp after switching Node versions.",
+"superseded_by": null
+},
+{
+"id": "r45",
+"scope": "",
+"kind": "fact",
+"subject": "typescript",
+"text": "TypeScript runs in strict mode with noUncheckedIndexedAccess enabled.",
+"superseded_by": null
+},
+{
+"id": "r46",
+"scope": "",
+"kind": "fact",
+"subject": "issue tracker",
+"text": "Issues are tracked in Linear under the ACME team; branch names start with the Linear id like acme-123.",
+"superseded_by": null
+},
+{
+"id": "r47",
+"scope": "",
+"kind": "constraint",
+"subject": "console.log",
+"text": "Do not leave console.log in committed code; use the pino logger.",
+"superseded_by": null
+},
+{
+"id": "r48",
+"scope": "",
+"kind": "fact",
+"subject": "license",
+"text": "The repo is proprietary; the CLI package is MIT licensed.",
+"superseded_by": null
+},
+{
+"id": "r49",
+"scope": "",
+"kind": "fact",
+"subject": "package manager",
+"text": "The package manager is yarn 1.",
+"superseded_by": "r01"
+},
+{
+"id": "r50",
+"scope": "",
+"kind": "fact",
+"subject": "node version",
+"text": "Node version is 18 LTS.",
+"superseded_by": "r02"
+},
+{
+"id": "w01",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "web framework",
+"text": "The web app is Next.js 15 with the App Router.",
+"superseded_by": null
+},
+{
+"id": "w02",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "auth provider",
+"text": "The web auth provider is Clerk.",
+"superseded_by": null
+},
+{
+"id": "w03",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "auth provider",
+"text": "The web auth provider is Auth0.",
+"superseded_by": "w02"
+},
+{
+"id": "w04",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "auth middleware",
+"text": "Clerk middleware lives in apps/web/middleware.ts and protects everything except publicRoutes.",
+"superseded_by": null
+},
+{
+"id": "w05",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "login page",
+"text": "The login page is apps/web/app/login/page.tsx and renders Clerk's SignIn component.",
+"superseded_by": null
+},
+{
+"id": "w06",
+"scope": "apps/web",
+"kind": "episode",
+"subject": "redirect loop",
+"text": "Gotcha: the sign-in redirect loop happens when /login is missing from publicRoutes in middleware.ts; also set afterSignInUrl to /dashboard.",
+"superseded_by": null
+},
+{
+"id": "w07",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "styling",
+"text": "Styling is Tailwind CSS v4; config is CSS-first in app/globals.css.",
+"superseded_by": null
+},
+{
+"id": "w08",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "ui components",
+"text": "UI components come from shadcn/ui and live in apps/web/components/ui.",
+"superseded_by": null
+},
+{
+"id": "w09",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "server state",
+"text": "Server state uses TanStack Query; client state uses zustand.",
+"superseded_by": null
+},
+{
+"id": "w10",
+"scope": "apps/web",
+"kind": "episode",
+"subject": "redux",
+"text": "Decided not to use Redux in the web app.",
+"superseded_by": null
+},
+{
+"id": "w11",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "forms",
+"text": "Forms use react-hook-form with zod resolvers.",
+"superseded_by": null
+},
+{
+"id": "w12",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "images",
+"text": "Remote images must be allowed in next.config.ts remotePatterns; the CDN host is cdn.acme.dev.",
+"superseded_by": null
+},
+{
+"id": "w13",
+"scope": "apps/web",
+"kind": "constraint",
+"subject": "public env vars",
+"text": "Only env vars prefixed NEXT_PUBLIC_ are exposed to the browser; never put secrets in them.",
+"superseded_by": null
+},
+{
+"id": "w14",
+"scope": "apps/web",
+"kind": "procedure",
+"subject": "web tests",
+"text": "Run web unit tests with pnpm --filter web test.",
+"superseded_by": null
+},
+{
+"id": "w15",
+"scope": "apps/web",
+"kind": "procedure",
+"subject": "web e2e",
+"text": "Run web end-to-end tests with pnpm --filter web e2e; it needs the dev server on port 3000.",
+"superseded_by": null
+},
+{
+"id": "w16",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "storybook",
+"text": "Storybook runs on port 6006 with pnpm --filter web storybook.",
+"superseded_by": null
+},
+{
+"id": "w17",
+"scope": "apps/web",
+"kind": "episode",
+"subject": "hydration mismatch",
+"text": "Hydration mismatch fix: format dates on the client inside useEffect, or use suppressHydrationWarning on the time element.",
+"superseded_by": null
+},
+{
+"id": "w18",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "i18n",
+"text": "Translations use next-intl; messages are in apps/web/messages/*.json.",
+"superseded_by": null
+},
+{
+"id": "w19",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "icons",
+"text": "Icons come from lucide-react.",
+"superseded_by": null
+},
+{
+"id": "w20",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "dark mode",
+"text": "Dark mode is handled by next-themes with the class strategy.",
+"superseded_by": null
+},
+{
+"id": "w21",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "api client",
+"text": "All browser calls to the API go through apps/web/lib/api.ts, a fetch wrapper that sends credentials: include.",
+"superseded_by": null
+},
+{
+"id": "w22",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "analytics provider",
+"text": "The PostHog provider is mounted in apps/web/app/providers.tsx.",
+"superseded_by": null
+},
+{
+"id": "w23",
+"scope": "apps/web",
+"kind": "episode",
+"subject": "can't resolve fs",
+"text": "Build error \"Module not found: Can't resolve 'fs'\" fix: add import \"server-only\" and keep the module out of client components.",
+"superseded_by": null
+},
+{
+"id": "w24",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "preview deploys",
+"text": "The web app deploys on Vercel; every PR gets a preview deployment.",
+"superseded_by": null
+},
+{
+"id": "w25",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "caching",
+"text": "Marketing pages use ISR with revalidate = 60.",
+"superseded_by": null
+},
+{
+"id": "w26",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "security headers",
+"text": "CSP and security headers are set in next.config.ts headers().",
+"superseded_by": null
+},
+{
+"id": "w27",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "fonts",
+"text": "The Inter font is loaded with next/font/google in app/layout.tsx.",
+"superseded_by": null
+},
+{
+"id": "w28",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "payments",
+"text": "Checkout uses Stripe Checkout redirect; the web app never sees card data.",
+"superseded_by": null
+},
+{
+"id": "w29",
+"scope": "apps/web",
+"kind": "constraint",
+"subject": "accessibility",
+"text": "Icon-only buttons must have an aria-label.",
+"superseded_by": null
+},
+{
+"id": "w30",
+"scope": "apps/web",
+"kind": "procedure",
+"subject": "bundle size",
+"text": "Inspect bundle size with ANALYZE=true pnpm --filter web build.",
+"superseded_by": null
+},
+{
+"id": "w31",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "route groups",
+"text": "Authenticated pages live in the app/(dashboard) route group; public pages in app/(marketing).",
+"superseded_by": null
+},
+{
+"id": "w32",
+"scope": "apps/web",
+"kind": "episode",
+"subject": "server actions",
+"text": "Decided to use server actions for form posts instead of API routes in the web app.",
+"superseded_by": null
+},
+{
+"id": "w33",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "error pages",
+"text": "Global errors are handled in app/global-error.tsx which reports to Sentry.",
+"superseded_by": null
+},
+{
+"id": "w34",
+"scope": "apps/web",
+"kind": "preference",
+"subject": "components style",
+"text": "User prefers small components under 150 lines and colocated tests.",
+"superseded_by": null
+},
+{
+"id": "w35",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "web env",
+"text": "The web app reads the API base URL from NEXT_PUBLIC_API_URL.",
+"superseded_by": null
+},
+{
+"id": "w36",
+"scope": "apps/web",
+"kind": "episode",
+"subject": "clerk keys",
+"text": "Gotcha: Clerk dev instance keys start with pk_test_; production builds fail if pk_test_ keys are used.",
+"superseded_by": null
+},
+{
+"id": "w37",
+"scope": "apps/web",
+"kind": "fact",
+"subject": "web framework",
+"text": "The web app is Next.js 13 with the pages router.",
+"superseded_by": "w01"
+},
+{
+"id": "a01",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "api framework",
+"text": "The API is built with Fastify 5.",
+"superseded_by": null
+},
+{
+"id": "a02",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "database",
+"text": "The database is Postgres 16.",
+"superseded_by": null
+},
+{
+"id": "a03",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "orm",
+"text": "The ORM is Drizzle; schema is in apps/api/src/db/schema.ts.",
+"superseded_by": null
+},
+{
+"id": "a04",
+"scope": "apps/api",
+"kind": "procedure",
+"subject": "db migrations",
+"text": "Apply migrations with pnpm --filter api db:migrate.",
+"superseded_by": null
+},
+{
+"id": "a05",
+"scope": "apps/api",
+"kind": "procedure",
+"subject": "generate migration",
+"text": "Generate a new migration with pnpm --filter api drizzle-kit generate after editing schema.ts.",
+"superseded_by": null
+},
+{
+"id": "a06",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "api auth",
+"text": "The API verifies Clerk session JWTs with @clerk/backend in src/plugins/auth.ts.",
+"superseded_by": null
+},
+{
+"id": "a07",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "rate limit",
+"text": "Rate limit is 100 requests per minute per IP, stored in Redis via @fastify/rate-limit.",
+"superseded_by": null
+},
+{
+"id": "a08",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "api versioning",
+"text": "Routes are versioned under /v1.",
+"superseded_by": null
+},
+{
+"id": "a09",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "openapi",
+"text": "The OpenAPI spec is generated from zod schemas into apps/api/openapi.yaml.",
+"superseded_by": null
+},
+{
+"id": "a10",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "api tests",
+"text": "API tests run against a real Postgres started by Testcontainers.",
+"superseded_by": null
+},
+{
+"id": "a11",
+"scope": "apps/api",
+"kind": "procedure",
+"subject": "auth tests",
+"text": "Run only the auth tests with pnpm --filter api test -- auth.",
+"superseded_by": null
+},
+{
+"id": "a12",
+"scope": "apps/api",
+"kind": "episode",
+"subject": "stripe webhook",
+"text": "Gotcha: the Stripe webhook route /v1/webhooks/stripe needs the raw body; register fastify-raw-body or signature verification fails.",
+"superseded_by": null
+},
+{
+"id": "a13",
+"scope": "apps/api",
+"kind": "constraint",
+"subject": "error format",
+"text": "Errors are returned as RFC 7807 problem+json.",
+"superseded_by": null
+},
+{
+"id": "a14",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "pagination",
+"text": "List endpoints use cursor pagination, never offset.",
+"superseded_by": null
+},
+{
+"id": "a15",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "soft delete",
+"text": "Rows are soft-deleted with a deleted_at column.",
+"superseded_by": null
+},
+{
+"id": "a16",
+"scope": "apps/api",
+"kind": "constraint",
+"subject": "money",
+"text": "Money is stored as integer cents, never floats.",
+"superseded_by": null
+},
+{
+"id": "a17",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "ids",
+"text": "Primary keys are UUID v7.",
+"superseded_by": null
+},
+{
+"id": "a18",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "connection pool",
+"text": "The Postgres pool max is 10 connections per pod.",
+"superseded_by": null
+},
+{
+"id": "a19",
+"scope": "apps/api",
+"kind": "episode",
+"subject": "pgbouncer",
+"text": "Gotcha: PgBouncer runs in transaction mode, so prepared statements must be disabled (prepare: false).",
+"superseded_by": null
+},
+{
+"id": "a20",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "database url",
+"text": "The API reads the database connection string from DATABASE_URL.",
+"superseded_by": null
+},
+{
+"id": "a21",
+"scope": "apps/api",
+"kind": "procedure",
+"subject": "seed data",
+"text": "Seed local data with pnpm --filter api db:seed.",
+"superseded_by": null
+},
+{
+"id": "a22",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "email",
+"text": "Transactional email is sent through Resend; templates are React Email in apps/api/emails.",
+"superseded_by": null
+},
+{
+"id": "a23",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "jobs",
+"text": "The API enqueues background jobs to the worker with BullMQ.",
+"superseded_by": null
+},
+{
+"id": "a24",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "cors",
+"text": "CORS allows only origins listed in CORS_ORIGINS.",
+"superseded_by": null
+},
+{
+"id": "a25",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "health check",
+"text": "The health endpoint is GET /healthz and checks Postgres and Redis.",
+"superseded_by": null
+},
+{
+"id": "a26",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "request ids",
+"text": "Every request log carries a requestId header x-request-id.",
+"superseded_by": null
+},
+{
+"id": "a27",
+"scope": "apps/api",
+"kind": "constraint",
+"subject": "timeouts",
+"text": "Outbound HTTP calls must set a 10 second timeout.",
+"superseded_by": null
+},
+{
+"id": "a28",
+"scope": "apps/api",
+"kind": "episode",
+"subject": "n+1",
+"text": "Gotcha: the orders list had an N+1 query; use the with: relations option in Drizzle to batch.",
+"superseded_by": null
+},
+{
+"id": "a29",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "file uploads",
+"text": "File uploads go directly to S3 with presigned URLs from POST /v1/uploads.",
+"superseded_by": null
+},
+{
+"id": "a30",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "search",
+"text": "Full-text search uses Postgres tsvector columns, not Elasticsearch.",
+"superseded_by": null
+},
+{
+"id": "a31",
+"scope": "apps/api",
+"kind": "episode",
+"subject": "orm choice",
+"text": "Switched from Prisma to Drizzle in May because of cold-start time.",
+"superseded_by": null
+},
+{
+"id": "a32",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "api port",
+"text": "The API listens on port 4000 locally.",
+"superseded_by": null
+},
+{
+"id": "a33",
+"scope": "apps/api",
+"kind": "constraint",
+"subject": "migrations",
+"text": "Never edit a migration that has been merged; add a new one.",
+"superseded_by": null
+},
+{
+"id": "a34",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "multi tenancy",
+"text": "Every table has an org_id column and queries must filter by it.",
+"superseded_by": null
+},
+{
+"id": "a35",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "webhooks out",
+"text": "Outgoing webhooks are signed with HMAC SHA-256 in the X-Acme-Signature header.",
+"superseded_by": null
+},
+{
+"id": "a36",
+"scope": "apps/api",
+"kind": "episode",
+"subject": "jwt clock skew",
+"text": "Gotcha: intermittent 401s came from JWT clock skew; allow 5 seconds of leeway in auth.ts.",
+"superseded_by": null
+},
+{
+"id": "a37",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "database",
+"text": "The database is MySQL 8.",
+"superseded_by": "a02"
+},
+{
+"id": "a38",
+"scope": "apps/api",
+"kind": "fact",
+"subject": "api framework",
+"text": "The API is built with Express 4.",
+"superseded_by": "a01"
+},
+{
+"id": "c01",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli framework",
+"text": "The CLI is built with commander.",
+"superseded_by": null
+},
+{
+"id": "c02",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli bundler",
+"text": "The CLI is bundled with tsup into dist/index.js.",
+"superseded_by": null
+},
+{
+"id": "c03",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli package",
+"text": "The CLI is published to npm as @acme/cli and the binary is named acme.",
+"superseded_by": null
+},
+{
+"id": "c04",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli config",
+"text": "The CLI stores its config in ~/.acme/config.json.",
+"superseded_by": null
+},
+{
+"id": "c05",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli tests",
+"text": "CLI tests use Vitest snapshot tests of stdout.",
+"superseded_by": null
+},
+{
+"id": "c06",
+"scope": "packages/cli",
+"kind": "procedure",
+"subject": "cli release",
+"text": "Release the CLI by merging the Changesets version PR; the publish job runs npm publish --provenance.",
+"superseded_by": null
+},
+{
+"id": "c07",
+"scope": "packages/cli",
+"kind": "constraint",
+"subject": "node support",
+"text": "The CLI must support Node 18 and later; no newer APIs without a fallback.",
+"superseded_by": null
+},
+{
+"id": "c08",
+"scope": "packages/cli",
+"kind": "episode",
+"subject": "cli esm",
+"text": "The CLI is ESM-only; the ERR_REQUIRE_ESM error from users means they are on an old Node, tell them to upgrade to 18.",
+"superseded_by": null
+},
+{
+"id": "c09",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli auth",
+"text": "acme login uses the OAuth device code flow and stores the token in the OS keychain via keytar.",
+"superseded_by": null
+},
+{
+"id": "c10",
+"scope": "packages/cli",
+"kind": "procedure",
+"subject": "cli local run",
+"text": "Run the CLI locally with pnpm --filter @acme/cli dev -- <args>.",
+"superseded_by": null
+},
+{
+"id": "c11",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli colors",
+"text": "Terminal colors use picocolors, not chalk.",
+"superseded_by": null
+},
+{
+"id": "c12",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli prompts",
+"text": "Interactive prompts use @clack/prompts.",
+"superseded_by": null
+},
+{
+"id": "c13",
+"scope": "packages/cli",
+"kind": "constraint",
+"subject": "cli output",
+"text": "Commands must support --json output for scripting.",
+"superseded_by": null
+},
+{
+"id": "c14",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli telemetry",
+"text": "CLI telemetry is opt-out with ACME_TELEMETRY=0.",
+"superseded_by": null
+},
+{
+"id": "c15",
+"scope": "packages/cli",
+"kind": "episode",
+"subject": "windows paths",
+"text": "Gotcha: on Windows, config path joins broke; always use path.join and os.homedir().",
+"superseded_by": null
+},
+{
+"id": "c16",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli update check",
+"text": "The CLI checks for updates once a day using update-notifier.",
+"superseded_by": null
+},
+{
+"id": "c17",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli exit codes",
+"text": "Exit code 2 means usage error, 1 means runtime error.",
+"superseded_by": null
+},
+{
+"id": "c18",
+"scope": "packages/cli",
+"kind": "procedure",
+"subject": "cli link",
+"text": "To test the CLI globally, run pnpm --filter @acme/cli build then npm link in packages/cli.",
+"superseded_by": null
+},
+{
+"id": "c19",
+"scope": "packages/cli",
+"kind": "fact",
+"subject": "cli framework",
+"text": "The CLI is built with yargs.",
+"superseded_by": "c01"
+},
+{
+"id": "s01",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "queue",
+"text": "The worker consumes BullMQ queues on Redis 7.",
+"superseded_by": null
+},
+{
+"id": "s02",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "queue names",
+"text": "Queue names are email, images, billing-sync and webhooks.",
+"superseded_by": null
+},
+{
+"id": "s03",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "concurrency",
+"text": "Worker concurrency is 5 jobs per process.",
+"superseded_by": null
+},
+{
+"id": "s04",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "retries",
+"text": "Jobs retry 3 times with exponential backoff starting at 1 second.",
+"superseded_by": null
+},
+{
+"id": "s05",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "scheduled jobs",
+"text": "Cron jobs are BullMQ repeatable jobs defined in src/schedules.ts.",
+"superseded_by": null
+},
+{
+"id": "s06",
+"scope": "services/worker",
+"kind": "episode",
+"subject": "sharp alpine",
+"text": "Gotcha: sharp fails on the Alpine image; the Dockerfile uses node:20-slim with libvips instead.",
+"superseded_by": null
+},
+{
+"id": "s07",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "dead letter",
+"text": "Failed jobs after the last retry move to the dead-letter queue dlq and alert in Slack #alerts.",
+"superseded_by": null
+},
+{
+"id": "s08",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "worker metrics",
+"text": "The worker exposes Prometheus metrics on port 9464 at /metrics.",
+"superseded_by": null
+},
+{
+"id": "s09",
+"scope": "services/worker",
+"kind": "procedure",
+"subject": "worker dev",
+"text": "Run the worker locally with pnpm --filter worker dev; it needs Redis running.",
+"superseded_by": null
+},
+{
+"id": "s10",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "job dashboard",
+"text": "Bull Board is mounted at /admin/queues on the worker, behind basic auth.",
+"superseded_by": null
+},
+{
+"id": "s11",
+"scope": "services/worker",
+"kind": "constraint",
+"subject": "idempotency",
+"text": "Every job handler must be idempotent; use the job id as the idempotency key.",
+"superseded_by": null
+},
+{
+"id": "s12",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "billing sync",
+"text": "billing-sync pulls Stripe invoices every 15 minutes.",
+"superseded_by": null
+},
+{
+"id": "s13",
+"scope": "services/worker",
+"kind": "episode",
+"subject": "redis memory",
+"text": "Gotcha: Redis ran out of memory because completed jobs were kept; set removeOnComplete: 1000.",
+"superseded_by": null
+},
+{
+"id": "s14",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "worker shutdown",
+"text": "The worker drains jobs on SIGTERM with a 30 second grace period.",
+"superseded_by": null
+},
+{
+"id": "s15",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "image jobs",
+"text": "Image jobs resize uploads to 3 sizes and write WebP to S3.",
+"superseded_by": null
+},
+{
+"id": "s16",
+"scope": "services/worker",
+"kind": "procedure",
+"subject": "worker tests",
+"text": "Run worker tests with pnpm --filter worker test; they use an in-memory Redis mock (ioredis-mock).",
+"superseded_by": null
+},
+{
+"id": "s17",
+"scope": "services/worker",
+"kind": "fact",
+"subject": "queue",
+"text": "The worker consumes RabbitMQ queues.",
+"superseded_by": "s01"
+},
+{
+"id": "i01",
+"scope": "infra",
+"kind": "fact",
+"subject": "iac",
+"text": "Infrastructure is Terraform 1.8 in infra/terraform.",
+"superseded_by": null
+},
+{
+"id": "i02",
+"scope": "infra",
+"kind": "fact",
+"subject": "terraform state",
+"text": "Terraform state lives in the S3 bucket acme-tfstate with a DynamoDB lock table.",
+"superseded_by": null
+},
+{
+"id": "i03",
+"scope": "infra",
+"kind": "fact",
+"subject": "cloud region",
+"text": "AWS region is us-east-1 for everything.",
+"superseded_by": null
+},
+{
+"id": "i04",
+"scope": "infra",
+"kind": "fact",
+"subject": "kubernetes",
+"text": "The API and worker run on EKS; the cluster is named acme-prod.",
+"superseded_by": null
+},
+{
+"id": "i05",
+"scope": "infra",
+"kind": "fact",
+"subject": "helm",
+"text": "Helm charts live in infra/helm, one chart per service.",
+"superseded_by": null
+},
+{
+"id": "i06",
+"scope": "infra",
+"kind": "constraint",
+"subject": "terraform apply",
+"text": "Never run terraform apply from a laptop; only the CI plan/apply workflow applies.",
+"superseded_by": null
+},
+{
+"id": "i07",
+"scope": "infra",
+"kind": "procedure",
+"subject": "terraform plan",
+"text": "Run make plan ENV=staging to see a Terraform plan locally.",
+"superseded_by": null
+},
+{
+"id": "i08",
+"scope": "infra",
+"kind": "fact",
+"subject": "k8s secrets",
+"text": "Kubernetes secrets come from AWS Secrets Manager through External Secrets Operator.",
+"superseded_by": null
+},
+{
+"id": "i09",
+"scope": "infra",
+"kind": "fact",
+"subject": "dns",
+"text": "DNS is on Cloudflare; the zone is acme.dev.",
+"superseded_by": null
+},
+{
+"id": "i10",
+"scope": "infra",
+"kind": "fact",
+"subject": "monitoring",
+"text": "Metrics and logs go to Grafana Cloud; dashboards are in infra/grafana.",
+"superseded_by": null
+},
+{
+"id": "i11",
+"scope": "infra",
+"kind": "fact",
+"subject": "alerting",
+"text": "Alerts page the on-call through PagerDuty.",
+"superseded_by": null
+},
+{
+"id": "i12",
+"scope": "infra",
+"kind": "procedure",
+"subject": "kube context",
+"text": "Switch kubectl context with aws eks update-kubeconfig --name acme-prod --region us-east-1.",
+"superseded_by": null
+},
+{
+"id": "i13",
+"scope": "infra",
+"kind": "fact",
+"subject": "container registry",
+"text": "Images are pushed to ECR repositories named acme/<service>.",
+"superseded_by": null
+},
+{
+"id": "i14",
+"scope": "infra",
+"kind": "fact",
+"subject": "database hosting",
+"text": "Production Postgres is RDS with Multi-AZ; backups are kept for 14 days.",
+"superseded_by": null
+},
+{
+"id": "i15",
+"scope": "infra",
+"kind": "fact",
+"subject": "redis hosting",
+"text": "Production Redis is ElastiCache.",
+"superseded_by": null
+},
+{
+"id": "i16",
+"scope": "infra",
+"kind": "episode",
+"subject": "eks upgrade",
+"text": "Gotcha: the EKS 1.29 upgrade broke the ingress; the AWS Load Balancer Controller must be upgraded first.",
+"superseded_by": null
+},
+{
+"id": "i17",
+"scope": "infra",
+"kind": "fact",
+"subject": "ingress",
+"text": "Ingress uses the AWS Load Balancer Controller with ACM certificates.",
+"superseded_by": null
+},
+{
+"id": "i18",
+"scope": "infra",
+"kind": "constraint",
+"subject": "infra changes",
+"text": "Infra changes need a review from the platform team and a plan output pasted in the PR.",
+"superseded_by": null
+},
+{
+"id": "i19",
+"scope": "infra",
+"kind": "fact",
+"subject": "autoscaling",
+"text": "The worker scales with KEDA on queue length; the API uses HPA on CPU at 70%.",
+"superseded_by": null
+},
+{
+"id": "i20",
+"scope": "infra",
+"kind": "fact",
+"subject": "cost",
+"text": "Cost tags: every resource needs the tags team and env.",
+"superseded_by": null
+},
+{
+"id": "i21",
+"scope": "infra",
+"kind": "fact",
+"subject": "vpn",
+"text": "Access to the prod database goes through Tailscale; no public endpoint.",
+"superseded_by": null
+},
+{
+"id": "i22",
+"scope": "infra",
+"kind": "episode",
+"subject": "rds failover",
+"text": "RDS failover took 90 seconds in the last game day; the API retries connections for 2 minutes.",
+"superseded_by": null
+},
+{
+"id": "i23",
+"scope": "infra",
+"kind": "fact",
+"subject": "iac",
+"text": "Infrastructure is Pulumi in TypeScript.",
+"superseded_by": "i01"
+},
+{
+"id": "p01",
+"scope": "",
+"kind": "constraint",
+"subject": "merge policy",
+"text": "Never merge pull requests yourself; push to the PR branch and let the user merge.",
+"superseded_by": null
+},
+{
+"id": "p02",
+"scope": "",
+"kind": "constraint",
+"subject": "pr timing",
+"text": "Do not open a pull request until the user says the work is ready.",
+"superseded_by": null
+},
+{
+"id": "p03",
+"scope": "",
+"kind": "constraint",
+"subject": "branching",
+"text": "Always work on a feature branch; never commit directly on main.",
+"superseded_by": null
+},
+{
+"id": "p04",
+"scope": "",
+"kind": "constraint",
+"subject": "pushing",
+"text": "Do not push to the upstream remote without asking first.",
+"superseded_by": null
+},
+{
+"id": "p05",
+"scope": "",
+"kind": "constraint",
+"subject": "verification",
+"text": "Before saying a task is done, re-check the work for bugs and security issues.",
+"superseded_by": null
+},
+{
+"id": "p06",
+"scope": "",
+"kind": "constraint",
+"subject": "e2e before pr",
+"text": "Test changes end to end before opening a PR, not only unit tests.",
+"superseded_by": null
+},
+{
+"id": "p07",
+"scope": "",
+"kind": "preference",
+"subject": "explanations",
+"text": "Explain things plainly, without jargon.",
+"superseded_by": null
+},
+{
+"id": "p08",
+"scope": "",
+"kind": "preference",
+"subject": "research depth",
+"text": "When asked to research, go deep: read primary sources and cite them.",
+"superseded_by": null
+},
+{
+"id": "p09",
+"scope": "",
+"kind": "constraint",
+"subject": "deletion",
+"text": "Do not delete files or branches without confirmation.",
+"superseded_by": null
+},
+{
+"id": "p10",
+"scope": "",
+"kind": "constraint",
+"subject": "friday deploys",
+"text": "Never deploy to production on Fridays.",
+"superseded_by": null
+},
+{
+"id": "p11",
+"scope": "",
+"kind": "preference",
+"subject": "pr size",
+"text": "Keep diffs small: one concern per pull request.",
+"superseded_by": null
+},
+{
+"id": "p12",
+"scope": "",
+"kind": "constraint",
+"subject": "new dependencies",
+"text": "Ask before adding a new dependency.",
+"superseded_by": null
+},
+{
+"id": "p13",
+"scope": "",
+"kind": "constraint",
+"subject": "generated files",
+"text": "Never hand-edit generated files under dist/ or *.gen.ts.",
+"superseded_by": null
+},
+{
+"id": "p14",
+"scope": "",
+"kind": "constraint",
+"subject": "destructive db",
+"text": "Do not run destructive database commands (drop, truncate, reset) without asking.",
+"superseded_by": null
+},
+{
+"id": "p15",
+"scope": "",
+"kind": "constraint",
+"subject": "full suite",
+"text": "Run the full test suite, not only the changed tests, before pushing.",
+"superseded_by": null
+},
+{
+"id": "p16",
+"scope": "",
+"kind": "constraint",
+"subject": "history rewrite",
+"text": "Do not rewrite or squash commits that are already pushed.",
+"superseded_by": null
+},
+{
+"id": "p17",
+"scope": "",
+"kind": "preference",
+"subject": "summaries",
+"text": "End-of-task summaries should be a short bullet list.",
+"superseded_by": null
+},
+{
+"id": "p18",
+"scope": "",
+"kind": "preference",
+"subject": "plan first",
+"text": "Show a plan before large refactors and wait for approval.",
+"superseded_by": null
+},
+{
+"id": "p19",
+"scope": "",
+"kind": "preference",
+"subject": "git stash",
+"text": "Do not use git stash; commit work in progress to the branch instead.",
+"superseded_by": null
+},
+{
+"id": "p20",
+"scope": "",
+"kind": "constraint",
+"subject": "skipped tests",
+"text": "Never skip or disable failing tests to make CI green.",
+"superseded_by": null
+},
+{
+"id": "p21",
+"scope": "",
+"kind": "preference",
+"subject": "github cli",
+"text": "Use the gh CLI for GitHub operations.",
+"superseded_by": null
+},
+{
+"id": "p22",
+"scope": "",
+"kind": "constraint",
+"subject": "billing code",
+"text": "Do not change billing code without the user's review.",
+"superseded_by": null
+},
+{
+"id": "p23",
+"scope": "",
+"kind": "preference",
+"subject": "emojis",
+"text": "No emojis in code, commits or docs.",
+"superseded_by": null
+},
+{
+"id": "p24",
+"scope": "",
+"kind": "preference",
+"subject": "commit body",
+"text": "Commit messages use the imperative mood with a short body explaining why.",
+"superseded_by": null
+},
+{
+"id": "p25",
+"scope": "",
+"kind": "constraint",
+"subject": "major upgrades",
+"text": "Do not bump major versions of dependencies without asking.",
+"superseded_by": null
+},
+{
+"id": "p26",
+"scope": "",
+"kind": "preference",
+"subject": "script language",
+"text": "Prefer TypeScript over JavaScript for new scripts.",
+"superseded_by": null
+},
+{
+"id": "p27",
+"scope": "",
+"kind": "constraint",
+"subject": "secrets in logs",
+"text": "Keep secrets and tokens out of logs and error messages.",
+"superseded_by": null
+},
+{
+"id": "p28",
+"scope": "",
+"kind": "preference",
+"subject": "uncertainty",
+"text": "When a fix is uncertain, say so instead of guessing.",
+"superseded_by": null
+},
+{
+"id": "p29",
+"scope": "",
+"kind": "constraint",
+"subject": "docs updates",
+"text": "Update the docs/ pages when public behavior changes.",
+"superseded_by": null
+},
+{
+"id": "p30",
+"scope": "",
+"kind": "constraint",
+"subject": "ci benchmarks",
+"text": "Do not run long benchmarks on the shared CI runners.",
+"superseded_by": null
+}
+]

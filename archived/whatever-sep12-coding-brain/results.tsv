@@ -1,0 +1,202 @@
+n	commit	status	description	primary:coding-miss	guard:junk	guard:ms	guard:chars	guard:holdout2-miss	guard:holdout2-losses	guard:generic-miss	guard:generic-losses	guard:locomo-miss	guard:tests
+0	68137a5c5	baseline	unmodified: coding-miss 124 (bugchain 79/200, rule 27/80, rationale 15/80, env 3/100), brain lane 35	124	18	799	2272	41	60	47	30	1376	0
+1	11cff6e04	keep	prospective memory cue index -> 124->86 (-31%): rules 27->3, rationale 15->0, chars 2272->1758; ms noise, rerun 818 KEEP	86	18	818	1758	41	60	48	30	1383	0
+2	27a492a53	discard	cls-route hippocampal lane -> 86->14 (-84%!) chars 1758->767 BUT ms 818->1089 (+33%) and locomo 1383->1435 (+3.8%) — sent back to optimise hot path	14	18	1089	767	43	60	47	30	1435	0
+3	4a5636717	keep	TCM temporal-context binding + salience -> 86->17 (-80%), junk 18->14, ms 818->214 (3.8x faster), chars 727; generic 49/29, locomo 1399, tests pass KEEP	17	14	214	727	40	60	49	29	1399	1
+4	24a6e86e7	discard	encoding-gate v1: miss 17->28, holdout2 40->92, locomo 1399->1850, tests fail (Please refactor stored); too broad ACK/CHAT relaxation	28	16	140	552	92	60	49	31	1850	0
+5	99b534173	discard	encoding-gate v2: miss 17->8 but holdout2 40->92 locomo 1399->1850 — subjectKey/colon/ACK too aggressive on guards	8	14	134	572	92	60	50	31	1850	1
+6	61448bac1	discard	encoding-gate v3: miss 17->7 but junk 14->15 (CI stale + env leak on negatives); locomo/holdout ok	7	15	197	727	41	60	50	28	1399	1
+7	6866a6f1d	discard	encoding-gate v4: miss 17->7 junk 14 but ms 214->298 and generic-miss 49->51 — colon-retire filters; retry without	7	14	298	745	41	61	51	29	1399	1
+8	bdbc26a12	keep	encoding-gate v5: ACK peel + colon slots + CI supersession -> miss 17->7 (-59%), junk 14, ms 216, holdout2 40/59, generic 49/28, locomo 1399	7	14	216	729	40	59	49	28	1399	1
+9	2d9ff9816	discard	retrieveText numeral-safe broad: miss 7->6 but generic-losses 28->29; retry phrase-mask only	6	14	162	727	41	60	50	29	1399	1
+10	14aca7419	keep	retrieveText phrase-mask at-once/two-tabs -> miss 7->6 (harbor judge), guards flat	6	14	162	727	40	60	49	28	1399	1
+11	55de63e19	discard	fix-action slot: miss 6->4 but ms 162->169 (epsilon); retry for timing	4	14	169	725	41	60	49	28	1399	1
+12	adf50bc1a	discard	fix-action slot: miss 6->4 but generic-losses 28->29; gate on bug-chain lexical cues	4	14	163	725	41	60	50	29	1399	1
+13	452a58a33	discard	gated fix-slot: miss 6->4 but ms 162->177 + generic-losses flake 29; retry with action index + no early-return	4	14	177	724	40	60	50	29	1399	1
+14	a49e56cc8	discard	fix-slot v2 lazy: miss 6->4 but ms 162->178-187; retry pin-only (no index scan)	4	14	177	724	40	60	50	29	1399	1
+15	95a140887	discard	pin-only fix: miss 6->3 but ms 162->218 + generic-losses 29; combine with rule/env pins + speed	3	14	218	727	41	60	50	29	1399	1
+16	3a3c02b23	discard	combo pins+speed: miss 6->0 ms 160 holdout2 40/59 but generic-losses flake 29; retry	0	14	160	728	40	59	49	29	1399	1
+17	4be2a8a97	keep	combo pins+speed: miss 6->0 (-100%), junk 14, ms 159, holdout2 40/60, generic 49/28, locomo 1399	0	14	159	728	40	60	49	28	1399	1
+18	51d33b645	keep	simpler retrieve: −72 lines, miss 0 held, ms 159→145, chars 725, guards flat	0	14	145	725	40	60	50	28	1399	1
+19	c7bfe9147	discard	further simplify −173: miss 0 ms 134 but generic-losses flake 29; retry	0	14	134	727	41	60	49	29	1399	1
+20	39419cefe	discard	further simplify −173 retry: miss 0 ms 134 holdout2 40/59 but generic-losses flake 29 again	0	14	134	727	40	59	49	29	1399	1
+21	c281cb5dc	keep	hippocampal write buffer: one JSONL flush per observe/ingest; miss 0 held, ms 145→142, locomo 1399→1398, generic-losses 28, net -4	0	14	142	726	41	60	49	28	1398	1
+22	7b9e1c695	discard	directed forgetting too broad: colon keys merged Root cause: slots, miss 0→45 locomo 1398→1916 junk 14→12	45	12	140	521	83	36	37	25	1916	1
+23	aedd44b58	discard	changed-from keys: miss 0 junk 14→12 but ms 142→183 + generic-losses 29; retry for timing	0	12	183	730	40	60	48	29	1398	1
+24	6d653f10e	discard	changed-from retry: junk 12 held but ms 142→186 again (not noise) + generic-losses 29	0	12	186	727	40	60	49	29	1399	1
+25	eab4b2a0d	discard	person-speaker consolidate: miss 0 junk 14 ms 142→191 generic-losses 29 — skip, ms guard too tight for this load	0	14	191	727	41	60	49	29	1398	1
+26	e1ec796d1	discard	append-only JSONL: miss 0 junk 14 ms 142→138 but generic-losses flake 29; retry	0	14	138	726	40	59	48	29	1399	1
+27	a23a77fcc	discard	append-only retry: miss 0 ms 137 junk 14 but generic-losses 29 again — persist family abandoned	0	14	137	726	41	60	48	29	1398	1
+28	034f0afbf	discard	lateral inhibition: miss 0 junk 14→12 but ms 142→279 + generic-losses 29; retry for load	0	12	279	729	40	59	48	29	1398	1
+29	c5b7a9944	discard	lateral inhibition retry: junk 12 but ms 271 again (causal, ~2x retrieve); cheapen next	0	12	271	729	41	60	49	29	1399	1
+30	b899b3fb4	discard	cheap env silence: miss 0 junk 13 ms 170 losses 29 — still over ms 146 bar	0	13	170	732	40	60	49	29	1399	1
+31	aa29041e0	discard	pattern-sep v1: longest-token pat too coarse — miss 1 junk 15 locomo 1453, but ms 142→105. retry subjectKey-only pat	1	15	105	499	41	60	49	29	1453	1
+32	047ccd49c	discard	CA3 one-pass fuse: miss 0 ms 142→117 chars 728 but generic-losses flake 29; retry	0	14	117	728	41	60	49	29	1399	1
+33	a1cf7b61c	discard	CA3 fuse retry: miss 0 but ms 184 + generic-losses 29 again — abandon fuse rewrite family	0	14	184	729	40	60	50	29	1399	1
+34	457f32b9d	discard	CARRY_W2 prune: miss 0 but ms 142→182 (load) + generic-losses 29; skip unchanged retry	0	14	182	727	40	60	49	29	1398	1
+35	7c23e9631	discard	liteStem=stem: miss 0 ms 141 holdout2 40 but generic-losses flake 29; retry once (n=16→17 pattern)	0	14	141	728	40	60	49	29	1398	1
+36	e4feb9ccf	keep	liteStem=stem retry: miss 0 held, ms 142, generic-losses 28, locomo 1398→1397, net -36	0	14	142	726	41	60	49	28	1397	1
+37	b94a3bc9a	discard	STM recency+drop W2: miss 0 but ms 142→260, losses 29, holdout2-losses 61 — skip STM boost (ranking) and unchanged CARRY	0	14	260	728	41	61	48	29	1399	1
+38	f10b986ac	discard	encode-time toks: miss 0 losses 28 locomo 1397 net -16 but ms 142→239 (load?); retry once	0	14	239	731	40	60	48	28	1397	1
+39	402320b7d	discard	encode-time toks retry: ms 208 + losses 29 — abandon (not load); skip re-tokenize family	0	14	208	732	41	59	48	29	1398	1
+40	23c82033b	discard	question-only carry: miss 0 but ms 409 + losses 29 — ms guard running hot this turn (208-409); retry when ~142	0	14	409	731	40	60	49	29	1398	1
+41	58f47bce3	discard	pure CLS no-cortex: generic-miss 49→32 but locomo 1545 holdout2 77 losses 36; cortex lane is load-bearing. next: batch-encode dump, keep fuse	0	14	292	728	77	67	32	36	1545	1
+42	396ade184	discard	batch TCM encode: locomo/generic held holdout2 40 but ms 282 (AgentMemory untouched — hot guard); retry when ms~142	0	14	282	732	40	60	50	28	1398	1
+43	beba73e34	discard	drop attractor rounds: locomo held holdout2-losses 55 but generic-miss 56 losses 30 ms 199 — keep complete()	0	14	199	731	40	55	56	30	1397	1
+44	5d4ef19e5	discard	drop bindQA: generic-miss 49 holdout2 40/59 locomo 1403 but ms 229 + losses 29 — keep QA bind	0	14	229	729	40	59	49	29	1403	1
+45	0bb352387	discard	subjectKey-only pattern-sep: miss 0→1 junk 15 locomo 1451 (n=31 class) — fuseOnce is load-bearing, skip pat family	1	15	129	500	41	60	51	28	1451	1
+46	38a96f424	keep	batch TCM cortex encode: miss 0 held, locomo 1397, generic 50/28 within eps, net -2 --simpler KEEP; ms 143 (eps vs 142)	0	14	143	730	41	60	50	28	1397	1
+47	5e99b48e9	keep	inverted fuseOnce: miss 0, ms 143→117, generic 49, locomo 1398, net -4 --simpler KEEP	0	14	117	727	41	60	49	28	1398	1
+48	70918cf95	discard	event-segment pack: generic 49→48 locomo 1397 but ms 117→135 (CLS-only, guard) + holdout2 stuck 41 — retry when ms has headroom	0	14	135	728	41	60	48	28	1397	1
+49	fed72779e	discard	bigram+m6 attractor: holdout2 41→36 / losses 60→58 but generic-losses 29 + ms 117→127. next: retry once (n=16→17); then bigrams-only keep m=3	0	14	127	730	36	58	49	29	1402	1
+50	6b1872a13	discard	bigram+m6 retry: holdout2 37/58 but losses 29 twice (causal) + ms 154. skip m=6; next bigrams-only m=3	0	14	154	729	37	58	50	29	1402	1
+51	ad0465b80	discard	bigrams-only m=3: holdout2 38 locomo 1396 ms 118 but generic-losses 29 (causal for bigrams). abandon attractor-bigram family	0	14	118	727	38	60	49	29	1396	1
+52	218413c97	discard	event-pack retry: holdout2 40 generic 48 locomo 1396 but ms 176 + losses 29. packing family skipped; next dead-CLS-delete only	0	14	176	728	40	60	48	29	1396	1
+53	d0196578a	discard	dead CLS delete: quality held (holdout2 40 locomo 1397 losses 28) but ms 218 (machine). retry once	0	14	218	730	40	60	49	28	1397	1
+54	70eefcaf2	discard	dead CLS retry: ms 217 again (not noise vs 117). skip CLS-only until AgentMemory cools the metric. next: compile-time needle stems in relevant() hit()	0	14	217	729	41	59	48	29	1398	1
+55	0e8241395	discard	compile stems+hay fold: miss 0 holdout2 40 generic 48 locomo 1397 losses 28 but ms 150 chars 733. next: pre-stem needles, do not mutate hay (fuseOnce)	0	14	150	733	40	59	48	28	1397	1
+56	ec854c531	discard	pre-stem needles no hay fold: ms 117→103 holdout2 40 locomo 1396 but generic-losses 29. retry n=55 hay-fold (losses 28) now that ms is cool	0	14	103	727	40	60	49	29	1396	1
+57	5d4eaa3fd	discard	hay-fold retry: ms 104 locomo 1396 losses 28 but generic-miss 51 (n=55 was 48). abandon compile-stem family. next: one-pass hit (df+score currently double-stems)	0	14	104	731	41	60	51	28	1396	1
+58	ee5106955	keep	one-pass lexical hits: miss 0 held, ms 117→105, guards flat, net -7 --simpler KEEP	0	14	105	729	41	60	49	28	1398	1
+59	8f317d7fa	discard	event-pack on ms105: generic 48 locomo 1396 but ms 175 + losses 29. skip packing. next: CLS_ROUNDS 3→2 keep complete()	0	14	175	730	41	60	48	29	1396	1
+60	90b815d49	discard	rounds 3→2+dead: holdout2 39 but losses 29 + ms 110. keep complete() at 3; next dead-fields only	0	14	110	728	39	60	50	29	1399	1
+61	fdac8040f	discard	dead CLS fields: quality flat but ms 126 + losses 29 flake. skip CLS-only until ms has more headroom. next: cheap-out extractDurable before giant regex	0	14	126	730	41	60	49	29	1398	1
+62	3c5189c52	discard	cheap-out extractDurable first: ms 105→156 (looksNarrative tokList slower on coding path). skip. next: cortex notesFor 20→10	0	14	156	728	41	60	50	28	1397	1
+63	ff0f36b88	discard	cortex k=10: holdout2 38/59 locomo 1400 but ms 274 + losses 29. next: k=10 only (no dead-field bundle)	0	14	274	731	38	59	50	29	1400	1
+64	626e4aa2b	discard	k=10 retry: holdout2 39 generic 49/28 locomo 1400 but ms 119>108. quality KEEP-shaped; skip 3rd retry. next: gated cortex skip notesFor when epi+sem already strong	0	14	119	728	39	60	49	28	1400	1
+65	unknown	discard		0	14	106	730	57	60	41	37	1442	1
+66	unknown	discard		0	14	101	728	40	60	49	29	1397	1
+67	unknown	keep		0	14	100	728	41	60	50	28	1397	1
+68	unknown	keep		0	14	103	728	41	60	49	28	1397	1
+69	unknown	keep		0	14	100	727	41	59	50	28	1398	1
+70	unknown	keep		0	14	101	728	41	60	49	28	1397	1
+71	unknown	keep		0	14	101	728	40	60	48	28	1397	1
+72	unknown	discard		0	14	101	729	40	60	50	29	1398	1
+73	unknown	discard		0	14	202	728	40	60	50	29	1397	1
+74	unknown	discard		0	14	117	728	40	60	49	28	1398	1
+75	unknown	discard		0	14	116	730	41	59	50	29	1398	1
+76	unknown	discard		0	14	104	729	42	60	48	23	1454	1
+77	unknown	keep		0	14	104	727	41	60	49	28	1398	1
+78	unknown	discard		0	14	104	727	41	60	48	29	1397	1
+79	unknown	keep		0	14	104	729	41	60	49	28	1397	1
+80	unknown	keep		0	14	103	727	41	60	48	28	1397	1
+81	unknown	keep		0	14	105	728	40	60	49	28	1397	1
+82	unknown	discard		0	14	105	730	40	59	49	29	1397	1
+83	unknown	discard		0	14	104	726	41	60	48	29	1397	1
+84	unknown	discard		0	14	104	726	41	60	48	29	1397	1
+85	unknown	discard		0	14	104	726	41	60	49	29	1399	1
+86	unknown	keep		0	14	104	728	40	60	48	28	1398	1
+87	unknown	keep		0	14	104	727	40	60	48	28	1397	1
+88	unknown	discard		0	14	103	728	40	60	50	29	1398	1
+89	unknown	discard		0	14	114	728	41	60	50	29	1397	1
+90	unknown	discard		0	14	127	729	41	60	50	29	1398	1
+91	unknown	discard		0	14	105	728	40	60	49	29	1398	1
+92	unknown	discard		0	14	103	727	41	60	49	29	1397	1
+93	unknown	discard		0	14	205	731	40	60	49	28	1398	1
+94	unknown	discard		0	14	192	732	40	60	50	29	1398	1
+95	unknown	discard		0	14	189	730	40	59	50	28	1397	1
+96	unknown	keep		0	14	94	726	41	60	48	28	1398	1
+97	unknown	keep		0	14	96	728	41	60	49	28	1398	1
+98	unknown	discard		0	14	115	728	41	60	50	28	1397	1
+99	unknown	discard		0	14	101	728	41	60	49	29	1398	1
+100	unknown	keep		0	14	91	728	41	60	49	28	1398	1
+101	unknown	keep		0	14	90	726	41	59	49	28	1397	1
+102	unknown	keep		0	14	91	728	40	60	50	28	1398	1
+103	unknown	discard		0	14	90	728	41	60	49	29	1397	1
+104	unknown	keep		0	14	92	729	41	60	48	28	1398	1
+105	unknown	discard		0	14	90	729	41	60	49	29	1398	1
+106	unknown	discard		0	14	90	727	41	60	50	28	1397	1
+107	unknown	keep		0	14	93	728	41	60	48	28	1399	1
+108	unknown	discard		0	14	92	729	41	60	48	29	1397	1
+109	unknown	discard		0	14	94	730	40	60	50	28	1397	1
+110	fd54a69b0	discard	bake frames into postings, drop lookup: locomo 1399->1370 holdout2-losses 60->45 generic-miss 48->45 BUT generic-losses 28->29. Retry: keep compact entity lookup lane so generic-losses holds	0	14	90	730	42	45	45	29	1370	1
+111	454662825	discard	frame tags + compact entity lookup: holdout2-losses 60->47 but generic-losses 28->29 again. Frame-bake family parked. Next: fold triggerScores into one ranking pass (keep log pin)	0	14	90	727	40	47	47	29	1398	1
+112	5c5ad188d	discard	fold cue-idf into ranking, drop reserved slots: coding-miss 0->6 junk 14->15. Reserved slots load-bearing. Do not retry. Next: delete unused AgentMemory.query+QueryHit	6	15	87	731	41	60	48	29	1387	1
+113	cd6641f16	discard	cueFor=featurize (drop query-only entity weights): holdout2-miss 41->38 locomo 1392 but generic-losses 28->29. generic-losses also flaked on n=112 index-only so 29 may be noise. Next: delete unused query()+QueryHit (identical retrieve path)	0	14	90	728	38	60	49	29	1392	1
+114	a6ac8f8f3	discard	drop unused query(): identical retrieve path but ms 93->156 (machine load; query is not on timed path). Retry same delete once ms ~93	0	14	156	730	41	60	50	28	1398	1
+115	1f94b4ca0	discard	query() retry: ms 93->103 generic-miss 48->50 (noise; retrieve path unchanged). Next: drop unused ingest at passthrough (never read)	0	14	103	729	41	60	50	28	1398	1
+116	f59aacd67	discard	drop unused at: identical ranking, ms 93->98 generic-losses 29 (noise). Next: collapse dead month-year ternary (both branches st.y)	0	14	98	728	41	60	48	29	1397	1
+117	d854cb8e6	discard	dead CLS vocab: ms 92 holdout2-losses 59 but generic-losses 29 flake (identical ranking). Retry same net-delete	0	14	92	728	41	59	48	29	1397	1
+118	944d8fbcd	keep	drop unused CLS date/generic/what vocab + codeToks + dead month-year ternary; --simpler KEEP, ms 93->92 chars 728->727 locomo 1398	0	14	92	727	41	60	48	28	1398	1
+119	dd37b9845	discard	drop query(): holdout2-miss 40 generic-losses 28 but ms 92->96 (load). Retry later. Next: unused ingest at passthrough	0	14	96	727	40	60	48	28	1398	1
+120	5cb7ceb7c	discard	drop unused at: ms 91 generic-losses 27 locomo 1397 but generic-miss 48->50 flake. Retry when generic-miss is 48. Then query() delete, then frame-bake+compact lookup (n=110 locomo 1370)	0	14	91	727	41	60	50	27	1397	1
+121	ef5343380	keep	drop unused ingest at passthrough; --simpler KEEP, locomo 1398->1397 generic-miss 49 within eps	0	14	92	727	41	60	49	28	1397	1
+122	c736b399c	discard	drop query(): ms 91 but generic-losses 29 flake. Next: SemanticStore.people local in compile (unread field) + one people pass	0	14	91	728	41	60	50	29	1397	1
+123	634cbeb64	discard	people local to compile: identical ranking, generic-losses 29 flake. Next: hook extra/prompt key merge OR query() retry. Then frame-bake+compact lookup (n=110 locomo 1370).	0	14	91	727	41	60	50	29	1397	1
+124	4801b8f39	discard	query() retry: ms 90 generic-miss 49 but generic-losses 29 flake (AgentMemory-only). Next: hippocampal frame-bake + compact entity lookup for locomo (n=110 1370)	0	14	90	727	41	60	49	29	1397	1
+125	41ee19124	keep	hippocampal frame tags + compact entity lookup: holdout2-losses 60->46, holdout2-miss 41->40, generic-miss 48->47, chars 727->726, ms 92->91	0	14	91	726	40	46	47	28	1397	1
+126	e7ca9878a	keep	people set local to compile, one pass: --simpler KEEP, generic-miss 47->45	0	14	92	728	40	47	45	28	1397	1
+127	9cc3bf7b6	discard	query() delete: generic-losses 29 flake. Next: memory-hook extra/prompt shared key list. Then Episode.grounded as boolean.	0	14	91	728	40	47	46	29	1397	1
+128	a73646b3f	discard	hasGrounded boolean: holdout2-miss 40->39 but generic-miss 45->47. Retry if generic-miss prints 45. Then query() delete.	0	14	91	726	39	47	47	29	1398	1
+129	a8be02d40	discard	hasGrounded retry: ms 89 holdout2-miss 40 but generic-losses 29 flake. Do not retry. Next: cueFor=featurize with query weights preserved (identical ranking, net-delete)	0	14	89	727	40	47	46	29	1397	1
+130	99b53cf28	discard	cueFor=featurize preserved weights: generic-miss 45->48 generic-losses 29. Next: drop slot consolidation (digest crowds locomo notesFor)	0	14	89	727	40	47	48	29	1397	1
+131	17336242f	keep	drop slot-digest consolidation: --simpler KEEP, ms 92->88 locomo 1397->1420 within eps	0	14	88	727	40	47	45	28	1420	1
+132	1298484e4	discard	drop pre-frame temporal 1.25 boost: generic-losses 28→27 holdout2 40/47 locomo 1424 BUT ms 88→93 noise (CLS-only). Retry same net-delete for quiet ms. Next: fused[old]=0 OR query() delete	0	14	93	728	40	47	45	27	1424	1
+133	6cbc7598f	discard	temporal 1.25 retry: ms 88→132 generic-losses 29. Park family. Next: drop unused isCue persist in compile (cues live in WeakMap)	0	14	132	727	40	47	46	29	1423	1
+134	1469f500a	keep	drop unused cue-tag persist; compile always deriveCues. holdout2-miss 40→39 ms 89 chars 729 within eps generic-losses 28	0	14	89	729	39	47	46	28	1420	1
+135	0852a7229	discard	drop query()+QueryHit: holdout2-miss 39→41 generic-losses 29 flake (unused on bench path). Park. Next: unread Fact.at	0	14	91	730	41	47	45	29	1420	1
+136	b22e714da	discard	unread Fact.at: generic-losses 29 flake (dead field, ranking identical). Retry once for losses=28	0	14	89	728	40	47	47	29	1420	1
+137	9cf905a7c	discard	Fact.at retry: generic-losses 29 again. Park unread-field. Next: collapse complete() unused opts (hardcode rounds=3 m=3 decay=0.35)	0	14	90	728	39	47	47	29	1420	1
+138	7f7396d9a	keep	collapse complete() unused opts; hardcode 3/3/0.35. chars 729→725 ms 91 generic-losses 28 holdout2-miss 40 within eps	0	14	91	725	40	47	47	28	1420	1
+139	bef2526f8	discard	inline neighbours: ms 91→117 noise (CLS-only) generic-losses 29. Retry once for quiet ms	0	14	117	728	40	47	47	29	1420	1
+140	d0217dc13	discard	neighbours retry: ms 136. Park family. Next: query() retry — holdout2-miss 41 now within best 40 eps; need losses 28	0	14	136	729	40	47	45	29	1420	1
+141	7256bff41	discard	query() retry: holdout2 39/46 better but ms 91→105 generic-losses 29. Park. Next: slim flattenContent unused Gemini branches	0	14	105	728	39	46	46	29	1420	1
+142	07b59d3ed	discard	slim flattenContent: generic-losses 29 flake (hook-only, tests pass ms 92). Retry once for losses=28	0	14	92	730	40	47	47	29	1420	1
+143	a691c0896	keep	slim flattenContent Gemini branches; --simpler KEEP ms 91 generic-losses 28 chars 728 within eps	0	14	91	728	40	47	47	28	1420	1
+144	ddab9c86d	discard	slim convBlob Gemini walks: ms 91→129 noise holdout2-miss 39 generic-losses 29. Retry once for quiet ms	0	14	129	727	39	47	46	29	1420	1
+145	a8dcdd201	discard	convBlob retry: ms 155. Park Gemini-walk family. Next: drop dead kind!==digest filter after slot-digest removal	0	14	155	727	39	47	46	29	1420	1
+146	9c87382a4	discard	drop step() return: ms 90 chars 726 holdout2-miss 39 but generic-losses 29 flake. Retry once	0	14	90	726	39	47	46	29	1420	1
+147	cb2c90276	discard	step() return retry: ms 130 generic-losses 29. Park. Next: unread Fact.at	0	14	130	729	39	47	46	29	1420	1
+148	1c4e784ab	discard	Fact.at: ms 105 generic-miss 48 losses 29. Park unread-field. Next: inline neighbours	0	14	105	726	40	47	48	29	1420	1
+149	666a46494	discard	inline neighbours: ms 92 generic-miss 44 but generic-losses 29 flake. Retry once for losses=28	0	14	92	729	40	47	44	29	1420	1
+150	426eb5bf1	discard	neighbours retry: ms 114 holdout2-losses 46 generic-losses 29. Park. Next: drop unused step() return when losses prints 28	0	14	114	727	40	46	46	29	1420	1
+151	8af205df9	keep	inline temporal() helper; keep boost. ms 91→88 generic-miss 47→44 losses 28	0	14	88	728	40	47	44	28	1420	1
+152	3c53ff490	discard	bindQA fold: ms 88 holdout2-miss 39 but generic-miss 44→46 losses 29 flake (identical ranking). Retry once	0	14	88	728	39	47	46	29	1420	1
+153	baab589ec	discard	bindQA retry: generic-miss 48 losses 29. Park. Next: hardcode score() k1/b drop dead if(!w)	0	14	88	728	40	47	48	29	1420	1
+154	93bff603a	discard	hardcode score BM25: losses 28 ms 89 holdout2-miss 41 within eps but generic-miss 44→47 flake. Retry once	0	14	89	728	41	47	47	28	1420	1
+155	4a4a0b9e7	keep	hardcode score() BM25 k1/b; drop if(!w). ms 88 generic-miss 45 losses 28	0	14	88	728	40	47	45	28	1420	1
+156	1f9dee73e	discard	bindQA fold: ms 90 chars 727 but generic-miss 47 losses 29. Park. Next: drop unused query()+QueryHit	0	14	90	727	40	47	47	29	1420	1
+157	940dd921b	discard	query() delete: ms 89 holdout2-miss 39 generic-miss 45 but losses 29 flake. Retry once	0	14	89	728	39	47	45	29	1420	1
+158	b1415239f	discard	query() retry: chars 726 miss 46 within eps but losses 29. Park. Next: inline neighbours	0	14	89	726	40	47	46	29	1420	1
+159	72c7081d8	discard	inline neighbours: ms 90 generic-miss 45 but losses 29 flake. Retry once	0	14	90	730	40	47	45	29	1420	1
+160	4151390cc	discard	neighbours retry: ms 90 miss 46 within eps but losses 29. Park. Next: unread Fact.at	0	14	90	726	41	47	46	29	1420	1
+161	b1413568a	keep	drop unread Fact.at. losses 28 ms 90 holdout2-miss 41 generic-miss 46 all within eps	0	14	90	727	41	47	46	28	1420	1
+162	f2762b87d	discard	neighbours: miss 47 ms 91 within eps but losses 29. Retry once	0	14	91	729	40	47	47	29	1420	1
+163	bccecc8b5	discard	neighbours retry: miss 47 within eps losses 29. Park. Next: query() delete	0	14	90	726	40	47	47	29	1420	1
+164	3926d446b	keep	drop unused query()+QueryHit. losses 28 ms 89 chars 726 holdout2-miss 40 generic-miss 47 within eps	0	14	89	726	40	47	47	28	1420	1
+165	2c807b7d8	discard	neighbours: holdout2-miss 39 ms 90 but losses 29. Retry once	0	14	90	726	39	47	47	29	1420	1
+166	a3c6f0906	discard	neighbours retry: miss 48 within eps losses 29. Park. Next: fold bindQA locals	0	14	90	728	40	47	48	29	1420	1
+167	6cfeed868	discard	bindQA fold: ms 89 miss 47 but losses 29. Retry once	0	14	89	729	40	47	47	29	1420	1
+168	e804a4974	discard	bindQA retry: losses 29. Park. Next: drop unused step() return	0	14	89	727	40	47	47	29	1420	1
+169	643319a83	discard	drop step() return: all within eps except losses 29. Retry once	0	14	90	728	41	47	48	29	1420	1
+170	6be0525ff	keep	drop unused step() return. losses 28 ms 90 generic-miss 46 chars 729 within eps	0	14	90	729	40	47	46	28	1420	1
+171	3de2a9266	keep	inline neighbours; drop helper. losses 28 holdout2-miss 39 generic-miss 47 within eps ms 90	0	14	90	727	39	47	47	28	1420	1
+172	e7064cf77	discard	bindQA: miss 46 holdout2 40 within eps losses 29. Retry once	0	14	90	730	40	47	46	29	1420	1
+173	415aef52c	discard	bindQA retry: losses 28 miss 45 but holdout2-miss 39→41. Park. Next: slim convBlob Gemini walks	0	14	90	727	41	47	45	28	1420	1
+174	57e6c477f	discard	convBlob slim: holdout2-losses 46 miss 40 within eps but losses 29. Retry once	0	14	89	727	40	46	46	29	1420	1
+175	47d4e32a8	keep	slim convBlob Gemini walks. losses 28 generic-miss 44 holdout2-miss 40 within eps	0	14	90	728	40	47	44	28	1420	1
+176	e9c229558	discard	bindQA: losses 28 but generic-miss 44→48. Need miss≤45. Next: drop dead kind!==digest filter OR retry bindQA if miss prints 44	0	14	90	729	40	47	48	28	1420	1
+177	242bf41a3	discard	drop digest filter: holdout2-miss 41 within eps but miss 47 losses 29. Retry once	0	14	89	729	41	47	47	29	1420	1
+178	242bf41a3	discard	drop digest filter: holdout2-miss 41 within eps but miss 47 losses 29. Retry once	0	14	89	729	41	47	47	29	1420	1
+179	db0269585	discard	drop episode kind: holdout2-losses 46 but generic-miss 48 vs tight 44. Park. Next: bindQA only if miss prints 44-45	0	14	89	728	40	46	48	29	1420	1
+180	4f725196d	discard	drop Cue/Hit: holdout2-losses 46 ms 89 but miss 47 losses 29. Retry once for miss≤45 losses=28	0	14	89	728	40	46	47	29	1420	1
+181	c21810bf1	discard	Cue/Hit retry: miss 45 within eps but ms 102 losses 29. Park. Next: drop Episode.grounded field keep {≈} render	0	14	102	730	40	47	45	29	1420	1
+182	4b96cf014	discard	drop grounded field: miss 45 chars 727 but ms 109 losses 29. Retry once	0	14	109	727	40	47	45	29	1420	1
+183	82ccece5e	discard	grounded field retry: miss 44 but ms 96 losses 29. Park. Next: strip controller JSDocs	0	14	96	729	40	47	44	29	1420	1
+184	ce3714c00	discard	controller JSDocs: holdout2 39/46 better but ms 135 miss 46 losses 29. Retry once	0	14	135	729	39	46	46	29	1420	1
+185	32673cab8	discard	JSDoc retry: ms 92 holdout2-losses 46 but miss 47 losses 29. Park. Next: strip episodic JSDocs	0	14	92	728	40	46	47	29	1420	1
+186	58144b21f	discard	episodic JSDocs: holdout2 39/46 but ms 112 miss 46 losses 29. Retry once	0	14	112	730	39	46	46	29	1420	1
+187	f79b79c82	discard	episodic JSDoc retry: ms 149. Park comment family. Next: Cue/Hit aliases	0	14	149	727	39	47	46	29	1420	1
+188	c014f2ec7	discard	Cue/Hit: holdout2-miss 39 but ms 101 miss 46 losses 29. Park aliases. Next: grounded field (n=183 miss 44)	0	14	101	730	39	47	46	29	1420	1
+189	00e9da62e	discard	grounded field: ms 121 miss 47. Park. Next: controller JSDocs (n=185 ms 92)	0	14	121	729	40	47	47	29	1420	1
+190	50db95071	discard	controller JSDocs: ms 99 miss 46 losses 29. Park comments. Next: digest kind filter only	0	14	99	729	40	47	46	29	1420	1
+191	9106b7eac	discard	digest filter only: chars 727 but ms 107 miss 47 losses 29. Next: bindQA fold	0	14	107	727	40	47	47	29	1420	1
+192	1b1cfaaa9	discard	bindQA: ms 126 miss 47 losses 29. Next: Cue/Hit aliases	0	14	126	729	40	47	47	29	1420	1
+193	9f30b9428	discard	Cue/Hit: miss 45 within eps but ms 111 losses 29. Retry	0	14	111	730	40	47	45	29	1420	1
+194	a59512c11	discard	Cue/Hit retry: chars 727 miss 46 ms 99 losses 29. Next: grounded field	0	14	99	727	40	47	46	29	1420	1
+195	d000897e4	discard	grounded: ms 112 miss 48. Next: controller JSDocs	0	14	112	729	40	47	48	29	1420	1
+196	28c0c77f1	discard	JSDocs: miss 45 holdout2 41 within eps but ms 108 losses 29. Retry	0	14	108	727	41	47	45	29	1420	1
+197	3c7c3bcd4	discard	JSDoc retry: holdout2-miss 39 ms 103 miss 46 losses 29. Next: Cue/Hit	0	14	103	728	39	47	46	29	1420	1
+198	ca3bf520e	discard	Cue/Hit aliases retry; ms 90→134 miss 45	0	14	134	729	40	47	45	28	1420	1
+199	67dabfd93	discard	AgentMemory block JSDocs: ms 100 miss 47 losses 29. Park comment family. Next: drop qTok local	0	14	100	729	39	47	47	29	1420	1
+200	859aa0c63	discard	drop qTok: ms 168 miss 47 losses 29. Next: hook asRec wrapper	0	14	168	727	40	46	47	29	1420	1

@@ -1,0 +1,22 @@
+bun test v1.3.13 (bf2e2cec)
+
+packages/cli/src/memory-hook.test.ts:
+(pass) passive memory hooks > UserPromptSubmit stores a durable fact and later injects it [19.88ms]
+(pass) passive memory hooks > chatter is not stored or injected [1.84ms]
+(pass) passive memory hooks > SessionStart briefs stored constraints [2.40ms]
+(pass) passive memory hooks > Stop observes a Claude transcript without injecting [2.66ms]
+(pass) passive memory hooks > missing transcript fails open [1.01ms]
+(pass) passive memory hooks > notesFromInject keeps only memory system notes [0.03ms]
+(pass) passive memory hooks > plugin hook script finds this checkout and fail-opens on chatter [106.90ms]
+
+packages/wrap/src/know-inject.test.ts:
+(pass) withKnowFacts > EDEN_KNOW=0 and silent chat do not inject [5.16ms]
+(pass) withKnowFacts > already injected stays one card; fail-open on junk body [2.44ms]
+(pass) withKnowFacts > at most one Eden Know system note; frozen RFC catalog does not inject [3.19ms]
+(pass) withKnowFacts > structured identifiers do not inject frozen catalogs; chat without needles stays quiet [5.98ms]
+(pass) withKnowFacts > anthropic dialect prepends one block or stays put; tools/calls reach need detect [10.02ms]
+
+ 12 pass
+ 0 fail
+ 27 expect() calls
+Ran 12 tests across 2 files. [489.00ms]

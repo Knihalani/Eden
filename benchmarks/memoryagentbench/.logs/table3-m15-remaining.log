@@ -1,0 +1,36 @@
+NIM smoke: (True, "ok model=google/gemma-4-31b-it reply='pong'")
+leaf fc_mh: skip-complete n=100 score=7.000000000000001
+
+========== mh configs/data_conf/Accurate_Retrieval/Ruler/QA/Ruler_qa2_421k.yaml ==========
+
+
+
+Using agent-specific chunk_size: 4096
+
+
+09/19/2026 08:05:50 - INFO - conversation_creator - Running test on ruler_qa2_421K
+Dataset: ruler_qa2_421K
+Loading ruler_qa2_421K from Hugging Face dataset: ai-hyz/MemoryAgentBench
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+09/19/2026 08:05:50 - WARNING - huggingface_hub.utils._http - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loaded 22 samples from Accurate_Retrieval
+Filtered to 1 samples matching source 'ruler_qa2_421K' (from 22 total)
+Dataset length: 1, each sample has 100 qa pairs
+  0%|          | 0/1 [00:00<?, ?it/s]Eden openMemory inject bridge up (k=10, NIM reader)
+
+
+ Agent Memorizing...
+
+
+
+Processing experiments 1/1:   0%|          | 0/106 [00:00<?, ?it/s][AProcessing experiments 1/1: 100%|██████████| 106/106 [00:00<00:00, 3985.41it/s]
+
+
+ Agent not saved (not implemented for this agent type) 
+
+
+
+!!!!!Processing 100 queries for context 0!!!!!
+
+
+  0%|          | 0/100 [00:00<?, ?it/s][A

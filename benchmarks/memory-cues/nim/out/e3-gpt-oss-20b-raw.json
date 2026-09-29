@@ -1,0 +1,495 @@
+[
+{
+"batch": "A",
+"i": 250,
+"ex": [],
+"parsed": true,
+"latency_s": 4.404338836669922,
+"usage": {
+"prompt_tokens": 1045,
+"total_tokens": 1154,
+"completion_tokens": 109,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 251,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "pnpm"
+},
+{
+"kind": "policy",
+"cls": "dependency",
+"pol": "pos",
+"obj": "pnpm",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "commit",
+"pol": "neg",
+"obj": ".env",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 18.49546194076538,
+"usage": {
+"prompt_tokens": 1038,
+"total_tokens": 1877,
+"completion_tokens": 839,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"slot\",\"slot\":\"pkg.manager\",\"op\":\"set\",\"value\":\"pnpm\"},{\"kind\":\"policy\",\"class\":\"dependency\",\"polarity\":\"pos\",\"object\":\"pnpm\",\"qualifier\":null},{\"kind\":\"policy\",\"class\":\"commit\",\"polarity\":\"neg\",\"object\":\".env\",\"qualifier\":null}]}"
+},
+{
+"batch": "A",
+"i": 252,
+"ex": [],
+"parsed": true,
+"latency_s": 7.992663145065308,
+"usage": {
+"prompt_tokens": 1055,
+"total_tokens": 1194,
+"completion_tokens": 139,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 253,
+"ex": [],
+"parsed": true,
+"latency_s": 3.4623520374298096,
+"usage": {
+"prompt_tokens": 1041,
+"total_tokens": 1116,
+"completion_tokens": 75,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 254,
+"ex": [],
+"parsed": true,
+"latency_s": 1.3452768325805664,
+"usage": {
+"prompt_tokens": 1040,
+"total_tokens": 1140,
+"completion_tokens": 100,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 255,
+"ex": [],
+"parsed": true,
+"latency_s": 0.9419770240783691,
+"usage": {
+"prompt_tokens": 1041,
+"total_tokens": 1100,
+"completion_tokens": 59,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 256,
+"ex": [
+{
+"kind": "slot",
+"slot": "test.runner",
+"op": "set",
+"value": "vitest"
+}
+],
+"parsed": true,
+"latency_s": 2.9198551177978516,
+"usage": {
+"prompt_tokens": 1035,
+"total_tokens": 1219,
+"completion_tokens": 184,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"slot\",\"slot\":\"test.runner\",\"op\":\"set\",\"value\":\"vitest\"}]}"
+},
+{
+"batch": "A",
+"i": 257,
+"ex": [],
+"parsed": true,
+"latency_s": 2.6426477432250977,
+"usage": {
+"prompt_tokens": 1058,
+"total_tokens": 1219,
+"completion_tokens": 161,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 258,
+"ex": [],
+"parsed": true,
+"latency_s": 1.0897281169891357,
+"usage": {
+"prompt_tokens": 1048,
+"total_tokens": 1117,
+"completion_tokens": 69,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 259,
+"ex": [],
+"parsed": true,
+"latency_s": 3.8921430110931396,
+"usage": {
+"prompt_tokens": 1061,
+"total_tokens": 1148,
+"completion_tokens": 87,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 260,
+"ex": [],
+"parsed": true,
+"latency_s": 8.120593786239624,
+"usage": {
+"prompt_tokens": 1040,
+"total_tokens": 1329,
+"completion_tokens": 289,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 261,
+"ex": [],
+"parsed": true,
+"latency_s": 3.7436981201171875,
+"usage": {
+"prompt_tokens": 1045,
+"total_tokens": 1168,
+"completion_tokens": 123,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 262,
+"ex": [],
+"parsed": true,
+"latency_s": 1.386064052581787,
+"usage": {
+"prompt_tokens": 1042,
+"total_tokens": 1127,
+"completion_tokens": 85,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 263,
+"ex": [],
+"parsed": true,
+"latency_s": 3.6508960723876953,
+"usage": {
+"prompt_tokens": 1048,
+"total_tokens": 1246,
+"completion_tokens": 198,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 264,
+"ex": [
+{
+"kind": "policy",
+"cls": "integrate",
+"pol": "neg",
+"obj": "pr",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 3.569356918334961,
+"usage": {
+"prompt_tokens": 1046,
+"total_tokens": 1316,
+"completion_tokens": 270,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"policy\",\"class\":\"integrate\",\"polarity\":\"neg\",\"object\":\"pr\",\"qualifier\":null}]}"
+},
+{
+"batch": "A",
+"i": 265,
+"ex": [],
+"parsed": true,
+"latency_s": 1.3849360942840576,
+"usage": {
+"prompt_tokens": 1042,
+"total_tokens": 1139,
+"completion_tokens": 97,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 266,
+"ex": [
+{
+"kind": "slot",
+"slot": "linter",
+"op": "set",
+"value": "eslint"
+},
+{
+"kind": "slot",
+"slot": "formatter",
+"op": "set",
+"value": "prettier"
+}
+],
+"parsed": true,
+"latency_s": 4.2987589836120605,
+"usage": {
+"prompt_tokens": 1036,
+"total_tokens": 1267,
+"completion_tokens": 231,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"slot\",\"slot\":\"linter\",\"op\":\"set\",\"value\":\"eslint\"},{\"kind\":\"slot\",\"slot\":\"formatter\",\"op\":\"set\",\"value\":\"prettier\"}]}"
+},
+{
+"batch": "A",
+"i": 267,
+"ex": [],
+"parsed": true,
+"latency_s": 6.1402270793914795,
+"usage": {
+"prompt_tokens": 1036,
+"total_tokens": 1130,
+"completion_tokens": 94,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 268,
+"ex": [
+{
+"kind": "slot",
+"slot": "node.version",
+"op": "set",
+"value": "18.19.0"
+},
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "pnpm"
+}
+],
+"parsed": true,
+"latency_s": 4.71044397354126,
+"usage": {
+"prompt_tokens": 1042,
+"total_tokens": 1373,
+"completion_tokens": 331,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"slot\",\"slot\":\"node.version\",\"op\":\"set\",\"value\":\"18.19.0\"},{\"kind\":\"slot\",\"slot\":\"pkg.manager\",\"op\":\"set\",\"value\":\"pnpm\"}]}"
+},
+{
+"batch": "A",
+"i": 269,
+"ex": [],
+"parsed": true,
+"latency_s": 1.6523749828338623,
+"usage": {
+"prompt_tokens": 1050,
+"total_tokens": 1145,
+"completion_tokens": 95,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "B",
+"i": 54,
+"ex": [
+{
+"kind": "policy",
+"cls": "push-upstream",
+"pol": "neg",
+"obj": "main",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "history-rewrite",
+"pol": "pos",
+"obj": "branch",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 16.86789298057556,
+"usage": {
+"prompt_tokens": 1033,
+"total_tokens": 1571,
+"completion_tokens": 538,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"policy\",\"class\":\"push-upstream\",\"polarity\":\"neg\",\"object\":\"main\",\"qualifier\":null},{\"kind\":\"policy\",\"class\":\"history-rewrite\",\"polarity\":\"pos\",\"object\":\"branch\",\"qualifier\":null}]}"
+},
+{
+"batch": "B",
+"i": 55,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "npm"
+}
+],
+"parsed": true,
+"latency_s": 1.5980408191680908,
+"usage": {
+"prompt_tokens": 1023,
+"total_tokens": 1145,
+"completion_tokens": 122,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"slot\",\"slot\":\"pkg.manager\",\"op\":\"set\",\"value\":\"npm\"}]}"
+},
+{
+"batch": "B",
+"i": 56,
+"ex": [
+{
+"kind": "slot",
+"slot": "test.runner",
+"op": "set",
+"value": "jest"
+},
+{
+"kind": "slot",
+"slot": "linter",
+"op": "set",
+"value": "eslint"
+},
+{
+"kind": "slot",
+"slot": "formatter",
+"op": "set",
+"value": "prettier"
+}
+],
+"parsed": true,
+"latency_s": 5.17948579788208,
+"usage": {
+"prompt_tokens": 1045,
+"total_tokens": 1413,
+"completion_tokens": 368,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\":[{\"kind\":\"slot\",\"slot\":\"test.runner\",\"op\":\"set\",\"value\":\"jest\"},{\"kind\":\"slot\",\"slot\":\"linter\",\"op\":\"set\",\"value\":\"eslint\"},{\"kind\":\"slot\",\"slot\":\"formatter\",\"op\":\"set\",\"value\":\"prettier\"}]}"
+},
+{
+"batch": "B",
+"i": 57,
+"ex": [],
+"parsed": true,
+"latency_s": 2.1909852027893066,
+"usage": {
+"prompt_tokens": 1042,
+"total_tokens": 1185,
+"completion_tokens": 143,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "B",
+"i": 58,
+"ex": [],
+"parsed": true,
+"latency_s": 1.2969660758972168,
+"usage": {
+"prompt_tokens": 1037,
+"total_tokens": 1115,
+"completion_tokens": 78,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "B",
+"i": 59,
+"ex": [],
+"parsed": true,
+"latency_s": 3.724320888519287,
+"usage": {
+"prompt_tokens": 1032,
+"total_tokens": 1276,
+"completion_tokens": 244,
+"prompt_tokens_details": null
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+}
+]

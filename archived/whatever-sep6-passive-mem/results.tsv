@@ -1,0 +1,303 @@
+n	commit	status	description	primary:capture-miss	guard:inject-tests	guard:junk-store	guard:probe-miss
+0	b197610b45ef083b05d020253f30007e33a0ef82	baseline	unmodified	1	1	0	1
+1	7a7968149106ed9d16b67621f0e3ac4968c9cd3a	keep	observe durable facts; inject absorbs; capture-miss 0 junk 0 probe 0.3	0	1	0	0.3
+2	057c2e8f37c8fce5d31f0997e8497a27ccb30b3e	keep	tag observed facts; compact extract; probe-miss 0	0	1	0	0
+3	8ea366f1ad7d486b045dff116398bf4f49a6e29c	keep	POST /observe offset by wrap comments; metrics held 0	0	1	0	0
+4	ae9b11f45416b04178479850a0c431381cb5c935	discard	is/are declaratives broke inject-tests	0	0	0	0
+5	c905a22d3363509981a2759fd47c7e395dcdfafa	keep	observe skips system prompts; capture/probe/junk 0	0	1	0	0
+6	de7e2ec3ffab51cf669c8c0ba4a5ba3e7de298a9	keep	is/are/needs/uses absorb; skip you-are; metrics held 0	0	1	0	0
+7	32dbccd5808d1631a55e9553e32c83c9626095b9	keep	shorter facts + must/from-now-on; metrics held 0	0	1	0	0
+8	e33883d46ebca275c51b562f1800b381df9c4b47	discard	grounded copula missed episode row: capture-miss 0.1	0.1	1	0	0.1
+9	c6fce651b1e012a0f99accaf924fd674ebae1779	keep	grounded copula + ran-out; capture/probe/junk 0	0	1	0	0
+10	227da0e40f9408cfa735175f6bc66368d2689494	keep	I-want preferences; skip I-want-to; metrics held 0	0	1	0	0
+11	5ba36e01a758cc65d60d66a3ef54980aeb1efe86	keep	FYI/colon facts; isolate test memory dir; metrics held 0	0	1	0	0
+12	b56fbe056daedb86d69e02805990e58a27c78e66	keep	also/numeric copulas; metrics held 0	0	1	0	0
+13	0010b77ef869c193d5aacac28466a703d58cfba5	keep	we-should/make-sure + longer facts; metrics held 0	0	1	0	0
+14	9b765779145f181a50cf26e9724bd2af5605b5fc	keep	Anthropic wrap observes; metrics held 0	0	1	0	0
+15	26278a49c2bf634a096befe9becb573cdcfef41e	keep	aka/stands-for knowledge; metrics held 0	0	1	0	0
+16	6b58f302f67dffd2d9b4c9f2bfa722ae042fdb9b	keep	numbered lists/quoted defs/called; metrics held 0	0	1	0	0
+17	760ddbb2988f095815b030a56a974dad60b9e6c6	keep	I-think hedges + bullets; metrics held 0	0	1	0	0
+18	14ecaedb4541bfb9500caf713d97a518ad42c664	keep	skip JSON dumps; confirmed facts; metrics held 0	0	1	0	0
+19	9c7dea3e54ae5b9efb2d5e8694c220c0d7399edb	keep	semicolon fact split; metrics held 0	0	1	0	0
+20	b6bd0b614ca37d24c5bf1630ed44f1c6dec2d88a	keep	decided/shipped; skip I'll chatter; metrics held 0	0	1	0	0
+21	b47dc08efffae60ec6f62d95e4d0291d42977f1a	keep	emails + skip code; metrics held 0	0	1	0	0
+22	2a81cbb008828dd51171a3f9f6cdcafb1d15d5b2	keep	ISO dates skip http; metrics held 0	0	1	0	0
+23	2c8407a5f3c6ab3467e32e8a7074098ac89a4408	keep	slash dates skip headings; metrics held 0	0	1	0	0
+24	033976e0f	discard	canary.ts was untracked; accidental add not simpler	0	1	0	0
+25	dbba31bdc8487b9534e5dfeae3933d3ab3d0eae5	keep	was/were/will-be copulas; metrics held 0	0	1	0	0
+26	46c63a1ed4c1489c3c7f2bdcd2f497d058194f88	keep	skip shell dumps; metrics held 0	0	1	0	0
+27	760bad09957a2a04561784e3db2a1244bfb16ed2	keep	assigned/owned-by/due-on; metrics held 0	0	1	0	0
+28	d7345eea83b3e2ba0eea9a7ce6680f1d0fe5c8e8	keep	phones and dollars; metrics held 0	0	1	0	0
+29	d4fb8b33d2b7fec9ef160eafc4af6e62bfc28637	keep	don't-constraints skip sudo/echo; metrics held 0	0	1	0	0
+30	ac9236dae2e0821234b33e8edf14115bb7706eed	keep	blocked-on/required skip we-are; metrics held 0	0	1	0	0
+31	c6488d546ada343fcbd0d502478066443871322b	keep	paths and FOO=; metrics held 0	0	1	0	0
+32	134dfb0ec6882a73ea8e73d2c2f61f4fa311e769	keep	kind constraint/episode/fact; metrics held 0	0	1	0	0
+33	15754688edafa166d8b3a4d64458e5d8dce2a959	keep	lives-in skip let's; metrics held 0	0	1	0	0
+34	85f38684287c1da5dc3743d9fc80440cbcfbda45	keep	ports and config files; metrics held 0	0	1	0	0
+35	6be3873b0d3e726fb16f5a598429a46d222ba42f	keep	works-at skip i'm; metrics held 0	0	1	0	0
+36	0bf1131ca9009a97eb96f69ca9718bd8b0598f1c	keep	rank constraints first; metrics held 0	0	1	0	0
+37	c7356f2ef3e883f49f7bc27ae160aeb30f83cb5e	keep	hostnames; metrics held 0	0	1	0	0
+38	2730a048a	discard	IPv4 broke inject-tests	0	0	0	0
+39	e8e2eec39	discard	on-call: inject-tests poisoned by shared test journal	0	0	0	0
+40	ce25ebefdf7952a276a76a33643815531b9e6d37	keep	isolate test memory skip look-at; inject-tests held	0	1	0	0
+41	60adb48c8b1dd4307202d6b9b15f45fb09859192	keep	on-call after isolation; inject-tests held	0	1	0	0
+42	a912b2568ccc8fa78e7e10c3c3c7fe931e566c90	keep	IPv4:port; inject-tests held	0	1	0	0
+43	2b0b934d572d0b85e0783d6dfe310f6b5ecf3281	keep	cluster/namespace/region/vpc; metrics held	0	1	0	0
+44	b489dd5bf5ac0711c1f3eef1be83a46f0875cf5c	keep	CIDR blocks; metrics held	0	1	0	0
+45	34c66d14c21bcfc19866445c39d9ac92365b9f13	keep	skip can-you tasking; metrics held	0	1	0	0
+46	f86016624070a00b60afae242c56bbc361248c0a	keep	UUIDs; metrics held	0	1	0	0
+47	9c592197d2c8fa6dd9be07574e54cf8518736654	keep	skip tell-me tasking; metrics held	0	1	0	0
+48	4ae542fdc7d18dca95d49b3e657886b04cc37b74	keep	skip secrets; metrics held	0	1	0	0
+49	6f9ace57eac2a725351b7c2e82424a8b3fa9e60c	keep	tool_result blocks; metrics held	0	1	0	0
+50	a505682ccaa3e37ad441c98e41fc2169f44e34bb	keep	skip hmm/wait chatter; metrics held	0	1	0	0
+51	43c90e3adf34127fa07442b3a9f07288f29d0b86	keep	full git SHAs; metrics held	0	1	0	0
+52	92f7b894d4092368d0d7c7f5b9a425eb55984403	keep	skip we-need-to; metrics held	0	1	0	0
+53	e53044b3f8b6de2544791d157432afe051f81079	keep	tz/email tags; metrics held	0	1	0	0
+54	45a432a2c27d7fdc5178d6663731fab185e40895	keep	skip we're; metrics held	0	1	0	0
+55	fd421ddd23843b5dba01a7ed0497f0e497fe32a2	keep	timezone cue; metrics held	0	1	0	0
+56	9ce6066bd10fffcc06739be806850dec63a43eac	keep	branch cue; metrics held	0	1	0	0
+57	19080307a0673bd6fcc2ef2711a2f154d8bf0fc6	keep	maybe/perhaps hedges; metrics held	0	1	0	0
+58	9d41047a8616fb017c53bad66e15aa530e5de454	keep	image alt text; metrics held	0	1	0	0
+59	46c85f4d63bf536425b7a6d53f005961a40cbf37	keep	repo cue; metrics held	0	1	0	0
+60	097b3021af5dcb11facd85490557c17186920125	keep	skip hey/yo; metrics held	0	1	0	0
+61	2936ddcc344b47e865ebbadf78d783d8d8691a03	keep	org/team cues; metrics held	0	1	0	0
+62	ce2e1d04d81e886e253894a908420e6e09dfbb08	keep	skip lol/haha; metrics held	0	1	0	0
+63	3ca7e49452673abf0a98673f96c99609939eba4c	keep	content-part names; metrics held	0	1	0	0
+64	b1cf54af2daf3944187d3b0d55c579040e53b011	keep	channel/workspace; metrics held	0	1	0	0
+65	7c2e784e3960286fd541ee4eaa8c2be01297a9c6	keep	project cue; metrics held	0	1	0	0
+66	f02c5f81efe213cd67ad51c85aa17281ce84ed36	keep	sprint/ticket cues; metrics held	0	1	0	0
+67	d25d57b5eb484e87184b3fb4a642f1fe60c9709d	keep	skip nope/np; metrics held	0	1	0	0
+68	730cd7895cb3c68d2edc9c7ce2dbcfe381e08084	keep	caption fields; metrics held	0	1	0	0
+69	5e5b8dfb054f133d5902b9e123b0a976d785eb08	keep	issue/hotfix cues; metrics held	0	1	0	0
+70	7d24f49309a2fb17545800e49a9d114e95b937cf	keep	tbh/imo hedges; metrics held	0	1	0	0
+71	f1862f3631a2b370e8a08937a5cead6df8fd464f	keep	incident/sev cues; metrics held	0	1	0	0
+72	424c6065572450f1038ec72723725890067c1d33	keep	title fields; metrics held	0	1	0	0
+73	665d8fbc5f7643f5a960bd5f1aac4aa4f4cecf37	keep	outage/pager cues; metrics held	0	1	0	0
+74	9753be69b8587144d55fba011f803e08b8ef90e2	keep	skip wow/whoa; metrics held	0	1	0	0
+75	2d1096b00e808654d7f117daa32b6604ea80a6c2	keep	rollback/deployed cues; metrics held	0	1	0	0
+76	28033d74a88dd5650733a5a18f40169a94ddfcb1	keep	feature-flag cues; metrics held	0	1	0	0
+77	4017358bd108e3cd7c5ae4df9c361b3ec16cc3a9	keep	skip cool,/nice,; metrics held	0	1	0	0
+78	dfe62a927958f65b1e4d81cc685c7807197caade	keep	filename fields; metrics held	0	1	0	0
+79	69dc2f422714c7c9ed547d9134e1a14277de3e25	keep	maintenance/degraded; metrics held	0	1	0	0
+80	171ccd6793308bbd7857d6432de310653384fc58	keep	btw/fwiw hedges; metrics held	0	1	0	0
+81	178b2ddecd85b3dcba3d0ca53ee6279a123918a4	keep	SLO/SLA cues; metrics held	0	1	0	0
+82	034feceb772ce1a7404780d8a086039bdaab5a94	keep	skip idk/dunno; metrics held	0	1	0	0
+83	0d9d025f2d09281b3672e3747185f4f6b27b9389	keep	url fields; metrics held	0	1	0	0
+84	ccdca6a1af02e71e184711e203ff1c871ee71848	keep	quota/budget; metrics held	0	1	0	0
+85	bc957be633888e21839f66274eef54fa5fba2034	keep	capacity/limit; metrics held	0	1	0	0
+86	94d89a86fb774586c5cafcb25ff12fd4f8a7d6ef	keep	skip great/awesome; metrics held	0	1	0	0
+87	2a2adba6e256f51d0dce18741fe8d04ea7b01859	keep	href fields; metrics held	0	1	0	0
+88	74a7274af50f243fd7857b7de83a25933bcb7677	keep	rate-limit/retry; metrics held	0	1	0	0
+89	ae480cc41c24c42f9f9a411a7d2d5813297fa320	keep	skip alright/gotcha; metrics held	0	1	0	0
+90	710f2fda8e3937e66b23f8b2c4e773afb78e3d56	keep	source/uri fields; metrics held	0	1	0	0
+91	d5cc74b191cd8e0c2b60c3165e5aef7319fceb35	keep	backoff; metrics held	0	1	0	0
+92	827949f9ff39e3d2575feef7cdb14442ccfd72d5	keep	DRI/owner; metrics held	0	1	0	0
+93	147c61c461f364c81388c5e590516fc93b0a960d	keep	circuit-breaker/webhook; metrics held	0	1	0	0
+94	a636fb9c844655dc180de280e3c0ba3c7c5fd1a1	keep	skip sounds-good; metrics held	0	1	0	0
+95	fa1f1ca1ee86122571d103dc2aeeac7ffb2f0328	keep	id fields; metrics held	0	1	0	0
+96	ce4a450993f51840235055880a44054234f1c069	keep	skip lgtm/ack; metrics held	0	1	0	0
+97	ded1fe1b4e78204c33eb875be1db3027ac9903ca	keep	endpoint; metrics held	0	1	0	0
+98	a753f10506d7341858c0709309ff72bec4060880	keep	cron expressions; metrics held	0	1	0	0
+99	718110c4e2f5d5c4b8d353f29f00faa20537399c	keep	MAC addresses; metrics held	0	1	0	0
+100	c32ec1c5f76c4a747a627f562d4fae529a59708e	keep	skip perfect; metrics held	0	1	0	0
+101	7c201ce15d18a4d35637461bde629b428816101a	keep	crontab/cronjob; metrics held	0	1	0	0
+102	476fd7172b3af81c9deb31c874cd505aee8f6bb9	keep	skip cheers; metrics held	0	1	0	0
+103	8b66135112be7f7f8cb584ddf95e7df053d6eb1c	keep	semver vX.Y.Z; metrics held	0	1	0	0
+104	ab4845bea2ae040c48ad2458aef160f39cbe64d1	keep	mimeType fields; metrics held	0	1	0	0
+105	012aca75245b337c91012d201a52beae2f1234da	keep	skip ty; metrics held	0	1	0	0
+106	0ef7ca98cee333d08f97ac7e52addb39494750ee	keep	version cue; metrics held	0	1	0	0
+107	9fcd0ff4544e539321bbcf8f98b50774571b78a4	keep	skip gg; metrics held	0	1	0	0
+108	0f2bd7241cfa2f9d23ed0b0549715f3395aedc48	keep	k8s/kubernetes; metrics held	0	1	0	0
+109	de0cd13b3d838139c653e4d3b124a23a4c7f8d4c	keep	skip brb; metrics held	0	1	0	0
+110	72feaa8ddedd2ec05f0d55e923b9fa7e1a5a6d24	keep	skip nvm; metrics held	0	1	0	0
+111	3c01dd98e9c63aa60b67d17cc9951dfeff500acb	keep	k8s svc names; metrics held	0	1	0	0
+112	9a5e3509e94444beb323f31375e2e6927a87c31f	keep	configmap; metrics held	0	1	0	0
+113	c4618d45355e0a13a3cdf88fa992d878c15be19e	keep	helm; metrics held	0	1	0	0
+114	3efffd541eb571dd2a52a81da3cefa50f483162b	keep	ARN; metrics held	0	1	0	0
+115	f56bd0685f4b847de2182a599edc6e449a328f09	keep	skip omg; metrics held	0	1	0	0
+116	6eef9e26a93f39e64052c43b3dd547979d6d341f	keep	terraform; metrics held	0	1	0	0
+117	df4f32a72430767fc7067a2fba4df577fd58f393	keep	skip kk; metrics held	0	1	0	0
+118	2cced9304254f97615e19fb76c17c0bb21334e8d	keep	pulumi; metrics held	0	1	0	0
+119	bbf9c2814b4b98f566009cb02f70e85f29d0040f	keep	skip yup; metrics held	0	1	0	0
+120	1084b1be02a523e2566297d0673dbe16c07fc9a0	keep	cloudformation; metrics held	0	1	0	0
+121	7bb1b2db70d83d5c88d6db89e3b2f3faf23f4f02	keep	IAM; metrics held	0	1	0	0
+122	a2f9b48422e07005c067dd578ca901b364511b93	keep	skip thx; metrics held	0	1	0	0
+123	5996f099aad6e8fa8eb6f92189bc7e914e48f739	keep	CDK; metrics held	0	1	0	0
+124	1e3eba717011a5074f910c834276929383dbcfbe	keep	ansible; metrics held	0	1	0	0
+125	5ce88a5f8d534157ae83e8a14d28bc66beab9343	keep	gcp/gcloud; metrics held	0	1	0	0
+126	0802ef9b4d4f43525e3c2b4a8c2f56040fa634d2	keep	skip ttyl; metrics held	0	1	0	0
+127	40171fc17c97a55582638a896b9140609aee81bb	keep	azure; metrics held	0	1	0	0
+128	26df2ab5f7a3b563d0f96b341354df4b0d53ad23	keep	snowflake; metrics held	0	1	0	0
+129	ca9451ea4a06885dd51b1c6040d289c6fd14f08f	keep	bigquery; metrics held	0	1	0	0
+130	0b88f3265cc092aa8486333891c26533569bd6ce	keep	datadog; metrics held	0	1	0	0
+131	9630b4d3735543ca66da4f7ae33aab4b0c3f1c7d	keep	skip smh; metrics held	0	1	0	0
+132	38d5d1f2dec40231b592fac558eab6985d21ea47	keep	kafka; metrics held	0	1	0	0
+133	6eec339a09cc9bc9288b089cbcae6813662ed41f	keep	redshift; metrics held	0	1	0	0
+134	c93a6f797b695450f3b9745bd6d849c54848326c	keep	pubsub; metrics held	0	1	0	0
+135	488b209ddd72a0bc77c40167d9fda3ce98e3e191	keep	skip wfm; metrics held	0	1	0	0
+136	c6a19529d627ff16abc023b7f7355baf7fd1aef1	keep	rabbitmq; metrics held	0	1	0	0
+137	637706f592669f6f49e4a283fcb49727146c6d13	keep	skip idc; metrics held	0	1	0	0
+138	9b71306ae06d7d302a012e1e9a4d6aa22c9fa94a	keep	redis; metrics held	0	1	0	0
+139	151c93e59e87b3672bf823e6f69dd4fb06d8cb41	keep	postgres; metrics held	0	1	0	0
+140	b366991e3f94a02cfdbec17b36cbc270f1eab2b7	keep	elasticsearch; metrics held	0	1	0	0
+141	53782d76ef1806a7dd8c6bdaba487fc4dce9af4e	keep	skip ngl; metrics held	0	1	0	0
+142	c728c241f28ee5f585d86d0bfdc9bcee59440f60	keep	mongodb; metrics held	0	1	0	0
+143	abc891205846b6699cda07430a6eb0814d27f269	keep	mysql; metrics held	0	1	0	0
+144	901ad51fe798bf8d983d2bec92a71bf66058fe63	keep	dynamodb; metrics held	0	1	0	0
+145	89e9a6751f37bf0125a24da2a4cddfd1358b8ac8	keep	sentry; metrics held	0	1	0	0
+146	4067204fe9a6cb63bfcc1208bc7606f48261ff0b	keep	skip fr; metrics held	0	1	0	0
+147	7eed8c4f13a36dd84a4695d3cabf8d0e65836e02	keep	grafana; metrics held	0	1	0	0
+148	fed05b05701b26ee1b9652ac05e8fa0c0450ba11	keep	prometheus; metrics held	0	1	0	0
+149	1f1681e905c38b6de8e1376b60170db4232167db	keep	newrelic; metrics held	0	1	0	0
+150	f320706abb9f5236f7cd3160f0c778a7309094b5	keep	honeycomb; metrics held	0	1	0	0
+151	21f686b048e8a891e126947daed5df03c9fa5646	keep	skip ikr; metrics held	0	1	0	0
+152	939313ee6e212f9182173e17969de7382f8c0f03	keep	otel; metrics held	0	1	0	0
+153	0200eda50c68eaeb2f900ccba2ead0da0c58b9be	keep	jaeger; metrics held	0	1	0	0
+154	d910180a7dba9778267172055c8c630938786902	keep	zipkin; metrics held	0	1	0	0
+155	309e15ec94364d25359a31e3becb4e4286d9c5a8	keep	cloudwatch; metrics held	0	1	0	0
+156	7b5a51f79ad335d65a88acc9f9b8dfd99239ece0	keep	skip meh; metrics held	0	1	0	0
+157	a3a13f40f2f9747662be66ac3d068a8726703fc1	keep	splunk; metrics held	0	1	0	0
+158	b2c7ceb887bf730711c165d166add4f33b781f7b	keep	skip ugh; metrics held	0	1	0	0
+159	f0170c7af2c56e21c4abb8217a1f85440e93279f	keep	lambda; metrics held	0	1	0	0
+160	9779041ee165c39eb0c4f23fa1c1166a257db8f6	keep	sqs; metrics held	0	1	0	0
+161	c1ac0d6a9fac9e81e32f7c62fce258b8cc28a903	keep	sns; metrics held	0	1	0	0
+162	890f9fe95b9e53622e6f07d10a34ffb93cbd23b3	keep	cloudtrail; metrics held	0	1	0	0
+163	bb22d775ac3d77d4bef8dace2499a56e25efd1df	keep	skip welp; metrics held	0	1	0	0
+164	7c187617d54ebec30b5efa201640486297aa7de3	keep	kinesis; metrics held	0	1	0	0
+165	eb9e5576fe863548132b780d57fb9956080eb61d	keep	ecs; metrics held	0	1	0	0
+166	8453b2abe5d6ce05eba73ee6af0b1cdcb6bebd40	keep	step functions; metrics held	0	1	0	0
+167	35f27481b8bb06a02b40cfa4ab685125b09f1d5b	keep	skip yikes; metrics held	0	1	0	0
+168	064391683f21ed617fd2c9ec365d9fcfbbaffc30	keep	eks; metrics held	0	1	0	0
+169	919def05823fcb1935d5e689cf726b08e44fb79e	keep	fargate; metrics held	0	1	0	0
+170	d72bc6c76	discard	accidentally git add untracked need.ts	0	1	0	0
+171	06ce9a9c8fe97321031c663cd173191d7169db4f	keep	rds; metrics held	0	1	0	0
+172	6a9abba4b6546a1105e94a7183c97796e979ddbd	keep	skip oops; metrics held	0	1	0	0
+173	6c3a16eca4e7c3a661dea2a2a2128d0fcdb1b690	keep	aurora; metrics held	0	1	0	0
+174	3d17a4c67b9d8ec3811e5398942da02c13f2ba80	keep	secrets manager; metrics held	0	1	0	0
+175	686779fb25433e64b630728b15d0c5a031c4bb7e	keep	cloudfront; metrics held	0	1	0	0
+176	f3e319d515cffb46a8811de02870839015e11563	keep	elasticache; metrics held	0	1	0	0
+177	86d66ff29cba3aa59395835ae11485d74eefaac3	keep	skip huh; metrics held	0	1	0	0
+178	2c109a58ccd7c0659f82810ba8922453f33e5cd6	keep	alb; metrics held	0	1	0	0
+179	9b883297339e46d75d2609e783beb8ba2c817b2f	keep	route53; metrics held	0	1	0	0
+180	fc6bc6731f21607d636d362e82a3a0eaa51de062	keep	api gateway; metrics held	0	1	0	0
+181	b5ab559645c7770e83465ba4b6cf40540434d32a	keep	waf; metrics held	0	1	0	0
+182	821186275319728f20aeeb91c9244846979d9b2e	keep	ecr; metrics held	0	1	0	0
+183	27537b816d9c7ab79cd3533f70d96c074f0b1eeb	keep	nlb; metrics held	0	1	0	0
+184	2f2207e25e3a03c221854c8fcf0c00f22d9964be	keep	elb; metrics held	0	1	0	0
+185	5043bfe41ba4239f76ec367786a7c1babf664cbf	keep	s3; metrics held	0	1	0	0
+186	d957dd4bd5ffcb965ad56f33e2f0cff62fe1d79c	keep	kms; metrics held	0	1	0	0
+187	d05c38781d08a067bf3069dc53f292882e024cb5	keep	athena; metrics held	0	1	0	0
+188	4689352d76e4bf02654dce5f3887fb6745052d00	keep	glue; metrics held	0	1	0	0
+189	558317def5e7aa158e51fa5dec80d99aa53f224b	keep	cognito; metrics held	0	1	0	0
+190	dc47e6518208727dacbe684a176765775bf25878	keep	ebs; metrics held	0	1	0	0
+191	ecc967ca90f9ee9399d2af66fdd51943eed65701	keep	emr; metrics held	0	1	0	0
+192	84254313b4ac37cfac5c575c4da9d08507cee3d8	keep	sagemaker; metrics held	0	1	0	0
+193	4f5a3e63c7f298a88e01611239b70263492f4805	keep	bedrock; metrics held	0	1	0	0
+194	ec39efeb5171bb3e5fb5788e8fc876902bb61f11	keep	aws batch; metrics held	0	1	0	0
+195	7371a004a7dd01d402f19c7e3b36b352e63058d2	keep	eventbridge; metrics held	0	1	0	0
+196	3fcf727093defe1428090c2f8516ef4623166caf	keep	codebuild; metrics held	0	1	0	0
+197	c449d2c0aa5196efdf36def4415640c6cba221f8	keep	codepipeline; metrics held	0	1	0	0
+198	e1538d799db996c445c894163d0c848841ee4268	keep	codedeploy; metrics held	0	1	0	0
+199	5bdf837531319df5c5f364aebe48df054ef0aae8	keep	appconfig; metrics held	0	1	0	0
+200	e05337dca262bd00fea920396b28c8c9714e2d74	keep	amplify; metrics held	0	1	0	0
+201	e51bd4280470c36585a96e943ff670af44d3f24b	keep	appsync; metrics held	0	1	0	0
+202	e78f2a587151aa7395dbd0b9e0a5b7c354219742	keep	xray; metrics held	0	1	0	0
+203	a3a2d44a0e47f63cb1d25accfbe8c63ffe5ff7ce	keep	codecommit; metrics held	0	1	0	0
+204	5d7a8c05bc89e85765b79bb14cf2b2958b0cb3eb	keep	codeartifact; metrics held	0	1	0	0
+205	d627069f05e5cb5a38bf8f8427f10b59e955de8b	keep	efs; metrics held	0	1	0	0
+206	e1dbfe0d4a397454daebadd8da6b715350ffc7ad	keep	fsx; metrics held	0	1	0	0
+207	71eda088a9437a1e578a452d1cb2696019ff76ab	keep	databricks; metrics held	0	1	0	0
+208	81c46d1de0b06ead815a85805cb2ceb40f3e045e	keep	clickhouse; metrics held	0	1	0	0
+209	cdb3861ab8e1241a5465b8a9bf5503fa7af7116f	keep	prestodb; metrics held	0	1	0	0
+210	15121d67183f15384fb16a448507d7c418bbd036	keep	trino; metrics held	0	1	0	0
+211	fc9186e6735d3f9e6473b0a196bc051fa27d31b6	keep	duckdb; metrics held	0	1	0	0
+212	09143ac9f0d69519f9975d08d5a3e7f55c99ee82	keep	flink; metrics held	0	1	0	0
+213	a8a722645780e522e93b9706815ca30d2770eabd	keep	cassandra; metrics held	0	1	0	0
+214	807bfc460faba33cb59489e86c755dfa6a9605f4	keep	neo4j; metrics held	0	1	0	0
+215	fb2c81da5eac8ff56d674d7be97f9a81d517c6bd	keep	scylla; metrics held	0	1	0	0
+216	2e660518d967f68aa40a72dda76cca775b9011f4	keep	cockroach; metrics held	0	1	0	0
+217	5580a2eb290584d3279281bdcb0da58f4b432aac	keep	vitess; metrics held	0	1	0	0
+218	2ed1b08024c02b990d1180c7c1752b63cd8f635e	keep	tidb; metrics held	0	1	0	0
+219	d3dc0eed222668c05415cb086fad2e1302d09e97	keep	spanner; metrics held	0	1	0	0
+220	2bd6bbbf021fd8b7097b282cba2579178a4ca4d7	keep	cosmosdb; metrics held	0	1	0	0
+221	f6dc379d75feb4cc99ce14d9ef2bd5d097ed2ee4	keep	firestore; metrics held	0	1	0	0
+222	eb4d63b24c378ee0be9b7e4cddaa189d270e1327	keep	bigtable; metrics held	0	1	0	0
+223	fcb44a27c10038d7711110e145e6aade30b88c48	keep	memcached; metrics held	0	1	0	0
+224	9b207af73ca59df3600b0f74a48436691ae1ba43	keep	consul; metrics held	0	1	0	0
+225	6e63914912f9e82a7ba0abd63cd22054b0ca156f	keep	etcd; metrics held	0	1	0	0
+226	d328720e0be96b7033f9d322f51f6415e24e81b2	keep	zookeeper; metrics held	0	1	0	0
+227	91e7922ad66e0c9d86a28dd5cd9df375beab7b88	keep	vault; metrics held	0	1	0	0
+228	17f01d560cb03c9ea5ff99e86f90bba3b938e751	keep	nomad; metrics held	0	1	0	0
+229	e58e99671066ac8f9a7aacf7c27ceed44b38bb6c	keep	istio; metrics held	0	1	0	0
+230	8224106ce564b54ca0735166024ee0c944998180	keep	envoy; metrics held	0	1	0	0
+231	e4ad293e63aea4a7fb7fc9d5581276f9dcaa48d7	keep	linkerd; metrics held	0	1	0	0
+232	b6cd53aef468280316c5bf0170b5ec2cd4b56c51	keep	traefik; metrics held	0	1	0	0
+233	4c443088e1ce47e448be4dfdaed0f625b058ea3a	keep	kong; metrics held	0	1	0	0
+234	8e48a637dea5598d503da0966f60164b3cadb2e4	keep	cilium; metrics held	0	1	0	0
+235	6024426accb92193660e6e90011bf3898b3e80d9	keep	argocd; metrics held	0	1	0	0
+236	abe18de888c344e127202bbfc21d392b059b024f	keep	fluxcd; metrics held	0	1	0	0
+237	5375c927b1702bcdc0f6c9d346b94dc0f55c83c9	keep	knative; metrics held	0	1	0	0
+238	89c9389778893cd13de41e7b3c53b4c07c8da090	keep	calico; metrics held	0	1	0	0
+239	1f8ae9b97f44745649c632fec27c1d4f9fe66b03	keep	tekton; metrics held	0	1	0	0
+240	be77ad358fcff1514bfdd73e68505f4a27ff96cd	keep	crossplane; metrics held	0	1	0	0
+241	53794b6e5c50a138c8f61b20780462e9d0f17bed	keep	kustomize; metrics held	0	1	0	0
+242	55bccf9a0762264ff545f9df43dca3cc5f68fa76	keep	harbor; metrics held	0	1	0	0
+243	b1a4047f0eae4cd9c0c314abf86d3610ba9907d2	keep	helmfile; metrics held	0	1	0	0
+244	ad8a509e1f9e78310e9d22aaeb6d8c8703f7797c	keep	thanos; metrics held	0	1	0	0
+245	579514cd89cfefb11767842830848c60c6e29f17	keep	mimir; metrics held	0	1	0	0
+246	ffb97c15ba84061a85b72e3374284fbb7f57d746	keep	cortex; metrics held	0	1	0	0
+247	e9883d72647bc336456fe870d7167463a3637b86	keep	fluentbit; metrics held	0	1	0	0
+248	1558e219b7dc041fee69455d1903d2b92155ef3e	keep	fluentd; metrics held	0	1	0	0
+249	16d458192993749f2ffd9be67b8747cc381dcf86	keep	filebeat; metrics held	0	1	0	0
+250	2fce33525ba47f1d17f64fc1c1932beb28d04b93	keep	logstash; metrics held	0	1	0	0
+251	4d260beaf6b4c19623a09caf5e4a54fbd3557158	keep	opensearch; metrics held	0	1	0	0
+252	474177f6e618abd2c2be63e291ce9817769f26d2	keep	metricbeat; metrics held	0	1	0	0
+253	54298b55be02b49f45d215bfbc9b9237f9fe427f	keep	qdrant; metrics held	0	1	0	0
+254	5197b550f0c734305fdb618381d0d2dabf21ace8	keep	weaviate; metrics held	0	1	0	0
+255	d59e52c11b12a671292d2438b1bb33e4ee74ad02	keep	milvus; metrics held	0	1	0	0
+256	10a04028fa1a4596189c38b7e81f16fe03fdb884	keep	pinecone; metrics held	0	1	0	0
+257	9480ca6232607f760b90630849b96670d76f4bf9	keep	typesense; metrics held	0	1	0	0
+258	375f64f879a3b41c6d710ced56f4eba0ee3fc5a1	keep	meilisearch; metrics held	0	1	0	0
+259	2aa6a38f7b460404f75e9e9f587189d4e3e7570e	keep	pgvector; metrics held	0	1	0	0
+260	047b25377bb02c68e8d7c6944b9212840b996cc8	keep	faiss; metrics held	0	1	0	0
+261	15087d01fe3aa520c627c1f3951b5b7bb7e46595	keep	lancedb; metrics held	0	1	0	0
+262	3f86881d5b753a4a94452f38418c83e0f7c974ef	keep	chromadb; metrics held	0	1	0	0
+263	a027aa6a8d451faca19e86063de06096452bcfaf	keep	solr; metrics held	0	1	0	0
+264	2ab55324e6b6174bbd255b117e1384776faa3c00	keep	nats; metrics held	0	1	0	0
+265	b4f1df653d05fc82dfec4fa7e483b99e12c86548	keep	pulsar; metrics held	0	1	0	0
+266	164e5e67f11be2e2f547d9692f0343068052d1ad	keep	mosquitto; metrics held	0	1	0	0
+267	fb6a03207722e40c437a4d5178728b5ab89a6f57	keep	emqx; metrics held	0	1	0	0
+268	5f1c95847a921d3703d213b24011854e07736ea5	keep	airflow; metrics held	0	1	0	0
+269	58ca8f6e84115c9928e5754a3ddbe120ac151d3f	keep	dagster; metrics held	0	1	0	0
+270	34db003eb2637dc9ee5042018f9db37e7693af93	keep	prefect; metrics held	0	1	0	0
+271	99900d13ab887eeeafcec9b35c9bc4a4f99c1d03	keep	temporal; metrics held	0	1	0	0
+272	6f0bfc178bdfefaa68d139bf2fe5c1f4a8dd2d5f	keep	flyte; metrics held	0	1	0	0
+273	05f9a1c47b48551f23322a2c19352f82e4de0c50	keep	kubeflow; metrics held	0	1	0	0
+274	c100b35032e4f0ab480ca5d9d88b3b785231e0ab	keep	mlflow; metrics held	0	1	0	0
+275	d933e83c95c7aed3e081dafb66d796f5c094cdde	keep	feast; metrics held	0	1	0	0
+276	f61e507723993d316c1b29e6da41dffb7b2e9f8b	keep	wandb; metrics held	0	1	0	0
+277	24ce842dfbf659312961787af918f10516a52724	keep	dvc; metrics held	0	1	0	0
+278	e908facffe2410a5edfa4549c65494919c430f64	keep	huggingface; metrics held	0	1	0	0
+279	6b807e2a1a42f44205c7c7ab432abec80dcbd0df	keep	langsmith; metrics held	0	1	0	0
+280	401690f787b2ba4c0cf06d4fa2abfe342dd8993a	keep	llamaindex; metrics held	0	1	0	0
+281	45ef863a3f0f759d29c62dbe5d6ded4c17639e9e	keep	ollama; metrics held	0	1	0	0
+282	f20371a59a45e1bfa3e39372d89493c1df02f91a	keep	vllm; metrics held	0	1	0	0
+283	d82bd7d83b7f8d8e1293836e8024d580c7047006	keep	sglang; metrics held	0	1	0	0
+284	a242ce8847c3cb8d6fbc1135696f6641c8a7a474	keep	tgi; metrics held	0	1	0	0
+285	7f61c4940614af949bca28b402ce20bfedd398a9	keep	tensorrt; metrics held	0	1	0	0
+286	41d1d04aa34af40b97615670c4de446afe546689	keep	triton; metrics held	0	1	0	0
+287	1c0beb03559e9caf496307d1fd2781b42dbb3bdd	keep	ggml; metrics held	0	1	0	0
+288	6458c3c14ce6d9bde279fc667207c7c7883b8eaf	keep	gguf; metrics held	0	1	0	0
+289	0401649ff1ec8acba3f75012e716360d23d1e127	keep	llamafile; metrics held	0	1	0	0
+290	e83d3e7b25d67f71387221b05f25ab7cc67003f6	keep	exllamav2; metrics held	0	1	0	0
+291	14ab197dac93a83aafcff59e2c86c3ccf4186a90	keep	awq; metrics held	0	1	0	0
+292	c73e85eb2e2d311a5e1afd081984ca774a0430e4	keep	gptq; metrics held	0	1	0	0
+293	29404d00b9c3e4ca2b25874528934a2ffbedcbab	keep	bitsandbytes; metrics held	0	1	0	0
+294	92c45d1a20cfe4fd265b9e8eca13e53002e4a972	keep	flashattn; metrics held	0	1	0	0
+295	58ae7079adfee59b2b8768e11ce9519b54f0602d	keep	deepspeed; metrics held	0	1	0	0
+296	f5ca1c23c100b889419692243d1604144eabf793	keep	fsdp; metrics held	0	1	0	0
+297	cb3c124902f16102769a14b54e10fab0df2dba62	keep	megatron; metrics held	0	1	0	0
+298	7775ce96b15e98c008ab48e418f59e201701b092	keep	horovod; metrics held	0	1	0	0
+299	133d90ca6d30bb8af2cc64685a0b471b3b1e40d5	keep	nccl; metrics held	0	1	0	0
+300	b846a323efb1d0424736225ca0285bd54717995b	keep	accelerate; metrics held	0	1	0	0
+301	35e62ff52af02b747e0e4920da35f09db5d200bd	keep	xla; metrics held	0	1	0	0

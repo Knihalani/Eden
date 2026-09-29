@@ -1,0 +1,15 @@
+bun test v1.3.13 (bf2e2cec)
+
+packages/cli/src/memory-hook.test.ts:
+(pass) passive memory hooks > UserPromptSubmit stores a durable fact and later injects it [9.16ms]
+(pass) passive memory hooks > chatter is not stored or injected [1.01ms]
+(pass) passive memory hooks > SessionStart briefs stored constraints [1.46ms]
+(pass) passive memory hooks > Stop observes a Claude transcript without injecting [1.45ms]
+(pass) passive memory hooks > missing transcript fails open [0.65ms]
+(pass) passive memory hooks > notesFromInject keeps only memory system notes [0.20ms]
+(pass) passive memory hooks > plugin hook script finds this checkout and fail-opens on chatter [65.38ms]
+
+ 7 pass
+ 0 fail
+ 13 expect() calls
+Ran 7 tests across 1 file. [180.00ms]

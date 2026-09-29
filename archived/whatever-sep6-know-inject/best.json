@@ -1,0 +1,10 @@
+{
+  "values": {
+    "open-miss": 0,
+    "inject-tests": 1,
+    "inject-us": 6.037127272727273,
+    "false-inject": 0
+  },
+  "n": 69,
+  "commit": "bf6ed733fd961f96e2cbaea81060e3fbf106093e"
+}

@@ -1,0 +1,5 @@
+metric: 1775
+junk: 0
+losses: 0
+cost_ms: 0
+{"sizes":{"eng":8,"personal":8,"update":4,"know":7,"eden5":1540,"brain5":1540,"brain20":1540},"misses":{"eng":0,"personal":0,"update":0,"know":0,"eden5":1028,"brain5":943,"brain20":762},"bm25":{"miss":1057,"n":1540},"metric":1775,"junk":0,"losses":0,"cost_ms":0}

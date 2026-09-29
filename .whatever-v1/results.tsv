@@ -1,0 +1,23 @@
+n	commit	status	description	primary:brain-miss	guard:mem-tests	guard:junk	guard:losses	guard:cost-ms
+0	ced6fb24f1ac8640ff7f794e98db03032ef60163	baseline	unmodified	2360	1	0	0	0
+1	4ced6d447	discard	ASA query expand → 2370	2370	1	0	0	0
+2	bdc1e87ed	discard	6-char prefix flat 2360	2360	1	0	0	0
+3	c6c73469e	discard	sentence engrams → 2377 dilute	2377	1	0	0	0
+4	58dd857aa	keep	stays/ship-from extract + bun used-for → 1842 KEEP	1842	1	0	0	0
+5	e2a7b18ed	discard	6-char on 1842 → 1843	1843	1	0	0	0
+6	048fcde2d	discard	entity-hub+whenQuery 1837 under-eps	1837	1	0	0	0
+7	b19c004fb	discard	hub+when+hollow → 1846 dilute	1846	1	0	0	0
+8	b34c4034d	discard	hub+when+Eden-pin 1831 under-eps	1831	1	0	0	0
+9	728ac9db8	discard	stem-gate+pin2+hub 1828 under-eps	1828	1	0	0	0
+10	123642f4f	discard	emotion on 1828 stack → 1831	1831	1	0	0	0
+11	8ab0325e7	discard	thanksPenalty stack 1830 + cost 20	1830	1	0	0	20
+12	f174bc554	keep	hub+stem-gate+pin Eden top-3 → 1815 KEEP	1815	1	0	0	0
+13	64abf2b27	discard	pin Eden top-5 → 1800 under-eps	1800	1	0	0	0
+14	e367d776f	discard	pin5+queryHay → 1800 under-eps flat	1800	1	0	0	0
+15	b036b3a3b	discard	pin5+whenPin2+dateCue → 1796 but cost-ms flake 20	1796	1	0	0	20
+16	b036b3a3b	keep	pin5+whenPin2+dateCue → 1796 KEEP (cost re-run clean)	1796	1	0	0	0
+17	285eba7cd	discard	rrfK40 → 1797 worse	1797	1	0	0	0
+18	12a847a45	discard	pin6 → 1796 flat	1796	1	0	0	0
+19	10afc10db	discard	widen whenQ → 1797 worse	1797	1	0	0	0
+20	aebc23db7	discard	light TCM fuse dateCue → 1795 under-eps (eps=1% ≈18)	1795	1	0	0	0
+21	18b2ee069	keep	neighbor smoothing (query-1) → 1775 KEEP	1775	1	0	0	0

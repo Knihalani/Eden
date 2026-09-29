@@ -1,0 +1,10 @@
+{
+  "values": {
+    "capture-miss": 0,
+    "inject-tests": 1,
+    "junk-store": 0,
+    "probe-miss": 0
+  },
+  "n": 301,
+  "commit": "35e62ff52af02b747e0e4920da35f09db5d200bd"
+}

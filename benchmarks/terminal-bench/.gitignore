@@ -1,0 +1,6 @@
+jobs/
+.data/
+dataset/
+*.log
+wrap-*.pid
+.last-run.json

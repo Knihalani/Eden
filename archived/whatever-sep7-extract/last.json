@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "errors": [],
+  "values": {
+    "extract-miss": 0,
+    "extract-tests": 1,
+    "junk": 0,
+    "cost-ms": 20
+  },
+  "at": "2026-09-07T06:13:14.327Z"
+}

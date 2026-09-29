@@ -1,0 +1,34 @@
+{
+  "goal": "Make Eden memory ready for full user use: a complete, useful passive memory system for coding agents (observe, persist, inject, isolate, forget, query, hooks).",
+  "branch": "whatever/sep7-user-mem",
+  "timeout_sec": 180,
+  "epsilon": 0.01,
+  "scope": ["src", "packages/cli/src", "packages/wrap/src", "plugins/eden-memory"],
+  "out_of_scope": [".whatever", ".gauntlet", "archived"],
+  "primary": {
+    "id": "user-gaps",
+    "cmd": "bun .whatever/benches/user-memory.ts",
+    "direction": "lower",
+    "extract": { "kind": "prefix", "prefix": "metric:" }
+  },
+  "guards": [
+    {
+      "id": "hook-tests",
+      "cmd": "bun test packages/cli/src/memory-hook.test.ts",
+      "direction": "higher",
+      "extract": { "kind": "exit" }
+    },
+    {
+      "id": "junk-store",
+      "cmd": "bun .whatever/benches/passive-memory.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "junk_store:" }
+    },
+    {
+      "id": "capture-miss",
+      "cmd": "bun .whatever/benches/passive-memory.ts",
+      "direction": "lower",
+      "extract": { "kind": "prefix", "prefix": "metric:" }
+    }
+  ]
+}

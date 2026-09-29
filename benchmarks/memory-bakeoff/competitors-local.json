@@ -1,0 +1,476 @@
+{
+  "when": "2026-09-08T05:00:48.276Z",
+  "protocol": {
+    "k": 5,
+    "metric": "retrieve hit@5, no LLM judge",
+    "locomoCats": "1-4",
+    "note": "Same retrieval metric as Eden bakeoff; not vendor LoCoMo judge scores."
+  },
+  "skipped": {
+    "cognee": "needs LLM API key (LLMAPIKeyNotSetError)",
+    "graphiti": "needs LLM client + OpenAI-class embedder (kuzu available but no local embedder in package)",
+    "letta": "full agent runtime; not a drop-in memory library for this harness",
+    "memobase": "cloud SDK client",
+    "langmem": "requires LangGraph LLM memory manager",
+    "supermemory": "hosted / closed local binary",
+    "mem0-cloud / zep-cloud": "no vendor keys"
+  },
+  "baselinesFrom": "2026-09-08T05:00:48.276Z",
+  "baselines": {
+    "eden": {
+      "passive": {
+        "capture": 28,
+        "captureN": 29,
+        "byFamily": {
+          "eng": {
+            "ok": 17,
+            "n": 17
+          },
+          "paraphrase": {
+            "ok": 2,
+            "n": 2
+          },
+          "buried": {
+            "ok": 1,
+            "n": 1
+          },
+          "update": {
+            "ok": 2,
+            "n": 2
+          },
+          "personal": {
+            "ok": 6,
+            "n": 7
+          }
+        },
+        "storedJunk": 0,
+        "misses": [
+          "per-terse"
+        ],
+        "ingestMs": 0.8570631379310352,
+        "retrieveMs": 0.18029737931034567
+      },
+      "locomo": {
+        "rec5": 499,
+        "n": 1540,
+        "hitRate": 0.32402597402597405,
+        "byCat": {
+          "1": {
+            "ok": 41,
+            "n": 282
+          },
+          "2": {
+            "ok": 20,
+            "n": 321
+          },
+          "3": {
+            "ok": 10,
+            "n": 96
+          },
+          "4": {
+            "ok": 428,
+            "n": 841
+          }
+        },
+        "ingestMs": 3404.089040000003,
+        "queryMs": 6.145391672727249
+      }
+    },
+    "lastk": {
+      "passive": {
+        "capture": 5,
+        "captureN": 29,
+        "byFamily": {
+          "eng": {
+            "ok": 4,
+            "n": 17
+          },
+          "paraphrase": {
+            "ok": 0,
+            "n": 2
+          },
+          "buried": {
+            "ok": 0,
+            "n": 1
+          },
+          "update": {
+            "ok": 0,
+            "n": 2
+          },
+          "personal": {
+            "ok": 1,
+            "n": 7
+          }
+        },
+        "storedJunk": 8,
+        "misses": [
+          "eng-tz",
+          "eng-hours",
+          "eng-flyctl",
+          "eng-prefer",
+          "eng-env",
+          "eng-dsn",
+          "eng-distroless",
+          "eng-due",
+          "eng-list",
+          "eng-tabs",
+          "eng-pd",
+          "eng-standup",
+          "eng-rps",
+          "eng-redis",
+          "eng-multi",
+          "upd-tz",
+          "per-sister",
+          "per-veg",
+          "per-city",
+          "per-stay",
+          "per-dog",
+          "per-bday",
+          "per-terse",
+          "upd-city"
+        ],
+        "ingestMs": 0.0037025517241371987,
+        "retrieveMs": 0.0010231034482757195
+      },
+      "locomo": {
+        "rec5": 20,
+        "n": 1540,
+        "hitRate": 0.012987012987012988,
+        "byCat": {
+          "1": {
+            "ok": 6,
+            "n": 282
+          },
+          "2": {
+            "ok": 2,
+            "n": 321
+          },
+          "3": {
+            "ok": 4,
+            "n": 96
+          },
+          "4": {
+            "ok": 8,
+            "n": 841
+          }
+        },
+        "ingestMs": 0.10545900000033726,
+        "queryMs": 0.00039320389610524714
+      }
+    },
+    "storeall-overlap": {
+      "passive": {
+        "capture": 23,
+        "captureN": 29,
+        "byFamily": {
+          "eng": {
+            "ok": 16,
+            "n": 17
+          },
+          "paraphrase": {
+            "ok": 1,
+            "n": 2
+          },
+          "buried": {
+            "ok": 1,
+            "n": 1
+          },
+          "update": {
+            "ok": 1,
+            "n": 2
+          },
+          "personal": {
+            "ok": 4,
+            "n": 7
+          }
+        },
+        "storedJunk": 7,
+        "misses": [
+          "eng-standup",
+          "per-veg",
+          "per-stay",
+          "per-dog",
+          "per-terse",
+          "upd-city"
+        ],
+        "ingestMs": 0.04111924137930943,
+        "retrieveMs": 0.04505175862069103
+      },
+      "locomo": {
+        "rec5": 237,
+        "n": 1540,
+        "hitRate": 0.1538961038961039,
+        "byCat": {
+          "1": {
+            "ok": 5,
+            "n": 282
+          },
+          "2": {
+            "ok": 9,
+            "n": 321
+          },
+          "3": {
+            "ok": 5,
+            "n": 96
+          },
+          "4": {
+            "ok": 218,
+            "n": 841
+          }
+        },
+        "ingestMs": 63.80575199999657,
+        "queryMs": 6.416265537013009
+      }
+    },
+    "storeall-bm25": {
+      "passive": {
+        "capture": 23,
+        "captureN": 29,
+        "byFamily": {
+          "eng": {
+            "ok": 16,
+            "n": 17
+          },
+          "paraphrase": {
+            "ok": 1,
+            "n": 2
+          },
+          "buried": {
+            "ok": 1,
+            "n": 1
+          },
+          "update": {
+            "ok": 1,
+            "n": 2
+          },
+          "personal": {
+            "ok": 4,
+            "n": 7
+          }
+        },
+        "storedJunk": 7,
+        "misses": [
+          "eng-standup",
+          "per-veg",
+          "per-stay",
+          "per-dog",
+          "per-terse",
+          "upd-city"
+        ],
+        "ingestMs": 0.03735920689655163,
+        "retrieveMs": 0.06284486206896364
+      },
+      "locomo": {
+        "rec5": 271,
+        "n": 1540,
+        "hitRate": 0.17597402597402598,
+        "byCat": {
+          "1": {
+            "ok": 5,
+            "n": 282
+          },
+          "2": {
+            "ok": 6,
+            "n": 321
+          },
+          "3": {
+            "ok": 4,
+            "n": 96
+          },
+          "4": {
+            "ok": 256,
+            "n": 841
+          }
+        },
+        "ingestMs": 73.9934590000048,
+        "queryMs": 8.580835119480563
+      }
+    }
+  },
+  "competitors": {
+    "memfabric": {
+      "passive": {
+        "capture": 25,
+        "captureN": 29,
+        "byFamily": {
+          "eng": {
+            "ok": 17,
+            "n": 17
+          },
+          "paraphrase": {
+            "ok": 1,
+            "n": 2
+          },
+          "buried": {
+            "ok": 1,
+            "n": 1
+          },
+          "update": {
+            "ok": 1,
+            "n": 2
+          },
+          "personal": {
+            "ok": 5,
+            "n": 7
+          }
+        },
+        "junkStoredApprox": 8,
+        "junkN": 8,
+        "misses": [
+          "per-veg",
+          "per-stay",
+          "per-terse",
+          "upd-city"
+        ],
+        "ingestMs": 2.495100619351684,
+        "retrieveMs": 0.85002307555285,
+        "elapsedMs": 378.2871659495868
+      },
+      "locomo": {
+        "hit": 403,
+        "n": 1540,
+        "hitRate": 0.2616883116883117,
+        "byCat": {
+          "1": {
+            "miss": 263,
+            "n": 282
+          },
+          "2": {
+            "miss": 307,
+            "n": 321
+          },
+          "3": {
+            "miss": 92,
+            "n": 96
+          },
+          "4": {
+            "miss": 475,
+            "n": 841
+          }
+        },
+        "nConv": 10,
+        "ingestSec": 1.4587674999493174,
+        "querySec": 6.2075279675773345
+      }
+    },
+    "mem0-storeall": {
+      "passive": {
+        "capture": 29,
+        "captureN": 29,
+        "byFamily": {
+          "eng": {
+            "ok": 17,
+            "n": 17
+          },
+          "paraphrase": {
+            "ok": 2,
+            "n": 2
+          },
+          "buried": {
+            "ok": 1,
+            "n": 1
+          },
+          "update": {
+            "ok": 2,
+            "n": 2
+          },
+          "personal": {
+            "ok": 7,
+            "n": 7
+          }
+        },
+        "junkStoredApprox": 8,
+        "junkN": 8,
+        "misses": [],
+        "ingestMs": 350.74507327878786,
+        "retrieveMs": 39.74333334641916,
+        "elapsedMs": 21913.57804200379
+      },
+      "locomo": {
+        "hit": 156,
+        "n": 385,
+        "hitRate": 0.4051948051948052,
+        "byCat": {
+          "1": {
+            "miss": 49,
+            "n": 74
+          },
+          "2": {
+            "miss": 86,
+            "n": 90
+          },
+          "3": {
+            "miss": 20,
+            "n": 21
+          },
+          "4": {
+            "miss": 74,
+            "n": 200
+          }
+        },
+        "nConv": 3,
+        "ingestSec": 69.67094108310994,
+        "querySec": 10.70255383301992,
+        "caveat": "Only first 3 LoCoMo conversations (385 Q), not full 1540."
+      }
+    },
+    "mem0-ollama": {
+      "passive_full": "aborted \u2014 llama3.2:1b extract too slow + JSON parse errors",
+      "smoke6": {
+        "ok": 6,
+        "n": 6,
+        "elapsed_s": 348.0,
+        "rows": [
+          {
+            "id": "eng-tz",
+            "hit": true,
+            "got": "Kai's timezone is Pacific\nPull requests need two reviewers before merge\nSam is the DRI for the dashboard"
+          },
+          {
+            "id": "eng-hours",
+            "hit": true,
+            "got": "Kai's timezone is Pacific\nKai's timezone is Pacific.\nuser: Kai's timezone is Pacific.\nuser: Kai's timezone is Pacific\nus"
+          },
+          {
+            "id": "eng-flyctl",
+            "hit": true,
+            "got": "Remember that production deploys use flyctl, never Heroku\nSam is the DRI for the dashboard\nPull requests need two review"
+          },
+          {
+            "id": "per-city",
+            "hit": true,
+            "got": "I live in Seattle, in Capitol Hill.\nSam is the DRI for the dashboard.\nRemember that production deploys use flyctl, never"
+          },
+          {
+            "id": "per-stay",
+            "hit": true,
+            "got": "I live in Seattle, in Capitol Hill.\nSam is the DRI for the dashboard.\nPull requests need two reviewers before merge.\nAlw"
+          },
+          {
+            "id": "upd-tz",
+            "hit": true,
+            "got": "Kai's timezone is Eastern now.\nKai's timezone is Pacific.\nAlways run bun test before you push.\nPull requests need two re"
+          }
+        ]
+      },
+      "locomo": {
+        "skipped": "LLM extract too slow/unreliable with 1b for LoCoMo"
+      },
+      "note": "Real Mem0 OSS + Ollama. 1b local LLM \u2260 Mem0 Cloud / gpt-4o-mini paper."
+    }
+  },
+  "fairness": {
+    "passive": "all systems, full 29-case suite (except mem0-ollama smoke6)",
+    "locomo_full_1540": [
+      "eden",
+      "lastk",
+      "storeall-overlap",
+      "storeall-bm25",
+      "memfabric"
+    ],
+    "locomo_subset_385": [
+      "mem0-storeall"
+    ],
+    "metric": "retrieve hit@5 (gold in top-5 notes). NOT vendor LLM-judge LoCoMo."
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "goal": "Neuroscience-inspired memory redesign of Eden (working memory, episodic/semantic consolidation, activation decay, salience) measured on a realistic coding-agent memory benchmark (hit-rate, speed, junk)",
+  "branch": "whatever/sep12-coding-brain",
+  "timeout_sec": 600,
+  "epsilon": 0.03,
+  "scope": ["src", "packages/cli/src/memory-hook.ts"],
+  "out_of_scope": [".whatever", "benchmarks", "archived", "packages/know", "packages/wrap", "apps"],
+  "primary": {
+    "id": "coding-miss",
+    "cmd": "bun .whatever/benches/coding-agent.ts",
+    "direction": "lower",
+    "extract": { "kind": "prefix", "prefix": "metric:" }
+  },
+  "guards": [
+    { "id": "junk", "cmd": "bun .whatever/benches/coding-agent.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "junk:" } },
+    { "id": "ms", "cmd": "bun .whatever/benches/coding-agent.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "ms:" } },
+    { "id": "chars", "cmd": "bun .whatever/benches/coding-agent.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "chars:" } },
+    { "id": "holdout2-miss", "cmd": "bun .whatever/benches/coding-holdout.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "coding_miss:" } },
+    { "id": "holdout2-losses", "cmd": "bun .whatever/benches/coding-holdout.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "coding_losses:" } },
+    { "id": "generic-miss", "cmd": "bun .whatever/benches/brain-holdout.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "holdout_miss:" } },
+    { "id": "generic-losses", "cmd": "bun .whatever/benches/brain-holdout.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "holdout_losses:" } },
+    { "id": "locomo-miss", "cmd": "bun .whatever/benches/brain-opt.ts", "direction": "lower", "extract": { "kind": "prefix", "prefix": "metric:" } },
+    { "id": "tests", "cmd": "bun test packages/cli/src/memory-hook.test.ts packages/wrap/src/know-inject.test.ts", "direction": "higher", "extract": { "kind": "exit" } }
+  ]
+}

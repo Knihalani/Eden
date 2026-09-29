@@ -1,0 +1,73 @@
+{
+  "id": "m35.1-negative",
+  "schema": 1,
+  "part": "M35.1",
+  "dated_registered": "2026-09-22",
+  "api_under_test": "openMemory.inject",
+  "product": ["openMemory", "inject", "injectBody"],
+  "named_not_scored": ["hook-inject"],
+  "k": "default",
+  "k_default": 6,
+  "materiality": 0.01,
+  "know": "EDEN_KNOW=0",
+  "off": "EDEN_MEMORY=0",
+  "on": "EDEN_MEMORY unset",
+  "delta_def": "packet_bytes(probe) - packet_bytes(baseline). packet_bytes is the UTF-8 length of system content that contains Eden Memory:. Δ≈0 iff abs(Δ) <= materiality * max(baseline_bytes, 1). Baseline 0 makes the band 0.01 byte, so only a 0-byte Δ is inside it. Packet bytes are arithmetic. Wall-clock is an A/A disclosure, not the verdict.",
+  "seed_liveness": {
+    "cue": "What sqlite database do we use?",
+    "needle": "sqlite",
+    "role": "setup only. If this related cue does not inject sqlite, seeded rows are FAIL. Not a scored Δ row."
+  },
+  "bans": ["hay", "k=40", "LoCoMo 92 as an Eden claim", "BrainMemory column", "dual-API", "ranker retune", "remain-silent omit", "HELP.md"],
+  "cases": [
+    {
+      "id": "empty-math",
+      "title": "Empty store + math",
+      "store": "empty",
+      "cue": "what's 2+2?",
+      "arms": ["off", "on"],
+      "expect": "DELTA_ZERO",
+      "expect_note": "Both identity / no Eden Memory packet. This is the Done-when Δ≈0 cell. Registered before the inject run."
+    },
+    {
+      "id": "aa-off",
+      "title": "A/A two off runs",
+      "store": "empty",
+      "cue": "what's 2+2?",
+      "arms": ["off", "off"],
+      "expect": "DELTA_ZERO",
+      "expect_note": "Noise floor. Two off runs. Packet Δ is arithmetic and must be 0. Wall-clock n=2 is disclosed and is not the verdict."
+    },
+    {
+      "id": "seeded-math",
+      "title": "Seeded sqlite/Clerk + math",
+      "store": "sqlite-clerk",
+      "seed": ["Use sqlite.", "Auth is Clerk."],
+      "leftover_needles": ["sqlite", "Clerk"],
+      "cue": "what's 2+2?",
+      "arms": ["off", "on"],
+      "expect": "MEASURE",
+      "expect_note": "If always-on injects sqlite or Clerk into math, file NON-ZERO packet Δ as LOSS vs remain-silent. Omit is M38. Do not claim Δ≈0 unless the measured packet is inside the ±1% band and the leftover needles are absent."
+    },
+    {
+      "id": "seeded-openssl",
+      "title": "Seeded sqlite/Clerk + unrelated openssl cue",
+      "store": "sqlite-clerk",
+      "seed": ["Use sqlite.", "Auth is Clerk."],
+      "leftover_needles": ["sqlite", "Clerk"],
+      "cue": "Generate an openssl self-signed cert for localhost.",
+      "arms": ["off", "on"],
+      "expect": "MEASURE",
+      "expect_note": "Same LOSS rule. Leftover sqlite/Clerk on an openssl cue is junk, not help. Do not implement omit."
+    },
+    {
+      "id": "empty-coding",
+      "title": "Empty store + coding cue",
+      "store": "empty",
+      "cue": "How do I fix the flake in auth.test.ts before committing?",
+      "arms": ["off", "on"],
+      "expect": "DELTA_ZERO",
+      "expect_note": "Optional empty-store coding cue. Expect identity and no Eden Memory packet."
+    }
+  ]
+}

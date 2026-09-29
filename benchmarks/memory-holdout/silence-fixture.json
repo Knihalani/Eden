@@ -1,0 +1,66 @@
+{
+  "id": "m38.3-silence",
+  "schema": 1,
+  "part": "M38.3",
+  "dated_registered": "2026-09-24",
+  "api_under_test": "openMemory.inject",
+  "product": ["openMemory", "inject", "injectBody"],
+  "named_not_scored": ["hook-inject"],
+  "k": "default",
+  "k_default": 6,
+  "materiality": 0.01,
+  "know": "EDEN_KNOW=0",
+  "off": "EDEN_MEMORY=0",
+  "on": "EDEN_MEMORY unset",
+  "backbone": "N/A",
+  "delta_def": "packet_bytes(probe) - packet_bytes(baseline). packet_bytes is the UTF-8 length of system content that contains Eden Memory:. Omitted means that packet is absent (0 bytes, inject identity, no Eden Memory: mark). Δ≈0 iff abs(Δ) <= materiality * max(baseline_bytes, 1). Baseline 0 makes the band 0.01 byte, so only a 0-byte Δ is inside it. Packet bytes are arithmetic. Wall-clock is an A/A disclosure, not the verdict. Materiality ±1% is registered once.",
+  "rotation": "Math cues (what's 2+2?) are measurement reuse of M35.1, not a new training target. The rotation cell is a new unrelated cue class: What is 17 times 23? Do not retune negative-fixture.json.",
+  "seed_liveness": {
+    "cue": "What sqlite database do we use?",
+    "needle": "sqlite",
+    "role": "setup only. If this related cue does not inject sqlite, seeded silence rows are FAIL (dead store). Not a scored Δ row."
+  },
+  "bans": ["hay", "k=40", "LoCoMo 92 as an Eden claim", "BrainMemory column", "dual-API", "ranker retune", "NEGATIVE.md edit", "retune NEGATIVE fixtures as a training target"],
+  "cases": [
+    {
+      "id": "empty-math",
+      "title": "Empty store + math",
+      "store": "empty",
+      "cue": "what's 2+2?",
+      "arms": ["off", "on"],
+      "expect": "OMIT",
+      "expect_note": "Pre-registered before the run. Empty store, off vs on. Expect Δ≈0 and the on-arm packet omitted (no Eden Memory:)."
+    },
+    {
+      "id": "seeded-math",
+      "title": "Seeded sqlite/Clerk + math",
+      "store": "sqlite-clerk",
+      "seed": ["Use sqlite.", "Auth is Clerk."],
+      "leftover_needles": ["sqlite", "Clerk"],
+      "cue": "what's 2+2?",
+      "arms": ["off", "on"],
+      "expect": "OMIT",
+      "expect_note": "Measurement reuse of the M35.1 math cue, not a new training target. Expect the on-arm packet omitted (no sqlite/Clerk leftover) and Δ≈0 vs EDEN_MEMORY=0. Leftover sqlite or Clerk is a named LOSS."
+    },
+    {
+      "id": "aa-off",
+      "title": "A/A two off runs",
+      "store": "empty",
+      "cue": "what's 2+2?",
+      "arms": ["off", "off"],
+      "expect": "OMIT",
+      "expect_note": "Noise floor. Two EDEN_MEMORY=0 arms. Both packets omitted. Packet Δ is arithmetic and must be 0. Wall-clock n=2 is disclosed and is not the verdict. There is no on-arm."
+    },
+    {
+      "id": "seeded-times",
+      "title": "Seeded sqlite/Clerk + 17 times 23",
+      "store": "sqlite-clerk",
+      "seed": ["Use sqlite.", "Auth is Clerk."],
+      "leftover_needles": ["sqlite", "Clerk"],
+      "cue": "What is 17 times 23?",
+      "arms": ["off", "on"],
+      "expect": "OMIT",
+      "expect_note": "Rotation cell. New unrelated cue class, not in negative-fixture.json. Expect Δ≈0 and the on-arm packet omitted. Leftover sqlite or Clerk is a named LOSS. Do not retune the ranker."
+    }
+  ]
+}

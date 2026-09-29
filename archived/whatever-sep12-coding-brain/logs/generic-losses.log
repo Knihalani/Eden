@@ -1,0 +1,20 @@
+holdout_miss: 46
+holdout_junk: 36
+holdout_losses: 29
+holdout_ms: 1
+
+# seed=20260909 K=5 queries=529 worlds=30 buried=168 (miss 11) miss_rate=8.7%
+# by domain
+#   clinic      miss  11/108  (10%)
+#   travel      miss  11/108  (10%)
+#   household   miss  14/102  (14%)
+#   finance     miss   8/105  (8%)
+#   sports      miss   2/106  (2%)
+# by style
+#   exact       miss   2/90  (2%)
+#   paraphrase  miss   3/87  (3%)
+#   update      miss  10/90  (11%)
+#   multihop    miss  30/60  (50%)
+#   numeric     miss   0/88  (0%)
+#   negation    miss   1/84  (1%)
+#   distractor  miss   0/30  (0%)

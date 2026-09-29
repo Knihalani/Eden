@@ -1,0 +1,156 @@
+n	commit	status	description	primary:user-gaps	guard:hook-tests	guard:junk-store	guard:capture-miss
+0	0f4c98835063f4ce73a3d42b2b0555a200db11b0	baseline	unmodified	4	1	0	0
+1	14380db88	keep	host event aliases	3	1	0	0
+2	942214825	keep	project field isolation	2	1	0	0
+3	f65090517	keep	hook cwd project key	1	1	0	0
+4	d6466fbc6	keep	supersede is/are facts	0	1	0	0
+5	f8ef93dfe	keep	drop identity event aliases	0	1	0	0
+6	7e0024fdb	keep	drop inject cache	0	1	0	0
+7	7ff2a7ca1	keep	fold subjectKey and briefing	0	1	0	0
+8	d23007499	keep	compile needles with one Set	0	1	0	0
+9	f28dcbbf6	keep	shorter jsonl load and flatten	0	1	0	0
+10	b0054b63a	keep	pack remember query convBlob	0	1	0	0
+11	a585e72bf	keep	route-table host and shorter stdin	0	1	0	0
+12	cdfe2ef1b	keep	pack aliases notesFromInject plugin walker	0	1	0	0
+13	0ffb483e2	keep	fold transcript parse and hookMemory	0	1	0	0
+14	c7f1bafb4	keep	splice inject notes; keep close for benches	0	1	0	0
+15	73763d292	keep	restore close; one-line flattenContent	0	1	0	0
+16	1ae3adda6	keep	fold Stop and SessionStart observe	0	1	0	0
+17	b6cc87479	keep	briefing without seen-id set	0	1	0	0
+18	3b8e21a19	keep	inline hook stdin reader	0	1	0	0
+19	578ff05b9	keep	filter notesFromInject	0	1	0	0
+20	2e2c6814e	keep	compact forget persist-and-true	0	1	0	0
+21	822a9946c	keep	one loop for observe extra tags	0	1	0	0
+22	dbf5e95da	keep	chain relevant; pack query	0	1	0	0
+23	af7e30e74	keep	assign dir and path inside mkdir/load	0	1	0	0
+24	4dcf5179c	keep	ternary remember upsert; inline host port	0	1	0	0
+25	e4e5e3440	keep	tighter convBlob	0	1	0	0
+26	9d7d19fa4	discard	atomic persist tmp+rename	0	1	0	0
+27	4c353812e	keep	one-line extractDurable seen add	0	1	0	0
+28	18b372919	keep	inline load jsonl try	0	1	0	0
+29	39ecc7150	keep	drop Note type alias	0	1	0	0
+30	8d6f2f494	keep	one-line hookMemory	0	1	0	0
+31	aed844c3b	keep	atomic persist paid by pack; host aliases	0	1	0	0
+32	77088392d	keep	pack transcript parse and stdin hook	0	1	0	0
+33	d681d5d03	keep	Gemini/Cursor/Codex event aliases + additional_context	0	1	0	0
+34	6e0e677aa	keep	wrap stream injectBody; EDEN_HOME memory dir	0	1	0	0
+35	3927b6d0b	keep	Gemini/Codex/Claude session memory; observe prompt sans transcript	0	1	0	0
+36	b137d142e	keep	cap jsonl to 2000 keeping constraints	0	1	0	0
+37	a122997ac	keep	OpenCode chat/session/compact memory inject	0	1	0	0
+38	eba54dd27	keep	evict oldest by recency at, not insert order	0	1	0	0
+39	8b0fe123e	keep	supersede prefers/uses/lives-in/owned-by facts	0	1	0	0
+40	a10693f2b	keep	OpenCode memory cwd falls back to plugin directory	0	1	0	0
+41	05448dfc1	keep	plugin relative import or hookd fallback	0	1	0	0
+42	5ca45c7e7	keep	Cursor camelCase transcript/prompt/cwd; SessionEnd not ingested	0	1	0	0
+43	8e6cb0830	keep	forget by subject key or case-insensitive text	0	1	0	0
+44	c6a81f6d7	keep	wrap processMemory honors EDEN_MEMORY_AGENT/PROJECT	0	1	0	0
+45	8094dfd86	keep	HTTP DELETE forget by id/query/path	0	1	0	0
+46	6f39baf50	keep	SessionStart briefing uses relevant(prompt)	0	1	0	0
+47	28896fbf4	keep	rank inject notes by token overlap	0	1	0	0
+48	16f26f6f3	keep	plugin loads memory-hook from EDEN_ROOT	0	1	0	0
+49	870fcb91b	keep	GET /memories newest-first and ?q= query	0	1	0	0
+50	18d8c314f	keep	workspace_root/git_root cwd aliases	0	1	0	0
+51	2bd22e563	keep	plugin falls back to eden hook on PATH	0	1	0	0
+52	264859934	keep	index 3-letter tokens for DSN/UTC retrieve	0	1	0	0
+53	ffb828e22	keep	SubagentStop/afterAgentResponse observe aliases	0	1	0	0
+54	71df255cf	keep	install SubagentStop on plugin and eden setup	0	1	0	0
+55	9f00f0e94	keep	EDEN_MEMORY_CAP controls inject/briefing size	0	1	0	0
+56	a61449962	keep	observe prompt_response even with transcript	0	1	0	0
+57	724e3d3e0	keep	flush jsonl to disk before rename	0	1	0	0
+58	7e685777f	keep	observe response/output/completion fields on stop	0	1	0	0
+59	5f837a5a7	keep	flatten transcript reasoning and thinking blocks	0	1	0	0
+60	deb50e0ea	keep	always pin constraints into inject notes	0	1	0	0
+61	ba4c288b1	keep	accept OpenCode events and nested project cwd	0	1	0	0
+62	02c8d50b5	keep	fsync memory dir after jsonl rename	0	1	0	0
+63	7d47e6e54	keep	isolate agent from hook payload agent fields	0	1	0	0
+64	970ff4a04	discard	merge on persist restored superseded facts	1	1	0	0
+65	6983148b4	keep	merge persist by id/text/subject, skip merge on forget	0	1	0	0
+66	7d633fd6b	keep	observe inline payload messages and transcript aliases	0	1	0	0
+67	4b83a8b27	keep	chmod memories.jsonl 0600 after persist	0	1	0	0
+68	d1e905a4e	keep	plugin falls back to bun EDEN_ROOT cli hook	0	1	0	0
+69	9b0bedb8a	keep	chmod memory dir 0700 on open	0	1	0	0
+70	3205f3628	keep	health endpoint reports stored memory count	0	1	0	0
+71	289fd13fc	keep	accept conversation payloads and extra prompt fields	0	1	0	0
+72	487c5712e	keep	localhost CORS on the memory HTTP host	0	1	0	0
+73	e71235d1e	keep	accept Cursor-style prompt and afterAgent event names	0	1	0	0
+74	f50da15d6	keep	observe and inject HTTP text as a user message	0	1	0	0
+75	c0906a466	keep	denser plugin readme with env, fallbacks, and events	0	1	0	0
+76	3c4fc7688	keep	cap GET /memories with limit or k (default 500)	0	1	0	0
+77	06803f427	keep	store settled-on / going-with / agreed-to decisions	0	1	0	0
+78	2f508e8ba	keep	pin constraints into query hits	0	1	0	0
+79	e48462d99	keep	flatten transcript caption title and filename blocks	0	1	0	0
+80	915fd3da1	keep	accept /v1 memory routes and prompt field	0	1	0	0
+81	005ebc3f5	keep	plugin also spawns checkout cli.ts hook as fallback	0	1	0	0
+82	ffe3753ea	keep	notesFor pins constraints for inject query and briefing	0	1	0	0
+83	a543cc0a9	keep	accept compact after_agent and turn_complete events	0	1	0	0
+84	fc7039841	keep	treat transcript human/model roles as user/assistant	0	1	0	0
+85	92af1f2c3	keep	accept PUT on the memory HTTP host	0	1	0	0
+86	36c5219eb	keep	map human/model roles on inline payload messages	0	1	0	0
+87	a3584411c	keep	accept PATCH on the memory HTTP host	0	1	0	0
+88	d8941f722	keep	observe Gemini llmContent in transcripts and wrap blobs	0	1	0	0
+89	4ab37698c	keep	store switched-to / rolled-back / pinned-to facts	0	1	0	0
+90	154d04455	keep	HEAD on memory host for probes	0	1	0	0
+91	50dc23318	keep	GET / health, Gemini parts, HTTP input aliases	0	1	0	0
+92	c46d03846	keep	GET /observe?text= for curl without POST	0	1	0	0
+93	d0beb3b6a	keep	store migrated-to / reverted-to / deprecated facts	0	1	0	0
+94	10cbbd47d	keep	bind memory host to 127.0.0.1 by default	0	1	0	0
+95	2f809ce07	keep	allow [::1] CORS on the memory host	0	1	0	0
+96	4e2214a76	keep	GET /inject?text= for curl without POST	0	1	0	0
+97	3fceff6c3	keep	observe hook message, body, and query fields	0	1	0	0
+98	c9ed21e18	keep	GET /remember?text= for curl without POST	0	1	0	0
+99	044b022ce	keep	allow [::1] CORS on wrap like the memory host	0	1	0	0
+100	404c625f5	keep	isolate project from repo_root and workspaceFolder	0	1	0	0
+101	5522d00e9	keep	observe AfterAgent result, answer, and reply fields	0	1	0	0
+102	3ac068b5c	keep	flatten Gemini content.parts and candidates in wrap blobs	0	1	0	0
+103	f3e327cff	keep	store cut-over-to / turned-on / turned-off facts	0	1	0	0
+104	e2b413745	keep	isolate agent from agent_type, client, and editor	0	1	0	0
+105	2377cde0c	keep	accept kebab-case hook event names	0	1	0	0
+106	8b56123c6	keep	flatten Gemini candidates in transcripts; map Model/AI roles	0	1	0	0
+107	e00740efa	keep	CORS preflight allows Authorization on the memory host	0	1	0	0
+108	773f52a58	keep	observe last_assistant_message and final_response on Stop	0	1	0	0
+109	76573c364	keep	document GET /observe /inject /remember curl on the plugin README	0	1	0	0
+110	b716bf7c3	keep	isolate project from workspaceFolders[0]	0	1	0	0
+111	b45c8d755	keep	empty POST body is {} not a 400 on the memory host	0	1	0	0
+112	20d713e95	keep	accept message.updated and chat.updated as prompt events	0	1	0	0
+113	4b8f1b8da	keep	CORS Max-Age 86400 on memory host preflight	0	1	0	0
+114	378298c01	keep	GET /forget?id= for curl without DELETE	0	1	0	0
+115	e5899aa9d	keep	map session.compacted and message.completed host events	0	1	0	0
+116	5bb5c238d	keep	isolate project from folderUri	0	1	0	0
+117	2d5f0d155	keep	document GET /forget?id= on the plugin README	0	1	0	0
+118	3f9ae87ab	keep	OPTIONS CORS on wrap chat and Anthropic handlers	0	1	0	0
+119	2d8718ab5	keep	store enabled-the / disabled-the flag facts	0	1	0	0
+120	7dee28db5	discard	too complex for the gain: added untracked demo.ts	0	1	0	0
+121	198d652e9	keep	strip file:// from project cwd uris	0	1	0	0
+122	58705d4ce	keep	observe Gemini systemInstruction in wrap blobs	0	1	0	0
+123	d5f3d7044	keep	expose content-type on memory CORS responses	0	1	0	0
+124	073eabdcd	keep	flatten Gemini systemInstruction in transcripts	0	1	0	0
+125	09fe3606a	keep	observe Gemini contents[] as conversation messages	0	1	0	0
+126	7e9c22908	keep	accept Gemini contents[] on memory HTTP observe	0	1	0	0
+127	d3cd6c3e1	keep	injectBody uses Gemini contents[] when messages is absent	0	1	0	0
+128	0921392a4	keep	observe wrap body systemInstruction before inject	0	1	0	0
+129	8ef81a8ab	keep	hookd aliases kebab OpenCode and Cursor memory events	0	1	0	0
+130	57a985564	keep	accept content and message as hook and HTTP memory text	0	1	0	0
+131	7308f0871	keep	isolate memory by workspace.path; session.updated observes	0	1	0	0
+132	48c013c8a	keep	observe wrap body.system alongside systemInstruction	0	1	0	0
+133	9169295ef	keep	HTTP inject returns Gemini contents[] when that was the body	0	1	0	0
+134	42515ed93	keep	flatten Gemini part value into wrap and hook memory blobs	0	1	0	0
+135	c03d5a14d	keep	accept HTTP POST system and systemInstruction as observe text	0	1	0	0
+136	d3b789aab	keep	skip empty Stop so idle session.updated does not churn the store	0	1	0	0
+137	10530d3e5	keep	alias prompt_submit and userPrompt as UserPromptSubmit	0	1	0	0
+138	b0ad68d5b	keep	observe hook system_instruction and system fields	0	1	0	0
+139	62813595f	keep	accept GET ?system= as memory text	0	1	0	0
+140	89b821501	keep	isolate memory by workspacePath projectPath and folderPath	0	1	0	0
+141	984c815ba	keep	alias session_update user_message and agent.completed for memory	0	1	0	0
+142	3da26725a	keep	accept GET ?body= as memory text	0	1	0	0
+143	af5087981	keep	isolate memory by host runtime and app agent fields	0	1	0	0
+144	6160c0661	keep	wrap CORS exposes content-type like the memory host	0	1	0	0
+145	02281d6c6	keep	accept HTTP POST body as observe text	0	1	0	0
+146	3a2f2d644	keep	isolate memory by nested folder and repo paths	0	1	0	0
+147	439efa51b	keep	GET inject dual-writes Gemini contents[] with messages	0	1	0	0
+148	d12422e8d	keep	store standardized on and standardized to as durable episodes	0	1	0	0
+149	daf4b7578	keep	document GET body and system query aliases in the plugin README	0	1	0	0
+150	f078d3d0e	keep	observe hook system_prompt and systemPrompt fields	0	1	0	0
+151	e2f6c35f0	keep	observe wrap body system_prompt alongside systemInstruction	0	1	0	0
+152	9b36f22a2	keep	accept GET ?system_prompt= as memory text	0	1	0	0
+153	4f898ddea	keep	alias bare prompt events as UserPromptSubmit	0	1	0	0
+154	7cb7f992d	keep	isolate memory by nested git.root and vcs.root	0	1	0	0

@@ -1,0 +1,141 @@
+{
+  "when": "2026-09-08T10:14:43.331Z",
+  "protocol": {
+    "metric": "LoCoMo cats 1-4 retrieve hit@5 and hit@20 (gold in notes)",
+    "answerer": "off",
+    "convs": 10,
+    "note": "92% vendor scores use answerer+judge; rec20 is a closer evidence ceiling for that path"
+  },
+  "rows": [
+    {
+      "id": "eden",
+      "rec5": 511,
+      "rec5_pct": 33.2,
+      "rec20": 651,
+      "rec20_pct": 42.3,
+      "n": 1540,
+      "cat2_pct": 6.5,
+      "cat4_pct": 52,
+      "answer_pct": null,
+      "ingest_ms": 3269,
+      "query_ms_avg": 22.64
+    },
+    {
+      "id": "brain-product",
+      "rec5": 512,
+      "rec5_pct": 33.2,
+      "rec20": 760,
+      "rec20_pct": 49.4,
+      "n": 1540,
+      "cat2_pct": 26.2,
+      "cat4_pct": 45.7,
+      "answer_pct": null,
+      "ingest_ms": 4052,
+      "query_ms_avg": 41.03
+    },
+    {
+      "id": "cls",
+      "rec5": 510,
+      "rec5_pct": 33.1,
+      "rec20": 715,
+      "rec20_pct": 46.4,
+      "n": 1540,
+      "cat2_pct": 23.4,
+      "cat4_pct": 47.6,
+      "answer_pct": null,
+      "ingest_ms": 3170,
+      "query_ms_avg": 35.31
+    },
+    {
+      "id": "hcm",
+      "rec5": 510,
+      "rec5_pct": 33.1,
+      "rec20": 765,
+      "rec20_pct": 49.7,
+      "n": 1540,
+      "cat2_pct": 26.2,
+      "cat4_pct": 46.3,
+      "answer_pct": null,
+      "ingest_ms": 4094,
+      "query_ms_avg": 61.84
+    },
+    {
+      "id": "tcm",
+      "rec5": 484,
+      "rec5_pct": 31.4,
+      "rec20": 682,
+      "rec20_pct": 44.3,
+      "n": 1540,
+      "cat2_pct": 24.6,
+      "cat4_pct": 44,
+      "answer_pct": null,
+      "ingest_ms": 44,
+      "query_ms_avg": 6.64
+    },
+    {
+      "id": "bm25-all",
+      "rec5": 481,
+      "rec5_pct": 31.2,
+      "rec20": 683,
+      "rec20_pct": 44.4,
+      "n": 1540,
+      "cat2_pct": 23.1,
+      "cat4_pct": 45.1,
+      "answer_pct": null,
+      "ingest_ms": 9,
+      "query_ms_avg": 12.66
+    },
+    {
+      "id": "schema",
+      "rec5": 460,
+      "rec5_pct": 29.9,
+      "rec20": 670,
+      "rec20_pct": 43.5,
+      "n": 1540,
+      "cat2_pct": 20.9,
+      "cat4_pct": 42.7,
+      "answer_pct": null,
+      "ingest_ms": 10,
+      "query_ms_avg": 13.74
+    },
+    {
+      "id": "asa",
+      "rec5": 228,
+      "rec5_pct": 14.8,
+      "rec20": 504,
+      "rec20_pct": 32.7,
+      "n": 1540,
+      "cat2_pct": 18.7,
+      "cat4_pct": 17.2,
+      "answer_pct": null,
+      "ingest_ms": 175,
+      "query_ms_avg": 1.39
+    },
+    {
+      "id": "salience",
+      "rec5": 225,
+      "rec5_pct": 14.6,
+      "rec20": 542,
+      "rec20_pct": 35.2,
+      "n": 1540,
+      "cat2_pct": 18.7,
+      "cat4_pct": 16.8,
+      "answer_pct": null,
+      "ingest_ms": 68,
+      "query_ms_avg": 6.12
+    },
+    {
+      "id": "lastk",
+      "rec5": 38,
+      "rec5_pct": 2.5,
+      "rec20": 54,
+      "rec20_pct": 3.5,
+      "n": 1540,
+      "cat2_pct": 4.7,
+      "cat4_pct": 1.1,
+      "answer_pct": null,
+      "ingest_ms": 8,
+      "query_ms_avg": 0
+    }
+  ]
+}

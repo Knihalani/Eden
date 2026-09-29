@@ -1,0 +1,106 @@
+{
+ "all24|R1 test policy (hand)": {
+  "n": 32,
+  "any_inject": 0.6875,
+  "bullets_per_cue": 1.875,
+  "recall": 0.5526315789473685,
+  "recall_reachable": 0.5526315789473685,
+  "reachable": 38,
+  "gold": 38,
+  "wrong_per_cue": 1.21875
+ },
+ "all24|test_nim policy-need (kimi)": {
+  "n": 60,
+  "any_inject": 0.85,
+  "bullets_per_cue": 2.1666666666666665,
+  "recall": 0.26666666666666666,
+  "recall_reachable": 0.26666666666666666,
+  "reachable": 60,
+  "gold": 60,
+  "wrong_per_cue": 1.9
+ },
+ "all24|test_nim para cues of policy rows": {
+  "n": 60,
+  "any_inject": 0.8,
+  "bullets_per_cue": 2.716666666666667,
+  "recall": 0.43333333333333335,
+  "recall_reachable": 0.43333333333333335,
+  "reachable": 60,
+  "gold": 60,
+  "wrong_per_cue": 2.283333333333333
+ },
+ "all24|R1 test negatives": {
+  "n": 80,
+  "any_inject": 0.3875,
+  "bullets_per_cue": 0.4125
+ },
+ "all24|test_nim negatives (kimi)": {
+  "n": 98,
+  "any_inject": 0.5612244897959183,
+  "bullets_per_cue": 0.7653061224489796
+ },
+ "all24|R1 test other positives": {
+  "n": 221,
+  "any_inject": 0.3167420814479638,
+  "bullets_per_cue": 0.6199095022624435,
+  "gain_policy_bullet": 0.3167420814479638
+ },
+ "all24|test_nim para, non-policy rows": {
+  "n": 340,
+  "any_inject": 0.4676470588235294,
+  "bullets_per_cue": 0.8,
+  "gain_policy_bullet": 0.4676470588235294
+ },
+ "high|R1 test policy (hand)": {
+  "n": 32,
+  "any_inject": 0.5,
+  "bullets_per_cue": 1.5625,
+  "recall": 0.47368421052631576,
+  "recall_reachable": 0.5454545454545454,
+  "reachable": 33,
+  "gold": 38,
+  "wrong_per_cue": 1.0
+ },
+ "high|test_nim policy-need (kimi)": {
+  "n": 60,
+  "any_inject": 0.6333333333333333,
+  "bullets_per_cue": 1.7666666666666666,
+  "recall": 0.18333333333333332,
+  "recall_reachable": 0.2619047619047619,
+  "reachable": 42,
+  "gold": 60,
+  "wrong_per_cue": 1.5833333333333333
+ },
+ "high|test_nim para cues of policy rows": {
+  "n": 60,
+  "any_inject": 0.6,
+  "bullets_per_cue": 2.3,
+  "recall": 0.31666666666666665,
+  "recall_reachable": 0.4523809523809524,
+  "reachable": 42,
+  "gold": 60,
+  "wrong_per_cue": 1.9833333333333334
+ },
+ "high|R1 test negatives": {
+  "n": 80,
+  "any_inject": 0.0375,
+  "bullets_per_cue": 0.05
+ },
+ "high|test_nim negatives (kimi)": {
+  "n": 98,
+  "any_inject": 0.10204081632653061,
+  "bullets_per_cue": 0.19387755102040816
+ },
+ "high|R1 test other positives": {
+  "n": 221,
+  "any_inject": 0.19004524886877827,
+  "bullets_per_cue": 0.47058823529411764,
+  "gain_policy_bullet": 0.19004524886877827
+ },
+ "high|test_nim para, non-policy rows": {
+  "n": 340,
+  "any_inject": 0.3058823529411765,
+  "bullets_per_cue": 0.5647058823529412,
+  "gain_policy_bullet": 0.3058823529411765
+ }
+}

@@ -1,0 +1,548 @@
+[
+{
+"batch": "A",
+"i": 250,
+"ex": [],
+"parsed": true,
+"latency_s": 1.0734257698059082,
+"usage": {
+"prompt_tokens": 1025,
+"completion_tokens": 7,
+"total_tokens": 1032
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 251,
+"ex": [
+{
+"kind": "policy",
+"cls": "dependency",
+"pol": "pos",
+"obj": "*",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "commit",
+"pol": "neg",
+"obj": ".env",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 3.263592004776001,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 68,
+"total_tokens": 1091
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"dependency\", \"polarity\": \"pos\", \"object\": \"*\", \"qualifier\": null}, {\"kind\": \"policy\", \"class\": \"commit\", \"polarity\": \"neg\", \"object\": \".env\", \"qualifier\": null}]}"
+},
+{
+"batch": "A",
+"i": 252,
+"ex": [
+{
+"kind": "policy",
+"cls": "push-upstream",
+"pol": "neg",
+"obj": "*",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "review",
+"pol": "pos",
+"obj": "pr",
+"qual": null
+},
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "yarn"
+}
+],
+"parsed": true,
+"latency_s": 1.189889669418335,
+"usage": {
+"prompt_tokens": 1037,
+"completion_tokens": 95,
+"total_tokens": 1132
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"push-upstream\", \"polarity\": \"neg\", \"object\": \"*\", \"qualifier\": null}, {\"kind\": \"policy\", \"class\": \"review\", \"polarity\": \"pos\", \"object\": \"pr\", \"qualifier\": null}, {\"kind\": \"slot\", \"slot\": \"pkg.manager\", \"op\": \"set\", \"value\": \"yarn\"}]}"
+},
+{
+"batch": "A",
+"i": 253,
+"ex": [],
+"parsed": true,
+"latency_s": 0.7100179195404053,
+"usage": {
+"prompt_tokens": 1025,
+"completion_tokens": 7,
+"total_tokens": 1032
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 254,
+"ex": [
+{
+"kind": "intent",
+"cls": "integrate",
+"pol": "neg",
+"obj": "pr",
+"qual": "until"
+}
+],
+"parsed": true,
+"latency_s": 0.8380351066589355,
+"usage": {
+"prompt_tokens": 1021,
+"completion_tokens": 40,
+"total_tokens": 1061
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"intent\", \"class\": \"integrate\", \"polarity\": \"neg\", \"object\": \"pr\", \"qualifier\": \"until\"}]}"
+},
+{
+"batch": "A",
+"i": 255,
+"ex": [],
+"parsed": true,
+"latency_s": 0.9395227432250977,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 7,
+"total_tokens": 1030
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 256,
+"ex": [
+{
+"kind": "slot",
+"slot": "test.runner",
+"op": "set",
+"value": "vitest"
+}
+],
+"parsed": true,
+"latency_s": 0.8691658973693848,
+"usage": {
+"prompt_tokens": 1018,
+"completion_tokens": 34,
+"total_tokens": 1052
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"test.runner\", \"op\": \"set\", \"value\": \"vitest\"}]}"
+},
+{
+"batch": "A",
+"i": 257,
+"ex": [],
+"parsed": true,
+"latency_s": 0.5915157794952393,
+"usage": {
+"prompt_tokens": 1040,
+"completion_tokens": 7,
+"total_tokens": 1047
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 258,
+"ex": [],
+"parsed": true,
+"latency_s": 2.8856701850891113,
+"usage": {
+"prompt_tokens": 1029,
+"completion_tokens": 7,
+"total_tokens": 1036
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 259,
+"ex": [],
+"parsed": true,
+"latency_s": 0.5717432498931885,
+"usage": {
+"prompt_tokens": 1043,
+"completion_tokens": 7,
+"total_tokens": 1050
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 260,
+"ex": [
+{
+"kind": "policy",
+"cls": "integrate",
+"pol": "neg",
+"obj": "pr",
+"qual": null
+},
+{
+"kind": "policy",
+"cls": "history-rewrite",
+"pol": "pos",
+"obj": "*",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 1.6993248462677002,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 72,
+"total_tokens": 1095
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"integrate\", \"polarity\": \"neg\", \"object\": \"pr\", \"qualifier\": null}, {\"kind\": \"policy\", \"class\": \"history-rewrite\", \"polarity\": \"pos\", \"object\": \"*\", \"qualifier\": null}]}"
+},
+{
+"batch": "A",
+"i": 261,
+"ex": [],
+"parsed": true,
+"latency_s": 0.7209427356719971,
+"usage": {
+"prompt_tokens": 1030,
+"completion_tokens": 7,
+"total_tokens": 1037
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 262,
+"ex": [
+{
+"kind": "policy",
+"cls": "deploy",
+"pol": "pos",
+"obj": "release",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 0.7649190425872803,
+"usage": {
+"prompt_tokens": 1023,
+"completion_tokens": 38,
+"total_tokens": 1061
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"deploy\", \"polarity\": \"pos\", \"object\": \"release\", \"qualifier\": null}]}"
+},
+{
+"batch": "A",
+"i": 263,
+"ex": [
+{
+"kind": "policy",
+"cls": "delete",
+"pol": "neg",
+"obj": "migrations"
+},
+{
+"kind": "policy",
+"cls": "dependency",
+"pol": "neg",
+"obj": "*"
+}
+],
+"parsed": true,
+"latency_s": 1.3493907451629639,
+"usage": {
+"prompt_tokens": 1030,
+"completion_tokens": 57,
+"total_tokens": 1087
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"policy\", \"class\": \"delete\", \"polarity\": \"neg\", \"object\": \"migrations\"}, {\"kind\": \"policy\", \"class\": \"dependency\", \"polarity\": \"neg\", \"object\": \"*\"}]}"
+},
+{
+"batch": "A",
+"i": 264,
+"ex": [],
+"parsed": true,
+"latency_s": 0.5667121410369873,
+"usage": {
+"prompt_tokens": 1030,
+"completion_tokens": 7,
+"total_tokens": 1037
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 265,
+"ex": [
+{
+"kind": "slot",
+"slot": "orm",
+"op": "set",
+"value": "drizzle"
+}
+],
+"parsed": true,
+"latency_s": 1.065852165222168,
+"usage": {
+"prompt_tokens": 1029,
+"completion_tokens": 33,
+"total_tokens": 1062
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"orm\", \"op\": \"set\", \"value\": \"drizzle\"}]}"
+},
+{
+"batch": "A",
+"i": 266,
+"ex": [
+{
+"kind": "slot",
+"slot": "linter",
+"op": "set",
+"value": "eslint"
+},
+{
+"kind": "slot",
+"slot": "formatter",
+"op": "set",
+"value": "prettier"
+}
+],
+"parsed": true,
+"latency_s": 1.2917828559875488,
+"usage": {
+"prompt_tokens": 1019,
+"completion_tokens": 57,
+"total_tokens": 1076
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"linter\", \"op\": \"set\", \"value\": \"eslint\"}, {\"kind\": \"slot\", \"slot\": \"formatter\", \"op\": \"set\", \"value\": \"prettier\"}]}"
+},
+{
+"batch": "A",
+"i": 267,
+"ex": [],
+"parsed": true,
+"latency_s": 0.8103370666503906,
+"usage": {
+"prompt_tokens": 1017,
+"completion_tokens": 7,
+"total_tokens": 1024
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "A",
+"i": 268,
+"ex": [
+{
+"kind": "slot",
+"slot": "node.version",
+"op": "set",
+"value": "18.19.0"
+},
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "set",
+"value": "pnpm"
+}
+],
+"parsed": true,
+"latency_s": 1.089761734008789,
+"usage": {
+"prompt_tokens": 1024,
+"completion_tokens": 64,
+"total_tokens": 1088
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"node.version\", \"op\": \"set\", \"value\": \"18.19.0\"}, {\"kind\": \"slot\", \"slot\": \"pkg.manager\", \"op\": \"set\", \"value\": \"pnpm\"}]}"
+},
+{
+"batch": "A",
+"i": 269,
+"ex": [
+{
+"kind": "slot",
+"slot": "auth.provider",
+"op": "set",
+"value": "auth0"
+},
+{
+"kind": "slot",
+"slot": "db.engine",
+"op": "set",
+"value": "mysql"
+}
+],
+"parsed": true,
+"latency_s": 1.206838846206665,
+"usage": {
+"prompt_tokens": 1031,
+"completion_tokens": 58,
+"total_tokens": 1089
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"auth.provider\", \"op\": \"set\", \"value\": \"auth0\"}, {\"kind\": \"slot\", \"slot\": \"db.engine\", \"op\": \"set\", \"value\": \"mysql\"}]}"
+},
+{
+"batch": "B",
+"i": 54,
+"ex": [
+{
+"kind": "intent",
+"cls": "push-upstream",
+"pol": "neg",
+"obj": "main",
+"qual": "for-now"
+},
+{
+"kind": "policy",
+"cls": "history-rewrite",
+"pol": "pos",
+"obj": "*",
+"qual": null
+}
+],
+"parsed": true,
+"latency_s": 1.0103261470794678,
+"usage": {
+"prompt_tokens": 1016,
+"completion_tokens": 76,
+"total_tokens": 1092
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"intent\", \"class\": \"push-upstream\", \"polarity\": \"neg\", \"object\": \"main\", \"qualifier\": \"for-now\"}, {\"kind\": \"policy\", \"class\": \"history-rewrite\", \"polarity\": \"pos\", \"object\": \"*\", \"qualifier\": null}]}"
+},
+{
+"batch": "B",
+"i": 55,
+"ex": [
+{
+"kind": "slot",
+"slot": "pkg.manager",
+"op": "invalidate",
+"value": "npm"
+}
+],
+"parsed": true,
+"latency_s": 0.7430641651153564,
+"usage": {
+"prompt_tokens": 1005,
+"completion_tokens": 32,
+"total_tokens": 1037
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"pkg.manager\", \"op\": \"invalidate\", \"value\": \"npm\"}]}"
+},
+{
+"batch": "B",
+"i": 56,
+"ex": [
+{
+"kind": "slot",
+"slot": "test.runner",
+"op": "set",
+"value": "jest"
+},
+{
+"kind": "slot",
+"slot": "linter",
+"op": "set",
+"value": "eslint"
+},
+{
+"kind": "slot",
+"slot": "formatter",
+"op": "set",
+"value": "prettier"
+}
+],
+"parsed": true,
+"latency_s": 2.6905553340911865,
+"usage": {
+"prompt_tokens": 1026,
+"completion_tokens": 84,
+"total_tokens": 1110
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"slot\", \"slot\": \"test.runner\", \"op\": \"set\", \"value\": \"jest\"}, {\"kind\": \"slot\", \"slot\": \"linter\", \"op\": \"set\", \"value\": \"eslint\"}, {\"kind\": \"slot\", \"slot\": \"formatter\", \"op\": \"set\", \"value\": \"prettier\"}]}"
+},
+{
+"batch": "B",
+"i": 57,
+"ex": [],
+"parsed": true,
+"latency_s": 0.7708561420440674,
+"usage": {
+"prompt_tokens": 1026,
+"completion_tokens": 7,
+"total_tokens": 1033
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "B",
+"i": 58,
+"ex": [],
+"parsed": true,
+"latency_s": 0.6680326461791992,
+"usage": {
+"prompt_tokens": 1016,
+"completion_tokens": 7,
+"total_tokens": 1023
+},
+"cached": false,
+"raw": "{\"extractions\": []}"
+},
+{
+"batch": "B",
+"i": 59,
+"ex": [
+{
+"kind": "intent",
+"cls": "integrate",
+"pol": "neg",
+"obj": "pr",
+"qual": "this-time"
+}
+],
+"parsed": true,
+"latency_s": 0.7336061000823975,
+"usage": {
+"prompt_tokens": 1015,
+"completion_tokens": 40,
+"total_tokens": 1055
+},
+"cached": false,
+"raw": "{\"extractions\": [{\"kind\": \"intent\", \"class\": \"integrate\", \"polarity\": \"neg\", \"object\": \"pr\", \"qualifier\": \"this-time\"}]}"
+}
+]

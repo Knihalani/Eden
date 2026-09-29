@@ -1,0 +1,320 @@
+{
+  "at": "2026-09-01T13:48:25.931Z",
+  "pack_path": "/Users/kaiavnihalani/.eden/know/graph.kpk",
+  "magic": "KPK9",
+  "flags": 4,
+  "pack_bytes": 7155,
+  "baseline_pack_bytes": 75069,
+  "n_triples": 8299,
+  "bytes_per_fact": 0.8621520665140379,
+  "bits_per_fact": 6.897216532112303,
+  "json_bytes": 507185,
+  "gzip_json_bytes": 42396,
+  "zstd_json_bytes": 27901,
+  "brotli_json_bytes": 26239,
+  "nt_bytes": 274806,
+  "gzip_nt_bytes": 40638,
+  "zstd_nt_bytes": 26141,
+  "brotli_nt_bytes": 24700,
+  "pack_over_gzip": 0.16876592131333146,
+  "pack_over_zstd": 0.25644242141858714,
+  "pack_over_json": 0.014107278409258949,
+  "pack_over_nt": 0.026036549420318335,
+  "pack_over_nt_pct": 2.6036549420318336,
+  "sqlite_bytes": 274432,
+  "crawl_bin_bytes": 4456,
+  "journal_bytes": 4,
+  "seen_bytes": 4,
+  "ingest_bytes": 4464,
+  "rfc_titles_bin": 59834,
+  "rfc_edges_bin": 5769,
+  "reencode_bytes": 7155,
+  "reencode_magic": "KPK9",
+  "reencode_n": 8299,
+  "roundtrip_n_ok": true,
+  "decode_ns": 11115625,
+  "encode_ns": 624429791,
+  "rss_after_decode": 118177792,
+  "rss_delta": 770048,
+  "query_p50_ns": 1042,
+  "query_p95_ns": 6417,
+  "query_p50_ms": 0.001042,
+  "query_p95_ms": 0.006417,
+  "inject_p50_ns": 458,
+  "inject_p95_ns": 6583,
+  "inject_p50_ms": 0.000458,
+  "inject_p95_ms": 0.006583,
+  "needle_p50_ns": 12792,
+  "htmltotext_p50_ns": 191709,
+  "holdout_n": 20,
+  "holdout_pass": 20,
+  "holdout_recall": 1,
+  "card_tokens_max": 9,
+  "cards_over_48": 0,
+  "extract_kenya_n": 10,
+  "extract_kenya_ns": 1211542,
+  "extract_kenya_p50_ns": 500666,
+  "extract_warm_ns": 34102417,
+  "extract_kenya_capitals": 1,
+  "extract_kenya_typed": 10,
+  "extract_list_n": 12,
+  "extract_list_capitals": 6,
+  "extract_list_ns": 16075500,
+  "extract_rfc_n": 9,
+  "extract_dense_n": 200,
+  "extract_dense_capitals": 200,
+  "extract_dense_ns": 5207542,
+  "extract_dense_bytes": 20700,
+  "extract_dense_per_kb": 9.893719806763285,
+  "extract_kenya_per_kb": 10.80168776371308,
+  "paywall": "paywall-host",
+  "primary_notes": 1,
+  "primary_card": "Eden Know: RFC 3986 is Uniform Resource Identifier (URI): Generic Syntax.",
+  "quiet_null": true,
+  "extra_unknown": true,
+  "empty_unknown": true,
+  "holdout": [
+    {
+      "id": "rfc3986",
+      "q": "RFC 3986",
+      "want": "Uniform Resource Identifier",
+      "fact": "RFC 3986 is Uniform Resource Identifier (URI): Generic Syntax.",
+      "unknown": false,
+      "tokens": 9,
+      "pass": true
+    },
+    {
+      "id": "rfc9110",
+      "q": "RFC 9110",
+      "want": "HTTP Semantics",
+      "fact": "RFC 9110 is HTTP Semantics.",
+      "unknown": false,
+      "tokens": 5,
+      "pass": true
+    },
+    {
+      "id": "json",
+      "q": "application/json",
+      "want": "JSON media type",
+      "fact": "application/json is a JSON media type.",
+      "unknown": false,
+      "tokens": 6,
+      "pass": true
+    },
+    {
+      "id": "json-bare",
+      "q": "json",
+      "want": "JSON media type",
+      "fact": "application/json is a JSON media type.",
+      "unknown": false,
+      "tokens": 6,
+      "pass": true
+    },
+    {
+      "id": "get",
+      "q": "GET",
+      "want": "GET is",
+      "fact": "GET is safe, idempotent, RFC 9110.",
+      "unknown": false,
+      "tokens": 6,
+      "pass": true
+    },
+    {
+      "id": "404",
+      "q": "404",
+      "want": "Not Found",
+      "fact": "HTTP 404 is Not Found.",
+      "unknown": false,
+      "tokens": 5,
+      "pass": true
+    },
+    {
+      "id": "kenya",
+      "q": "capital of Kenya",
+      "want": "Nairobi",
+      "fact": "The capital of Kenya is Nairobi.",
+      "unknown": false,
+      "tokens": 6,
+      "pass": true
+    },
+    {
+      "id": "uk",
+      "q": "capital of United Kingdom",
+      "want": "London",
+      "fact": "The capital of the United Kingdom is London.",
+      "unknown": false,
+      "tokens": 8,
+      "pass": true
+    },
+    {
+      "id": "utf8",
+      "q": "UTF-8",
+      "want": "charset",
+      "fact": "UTF-8 is a charset.",
+      "unknown": false,
+      "tokens": 4,
+      "pass": true
+    },
+    {
+      "id": "mit",
+      "q": "MIT",
+      "want": "SPDX license",
+      "fact": "MIT is an SPDX license.",
+      "unknown": false,
+      "tokens": 5,
+      "pass": true
+    },
+    {
+      "id": "tcp",
+      "q": "TCP",
+      "want": "protocol",
+      "fact": "TCP is protocol 6.",
+      "unknown": false,
+      "tokens": 4,
+      "pass": true
+    },
+    {
+      "id": "https",
+      "q": "https",
+      "want": "Hypertext",
+      "fact": "https is Hypertext Transfer Protocol Secure.",
+      "unknown": false,
+      "tokens": 6,
+      "pass": true
+    },
+    {
+      "id": "aaaa",
+      "q": "AAAA",
+      "want": "IP6",
+      "fact": "AAAA is an IP6 Address record.",
+      "unknown": false,
+      "tokens": 6,
+      "pass": true
+    },
+    {
+      "id": "accept",
+      "q": "Accept",
+      "want": "header",
+      "fact": "Accept is an HTTP header.",
+      "unknown": false,
+      "tokens": 5,
+      "pass": true
+    },
+    {
+      "id": "content-type",
+      "q": "Content-Type",
+      "want": "header",
+      "fact": "Content-Type is an HTTP header.",
+      "unknown": false,
+      "tokens": 5,
+      "pass": true
+    },
+    {
+      "id": "apache",
+      "q": "Apache-2.0",
+      "want": "SPDX",
+      "fact": "Apache-2.0 is an SPDX license.",
+      "unknown": false,
+      "tokens": 5,
+      "pass": true
+    },
+    {
+      "id": "web-share",
+      "q": "W3C web-share",
+      "want": "Web Share",
+      "fact": "W3C web-share is Web Share API.",
+      "unknown": false,
+      "tokens": 6,
+      "pass": true
+    },
+    {
+      "id": "whatwg-html",
+      "q": "WHATWG html",
+      "want": "HTML",
+      "fact": "WHATWG html is HTML.",
+      "unknown": false,
+      "tokens": 4,
+      "pass": true
+    },
+    {
+      "id": "empty",
+      "q": "",
+      "want": "unknown",
+      "fact": "",
+      "unknown": true,
+      "tokens": 0,
+      "pass": true
+    },
+    {
+      "id": "extra",
+      "q": "RFC 3986 xyzzy-not-a-token",
+      "want": "unknown",
+      "fact": "",
+      "unknown": true,
+      "tokens": 0,
+      "pass": true
+    }
+  ],
+  "kenya_sample": [
+    {
+      "s": "Kenya",
+      "p": "capital",
+      "o": "Nairobi",
+      "e": "capital of Kenya is Nairobi"
+    },
+    {
+      "s": "Kenya",
+      "p": "id",
+      "o": "KE",
+      "e": "Kenya ISO 3166-1 alpha-2 KE"
+    },
+    {
+      "s": "KE",
+      "p": "is",
+      "o": "the ISO 3166-1 alpha-2 of Kenya",
+      "e": "Kenya ISO 3166-1 alpha-2 KE"
+    },
+    {
+      "s": "Nairobi",
+      "p": "is",
+      "o": "the largest city of Kenya",
+      "e": "the largest city of Kenya"
+    },
+    {
+      "s": "English",
+      "p": "is",
+      "o": "an official language of Kenya",
+      "e": "an official language of Kenya"
+    },
+    {
+      "s": "Swahili",
+      "p": "is",
+      "o": "an official language of Kenya",
+      "e": "an official language of Kenya"
+    },
+    {
+      "s": "Kenyan shilling",
+      "p": "is",
+      "o": "the currency of Kenya",
+      "e": "the currency of Kenya"
+    },
+    {
+      "s": "Nairobi",
+      "p": "is",
+      "o": "the capital of Kenya",
+      "e": "capital of Kenya is Nairobi"
+    },
+    {
+      "s": "Nairobi",
+      "p": "is",
+      "o": "a city in Kenya",
+      "e": "capital of Kenya is Nairobi"
+    },
+    {
+      "s": "Kenya",
+      "p": "is",
+      "o": "a country in East Africa",
+      "e": "a country in East Africa"
+    }
+  ]
+}

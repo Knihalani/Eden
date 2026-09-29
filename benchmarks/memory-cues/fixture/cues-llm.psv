@@ -1,0 +1,191 @@
+# cat|scope|gold|cue|last_paths|prev_turn   (author=qwen2.5-3b-instruct)
+para|apps/web|w36|What causes production builds to fail for clerk instances?||
+llm-natural|apps/web|w36|Could you remind me why pk_test_ keys cause build failures in prod?||
+para||r39|What directories do platform members own?||
+llm-natural||r39|Could you remind me who owns infra/ and .github/ in CODEOWNERS?||
+para|apps/api|a19|how do we handle prepared statements with PgBouncer?||
+llm-natural|apps/api|a19|Need help enabling prepared statements for PgBouncer?||
+para|infra|i14|What's the duration backups are stored for?||
+llm-natural|infra|i14|Could you remind me about production Postgres backup retention?||
+para||r13|How do we set up alias paths for TypeScript files?||
+llm-natural||r13|Can you remind me about TypeScript path aliases and their prefix?||
+para||r19|what does running changeset do for our project?||
+llm-natural||r19|Help! Need to create a changeset for a user-facing update.||
+para|services/worker|s01|What queue system is being used with Redis version 7?||
+llm-natural|services/worker|s01|Could you remind me how BullMQ works with Redis 7?||
+para||r25|what does DSN stand for in this context?||
+llm-natural||r25|Could you please remind me where to find the Sentry DSN?||
+para|apps/api|a11|How do I run just the authentication tests?||
+llm-natural|apps/api|a11|Can you run just the auth tests using pnpm?||
+para|services/worker|s13|how do we clear job data after processing them?||
+llm-natural|services/worker|s13|Need help understanding "removeOnComplete: 1000" setting?||
+para||r15|How do I set up unit tests with Vitest?||
+llm-natural||r15|Could you remind me where Vitest is used for unit tests?||
+para|packages/cli|c11|What library should I use for terminal colors?||
+llm-natural|packages/cli|c11|Could you please remind me about picocolors vs chalk for terminal colors?||
+para|apps/web|w08|where are UI components stored?||
+llm-natural|apps/web|w08|Can you remind me where UI components are stored?||
+para||r10|Why switched from linting tools now?||
+llm-natural||r10|Could you please remind me why we switched to Biome?||
+para||r23|What date library should I use now?||
+llm-natural||r23|Check if we can use date-fns for date operations instead of moment.||
+para|apps/api|a29|How do we send files to S3 using POST?||
+llm-natural|apps/api|a29|Could you remind me how file uploads work with S3 and presigned URLs?||
+para|apps/api|a25|What checks does the health endpoint do?||
+llm-natural|apps/api|a25|Could you remind me what endpoints check Postgres and Redis?||
+para||r18|What happens with dependency updates on Mondays?||
+llm-natural||r18|Check if it's Monday to trigger renames and watch automerge for patches.||
+para|apps/web|w15|What command do I use to run web tests and start dev server?||
+llm-natural|apps/web|w15|Help needed: Starting dev server on port 3000 for web E2E tests?||
+para||r24|How do we set up structured logging with pino?||
+llm-natural||r24|Need info on structured logging using pino?||
+para|services/worker|s05|What are BullMQ jobs used for in schedules?||
+llm-natural|services/worker|s05|Could you remind me what Cron jobs are in our setup?||
+para|apps/api|a26|What does each log entry include?||
+llm-natural|apps/api|a26|Could you remind me what the requestId header is called?||
+para||r16|What's Playwright used for in our tests?||
+llm-natural||r16|Need info on where Playwright is used for end-to-end tests?||
+para|services/worker|s08|What endpoint exposes metrics for Prometheus?||
+llm-natural|services/worker|s08|Can you help me expose Prometheus metrics on port 9464?||
+para||r32|What are the server ports for web, API, and database?||
+llm-natural||r32|Hey AI, could you remind me of local port numbers for web, API, and DB?||
+para|apps/web|w11|How does react-hook-form work with Zod?||
+llm-natural|apps/web|w11|Need help with react-hook-form and Zod resolvers?||
+para|services/worker|s16|What's the command to run worker tests with Redis mock?||
+llm-natural|services/worker|s16|Need help running worker tests with pnpm filter?||
+para|services/worker|s11|How do we ensure each job run can safely run multiple times without double-processing?||
+llm-natural|services/worker|s11|Can you remind me what it means for a job handler to be idempotent?||
+para|infra|i20|How do I ensure all resources have team and env tags?||
+llm-natural|infra|i20|Could you remind me about cost tags: team and env for all resources?||
+para|infra|i18|What do I need to do for infra changes?||
+llm-natural|infra|i18|Need platform team review and plan for infra change PR?||
+para|apps/web|w10|Why did you decide against Redux here?||
+llm-natural|apps/web|w10|Could you remind me why we decided against Redux for this project?||
+para||r12|how do I fix the error for ES Module imports?||
+llm-natural||r12|Can you remind me how to fix ERR_REQUIRE_ESM?||
+para|services/worker|s06|How do I resolve Sharp not working with Alpine image?||
+llm-natural|services/worker|s06|Can you remind me why Sharp isn't working in Alpine?||
+para||r35|How do I start all services using Turborepo?||
+llm-natural||r35|Check `pnpm dev` at root to start all services.||
+para|apps/web|w28|What setup ensures card info isn't stored in our app?||
+llm-natural|apps/web|w28|Can you remind me how Stripe Checkout redirects work without exposing card data?||
+para|infra|i06|Why can't I use local apply for CI?||
+llm-natural|infra|i06|Could you remind me why we don't run apply locally?||
+para||r37|What tag triggers production deploys and where can I find the release process config?||
+llm-natural||r37|Need help with production deploy steps?||
+para||r31|How do I avoid using sudo for npm installs?||
+llm-natural||r31|Check your npm/pnpm permissions; don't use sudo.||
+para|apps/web|w32|How do we handle form submissions now?||
+llm-natural|apps/web|w32|Can you remind me why we're using server actions for form posts?||
+para||r47|how should I log messages without console?||
+llm-natural||r47|Can you remind about removing console.logs and using pino logger?||
+para||r27|How do we set up analytics tracking in our project?||
+llm-natural||r27|Could you remind me where we're using PostHog for product analytics?||
+para|apps/web|w01|How do I set up routing for Next.js 15 App Router?||
+llm-natural|apps/web|w01|Need info on Next.js 15 App Router setup?||
+para|apps/api|a13|What does it mean for errors to be JSON formatted per RFC 7807?||
+llm-natural|apps/api|a13|Could you remind me what format errors are returned as?||
+para|infra|i15|What service does our production use for caching?||
+llm-natural|infra|i15|Could you remind me where we store our production Redis?||
+para||r17|What if our code coverage drops below 80%?||
+llm-natural||r17|Could you check if our code coverage meets the 80% threshold for CI?||
+para|services/worker|s12|How often does Stripe invoice data get fetched?||
+llm-natural|services/worker|s12|Could you remind me what billing-sync does with Stripe invoices?||
+para|apps/web|w06|Why am I getting stuck in a login loop?||
+llm-natural|apps/web|w06|Need help with login redirect loop issue.||
+para|packages/cli|c09|How do we securely save OAuth tokens across sessions?||
+llm-natural|packages/cli|c09|Need help with OAuth device code flow and storing token in OS keychain using Keytar?||
+para|apps/api|a05|How do I create a new migration for the API schema?||
+llm-natural|apps/api|a05|Help needed: How to create new API migration with Drizzle Kit?||
+para|apps/web|w22|What file has the PostHog provider configured?||
+llm-natural|apps/web|w22|Could you remind me where the PostHog provider is mounted?||
+para|infra|i10|Where do we store metrics and how are dashboards accessed?||
+llm-natural|infra|i10|Need help finding where to input metrics/logs for Grafana Cloud?||
+para|apps/api|a17|What does UUID v7 mean for primary keys here?||
+llm-natural|apps/api|a17|Could you remind me what UUID v7 is used for as primary keys?||
+para||r41|what docs mention recommended vscode add-ins?||
+llm-natural||r41|Can you show me the recommended VS Code extensions list?||
+para|apps/web|w13|what if I want to use a sensitive key in my code?||
+llm-natural|apps/web|w13|Could you remind me which env vars can be exposed to the browser?||
+para|services/worker|s04|How does retry mechanism work in terms of time?||
+llm-natural|services/worker|s04|Can you remind me how jobs retry with exponential backoff?||
+para|apps/api|a36|how do we handle JWT time discrepancies?||
+llm-natural|apps/api|a36|Could you remind us about JWT clock skew and the 5-second leeway?||
+para|apps/web|w12|How do I add cdn.acme.dev to allow remote images?||
+llm-natural|apps/web|w12|Could you remind me how to add cdn.acme.dev to remotePatterns in next.config.ts?||
+para|packages/cli|c17|What does it mean if my script shows exit code 2?||
+llm-natural|packages/cli|c17|Could you remind me what exit codes 1 and 2 mean?||
+para|infra|i21|How do we connect to prod database securely?||
+llm-natural|infra|i21|Need to access prod DB via Tailscale? No public endpoint.||
+para|services/worker|s14|How does the app handle tasks when收到SIGTERM信号?||
+llm-natural|services/worker|s14|Can you remind me what happens to jobs when a worker gets SIGTERM?||
+para|services/worker|s10|How do I access Bull Board with basic auth?||
+llm-natural|services/worker|s10|Could you remind me where Bull Board is mounted and what auth setup is in place?||
+para|infra|i03|what AWS location is set for all services?||
+llm-natural|infra|i03|Could you remind me of the AWS region?||
+para|apps/api|a07|How do I manage request limits for my API?||
+llm-natural|apps/api|a07|Need info on rate limit and Redis setup?||
+para|packages/cli|c05|How do we run snapshot tests for CLI outputs?||
+llm-natural|packages/cli|c05|Could you remind me what CLI tests do with Vitest and stdout?||
+para|apps/api|a33|What should I do if I need to change something in the database schema?||
+llm-natural|apps/api|a33|Check the guideline: Never edit a merged migration, create a new one instead.||
+para||r11|how do I check if my project is using ES modules?||
+llm-natural||r11|Could you remind me where I set my project to use ES Modules?||
+para|apps/web|w27|What does it mean to load Inter font with next/font/google?||
+llm-natural|apps/web|w27|Could you remind me where Inter font is loaded?||
+para|apps/api|a34|How do we ensure all tables filter by org_id?||
+llm-natural|apps/api|a34|Could you remind me how queries should filter by org_id?||
+para|apps/web|w21|How do we ensure all API calls include credentials?||
+llm-natural|apps/web|w21|Could you remind me where browser API calls go and about including credentials?||
+para|apps/web|w17|how can we avoid date formatting issues between server and client?||
+llm-natural|apps/web|w17|Need help with hydration mismatch for dates?||
+para||r44|How do I ensure my app works on newer Node version without issues?||
+llm-natural||r44|Need help with Rosetta-free builds for sharp and canvas?||
+para|infra|i19|How do we manage scaling for CPU usage and queue size?||
+llm-natural|infra|i19|Need help understanding KEDA for worker scaling and HPA for CPU at 70%.||
+para|infra|i13|What repositories do we push image builds to?||
+llm-natural|infra|i13|Can you remind me where to push new image versions?||
+para|services/worker|s02|what are the queue names mentioned?||
+llm-natural|services/worker|s02|Could you remind me what queue names we have set up?||
+para|apps/web|w31|What routes hold authenticated vs public pages?||
+llm-natural|apps/web|w31|Could you remind me where authenticated and public pages are stored?||
+para|infra|i09|what's the domain setup for acme dev?||
+llm-natural|infra|i09|Need DNS info for acme.dev?||
+para|infra|i11|What does it mean for alerts to go through PagerDuty?||
+llm-natural|infra|i11|Could you remind me what "on-call through PagerDuty" means for the alerts page?||
+para|apps/web|w19|What does "Lucide React" refer to here?||
+llm-natural|apps/web|w19|Need help finding icons info from lucide-react?||
+para|apps/web|w07|What does CSS-first mean in app/globals.css?||
+llm-natural|apps/web|w07|Need help with Tailwind CSS v4 and app/globals.css?||
+para||r22|What does runtime validation with zod involve here?||
+llm-natural||r22|Need help finding where Zod is used for runtime validation?||
+para|apps/api|a22|How do we configure transactional emails for React?||
+llm-natural|apps/api|a22|Could you remind me where to find the React Email templates for transactional emails?||
+para||r20|Help with quick, code-first responses needed today.||
+llm-natural||r20|Can you provide the code first, then explain it?||
+para|apps/web|w16|how do I start my storybook server?||
+llm-natural|apps/web|w16|Tell me how to start Storybook on port 6006.||
+para|apps/api|a14|How should I implement pagination for my API endpoints?||
+llm-natural|apps/api|a14|Could you remind me about cursor vs offset pagination for endpoints?||
+para||r06|What do commit messages use for feature additions?||
+llm-natural||r06|Could you remind me what commit types we use?||
+para|apps/api|a03|what does orm drizzle mean here?||
+llm-natural|apps/api|a03|Can you remind me where the Drizzle schema is defined?||
+para|infra|i07|what do i need to do to preview changes in staging?||
+llm-natural|infra|i07|Can you remind me how to run the Terraform plan for staging?||
+para|apps/web|w25|how does ISR work with page caching?||
+llm-natural|apps/web|w25|Could you remind me what ISR with revalidate = 60 means for marketing pages?||
+para|infra|i01|How do I check Terraform version in my repo?||
+llm-natural|infra|i01|Can you remind me where I can find Terraform 1.8 config?||
+para|packages/cli|c04|Where exactly does the CLI save its settings?||
+llm-natural|packages/cli|c04|Could you remind me where CLI stores its config file?||
+para|apps/api|a12|How do I handle raw POST data for Stripe webhooks?||
+llm-natural|apps/api|a12|Need help with Stripe webhook raw body requirement?||
+para||r45|What does enabling noUncheckedIndexedAccess mean in strict mode?||
+llm-natural||r45|Could you remind me what strict mode with noUncheckedIndexedAccess means?||
+para|apps/web|w30|What command do I run to check my web app's package size?||
+llm-natural|apps/web|w30|Can you help me analyze the bundle size with ANALYZE=true?||
+para|apps/api|a23|How does BullMQ help manage background jobs?||
+llm-natural|apps/api|a23|Could you remind me how BullMQ is used for enqueueing background jobs?||
+para|packages/cli|c02|What does it mean for CLI to be bundled with tsup?||
+llm-natural|packages/cli|c02|Can you tell me where I can find the bundled CLI in dist/index.js?||

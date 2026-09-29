@@ -1,0 +1,91 @@
+bun test v1.3.13 (bf2e2cec)
+
+packages/wrap/src/know-inject.test.ts:
+(pass) withKnowFacts > EDEN_KNOW=0 and silent chat do not inject [4.60ms]
+(pass) withKnowFacts > already injected stays one card; fail-open on junk body [0.29ms]
+(pass) withKnowFacts > at most one Eden Know system note; frozen RFC catalog does not inject [1.14ms]
+(pass) withKnowFacts > structured identifiers do not inject frozen catalogs; chat without needles stays quiet [0.50ms]
+(pass) withKnowFacts > anthropic dialect prepends one block or stays put; tools/calls reach need detect [0.93ms]
+
+packages/wrap/src/intent.test.ts:
+(pass) surface policy > default mode is jit — full catalog is EDEN_SURFACE=all
+(pass) surface policy > modes parse [0.29ms]
+(pass) intent ranking > a URL in the conversation surfaces the program that serves its shape [2.49ms]
+(pass) intent ranking > a different GitHub owner/repo still surfaces the same issue/PR resource kind [0.45ms]
+(pass) intent ranking > trailing English after a CLI still surfaces the template program [0.18ms]
+(pass) intent ranking > word overlap alone never surfaces anything [0.26ms]
+(pass) intent ranking > an envelope id in the conversation surfaces that program [0.21ms]
+(pass) intent ranking > unique-work ids and ticket numbers stay silent without envelope membership [0.08ms]
+(pass) intent ranking > kubectl envelope words are not dense witnesses [0.20ms]
+(pass) intent ranking > an unrelated conversation ranks nothing [0.19ms]
+(pass) intent ranking > a corrupt program is skipped, not fatal [0.61ms]
+(pass) intent ranking > messageText reads both dialects' content blocks but ignores roles and ids
+(pass) selectSurfacePrograms > all returns every live program [0.11ms]
+(pass) selectSurfacePrograms > jit without messages degrades to silence, not the full catalog [0.02ms]
+(pass) selectSurfacePrograms > jit surfaces at most one, and only on structural evidence [0.21ms]
+(pass) selectSurfacePrograms > jit-shadow surfaces nothing but names what would have been surfaced [0.15ms]
+(pass) dispatchPrograms > same messages → same single name as local JIT [0.27ms]
+(pass) dispatchPrograms > length is 0 or 1 even when several programs clear the bar [0.19ms]
+(pass) dispatchPrograms > a string url is one user turn — same hit as messages [0.19ms]
+(pass) injectTools under the surface policy > default (env unset): jit — one schema on evidence, nothing on silence [0.31ms]
+(pass) injectTools under the surface policy > all: historic behavior — every live program appended
+(pass) injectTools under the surface policy > none: client tools pass through untouched — steering still routes reactively [0.12ms]
+(pass) injectTools under the surface policy > jit: exactly one Eden schema, ahead of the client's own [0.15ms]
+(pass) injectTools under the surface policy > jit with no evidence: nothing injected even though programs are live [0.19ms]
+(pass) injectTools under the surface policy > a non-array tools field still gets nothing back in any mode [0.13ms]
+(pass) proxy wiring (handleChatCompletions) > default surface: the upstream sees the one JIT schema, not the full catalog [2.91ms]
+(pass) proxy wiring (handleChatCompletions) > jit surface: the upstream sees exactly one Eden schema, chosen from the conversation [0.26ms]
+(pass) proxy wiring (handleChatCompletions) > none surface: the upstream sees only the client's own tools [0.31ms]
+(pass) JIT injection-rate guards > all surface mode — jit caps do not fire [0.33ms]
+(pass) JIT injection-rate guards > jit caps injections per episode at jitMax (default 4) [0.30ms]
+(pass) JIT injection-rate guards > three consecutive unused injections demote the episode to S0 [0.22ms]
+(pass) JIT injection-rate guards > a used injection resets the unused streak [0.26ms]
+(pass) JIT injection-rate guards > a tool call in the next conversation counts as used [0.10ms]
+
+packages/know/src/gold-gauntlet.test.ts:
+(pass) locked gold prompts > every gold line is unknown or a grounded knowQuery card [88.78ms]
+(pass) locked gold prompts > wrap inject stays silent on frozen catalog gold prompts [0.47ms]
+(pass) locked gold prompts > wrap inject gauntlet: silent stays empty; technique/wrong/stale hit the named card [36.57ms]
+
+packages/know/src/inject-rank.test.ts:
+(pass) needle rank > RFC beats media beats status beats header beats SPDX beats W3C beats protocol beats method [0.33ms]
+(pass) needle rank > needlesFromText ranks GET behind RFC and media [1.08ms]
+(pass) needle rank > Kenya's capital is a capital-of needle [0.32ms]
+(pass) needle rank > United Kingdom possessive is a capital-of needle [0.02ms]
+(pass) needle rank > names the packed row: charset param, SPDX header, URI scheme, DNS, well-known, possessive [0.78ms]
+(pass) needle rank > catalog English titles inject the packed identifier; quiet stays empty [0.60ms]
+(pass) needle rank > equal-rank needles prefer the card with more tokens not in the prompt [0.21ms]
+(pass) cards > United Kingdom card keeps leading The; possessive still hits [0.31ms]
+(pass) cards > charset / DNS / well-known cards have no IANA-prefix junk [0.23ms]
+(pass) cards > GET / 404 / TCP have no IANA-prefix junk [0.14ms]
+(pass) cards > cards keep a citeable source URL off the fact sentence [0.17ms]
+(pass) cards > area-only RFC card upgrades to the stored title [0.16ms]
+(pass) cards > RFC is-obsoleted-by keeps the successor number [0.09ms]
+(pass) cards > RFC keeps (URI); SPDX is not a tautology dump; media is not RFC 4627 [0.24ms]
+(pass) cards > wrong first hit still surfaces the graph row [0.06ms]
+(pass) cards > hard cases stay unknown [0.07ms]
+(pass) injectFromText ranking > most specific needle wins; silent and disabled stay quiet [18.78ms]
+(pass) injectFromText ranking > knowQuery application/json is IANA media; extra tokens unknown [15.49ms]
+(pass) injectFromText ranking > technique AND-miss falls back to the task object [5.67ms]
+
+packages/know/src/need.test.ts:
+(pass) need detect POC > implicit technique fires without “best way”; media-type English does not [0.70ms]
+(pass) need detect POC > labeled corpus: silent set stays empty; typed/technique/wrong hit the named card [16.03ms]
+(pass) need detect POC > detectNeed names the query before inject; tools[] descriptions are not in text [0.32ms]
+(pass) need detect POC > injectFromText still uses the request path [13.27ms]
+(pass) need detect POC > current successor RFCs do not open the pack; cold stale numbers still do [11.53ms]
+
+packages/know/src/talk.test.ts:
+(pass) frozen encyclopedia stays off the graph > capitals, RFC titles, IANA tautologies, country ISO are frozen [0.42ms]
+(pass) frozen encyclopedia stays off the graph > techniques and RFC obsoletes still persist [0.10ms]
+(pass) frozen encyclopedia stays off the graph > wiki capital pages extract then drop at persist [10.29ms]
+(pass) talk crawl: Reddit, GitHub issues, Stack Overflow > allowlisted issues and programming reddit are talk, not junk [0.77ms]
+(pass) talk crawl: Reddit, GitHub issues, Stack Overflow > keepWet holds technique-bearing talk, drops meme reddit [1.49ms]
+(pass) talk crawl: Reddit, GitHub issues, Stack Overflow > forum prose packs used-for, not capitals [3.50ms]
+(pass) inject useful techniques, skip frozen flash > usefulInjectFact rejects capitals and RFC titles [0.10ms]
+(pass) inject useful techniques, skip frozen flash > how-to and wrong-way inject jq; capital and RFC title stay silent [8.14ms]
+
+ 73 pass
+ 0 fail
+ 531 expect() calls
+Ran 73 tests across 6 files. [433.00ms]

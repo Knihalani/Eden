@@ -1,0 +1,4 @@
+n	commit	status	description	primary:need-miss	guard:leak	guard:holdout	guard:inject-ms	guard:tests
+0	bd17ba10e	baseline	harder: 64 live recap walls without qx, 56-turn, 960 paste, dlq/lease/outbox/sidecar NEED	7	4	3	0.41	1
+1	b6c895be1	discard	4-key dlq/lease/outbox/sidecar miss 7→3 holdout 0 but ms 0.41→1.707. next: one key at a time starting dlq→letters	3	4	0	1.707	1
+2	76ef73b10	discard	dlq→letters miss 7→6 but inject-ms 0.41→0.516 abs eps. next: speedup inject below 0.41 then expand; do not retry 4-key or 1-key dlq unchanged	6	4	2	0.516	1

@@ -1,0 +1,79 @@
+{
+  "id": "cart0",
+  "llmCalls": 5,
+  "duration_ms": 50,
+  "cost_cents": 5,
+  "complete": true,
+  "input": {
+    "cart": "CART-0"
+  },
+  "events": [
+    {
+      "name": "listCart",
+      "args": {
+        "cart": "CART-0"
+      },
+      "result": {
+        "items": [
+          {
+            "sku": "a0",
+            "qty": 1
+          },
+          {
+            "sku": "b0",
+            "qty": 2
+          },
+          {
+            "sku": "c0",
+            "qty": 1
+          }
+        ],
+        "cart": "CART-0"
+      },
+      "ok": true
+    },
+    {
+      "name": "reserveSku",
+      "args": {
+        "sku": "a0"
+      },
+      "result": {
+        "reserved": "a0"
+      },
+      "ok": true
+    },
+    {
+      "name": "reserveSku",
+      "args": {
+        "sku": "b0"
+      },
+      "result": {
+        "reserved": "b0"
+      },
+      "ok": true
+    },
+    {
+      "name": "reserveSku",
+      "args": {
+        "sku": "c0"
+      },
+      "result": {
+        "reserved": "c0"
+      },
+      "ok": true
+    },
+    {
+      "name": "checkoutCart",
+      "args": {
+        "cart": "CART-0"
+      },
+      "result": {
+        "paid": true
+      },
+      "ok": true
+    }
+  ],
+  "output": {
+    "paid": true
+  }
+}

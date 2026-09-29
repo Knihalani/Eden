@@ -1,0 +1,13 @@
+{
+  "exam": "Table 3",
+  "k": 10,
+  "eventqa": 534000,
+  "fc": 262000,
+  "sh": 197000,
+  "mh": 421000,
+  "labelStrip": false,
+  "method": "GraphRAG",
+  "retrieve": "GraphRAG",
+  "api": "openMemory inject",
+  "note": "example — GraphRAG EventQA is forbidden as Table 3"
+}
