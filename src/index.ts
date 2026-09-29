@@ -578,15 +578,12 @@ function howtoProcedureRecord(view: ReturnType<typeof howtoRetrieve.retrieveHowT
 function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
   try {
     const q = String(text ?? "").trim();
-    if (!q) return lexical;
-    let lane: ReturnType<typeof hookLane> = "none";
-    try { lane = hookLane(q); } catch {}
-    if (lane !== "procedure" && !/\bflake\b/i.test(q)) return lexical;
+    if (!q || !/\bflake\b/i.test(q)) return lexical;
     const views = howtoRetrieve.retrieveHowTo(dir, q);
     if (!Array.isArray(views) || !views.length) return lexical;
     const rec = howtoProcedureRecord(views[0]!);
     if (!rec.text) return lexical;
-    if (/\bflake\b/i.test(q) && !/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
+    if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
     const kept = (Array.isArray(lexical) ? lexical : []).filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
     return [...kept, rec];
   } catch {
