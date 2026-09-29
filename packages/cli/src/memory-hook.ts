@@ -31,7 +31,6 @@ function flattenContent(content: unknown): string {
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
 
 function isPinnedIntention(r: MemoryRecord): boolean {
-  if (!r.text) return false;
   if (r.kind === "constraint") return true;
   return (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
 }
