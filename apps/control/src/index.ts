@@ -1,4 +1,5 @@
 export { Store } from "./store";
+export type { LiveTool } from "./store";
 export { createHandler } from "./server";
 export { handleApi } from "./api";
 export { replayRegistry } from "@eden/shadow";
@@ -36,3 +37,4 @@ export {
 export type { AccessReviewPayload, AccessReviewRecord } from "./access-review";
 export { maybeQueueRefresh, refreshCandidateId, isRefreshCandidate, REFRESH_WAITING_COPY } from "./refresh";
 export { scheduleClockEnabled, SCHEDULE_CLOCK_ENV } from "./schedule-clock";
+export { executeLiveRun, toolMayFire } from "./schedule";
