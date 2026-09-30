@@ -1,12 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { codingRegistry } from "../src/coding";
-import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// A throwaway workspace: the tests write and edit files, and must never touch the repo tree.
+const dir = mkdtempSync(join(tmpdir(), "eden-coding-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("coding registry", () => {
   test("Read returns file contents", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const path = join(dir, "note.txt");
     writeFileSync(path, "hello-eden");
     const reg = codingRegistry(dir);
@@ -15,22 +18,16 @@ describe("coding registry", () => {
   });
 
   test("Read refuses paths outside cwd", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const reg = codingRegistry(dir);
     await expect(reg.execute("Read", { path: "../package.json" })).rejects.toThrow(/outside/);
   });
 
   test("Bash refuses an empty command", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const reg = codingRegistry(dir);
     await expect(reg.execute("Bash", { command: "   " })).rejects.toThrow(/empty command/);
   });
 
   test("Write stays inside cwd and Edit refuses missing old_string", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const reg = codingRegistry(dir);
     await expect(reg.execute("Write", { path: "../escape.txt", contents: "nope" })).rejects.toThrow(/outside/);
     const out = (await reg.execute("Write", { path: "note2.txt", contents: "alpha" })) as { ok: boolean };
@@ -44,8 +41,6 @@ describe("coding registry", () => {
   });
 
   test("Grep and Glob stay inside cwd", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "note.txt"), "hello-eden");
     const reg = codingRegistry(dir);
     expect(reg.has?.("Grep")).toBe(true);
@@ -58,8 +53,6 @@ describe("coding registry", () => {
   });
 
   test("Bash refuses command substitution and quoted cd", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const reg = codingRegistry(dir);
     await expect(reg.execute("Bash", { command: "cat $(pwd)/../package.json" })).rejects.toThrow(/outside/);
     await expect(reg.execute("Bash", { command: 'cd ".." && ls' })).rejects.toThrow(/outside/);
@@ -67,8 +60,6 @@ describe("coding registry", () => {
   });
 
   test("Edit splices literally instead of expanding $ patterns", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const reg = codingRegistry(dir);
 
     const dollarAmp = join(dir, "amp.ts");
@@ -83,8 +74,6 @@ describe("coding registry", () => {
   });
 
   test("Edit refuses an ambiguous old_string rather than picking one", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const path = join(dir, "dupe.txt");
     writeFileSync(path, "foo\nfoo\n");
     const reg = codingRegistry(dir);
@@ -93,8 +82,6 @@ describe("coding registry", () => {
   });
 
   test("Edit without old_string does not truncate the file", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     const path = join(dir, "keep.txt");
     writeFileSync(path, "important existing content\n");
     const reg = codingRegistry(dir);
@@ -103,8 +90,6 @@ describe("coding registry", () => {
   });
 
   test("PTC complement: allowed_callers is guidance, execute still works direct", async () => {
-    const dir = join(import.meta.dir, "../../.tmp-coding");
-    mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "ptc.txt"), "ok");
     const reg = codingRegistry(dir);
     expect(reg.allowed_callers).toEqual(["direct", "code_execution_20260120"]);
