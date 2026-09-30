@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Store } from "./store";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { maybeQueueRefresh, refreshCandidateId, REFRESH_WAITING_COPY, isRefreshCandidate } from "./refresh";
 import { replayRegistry } from "@eden/shadow";
 import {
@@ -10,6 +11,8 @@ import {
   WITNESS_IDS,
 } from "../../../packages/runtime/src/ticketship";
 import type { StretchTrace } from "@eden/ir";
+
+useTempEdenHome();
 
 const PREV_DEV = process.env.EDEN_DEV;
 process.env.EDEN_DEV = "1";

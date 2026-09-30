@@ -1,7 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { withVersion, type StretchProgram } from "@eden/ir";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { Store } from "./store";
+
+useTempEdenHome();
 
 // Org binding: a DATABASE_URL in .env makes the control plane treat itself as
 // managed, where the permissive legacy fallback requires explicit opt-in.

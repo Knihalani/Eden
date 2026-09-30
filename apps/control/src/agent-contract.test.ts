@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Store } from "./store";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { registryFrom } from "@eden/runtime";
 import { replayRegistry } from "@eden/shadow";
 import {
@@ -10,6 +11,8 @@ import {
   WITNESS_IDS,
 } from "../../../packages/runtime/src/ticketship";
 import type { StretchTrace } from "@eden/ir";
+
+useTempEdenHome();
 
 // Same pin as golden.test.ts: a DATABASE_URL in .env would treat this as
 // managed and refuse unscoped Approve / wrap.

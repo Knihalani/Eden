@@ -4,15 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withVersion, type StretchProgram } from "@eden/ir";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { Store } from "./store";
 
+const FILE_HOME = useTempEdenHome();
 const PREV_DEV = process.env.EDEN_DEV;
-const PREV_HOME = process.env.EDEN_HOME;
 process.env.EDEN_DEV = "1";
 afterAll(() => {
   process.env.EDEN_DEV = PREV_DEV;
-  if (PREV_HOME === undefined) delete process.env.EDEN_HOME;
-  else process.env.EDEN_HOME = PREV_HOME;
 });
 
 const passManifest = {
@@ -70,8 +69,7 @@ describe("graduated rollout", () => {
   afterEach(() => {
     if (home) rmSync(home, { recursive: true, force: true });
     home = undefined;
-    if (PREV_HOME === undefined) delete process.env.EDEN_HOME;
-    else process.env.EDEN_HOME = PREV_HOME;
+    process.env.EDEN_HOME = FILE_HOME;
   });
 
   test("Approve ships canary unless body.rollout is live", async () => {
