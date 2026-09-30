@@ -16,6 +16,7 @@ v2 measures against **independent oracles**.
 | Bench | Blind spot |
 |---|---|
 | Locked whatever 2k bench | one auth / one db; no folders, sessions or processes |
+| Hard scale bench (`benchmarks/memory-scale/hard.ts`, 20k rows; dev split = Dev tier, `--split test` = Locked test tier, X5) | in-process and session-less, so it cannot see A1 D1/D2; no tool events, `open_files` or `q_path`; one author wrote its paraphrases |
 | Long-horizon runner (today) | single process, so it cannot see id collisions (A1 D2); session-less, so it cannot see the per-session store (A1 D1); supplies `open_files`, which no host sends; no rewinds, subagents, non-human submits or policies |
 | CueBench-code (R1) | cue quality only; synthetic, one author; no tool events |
 | League B (MAB / LME / TB) | chat QA; no metric for restatement, repetition or stale injection |
