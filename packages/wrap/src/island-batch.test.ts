@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { unwrapIsland } from "@eden/ir";
-import { withIslandBatch } from "./island-batch";
+import { islandBatchUrl, PROVIDER_BATCH_CENTS, canUseProviderBatch, withIslandBatch } from "./island-batch";
 import { openaiIsland } from "./island";
 
 function fakeProvider(calls: { chat: number; batch: number; bodies: unknown[] }, opts: { batchStatus?: number } = {}): typeof fetch {
@@ -47,6 +47,14 @@ function fakeProvider(calls: { chat: number; batch: number; bodies: unknown[] },
 }
 
 describe("island batch transport", () => {
+  test("PROVIDER_BATCH_CENTS is the provider contract (half of sync)", () => {
+    expect(PROVIDER_BATCH_CENTS).toBe(0.5);
+  });
+
+  test("islandBatchUrl matches Message Batches path", () => {
+    expect(islandBatchUrl("https://api.example.com/v1")).toBe("https://api.example.com/v1/messages/batches");
+  });
+
   test("custom_id rejoins results; stream is false on the batch path", async () => {
     const calls = { chat: 0, batch: 0, bodies: [] as unknown[] };
     const fetchFn = fakeProvider(calls);
@@ -121,6 +129,15 @@ describe("island batch transport", () => {
     await Bun.sleep(40);
     expect(calls.batch).toBe(0);
     expect(calls.chat).toBe(0);
+  });
+
+  test("default OpenAI and Anthropic hosts without an injected fetch do not POST /messages/batches", () => {
+    expect(canUseProviderBatch({ baseURL: "https://api.openai.com/v1" })).toBe(false);
+    expect(canUseProviderBatch({ baseURL: "https://api.anthropic.com/v1" })).toBe(false);
+    expect(canUseProviderBatch({ baseURL: "https://proxy.internal/v1" })).toBe(true);
+    const injected = fakeProvider({ chat: 0, batch: 0, bodies: [] });
+    expect(canUseProviderBatch({ baseURL: "https://api.openai.com/v1", fetch: injected })).toBe(true);
+    expect(canUseProviderBatch({ baseURL: "https://api.anthropic.com/v1", fetch: injected })).toBe(true);
   });
 
   test("in_progress CREATE then retrieve inside the island timeout is half cents, zero sync", async () => {
