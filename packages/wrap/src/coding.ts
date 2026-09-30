@@ -139,7 +139,19 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
           const v = env[k];
           if (typeof v === "string" && /[a-z][a-z0-9+.-]*:\/\/[^\s/@]+:[^\s@]+@/i.test(v)) delete env[k];
         }
-        const proc = spawn(cmd, { cwd, shell: true, env });
+        // Detached, so the shell leads its own process group and a timeout or abort
+        // can kill everything it started. Killing only the shell left any child it
+        // forked rather than exec'd into (a subshell, the `a` of `a; b`) running and
+        // holding the pipes, so the call waited for that child to finish.
+        const proc = spawn(cmd, { cwd, shell: true, env, detached: true });
+        const killTree = () => {
+          if (proc.pid === undefined) return;
+          try {
+            process.kill(-proc.pid, "SIGKILL");
+          } catch {
+            proc.kill("SIGKILL");
+          }
+        };
         const chunks: Buffer[] = [];
         const err: Buffer[] = [];
         proc.stdout.on("data", (c) => chunks.push(c as Buffer));
@@ -150,15 +162,14 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         // default instead.
         const requested = Number(args.timeout_ms);
         const ms = Math.min(Number.isFinite(requested) && requested > 0 ? requested : 15_000, 60_000);
-        const killer = setTimeout(() => proc.kill("SIGKILL"), ms);
-        const onAbort = () => proc.kill("SIGKILL");
-        ctx?.signal?.addEventListener("abort", onAbort, { once: true });
+        const killer = setTimeout(killTree, ms);
+        ctx?.signal?.addEventListener("abort", killTree, { once: true });
         try {
           const code: number = await new Promise((resolve) => proc.on("close", (c) => resolve(c ?? 1)));
           return { stdout: Buffer.concat(chunks).toString("utf8"), stderr: Buffer.concat(err).toString("utf8"), code };
         } finally {
           clearTimeout(killer);
-          ctx?.signal?.removeEventListener("abort", onAbort);
+          ctx?.signal?.removeEventListener("abort", killTree);
         }
       }
       if (name === "Read" || name === "read") {
