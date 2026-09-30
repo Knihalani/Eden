@@ -1,3 +1,4 @@
+import { isSafeShellCommand, isShellCommand } from "./shell";
 import {
   ASSERT_ON_FAIL,
   BINDING_KINDS,
@@ -57,6 +58,13 @@ function checkStep(step: unknown, path: string, issues: ValidateIssue[]): void {
     if (typeof step.tool !== "string" || !step.tool) issues.push({ path, message: "tool step needs tool" });
     if (!isObj(step.args)) issues.push({ path, message: "tool step needs args" });
     else for (const [k, v] of Object.entries(step.args)) checkBinding(v, `${path}.args.${k}`, issues);
+    const command = isObj(step.args) ? step.args.command : undefined;
+    if (typeof step.tool === "string" && isShellCommand(step.tool, "command") && isObj(command)) {
+      if (!isSafeShellCommand(command as Binding)) {
+        const message = "shell command must be a literal, the input or a template";
+        issues.push({ path: `${path}.args.command`, message });
+      }
+    }
     return;
   }
   if (step.kind === "island") {
