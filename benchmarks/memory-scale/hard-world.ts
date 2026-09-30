@@ -23,7 +23,6 @@ export type Category =
 
 /** A sentence the simulated user said that the oracle knows the meaning of. */
 export type Statement = {
-  id: string;
   session: number;
   repo: RepoId;
   text: string;
@@ -530,8 +529,7 @@ export function buildWorld(fillerRows = FILLER_ROWS): World {
   const statements: Statement[] = [];
   const pairs: World["pairs"] = [];
   const say = (session: number, repo: RepoId, text: string, slot: string, value?: string, not?: string) => {
-    const s: Statement = { id: `s${statements.length}`, session, repo, text, slot, value, not };
-    statements.push(s);
+    statements.push({ session, repo, text, slot, value, not });
   };
 
   for (const repo of REPOS) {
