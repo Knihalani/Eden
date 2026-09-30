@@ -4,7 +4,9 @@
  *   bun benchmarks/memory-holdout/run-negative.ts
  *
  * Pre-registered expects live in negative-fixture.json (ROADMAP §4.9).
- * This file measures openMemory.inject / injectBody and writes NEGATIVE.md.
+ * This file measures openMemory.inject / injectBody. Run as above, it rewrites the
+ * tracked NEGATIVE.md; runNegative() itself writes a report only to the `out` it is
+ * given, so the tests render into a temp dir and leave the tree clean.
  * It does not edit the fixture, the ranker, or remain-silent (M38).
  *
  * Scored API: openMemory.inject. injectBody is the same AgentMemory path, checked
@@ -374,7 +376,7 @@ function judge(row: Omit<NegativeRow, "verdict" | "note"> & { seed_expected: num
   return { verdict: "LOSS", note: notes.join("; ") };
 }
 
-export function runNegative(opts: { write?: boolean } = {}): NegativeRun {
+export function runNegative(opts: { out?: string } = {}): NegativeRun {
   const fix = loadNegativeFixture();
   const issues = negativeFixtureIssues(fix);
   if (issues.length) throw new Error("negative fixture:\n" + issues.map((i) => `- ${i}`).join("\n"));
@@ -450,7 +452,7 @@ export function runNegative(opts: { write?: boolean } = {}): NegativeRun {
     bugs,
     seed_liveness: seedLiveness,
   };
-  if (opts.write !== false) writeFileSync(NEGATIVE_PATH, formatNegative(run));
+  if (opts.out) writeFileSync(opts.out, formatNegative(run));
   return run;
 }
 
@@ -578,7 +580,7 @@ export function formatNegative(run: NegativeRun): string {
 }
 
 if (import.meta.main) {
-  const run = runNegative();
+  const run = runNegative({ out: NEGATIVE_PATH });
   process.stdout.write(formatNegative(run));
   const summary = run.rows.map((r) => `${r.id}\t${r.verdict}\tΔ${r.delta_bytes}`).join("\n");
   console.error(`\n${summary}`);

@@ -2,12 +2,12 @@
  * M35.1 no-lift annex. Dated 2026-09-22.
  * Asserts NEGATIVE.md shape and that a Δ≈0 label matches a real 0-byte on/off inject delta.
  */
-import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   FIXTURE_PATH,
-  NEGATIVE_PATH,
   REQUIRED_CASE_IDS,
   loadNegativeFixture,
   negativeFixtureIssues,
@@ -17,6 +17,11 @@ import {
 } from "./run-negative.ts";
 
 const REGISTERED = "2026-09-22";
+
+// The report renders here, not over the tracked NEGATIVE.md (only the CLI rewrites that).
+const REPORT_DIR = mkdtempSync(join(tmpdir(), "eden-negative-"));
+const REPORT = join(REPORT_DIR, "NEGATIVE.md");
+afterAll(() => rmSync(REPORT_DIR, { recursive: true, force: true }));
 
 function honest(row: NegativeRow): boolean {
   if (row.verdict === "Δ≈0") {
@@ -64,9 +69,9 @@ describe("M35.1 no-lift negative annex", () => {
   });
 
   test("runner files an on/off Δ table and does not invent Δ≈0", () => {
-    const run = runNegative();
-    expect(existsSync(NEGATIVE_PATH)).toBe(true);
-    const md = readFileSync(NEGATIVE_PATH, "utf8");
+    const run = runNegative({ out: REPORT });
+    expect(existsSync(REPORT)).toBe(true);
+    const md = readFileSync(REPORT, "utf8");
     expect(run.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(run.registered).toBe(REGISTERED);
     expect(md).toMatch(/\*\*Date:\*\*\s+\d{4}-\d{2}-\d{2}/);
@@ -101,7 +106,7 @@ describe("M35.1 no-lift negative annex", () => {
       expect(run.seed_liveness.sqlite).toBe(true);
       expect(run.seed_liveness.packet_bytes).toBeGreaterThan(0);
     }
-    const again = runNegative({ write: false });
+    const again = runNegative();
     for (const row of run.rows) {
       const twin = again.rows.find((r) => r.id === row.id);
       expect(twin?.probe.packet_bytes).toBe(row.probe.packet_bytes);
