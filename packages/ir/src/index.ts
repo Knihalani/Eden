@@ -17,4 +17,5 @@ export * from "./ground";
 export * from "./confirm";
 export * from "./diff";
 export * from "./protocol";
+export * from "./loopback";
 export * from "./mcp-version";
