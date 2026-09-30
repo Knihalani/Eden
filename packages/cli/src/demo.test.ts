@@ -161,6 +161,14 @@ describe("parseInbox", () => {
     expect(foot).not.toMatch(/apps\/web/);
   });
 
+  test("the play hint passes --key eden_dev to the demo and does not repeat an operator key", () => {
+    const dev = demoListenLines("http://127.0.0.1:8799/", "eden_dev");
+    expect(dev).toMatch(/eden play <name> --key eden_dev --input/);
+    const own = demoListenLines("http://127.0.0.1:8799/", "eden_operator_key");
+    expect(own).toMatch(/eden play <name> --input/);
+    expect(own).not.toMatch(/--key/);
+  });
+
   test("missing candidates is a demo: sentence and empty list", () => {
     const r = parseInbox({ heartbeat: 1, live: [] });
     expect(r.candidates).toEqual([]);

@@ -77,11 +77,12 @@ export function demoHelp(): string {
 The demo script Approves TicketShip (operator). That is different from
 eden compile, which Does not Approve.
 
-Uses the local eden_dev key (EDEN_DEV=1) unless you already set EDEN_API_KEY.
+Uses the public eden_dev key (EDEN_DEV=1) unless you already set EDEN_API_KEY.
+eden wrap keeps a per-install key instead, so play against the demo with --key eden_dev.
 Same sitting as bun run demo (${DEMO_REL}). Stays up like wrap.
 Port 8788 (or PORT). If wrap is already there: one sentence, exit 1.
 Play T-100 after it is up:
-EDEN_WRAP_URL=http://127.0.0.1:<port> eden play <name> --input '{"id":"T-100"}'
+EDEN_WRAP_URL=http://127.0.0.1:<port> eden play <name> --key eden_dev --input '{"id":"T-100"}'
 There is no HTML inbox on this port. Health is /health; candidates are GET /v1/inbox.
 `;
 }
@@ -92,11 +93,13 @@ export function demoPortBusyMessage(port: number): string {
 
 export function demoListenLines(origin: string, token: string): string {
   const base = origin.replace(/\/$/, "");
+  // eden play would send the per-install key from config.json; the public dev key is safe to name.
+  const key = token === "eden_dev" ? " --key eden_dev" : "";
   return `Eden demo is up
   Health    ${base}/health
   Inbox     ${base}/v1/inbox  (Bearer ${token})
   OpenAI    ${base}/v1
-  Play      EDEN_WRAP_URL=${base} eden play <name> --input '{"id":"T-100"}'`;
+  Play      EDEN_WRAP_URL=${base} eden play <name>${key} --input '{"id":"T-100"}'`;
 }
 
 export function demoListenFooter(origin: string, token: string): string {
@@ -137,7 +140,7 @@ export function resolveDemoScript(cwd = process.cwd(), from = import.meta.dir): 
   return null;
 }
 
-/** The sitting uses the local eden_dev key unless the operator already set EDEN_API_KEY. */
+/** The sitting uses the public eden_dev key unless the operator already set EDEN_API_KEY. */
 export function demoChildEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const out = { ...env };
   if (!out.EDEN_API_KEY) {
