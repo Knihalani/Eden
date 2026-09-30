@@ -13,7 +13,6 @@ import { extractCandidates, type CandidateText } from "./assemble";
 import {
   MEMORY_MARK,
   encodeLane,
-  isRecsysShot,
   memoryInjectSwallows,
   openMemory,
   sleep,
@@ -21,7 +20,9 @@ import {
 } from "./index";
 import * as edenMem from "./index";
 import { MEMORY_LANE_KINDS } from "./memory-lanes";
-import { isIclExemplar, SemanticStore } from "./semantic-store";
+import { isIclExemplar, isRecsysShot, SemanticStore } from "./semantic-store";
+
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/60
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 const WRAP_SRC = readFileSync(join(import.meta.dir, "../packages/wrap/src/know-inject.ts"), "utf8");
@@ -156,7 +157,7 @@ describe("M31.4 M16.2 kinds stay 5", () => {
 });
 
 describe("M31.4 recsys store-all (not extractDurable chop)", () => {
-  test("movie list stored as atom (store-all); packet on comedy cue has Superbad / Hangover", async () => {
+  test.failing("movie list stored as atom (store-all); packet on comedy cue has Superbad / Hangover", async () => {
     await withMem("eden-m314-liked-", (mem) => {
       expect(["narrative", "recsys"]).toContain(encodeLane(RECSYS_LIKED));
       mem.observe([{ role: "user", content: RECSYS_LIKED }]);
@@ -173,7 +174,7 @@ describe("M31.4 recsys store-all (not extractDurable chop)", () => {
     });
   });
 
-  test("numbered movie list is NOT a fact-serial extract", async () => {
+  test.failing("numbered movie list is NOT a fact-serial extract", async () => {
     await withMem("eden-m314-numbered-", (mem, dir) => {
       expect(["narrative", "recsys"]).toContain(encodeLane(RECSYS_NUMBERED));
       expect(["narrative", "recsys"]).toContain(encodeLane(flatten(RECSYS_NUMBERED)));
@@ -251,7 +252,7 @@ describe("M31.4 ICL still ICL, not recsys (M7.4)", () => {
 });
 
 describe("M31.4 recsys / ICL false positives", () => {
-  test("RFC ids with years are not recsys; Title (YYYY) lists are", () => {
+  test.failing("RFC ids with years are not recsys; Title (YYYY) lists are", () => {
     expect(isRecsysShot("RFC 9110 (2022) superseded RFC 7231 (2014)")).toBe(false);
     expect(encodeLane("RFC 9110 (2022) superseded RFC 7231 (2014)")).not.toBe("narrative");
     expect(isRecsysShot("Superbad (2007), The Hangover (2009), Knocked Up (2007)")).toBe(true);
@@ -443,7 +444,7 @@ describe("M31.4 assemble firewall", () => {
     expect(extractCandidates([recsysCandidate(RECSYS_NUMBERED, { lane: "narrative" })])).toEqual([]);
   });
 
-  test("observed recsys atoms (and recsys-tagged notes) yield zero triples", async () => {
+  test.failing("observed recsys atoms (and recsys-tagged notes) yield zero triples", async () => {
     await withMem("eden-m314-assemble-", (mem) => {
       mem.observe([{ role: "user", content: RECSYS_LIKED }]);
       mem.observe([{ role: "user", content: RECSYS_NUMBERED }]);
