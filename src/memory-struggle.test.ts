@@ -77,16 +77,19 @@ function withMem(fn: (mem: AgentMemory, dir: string) => void): void {
 
 function withHookDir(fn: (dir: string) => void | Promise<void>): Promise<void> | void {
   const dir = tmpDir("eden-m63-hook-");
+  // respondToHook records the stretch under EDEN_HOME; unset, that is the real ~/.eden (#67).
+  const home = tmpDir("eden-m63-home-");
   const prevDir = process.env.EDEN_MEMORY_DIR;
   const prevHome = process.env.EDEN_HOME;
   process.env.EDEN_MEMORY_DIR = dir;
-  delete process.env.EDEN_HOME;
+  process.env.EDEN_HOME = home;
   const finish = () => {
     if (prevDir === undefined) delete process.env.EDEN_MEMORY_DIR;
     else process.env.EDEN_MEMORY_DIR = prevDir;
     if (prevHome === undefined) delete process.env.EDEN_HOME;
     else process.env.EDEN_HOME = prevHome;
     rmSync(dir, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
   };
   try {
     const out = fn(dir);
