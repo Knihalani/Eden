@@ -1,4 +1,4 @@
-import { openDb, workspaceForKey, isManagedDeployment, hashApiKey, type EdenDb } from "./db";
+import { openDb, workspaceForKey, isManagedDeployment, devFallbackEnabled, hashApiKey, type EdenDb } from "./db";
 import { ingest } from "./cluster";
 import { handleMcp, liveOnTools, wrapDispatchResult, toolRowToProgram } from "./mcp";
 import { playTool } from "./playback";
@@ -279,6 +279,16 @@ export function wrapTokenFromRequest(req: Request): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * The model provider key a chat caller brought: x-openai-api-key, or a bearer that is not an Eden
+ * key (the setup page tells agents to send their provider key as Authorization). Empty: none.
+ */
+function callerProviderKey(req: Request): string {
+  const header = (req.headers.get("x-openai-api-key") || req.headers.get("openai-api-key") || "").trim();
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  return [header, bearer].find((k) => k && !k.startsWith("eden_")) ?? "";
 }
 
 function sessionCookie(token: string): string {
@@ -1237,6 +1247,15 @@ export EDEN_API_KEY=<the key above>
 
   if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
     if (!wsId) return unauthorizedJson();
+    // Whose model key pays (#88). A caller's own provider key is forwarded as itself; being
+    // non-empty, it also keeps handleChatCompletions from falling back to OPENAI_API_KEY.
+    // Without one, the site's key pays only for a caller authenticated as a real deployment
+    // requires. With the dev fallback on, anyone who reaches the port gets in and /v1/signup
+    // mints keys, so no key shows the caller is the operator. /v1/setup hands out eden_dev.
+    // With no site key to spend, the request goes on to wrap's usual fail-open reply.
+    const ownKey = callerProviderKey(req);
+    const operatorMayPay = !devFallbackEnabled() && wrapToken !== "eden_dev";
+    if (!ownKey && process.env.OPENAI_API_KEY?.trim() && !operatorMayPay) return unauthorizedJson();
     let programs: ReturnType<typeof toolRowToProgram>[] = [];
     try {
       programs = (await liveOnTools(d, wsId)).map(toolRowToProgram);
@@ -1246,7 +1265,7 @@ export EDEN_API_KEY=<the key above>
     return handleChatCompletions(req, {
       state: siteWrapState,
       upstream: process.env.OPENAI_API_BASE || "https://api.openai.com/v1",
-      upstreamKey: process.env.OPENAI_API_KEY,
+      upstreamKey: ownKey || process.env.OPENAI_API_KEY,
       getPrograms: () => programs,
       play: async (name, args) => {
         const tool = await findOnTool(d, wsId, name);
