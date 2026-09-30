@@ -44,11 +44,13 @@ for f in $quarantined; do
 done
 echo "quarantined files:" $quarantined
 
-# Tests must never touch the real ~/.eden. Many test files restore EDEN_HOME by
-# deleting it, after which edenHome() falls back to $HOME/.eden, so the whole
-# run gets a throwaway HOME, removed on exit. EDEN_* variables from the calling
-# shell are cleared too, so none can point a test at a real store. Both match
-# CI, which has no ~/.eden and sets no EDEN_* variable.
+# Tests must never touch the real ~/.eden (issue #67). Test files restore the
+# EDEN_HOME they found, and bunfig.toml's preload (scripts/test-preload.ts)
+# gives each bun test process its own HOME and EDEN_HOME. This is one more
+# layer: the whole run, python tests included, gets a throwaway HOME, removed
+# on exit. EDEN_* variables from the calling shell are cleared too, so none can
+# point a test at a real store. Both match CI, which has no ~/.eden and sets no
+# EDEN_* variable.
 test_home=$(mktemp -d "${TMPDIR:-/tmp}/eden-test-home.XXXXXX")
 trap 'rm -rf "$test_home"' EXIT
 export HOME="$test_home"
