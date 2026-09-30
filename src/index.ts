@@ -60,7 +60,7 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
 }
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags: string[]; at: number; ep?: string; sal?: number; lane?: MemoryLaneKind; invalidAt?: number; validUntil?: number; heat?: number; };
+export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags?: string[]; at: number; ep?: string; sal?: number; lane?: MemoryLaneKind; invalidAt?: number; validUntil?: number; heat?: number; };
 
 function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
   return !(typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
@@ -232,8 +232,8 @@ export class AgentMemory {
   remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
     const rec: MemoryRecord = { id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => String(t).toLowerCase()), at: Date.now(), ...(opts.lane ? { lane: opts.lane } : {}), ...(this.session ? { ep: opaqueId(this.session) } : {}) };
     try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
-    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text); if (pin && !rec.tags.includes("pin")) rec.tags.push("pin");
-    rec.tags = writeAliasTags(rec.tags, rec.text).filter((t) => { if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false; if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true; return Object.values(WRITE_ALIASES).some((a) => a.includes(t)); }); if (!rec.tags.length) delete (rec as { tags?: string[] }).tags;
+    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text); if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
+    rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => { if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false; if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true; return Object.values(WRITE_ALIASES).some((a) => a.includes(t)); }); if (!rec.tags.length) delete rec.tags;
     try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
     try { const fact = objectAsserted(rec.text); if (fact && !STATUS_OBJECT.test(fact.o)) { const live = this.semantic().get(fact.s, fact.p); const serial = leadingSerial(rec.text); if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at); } } catch {}
     const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id); i >= 0 && this.compiled.splice(i, 1); try { this.invalidateSameCopula(rec); } catch {}
