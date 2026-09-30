@@ -2,6 +2,7 @@ import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { writeConfig, ensureHome, edenHome, resolveApiKey, readConfig, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
+import { ensureHookdKey, hookdKeyPath } from "./hookd-key";
 
 /** Live `HOME` so a changed env (tests, redirected home) is not stuck on the cached `os.homedir()`. */
 function userHome(): string {
@@ -20,7 +21,13 @@ function shq(v: string): string {
 
 export function preHookCommand(hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
   const hookd = `http://127.0.0.1:${hookdPort}/hook`;
-  return `curl -sS --max-time 1 -H 'content-type: application/json' --data-binary @- ${hookd} || echo '{}'`;
+  const curl = `curl -sS --max-time 1 ${hookdKeyArg()} -H 'content-type: application/json'`;
+  return `${curl} --data-binary @- ${hookd} || echo '{}'`;
+}
+
+/** curl reads hookd's key header from its 0600 file, so the key is never in argv. No file: curl fails. */
+function hookdKeyArg(): string {
+  return `-H @${shq(hookdKeyPath())}`;
 }
 
 export function hookCommand(
@@ -32,7 +39,8 @@ export function hookCommand(
   const bunHook = `bun ${shq(cliPath)} hook`;
   const ms = Number(process.env.EDEN_HOOKD_TIMEOUT_MS || 8000);
   const sec = Math.min(60, Math.max(2, Math.ceil((Number.isFinite(ms) ? ms : 8000) / 1000)));
-  const core = `${edenHomeExport()}; curl -sS --max-time ${sec} -H 'content-type: application/json' --data-binary @- ${hookd} || ${bunHook}`;
+  const curl = `curl -sS --max-time ${sec} ${hookdKeyArg()} -H 'content-type: application/json'`;
+  const core = `${edenHomeExport()}; ${curl} --data-binary @- ${hookd} || ${bunHook}`;
   return opts.failOpen === false ? core : `${core} || echo '{}'`;
 }
 
@@ -195,6 +203,7 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     `const EDEN_HOME = ${JSON.stringify(edenHome())}`,
     `const CLI = ${JSON.stringify(cliPath)}`,
     `const HOOKD = ${JSON.stringify(`http://127.0.0.1:${port}/hook`)}`,
+    `const HOOKD_KEY = ${JSON.stringify(hookdKeyPath())}`,
     "const ALIAS = { bash: \"Bash\", shell: \"Bash\", read: \"Read\", write: \"Write\", grep: \"Grep\", glob: \"Glob\", webfetch: \"WebFetch\" }",
     "const pending = new Map()",
     "",
@@ -218,12 +227,15 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     "",
     "async function send(payload, bunFallback) {",
     "  try {",
+    "    const { readFileSync } = await import(\"node:fs\")",
+    "    const [name, value] = readFileSync(HOOKD_KEY, \"utf8\").trim().split(/:\\s*/, 2)",
     "    const res = await fetch(HOOKD, {",
     "      method: \"POST\",",
-    "      headers: { \"content-type\": \"application/json\" },",
+    "      headers: { \"content-type\": \"application/json\", [name]: value },",
     "      body: JSON.stringify(payload),",
     "      signal: AbortSignal.timeout(bunFallback ? 8000 : 1000),",
     "    })",
+    "    if (!res.ok) throw new Error(\"hookd refused\")",
     "    return await res.json()",
     "  } catch {",
     "    if (bunFallback) return await bunHook(payload)",
@@ -377,6 +389,11 @@ export async function setup(args: string[]): Promise<void> {
   const cliPath = installedCliPath();
   const hookCmd = hookCommand(cliPath);
   const preCmd = preHookCommand();
+  // The hooks send hookd's key from its file. Made here, it also lets them reach a hookd started
+  // before this version, which would never create it; without it they take the slower bun path.
+  try {
+    ensureHookdKey();
+  } catch {}
   const headersCmd = `bun "${cliPath}" mcp-headers`;
 
   const userClaude = claudeSettingsDir("user");

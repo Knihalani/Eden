@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { isLoopbackHost, looksBrowserDriven } from "@eden/ir";
 import { respondToHook, type HookIn } from "./hook";
 import { edenHome, ensureHome, withFileLockAsync } from "./home";
+import { HOOKD_KEY_HEADER, ensureHookdKey, hookdKeyMatches } from "./hookd-key";
 
 export function hookdPidPath(): string {
   return join(edenHome(), "hookd.pid");
@@ -104,6 +105,11 @@ export async function handleHookd(req: Request): Promise<Response> {
   if (looksBrowserDriven(req) || (host && !isLoopbackHost(host))) {
     return Response.json({}, { status: 403 });
   }
+  // Any local account can reach this port (#85). The body stays `{}`: an older installed hook
+  // prints whatever hookd answers, and `{}` is a no-op for the agent.
+  if (!hookdKeyMatches(req.headers.get(HOOKD_KEY_HEADER))) {
+    return Response.json({}, { status: 401 });
+  }
   if (path !== "/hook" && path !== "/") {
     return Response.json({}, { status: 404 });
   }
@@ -200,6 +206,8 @@ export async function runHookd(args: string[] = []): Promise<void> {
   const hostname = process.env.EDEN_HOOKD_HOST || "127.0.0.1";
   let server: ReturnType<typeof Bun.serve>;
   try {
+    // Before the port opens: a client that sees /health answer can read the key.
+    ensureHookdKey();
     server = Bun.serve({
       port,
       hostname,

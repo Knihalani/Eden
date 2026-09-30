@@ -118,7 +118,9 @@ Then stop.`;
 }
 
 function hooksSettings() {
-  const cmd = `curl -sS --max-time 8 -H 'content-type: application/json' --data-binary @- ${HOOKD}/hook || echo '{}'`;
+  // hookd requires its per-install key; it writes it under EDEN_HOME when it starts.
+  const curl = `curl -sS --max-time 8 -H @${join(EDEN_HOME, "hookd.key")} -H 'content-type: application/json'`;
+  const cmd = `${curl} --data-binary @- ${HOOKD}/hook || echo '{}'`;
   return {
     hooks: {
       PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: cmd }] }],
