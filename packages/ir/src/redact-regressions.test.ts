@@ -91,3 +91,36 @@ describe("eq cycle safety", () => {
     expect(eq(a, b)).toBe(false);
   });
 });
+
+describe("sk- keys with dashes and short GitHub tokens", () => {
+  test("dashed sk- keys and short ghp_/gho_/github_pat_ tokens are redacted", () => {
+    for (const secret of [
+      "sk-ant-api03-SECRETVALUE99",
+      "sk-proj-abc123DEF456ghi789",
+      "sk-live-abcdef123456",
+      "ghp_abc123XYZ999",
+      "gho_abc123XYZ999",
+      "github_pat_abc123XYZ999",
+    ]) {
+      expect(redactString(`./deploy.sh ${secret} done`)).toBe("./deploy.sh [REDACTED] done");
+      expect(containsSecret(secret)).toBe(true);
+    }
+  });
+
+  test("hyphenated words that start with sk- and hold no digit are left alone", () => {
+    // Shadow compares tool args after redact(): eating these made
+    // "git push origin sk-fix-login" and "… sk-fix-logout" compare equal.
+    for (const word of ["git push origin sk-fix-login", "git push origin sk-fix-logout", ".sk-canvas-node-offset {"]) {
+      expect(redactString(word)).toBe(word);
+      expect(containsSecret(word)).toBe(false);
+    }
+  });
+
+  test("a long run of sk- without a digit stays linear", () => {
+    const run = "sk-".repeat(400_000);
+    const t0 = performance.now();
+    expect(redactString(run)).toBe(run);
+    expect(containsSecret(run)).toBe(false);
+    expect(performance.now() - t0).toBeLessThan(1000);
+  });
+});
