@@ -444,12 +444,14 @@ describe("passive memory hooks", () => {
 
   test("SubagentStop fail-opens on cyclic tool_response and an observe throw", async () => {
     const memDir = join(import.meta.dir, "../../.tmp-eden-mem-subagent-failopen");
+    // respondToHook records the stretch under EDEN_HOME; unset, that is the real ~/.eden (#67).
+    const home = mkdtempSync(join(tmpdir(), "eden-mem-failopen-home-"));
     const prevDir = process.env.EDEN_MEMORY_DIR;
     const prevHome = process.env.EDEN_HOME;
     rmSync(memDir, { recursive: true, force: true });
     mkdirSync(memDir, { recursive: true });
     process.env.EDEN_MEMORY_DIR = memDir;
-    delete process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
     try {
       const cyclic: Record<string, unknown> = { note: "loop" };
       cyclic.self = cyclic;
@@ -503,6 +505,7 @@ describe("passive memory hooks", () => {
       if (prevHome === undefined) delete process.env.EDEN_HOME;
       else process.env.EDEN_HOME = prevHome;
       rmSync(memDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
     }
   });
 
@@ -923,9 +926,11 @@ function m13JsonlContents(root: string): string {
 describe("M13 honest off switch (hook)", () => {
   test("off: 0/off hook returns null, does not persist, agent continues", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m13-hook-off-"));
+    // respondToHook records the stretch under EDEN_HOME; unset, that is the real ~/.eden (#67).
+    const home = mkdtempSync(join(tmpdir(), "eden-m13-hook-off-home-"));
     try {
       for (const value of ["0", "off"]) {
-        await m13WithEnv({ EDEN_MEMORY: value, EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
+        await m13WithEnv({ EDEN_MEMORY: value, EDEN_MEMORY_DIR: dir, EDEN_HOME: home }, async () => {
           let out: Record<string, unknown> | null = null;
           expect(() => {
             out = memoryHookResponse({
@@ -953,6 +958,7 @@ describe("M13 honest off switch (hook)", () => {
       expect(m13JsonlContents(dir)).not.toMatch(/sqlite/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
     }
   });
 
