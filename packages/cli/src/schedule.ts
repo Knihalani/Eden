@@ -58,7 +58,7 @@ export async function scheduleCli(
   }
   const cfg = readConfig();
   if (!cfg) {
-    console.log("schedule: no config · run eden login --dev");
+    console.log("schedule: no config · start eden wrap or run eden login");
     return 1;
   }
   const base = wrapPlaneUrl(cfg.base_url);

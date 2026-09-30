@@ -472,7 +472,7 @@ export async function setup(args: string[]): Promise<void> {
     console.log(`  key stored in ${join(edenHome(), "config.json")}`);
     console.log(`  wrap  ${wrap}`);
   } else {
-    console.log("  wrap and MCP skipped until a key (--key, EDEN_API_KEY, eden login, or --dev)");
+    console.log("  wrap and MCP skipped until a key (eden wrap writes one; or --key, EDEN_API_KEY, eden login)");
   }
   console.log(`  hooks → ${settingsPath}`);
   if (apiKey) console.log(`  mcp   → ${mcpPath} (stdio bun … mcp)`);

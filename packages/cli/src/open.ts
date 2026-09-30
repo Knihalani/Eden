@@ -34,7 +34,7 @@ export function openBrowser(url: string): void {
 export async function rejectTool(): Promise<number> {
   const cfg = readConfig();
   if (!cfg) {
-    console.log("reject: no config · run eden login --dev");
+    console.log("reject: no config · start eden wrap or run eden login");
     return 1;
   }
   const base = sitePlaneUrl(cfg.base_url);
