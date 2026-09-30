@@ -39,7 +39,10 @@ export {
   PACKET_BULLET_MAX,
   PACKET_BYTE_CAP,
 } from "./memory-sota";
-/** Tokens with M32: Harbor prompt Δ 150854 → 178613 (+27759) and total +26941 are agent traces. No 89-task claim. No dual-API. */
+/**
+ * Tokens with M32: Harbor prompt Δ 150854 → 178613 (+27759) and total +26941 are agent traces.
+ * No 89-task claim. No dual-API.
+ */
 export const PROCEDURE_TOKEN_CAP = 300;
 export const PROCEDURE_CHAR_CAP = PROCEDURE_TOKEN_CAP * 4;
 export const FACT_CHAR_CAP = PROCEDURE_CHAR_CAP;

@@ -19,7 +19,10 @@ export type HopFact = {
   id?: string;
 };
 
-/** Cap on a CAR walk. Official FC-MH has 3-hop (position→sport→country) and 4-hop (author→spouse→citizen→continent) chains. Not unbounded BM25. */
+/**
+ * Cap on a CAR walk. Official FC-MH has 3-hop (position→sport→country) and 4-hop (author→spouse→citizen→continent)
+ * chains. Not unbounded BM25.
+ */
 const MAX_HOPS = 4;
 const HOP_K = 10;
 /** Observe's Date.now() (~1e12). Serial t=8 must beat wall-clock ice hockey. */
