@@ -175,7 +175,7 @@ describe("doctor", () => {
       const checks = await collectDoctor({
         fetch: (async () => {
           throw new Error("down");
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       });
       expect(checks.find((c) => c.name === "wrap")?.ok).toBe(false);
       expect(checks.find((c) => c.name === "mine")?.ok).toBe(false);
@@ -340,7 +340,7 @@ describe("doctor", () => {
       }
       const printed = formatDoctor(checks);
       const idx = FUNNEL_STAGES.map((n) => printed.indexOf(`  ${n}:`));
-      for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThan(idx[i - 1]);
+      for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThan(idx[i - 1]!);
       expect(checks.find((c) => c.name === "record")?.ok).toBe(true);
       expect(checks.find((c) => c.name === "mine")?.ok).toBe(true);
       expect(checks.find((c) => c.name === "approve")?.ok).toBe(true);
@@ -366,7 +366,7 @@ describe("doctor", () => {
       const checks = await collectDoctor({
         fetch: (async () => {
           throw new Error("down");
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       });
       expect(checks.find((c) => c.name === "install")?.detail).toMatch(/^\d+ · /);
       expect(checks.find((c) => c.name === "record")?.count).toBe(0);
@@ -442,7 +442,7 @@ describe("doctor", () => {
       const h = init?.headers;
       if (!h) return undefined;
       if (h instanceof Headers) return h.get("Authorization") ?? h.get("authorization") ?? undefined;
-      if (Array.isArray(h)) return h.find(([k]) => k.toLowerCase() === "authorization")?.[1];
+      if (Array.isArray(h)) return h.find(([k]) => k!.toLowerCase() === "authorization")?.[1];
       const rec = h as Record<string, string>;
       return rec.Authorization ?? rec.authorization;
     }
@@ -862,7 +862,7 @@ describe("doctor", () => {
     const hung = () => new Promise<Response>(() => {}) as Promise<Response>;
     const t0 = Date.now();
     try {
-      const checks = await collectDoctor({ fetch: hung as typeof fetch });
+      const checks = await collectDoctor({ fetch: hung as unknown as typeof fetch });
       expect(Date.now() - t0).toBeLessThan(2500);
       expect(checks.find((c) => c.name === "wrap")?.ok).toBe(false);
       expect(checks.find((c) => c.name === "wrap")?.detail).toMatch(/down · control wrap/);
@@ -877,7 +877,11 @@ describe("doctor", () => {
 
   test("probeJson returns null on a never-resolving fetch", async () => {
     const t0 = Date.now();
-    const out = await probeJson("http://127.0.0.1:9/health", () => new Promise(() => {}) as Promise<Response>, 50);
+    const out = await probeJson(
+      "http://127.0.0.1:9/health",
+      (() => new Promise(() => {}) as Promise<Response>) as unknown as typeof fetch,
+      50,
+    );
     expect(out).toBeNull();
     expect(Date.now() - t0).toBeLessThan(500);
   });
@@ -931,7 +935,7 @@ describe("M13.3 memory hooks doctor", () => {
     writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
     try {
       const checks = await collectDoctor({
-        fetch: (async () => new Response("no", { status: 404 })) as typeof fetch,
+        fetch: (async () => new Response("no", { status: 404 })) as unknown as typeof fetch,
       });
       expect(formatDoctor(checks)).not.toContain("/forget");
       expect(JSON.stringify(checks)).not.toContain("/forget");

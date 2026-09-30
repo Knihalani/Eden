@@ -36,7 +36,7 @@ describe("approvals: open / reject (Arc 2 catcher)", () => {
     const knock = join(home, "knock.json");
     writeFileSync(knock, JSON.stringify({ tool_id: "t_gone" }));
     const prevFetch = globalThis.fetch;
-    globalThis.fetch = (async () => new Response("no", { status: 503 })) as typeof fetch;
+    globalThis.fetch = (async () => new Response("no", { status: 503 })) as unknown as typeof fetch;
     const logs: string[] = [];
     const orig = console.log;
     console.log = (m?: unknown) => {
@@ -57,7 +57,7 @@ describe("approvals: open / reject (Arc 2 catcher)", () => {
     const prevFetch = globalThis.fetch;
     globalThis.fetch = (async () => {
       throw new Error("Unable to connect");
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     const logs: string[] = [];
     const orig = console.log;
     console.log = (m?: unknown) => {

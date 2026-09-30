@@ -16,6 +16,7 @@ export type HookIn = {
   tool_input?: Record<string, unknown>;
   tool_response?: unknown;
   tool_output?: unknown;
+  is_error?: boolean;
   tool_calls?: unknown;
   cwd?: string;
   prompt?: string;
@@ -383,7 +384,12 @@ export async function respondToHook(
   const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
   const live = (
     Array.isArray(liveRaw) ? liveRaw : []
-  ) as Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>;
+  ) as Array<{
+    name: string;
+    sequence?: string[];
+    envelope?: { inputs?: Record<string, unknown[]> };
+    rollout?: LiveTool["rollout"];
+  }>;
   const cfg = readConfigSafely();
   if (body.hook_event_name === "PreToolUse" && name) {
     try {

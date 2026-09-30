@@ -244,12 +244,13 @@ describe("hook", () => {
       err.push(a.map(String).join(" "));
     };
     try {
-      let health: { ok?: boolean; pid?: number; service?: string } | null = null;
+      type Health = { ok?: boolean; pid?: number; service?: string };
+      let health: Health | null = null;
       for (let i = 0; i < 50; i++) {
         try {
           const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(200) });
           if (r.ok) {
-            health = (await r.json()) as typeof health;
+            health = (await r.json()) as Health;
             break;
           }
         } catch {}

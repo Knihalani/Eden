@@ -37,7 +37,7 @@ describe("eden schedule", () => {
       const code = await scheduleCli(["desk", "--cron", "* * * * *"], {
         fetch: (async () => {
           throw new Error("down");
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       });
       expect(code).toBe(0);
       expect(logs.join("\n")).toMatch(/wrap is down/);
