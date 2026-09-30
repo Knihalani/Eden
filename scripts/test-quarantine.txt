@@ -7,8 +7,6 @@
 # Cannot load: they import code the whatever loop deleted.
 benchmarks/campaign/budget-forecast.test.ts        https://github.com/Knihalani/Eden/issues/3
 benchmarks/campaign/timeout.test.ts                https://github.com/Knihalani/Eden/issues/5
-benchmarks/memory-holdout/negative.test.ts         https://github.com/Knihalani/Eden/issues/7
-benchmarks/memory-holdout/silence.test.ts          https://github.com/Knihalani/Eden/issues/9
 benchmarks/memoryagentbench/memory-char.test.ts    https://github.com/Knihalani/Eden/issues/39
 benchmarks/memoryagentbench/memory-fixes.test.ts   https://github.com/Knihalani/Eden/issues/13
 benchmarks/memoryagentbench/memory-ranker.test.ts  https://github.com/Knihalani/Eden/issues/59
