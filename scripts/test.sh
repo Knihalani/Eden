@@ -46,9 +46,15 @@ echo "quarantined files:" $quarantined
 
 # Tests must never touch the real ~/.eden. Many test files restore EDEN_HOME by
 # deleting it, after which edenHome() falls back to $HOME/.eden, so the whole
-# run gets a throwaway HOME. It also matches CI, whose HOME has no ~/.eden.
-HOME=$(mktemp -d "${TMPDIR:-/tmp}/eden-test-home.XXXXXX")
-export HOME
+# run gets a throwaway HOME, removed on exit. EDEN_* variables from the calling
+# shell are cleared too, so none can point a test at a real store. Both match
+# CI, which has no ~/.eden and sets no EDEN_* variable.
+test_home=$(mktemp -d "${TMPDIR:-/tmp}/eden-test-home.XXXXXX")
+trap 'rm -rf "$test_home"' EXIT
+export HOME="$test_home"
+for var in $(compgen -e | awk '/^EDEN_/'); do
+  unset "$var"
+done
 echo "test HOME: $HOME"
 
 # Python SDK tests live under packages/sdk-py. bun's discovery only finds
@@ -62,5 +68,7 @@ if command -v python3 >/dev/null 2>&1; then
   }
 fi
 
+# Not exec: the EXIT trap has to run to remove the throwaway HOME. set -e still
+# makes bun's exit status the script's.
 # shellcheck disable=SC2086 # word splitting is intended: one argument per dir/file
-exec bun test "$@" $ignore $dirs $src_tests
+bun test "$@" $ignore $dirs $src_tests
