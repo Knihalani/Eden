@@ -6,6 +6,7 @@ export * from "./tokens";
 export * from "./island-usage";
 export * from "./eq";
 export * from "./path";
+export * from "./shell";
 export * from "./hash";
 export * from "./validate";
 export * from "./redact";

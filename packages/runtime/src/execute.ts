@@ -243,7 +243,7 @@ export async function runProgram(
   ): Promise<unknown> => {
     if (signal.aborted) throw new DeoptError("aborted");
     if (step.kind === "tool") {
-      const args = evalArgs(step.args, scope);
+      const args = evalArgs(step.args, scope, step.tool);
       // Counted before the call, not after it. stats.toolCalls is only appended
       // once a step returns, so a tool that ran and *then* threw would look
       // like it never happened — precisely the case where a caller must not

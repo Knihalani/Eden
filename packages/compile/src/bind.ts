@@ -1,8 +1,26 @@
 import type { Binding, StretchTrace, TraceEvent } from "@eden/ir";
-import { canonicalize, containsRedaction, eq, flatten, getPath, interpolateSlots, isWeakValue } from "@eden/ir";
+import {
+  canonicalize,
+  containsRedaction,
+  eq,
+  flatten,
+  getPath,
+  interpolateShell,
+  interpolateSlots,
+  isWeakValue,
+} from "@eden/ir";
 export { isCheckName, isIslandName, isMutating, isReadName } from "@eden/ir";
 
 type Producer = { kind: "input"; path: string } | { kind: "from"; step: string; path: string };
+
+/**
+ * How a string template is filled: interpolateSlots, or interpolateShell for a
+ * shell command line. A template is verified against its witnesses with the
+ * renderer the runtime will run it with, so what is verified is what runs.
+ */
+type Render = (expr: string, record: unknown) => string | null;
+
+type BindOpts = { mutating: boolean; allowExact: boolean; shell?: boolean };
 
 function producersFor(
   value: unknown,
@@ -113,6 +131,7 @@ function tryTokenTemplate(
   strs: string[],
   inputFlats: Map<string, unknown>[],
   priorFlats: Array<Array<{ id: string; flat: Map<string, unknown>; result: unknown }>>,
+  render: Render,
 ): Binding | null {
   if (!strs.every((v) => typeof v === "string")) return null;
   const rows = strs.map((s) => (s as string).split(/\s+/));
@@ -165,7 +184,7 @@ function tryTokenTemplate(
     }
     if (!resolved || !slots) continue;
     const expr = exprTokens.join(" ");
-    if (!rows.every((_, j) => interpolateSlots(expr, recs[j]!) === strs[j])) continue;
+    if (!rows.every((_, j) => render(expr, recs[j]!) === strs[j])) continue;
     return source.kind === "input"
       ? { kind: "transform", fn: "template", expr, of: { kind: "input", path: "" } }
       : { kind: "transform", fn: "template", expr, of: { kind: "from", step: source.id, path: "" } };
@@ -316,12 +335,13 @@ function tryTemplate(
   values: unknown[],
   inputFlats: Map<string, unknown>[],
   priorFlats: Array<Array<{ id: string; flat: Map<string, unknown>; result: unknown }>>,
+  render: Render,
 ): Binding | null {
   // Multi-slot token template first: commands whose varying parts span more
   // than one value (`kubectl logs {app} -n {namespace}`) are unreachable by
   // the single-value substitution below. Token alignment is guaranteed for
   // skeleton-clustered shell steps and harmless to attempt otherwise.
-  const tokenAttempt = tryTokenTemplate(values as string[], inputFlats, priorFlats);
+  const tokenAttempt = tryTokenTemplate(values as string[], inputFlats, priorFlats, render);
   if (tokenAttempt) return tokenAttempt;
   const objectAttempt = tryObjectTemplate(values, inputFlats, priorFlats);
   if (objectAttempt) return objectAttempt;
@@ -334,7 +354,7 @@ function tryTemplate(
   for (const [path, v] of ranked) {
     const expr = base.split(v as string).join(`{${path}}`);
     if (expr === base || !expr.includes("{")) continue;
-    const ok = strs.every((s, j) => interpolateSlots(expr, inputRecord(inputFlats[j]!)) === s);
+    const ok = strs.every((s, j) => render(expr, inputRecord(inputFlats[j]!)) === s);
     if (ok) return { kind: "transform", fn: "template", expr, of: { kind: "input", path: "" } };
   }
   const priorHits = [...(priorFlats[0] ?? [])].flatMap((step) =>
@@ -353,7 +373,7 @@ function tryTemplate(
       // {…} tokens, so a command containing literal shell expansions verified
       // here but executed at runtime with those tokens left raw — the
       // compiled tool ran a command that was never witnessed.
-      return interpolateSlots(expr, src.result) === s;
+      return render(expr, src.result) === s;
     });
     if (ok) return { kind: "transform", fn: "template", expr, of: { kind: "from", step: step.id, path: "" } };
   }
@@ -490,10 +510,11 @@ export function bindContext(traces: StretchTrace[], priorIds: string[]): BindCon
 export function bindSlot(
   values: unknown[],
   ctx: BindContext,
-  opts: { mutating: boolean; allowExact: boolean },
+  opts: BindOpts,
 ): BindResult {
   if (!values.length) return { ok: false, reason: "empty slot" };
   const { inputFlats, priors } = ctx;
+  const render: Render = opts.shell ? interpolateShell : interpolateSlots;
   // Enumerate every producer for the first witness, then only *verify* the
   // survivors against the rest. Enumerating for all of them and intersecting
   // afterwards costs O(witnesses x flattened entries); verification is a map
@@ -518,7 +539,7 @@ export function bindSlot(
     // that as a literal compiles a tool that sends the sentinel to a live API.
     if (values.some((v) => containsRedaction(v))) return { ok: false, reason: "redacted secret slot" };
     if (!opts.allowExact && values.some((v) => v && typeof v === "object")) {
-      const tmpl = tryTemplate(values, inputFlats, priors);
+      const tmpl = tryTemplate(values, inputFlats, priors, render);
       if (tmpl) return { ok: true, binding: tmpl };
     }
     return { ok: true, binding: { kind: "literal", value: values[0] } };
@@ -530,7 +551,7 @@ export function bindSlot(
       reason: `92% trap: slot agrees ${agr.toFixed(2)} but is not exact`,
     };
   }
-  const tmpl = tryTemplate(values, inputFlats, priors);
+  const tmpl = tryTemplate(values, inputFlats, priors, render);
   if (tmpl) return { ok: true, binding: tmpl };
   if (opts.mutating) return { ok: false, reason: "under-determined mutating argument" };
   return { ok: false, reason: "under-determined argument" };
@@ -562,7 +583,7 @@ export function bindSlotWitnesses(
   values: unknown[],
   traces: StretchTrace[],
   priorIds: string[],
-  opts: { mutating: boolean; allowExact: boolean },
+  opts: BindOpts,
 ): BindResult {
   if (!values.length) return { ok: false, reason: "empty slot" };
   if (values.length !== traces.length || values.length <= BIND_SAMPLE) {
@@ -571,7 +592,8 @@ export function bindSlotWitnesses(
   const sampleT = sampleTraces(traces);
   const sampleV = values.slice(0, BIND_SAMPLE);
   const sampled = bindSlot(sampleV, bindContext(sampleT, priorIds), opts);
-  if (sampled.ok && bindingHoldsAll(sampled.binding, values, traces, priorIds)) return sampled;
+  const render: Render = opts.shell ? interpolateShell : interpolateSlots;
+  if (sampled.ok && bindingHoldsAll(sampled.binding, values, traces, priorIds, render)) return sampled;
   return bindSlot(values, bindContext(traces, priorIds), opts);
 }
 
@@ -580,14 +602,15 @@ function bindingHoldsAll(
   values: unknown[],
   traces: StretchTrace[],
   priorIds: string[],
+  render: Render,
 ): boolean {
   for (let i = BIND_SAMPLE; i < values.length; i++) {
-    if (!bindingHolds(b, values[i], traces[i]!, priorIds)) return false;
+    if (!bindingHolds(b, values[i], traces[i]!, priorIds, render)) return false;
   }
   return true;
 }
 
-function bindingHolds(b: Binding, value: unknown, t: StretchTrace, priorIds: string[]): boolean {
+function bindingHolds(b: Binding, value: unknown, t: StretchTrace, priorIds: string[], render: Render): boolean {
   const primitive = value == null || typeof value !== "object";
   if (b.kind === "literal") return sameValue(b.value, value, primitive);
   if (b.kind === "input") {
@@ -596,12 +619,13 @@ function bindingHolds(b: Binding, value: unknown, t: StretchTrace, priorIds: str
   }
   if (b.kind === "from") {
     if (fromHolds(t, b.step, b.path, value, priorIds, primitive)) return true;
-    return b.or ? bindingHolds(b.or, value, t, priorIds) : false;
+    return b.or ? bindingHolds(b.or, value, t, priorIds, render) : false;
   }
   if (b.kind === "transform" && b.fn === "template") {
     const rec = templateRecord(b.of, t, priorIds);
     if (!rec) return false;
-    const rendered = interpolateSlots(b.expr, rec);
+    const rendered = render(b.expr, rec);
+    if (rendered === null) return false;
     const trimmed = b.expr.trim();
     if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
       try {
@@ -850,5 +874,5 @@ export function tryTemplateForTest(
   priorIds: string[],
 ): Binding | null {
   const inputFlats = traces.map((t) => flatten(t.input ?? {}));
-  return tryTemplate(values, inputFlats, priorFlats(traces, priorIds));
+  return tryTemplate(values, inputFlats, priorFlats(traces, priorIds), interpolateSlots);
 }
