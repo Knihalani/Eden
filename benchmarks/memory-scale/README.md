@@ -42,7 +42,7 @@ bun run bench:memory-hard -- --detail         # dev only: each failing case with
 bun run bench:memory-hard -- --no-sleep       # skip the Stop-hook consolidation (faster, not the baseline)
 ```
 
-It takes about 18 s on an Apple M3, most of it the Stop-hook consolidation. It is deterministic, uses no network
+It takes 18–23 s on an Apple M3, most of it the Stop-hook consolidation. It is deterministic, uses no network
 or model, and depends on the clock only through injected time.
 
 ### What it builds
@@ -166,12 +166,13 @@ Scale lines:
 
 Measured on 2026-09-30 on product commit `f29cfcb8a` (`origin/main`; this branch changes no product file). It ran
 twice in fresh processes (`HOME=$(mktemp -d) bun run bench:memory-hard -- --split all`), on Bun 1.3.13 on an Apple
-M3. Both runs matched exactly, digests included, except for the timing lines.
+M3. Both runs matched exactly, digests included, except for the timing lines. Other test runs shared the machine,
+so timings vary from run to run; compare them only within one quiet session.
 
 The harness files hashed as follows (sha256):
 - `hard.ts`: `bf6f490a1189fe42a1b42bb8538034d218e0875ffa17d757cc33c243fd72e7ea`
-- `hard-world.ts`: `a1d7b030f16d890c886d667b8f88a990d4e875b275ef6386c58ac2cfdbb15907`
-- `hard-oracle.ts`: `766d2073648c0b465eea9ad2a8cfb4a13ec9d1d429209ac6c4cd8b6e26b4750e`
+- `hard-world.ts`: `fff47ad08d7d0400954ccaec64cd663584a077910fdf9ae299222dbb2f3e3eaa`
+- `hard-oracle.ts`: `f27f11d29b0383650006c0aa547b27bc475f68d3d3e906f98d9751796bc8ef6d`
 
 | | dev | test |
 |---|---|---|
@@ -212,11 +213,11 @@ The harness files hashed as follows (sha256):
 | n | 20142 | 20142 |
 | bytes | 4946744 | 4946744 |
 | dir_bytes | 7585689 | 7585689 |
-| build_ms | 5334 | 4899 |
-| sleep_ms | 11303 | 11298 |
-| p50_ms | 0.105 | 0.106 |
-| p99_ms | 0.162 | 0.171 |
-| cold_ms | 134.8 | 135.7 |
+| build_ms | 4885 | 5033 |
+| sleep_ms | 16008 | 11152 |
+| p50_ms | 0.165 | 0.104 |
+| p99_ms | 0.377 | 0.142 |
+| cold_ms | 183.8 | 134.0 |
 | timing_samples | 1312 | 1312 |
 
 **What the baseline shows** (dev numbers; `--detail` shows each case):
@@ -227,7 +228,7 @@ The harness files hashed as follows (sha256):
 - Superseded values are injected in 34 of 133 positive cases.
 - Every task notification gets a packet.
 - The `cwd` scopes nothing: a repo cue in `acme-data` gets `acme-shop`'s package manager.
-- One Stop-hook consolidation takes about 11 s at 20k rows.
+- One Stop-hook consolidation takes 11–16 s at 20k rows.
 
 ### Not covered
 
