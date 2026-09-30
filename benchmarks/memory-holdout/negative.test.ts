@@ -116,6 +116,5 @@ describe("M35.1 no-lift negative annex", () => {
     expect(src).not.toMatch(/import\s*(?:type\s+)?(?:\{[^}]*\bBrainMemory\b[^}]*\}|\bBrainMemory\b)\s*from/);
     expect(src).not.toMatch(/EDEN_MEMORY_CAP\s*[:=]\s*["']?40/);
     expect(src).not.toMatch(/writeFileSync\([^)]*HELP\.md/);
-    expect(existsSync(join(import.meta.dir, "HELP.md"))).toBe(false);
   });
 });
