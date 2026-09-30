@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { codingRegistry } from "../src/coding";
-import { writeFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, writeFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -87,6 +87,25 @@ describe("coding registry", () => {
     const reg = codingRegistry(dir);
     await expect(reg.execute("Edit", { path, new_string: "tiny" })).rejects.toThrow(/old_string is required/);
     expect(readFileSync(path, "utf8")).toBe("important existing content\n");
+  });
+
+  test("Write and Edit refuse a dangling symlink whose target is outside cwd", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "eden-coding-outside-"));
+    try {
+      symlinkSync(join(outside, "created.txt"), join(dir, "escape-link.txt"));
+      symlinkSync("later.txt", join(dir, "inside-link.txt"));
+      const reg = codingRegistry(dir);
+      await expect(reg.execute("Write", { path: "escape-link.txt", contents: "x" })).rejects.toThrow(/outside/);
+      await expect(
+        reg.execute("Edit", { path: "escape-link.txt", old_string: "a", new_string: "b" }),
+      ).rejects.toThrow(/outside/);
+      expect(existsSync(join(outside, "created.txt"))).toBe(false);
+      // A dangling link that stays inside the workspace still works.
+      await reg.execute("Write", { path: "inside-link.txt", contents: "ok" });
+      expect(readFileSync(join(dir, "later.txt"), "utf8")).toBe("ok");
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   test("PTC complement: allowed_callers is guidance, execute still works direct", async () => {
