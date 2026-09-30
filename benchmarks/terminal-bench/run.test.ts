@@ -31,6 +31,9 @@ import {
 
 const OFF_DIR = join(JOBS_DIR, "eden-m153-off-google-gemma-4-31b-it");
 const ON_DIR = join(JOBS_DIR, "eden-m153-on-google-gemma-4-31b-it");
+// jobs/ is gitignored, so CI and fresh clones have no Harbor job dirs and the tests that read
+// them skip there (quarantined in P0.-1: https://github.com/Knihalani/Eden/issues/15).
+const HAS_JOBS = existsSync(JOBS_DIR);
 
 function trialJson(jobDir: string, trial: string): unknown {
   return JSON.parse(readFileSync(join(jobDir, trial, "result.json"), "utf8"));
@@ -41,7 +44,7 @@ function byTrial(arm: ReturnType<typeof parseArm>): Record<string, (typeof arm.t
 }
 
 describe("Harbor schema readers", () => {
-  test("rewardOf reads verifier_result.rewards.reward, not verifier_result.reward", () => {
+  test.skipIf(!HAS_JOBS)("rewardOf reads verifier_result.rewards.reward, not verifier_result.reward", () => {
     const win = trialJson(OFF_DIR, "openssl-selfsigned-cert__zJodDRX") as {
       verifier_result: { reward?: unknown; rewards: { reward: number } };
     };
@@ -56,7 +59,7 @@ describe("Harbor schema readers", () => {
     expect(rewardOf(err)).toBeNull();
   });
 
-  test("tokensFrom reads agent_result.n_input_tokens / n_output_tokens", () => {
+  test.skipIf(!HAS_JOBS)("tokensFrom reads agent_result.n_input_tokens / n_output_tokens", () => {
     const j = trialJson(OFF_DIR, "openssl-selfsigned-cert__zJodDRX");
     const tok = tokensFrom(j);
     expect(tok.measured).toBe(true);
@@ -65,7 +68,7 @@ describe("Harbor schema readers", () => {
     expect(tok.total).toBe(29695 + 3244);
   });
 
-  test("harborMeanFromJob reads stats.evals.*.metrics[].mean", () => {
+  test.skipIf(!HAS_JOBS)("harborMeanFromJob reads stats.evals.*.metrics[].mean", () => {
     const offJob = JSON.parse(readFileSync(join(OFF_DIR, "result.json"), "utf8"));
     const onJob = JSON.parse(readFileSync(join(ON_DIR, "result.json"), "utf8"));
     expect(harborMeanFromJob(offJob)).toBe(0.3);
@@ -78,12 +81,12 @@ describe("Harbor schema readers", () => {
 });
 
 describe("parseArm on existing M15.3 Harbor jobs", () => {
-  test("job dirs exist (parser recovers; Harbor is not re-run)", () => {
+  test.skipIf(!HAS_JOBS)("job dirs exist (parser recovers; Harbor is not re-run)", () => {
     expect(existsSync(join(OFF_DIR, "result.json"))).toBe(true);
     expect(existsSync(join(ON_DIR, "result.json"))).toBe(true);
   });
 
-  test("off arm: Harbor mean 0.3, 3/10 resolved, tokens 142305/15227", () => {
+  test.skipIf(!HAS_JOBS)("off arm: Harbor mean 0.3, 3/10 resolved, tokens 142305/15227", () => {
     const off = parseArm("off", OFF_DIR, true);
     expect(off.n_trials).toBe(10);
     expect(off.n_resolved).toBe(3);
@@ -114,7 +117,7 @@ describe("parseArm on existing M15.3 Harbor jobs", () => {
     }
   });
 
-  test("on arm: Harbor mean 0.1, 1/10 resolved, tokens 24934/3915", () => {
+  test.skipIf(!HAS_JOBS)("on arm: Harbor mean 0.1, 1/10 resolved, tokens 24934/3915", () => {
     const on = parseArm("on", ON_DIR, true);
     expect(on.n_trials).toBe(10);
     expect(on.n_resolved).toBe(1);
@@ -146,7 +149,7 @@ describe("parseArm on existing M15.3 Harbor jobs", () => {
     }
   });
 
-  test("Δ = on − off is a LOSS (−20.0 pp); not a silent 0.0/0.0", () => {
+  test.skipIf(!HAS_JOBS)("Δ = on − off is a LOSS (−20.0 pp); not a silent 0.0/0.0", () => {
     const off = parseArm("off", OFF_DIR, true);
     const on = parseArm("on", ON_DIR, true);
     const dAcc = (on.accuracy ?? 0) - (off.accuracy ?? 0);
@@ -197,7 +200,7 @@ describe("M32 renderResults contract", () => {
     expect(md).not.toMatch(/k=40/);
   });
 
-  test("Δ table has accuracy, tokens, $, n_trials, n_resolved, n_errored; LOSS when Δ < 0", () => {
+  test.skipIf(!HAS_JOBS)("Δ table has accuracy, tokens, $, n_trials, n_resolved, n_errored; LOSS when Δ < 0", () => {
     const md = renderResults(reportFromM15Jobs());
     expect(md).toMatch(/\| accuracy \(Harbor mean\) \| 30\.0% \| 10\.0% \| -20\.0 pp \|/);
     expect(md).toMatch(/\| tokens prompt \|/);
@@ -268,7 +271,7 @@ describe("M32.1 harness: job names, GLM reject, NIM 504", () => {
     expect(injectLogPath("on")).toBe(join(DATA_DIR, "inject-on.jsonl"));
   });
 
-  test("jobDirModelOk rejects GLM / z-ai / missing model; accepts current Gemma", () => {
+  test.skipIf(!HAS_JOBS)("jobDirModelOk rejects GLM / z-ai / missing model; accepts current Gemma", () => {
     const glmOff = JSON.parse(readFileSync(join(JOBS_DIR, "eden-m153-off", "config.json"), "utf8"));
     const glmOn = JSON.parse(readFileSync(join(JOBS_DIR, "eden-m153-on", "config.json"), "utf8"));
     expect(glmOff.agents[0].model_name).toMatch(/z-ai\/glm/);
@@ -281,7 +284,7 @@ describe("M32.1 harness: job names, GLM reject, NIM 504", () => {
     expect(jobDirModelOk({ agents: [{ model_name: `openai/${NIM_MODEL}` }] })).toBe(true);
   });
 
-  test("findJobDir never returns stale GLM dirs; prefers exact eden-m32 name", () => {
+  test.skipIf(!HAS_JOBS)("findJobDir never returns stale GLM dirs; prefers exact eden-m32 name", () => {
     const glmOff = join(JOBS_DIR, "eden-m153-off");
     const glmOn = join(JOBS_DIR, "eden-m153-on");
     expect(existsSync(join(glmOff, "config.json"))).toBe(true);

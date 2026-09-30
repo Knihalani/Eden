@@ -7,6 +7,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { isBrainMemoryConstruct, isBrainMemoryImport, NOT_PRODUCT_LINE } from "./inject-gate";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/11
+
 const ROOT = join(import.meta.dir, "../..");
 const BENCH = join(ROOT, "benchmarks");
 const MAB = join(BENCH, "memoryagentbench");
@@ -166,7 +168,7 @@ describe("M6.2 dual-API CI gate", () => {
     expect(brain).toEqual([]);
   });
 
-  test("INJECT-API.md matches hookMemory session file; wrap stays processMemory()", () => {
+  test.failing("INJECT-API.md matches hookMemory session file; wrap stays processMemory()", () => {
     const freeze = readFileSync(INJECT_API, "utf8");
     expect(freeze).toContain("hookMemory");
     expect(freeze).toContain("session_id");

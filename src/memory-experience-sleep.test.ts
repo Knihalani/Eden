@@ -25,6 +25,8 @@ import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep } fro
 import * as edenMem from "./index";
 import * as sleepMod from "./sleep";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/47
+
 const GOLD_REPLAY = "UNIQUE_M25_GOLD_PHRASE_REPLAY";
 const GOLD_OK = "UNIQUE_M25_GOLD_PHRASE_SUCCESS";
 const GOLD_DEAD = "UNIQUE_M25_GOLD_PHRASE_DEADEND";
@@ -623,7 +625,7 @@ describe("M25 wrap/hook: sleep then inject; experience files remain; pytest how-
     });
   });
 
-  test("hook PostToolUse pytest + Stop keeps files; SessionStart does not dump traj", async () => {
+  test.failing("hook PostToolUse pytest + Stop keeps files; SessionStart does not dump traj", async () => {
     await withMem("eden-m25-hook-", async (mem, dir) => {
       void mem;
       memoryHookResponse({

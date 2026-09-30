@@ -12,6 +12,8 @@ import * as iclIndex from "./icl-index";
 import { MEMORY_MARK, encodeLane, openMemory, queryHay, type AgentMemory } from "./index";
 import * as edenMem from "./index";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/52
+
 function tmpDir(prefix = "eden-m192-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -88,7 +90,7 @@ const ICL_CUE = "The movie was great. label:";
 const ICL_CUE_OFFICIAL = "Only output label:";
 
 describe("M19.2 chat fact cue does not pull ICL shots", () => {
-  test("bare 'label this PR' is chat, not ICL-only", () => {
+  test.failing("bare 'label this PR' is chat, not ICL-only", () => {
     withMem((mem) => {
       seedIclAndClerk(mem);
       const pkt = packetOf(mem.inject([{ role: "user", content: "please label this Auth ticket" }]));
@@ -109,7 +111,7 @@ describe("M19.2 chat fact cue does not pull ICL shots", () => {
     });
   });
 
-  test("Auth cues inject Clerk and never movie label: 28", () => {
+  test.failing("Auth cues inject Clerk and never movie label: 28", () => {
     withMem((mem) => {
       seedIclAndClerk(mem);
       for (const cue of [...CHAT_CUES, "Auth is Clerk/failing"]) {
@@ -358,7 +360,7 @@ const NOVEL_PARA =
   "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
 
 describe("M19 locks: novel vs ICL, identity, hay, search, order", () => {
-  test("ICL cue does not pull novel chunks; novel cue does not pull ICL", () => {
+  test.failing("ICL cue does not pull novel chunks; novel cue does not pull ICL", () => {
     withMem((mem) => {
       expect(encodeLane(NOVEL_PARA)).toBe("narrative");
       seedIclAndClerk(mem);

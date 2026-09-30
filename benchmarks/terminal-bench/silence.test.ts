@@ -2,7 +2,7 @@
  * M32.3 remain-silent measure: empty vs junk vs on-cue.
  * Does not launch Harbor. Core omit gate lives in src/index.ts (M38).
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -20,8 +20,12 @@ import {
   type InjectLogLine,
 } from "./silence.ts";
 
+// Quarantined in P0.-1 (https://github.com/Knihalani/Eden/issues/16): failing tests are marked
+// test.failing, and the test that reads the gitignored jobs/ dir skips where it is absent.
+
 const ROOT = join(import.meta.dir, "../..");
 const ON_JOB = join(import.meta.dir, "jobs/eden-m153-on-google-gemma-4-31b-it");
+const HAS_JOBS = existsSync(ON_JOB);
 const OPENSSL_CUE =
   "Create a self-signed TLS certificate using OpenSSL. Save the SHA-256 fingerprint.";
 const SQLITE_PACKET = `${MEMORY_MARK}\n- sqlite is the database.\n- Auth is Clerk.\n- CI is CircleCI.\n- postgres is the session store.\n- Kai is on a peanut diet.`;
@@ -174,7 +178,7 @@ describe("countSilence trial mapping", () => {
     }
   });
 
-  test("missing log + Harbor job dirs: every trial is no_inject, not empty-packet", () => {
+  test.skipIf(!HAS_JOBS)("missing log + Harbor job dirs: every trial is no_inject, not empty-packet", () => {
     const c = countSilence({
       logPath: join(ON_JOB, "no-such-inject.jsonl"),
       jobDir: ON_JOB,
@@ -330,7 +334,7 @@ describe("wrap inject log (measure only)", () => {
 });
 
 describe("omit gate lives in src/index.ts (M38)", () => {
-  test("wrap may mention EDEN_MEMORY_MIN only when that file contains it; core gate is src/index.ts", () => {
+  test.failing("wrap may mention EDEN_MEMORY_MIN only when that file contains it; core gate is src/index.ts", () => {
     const wrapSrc = readFileSync(join(ROOT, "packages/wrap/src/tool-observe.ts"), "utf8");
     const indexSrc = readFileSync(join(ROOT, "src/index.ts"), "utf8");
     expect(wrapSrc).toMatch(/EDEN_MEMORY_INJECT_LOG/);

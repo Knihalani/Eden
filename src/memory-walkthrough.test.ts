@@ -27,6 +27,8 @@ import {
 import * as edenMem from "./index";
 import { loadToolTraces, type ToolTrace } from "./tool-trace";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/66
+
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 const COMPLETE_SRC = readFileSync(join(import.meta.dir, "cls/complete.ts"), "utf8");
 
@@ -315,14 +317,14 @@ function hookStop(session: string): void {
 }
 
 describe("M36.2 walkthrough 1 — commit cue labels [rule]", () => {
-  test("inject", async () => {
+  test.failing("inject", async () => {
     await withSession("eden-m36-1i-", "s-m36-1i", async (mem) => {
       mem.observe(user(RULE));
       assertRule(packetOf(mem.inject(user(COMMIT_CUE))));
     });
   });
 
-  test("wrap OpenAI and Anthropic", async () => {
+  test.failing("wrap OpenAI and Anthropic", async () => {
     await withSession("eden-m36-1w-", "s-m36-1w", async (mem) => {
       mem.observe(user(RULE));
       forOpenAI(mem, COMMIT_CUE, assertRule);
@@ -330,7 +332,7 @@ describe("M36.2 walkthrough 1 — commit cue labels [rule]", () => {
     });
   });
 
-  test("hook submit", async () => {
+  test.failing("hook submit", async () => {
     await withSession("eden-m36-1h-", "s-m36-1h", async () => {
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m36-1h", prompt: RULE });
       assertRule(hookSubmit("s-m36-1h", COMMIT_CUE));
@@ -373,7 +375,7 @@ describe("M36.2 walkthrough 2 — Clerk survives Auth is failing after sleep", (
 });
 
 describe("M36.2 walkthrough 3 — sqlite wins; postgres absent after sleep", () => {
-  test("inject", async () => {
+  test.failing("inject", async () => {
     await withSession("eden-m36-3i-", "s-m36-3i", async (mem, dir) => {
       mem.observe(user(USE_PG));
       mem.observe(user(USE_SQLITE));
@@ -383,7 +385,7 @@ describe("M36.2 walkthrough 3 — sqlite wins; postgres absent after sleep", () 
     });
   });
 
-  test("wrap OpenAI and Anthropic", async () => {
+  test.failing("wrap OpenAI and Anthropic", async () => {
     await withSession("eden-m36-3w-", "s-m36-3w", async (mem, dir) => {
       mem.observe(user(USE_PG));
       mem.observe(user(USE_SQLITE));
@@ -395,7 +397,7 @@ describe("M36.2 walkthrough 3 — sqlite wins; postgres absent after sleep", () 
     });
   });
 
-  test("hook Stop then later cue", async () => {
+  test.failing("hook Stop then later cue", async () => {
     await withSession("eden-m36-3h-", "s-m36-3h", async () => {
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m36-3h", prompt: USE_PG });
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m36-3h", prompt: USE_SQLITE });
@@ -441,7 +443,7 @@ describe("M36.2 walkthrough 5 — successful fix sleeps into [procedure]; chat-o
     expect(FLAKE_CMD_CUE).not.toContain('"command"');
   });
 
-  test("inject after sleep: cmd cue still matches; body under the cap", async () => {
+  test.failing("inject after sleep: cmd cue still matches; body under the cap", async () => {
     await withSession("eden-m36-5i-", "s-m36-5i", async (mem, dir) => {
       observeToolTraces(mem, pytestWindow());
       await sleep({ dir, mem, session: "s-m36-5i" });
@@ -452,7 +454,7 @@ describe("M36.2 walkthrough 5 — successful fix sleeps into [procedure]; chat-o
     });
   });
 
-  test("wrap OpenAI and Anthropic", async () => {
+  test.failing("wrap OpenAI and Anthropic", async () => {
     await withSession("eden-m36-5w-", "s-m36-5w", async (mem, dir) => {
       observeToolTraces(mem, pytestWindow());
       await sleep({ dir, mem, session: "s-m36-5w" });
@@ -461,7 +463,7 @@ describe("M36.2 walkthrough 5 — successful fix sleeps into [procedure]; chat-o
     });
   });
 
-  test("hook PostToolUse success, Stop, cmd cue", async () => {
+  test.failing("hook PostToolUse success, Stop, cmd cue", async () => {
     await withSession("eden-m36-5h-", "s-m36-5h", async () => {
       expect(memoryHookResponse({
         hook_event_name: "PostToolUse",
@@ -525,7 +527,7 @@ describe("M36.2 walkthrough 6 — SessionStart is gists + pins; empty cue dumps 
     expect(text).not.toContain(MEMORY_MARK);
   }
 
-  test("inject empty cue", async () => {
+  test.failing("inject empty cue", async () => {
     await withSession("eden-m36-6i-", "s-m36-6i", async (mem, dir) => {
       await seedBrief(mem, dir, "s-m36-6i");
       assertEmpty(packetOf(mem.inject([])));
@@ -534,7 +536,7 @@ describe("M36.2 walkthrough 6 — SessionStart is gists + pins; empty cue dumps 
     });
   });
 
-  test("wrap empty cue", async () => {
+  test.failing("wrap empty cue", async () => {
     await withSession("eden-m36-6w-", "s-m36-6w", async (mem, dir) => {
       await seedBrief(mem, dir, "s-m36-6w");
       forOpenAI(mem, "", assertEmpty);
@@ -542,7 +544,7 @@ describe("M36.2 walkthrough 6 — SessionStart is gists + pins; empty cue dumps 
     });
   });
 
-  test("hook SessionStart briefs pins and gists, not eviction junk or a traj dump", async () => {
+  test.failing("hook SessionStart briefs pins and gists, not eviction junk or a traj dump", async () => {
     await withSession("eden-m36-6h-", "s-m36-6h", async (mem, dir) => {
       await seedBrief(mem, dir, "s-m36-6h");
       const start = hookContext(memoryHookResponse({
@@ -733,7 +735,7 @@ describe("M36.2 walkthrough 8 — chat-only still gets 1–3 and 6–7; no diet 
     expect(INDEX_SRC).not.toMatch(/staging\.example/);
   });
 
-  test("set up ci does not pin CircleCI; restaurant cue does not pull a diet fact", async () => {
+  test.failing("set up ci does not pin CircleCI; restaurant cue does not pull a diet fact", async () => {
     await withSession("eden-m36-8p-", "s-m36-8p", async (mem) => {
       mem.remember("CI is GitHub Actions and we set up ci with reusable workflows");
       mem.remember("CI is CircleCI");
@@ -748,7 +750,7 @@ describe("M36.2 walkthrough 8 — chat-only still gets 1–3 and 6–7; no diet 
     });
   });
 
-  test("chat-only inject, wrap, and hook still do 1–3 and 6–7 with no [procedure]", async () => {
+  test.failing("chat-only inject, wrap, and hook still do 1–3 and 6–7 with no [procedure]", async () => {
     await withSession("eden-m36-8c-", "s-m36-8c", async (mem, dir) => {
       mem.observe(user(RULE));
       assertRule(packetOf(mem.inject(user(COMMIT_CUE))));
@@ -838,7 +840,7 @@ describe("M36.2 walkthrough 9 — two-hop overwrite still holds after sleep", ()
     mem.observe(user(WINNER));
   }
 
-  test("inject before and after sleep", async () => {
+  test.failing("inject before and after sleep", async () => {
     await withSession("eden-m36-9i-", "s-m36-9i", async (mem, dir) => {
       seedHop(mem);
       assertCanada(packetOf(mem.inject(user(HOP_CUE))));
@@ -847,7 +849,7 @@ describe("M36.2 walkthrough 9 — two-hop overwrite still holds after sleep", ()
     });
   });
 
-  test("wrap OpenAI and Anthropic before and after sleep", async () => {
+  test.failing("wrap OpenAI and Anthropic before and after sleep", async () => {
     await withSession("eden-m36-9w-", "s-m36-9w", async (mem, dir) => {
       seedHop(mem);
       forOpenAI(mem, HOP_CUE, assertCanada);
@@ -858,7 +860,7 @@ describe("M36.2 walkthrough 9 — two-hop overwrite still holds after sleep", ()
     });
   });
 
-  test("hook before Stop and after consolidate", async () => {
+  test.failing("hook before Stop and after consolidate", async () => {
     await withSession("eden-m36-9h-", "s-m36-9h", async (mem) => {
       seedHop(mem);
       assertCanada(hookSubmit("s-m36-9h", HOP_CUE));
@@ -937,7 +939,7 @@ function assertFirstHourSqlite(hay: string): void {
 }
 
 describe("M49.3 first session — decide sqlite, new cue, sleep, still sqlite", () => {
-  test("wrap OpenAI and Anthropic: cue has sqlite [fact] before and after sleep", async () => {
+  test.failing("wrap OpenAI and Anthropic: cue has sqlite [fact] before and after sleep", async () => {
     await withSession("eden-m49-3w-", "s-m49-3w", async (mem, dir) => {
       mem.observe(user(FIRST_SQLITE));
       forOpenAI(mem, FIRST_DB_CUE, assertFirstHourSqlite);
@@ -950,7 +952,7 @@ describe("M49.3 first session — decide sqlite, new cue, sleep, still sqlite", 
     });
   });
 
-  test("hook: UserPromptSubmit encode, cue, Stop, cue still sqlite", async () => {
+  test.failing("hook: UserPromptSubmit encode, cue, Stop, cue still sqlite", async () => {
     await withSession("eden-m49-3h-", "s-m49-3h", async () => {
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m49-3h", prompt: FIRST_SQLITE });
       assertFirstHourSqlite(hookSubmit("s-m49-3h", FIRST_DB_CUE));

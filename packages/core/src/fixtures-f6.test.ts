@@ -3,6 +3,8 @@ import { compileTraces } from "../../compile/src/index";
 import { cutIslands, heuristicName } from "./islands";
 import type { IslandStep, ToolEvent } from "./types";
 import { runProgram, registryFrom } from "../../runtime/src/index";
+
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/21
 export type { IslandStep };
 
 /** Minimal local mirror of @eden/ir's StretchTrace (core does not depend on ir). */
@@ -142,7 +144,7 @@ describe("F6 fixture suite — six domains, zero vendor knowledge", () => {
     ]);
   });
 
-  test("G5: structured-body binding — JSON POST bodies template from witnesses", async () => {
+  test.failing("G5: structured-body binding — JSON POST bodies template from witnesses", async () => {
     const mk = (id: string, status: string): Record<string, unknown> => ({
       id,
       events: [

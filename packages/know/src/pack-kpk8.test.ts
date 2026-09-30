@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { decodePack, encodePack, encodePackV1, allFacts, overlayFromPackPayload, type PackFact } from "./pack";
 import { RFC_TITLE_HOT } from "./rfc-hot";
 import { closedCatalog, DNS_OBJECT, HEADER_LIST } from "./synth";
@@ -7,6 +7,11 @@ import { httpFieldNames } from "./http-field-tab";
 import { mediaTypeNames } from "./media-type-tab";
 import { schemeNames } from "./scheme-tab";
 import { relNames } from "./rel-tab";
+
+// .gauntlet/ is gitignored, so CI and fresh clones have no baseline pack and the test that reads
+// it skips there (quarantined in P0.-1: https://github.com/Knihalani/Eden/issues/25).
+const BASELINE_KPK = new URL("../../../.gauntlet/baseline/know-pack.kpk", import.meta.url);
+const HAS_BASELINE_KPK = existsSync(BASELINE_KPK);
 
 const facts: PackFact[] = [
   { s: "Kenya", p: "capital", o: "Nairobi", e: "", url: "https://example.org/a" },
@@ -394,8 +399,8 @@ describe("KPK9", () => {
     expect(p.search("RFC 3986")[0]?.o).toContain("URI");
   });
 
-  test("baseline KPK7 still decodes", () => {
-    const raw = readFileSync(new URL("../../../.gauntlet/baseline/know-pack.kpk", import.meta.url));
+  test.skipIf(!HAS_BASELINE_KPK)("baseline KPK7 still decodes", () => {
+    const raw = readFileSync(BASELINE_KPK);
     expect(new TextDecoder().decode(raw.subarray(0, 4))).toBe("KPK7");
     const p = decodePack(raw);
     expect(p.search("RFC 3986")[0]?.o).toContain("URI");

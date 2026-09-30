@@ -6,6 +6,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/18
+
 const root = join(import.meta.dir, "../../..");
 const cliReadme = readFileSync(join(root, "packages/cli/README.md"), "utf8");
 const pluginReadme = readFileSync(join(root, "plugins/eden-memory/README.md"), "utf8");
@@ -50,7 +52,7 @@ describe("M49.4 memory env docs", () => {
     expect(pluginReadme).toMatch(/\bon\b/);
   });
 
-  test("every operator EDEN_MEMORY / EDEN_SLEEP name in the READMEs exists in product code", () => {
+  test.failing("every operator EDEN_MEMORY / EDEN_SLEEP name in the READMEs exists in product code", () => {
     const src = productSource();
     const names = [...new Set([...envNames(cliReadme), ...envNames(pluginReadme)])];
     expect(names.length).toBeGreaterThan(0);

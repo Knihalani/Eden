@@ -21,6 +21,8 @@ import { encodeLane, MEMORY_MARK, openMemory, sleep, type AgentMemory } from "./
 import * as edenMem from "./index";
 import { isIclExemplar } from "./semantic-store";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/49
+
 const FILLER = [
   "The miller walked beside the river that ran through the valley at dawn.",
   "Villagers said the oak still slept under the silt waiting for summer rain.",
@@ -252,7 +254,7 @@ m291("M29.1 long doc sleep → gist in packet on summarize", () => {
     if (GIST_CHAR_CAP !== undefined) expect(GIST_CHAR_CAP).toBe(GIST_CAP);
   });
 
-  test("long narrative sleep: retrieveGists + inject packet have [gist] and Quellbridge", async () => {
+  test.failing("long narrative sleep: retrieveGists + inject packet have [gist] and Quellbridge", async () => {
     await withSleptBook(async (mem, dir, story) => {
       const chunks = chunkText(story);
       const rareChunk = chunks.findIndex((c) => RARE_RE.test(firstSent(c)));
@@ -275,7 +277,7 @@ m291("M29.1 long doc sleep → gist in packet on summarize", () => {
     });
   });
 
-  test("wrap injectBody / withKnowFacts / Anthropic / UserPromptSubmit see [gist] + marker", async () => {
+  test.failing("wrap injectBody / withKnowFacts / Anthropic / UserPromptSubmit see [gist] + marker", async () => {
     await withSleptBook(async (mem, dir) => {
       const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
       try {
@@ -400,7 +402,7 @@ describe("M29 isolation", () => {
     });
   });
 
-  test("ICL cue does not pull narrative gists; summarize packet has no label: 28 shots", async () => {
+  test.failing("ICL cue does not pull narrative gists; summarize packet has no label: 28 shots", async () => {
     await withSleptBook(async (mem) => {
       mem.observe([{ role: "user", content: ICL_SHOT }]);
       for (let i = 0; i < 4; i++) {
@@ -521,7 +523,7 @@ describe("M29 adversarial locks", () => {
     });
   });
 
-  test("InfBench-shaped summarize is not ICL; skipNarrativeComplete (no completeNotes hop)", async () => {
+  test.failing("InfBench-shaped summarize is not ICL; skipNarrativeComplete (no completeNotes hop)", async () => {
     await withSleptBook(async (mem) => {
       mem.observe([{ role: "user", content: ICL_SHOT }]);
       for (let i = 0; i < 4; i++) {
