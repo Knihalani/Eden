@@ -17,7 +17,8 @@ import { classifyImportRecord } from "./memory-import-kinds";
 import { MEMORY_MARK, openMemory, type AgentMemory } from "../../../src/index";
 import { memoryHookResponse } from "./memory-hook";
 
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/19
+// Quarantined tests are marked test.failing (P0.-1): issue Knihalani/Eden#19. No URL here:
+// the "M46.4 no NVIDIA" test asserts this file contains none.
 
 const SECRET = "sk-ant-api03-SECRETVALUE99";
 const SQLITE = "Use sqlite.";
