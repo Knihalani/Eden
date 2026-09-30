@@ -86,7 +86,7 @@ describe("M1.3 (1) please / fix the / we need to dropped", () => {
   const fixThe = "fix the flake in auth.test.ts";
   const weNeed = "we need to bump the timeout in the worker.";
 
-  test.failing("today: CHAT/extractDurable stores please, fix the, we need to; secrets still redacted", () => {
+  test("today: CHAT/extractDurable stores please, fix the, we need to; secrets still redacted", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: please }]);
       mem.observe([{ role: "user", content: fixThe }]);

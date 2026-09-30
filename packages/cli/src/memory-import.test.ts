@@ -279,7 +279,7 @@ describe("M46.4 mixed file kinds", () => {
 });
 
 describe("M46.4 secrets redacted", () => {
-  test.failing("live import stores the fact without the secret token", async () => {
+  test("live import stores the fact without the secret token", async () => {
     const { memoryCli, importMemoryPath } = needImport();
     const dir = tmpDir();
     const memDir = join(dir, "memory");
@@ -305,7 +305,7 @@ describe("M46.4 secrets redacted", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(0);
   });
 
-  test.failing("session_id, cwd, email, and ghp_ do not persist", async () => {
+  test("session_id, cwd, email, and ghp_ do not persist", async () => {
     const { importMemoryPath } = needImport();
     const dir = tmpDir();
     const memDir = join(dir, "memory");
