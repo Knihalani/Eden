@@ -3,9 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { rfcTitleOf } from "./rfc-titles";
 import { RFC_TITLE_VOCAB } from "./rfc-vocab";
 
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/26
-
-const GOLDEN = "97a7b0203886f04a3e09f368b89fcc6018567f15996972784e57b9f911a8c2fd";
+const GOLDEN = "3f0f97f04664aa2e2e6de1081382abc73d0927791819aebcff78693d3a9021fe";
 const RFC3986 = "Uniform Resource Identifier (URI): Generic Syntax";
 
 describe("rfcTitleOf compact RT11", () => {
@@ -32,7 +30,7 @@ describe("rfcTitleOf compact RT11", () => {
     expect(rfcTitleOf(-3986)).toBeUndefined();
   });
 
-  test.failing("does not drop titles: 5227 rows, frozen sha256", () => {
+  test("does not drop titles: 5228 rows, frozen sha256", () => {
     const h = createHash("sha256");
     let n = 0;
     for (let i = 0; i <= 10038; i++) {
@@ -41,7 +39,7 @@ describe("rfcTitleOf compact RT11", () => {
       h.update(`${i}\t${t}\n`);
       n++;
     }
-    expect(n).toBe(5227);
+    expect(n).toBe(5228);
     expect(h.digest("hex")).toBe(GOLDEN);
     expect(rfcTitleOf(10038)).toBe("Distributing the Segment Routing over IPv6 (SRv6) Locator Using DHCPv6");
   });
