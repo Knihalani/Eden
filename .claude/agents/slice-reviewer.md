@@ -35,7 +35,7 @@ Read, in this order:
    - No `fixture:` edit changes an oracle without a stated reason.
    - No bench string is special-cased in `src/`.
 4. **Re-run the evidence yourself.**
-   - CI's three steps: `bun run typecheck`, `bun run test`, `bash scripts/build-cli.sh`.
+   - CI's four steps: `bun run format:check`, `bun run typecheck`, `bun run test`, `bash scripts/build-cli.sh`.
    - The slice's arms, twice, in fresh processes.
    - Both flag states.
    - Compare with the numbers in the draft report. **Any mismatch is a finding.**
@@ -63,7 +63,7 @@ FINDINGS (ordered by severity; empty if none)
 ...
 
 RE-RUN EVIDENCE
-- typecheck: <pass/fail>   test: <pass/fail>   build-cli: <pass/fail>
+- format: <pass/fail>   typecheck: <pass/fail>   test: <pass/fail>   build-cli: <pass/fail>
 - arms: <name: result, run 1 / run 2>
 - flag states: <off / shadow / on results>
 - numbers vs draft report: <match | list of mismatches>

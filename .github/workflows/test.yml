@@ -14,7 +14,11 @@ jobs:
         with:
           bun-version: "1.3.13"
       - run: bun install --frozen-lockfile
-      # Typecheck first: packages/* carry no build step, so tsc is the only
+      # Formatting first, since it takes seconds: Prettier plus the line-length
+      # check on the files under the formatter (scripts/format.sh).
+      # `bun run format` fixes everything but long comments.
+      - run: bun run format:check
+      # Then typecheck: packages/* carry no build step, so tsc is the only
       # thing that ever looks at their types. Bun strips them unchecked.
       - run: bun run typecheck
       # Discovers every test directory instead of naming them. The previous
