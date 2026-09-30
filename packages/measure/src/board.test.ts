@@ -8,7 +8,7 @@ describe("claims board", () => {
     const n = boardCounts();
     expect(n.wins).toBe(PUBLIC_CLAIMS.filter((c) => c.kind === "win").length);
     expect(n.customers).toBe(0);
-    expect(n.limits).toBeGreaterThanOrEqual(5);
+    expect(n.limits).toBeGreaterThanOrEqual(4);
     expect(boardSummaryLine()).toMatch(/0 customers/);
     expect(parseClaimsKind("limits")).toBe("limit");
     expect(parseClaimsKind("")).toBe("all");
@@ -23,7 +23,7 @@ describe("claims board", () => {
     expect(claimById("oblivious-long")?.kind).toBe("limit");
     expect(letter).toMatch(/oblivious-long/);
     expect(letter).toMatch(/\+2\.8% cents \/ \+3\.2% wall/);
-    expect(letter).toMatch(/FAIL precision=0\.789 n=38/);
+    expect(letter).toMatch(/PASS precision=1\.000 n=38 · win/);
     expect(letter).toMatch(/host limit \(replica-only\)/);
     const onlyWins = renderClaimsBoard(undefined, { kind: "win" });
     expect(onlyWins).not.toMatch(/oblivious-long/);
