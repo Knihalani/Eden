@@ -33,6 +33,17 @@ fi
 echo "test dirs:" $dirs
 echo "src tests:" $src_tests
 
+# Quarantined test files are skipped, not deleted: each one has a tracking
+# issue in scripts/test-quarantine.txt, and un-quarantining is deleting its
+# line. Tests quarantined individually use test.failing() in their own file.
+quarantined=$(awk '!/^#/ && NF { print $1 }' scripts/test-quarantine.txt)
+ignore=""
+for f in $quarantined; do
+  [ -f "$f" ] || { echo "scripts/test-quarantine.txt lists a missing file: $f" >&2; exit 1; }
+  ignore="$ignore --path-ignore-patterns=$f"
+done
+echo "quarantined files:" $quarantined
+
 # Python SDK tests live under packages/sdk-py. bun's discovery only finds
 # *.test.ts, so run them here when python3 exists; environments without
 # python3 skip quietly and stay green.
@@ -45,4 +56,4 @@ if command -v python3 >/dev/null 2>&1; then
 fi
 
 # shellcheck disable=SC2086 # word splitting is intended: one argument per dir/file
-exec bun test "$@" $dirs $src_tests
+exec bun test "$@" $ignore $dirs $src_tests
