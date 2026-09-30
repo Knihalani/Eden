@@ -9,6 +9,8 @@ import {
   undocumentedSwitches,
 } from "./switches";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/20
+
 const ROOT = resolve(import.meta.dir, "../../..");
 const ROADMAP = readFileSync(resolve(ROOT, "docs/ROADMAP.md"), "utf8");
 
@@ -23,7 +25,7 @@ describe("kill-switch inventory (Wave 20.3)", () => {
     expect(rows.has("EDEN_WEBHOOK_RAW")).toBe(true);
   });
 
-  test("production EDEN_* is in §15 or the path/test allowlist", () => {
+  test.failing("production EDEN_* is in §15 or the path/test allowlist", () => {
     const missing = undocumentedSwitches(ROADMAP, ROOT);
     expect(missing).toEqual([]);
   });

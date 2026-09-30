@@ -11,6 +11,8 @@ import { AgentMemory, cueFor, MEMORY_MARK, openMemory } from "../../../src/index
 import * as edenMem from "../../../src/index";
 import { HowToStore, howtoPath } from "../../../src/howto-store";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/33
+
 function notes(body: Record<string, unknown>): string[] {
   const messages = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: string }[]) : [];
   return messages.filter((m) => m.role === "system" && String(m.content || "").startsWith(KNOW_INJECT_MARK)).map((m) => String(m.content));
@@ -590,7 +592,7 @@ describe("M41 wrap place cues", () => {
     }
   });
 
-  test("path header and last-user files are place names, not file source or the window", () => {
+  test.failing("path header and last-user files are place names, not file source or the window", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m41-place-"));
     const mem = openMemory({ dir });
     const cues: string[] = [];

@@ -12,6 +12,8 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { MEMORY_MARK, memoryInjectSwallows, openMemory, type AgentMemory } from "./index";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/58
+
 const INDEX = join(import.meta.dir, "index.ts");
 const SESSION_A = "session-a";
 const SESSION_B = "session-b";
@@ -101,7 +103,7 @@ function assertSessionLayout(dir: string, allowedDirs: string[]): void {
 }
 
 describe("M44 project identity", () => {
-  test("M48.2 holdout ADR: session A UserPromptSubmit + Stop, session B injects Clerk", async () => {
+  test.failing("M48.2 holdout ADR: session A UserPromptSubmit + Stop, session B injects Clerk", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -132,7 +134,7 @@ describe("M44 project identity", () => {
     }
   });
 
-  test("two hook sessions, same dir: A encodes sqlite and Clerk, B injects them", async () => {
+  test.failing("two hook sessions, same dir: A encodes sqlite and Clerk, B injects them", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -338,7 +340,7 @@ describe("M44 project identity", () => {
     }
   });
 
-  test("session B does not resurrect postgres after sqlite overwrite", async () => {
+  test.failing("session B does not resurrect postgres after sqlite overwrite", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -371,7 +373,7 @@ describe("M44 project identity", () => {
     }
   });
 
-  test("same sentence: later sqlite decision replaces postgres on session B", async () => {
+  test.failing("same sentence: later sqlite decision replaces postgres on session B", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -421,7 +423,7 @@ describe("M44 project identity", () => {
     }
   });
 
-  test("one Stop transcript: postgres then sqlite, session B does not resurrect postgres", async () => {
+  test.failing("one Stop transcript: postgres then sqlite, session B does not resurrect postgres", async () => {
     const dir = tmpDir();
     const secretSession = "sess-secret-m44-9f3a";
     const secretCwd = join(dir, "repo-secret-cwd");

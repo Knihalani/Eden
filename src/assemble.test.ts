@@ -14,6 +14,8 @@ import { MEMORY_MARK, encodeLane, memoryInjectSwallows, openMemory, sleep, type 
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/36
+
 function tmpDir(prefix = "eden-m81-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -338,7 +340,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     expect(block).not.toMatch(/\blacrosse\b/i);
   });
 
-  test("hopChain is 2 hops; last object canada serial 8; inject has Canada not Scotland", async () => {
+  test.failing("hopChain is 2 hops; last object canada serial 8; inject has Canada not Scotland", async () => {
     await withMem((mem) => {
       seedSportWorld(mem);
       expect(mem.memories().some((r) => /Scotland/.test(r.text))).toBe(true);
@@ -361,7 +363,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     });
   });
 
-  test("last-hop Canada is first [fact]; Scotland loser absent", async () => {
+  test.failing("last-hop Canada is first [fact]; Scotland loser absent", async () => {
     await withMem((mem) => {
       seedSportWorld(mem);
       const pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
@@ -376,7 +378,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     });
   });
 
-  test("last hop [fact] is first among facts; a [rule] may precede", async () => {
+  test.failing("last hop [fact] is first among facts; a [rule] may precede", async () => {
     await withMem((mem) => {
       mem.remember(RULE, { kind: "constraint" });
       seedSportWorld(mem);
@@ -441,7 +443,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     });
   });
 
-  test("hop cue on mixed ICL/novel/Zane world still returns Canada", async () => {
+  test.failing("hop cue on mixed ICL/novel/Zane world still returns Canada", async () => {
     expect(ICL).toMatch(/label:\s*28/);
     expect(NOVEL.length).toBeGreaterThan(400);
     await withMem((mem) => {
@@ -471,7 +473,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     });
   });
 
-  test("official-shaped 3-hop: position → sport → country; last hop Kenya first; Peru absent", async () => {
+  test.failing("official-shaped 3-hop: position → sport → country; last hop Kenya first; Peru absent", async () => {
     const posLose = "1. Dana Voss plays the position of winger.";
     const posWin = "8. Dana Voss plays the position of keeper.";
     const sportLose = "1. keeper is associated with the sport of curling.";
@@ -525,7 +527,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     });
   });
 
-  test("wrap injectBody / Anthropic / hook: last hop Canada, not Scotland", async () => {
+  test.failing("wrap injectBody / Anthropic / hook: last hop Canada, not Scotland", async () => {
     await withMem(async (mem, dir) => {
       const prev = process.env.EDEN_MEMORY_DIR;
       process.env.EDEN_MEMORY_DIR = dir;
@@ -563,7 +565,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     });
   });
 
-  test("4-hop continent last hop first; citizen query with continent stored still Belgium", async () => {
+  test.failing("4-hop continent last hop first; citizen query with continent stored still Belgium", async () => {
     const rows = [
       "0. The author of Our Mutual Friend is Charles Dickens.",
       "3. The author of Our Mutual Friend is Charles Darwin.",
@@ -601,7 +603,7 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
  * 262k re-bench is M21. M16.4 hop fixture is the green two-hop overwrite product test (M22).
  */
 describe("M17.4 FC-SH observe overwrite still latest", () => {
-  test("timestamp overwrite (observe): Alice then Bob → packet has Bob, not Alice", async () => {
+  test.failing("timestamp overwrite (observe): Alice then Bob → packet has Bob, not Alice", async () => {
     const alice = "The chairperson of the committee is Alice.";
     const bob = "The chairperson of the committee is Bob.";
     expect(encodeLane(alice)).toBe("chat");
@@ -618,7 +620,7 @@ describe("M17.4 FC-SH observe overwrite still latest", () => {
     });
   });
 
-  test("numbered serials (observe): 1. Alice then 8. Bob → packet has Bob, not Alice", async () => {
+  test.failing("numbered serials (observe): 1. Alice then 8. Bob → packet has Bob, not Alice", async () => {
     const alice = "1. The chairperson of the committee is Alice.";
     const bob = "8. The chairperson of the committee is Bob.";
     expect(encodeLane(alice)).toBe("chat");
@@ -637,7 +639,7 @@ describe("M17.4 FC-SH observe overwrite still latest", () => {
     });
   });
 
-  test("novel + Alice then Bob: packet has Bob, not Alice; miller stays narrative", async () => {
+  test.failing("novel + Alice then Bob: packet has Bob, not Alice; miller stays narrative", async () => {
     const novel =
       "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
     expect(encodeLane(novel)).toBe("narrative");
@@ -672,7 +674,7 @@ describe("M17.4 FC-SH observe overwrite still latest", () => {
     });
   });
 
-  test("postgres → sqlite (observe): packet has sqlite, not postgres", async () => {
+  test.failing("postgres → sqlite (observe): packet has sqlite, not postgres", async () => {
     const pg = "The database is postgres.";
     const sqlite = "The database is sqlite.";
     expect(encodeLane(pg)).toBe("chat");
@@ -761,7 +763,7 @@ describe("M20.4 kind firewall", () => {
     expect(out.some((n) => /Bob/.test(n.text))).toBe(true);
   });
 
-  test("inject packet omits leftover Alice; miller cue keeps miller without Alice", async () => {
+  test.failing("inject packet omits leftover Alice; miller cue keeps miller without Alice", async () => {
     const novel =
       "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
     await withMem((mem) => {

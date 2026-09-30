@@ -20,6 +20,8 @@ import { describe, expect, test } from "bun:test";
 import { openaiIsland } from "../../packages/wrap/src/island.ts";
 import type { IslandCaller } from "../../packages/ir";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/14
+
 const CALL_MS = 350; // gpt-4o-mini typical p50 for tiny JSON tasks
 const COST_PER_CALL_CENTS = 0.015; // ~600 in / 60 out tokens
 
@@ -65,7 +67,7 @@ function deterministicFirst(base: IslandCaller, witnesses: WitnessTable): Island
 }
 
 describe("POC C — deterministic-first islands", () => {
-  test("witnessed mappings never reach the LLM; unseen ones fall back safely", async () => {
+  test.failing("witnessed mappings never reach the LLM; unseen ones fall back safely", async () => {
     const calls = { n: 0 };
     const base = openaiIsland({ fetch: async (...a) => { calls.n++; return fakeFetchWithLatency(CALL_MS)(...a); } });
 

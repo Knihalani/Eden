@@ -11,6 +11,9 @@ import { basename, join, relative } from "node:path";
 
 const ROOT = join(import.meta.dir, "../..");
 const BENCH = join(ROOT, "benchmarks");
+// lme-v2/RESULTS.smoke.md is gitignored, so CI and fresh clones lack it and the test that
+// needs it skips there (quarantined in P0.-1: https://github.com/Knihalani/Eden/issues/8).
+const HAS_SMOKE_RESULTS = existsSync(join(BENCH, "lme-v2/RESULTS.smoke.md"));
 const SAVINGS = join(import.meta.dir, "SAVINGS.md");
 const SCAN_DIRS = ["memory-holdout", "memoryagentbench", "lme-v2", "terminal-bench"].map((d) => join(BENCH, d));
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}[-|:\s]*$/;
@@ -258,7 +261,7 @@ describe("M35.2 savings control gate", () => {
     expect(hasBannedProductColumn("No BrainMemory column. No cortex-off column.\n")).toBe(false);
   });
 
-  test("scanner sees product RESULTS and skips the autopsy plus the M15 evidence lock", () => {
+  test.skipIf(!HAS_SMOKE_RESULTS)("scanner sees product RESULTS and skips the autopsy plus the M15 evidence lock", () => {
     const names = productResultsFiles().map(rel).sort();
     expect(names).toContain("benchmarks/memory-holdout/RESULTS.md");
     expect(names).toContain("benchmarks/memory-holdout/TOOLS-RESULTS.md");

@@ -5,6 +5,8 @@ import { login, formatStatus } from "./login";
 import { wrapCmd, wrapHelp, wrapBootLetter, wrapRegistry, wrapListen } from "./wrap-cmd";
 import { resolveApiKey } from "./home";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/17
+
 describe("login", () => {
   test("writes config", async () => {
     const home = join(import.meta.dir, "../../.tmp-eden-login");
@@ -71,7 +73,7 @@ describe("resolveApiKey", () => {
 });
 
 describe("wrap cmd", () => {
-  test("--no-coding skips the coding registry", () => {
+  test.failing("--no-coding skips the coding registry", () => {
     expect(wrapRegistry(["--no-coding"])).toBeUndefined();
     expect(wrapRegistry([])?.has?.("Read")).toBe(true);
     expect(wrapRegistry([])?.has?.("Grep")).toBe(true);

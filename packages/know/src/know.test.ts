@@ -26,7 +26,7 @@ import { parseUnicodeScripts } from "./scripts";
 import { EDENBOT } from "./ua";
 import { openStore, openQueryStore } from "./store";
 import { SEED_URLS } from "./seed";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -794,15 +794,19 @@ describe("ua", () => {
 });
 
 describe("know crush holdout", () => {
-  const holdout = JSON.parse(
-    readFileSync(new URL("../../../.gauntlet/know-crush/refs/holdout.json", import.meta.url), "utf8"),
-  ) as {
+  type Holdout = {
     must_hit: { q: string; needles: string[]; forbid?: string[] }[];
     must_unknown: string[];
     inject_hit: string;
     inject_silent: string;
     card_forbid: string[];
   };
+  // .gauntlet/ is gitignored, so CI and fresh clones have no holdout. Reading it only when present
+  // keeps the rest of this block running there; the two tests that need it skip
+  // (quarantined in P0.-1: https://github.com/Knihalani/Eden/issues/23).
+  const holdoutUrl = new URL("../../../.gauntlet/know-crush/refs/holdout.json", import.meta.url);
+  const HAS_HOLDOUT = existsSync(holdoutUrl);
+  const holdout: Holdout | undefined = HAS_HOLDOUT ? JSON.parse(readFileSync(holdoutUrl, "utf8")) : undefined;
 
   function packedStore() {
     const facts = [
@@ -853,18 +857,18 @@ describe("know crush holdout", () => {
     }
   });
 
-  test("holdout must_hit 100% and must_unknown stay unknown", () => {
+  test.skipIf(!HAS_HOLDOUT)("holdout must_hit 100% and must_unknown stay unknown", () => {
     const { dir, store } = packedStore();
     try {
-      for (const row of holdout.must_hit) {
+      for (const row of holdout!.must_hit) {
         const card = knowQuery(row.q, store);
         expect("fact" in card).toBe(true);
         const fact = (card as { fact: string }).fact;
         for (const n of row.needles) expect(fact).toContain(n);
         for (const f of row.forbid ?? []) expect(fact).not.toContain(f);
-        for (const f of holdout.card_forbid) expect(fact).not.toContain(f);
+        for (const f of holdout!.card_forbid) expect(fact).not.toContain(f);
       }
-      for (const q of holdout.must_unknown) {
+      for (const q of holdout!.must_unknown) {
         expect("unknown" in knowQuery(q, store)).toBe(true);
       }
     } finally {
@@ -891,15 +895,15 @@ describe("know crush holdout", () => {
     }
   });
 
-  test("EDEN_KNOW=0 disables inject; silent chat stays silent", () => {
+  test.skipIf(!HAS_HOLDOUT)("EDEN_KNOW=0 disables inject; silent chat stays silent", () => {
     const prev = process.env.EDEN_KNOW;
     process.env.EDEN_KNOW = "0";
     try {
-      expect(injectFromText(holdout.inject_hit)).toBeUndefined();
+      expect(injectFromText(holdout!.inject_hit)).toBeUndefined();
     } finally {
       if (prev === undefined) delete process.env.EDEN_KNOW;
       else process.env.EDEN_KNOW = prev;
     }
-    expect(injectFromText(holdout.inject_silent)).toBeUndefined();
+    expect(injectFromText(holdout!.inject_silent)).toBeUndefined();
   });
 });
