@@ -53,7 +53,7 @@ export function stem(token: string): string {
 }
 
 /** Bullet or statement text without the list dash, provenance labels, case or end punctuation. */
-export function norm(text: string): string {
+function norm(text: string): string {
   return text
     .replace(/^\s*-\s+/, "")
     .replace(/^(?:\[[^\]]*\]\s*)+/, "")
