@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { isLoopbackHost, looksBrowserDriven } from "@eden/ir";
 import { respondToHook, type HookIn } from "./hook";
 import { edenHome, ensureHome, withFileLockAsync } from "./home";
 
@@ -90,19 +91,6 @@ export function hookdTimeoutMs(): number {
   return Number.isFinite(n) ? Math.min(60_000, Math.max(500, n)) : 8000;
 }
 
-function looksBrowserDriven(req: Request): boolean {
-  if (req.headers.get("origin")) return true;
-  const site = req.headers.get("sec-fetch-site");
-  return site !== null && site !== "none";
-}
-
-function hostIsLoopback(req: Request): boolean {
-  const raw = req.headers.get("host");
-  if (!raw) return true;
-  const host = raw.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
-  return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1";
-}
-
 export async function handleHookd(req: Request): Promise<Response> {
   const path = new URL(req.url).pathname;
   if (req.method === "GET" && path === "/health") {
@@ -111,7 +99,9 @@ export async function handleHookd(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return Response.json({});
   }
-  if (looksBrowserDriven(req) || !hostIsLoopback(req)) {
+  const host = req.headers.get("host");
+  // A missing Host (HTTP/1.0) is allowed: a browser always sends one.
+  if (looksBrowserDriven(req) || (host && !isLoopbackHost(host))) {
     return Response.json({}, { status: 403 });
   }
   if (path !== "/hook" && path !== "/") {
