@@ -24,11 +24,11 @@ function cfg(opts?: Opts) {
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
-/** The port of a loopback URL, else null. Parsed, so http://localhost:1@evil.example is not loopback. */
-function loopbackPort(url: string): string | null {
+/** host:port of a loopback URL, else null. Parsed, so http://localhost:1@evil.example is not loopback. */
+function loopbackOrigin(url: string): string | null {
   try {
     const u = new URL(url);
-    return LOOPBACK.has(u.hostname) ? u.port || (u.protocol === "https:" ? "443" : "80") : null;
+    return LOOPBACK.has(u.hostname) ? `${u.hostname}:${u.port || (u.protocol === "https:" ? "443" : "80")}` : null;
   } catch {
     return null;
   }
@@ -38,16 +38,16 @@ type SavedConfig = { api_key?: unknown; base_url?: unknown };
 
 /**
  * The key `eden wrap` or `eden login` saved in $EDEN_HOME/config.json (default ~/.eden), sent only
- * to the loopback port it was saved for. Otherwise the public eden_dev, which only a `--dev` wrap
- * or `eden demo` accepts.
+ * to the loopback host and port it was saved for (localhost and 127.0.0.1 can be different
+ * listeners). Otherwise the public eden_dev, which only a `--dev` wrap or `eden demo` accepts.
  */
 function localKey(base: string): string {
   try {
     const home = process.env.EDEN_HOME || join(homedir(), ".eden");
     const saved = JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as SavedConfig;
-    const port = loopbackPort(base);
-    const samePort = port !== null && typeof saved.base_url === "string" && loopbackPort(saved.base_url) === port;
-    if (samePort && typeof saved.api_key === "string" && saved.api_key) return saved.api_key;
+    const origin = loopbackOrigin(base);
+    const same = origin !== null && typeof saved.base_url === "string" && loopbackOrigin(saved.base_url) === origin;
+    if (same && typeof saved.api_key === "string" && saved.api_key) return saved.api_key;
   } catch {}
   return "eden_dev";
 }
