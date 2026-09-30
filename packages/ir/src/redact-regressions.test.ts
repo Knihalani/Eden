@@ -124,3 +124,22 @@ describe("sk- keys with dashes and short GitHub tokens", () => {
     expect(performance.now() - t0).toBeLessThan(1000);
   });
 });
+
+describe("the per-install wrap key", () => {
+  // Same shape as packages/cli home.ts resolveWrapKey: eden_local_ + 32 random bytes in hex.
+  const key = `eden_local_${"0123456789abcdef".repeat(4)}`;
+
+  test("is redacted on its own, with no credential noun next to it", () => {
+    const out = redactString(`eden play lookup --key ${key} --input {}`);
+    expect(out).toBe("eden play lookup --key [REDACTED] --input {}");
+    expect(containsSecret(`echo ${key} | pbcopy`)).toBe(true);
+    expect(containsSecret({ args: [key] })).toBe(true);
+  });
+
+  test("the public eden_dev key and the bare prefix are not secrets", () => {
+    for (const word of ["eden play lookup --key eden_dev", "grep -r eden_local_ packages"]) {
+      expect(redactString(word)).toBe(word);
+      expect(containsSecret(word)).toBe(false);
+    }
+  });
+});
