@@ -5,8 +5,6 @@
 # when gitignored data is absent. Both carry a comment that links their issue.
 
 # Every test in the file fails for one code change, so skipping the file loses no passing test.
-packages/wrap/src/coding-jail.test.ts   https://github.com/Knihalani/Eden/issues/29
-packages/wrap/src/coding.test.ts        https://github.com/Knihalani/Eden/issues/30
 packages/wrap/src/island-batch.test.ts  https://github.com/Knihalani/Eden/issues/31
 src/memory-harmed.test.ts               https://github.com/Knihalani/Eden/issues/50
 
