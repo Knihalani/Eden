@@ -2,13 +2,13 @@
  * M38.3 remain-silent holdout. Dated 2026-09-24.
  * Asserts SILENCE.md shape: Δ≈0, omitted, dated. Does not retune the ranker.
  */
-import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   FIXTURE_PATH,
   REQUIRED_CASE_IDS,
-  SILENCE_PATH,
   loadSilenceFixture,
   runSilence,
   silenceFixtureIssues,
@@ -17,6 +17,11 @@ import {
 } from "./run-silence.ts";
 
 const REGISTERED = "2026-09-24";
+
+// The report renders here, not over the tracked SILENCE.md (only the CLI rewrites that).
+const REPORT_DIR = mkdtempSync(join(tmpdir(), "eden-silence-"));
+const REPORT = join(REPORT_DIR, "SILENCE.md");
+afterAll(() => rmSync(REPORT_DIR, { recursive: true, force: true }));
 
 function honest(row: SilenceRow): boolean {
   if (row.verdict === "WIN") {
@@ -64,9 +69,9 @@ describe("M38.3 silence holdout", () => {
   });
 
   test("SILENCE.md is dated, Δ≈0 when WIN, and names omit", () => {
-    const run = runSilence();
-    expect(existsSync(SILENCE_PATH)).toBe(true);
-    const md = readFileSync(SILENCE_PATH, "utf8");
+    const run = runSilence({ out: REPORT });
+    expect(existsSync(REPORT)).toBe(true);
+    const md = readFileSync(REPORT, "utf8");
     expect(run.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(run.registered).toBe(REGISTERED);
     expect(md).toMatch(/\*\*Date:\*\*\s+\d{4}-\d{2}-\d{2}/);
