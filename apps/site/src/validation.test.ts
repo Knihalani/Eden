@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +6,8 @@ import { join } from "node:path";
 // Pin the on-disk driver before the first server import: a DATABASE_URL in
 // .env would otherwise send every request down the network driver.
 const DB_FILE = mkdtempSync(join(tmpdir(), "eden-validate-")) + "/validate.db";
+const saved: Record<string, string | undefined> = {};
+for (const k of ["EDEN_DB", "DATABASE_URL", "VERCEL", "EDEN_DEV"]) saved[k] = process.env[k];
 process.env.EDEN_DB = DB_FILE;
 delete process.env.DATABASE_URL;
 delete process.env.VERCEL;
@@ -38,6 +40,15 @@ afterEach(() => {
   process.env.EDEN_DEV = "1";
   delete process.env.DATABASE_URL;
   delete process.env.VERCEL;
+});
+
+// File-level, so it runs once after the last test here in any order: every test
+// needs the pinned values above, and later files must get the caller's back.
+afterAll(() => {
+  for (const [k, v] of Object.entries(saved)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
 });
 
 /**
