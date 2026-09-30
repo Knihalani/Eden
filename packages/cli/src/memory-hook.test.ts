@@ -165,6 +165,40 @@ describe("passive memory hooks", () => {
     rmSync(memDir, { recursive: true, force: true });
   });
 
+  // traces.jsonl goes through IR redact() alone, which let sk-ant-… keys (dashes) and short ghp_ through.
+  test("PostToolUse args with an sk-ant key and a short ghp_ reach no store file, traces.jsonl included", () => {
+    const memDir = mkdtempSync(join(tmpdir(), "eden-mem-posttool-args-"));
+    const prev = process.env.EDEN_MEMORY_DIR;
+    const key = "sk-ant-api03-SECRETVALUE99";
+    const ghp = "ghp_abc123XYZ999";
+    try {
+      process.env.EDEN_MEMORY_DIR = memDir;
+      memoryHookResponse({
+        hook_event_name: "PostToolUse",
+        session_id: "s-args-secret",
+        tool_name: "Bash",
+        tool_input: { command: `./deploy.sh ${key} && gh auth login ${ghp}` },
+        tool_response: { stdout: `deployed with ${key}`, stderr: "", exit_code: 0 },
+      });
+      const files = readdirSync(memDir, { recursive: true, encoding: "utf8" });
+      expect(files.map((f) => f.split(/[/\\]/).pop())).toContain("traces.jsonl");
+      const leaks = files.filter((f) => {
+        let text = "";
+        try {
+          text = readFileSync(join(memDir, f), "utf8");
+        } catch {
+          return false; // a directory
+        }
+        return text.includes("SECRETVALUE99") || text.includes(ghp);
+      });
+      expect(leaks).toEqual([]);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_MEMORY_DIR;
+      else process.env.EDEN_MEMORY_DIR = prev;
+      rmSync(memDir, { recursive: true, force: true });
+    }
+  });
+
   test("PostToolUse without tool_name still stores the result", async () => {
     const home = join(import.meta.dir, "../../.tmp-eden-mem-posttool-noname");
     const memDir = join(home, "memory");
