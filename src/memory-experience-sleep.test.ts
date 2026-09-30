@@ -176,7 +176,10 @@ function packetOf(messages: unknown[]): string {
     .join("\n");
 }
 
-/** Disk fixture in ExperienceStore jsonl shape. Extra keys (exit/verify/files/goal/outcome) stay on disk for D's sleep pass. */
+/**
+ * Disk fixture in ExperienceStore jsonl shape.
+ * Extra keys (exit/verify/files/goal/outcome) stay on disk for D's sleep pass.
+ */
 function writeTraj(dir: string, traj: ExtraTraj): string {
   const exp = experienceDir(dir);
   mkdirSync(exp, { recursive: true });

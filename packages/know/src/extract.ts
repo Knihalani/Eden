@@ -2446,7 +2446,10 @@ const RFC_CAT: Record<string, string> = {
   historic: "a Historic RFC",
 };
 
-/** Map xml2rfc `category=` / `Category:` / `Status:` to a persistable RFC `is` object. Never the Status-of-This-Memo gist. */
+/**
+ * Map xml2rfc `category=` / `Category:` / `Status:` to a persistable RFC `is` object.
+ * Never the Status-of-This-Memo gist.
+ */
 function rfcStatusObject(raw: string): string | undefined {
   const t = decodeEntities(raw).replace(/\s+/g, " ").trim().toLowerCase();
   if (!t || t.length > 56) return;
@@ -2533,7 +2536,10 @@ function innerText(raw: string): string {
     .trim();
 }
 
-/** Prefer `<span class="h1">` / real `<h1>` / RFC XML `<title>` / DC.Title so the gist is the RFC title, not “When server”. */
+/**
+ * Prefer `<span class="h1">` / real `<h1>` / RFC XML `<title>` / DC.Title so the gist is the RFC title,
+ * not “When server”.
+ */
 export function rfcTitleFromHtml(
   html: string,
   num: string,

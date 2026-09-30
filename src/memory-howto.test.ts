@@ -1,5 +1,6 @@
 /**
- * M9.4 structured-experience tests + M10.4 sleep how-to + M11.4 how-to integrity + M12.4 cue-complete inject + M14.4 one brain.
+ * M9.4 structured-experience tests + M10.4 sleep how-to + M11.4 how-to integrity + M12.4 cue-complete inject +
+ * M14.4 one brain.
  * Wrap/hook traces keep order/files/exit; sleep compresses success into HowToStore.
  * D owns product; this file only asserts the locked contracts.
  */
