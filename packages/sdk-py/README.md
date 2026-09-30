@@ -5,7 +5,7 @@ Pure-stdlib Python client for Eden wrap. Not on PyPI (`eden-agent` there is some
 ```python
 from eden import wrap_tools, EdenClient
 
-# Local wrap (default): http://127.0.0.1:8788  key eden_dev
+# Local wrap (default): http://127.0.0.1:8788  key from ~/.eden/config.json (eden wrap writes it)
 # Hosted: EDEN_BASE_URL=https://useeden.vercel.app  EDEN_API_KEY=<signup>
 ```
 
