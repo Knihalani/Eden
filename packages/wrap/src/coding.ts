@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { ToolRegistry, ToolRunCtx } from "@eden/ir";
@@ -65,13 +65,19 @@ function bashJail(cwd: string, cmd: string): void {
   }
 }
 
-function confined(cwd: string, p: string): string {
+function confined(cwd: string, p: string, hops = 0): string {
   const root = realpathSync(resolve(cwd));
   const target = resolve(root, p);
   let checked = target;
   try {
     if (existsSync(target)) checked = realpathSync(target);
-    else {
+    else if (lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      // A dangling link resolves nowhere, so its own in-workspace path would pass
+      // the checks below, yet writing through it creates its target wherever that
+      // points. Confine the target as well.
+      if (hops >= 8) throw new Error("symlink chain too long");
+      confined(cwd, resolve(realpathSync(dirname(target)), readlinkSync(target)), hops + 1);
+    } else {
       let dir = dirname(target);
       while (dir.length >= root.length) {
         if (existsSync(dir) && lstatSync(dir).isSymbolicLink()) {
