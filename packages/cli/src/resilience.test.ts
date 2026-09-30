@@ -4,6 +4,7 @@ import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import { appendJsonl, ensureHome, eventsPath, safeRunId, withFileLock, writeConfig } from "./home";
 import { handleHookd } from "./hookd";
+import { HOOKD_KEY_HEADER, ensureHookdKey } from "./hookd-key";
 import { applyFlushTruncate, respondToHook } from "./hook";
 import { rewriteOutbox } from "./drain";
 
@@ -47,10 +48,12 @@ describe("run ids cannot escape the runs directory", () => {
 });
 
 describe("hookd refuses drive-by callers", () => {
+  // Each request carries the hookd key, so each test isolates the check it names.
+  const keyed = () => ({ "content-type": "application/json", [HOOKD_KEY_HEADER]: ensureHookdKey() });
   const post = (headers: Record<string, string> = {}, path = "/hook") =>
     new Request(`http://127.0.0.1:8794${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...headers },
+      headers: { ...keyed(), ...headers },
       body: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "local" }),
     });
 
@@ -87,7 +90,7 @@ describe("hookd refuses drive-by callers", () => {
       new Request("http://127.0.0.1:8794/hook", {
         method: "POST",
         headers: {
-          "content-type": "application/json",
+          ...keyed(),
           host: "evil.test:8794",
           "sec-fetch-site": "same-origin",
         },
@@ -102,7 +105,7 @@ describe("hookd refuses drive-by callers", () => {
       const res = await handleHookd(
         new Request("http://127.0.0.1:8794/hook", {
           method: "POST",
-          headers: { "content-type": "application/json", host },
+          headers: { ...keyed(), host },
           body: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "local" }),
         }),
       );

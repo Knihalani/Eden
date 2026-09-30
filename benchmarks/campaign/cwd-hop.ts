@@ -18,6 +18,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { handleHookd } from "../../packages/cli/src/hookd";
+import { ensureHookdKey } from "../../packages/cli/src/hookd-key";
 import { hookCommand, preHookCommand } from "../../packages/cli/src/setup";
 
 /**
@@ -126,6 +127,8 @@ export async function curlAsClaude(cmd: string, body: unknown): Promise<Record<s
 }
 
 async function withLiveHookd<T>(fn: (cmds: { pre: string; warm: string; port: number }) => Promise<T>): Promise<T> {
+  // `eden hookd` creates its key at start; an in-process hookd needs it before the hooks run.
+  ensureHookdKey();
   const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: handleHookd });
   const port = server.port;
   try {
