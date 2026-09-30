@@ -270,20 +270,22 @@ export function sitePlaneUrl(raw?: string | null): string {
   return /127\.0\.0\.1:8788|localhost:8788/.test(u) ? u.replace(":8788", ":8787") : u;
 }
 
-function configuredApiKey(args: string[]): string | undefined {
+function explicitApiKey(args: string[]): string | undefined {
   const i = args.indexOf("--key");
   const flagged = i >= 0 ? args[i + 1] : undefined;
-  const explicit = flagged || process.env.EDEN_API_KEY;
-  if (explicit) return explicit;
-  const cfg = readConfig();
-  if (cfg?.api_key) return cfg.api_key;
-  if (args.includes("--dev") || process.env.EDEN_DEV === "1") return "eden_dev";
-  return undefined;
+  return flagged || process.env.EDEN_API_KEY || undefined;
+}
+
+function devKeyOptIn(args: string[]): boolean {
+  return args.includes("--dev") || process.env.EDEN_DEV === "1";
 }
 
 export function resolveApiKey(args: string[] = []): string {
-  const key = configuredApiKey(args);
-  if (key) return key;
+  const explicit = explicitApiKey(args);
+  if (explicit) return explicit;
+  const cfg = readConfig();
+  if (cfg?.api_key) return cfg.api_key;
+  if (devKeyOptIn(args)) return "eden_dev";
   throw new Error("eden needs a key: start eden wrap (it writes one), or --key, EDEN_API_KEY, eden login, or --dev");
 }
 
@@ -293,21 +295,35 @@ export function resolveApiKey(args: string[] = []): string {
  */
 export const LOCAL_KEY_PREFIX = "eden_local_";
 
+export type WrapKey = {
+  key: string;
+  /** Only for a new key: stores it with the origin wrap bound. False if another boot stored one first. */
+  save?: (origin: string) => boolean;
+  /** The new key replaces an eden_dev that an old `eden init --dev` or `eden login --dev` saved. */
+  replacesDevKey?: boolean;
+};
+
 /**
- * The key a loopback `eden wrap` guards /v1 with. It resolves like every client's key. Where a
- * client would find none, it creates a random per-install key in config.json (mode 0600) instead
- * of falling back to the public eden_dev, and later runs reuse it (#75).
+ * The key a loopback `eden wrap` guards /v1 with (#75). It resolves like every client's key, except
+ * that the public eden_dev counts only with --dev, EDEN_DEV=1 or an explicit key, even when it is
+ * saved in config.json. Otherwise it is a fresh per-install key. Wrap saves it once it has bound
+ * its port, so config.json never points clients at a port another process holds.
  */
-export function resolveWrapKey(args: string[] = []): { key: string; created: boolean } {
-  const key = configuredApiKey(args);
-  if (key) return { key, created: false };
-  return withFileLock(`${configPath()}.lock`, () => {
-    const cfg = readConfig();
-    if (cfg?.api_key) return { key: cfg.api_key, created: false };
-    const fresh = `${LOCAL_KEY_PREFIX}${randomBytes(32).toString("hex")}`;
-    writeConfig({ ...cfg, api_key: fresh, base_url: cfg?.base_url || wrapPlaneUrl() });
-    return { key: fresh, created: true };
-  });
+export function resolveWrapKey(args: string[] = []): WrapKey {
+  const explicit = explicitApiKey(args);
+  if (explicit) return { key: explicit };
+  const saved = readConfig()?.api_key;
+  if (saved && (saved !== "eden_dev" || devKeyOptIn(args))) return { key: saved };
+  if (devKeyOptIn(args)) return { key: "eden_dev" };
+  const key = `${LOCAL_KEY_PREFIX}${randomBytes(32).toString("hex")}`;
+  const save = (origin: string) =>
+    withFileLock(`${configPath()}.lock`, () => {
+      const cfg = readConfig();
+      if (cfg?.api_key && cfg.api_key !== saved) return false;
+      writeConfig({ ...cfg, api_key: key, base_url: origin });
+      return true;
+    });
+  return { key, save, replacesDevKey: saved === "eden_dev" };
 }
 
 export function readJson<T>(path: string, fallback: T): T {

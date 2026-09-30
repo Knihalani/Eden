@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { Store, createHandler } from "@eden/control";
-import { configPath, ensureHome, resolveApiKey, resolveWrapKey } from "./home";
+import { configPath, ensureHome, resolveApiKey, resolveWrapKey, type WrapKey } from "./home";
 import { codingRegistry, wrapIsland } from "@eden/wrap";
 import { replayRegistry } from "@eden/shadow";
 
@@ -29,6 +29,16 @@ export function wrapListen(args: string[]): { port: number; hostname: string } {
 
 export function isLoopbackHost(hostname: string): boolean {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+}
+
+/** Saves a new per-install key once the server holds its port, and says where. */
+export function keepWrapKey(wrapKey: WrapKey, origin: string): void {
+  if (!wrapKey.save) return;
+  if (!wrapKey.save(origin.replace(/\/$/, ""))) {
+    throw new Error("another eden wrap saved a key first; start eden wrap again");
+  }
+  const replaced = wrapKey.replacesDevKey ? ", replacing the public eden_dev" : "";
+  console.log(`Saved a per-install wrap key in ${configPath()} (mode 0600)${replaced}. eden clients read it there.`);
 }
 
 export function wrapHelp(): string {
@@ -70,8 +80,8 @@ export async function wrapCmd(args: string[]): Promise<void> {
   }
   const { port, hostname } = wrapListen(args);
   const local = isLoopbackHost(hostname) && !process.env.VERCEL;
-  const { key: token, created } = local ? resolveWrapKey(args) : { key: resolveApiKey(args), created: false };
-  if (created) console.log(`Created a local wrap key in ${configPath()} (mode 0600). eden clients read it from there.`);
+  const wrapKey: WrapKey = local ? resolveWrapKey(args) : { key: resolveApiKey(args) };
+  const token = wrapKey.key;
   // A laptop often has DATABASE_URL set for the hosted site, which reads as a managed install.
   // Loopback wrap is a local install. This runs after the key is chosen, so it never picks eden_dev.
   if (local && process.env.EDEN_DEV !== "0") {
@@ -93,6 +103,7 @@ export async function wrapCmd(args: string[]): Promise<void> {
     scheduleClock: true,
   });
   const server = Bun.serve({ port, hostname, fetch: fetchHandler });
+  keepWrapKey(wrapKey, String(server.url));
   console.log(wrapBootLetter(String(server.url), store.liveCount()));
   await new Promise(() => undefined);
 }
