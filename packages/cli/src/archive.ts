@@ -287,13 +287,15 @@ function compactArchiveUnsafe(now: number): CompactResult {
     let row = coldAgg.get(month);
     if (!row) {
       const existing = join(p.cold, `${month}.jsonl`);
-      row = existsSync(existing) ? coldFromFile(existing, month) : {
-        month,
-        runs: 0,
-        classes: emptyTokenClasses(),
-        billed: 0,
-        dcShare: 0,
-      };
+      row = existsSync(existing)
+        ? coldFromFile(existing, month)
+        : {
+            month,
+            runs: 0,
+            classes: emptyTokenClasses(),
+            billed: 0,
+            dcShare: 0,
+          };
       coldAgg.set(month, row);
     }
     row.runs += 1;

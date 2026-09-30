@@ -8,15 +8,7 @@
  * Smoke: `for (let i = 0; i < 100; i++) store.put({ id: "t" + i, states: [{ url: "https://ex/" + i, t: i }] });`
  */
 import { createHash } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  unlinkSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { redact } from "../packages/ir/src/redact";
@@ -80,9 +72,11 @@ const OUTCOME_KEYS = ["outcome"] as const;
 const VERIFY_FIELD_KEYS = ["verify"] as const;
 const CMD_KEYS = ["command", "cmd", "script"] as const;
 const ALT_KEYS = ["alt", "caption", "altText", "alt_text"] as const;
-const IMAGE_KEY = /^(?:screenshot|image|image_data|imagedata|png|jpe?g|webp|gif|bytes|bitmap|screenshot_uri|screenshoturi|screenshot_url|screenshoturl|image_url|imageurl)$/i;
+const IMAGE_KEY =
+  /^(?:screenshot|image|image_data|imagedata|png|jpe?g|webp|gif|bytes|bitmap|screenshot_uri|screenshoturi|screenshot_url|screenshoturl|image_url|imageurl)$/i;
 /** Same family as M10 sleep VERIFY_CMD — do not mint how-to from `ls` / `git grep`. */
-const VERIFY_CMD = /\b(?:pytest|vitest|jest|mocha)\b|\b(?:bun|cargo|go)\s+test\b|\b(?:npm|pnpm|yarn)\s+(?:run\s+)?test\b/i;
+const VERIFY_CMD =
+  /\b(?:pytest|vitest|jest|mocha)\b|\b(?:bun|cargo|go)\s+test\b|\b(?:npm|pnpm|yarn)\s+(?:run\s+)?test\b/i;
 const IMAGE_B64 = /^(?:data:image\/|iVBORw0KGgo|\/9j\/|R0lGOD|UklGR)/;
 const B64_ONLY = /^[A-Za-z0-9+/=\s]+$/;
 
@@ -235,11 +229,13 @@ function assignExtras<T extends ExperienceExtras>(target: T, extras: ExperienceE
 }
 
 function extrasPresent(st: ExperienceExtras): boolean {
-  return st.exit != null
-    || Boolean(st.verify)
-    || Boolean(st.goal)
-    || Boolean(st.outcome)
-    || Boolean(st.files && st.files.length);
+  return (
+    st.exit != null ||
+    Boolean(st.verify) ||
+    Boolean(st.goal) ||
+    Boolean(st.outcome) ||
+    Boolean(st.files && st.files.length)
+  );
 }
 
 function cleanText(text: string, cap: number, ctx?: MemoryScrubCtx): string {
@@ -360,7 +356,10 @@ function persistStateRow(st: ExperienceState): ExperienceState {
   return row;
 }
 
-function persistFile(path: string, traj: ExperienceExtras & { id: string; session?: string; states: ExperienceState[] }): void {
+function persistFile(
+  path: string,
+  traj: ExperienceExtras & { id: string; session?: string; states: ExperienceState[] },
+): void {
   const lines: string[] = [];
   const meta: ExperienceExtras & { id: string; session?: string } = { id: traj.id };
   if (traj.session) meta.session = traj.session;
@@ -370,7 +369,9 @@ function persistFile(path: string, traj: ExperienceExtras & { id: string; sessio
     lines.push(JSON.stringify(persistStateRow(st)));
   }
   writeFileAtomic(path, lines.join("\n") + "\n");
-  try { chmodSync(path, 0o600); } catch {}
+  try {
+    chmodSync(path, 0o600);
+  } catch {}
 }
 
 type FileStat = { path: string; size: number; mtime: number };
@@ -416,8 +417,12 @@ function enforceBudget(expDir: string): void {
 function ensureExpDir(root: string, expDir: string): boolean {
   try {
     mkdirSync(expDir, { recursive: true });
-    try { chmodSync(root, 0o700); } catch {}
-    try { chmodSync(expDir, 0o700); } catch {}
+    try {
+      chmodSync(root, 0o700);
+    } catch {}
+    try {
+      chmodSync(expDir, 0o700);
+    } catch {}
     return true;
   } catch {
     return false;
@@ -607,8 +612,9 @@ function resultBlob(result: unknown): string {
   if (typeof result === "string") return isImagePayloadString(result) ? "" : result;
   const o = asRecord(result);
   if (!o) return "";
-  const parts = [o.stdout, o.stderr, o.text, o.content, o.output, o.message]
-    .filter((x): x is string => typeof x === "string" && x.length > 0 && !isImagePayloadString(x));
+  const parts = [o.stdout, o.stderr, o.text, o.content, o.output, o.message].filter(
+    (x): x is string => typeof x === "string" && x.length > 0 && !isImagePayloadString(x),
+  );
   if (parts.length) return parts.join("\n");
   try {
     const slim: Record<string, unknown> = {};
@@ -918,7 +924,7 @@ function toHowToSteps(traj: ExperienceTraj, success: { st: ExperienceState; veri
   for (let i = 0; i < traj.states.length; i++) {
     const st = traj.states[i]!;
     if (typeof st.exit === "number" && st.exit !== 0) continue;
-    const name = (typeof st.action === "string" && st.action.trim()) ? st.action.trim() : "";
+    const name = typeof st.action === "string" && st.action.trim() ? st.action.trim() : "";
     if (!name && st !== success.st) continue;
     const step: HowToStep = { name: name || "tool", order: i };
     if (st === success.st && success.verify) step.args = { command: success.verify };
@@ -927,9 +933,7 @@ function toHowToSteps(traj: ExperienceTraj, success: { st: ExperienceState; veri
     steps.push(step);
   }
   if (!steps.length) {
-    const name = (typeof success.st.action === "string" && success.st.action.trim())
-      ? success.st.action.trim()
-      : "tool";
+    const name = typeof success.st.action === "string" && success.st.action.trim() ? success.st.action.trim() : "tool";
     const step: HowToStep = { name, exit: 0, order: 0, args: { command: success.verify } };
     if (success.st.files?.length) step.files = success.st.files.slice(0, EXPERIENCE_FILES_MAX);
     steps.push(step);
@@ -946,12 +950,13 @@ function mintExperienceHowTo(howtoDir: string, traj: ExperienceTraj): void {
     const goal = (typeof picked.st.goal === "string" && picked.st.goal) || traj.goal || "";
     const outcome = (typeof picked.st.outcome === "string" && picked.st.outcome) || traj.outcome || "";
     if (iclHay([thought, picked.st.action, picked.verify, goal, outcome, url, traj.goal, traj.outcome])) return;
-    const cue = [url, picked.files.join(" "), thought, goal]
-      .filter((s) => typeof s === "string" && s.trim())
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 800) || picked.verify;
+    const cue =
+      [url, picked.files.join(" "), thought, goal]
+        .filter((s) => typeof s === "string" && s.trim())
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 800) || picked.verify;
     if (iclHay([cue])) return;
     const steps = toHowToSteps(traj, picked);
     if (!cue && !steps.length && !picked.files.length) return;

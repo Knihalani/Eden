@@ -26,8 +26,20 @@ const FILES_MAX = 32;
 const ARG_STR_MAX = 2000;
 
 const EXIT_IN_TEXT = /\bexit(?:\s+code)?[:\s]+(-?\d+)\b/i;
-const FILE_TOKEN = /(?:^|[^A-Za-z0-9_./-])((?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+|[A-Za-z0-9_-]+\.[A-Za-z][A-Za-z0-9.]*)/g;
-const FILE_KEYS = new Set(["path", "file", "files", "file_path", "filePath", "filename", "filepath", "target_file", "targetFile", "target"]);
+const FILE_TOKEN =
+  /(?:^|[^A-Za-z0-9_./-])((?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+|[A-Za-z0-9_-]+\.[A-Za-z][A-Za-z0-9.]*)/g;
+const FILE_KEYS = new Set([
+  "path",
+  "file",
+  "files",
+  "file_path",
+  "filePath",
+  "filename",
+  "filepath",
+  "target_file",
+  "targetFile",
+  "target",
+]);
 
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -102,10 +114,15 @@ function resultText(v: unknown): string {
     if (typeof redacted === "number" || typeof redacted === "boolean") return String(redacted);
     if (redacted && typeof redacted === "object") {
       const o = asRec(redacted);
-      const parts = [o.stdout, o.stderr, o.text, o.content, o.output, o.message, o.error]
-        .filter((x): x is string => typeof x === "string" && x.length > 0);
+      const parts = [o.stdout, o.stderr, o.text, o.content, o.output, o.message, o.error].filter(
+        (x): x is string => typeof x === "string" && x.length > 0,
+      );
       if (parts.length) return parts.join("\n");
-      try { return JSON.stringify(redacted); } catch { return ""; }
+      try {
+        return JSON.stringify(redacted);
+      } catch {
+        return "";
+      }
     }
   } catch {}
   return "";
@@ -186,14 +203,29 @@ function hasToolPayload(o: Record<string, unknown>): boolean {
 
 function parseItem(item: Record<string, unknown>, fallback: Record<string, unknown>, t: number): ToolTraceDraft | null {
   const name = toolName(item, true) || toolName(fallback) || "subagent";
-  const argsRaw = item.tool_input ?? item.args ?? item.parameters ?? item.input
-    ?? fallback.tool_input ?? fallback.args ?? fallback.parameters;
-  const result = item.tool_response ?? item.tool_output ?? item.result ?? item.output ?? item.content
-    ?? fallback.tool_response ?? fallback.tool_output ?? fallback.result ?? fallback.output;
+  const argsRaw =
+    item.tool_input ??
+    item.args ??
+    item.parameters ??
+    item.input ??
+    fallback.tool_input ??
+    fallback.args ??
+    fallback.parameters;
+  const result =
+    item.tool_response ??
+    item.tool_output ??
+    item.result ??
+    item.output ??
+    item.content ??
+    fallback.tool_response ??
+    fallback.tool_output ??
+    fallback.result ??
+    fallback.output;
   const args = parseToolArgs(argsRaw);
   const blob = resultText(result);
   if (!toolName(item, true) && !toolName(fallback) && !Object.keys(args).length && !blob) return null;
-  const isError = item.is_error === true || item.isError === true || fallback.is_error === true || fallback.isError === true;
+  const isError =
+    item.is_error === true || item.isError === true || fallback.is_error === true || fallback.isError === true;
   const exit = exitFromResult({ ...asRec(result), ...item, ...fallback }, blob, isError);
   const files = filesFromTool(args, blob);
   const rec: ToolTraceDraft = { name, args, t };
@@ -206,7 +238,8 @@ function parseItem(item: Record<string, unknown>, fallback: Record<string, unkno
 export function parseHookToolTraces(raw: Record<string, unknown>): ToolTraceDraft[] {
   try {
     const r = asRec(raw);
-    const batch = [r.tools, r.tool_calls, r.tool_results].find((x) => Array.isArray(x) && (x as unknown[]).length) as unknown[] | undefined;
+    const batch = [r.tools, r.tool_calls, r.tool_results].find((x) => Array.isArray(x) && (x as unknown[]).length) as
+      unknown[] | undefined;
     const items = batch ? batch.map((x) => asRec(x)) : hasToolPayload(r) ? [r] : [];
     if (!items.length) return [];
     const t = Date.now();
@@ -233,9 +266,10 @@ function readTracesFile(path: string): ToolTrace[] {
         if (typeof rec.name !== "string") continue;
         if (typeof rec.t !== "number" || !Number.isFinite(rec.t)) continue;
         if (typeof rec.order !== "number" || !Number.isFinite(rec.order)) continue;
-        const args = rec.args && typeof rec.args === "object" && !Array.isArray(rec.args)
-          ? rec.args as Record<string, unknown>
-          : {};
+        const args =
+          rec.args && typeof rec.args === "object" && !Array.isArray(rec.args)
+            ? (rec.args as Record<string, unknown>)
+            : {};
         const row: ToolTrace = { name: rec.name, args, t: rec.t, order: rec.order };
         if (Array.isArray(rec.files)) row.files = rec.files.filter((x): x is string => typeof x === "string");
         if (typeof rec.exit === "number" && Number.isFinite(rec.exit)) row.exit = rec.exit;
@@ -261,33 +295,49 @@ export function loadToolTraces(dir: string): ToolTrace[] {
  * Incoming relative order is kept. Fail-open.
  */
 export function persistToolTraces(dir: string, drafts: Array<ToolTrace | ToolTraceDraft>): void {
-  try { if (memoryConsent() !== "on") return; } catch { return; }
+  try {
+    if (memoryConsent() !== "on") return;
+  } catch {
+    return;
+  }
   if (!drafts.length || !dir) return;
   const path = tracesPath(dir);
   const lockPath = `${path}.lock`;
   try {
     mkdirSync(dir, { recursive: true });
-    try { chmodSync(dir, 0o700); } catch {}
+    try {
+      chmodSync(dir, 0o700);
+    } catch {}
     withFileLock(lockPath, () => {
       const rows = readTracesFile(path);
       let next = -1;
-      for (const r of rows) if (typeof r.order === "number" && Number.isFinite(r.order) && r.order > next) next = r.order;
+      for (const r of rows)
+        if (typeof r.order === "number" && Number.isFinite(r.order) && r.order > next) next = r.order;
       for (const d of drafts) {
         next += 1;
         const parsed = parseToolArgs(d.args && typeof d.args === "object" && !Array.isArray(d.args) ? d.args : {});
         const scrubbed = scrubMemoryValue(parsed);
         const rec: ToolTrace = {
           name: String(d.name || "subagent").slice(0, NAME_MAX),
-          args: scrubbed && typeof scrubbed === "object" && !Array.isArray(scrubbed) ? (scrubbed as Record<string, unknown>) : parsed,
+          args:
+            scrubbed && typeof scrubbed === "object" && !Array.isArray(scrubbed)
+              ? (scrubbed as Record<string, unknown>)
+              : parsed,
           t: typeof d.t === "number" && Number.isFinite(d.t) ? d.t : Date.now(),
           order: next,
         };
-        if (d.files?.length) rec.files = d.files.filter((x) => typeof x === "string").map((x) => scrubMemoryText(x)).slice(0, FILES_MAX);
+        if (d.files?.length)
+          rec.files = d.files
+            .filter((x) => typeof x === "string")
+            .map((x) => scrubMemoryText(x))
+            .slice(0, FILES_MAX);
         if (typeof d.exit === "number" && Number.isFinite(d.exit)) rec.exit = d.exit;
         rows.push(rec);
       }
       writeFileAtomic(path, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
-      try { chmodSync(path, 0o600); } catch {}
+      try {
+        chmodSync(path, 0o600);
+      } catch {}
     });
   } catch {
     // Fail-open: lock/disk/parse faults must not throw into wrap/hook.

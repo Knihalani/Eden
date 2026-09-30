@@ -18,10 +18,7 @@ const DNS_BARE = new Set(
     " ",
   ),
 );
-const DNS_SET = new Set([
-  ...DNS_BARE,
-  ..."MX TXT NS SOA PTR SRV CAA SPF".split(" "),
-]);
+const DNS_SET = new Set([...DNS_BARE, ..."MX TXT NS SOA PTR SRV CAA SPF".split(" ")]);
 export { HEADER_SET, METHOD_SET, PROTO_SET, SCHEME_SET, DNS_SET, DNS_BARE };
 
 const SPDX_LC = new Map([...SPDX_KEEP].map((id) => [id.toLowerCase(), id]));
@@ -208,14 +205,7 @@ function isTokStart(c: number): boolean {
 }
 
 function isTokChar(c: number): boolean {
-  return (
-    (c >= 65 && c <= 90) ||
-    (c >= 97 && c <= 122) ||
-    (c >= 48 && c <= 57) ||
-    c === 43 ||
-    c === 46 ||
-    c === 45
-  );
+  return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 43 || c === 46 || c === 45;
 }
 
 function isDigit(c: number): boolean {
@@ -315,14 +305,7 @@ function wellKnownAt(slice: string, i: number): string | undefined {
   b++;
   while (b < n) {
     const c = slice.charCodeAt(b);
-    if (
-      (c >= 97 && c <= 122) ||
-      (c >= 65 && c <= 90) ||
-      (c >= 48 && c <= 57) ||
-      c === 46 ||
-      c === 95 ||
-      c === 45
-    ) {
+    if ((c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 46 || c === 95 || c === 45) {
       b++;
       if (b - (slash + 1) > 48) return;
     } else break;
@@ -362,7 +345,7 @@ function capitalNameAt(slice: string, i: number, n: number): string | undefined 
   if (last - i < 2) return;
   let name = slice.slice(i, last);
   if (eqFoldAt(name, 0, "the") && name.length > 4 && name.charCodeAt(3) === 32) name = name.slice(4);
-  else if ((eqFoldAt(name, 0, "a") && name.length > 2 && name.charCodeAt(1) === 32)) name = name.slice(2);
+  else if (eqFoldAt(name, 0, "a") && name.length > 2 && name.charCodeAt(1) === 32) name = name.slice(2);
   name = name.trim();
   return name.length >= 2 ? name : undefined;
 }
@@ -500,98 +483,100 @@ function scanClosed(slice: string, add: (q: string) => void, flags: ScanFlags) {
           }
         }
         const rec = trieGet(slice, i, end);
-      if (rec) {
-        if (rec.kind === "rfcLead") {
-          const k = skipSpace(slice, j, n);
-          let d = k;
-          while (d < n && isDigit(slice.charCodeAt(d))) d++;
-          const dn = d - k;
-          if (dn >= 1 && dn <= 5) {
-            const next = d < n ? slice.charCodeAt(d) : 0;
-            if (!isDigit(next) && !isTokStart(next)) add(`RFC ${slice.slice(k, d)}`);
-          }
-        } else if (rec.kind === "httpLead") {
-          const k = skipSpace(slice, j, n);
-          const st = statusAt(slice, k);
-          if (st) add(st);
-        } else if (rec.kind === "w3cLead") {
-          const k = skipSpace(slice, j, n);
-          const tok = takeTok(slice, k, n);
-          if (tok && tok.w.length >= 3 && tok.w.length <= 40) add(`W3C ${tok.w}`);
-        } else if (rec.kind === "whatwgLead") {
-          const k = skipSpace(slice, j, n);
-          const tok = takeTok(slice, k, n);
-          if (tok && tok.w.length >= 2 && tok.w.length <= 40) add(`WHATWG ${tok.w}`);
-        } else if (rec.kind === "scheme") {
-          schemeLater.push(rec.emit);
-        } else if (rec.kind === "dnsCtx") {
-          dnsLater.push(rec.emit);
-        } else if (rec.kind === "spdx") {
-          if (rec.emit === "ISC") flags.isc = true;
-          else add(rec.emit);
-        } else if (rec.kind === "statusLead") {
-          let k = skipSpace(slice, j, n);
-          if (rec.emit === "status" && k + 4 <= n && eqFoldAt(slice, k, "code") && boundWord(slice, k, 4)) {
-            k = skipSpace(slice, k + 4, n);
-          }
-          const st = statusAt(slice, k);
-          if (st) add(st);
-        } else if (rec.kind === "spdxHdr") {
-          let k = skipSpace(slice, j, n);
-          if (k < n && slice.charCodeAt(k) === 58) k = skipSpace(slice, k + 1, n);
-          const tok = takeTok(slice, k, n);
-          if (tok) add(SPDX_LC.get(tok.w.toLowerCase()) || tok.w);
-        } else if (rec.kind === "unicodeLead") {
-          const k = skipSpace(slice, j, n);
-          if (eqFoldAt(slice, k, "block") && boundWord(slice, k, 5)) {
-            const name = unicodeBlockAt(slice, skipSpace(slice, k + 5, n), n);
-            if (name) add(`Unicode Block ${name}`);
-          } else if (eqFoldAt(slice, k, "script") && boundWord(slice, k, 6)) {
-            const sc = scriptAt(slice, skipSpace(slice, k + 6, n), n);
+        if (rec) {
+          if (rec.kind === "rfcLead") {
+            const k = skipSpace(slice, j, n);
+            let d = k;
+            while (d < n && isDigit(slice.charCodeAt(d))) d++;
+            const dn = d - k;
+            if (dn >= 1 && dn <= 5) {
+              const next = d < n ? slice.charCodeAt(d) : 0;
+              if (!isDigit(next) && !isTokStart(next)) add(`RFC ${slice.slice(k, d)}`);
+            }
+          } else if (rec.kind === "httpLead") {
+            const k = skipSpace(slice, j, n);
+            const st = statusAt(slice, k);
+            if (st) add(st);
+          } else if (rec.kind === "w3cLead") {
+            const k = skipSpace(slice, j, n);
+            const tok = takeTok(slice, k, n);
+            if (tok && tok.w.length >= 3 && tok.w.length <= 40) add(`W3C ${tok.w}`);
+          } else if (rec.kind === "whatwgLead") {
+            const k = skipSpace(slice, j, n);
+            const tok = takeTok(slice, k, n);
+            if (tok && tok.w.length >= 2 && tok.w.length <= 40) add(`WHATWG ${tok.w}`);
+          } else if (rec.kind === "scheme") {
+            schemeLater.push(rec.emit);
+          } else if (rec.kind === "dnsCtx") {
+            dnsLater.push(rec.emit);
+          } else if (rec.kind === "spdx") {
+            if (rec.emit === "ISC") flags.isc = true;
+            else add(rec.emit);
+          } else if (rec.kind === "statusLead") {
+            let k = skipSpace(slice, j, n);
+            if (rec.emit === "status" && k + 4 <= n && eqFoldAt(slice, k, "code") && boundWord(slice, k, 4)) {
+              k = skipSpace(slice, k + 4, n);
+            }
+            const st = statusAt(slice, k);
+            if (st) add(st);
+          } else if (rec.kind === "spdxHdr") {
+            let k = skipSpace(slice, j, n);
+            if (k < n && slice.charCodeAt(k) === 58) k = skipSpace(slice, k + 1, n);
+            const tok = takeTok(slice, k, n);
+            if (tok) add(SPDX_LC.get(tok.w.toLowerCase()) || tok.w);
+          } else if (rec.kind === "unicodeLead") {
+            const k = skipSpace(slice, j, n);
+            if (eqFoldAt(slice, k, "block") && boundWord(slice, k, 5)) {
+              const name = unicodeBlockAt(slice, skipSpace(slice, k + 5, n), n);
+              if (name) add(`Unicode Block ${name}`);
+            } else if (eqFoldAt(slice, k, "script") && boundWord(slice, k, 6)) {
+              const sc = scriptAt(slice, skipSpace(slice, k + 6, n), n);
+              if (sc) add(sc);
+            }
+          } else if (rec.kind === "scriptLead") {
+            const k = skipSpace(slice, j, n);
+            const sc = scriptAt(slice, k, n);
             if (sc) add(sc);
-          }
-        } else if (rec.kind === "scriptLead") {
-          const k = skipSpace(slice, j, n);
-          const sc = scriptAt(slice, k, n);
-          if (sc) add(sc);
-        } else if (rec.kind === "ianaLead") {
-          let k = skipSpace(slice, j, n);
-          if (eqFoldAt(slice, k, "language") && boundWord(slice, k, 8)) {
-            k = skipSpace(slice, k + 8, n);
-            if (eqFoldAt(slice, k, "subtag") && boundWord(slice, k, 6)) k = skipSpace(slice, k + 6, n);
-            if (k + 2 <= n) {
-              const next = k + 2 < n ? slice.charCodeAt(k + 2) : 0;
-              const wordCont = (next >= 65 && next <= 90) || (next >= 97 && next <= 122) || isDigit(next) || next === 95;
-              if (!wordCont) {
-                const a = slice.charCodeAt(k);
-                const b = slice.charCodeAt(k + 1);
-                const la = a >= 65 && a <= 90 ? a + 32 : a;
-                const lb = b >= 65 && b <= 90 ? b + 32 : b;
-                if (la >= 97 && la <= 122 && lb >= 97 && lb <= 122) add(`IANA language ${String.fromCharCode(la, lb)}`);
+          } else if (rec.kind === "ianaLead") {
+            let k = skipSpace(slice, j, n);
+            if (eqFoldAt(slice, k, "language") && boundWord(slice, k, 8)) {
+              k = skipSpace(slice, k + 8, n);
+              if (eqFoldAt(slice, k, "subtag") && boundWord(slice, k, 6)) k = skipSpace(slice, k + 6, n);
+              if (k + 2 <= n) {
+                const next = k + 2 < n ? slice.charCodeAt(k + 2) : 0;
+                const wordCont =
+                  (next >= 65 && next <= 90) || (next >= 97 && next <= 122) || isDigit(next) || next === 95;
+                if (!wordCont) {
+                  const a = slice.charCodeAt(k);
+                  const b = slice.charCodeAt(k + 1);
+                  const la = a >= 65 && a <= 90 ? a + 32 : a;
+                  const lb = b >= 65 && b <= 90 ? b + 32 : b;
+                  if (la >= 97 && la <= 122 && lb >= 97 && lb <= 122)
+                    add(`IANA language ${String.fromCharCode(la, lb)}`);
+                }
               }
             }
-          }
-        } else if (rec.kind === "capitalLead") {
-          const k = skipSpace(slice, j, n);
-          if (eqFoldAt(slice, k, "of") && boundWord(slice, k, 2)) {
-            const name = capitalNameAt(slice, skipSpace(slice, k + 2, n), n);
-            if (name) add(`capital of ${name}`);
-          }
-        } else if (rec.kind === "dnsLead") {
-          flags.dns = true;
-          const k = skipSpace(slice, j, n);
-          const tok = takeTok(slice, k, n);
-          if (tok) {
-            if (tok.w.length === 1 && (tok.w === "A" || tok.w === "a")) add("IANA dns A");
-            else if (eqFoldAt(tok.w, 0, "https") && tok.w.length === 5) add("IANA dns HTTPS");
-          }
-        } else if (rec.kind === "jsonWord") flags.json = true;
-        else if (rec.kind === "mediaWord") flags.media = true;
-        else if (rec.kind === "licenseWord") flags.license = true;
-        else if (rec.kind === "recordWord") flags.record = true;
-        else if (rec.kind === "schemeCue") flags.schemeCue = true;
-        else add(rec.emit);
-      }
+          } else if (rec.kind === "capitalLead") {
+            const k = skipSpace(slice, j, n);
+            if (eqFoldAt(slice, k, "of") && boundWord(slice, k, 2)) {
+              const name = capitalNameAt(slice, skipSpace(slice, k + 2, n), n);
+              if (name) add(`capital of ${name}`);
+            }
+          } else if (rec.kind === "dnsLead") {
+            flags.dns = true;
+            const k = skipSpace(slice, j, n);
+            const tok = takeTok(slice, k, n);
+            if (tok) {
+              if (tok.w.length === 1 && (tok.w === "A" || tok.w === "a")) add("IANA dns A");
+              else if (eqFoldAt(tok.w, 0, "https") && tok.w.length === 5) add("IANA dns HTTPS");
+            }
+          } else if (rec.kind === "jsonWord") flags.json = true;
+          else if (rec.kind === "mediaWord") flags.media = true;
+          else if (rec.kind === "licenseWord") flags.license = true;
+          else if (rec.kind === "recordWord") flags.record = true;
+          else if (rec.kind === "schemeCue") flags.schemeCue = true;
+          else add(rec.emit);
+        }
       }
     }
     i = j;
@@ -613,7 +598,7 @@ function canonCharset(raw: string): string | undefined {
   const hit = CHARSET_EMIT.get(t);
   if (hit) return hit;
   if (
-    eqFoldAt(t, 0, "us-ascii") && t.length === 8 ||
+    (eqFoldAt(t, 0, "us-ascii") && t.length === 8) ||
     (t.length >= 10 && eqFoldAt(t, 0, "iso-8859-")) ||
     (t.length >= 11 && eqFoldAt(t, 0, "windows-125")) ||
     eqFoldAt(t, 0, "shift_jis") ||
@@ -825,8 +810,7 @@ const TECHNIQUE_CUE =
   /\b(?:(?:what(?:'s| is) the |the )?(?:best|right|usual|standard|recommended|good|proper|correct) (?:way|tool|thing)(?: to use)? (?:to|for)|what(?: should i)?(?: to)? use (?:to|for)|which (?:tool|thing) (?:should i use |to use )?(?:to|for)|is there a (?:way|tool) to|looking for a (?:way|tool) to|anyone know how to|how(?:\s+do(?:es)?(?:\s+(?:i|you|one|we))?|\s+can(?:\s+i)?|\s+would(?:\s+i)?|\s+should(?:\s+i)?|\s+to))\s+([^?!.]+)/i;
 const INTENT_CUE =
   /\b(?:(?:need(?:s)?|trying|want(?:ing)?|looking) to|(?:can|could) (?:i|you|we|one)|help me|any(?: good)? (?:way|tool) to|recommend(?:ed)? (?:a )?(?:tool|way|something) (?:to|for)|(?:alternative|replacement) to \S+ for|tool for)\s+([^?!.]+)/i;
-const LEAD_VERB =
-  /^(?:(use|do|get|make)(?:ing|es|ne)?)\s+/i;
+const LEAD_VERB = /^(?:(use|do|get|make)(?:ing|es|ne)?)\s+/i;
 
 const TASK_OBJ =
   "jsonl?|ndjson|yaml|toml|xml|html|markdown|typescript|javascript|rustc|rust|python|sql|bash|csv|regex|protobuf|graphql|docker|kubernetes|sqlite|postgres|golang|ruby|php|css|terraform|nix|redis|parquet|avro|repo|codebase";
@@ -851,21 +835,45 @@ export function jsonTaskToken(text: string): boolean {
   if (text.indexOf("json") < 0 && text.indexOf("JSON") < 0) return (_jh = false);
   if (/\bndjson\b|\bjsonl\b/i.test(text)) return (_jh = true);
   if (configJsonPath(text) && !JSON_STRUCT.test(text)) return (_jh = false);
-  if ((/\b(?:content-type|media type|iana)\b/i.test(text) || /application\/json/i.test(text)) && !/\.(jsonl?|ndjson)\b/i.test(text)) return (_jh = false);
-  return (_jh = /\bjson\b|\.jsonl?\b/i.test(text.indexOf("application") < 0 ? text : text.replace(/application\/(?:ld\+)?json/gi, " ")));
+  if (
+    (/\b(?:content-type|media type|iana)\b/i.test(text) || /application\/json/i.test(text)) &&
+    !/\.(jsonl?|ndjson)\b/i.test(text)
+  )
+    return (_jh = false);
+  return (_jh = /\bjson\b|\.jsonl?\b/i.test(
+    text.indexOf("application") < 0 ? text : text.replace(/application\/(?:ld\+)?json/gi, " "),
+  ));
 }
 
 export function jsonWrongWay(text: string): boolean {
-  return GREP_LINE.test(text) && jsonTaskToken(text) && !(/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text));
+  return (
+    GREP_LINE.test(text) &&
+    jsonTaskToken(text) &&
+    !(/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text))
+  );
 }
 
 export function jsonCliNeed(text: string): boolean {
   if (!jsonTaskToken(text)) return false;
-  if (/\b(?:repo|codebase|source tree)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text) && !/\bndjson\b|\bjsonl\b/i.test(text)) return false;
+  if (
+    /\b(?:repo|codebase|source tree)\b/i.test(text) &&
+    !/\.(jsonl?|ndjson)\b/i.test(text) &&
+    !/\bndjson\b|\bjsonl\b/i.test(text)
+  )
+    return false;
   if (GREP_LINE.test(text)) return true;
   const struct = JSON_STRUCT.test(text);
-  if (struct && /\.(jsonl?|ndjson)\b/i.test(text) && /\b(?:pull|pluck|grep|cat|sed|awk|extract|parse|get|read|print)\b/i.test(text)) return true;
-  if (/\bjson\b/i.test(text.indexOf("application") < 0 ? text : text.replace(/application\/json/gi, " ")) && /\bcli\b/i.test(text)) return true;
+  if (
+    struct &&
+    /\.(jsonl?|ndjson)\b/i.test(text) &&
+    /\b(?:pull|pluck|grep|cat|sed|awk|extract|parse|get|read|print)\b/i.test(text)
+  )
+    return true;
+  if (
+    /\bjson\b/i.test(text.indexOf("application") < 0 ? text : text.replace(/application\/json/gi, " ")) &&
+    /\bcli\b/i.test(text)
+  )
+    return true;
   return struct && /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line|pipeline)\b/i.test(text);
 }
 
@@ -879,7 +887,12 @@ export function jsonToolArgs(args: string): boolean {
 }
 
 export function pythonInstallNeed(text: string): boolean {
-  if (text.indexOf("pip") < 0 && text.indexOf("python") < 0 && text.indexOf("Python") < 0 && text.indexOf("easy_install") < 0) {
+  if (
+    text.indexOf("pip") < 0 &&
+    text.indexOf("python") < 0 &&
+    text.indexOf("Python") < 0 &&
+    text.indexOf("easy_install") < 0
+  ) {
     return false;
   }
   if (PIP_LIKE.test(text)) return !/\b(?:freeze|list|show|uninstall|outdated)\b/i.test(text);
@@ -888,19 +901,32 @@ export function pythonInstallNeed(text: string): boolean {
 }
 
 export function typescriptRunNeed(text: string): boolean {
-  if (text.indexOf("tsc") < 0 && text.indexOf("tsx") < 0 && text.indexOf("typescript") < 0 && text.indexOf("TypeScript") < 0 && text.indexOf("ts-node") < 0) {
+  if (
+    text.indexOf("tsc") < 0 &&
+    text.indexOf("tsx") < 0 &&
+    text.indexOf("typescript") < 0 &&
+    text.indexOf("TypeScript") < 0 &&
+    text.indexOf("ts-node") < 0
+  ) {
     return false;
   }
   if (/\b(?:tsc|ts-node|(?:npx\s+)?tsx)\b/i.test(text)) return true;
-  return /\btypescript\b/i.test(text) && /\b(?:compile step|without a compile|skip(?:ping)? (?:the )?compile|as-is|just start)\b/i.test(text);
+  return (
+    /\btypescript\b/i.test(text) &&
+    /\b(?:compile step|without a compile|skip(?:ping)? (?:the )?compile|as-is|just start)\b/i.test(text)
+  );
 }
 
 export function findFilesNeed(text: string): boolean {
-  if (text.indexOf("file") < 0 && text.indexOf("glob") < 0 && text.indexOf("find") < 0 && text.indexOf("locate") < 0) return false;
+  if (text.indexOf("file") < 0 && text.indexOf("glob") < 0 && text.indexOf("find") < 0 && text.indexOf("locate") < 0)
+    return false;
   if (/\bfile named\b/i.test(text) || (/\bglob\b/i.test(text) && /\b(?:tree|tsconfig)\b/i.test(text))) return true;
   if (/\bfind\b/i.test(text) && /\s-i?name\b/.test(text)) return true;
   if (!/\b(?:find|locate)\b/i.test(text)) return false;
-  return /\b(?:files named|files? by name|by filename|filenames?)\b/i.test(text) || (/\bfiles?\b/i.test(text) && /\bglob\b/i.test(text));
+  return (
+    /\b(?:files named|files? by name|by filename|filenames?)\b/i.test(text) ||
+    (/\bfiles?\b/i.test(text) && /\bglob\b/i.test(text))
+  );
 }
 
 export function repoSearchNeed(text: string): boolean {
@@ -913,7 +939,11 @@ export function repoSearchNeed(text: string): boolean {
 function jsonTechniqueBlockedByRfc(text: string): boolean {
   if (text.indexOf("RFC") < 0 && text.indexOf("rfc") < 0) return false;
   if (!/\bRFC[\s#:-]*\d{1,5}\b/i.test(text)) return false;
-  return !GREP_LINE.test(text) && !/\b(?:cli|command[ -]?line|bash|shell)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text);
+  return (
+    !GREP_LINE.test(text) &&
+    !/\b(?:cli|command[ -]?line|bash|shell)\b/i.test(text) &&
+    !/\.(jsonl?|ndjson)\b/i.test(text)
+  );
 }
 
 function canonTaskObj(obj: string): string {
@@ -923,7 +953,14 @@ function canonTaskObj(obj: string): string {
 }
 
 function cleanTask(raw: string): string | undefined {
-  const task = raw.replace(/\s+/g, " ").trim().replace(/^(to|for|a|an|the)\s+/i, "").replace(/[?!.]+$/, "").trim().replace(LEAD_VERB, "").trim();
+  const task = raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(to|for|a|an|the)\s+/i, "")
+    .replace(/[?!.]+$/, "")
+    .trim()
+    .replace(LEAD_VERB, "")
+    .trim();
   return task.length < 2 || task.length > 60 ? undefined : task;
 }
 
@@ -961,14 +998,8 @@ const TECH_FILLER = new Set([
   "please",
   "just",
 ]);
-const TASK_FWD = new RegExp(
-  `\\b(?:${TASK_VERB})(?:ing|es|s|e|ed)?\\b[\\s\\S]{0,48}?\\b(${TASK_OBJ})\\b`,
-  "i",
-);
-const TASK_REV = new RegExp(
-  `\\b(${TASK_OBJ})\\b[\\s\\S]{0,48}\\b(?:${TASK_VERB})(?:ing|es|s|e|ed)?\\b`,
-  "i",
-);
+const TASK_FWD = new RegExp(`\\b(?:${TASK_VERB})(?:ing|es|s|e|ed)?\\b[\\s\\S]{0,48}?\\b(${TASK_OBJ})\\b`, "i");
+const TASK_REV = new RegExp(`\\b(${TASK_OBJ})\\b[\\s\\S]{0,48}\\b(?:${TASK_VERB})(?:ing|es|s|e|ed)?\\b`, "i");
 
 export function implicitTechniqueTask(text: string): string | undefined {
   if (text.length < 8) return undefined;
@@ -977,15 +1008,23 @@ export function implicitTechniqueTask(text: string): string | undefined {
   if (typescriptRunNeed(text)) return "TypeScript";
   if (findFilesNeed(text)) return "files";
   if (repoSearchNeed(text)) return "search";
-  if ((text.indexOf("rust") >= 0 || text.indexOf("Rust") >= 0) && (text.indexOf("crate") >= 0 || text.indexOf("binary") >= 0) && /\brust\b/i.test(text) && /\b(?:crate|binary)\b/i.test(text)) return "Rust";
+  if (
+    (text.indexOf("rust") >= 0 || text.indexOf("Rust") >= 0) &&
+    (text.indexOf("crate") >= 0 || text.indexOf("binary") >= 0) &&
+    /\brust\b/i.test(text) &&
+    /\b(?:crate|binary)\b/i.test(text)
+  )
+    return "Rust";
   if (!TASK_OBJ_HIT.test(text)) return undefined;
   const m = TASK_FWD.exec(text) || TASK_REV.exec(text);
   if (!m) return undefined;
   const obj = m[1]!.trim();
   const canon = canonTaskObj(obj);
-  if (/^JSON$/i.test(canon) && (jsonTechniqueBlockedByRfc(text) || (!jsonTaskToken(text) && !jsonCliNeed(text)))) return undefined;
+  if (/^JSON$/i.test(canon) && (jsonTechniqueBlockedByRfc(text) || (!jsonTaskToken(text) && !jsonCliNeed(text))))
+    return undefined;
   if (/^Python$/i.test(canon) && !pythonInstallNeed(text)) return undefined;
-  if (/^TypeScript$/i.test(canon) && !typescriptRunNeed(text) && !/\b(?:run|execute|running|executing)s?\b/i.test(text)) return undefined;
+  if (/^TypeScript$/i.test(canon) && !typescriptRunNeed(text) && !/\b(?:run|execute|running|executing)s?\b/i.test(text))
+    return undefined;
   return canon.length >= 2 && canon.length <= 24 ? canon : undefined;
 }
 
@@ -1007,7 +1046,12 @@ export function techniqueQueryFallbacks(q: string): string[] {
   const objs = bits.filter((b) => TASK_OBJ_RE.test(b));
   const out: string[] = [];
   const add = (s: string) => {
-    if (s.length >= 10 && s.length <= 80 && s.toLowerCase() !== t.toLowerCase() && !out.some((x) => x.toLowerCase() === s.toLowerCase())) {
+    if (
+      s.length >= 10 &&
+      s.length <= 80 &&
+      s.toLowerCase() !== t.toLowerCase() &&
+      !out.some((x) => x.toLowerCase() === s.toLowerCase())
+    ) {
       out.push(s);
     }
   };
@@ -1034,8 +1078,7 @@ export function techniqueNeedleFromText(text: string): string | undefined {
   const cued = techniqueTaskFromText(text);
   if (cued) {
     const skipJson =
-      (jsonTechniqueBlockedByRfc(text) && /\bjson/i.test(cued)) ||
-      (repoSearchNeed(text) && /\bjson/i.test(cued));
+      (jsonTechniqueBlockedByRfc(text) && /\bjson/i.test(cued)) || (repoSearchNeed(text) && /\bjson/i.test(cued));
     const skipPy = JS_PKG.test(text) && /python/i.test(cued) && !PIP_LIKE.test(text);
     if (!skipJson && !skipPy) {
       const q = bitsNeedle(cued);

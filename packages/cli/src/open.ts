@@ -20,11 +20,7 @@ export function knockWorkshopUrl(base: string, knock: { tool_id?: string } | nul
 export function openBrowser(url: string): void {
   const platform = process.platform;
   const cmd =
-    platform === "darwin"
-      ? ["open", url]
-      : platform === "win32"
-        ? ["cmd", "/c", "start", "", url]
-        : ["xdg-open", url];
+    platform === "darwin" ? ["open", url] : platform === "win32" ? ["cmd", "/c", "start", "", url] : ["xdg-open", url];
   try {
     const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
     void proc.exited.catch(() => undefined);

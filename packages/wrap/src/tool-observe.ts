@@ -127,9 +127,10 @@ function callId(x: Record<string, unknown>): string {
 function redactArgs(args: Record<string, unknown>): Record<string, unknown> {
   try {
     const redacted = redact(args);
-    const rec = redacted && typeof redacted === "object" && !Array.isArray(redacted)
-      ? { ...(redacted as Record<string, unknown>) }
-      : { ...args };
+    const rec =
+      redacted && typeof redacted === "object" && !Array.isArray(redacted)
+        ? { ...(redacted as Record<string, unknown>) }
+        : { ...args };
     for (const k of ["command", "cmd", "file", "path", "file_path", "files"] as const) {
       if (!(k in args)) continue;
       const v = args[k];
@@ -169,7 +170,7 @@ function collect(messages: unknown): { prose: ToolTraceMessage[]; traces: Assemb
   const traces: string[] = [];
 
   const noteCall = (id: string, name: string, args: Record<string, unknown> = {}) => {
-    const n = name || (id ? namesById.get(id) ?? "" : "");
+    const n = name || (id ? (namesById.get(id) ?? "") : "");
     if (id && n) namesById.set(id, n);
     if (!n && !id) return;
     calls.push({ id: id || `anon-${calls.length}`, name: n, args });
@@ -321,7 +322,11 @@ function hostNeedle(mem: ObserveHost, keys: readonly string[]): string | undefin
 }
 
 export function observeToolTraces(mem: ObserveHost, messages: unknown): void {
-  try { if (memoryConsent() !== "on") return; } catch { return; }
+  try {
+    if (memoryConsent() !== "on") return;
+  } catch {
+    return;
+  }
   let prose: ToolTraceMessage[] = [];
   let structured: AssembledTrace[] = [];
   try {
@@ -332,16 +337,13 @@ export function observeToolTraces(mem: ObserveHost, messages: unknown): void {
     return;
   }
   try {
-    const dir = (typeof mem.jsonlDir === "string" && mem.jsonlDir)
-      || (typeof mem.dir === "string" ? mem.dir : "");
+    const dir = (typeof mem.jsonlDir === "string" && mem.jsonlDir) || (typeof mem.dir === "string" ? mem.dir : "");
     if (dir && structured.length) persistToolTraces(dir, structured);
   } catch {
     /* persist fail-open */
   }
   try {
-    const root = (typeof mem.dir === "string" && mem.dir)
-      || (typeof mem.jsonlDir === "string" && mem.jsonlDir)
-      || "";
+    const root = (typeof mem.dir === "string" && mem.dir) || (typeof mem.jsonlDir === "string" && mem.jsonlDir) || "";
     if (root && structured.length) {
       for (const tr of structured) {
         try {
@@ -371,9 +373,35 @@ const INJECT_LOG_CAP = 4000;
 const TASK_TOKENS = new Set(["openssl", "cert", "certificate", "tls", "ssl", "regex", "log", "fingerprint"]);
 const LEFTOVER_TOKENS = new Set(["sqlite", "clerk", "postgres", "postgresql", "circleci", "diet"]);
 const LOG_STOP = new Set([
-  "eden", "memory", "this", "that", "with", "from", "have", "been", "will", "your", "task",
-  "please", "using", "into", "file", "files", "create", "created", "make", "made", "about",
-  "command", "commands", "linux", "output", "assistant", "environment", "current", "terminal",
+  "eden",
+  "memory",
+  "this",
+  "that",
+  "with",
+  "from",
+  "have",
+  "been",
+  "will",
+  "your",
+  "task",
+  "please",
+  "using",
+  "into",
+  "file",
+  "files",
+  "create",
+  "created",
+  "make",
+  "made",
+  "about",
+  "command",
+  "commands",
+  "linux",
+  "output",
+  "assistant",
+  "environment",
+  "current",
+  "terminal",
 ]);
 
 function logTokens(text: string): Set<string> {
@@ -438,7 +466,17 @@ function cueFromInjected(body: Record<string, unknown>): string {
   }
 }
 
-const UPSTREAM_PLACE_KEYS = ["open_files", "openFiles", "files", "file_paths", "filePaths", "file_path", "filePath", "recently_viewed_files", "recentlyViewedFiles"] as const;
+const UPSTREAM_PLACE_KEYS = [
+  "open_files",
+  "openFiles",
+  "files",
+  "file_paths",
+  "filePaths",
+  "file_path",
+  "filePath",
+  "recently_viewed_files",
+  "recentlyViewedFiles",
+] as const;
 
 function sanitizePlaceField(v: unknown): unknown {
   if (typeof v === "string") return placePathsFrom(v).length ? v : undefined;
@@ -523,7 +561,10 @@ function headerPlaceNames(header: string): string[] {
   return placePathsFrom(parts);
 }
 
-export function withOpenFileHeaders(body: Record<string, unknown>, header: string | null | undefined): Record<string, unknown> {
+export function withOpenFileHeaders(
+  body: Record<string, unknown>,
+  header: string | null | undefined,
+): Record<string, unknown> {
   try {
     const raw = typeof header === "string" ? header : "";
     if (!raw.trim()) return body;
@@ -601,8 +642,7 @@ function logInjectMetric(original: Record<string, unknown>, next: Record<string,
     if (arm) rec.arm = arm;
     mkdirSync(dirname(path), { recursive: true });
     appendFileSync(path, `${JSON.stringify(rec)}\n`);
-  } catch {
-  }
+  } catch {}
 }
 
 export function injectBodyThenObserveTools(mem: InjectHost, body: Record<string, unknown>): Record<string, unknown> {
@@ -614,8 +654,7 @@ export function injectBodyThenObserveTools(mem: InjectHost, body: Record<string,
   } catch {
     try {
       observeToolTraces(mem, body.messages);
-    } catch {
-    }
+    } catch {}
     logInjectMetric(body, body);
     return body;
   }

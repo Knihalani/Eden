@@ -2,7 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { demoCli, demoHelp, demoChildEnv, DEMO_MISSING, DEMO_REL, parseInbox, parseLiveTools, pickPlayTool, resolveDemoScript, demoPortBusyMessage, demoListenLines, demoListenFooter } from "./demo";
+import {
+  demoCli,
+  demoHelp,
+  demoChildEnv,
+  DEMO_MISSING,
+  DEMO_REL,
+  parseInbox,
+  parseLiveTools,
+  pickPlayTool,
+  resolveDemoScript,
+  demoPortBusyMessage,
+  demoListenLines,
+  demoListenFooter,
+} from "./demo";
 
 async function capture(fn: () => Promise<number>): Promise<{ code: number; out: string; err: string }> {
   const logs: string[] = [];
@@ -48,17 +61,13 @@ describe("eden demo", () => {
     expect(err).toBe("");
     expect(out).toBe(letter);
 
-    const missing = await capture(() =>
-      demoCli(["--help"], { scriptPath: "/no/such/apps/control/src/demo.ts" }),
-    );
+    const missing = await capture(() => demoCli(["--help"], { scriptPath: "/no/such/apps/control/src/demo.ts" }));
     expect(missing.code).toBe(0);
     expect(missing.out).toMatch(/TicketShip/);
   });
 
   test("missing clone path: one stderr sentence, exit 1", async () => {
-    const { code, out, err } = await capture(() =>
-      demoCli([], { scriptPath: "/no/such/apps/control/src/demo.ts" }),
-    );
+    const { code, out, err } = await capture(() => demoCli([], { scriptPath: "/no/such/apps/control/src/demo.ts" }));
     expect(code).toBe(1);
     expect(out).toBe("");
     expect(err).toBe(DEMO_MISSING);
@@ -213,8 +222,6 @@ describe("parseInbox", () => {
     });
     expect(r.notice).toBeNull();
     expect(r.candidates).toHaveLength(1);
-    expect(r.candidates.find((c) => c.verdict === "PASS" && c.program)?.program?.name).toBe(
-      "lookupTicket_to_notify",
-    );
+    expect(r.candidates.find((c) => c.verdict === "PASS" && c.program)?.program?.name).toBe("lookupTicket_to_notify");
   });
 });

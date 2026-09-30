@@ -33,7 +33,9 @@ const FILLER = [
 type ChunkLike = string | { text?: string; body?: string; content?: string };
 
 function wsNorm(s: string): string {
-  return String(s ?? "").replace(/\s+/g, " ").trim();
+  return String(s ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function wsTokens(s: string): string[] {
@@ -304,8 +306,7 @@ describe("M18.4 narrative retrieve is not GraphRAG", () => {
 describe("M18.1 secrets + fail-open + chat", () => {
   test("secrets still redacted in stored chunks", () => {
     withMem((mem, dir) => {
-      const story =
-        `${longStory(800)} The deploy token is sk-abc123XYZ999. The github token is ghp_abc123XYZ999.`;
+      const story = `${longStory(800)} The deploy token is sk-abc123XYZ999. The github token is ghp_abc123XYZ999.`;
       expect(encodeLane(story)).toBe("narrative");
       mem.observe([{ role: "user", content: story }]);
       const store = new ChunkStore(dir);
@@ -428,7 +429,9 @@ describe("M18 leftover identity + empty cue + torn JSONL", () => {
         const ctx = [
           start?.additional_context,
           (start?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
-        ].map((x) => String(x ?? "")).join("\n");
+        ]
+          .map((x) => String(x ?? ""))
+          .join("\n");
         expect(ctx).not.toMatch(/Blackford/);
         expect(ctx).not.toMatch(/miller walked beside the river/);
       });
@@ -441,7 +444,7 @@ describe("M18 leftover identity + empty cue + torn JSONL", () => {
       mem.observe([{ role: "user", content: story }]);
       const path = join(dir, "chunks.jsonl");
       expect(existsSync(path)).toBe(true);
-      appendFileSync(path, "{not json\n{\"id\":\"x\",\"text\":\n");
+      appendFileSync(path, '{not json\n{"id":"x","text":\n');
       const list = [{ role: "user", content: "What happened at Blackford mill?" }];
       let out: unknown;
       expect(() => {
@@ -474,18 +477,30 @@ describe("M18 wrap + hook miller/Blackford + Clerk + fail-open", () => {
         mem.observe([{ role: "user", content: "Auth is Clerk" }]);
         mem.observe([{ role: "user", content: longStory(2500, { name: "Blackford", atTok: 700 }) }]);
 
-        const openaiClerk = mem.injectBody({ messages: [{ role: "user", content: "What auth provider do we use for Clerk?" }] });
+        const openaiClerk = mem.injectBody({
+          messages: [{ role: "user", content: "What auth provider do we use for Clerk?" }],
+        });
         expect(packetOf((openaiClerk.messages as unknown[]) ?? [])).toMatch(/Clerk/);
         const openaiNar = mem.injectBody({ messages: [{ role: "user", content: "What happened at Blackford mill?" }] });
         expect(packetOf((openaiNar.messages as unknown[]) ?? [])).toMatch(/Blackford/);
 
-        const anthClerk = withKnowFactsAnthropic({ messages: [{ role: "user", content: "What auth provider do we use for Clerk?" }] });
+        const anthClerk = withKnowFactsAnthropic({
+          messages: [{ role: "user", content: "What auth provider do we use for Clerk?" }],
+        });
         expect(JSON.stringify(anthClerk)).toMatch(/Clerk/);
-        const anthNar = withKnowFactsAnthropic({ messages: [{ role: "user", content: "What happened at Blackford mill?" }] });
+        const anthNar = withKnowFactsAnthropic({
+          messages: [{ role: "user", content: "What happened at Blackford mill?" }],
+        });
         expect(JSON.stringify(anthNar)).toMatch(/Blackford/);
 
-        const hookClerk = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What auth provider do we use for Clerk?" });
-        const hookNar = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What happened at Blackford mill?" });
+        const hookClerk = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          prompt: "What auth provider do we use for Clerk?",
+        });
+        const hookNar = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          prompt: "What happened at Blackford mill?",
+        });
         const hookHay = `${JSON.stringify(hookClerk ?? {})}\n${JSON.stringify(hookNar ?? {})}`;
         expect(hookHay).toMatch(/Clerk/);
         expect(hookHay).toMatch(/Blackford/);

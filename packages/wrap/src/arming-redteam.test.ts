@@ -8,32 +8,47 @@ function prog(): StretchProgram {
     id: "p_rt",
     name: "p_rt",
     description: "d",
-    inputSchema: { type: "object", properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"] },
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string" }, text: { type: "string" } },
+      required: ["id", "text"],
+    },
     sequence,
     steps: sequence.map((tool, i) => ({
       id: tool,
       kind: "tool" as const,
       tool,
-      args: { id: { kind: "input" as const, path: "id" }, ...(i === 0 ? { text: { kind: "input" as const, path: "text" } } : {}) },
+      args: {
+        id: { kind: "input" as const, path: "id" },
+        ...(i === 0 ? { text: { kind: "input" as const, path: "text" } } : {}),
+      },
     })),
     returns: { kind: "from", step: "write", path: "" },
     contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-    manifest: { llmReduction: 2, latencyReduction: 1, costReduction: 2, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+    manifest: {
+      llmReduction: 2,
+      latencyReduction: 1,
+      costReduction: 2,
+      skipRateBefore: 0,
+      skipRateAfter: 0,
+      nShadow: 3,
+    },
   }) as StretchProgram;
 }
 
 describe("red-team: arming store", () => {
   test("hostile session keys stay isolated (__proto__, '', long)", async () => {
     const writes: Record<string, number> = {};
-    const tools = (tag: string) => ({
-      lookup: { execute: async (a) => ({ id: a.id }) },
-      write: {
-        execute: async (a) => {
-          writes[tag] = (writes[tag] ?? 0) + 1;
-          return { id: a.id };
+    const tools = (tag: string) =>
+      ({
+        lookup: { execute: async (a) => ({ id: a.id }) },
+        write: {
+          execute: async (a) => {
+            writes[tag] = (writes[tag] ?? 0) + 1;
+            return { id: a.id };
+          },
         },
-      },
-    }) satisfies Record<string, ToolDef>;
+      }) satisfies Record<string, ToolDef>;
     const p = prog();
     const store = createArmingStore();
     const keys = ["__proto__", "", "x".repeat(400)];
@@ -53,28 +68,22 @@ describe("red-team: arming store", () => {
     const writes: Record<string, number> = {};
     const p = prog();
     const store = createArmingStore({ perSessionMax: 4, globalMax: 2 });
-    const mk = (tag: string) => ({
-      lookup: { execute: async (a) => ({ id: a.id }) },
-      write: {
-        execute: async (a) => {
-          writes[tag] = (writes[tag] ?? 0) + 1;
-          return { id: a.id };
+    const mk = (tag: string) =>
+      ({
+        lookup: { execute: async (a) => ({ id: a.id }) },
+        write: {
+          execute: async (a) => {
+            writes[tag] = (writes[tag] ?? 0) + 1;
+            return { id: a.id };
+          },
         },
-      },
-    }) satisfies Record<string, ToolDef>;
+      }) satisfies Record<string, ToolDef>;
     const a = wrapTools(mk("a"), createState({ programs: [p], arming: store, sessionId: "a" }));
     const b = wrapTools(mk("b"), createState({ programs: [p], arming: store, sessionId: "b" }));
     const c = wrapTools(mk("c"), createState({ programs: [p], arming: store, sessionId: "c" }));
-    await Promise.all([
-      a.lookup.execute({ id: "A", text: "t" }),
-      b.lookup.execute({ id: "B", text: "t" }),
-    ]);
+    await Promise.all([a.lookup.execute({ id: "A", text: "t" }), b.lookup.execute({ id: "B", text: "t" })]);
     await c.lookup.execute({ id: "C", text: "t" });
-    await Promise.all([
-      a.write.execute({ id: "A" }),
-      b.write.execute({ id: "B" }),
-      c.write.execute({ id: "C" }),
-    ]);
+    await Promise.all([a.write.execute({ id: "A" }), b.write.execute({ id: "B" }), c.write.execute({ id: "C" })]);
     expect(writes.a).toBe(1);
     expect(writes.b).toBe(1);
     expect(writes.c).toBe(1);
@@ -104,15 +113,16 @@ describe("red-team: arming store", () => {
     const details: string[] = [];
     const writes: Record<string, number> = {};
     const p = prog();
-    const toolsFor = (tag: string) => ({
-      lookup: { execute: async (a) => ({ id: a.id }) },
-      write: {
-        execute: async (a) => {
-          writes[tag] = (writes[tag] ?? 0) + 1;
-          return { id: a.id };
+    const toolsFor = (tag: string) =>
+      ({
+        lookup: { execute: async (a) => ({ id: a.id }) },
+        write: {
+          execute: async (a) => {
+            writes[tag] = (writes[tag] ?? 0) + 1;
+            return { id: a.id };
+          },
         },
-      },
-    }) satisfies Record<string, ToolDef>;
+      }) satisfies Record<string, ToolDef>;
     const store = createArmingStore({ perSessionMax: 1 });
     const state = createState({
       programs: [p],
@@ -168,15 +178,16 @@ describe("red-team: arming store", () => {
 
   test("mutating program with a shared fleetId still writes once per session", async () => {
     const writes: Record<string, number> = {};
-    const tools = (tag: string) => ({
-      lookup: { execute: async (a) => ({ id: a.id }) },
-      write: {
-        execute: async (a) => {
-          writes[tag] = (writes[tag] ?? 0) + 1;
-          return { id: a.id };
+    const tools = (tag: string) =>
+      ({
+        lookup: { execute: async (a) => ({ id: a.id }) },
+        write: {
+          execute: async (a) => {
+            writes[tag] = (writes[tag] ?? 0) + 1;
+            return { id: a.id };
+          },
         },
-      },
-    }) satisfies Record<string, ToolDef>;
+      }) satisfies Record<string, ToolDef>;
     const p = prog();
     const store = createArmingStore();
     const a = wrapTools(tools("a"), createState({ programs: [p], arming: store, sessionId: "sess-a", fleetId: "f1" }));

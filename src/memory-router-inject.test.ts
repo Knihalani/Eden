@@ -136,32 +136,50 @@ describe("M33.3 wrap and hook stay silent", () => {
       process.env.EDEN_MEMORY_DIR = dir;
       delete process.env.EDEN_HOME;
       try {
-        const openaiAuth = packetOf(withKnowFacts({ messages: [{ role: "user", content: AUTH_FAIL }] }).messages as unknown[]);
+        const openaiAuth = packetOf(
+          withKnowFacts({ messages: [{ role: "user", content: AUTH_FAIL }] }).messages as unknown[],
+        );
         expect(openaiAuth).toMatch(/Clerk/);
         expect(openaiAuth).not.toMatch(/label:\s*28/);
         expect(openaiAuth).not.toMatch(/zebra-quark-17/);
-        const openaiMiller = packetOf(withKnowFacts({ messages: [{ role: "user", content: EVENTQA_MILLER }] }).messages as unknown[]);
+        const openaiMiller = packetOf(
+          withKnowFacts({ messages: [{ role: "user", content: EVENTQA_MILLER }] }).messages as unknown[],
+        );
         expect(openaiMiller).toMatch(/miller of Blackford|zebra-quark-17/);
         expect(openaiMiller).not.toMatch(/label:\s*28/);
-        const openaiIcl = packetOf(withKnowFacts({ messages: [{ role: "user", content: ICL_CUE }] }).messages as unknown[]);
+        const openaiIcl = packetOf(
+          withKnowFacts({ messages: [{ role: "user", content: ICL_CUE }] }).messages as unknown[],
+        );
         expect(openaiIcl).toMatch(/label:\s*28/);
         expect(openaiIcl).not.toMatch(/zebra-quark-17/);
 
         const anthAuthBody = withKnowFactsAnthropic({ messages: [{ role: "user", content: AUTH_FAIL }] });
-        const anthAuth = [anthAuthBody.system].flat().map((b) => typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")).join("\n");
+        const anthAuth = [anthAuthBody.system]
+          .flat()
+          .map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+          .join("\n");
         expect(anthAuth).toMatch(/Clerk/);
         expect(anthAuth).not.toMatch(/label:\s*28/);
         const anthMillerBody = withKnowFactsAnthropic({ messages: [{ role: "user", content: EVENTQA_MILLER }] });
-        const anthMiller = [anthMillerBody.system].flat().map((b) => typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")).join("\n");
+        const anthMiller = [anthMillerBody.system]
+          .flat()
+          .map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+          .join("\n");
         expect(anthMiller).toMatch(/miller of Blackford|zebra-quark-17/);
         expect(anthMiller).not.toMatch(/label:\s*28/);
 
         const hookAuth = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: AUTH_FAIL });
-        const hookAuthCtx = [hookAuth?.additional_context, (hookAuth?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext].join("\n");
+        const hookAuthCtx = [
+          hookAuth?.additional_context,
+          (hookAuth?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
+        ].join("\n");
         expect(hookAuthCtx).toMatch(/Clerk/);
         expect(hookAuthCtx).not.toMatch(/label:\s*28/);
         const hookMiller = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: EVENTQA_MILLER });
-        const hookMillerCtx = [hookMiller?.additional_context, (hookMiller?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext].join("\n");
+        const hookMillerCtx = [
+          hookMiller?.additional_context,
+          (hookMiller?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
+        ].join("\n");
         expect(hookMillerCtx).toMatch(/miller of Blackford|zebra-quark-17/);
         expect(hookMillerCtx).not.toMatch(/label:\s*28/);
       } finally {

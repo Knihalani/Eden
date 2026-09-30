@@ -1,7 +1,16 @@
 import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { writeConfig, ensureHome, edenHome, resolveApiKey, readConfig, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
+import {
+  writeConfig,
+  ensureHome,
+  edenHome,
+  resolveApiKey,
+  readConfig,
+  wrapPlaneUrl,
+  sitePlaneUrl,
+  writeFileAtomic,
+} from "./home";
 import { ensureHookdKey, hookdKeyPath } from "./hookd-key";
 
 /** Live `HOME` so a changed env (tests, redirected home) is not stuck on the cached `os.homedir()`. */
@@ -103,7 +112,10 @@ function isEdenGeminiEntry(entry: unknown): boolean {
   });
 }
 
-function mergeGeminiEvent(existing: unknown, ours: { command: string }): Array<{ command: string } | Record<string, unknown>> {
+function mergeGeminiEvent(
+  existing: unknown,
+  ours: { command: string },
+): Array<{ command: string } | Record<string, unknown>> {
   const prev = Array.isArray(existing)
     ? existing.filter((e) => !isEdenGeminiEntry(e) && (e as { command?: string }).command !== ours.command)
     : [];
@@ -145,14 +157,13 @@ export function codexHooksJson(
   preCmd: string = preHookCommand(),
 ): {
   description: string;
-  hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ type: "command"; command: string; timeout: number }> }>>;
+  hooks: Record<
+    string,
+    Array<{ matcher?: string; hooks: Array<{ type: "command"; command: string; timeout: number }> }>
+  >;
 } {
-  const allTools = (command: string, timeout: number) => [
-    { matcher: ".*", hooks: [hookHandler(command, timeout)] },
-  ];
-  const once = (command: string, timeout: number) => [
-    { hooks: [hookHandler(command, timeout)] },
-  ];
+  const allTools = (command: string, timeout: number) => [{ matcher: ".*", hooks: [hookHandler(command, timeout)] }];
+  const once = (command: string, timeout: number) => [{ hooks: [hookHandler(command, timeout)] }];
   return {
     description: "Eden memory (managed; re-run `eden setup`). Fail-open. Trust via /hooks.",
     hooks: {
@@ -206,19 +217,19 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     `const CLI = ${JSON.stringify(cliPath)}`,
     `const HOOKD = ${JSON.stringify(`http://127.0.0.1:${port}/hook`)}`,
     `const HOOKD_KEY = ${JSON.stringify(hookdKeyPath())}`,
-    "const ALIAS = { bash: \"Bash\", shell: \"Bash\", read: \"Read\", write: \"Write\", grep: \"Grep\", glob: \"Glob\", webfetch: \"WebFetch\" }",
+    'const ALIAS = { bash: "Bash", shell: "Bash", read: "Read", write: "Write", grep: "Grep", glob: "Glob", webfetch: "WebFetch" }',
     "const pending = new Map()",
     "",
     "function mapTool(name) { return name ? ALIAS[String(name).toLowerCase()] || name : name }",
     "",
-    "function mcpShaped(v) { return !!(v && typeof v === \"object\" && Array.isArray(v.content) && v.content.length && typeof v.content[0]?.type === \"string\") }",
+    'function mcpShaped(v) { return !!(v && typeof v === "object" && Array.isArray(v.content) && v.content.length && typeof v.content[0]?.type === "string") }',
     "",
     "async function bunHook(payload) {",
     "  try {",
-    "    const { spawnSync } = await import(\"node:child_process\")",
-    "    const r = spawnSync(\"bun\", [CLI, \"hook\"], {",
+    '    const { spawnSync } = await import("node:child_process")',
+    '    const r = spawnSync("bun", [CLI, "hook"], {',
     "      input: JSON.stringify(payload),",
-    "      encoding: \"utf8\",",
+    '      encoding: "utf8",',
     "      timeout: 8000,",
     "      env: { ...process.env, EDEN_HOME },",
     "    })",
@@ -229,15 +240,15 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     "",
     "async function send(payload, bunFallback) {",
     "  try {",
-    "    const { readFileSync } = await import(\"node:fs\")",
-    "    const [name, value] = readFileSync(HOOKD_KEY, \"utf8\").trim().split(/:\\s*/, 2)",
+    '    const { readFileSync } = await import("node:fs")',
+    '    const [name, value] = readFileSync(HOOKD_KEY, "utf8").trim().split(/:\\s*/, 2)',
     "    const res = await fetch(HOOKD, {",
-    "      method: \"POST\",",
-    "      headers: { \"content-type\": \"application/json\", [name]: value },",
+    '      method: "POST",',
+    '      headers: { "content-type": "application/json", [name]: value },',
     "      body: JSON.stringify(payload),",
     "      signal: AbortSignal.timeout(bunFallback ? 8000 : 1000),",
     "    })",
-    "    if (!res.ok) throw new Error(\"hookd refused\")",
+    '    if (!res.ok) throw new Error("hookd refused")',
     "    return await res.json()",
     "  } catch {",
     "    if (bunFallback) return await bunHook(payload)",
@@ -250,31 +261,31 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     "  const extra = hook.hookSpecificOutput?.additionalContext",
     "  const original = output.output",
     "  if (mcpShaped(original) || mcpShaped(output)) {",
-    "    if (typeof extra === \"string\" && extra && Object.prototype.hasOwnProperty.call(output, \"inject\")) {",
+    '    if (typeof extra === "string" && extra && Object.prototype.hasOwnProperty.call(output, "inject")) {',
     "      output.inject = extra",
     "    }",
     "    return",
     "  }",
     "  const u = hook.hookSpecificOutput?.updatedToolOutput",
-    "  let text = typeof u === \"string\" ? u : \"\"",
-    "  if (!text && u && typeof u === \"object\") {",
-    "    text = u.stdout || u.file?.content || u.result || (typeof u.content === \"string\" ? u.content : \"\") || \"\"",
+    '  let text = typeof u === "string" ? u : ""',
+    '  if (!text && u && typeof u === "object") {',
+    '    text = u.stdout || u.file?.content || u.result || (typeof u.content === "string" ? u.content : "") || ""',
     "  }",
-    "  if (!text && typeof extra === \"string\") text = extra",
-    "  if (typeof output.output === \"string\" && text) {",
-    "    output.output = text.includes(\"[eden:\") ? text : output.output + \"\\n\" + (extra || text)",
-    "  } else if (typeof output.output === \"string\" && typeof extra === \"string\" && extra && !output.output.includes(\"[eden:\")) {",
-    "    output.output = output.output + \"\\n\" + extra",
+    '  if (!text && typeof extra === "string") text = extra',
+    '  if (typeof output.output === "string" && text) {',
+    '    output.output = text.includes("[eden:") ? text : output.output + "\\n" + (extra || text)',
+    '  } else if (typeof output.output === "string" && typeof extra === "string" && extra && !output.output.includes("[eden:")) {',
+    '    output.output = output.output + "\\n" + extra',
     "  }",
     "}",
     "",
     "export const EdenRecorderPlugin = async ({ project, directory }) => ({",
-    "  \"tool.execute.before\": async (input, output) => {",
+    '  "tool.execute.before": async (input, output) => {',
     "    try { pending.set(input?.callID, output?.args) } catch { /* fail-open */ }",
     "    let hook = null",
     "    try {",
     "      hook = await send({",
-    "        hook_event_name: \"PreToolUse\",",
+    '        hook_event_name: "PreToolUse",',
     "        session_id: input?.sessionID,",
     "        tool_name: mapTool(input?.tool),",
     "        tool_input: output?.args ?? {},",
@@ -283,16 +294,16 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     "    } catch {",
     "      return",
     "    }",
-    "    if (hook?.hookSpecificOutput?.permissionDecision === \"deny\") {",
-    "      throw new Error(hook.hookSpecificOutput.permissionDecisionReason || \"Already served by Eden.\")",
+    '    if (hook?.hookSpecificOutput?.permissionDecision === "deny") {',
+    '      throw new Error(hook.hookSpecificOutput.permissionDecisionReason || "Already served by Eden.")',
     "    }",
     "  },",
-    "  \"tool.execute.after\": async (input, output) => {",
+    '  "tool.execute.after": async (input, output) => {',
     "    try {",
     "      const args = pending.get(input?.callID) || output?.args || {}",
     "      try { pending.delete(input?.callID) } catch { /* ignore */ }",
     "      const hook = await send({",
-    "        hook_event_name: \"PostToolUse\",",
+    '        hook_event_name: "PostToolUse",',
     "        session_id: input?.sessionID,",
     "        tool_name: mapTool(input?.tool),",
     "        tool_input: args,",
@@ -306,23 +317,23 @@ export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")):
     "    try {",
     "      const t = event?.type",
     "      const session_id = event?.properties?.sessionID || event?.properties?.sessionId",
-    "      if (t === \"session.created\") await send({ hook_event_name: \"SessionStart\", session_id, cwd: project?.directory || directory }, true)",
-    "      else if (t === \"session.idle\" || t === \"session.deleted\") await send({ hook_event_name: \"Stop\", session_id, cwd: project?.directory || directory }, true)",
+    '      if (t === "session.created") await send({ hook_event_name: "SessionStart", session_id, cwd: project?.directory || directory }, true)',
+    '      else if (t === "session.idle" || t === "session.deleted") await send({ hook_event_name: "Stop", session_id, cwd: project?.directory || directory }, true)',
     "    } catch {}",
     "  },",
-    "  \"chat.message\": async (input, output) => {",
+    '  "chat.message": async (input, output) => {',
     "    try {",
-    "      const prompt = (output?.parts || []).map((p) => p && p.text).filter(Boolean).join(\"\\n\")",
-    "      const hook = await send({ hook_event_name: \"UserPromptSubmit\", session_id: input?.sessionID, prompt, cwd: project?.directory || directory }, true)",
+    '      const prompt = (output?.parts || []).map((p) => p && p.text).filter(Boolean).join("\\n")',
+    '      const hook = await send({ hook_event_name: "UserPromptSubmit", session_id: input?.sessionID, prompt, cwd: project?.directory || directory }, true)',
     "      const extra = hook?.hookSpecificOutput?.additionalContext || hook?.additional_context",
-    "      if (typeof extra === \"string\" && extra) output.parts.push({ type: \"text\", text: extra })",
+    '      if (typeof extra === "string" && extra) output.parts.push({ type: "text", text: extra })',
     "    } catch {}",
     "  },",
-    "  \"experimental.session.compacting\": async (input, output) => {",
+    '  "experimental.session.compacting": async (input, output) => {',
     "    try {",
-    "      const hook = await send({ hook_event_name: \"PreCompact\", session_id: input?.sessionID, cwd: project?.directory || directory }, true)",
+    '      const hook = await send({ hook_event_name: "PreCompact", session_id: input?.sessionID, cwd: project?.directory || directory }, true)',
     "      const extra = hook?.hookSpecificOutput?.additionalContext || hook?.additional_context",
-    "      if (typeof extra === \"string\" && extra) output.context.push(extra)",
+    '      if (typeof extra === "string" && extra) output.context.push(extra)',
     "    } catch {}",
     "  },",
     "})",

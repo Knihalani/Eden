@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { hookCommand, preHookCommand, installedHooks, mergeHooks, wrapMcpServer, geminiHookConfig, applyCodexToml, codexHooksJson, opencodePluginSource } from "./setup";
+import {
+  hookCommand,
+  preHookCommand,
+  installedHooks,
+  mergeHooks,
+  wrapMcpServer,
+  geminiHookConfig,
+  applyCodexToml,
+  codexHooksJson,
+  opencodePluginSource,
+} from "./setup";
 import * as setup from "./setup";
 import { wrapPlaneUrl, sitePlaneUrl } from "./home";
 import { remainderPath } from "./remainder";
@@ -38,7 +48,16 @@ describe("setup hookd", () => {
     expect(pre).toContain("--max-time 1");
     expect(pre).toContain("|| echo '{}'");
     expect(pre).not.toContain("bun ");
-    for (const event of ["PostToolUse", "PostToolBatch", "Stop", "SessionStart", "SessionEnd", "UserPromptSubmit", "PreCompact", "SubagentStop"] as const) {
+    for (const event of [
+      "PostToolUse",
+      "PostToolBatch",
+      "Stop",
+      "SessionStart",
+      "SessionEnd",
+      "UserPromptSubmit",
+      "PreCompact",
+      "SubagentStop",
+    ] as const) {
       const cmd = String(hooks[event]![0]!.hooks[0]!.command);
       expect(cmd).toContain("--max-time 8");
       expect(cmd).toContain("bun '/abs/cli.ts' hook");
@@ -152,7 +171,7 @@ describe("multi-agent installer", () => {
   });
 
   test("codex toml append is idempotent and replaces only the managed section", () => {
-    const once = applyCodexToml("[model]\nname = \"x\"\n", post);
+    const once = applyCodexToml('[model]\nname = "x"\n', post);
     expect(once).toContain('name = "x"');
     expect(once).toContain("eden-recorder");
     expect(once).toContain("hooks.json");
@@ -162,7 +181,7 @@ describe("multi-agent installer", () => {
     const twice = applyCodexToml(once, post);
     expect(twice).toBe(once);
     const stale = applyCodexToml(
-      "[model]\nname = \"x\"\n# --- eden-recorder ---\n[hooks.eden]\npost_tool = [\"sh\"]\n# --- end eden-recorder ---\n",
+      '[model]\nname = "x"\n# --- eden-recorder ---\n[hooks.eden]\npost_tool = ["sh"]\n# --- end eden-recorder ---\n',
       post,
     );
     expect(stale).not.toContain("[hooks.eden]");

@@ -41,10 +41,7 @@ const ENV_KEYS = [
 type ImportMod = {
   memoryCli: (args: string[]) => Promise<number | string | unknown> | number | string | unknown;
   memoryImportHelp: () => string;
-  importMemoryPath: (
-    path: string,
-    opts?: { dryRun?: boolean },
-  ) => Promise<unknown> | unknown;
+  importMemoryPath: (path: string, opts?: { dryRun?: boolean }) => Promise<unknown> | unknown;
 };
 
 let importMod: ImportMod | undefined;
@@ -105,7 +102,9 @@ function exitOf(value: unknown): number {
   return 0;
 }
 
-async function capture(fn: () => Promise<unknown> | unknown): Promise<{ code: number; out: string; err: string; value: unknown }> {
+async function capture(
+  fn: () => Promise<unknown> | unknown,
+): Promise<{ code: number; out: string; err: string; value: unknown }> {
   const logs: string[] = [];
   const errs: string[] = [];
   const log = console.log;
@@ -181,7 +180,11 @@ beforeEach(async () => {
   }) as unknown as typeof fetch);
   try {
     const m = (await import("./memory-import")) as Partial<ImportMod>;
-    if (typeof m.memoryCli !== "function" || typeof m.memoryImportHelp !== "function" || typeof m.importMemoryPath !== "function") {
+    if (
+      typeof m.memoryCli !== "function" ||
+      typeof m.memoryImportHelp !== "function" ||
+      typeof m.importMemoryPath !== "function"
+    ) {
       importMod = undefined;
       importLoadError = `exports missing: ${Object.keys(m).join(",") || "(none)"}`;
     } else {
@@ -196,7 +199,9 @@ beforeEach(async () => {
 
 afterEach(() => {
   for (const mem of open.splice(0)) {
-    try { mem.close(); } catch {}
+    try {
+      mem.close();
+    } catch {}
   }
   fetchSpy?.mockRestore();
   fetchSpy = undefined;
@@ -245,7 +250,11 @@ describe("M46.4 dry-run counts", () => {
 
     const cli = await capture(() => memoryCli(["--dry-run", path]));
     const fromCli = (() => {
-      try { return kindsOf(cli.value); } catch { return undefined; }
+      try {
+        return kindsOf(cli.value);
+      } catch {
+        return undefined;
+      }
     })();
     const printed = `${cli.out}\n${cli.err}`;
     if (fromCli) {
@@ -387,10 +396,8 @@ describe("M46.4 silence still wins", () => {
     const junkPath = join(junkDir, "..", "junk.jsonl");
     writeFileSync(
       junkPath,
-      [
-        JSON.stringify({ role: "user", content: "nice" }),
-        JSON.stringify({ role: "user", content: MATH }),
-      ].join("\n") + "\n",
+      [JSON.stringify({ role: "user", content: "nice" }), JSON.stringify({ role: "user", content: MATH })].join("\n") +
+        "\n",
     );
     process.env.EDEN_MEMORY = "on";
     process.env.EDEN_MEMORY_DIR = junkDir;

@@ -68,8 +68,7 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
   return parts.join("\n").slice(0, 16_000);
 }
 
-const DENSE_EXTRACT =
-  /[^\s]+@[^\s]+|s3:\/\/[^\s]+|arn:aws:[^\s]+|gid:\/\/[^\s]+|\+[1-9]\d{6,14}|[A-Za-z0-9_.:/-]{4,}/g;
+const DENSE_EXTRACT = /[^\s]+@[^\s]+|s3:\/\/[^\s]+|arn:aws:[^\s]+|gid:\/\/[^\s]+|\+[1-9]\d{6,14}|[A-Za-z0-9_.:/-]{4,}/g;
 
 export function githubBareUrls(text: string): string[] {
   const out: string[] = [];
@@ -188,9 +187,7 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
   }
   ranked.sort(
     (a, b) =>
-      b.score - a.score ||
-      (b.program.sequence?.length ?? 0) - (a.program.sequence?.length ?? 0) ||
-      a.idx - b.idx,
+      b.score - a.score || (b.program.sequence?.length ?? 0) - (a.program.sequence?.length ?? 0) || a.idx - b.idx,
   );
   return ranked.map(({ idx: _idx, ...rest }) => rest);
 }
@@ -223,10 +220,7 @@ export function selectSurfacePrograms(opts: {
   return { surface: ranked.length ? [ranked[0]!.program] : [] };
 }
 
-export function dispatchPrograms(
-  messages: unknown[] | undefined,
-  programs: StretchProgram[],
-): StretchProgram[] {
+export function dispatchPrograms(messages: unknown[] | undefined, programs: StretchProgram[]): StretchProgram[] {
   try {
     return selectSurfacePrograms({ mode: "jit", live: programs, messages }).surface.slice(0, 1);
   } catch {
@@ -267,11 +261,7 @@ export function noteJitUsed(jit: JitGuard, names: readonly string[]): void {
   jit.unusedStreak = 0;
 }
 
-export function selectForRequest(
-  live: StretchProgram[],
-  messages?: unknown[],
-  jit?: JitGuard,
-): StretchProgram[] {
+export function selectForRequest(live: StretchProgram[], messages?: unknown[], jit?: JitGuard): StretchProgram[] {
   let selected = live;
   try {
     const mode = surfaceMode();

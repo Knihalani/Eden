@@ -36,7 +36,11 @@ function parseJsonl(dir: string): unknown[] {
     for (const line of readFileSync(p, "utf8").split("\n")) {
       if (!line) continue;
       let rec: { id?: string };
-      try { rec = JSON.parse(line) as { id?: string }; } catch { continue; }
+      try {
+        rec = JSON.parse(line) as { id?: string };
+      } catch {
+        continue;
+      }
       const id = typeof rec?.id === "string" ? rec.id : undefined;
       if (!id) continue;
       const at = idx.get(id);
@@ -124,7 +128,11 @@ describe("M5.1 concurrent persist", () => {
       first.remember("Alpha catalog entry is durable.", { id: "alpha" });
       stale.remember("Bravo catalog entry is durable.", { id: "bravo" });
       stale.close();
-      expect(parseJsonl(dir).map((r) => (r as { id?: string }).id).sort()).toEqual(["alpha", "bravo"]);
+      expect(
+        parseJsonl(dir)
+          .map((r) => (r as { id?: string }).id)
+          .sort(),
+      ).toEqual(["alpha", "bravo"]);
       first.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -213,11 +221,18 @@ describe("M5.1 persist fail-open + mode + secrets", () => {
       expect(Array.isArray(out)).toBe(true);
       closeSync(fd);
       fd = undefined;
-      try { unlinkSync(lock); } catch {}
+      try {
+        unlinkSync(lock);
+      } catch {}
       mem.close();
     } finally {
-      if (fd !== undefined) try { closeSync(fd); } catch {}
-      try { unlinkSync(lock); } catch {}
+      if (fd !== undefined)
+        try {
+          closeSync(fd);
+        } catch {}
+      try {
+        unlinkSync(lock);
+      } catch {}
       rmSync(dir, { recursive: true, force: true });
     }
   }, 10_000);

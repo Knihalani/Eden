@@ -11,14 +11,17 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { injectBodyThenObserveTools, observeToolTraces, toolTraceMessages } from "../packages/wrap/src/tool-observe";
 import { GistStore } from "./gist-store";
-import { HowToStore, howtoPath, mergeSharedPrefix, mergeSharedPrefixHowTo, omitStalePlace, type HowTo, type HowToGap } from "./howto-store";
-import * as howtoMod from "./howto-store";
 import {
-  retrieveHowTo,
-  HOWTO_RETRIEVE_K,
-  HOWTO_TOKEN_CAP,
-  type HowToView,
-} from "./howto-retrieve";
+  HowToStore,
+  howtoPath,
+  mergeSharedPrefix,
+  mergeSharedPrefixHowTo,
+  omitStalePlace,
+  type HowTo,
+  type HowToGap,
+} from "./howto-store";
+import * as howtoMod from "./howto-store";
+import { retrieveHowTo, HOWTO_RETRIEVE_K, HOWTO_TOKEN_CAP, type HowToView } from "./howto-retrieve";
 import * as howtoRetrieve from "./howto-retrieve";
 import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
 import * as edenMem from "./index";
@@ -159,9 +162,11 @@ function tracesAbsentOrEmpty(dir: string, session?: string): boolean {
 const ALT_CMD = "npm test -- tests/auth/login.test.ts";
 
 function tracesKept(dir: string, session?: string): boolean {
-  return loadTraces(dir, session).length > 0
-    || existsSync(tracesPath(dir))
-    || existsSync(tracesPath(memoryTracesDir(dir, session)));
+  return (
+    loadTraces(dir, session).length > 0 ||
+    existsSync(tracesPath(dir)) ||
+    existsSync(tracesPath(memoryTracesDir(dir, session)))
+  );
 }
 
 function howtos(dir: string, cue = "auth pytest flake", k = 5): HowTo[] {
@@ -204,13 +209,20 @@ function failPytestWindow(): unknown[] {
   return [
     {
       role: "assistant",
-      tool_calls: [{
-        id: "call_pytest_fail",
-        type: "function",
-        function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
-      }],
+      tool_calls: [
+        {
+          id: "call_pytest_fail",
+          type: "function",
+          function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
+        },
+      ],
     },
-    { role: "tool", tool_call_id: "call_pytest_fail", content: "FAILED tests/auth/session.test.ts\nauth.ts\nexit 1", is_error: true },
+    {
+      role: "tool",
+      tool_call_id: "call_pytest_fail",
+      content: "FAILED tests/auth/session.test.ts\nauth.ts\nexit 1",
+      is_error: true,
+    },
   ];
 }
 
@@ -219,8 +231,16 @@ function readSearchWindow(): unknown[] {
     {
       role: "assistant",
       tool_calls: [
-        { id: "call_read_only", type: "function", function: { name: "Read", arguments: JSON.stringify({ path: "src/login.ts" }) } },
-        { id: "call_grep_only", type: "function", function: { name: "Grep", arguments: JSON.stringify({ pattern: "auth", path: "src" }) } },
+        {
+          id: "call_read_only",
+          type: "function",
+          function: { name: "Read", arguments: JSON.stringify({ path: "src/login.ts" }) },
+        },
+        {
+          id: "call_grep_only",
+          type: "function",
+          function: { name: "Grep", arguments: JSON.stringify({ pattern: "auth", path: "src" }) },
+        },
       ],
     },
     { role: "tool", tool_call_id: "call_read_only", content: "export function login() {}\nexit 0" },
@@ -233,12 +253,32 @@ function deadEndWindow(): unknown[] {
     {
       role: "assistant",
       tool_calls: [
-        { id: "call_fail", type: "function", function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) } },
-        { id: "call_write", type: "function", function: { name: "Write", arguments: JSON.stringify({ path: "auth.ts", file_path: "auth.ts", contents: "export const ok = 1;\n" }) } },
-        { id: "call_pass", type: "function", function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) } },
+        {
+          id: "call_fail",
+          type: "function",
+          function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
+        },
+        {
+          id: "call_write",
+          type: "function",
+          function: {
+            name: "Write",
+            arguments: JSON.stringify({ path: "auth.ts", file_path: "auth.ts", contents: "export const ok = 1;\n" }),
+          },
+        },
+        {
+          id: "call_pass",
+          type: "function",
+          function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
+        },
       ],
     },
-    { role: "tool", tool_call_id: "call_fail", content: "FAILED tests/auth/session.test.ts\nauth.ts\nexit 1", is_error: true },
+    {
+      role: "tool",
+      tool_call_id: "call_fail",
+      content: "FAILED tests/auth/session.test.ts\nauth.ts\nexit 1",
+      is_error: true,
+    },
     { role: "tool", tool_call_id: "call_write", content: "wrote auth.ts\nexit 0" },
     { role: "tool", tool_call_id: "call_pass", content: PYTEST_OUT },
   ];
@@ -249,8 +289,16 @@ function altFixWindow(): unknown[] {
     {
       role: "assistant",
       tool_calls: [
-        { id: "call_alt", type: "function", function: { name: "Bash", arguments: JSON.stringify({ command: ALT_CMD }) } },
-        { id: "call_edit", type: "function", function: { name: "Edit", arguments: JSON.stringify({ path: "session.ts", file_path: "session.ts" }) } },
+        {
+          id: "call_alt",
+          type: "function",
+          function: { name: "Bash", arguments: JSON.stringify({ command: ALT_CMD }) },
+        },
+        {
+          id: "call_edit",
+          type: "function",
+          function: { name: "Edit", arguments: JSON.stringify({ path: "session.ts", file_path: "session.ts" }) },
+        },
       ],
     },
     { role: "tool", tool_call_id: "call_alt", content: "ok\nsession.ts touched\nexit 0" },
@@ -262,13 +310,22 @@ function iclToolWindow(): unknown[] {
   return [
     {
       role: "assistant",
-      tool_calls: [{
-        id: "call_icl",
-        type: "function",
-        function: { name: "Bash", arguments: JSON.stringify({ command: "echo 'Input: The film is terrible. Output: negative'" }) },
-      }],
+      tool_calls: [
+        {
+          id: "call_icl",
+          type: "function",
+          function: {
+            name: "Bash",
+            arguments: JSON.stringify({ command: "echo 'Input: The film is terrible. Output: negative'" }),
+          },
+        },
+      ],
     },
-    { role: "tool", tool_call_id: "call_icl", content: "Input: The film is terrible. Output: negative\nlabel: positive\nexit 0" },
+    {
+      role: "tool",
+      tool_call_id: "call_icl",
+      content: "Input: The film is terrible. Output: negative\nlabel: positive\nexit 0",
+    },
   ];
 }
 
@@ -298,8 +355,8 @@ function callPrune(dir: string, exists: (file: string) => boolean): void {
     pruneHowTo?: (d: string, o?: PruneOpts) => void;
     prune?: (d: string, o?: PruneOpts) => void;
   };
-  const named = extras.pruneHowTo ?? extras.prune
-    ?? (sleepMod as { pruneHowTo?: (d: string, o?: PruneOpts) => void }).pruneHowTo;
+  const named =
+    extras.pruneHowTo ?? extras.prune ?? (sleepMod as { pruneHowTo?: (d: string, o?: PruneOpts) => void }).pruneHowTo;
   if (typeof named === "function") {
     named(dir, { exists });
     return;
@@ -316,8 +373,9 @@ describe("M9.4 ordered wrap traces reconstruct files/exit/order", () => {
       const traces = loadTraces(dir);
       const pytest = assertPytestFields(traces);
       expect(pytest.order).toBe(0);
-      const second = traces.find((t) => t !== pytest && t.order === 1)
-        ?? traces.filter((t) => t !== pytest).sort((a, b) => (a.order ?? 99) - (b.order ?? 99))[0];
+      const second =
+        traces.find((t) => t !== pytest && t.order === 1) ??
+        traces.filter((t) => t !== pytest).sort((a, b) => (a.order ?? 99) - (b.order ?? 99))[0];
       expect(second).toBeTruthy();
       expect(second!.order).toBe(1);
     });
@@ -360,7 +418,10 @@ describe("M9.4 chat-only mints no how-to", () => {
       expect(tracesAbsentOrEmpty(dir)).toBe(true);
       const injected = mem.inject([{ role: "user", content: "what is auth using these days?" }]);
       const pkt = packetOf(injected);
-      const hay = `${pkt}\n${mem.memories().map((r) => r.text).join("\n")}`;
+      const hay = `${pkt}\n${mem
+        .memories()
+        .map((r) => r.text)
+        .join("\n")}`;
       expect(hay).toMatch(/Clerk/i);
       expect(/\[procedure\b/.test(pkt) || /how-to|howto/i.test(pkt)).toBe(false);
     });
@@ -397,9 +458,7 @@ describe("M9.4 inject/observeToolTraces fail-open if parse throws", () => {
         observeToolTraces(mem, [
           {
             role: "assistant",
-            tool_calls: [
-              { id: "c-bad", type: "function", function: { name: "Bash", arguments: "not-json" } },
-            ],
+            tool_calls: [{ id: "c-bad", type: "function", function: { name: "Bash", arguments: "not-json" } }],
           },
           { role: "tool", tool_call_id: "c-bad", content: PYTEST_OUT },
         ]),
@@ -411,9 +470,7 @@ describe("M9.4 inject/observeToolTraces fail-open if parse throws", () => {
         observeToolTraces(mem, [
           {
             role: "assistant",
-            tool_calls: [
-              { id: "c-circ", type: "function", function: { name: "Bash", arguments: circular } },
-            ],
+            tool_calls: [{ id: "c-circ", type: "function", function: { name: "Bash", arguments: circular } }],
           },
           { role: "tool", tool_call_id: "c-circ", content: PYTEST_OUT },
         ]),
@@ -461,7 +518,10 @@ describe("M9.4 wave close: traces survive Stop; chat-only still zero how-to", ()
         expect(tracesAbsentOrEmpty(chatDir)).toBe(true);
         const later = openMemory({ dir: chatDir });
         const injected = later.inject([{ role: "user", content: "remind me what auth is" }]);
-        const hay = `${packetOf(injected)}\n${later.memories().map((r) => r.text).join("\n")}`;
+        const hay = `${packetOf(injected)}\n${later
+          .memories()
+          .map((r) => r.text)
+          .join("\n")}`;
         expect(hay).toMatch(/Clerk/i);
       });
     } finally {
@@ -506,7 +566,14 @@ describe("M9.4 HowToStore concurrent puts do not tear", () => {
     const dir = tmpDir("eden-m94-howto-empty-");
     try {
       const store = new HowToStore(dir);
-      store.put({ cue: "fix auth pytest", steps: [{ name: "Bash" }], files: ["auth.ts"], verify: PYTEST_CMD, exit: 0, t: 1 });
+      store.put({
+        cue: "fix auth pytest",
+        steps: [{ name: "Bash" }],
+        files: ["auth.ts"],
+        verify: PYTEST_CMD,
+        exit: 0,
+        t: 1,
+      });
       expect(store.latest("", 5)).toEqual([]);
       expect(store.latest("   ", 3)).toEqual([]);
       expect(retrieveHowTo(dir, "")).toEqual([]);
@@ -519,15 +586,19 @@ describe("M9.4 HowToStore concurrent puts do not tear", () => {
   test("parallel puts do not tear JSONL", async () => {
     const dir = tmpDir("eden-m94-howto-parallel-");
     try {
-      await Promise.all(Array.from({ length: 8 }, (_, i) =>
-        Promise.resolve(new HowToStore(dir).put({
-          cue: `fix ${i}`,
-          steps: [{ name: "Bash", order: i }],
-          files: [`f${i}.ts`],
-          exit: 0,
-          t: i + 1,
-        })),
-      ));
+      await Promise.all(
+        Array.from({ length: 8 }, (_, i) =>
+          Promise.resolve(
+            new HowToStore(dir).put({
+              cue: `fix ${i}`,
+              steps: [{ name: "Bash", order: i }],
+              files: [`f${i}.ts`],
+              exit: 0,
+              t: i + 1,
+            }),
+          ),
+        ),
+      );
       const rows = new HowToStore(dir).latest("fix", 10);
       expect(rows.length).toBeGreaterThanOrEqual(8);
     } finally {
@@ -557,13 +628,17 @@ describe("M9.4 wrap Anthropic pytest reconstructs the same three fields", () => 
 
 describe("M9.4 wrap session traces live beside memories.jsonl", () => {
   test("openMemory session writes traces to the session subdir, not the root", async () => {
-    await withMem("eden-m94-wrap-sess-", async (mem, dir) => {
-      observeToolTraces(mem, pytestWindow());
-      const sessionDir = memoryTracesDir(dir, "s-wrap");
-      expect(existsSync(tracesPath(sessionDir))).toBe(true);
-      expect(existsSync(tracesPath(dir))).toBe(false);
-      assertPytestFields(loadToolTraces(sessionDir));
-    }, "s-wrap");
+    await withMem(
+      "eden-m94-wrap-sess-",
+      async (mem, dir) => {
+        observeToolTraces(mem, pytestWindow());
+        const sessionDir = memoryTracesDir(dir, "s-wrap");
+        expect(existsSync(tracesPath(sessionDir))).toBe(true);
+        expect(existsSync(tracesPath(dir))).toBe(false);
+        assertPytestFields(loadToolTraces(sessionDir));
+      },
+      "s-wrap",
+    );
   });
 });
 
@@ -573,11 +648,16 @@ describe("M9.4 secrets never land in traces.jsonl", () => {
       observeToolTraces(mem, [
         {
           role: "assistant",
-          tool_calls: [{
-            id: "c-sec",
-            type: "function",
-            function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD, api_key: "sk-abc123XYZ999secret" }) },
-          }],
+          tool_calls: [
+            {
+              id: "c-sec",
+              type: "function",
+              function: {
+                name: "Bash",
+                arguments: JSON.stringify({ command: PYTEST_CMD, api_key: "sk-abc123XYZ999secret" }),
+              },
+            },
+          ],
         },
         { role: "tool", tool_call_id: "c-sec", content: `${PYTEST_OUT}\nghp_abc123XYZ999abcdefghij` },
       ]);
@@ -890,7 +970,10 @@ describe("M10.4 facts still LWW", () => {
       mem.observe([{ role: "user", content: "Use sqlite instead" }]);
       await mem.sleep();
       const injected = mem.inject([{ role: "user", content: "what database do we use" }]);
-      const hay = `${packetOf(injected)}\n${mem.memories().map((r) => r.text).join("\n")}`;
+      const hay = `${packetOf(injected)}\n${mem
+        .memories()
+        .map((r) => r.text)
+        .join("\n")}`;
       expect(hay).toMatch(/sqlite/i);
       expect(hay).not.toMatch(/postgres/i);
     });
@@ -903,13 +986,15 @@ describe("M10.4 hook Stop path", () => {
     const session = "s-m104-stop";
     await withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
       try {
-        expect(memoryHookResponse({
-          hook_event_name: "PostToolUse",
-          session_id: session,
-          tool_name: "Bash",
-          tool_input: { command: PYTEST_CMD },
-          tool_response: PYTEST_OUT,
-        })).toBeNull();
+        expect(
+          memoryHookResponse({
+            hook_event_name: "PostToolUse",
+            session_id: session,
+            tool_name: "Bash",
+            tool_input: { command: PYTEST_CMD },
+            tool_response: PYTEST_OUT,
+          }),
+        ).toBeNull();
         expect(memoryHookResponse({ hook_event_name: "Stop", session_id: session })).toBeNull();
         const skill = assertHowToSkill(howtos(dir, "auth pytest flake", 5));
         expect(String(skill.verify ?? "").toLowerCase()).toMatch(/pytest/);
@@ -923,7 +1008,10 @@ describe("M10.4 hook Stop path", () => {
 });
 
 function gistHay(dir: string): string {
-  return new GistStore(dir).latest("", 8).map((g) => g.text).join("\n");
+  return new GistStore(dir)
+    .latest("", 8)
+    .map((g) => g.text)
+    .join("\n");
 }
 
 function semanticHay(dir: string): string {
@@ -981,11 +1069,13 @@ describe("M10 grep-only Bash does not promote", () => {
       observeToolTraces(mem, [
         {
           role: "assistant",
-          tool_calls: [{
-            id: "call_gg",
-            type: "function",
-            function: { name: "Bash", arguments: JSON.stringify({ command: "git grep auth" }) },
-          }],
+          tool_calls: [
+            {
+              id: "call_gg",
+              type: "function",
+              function: { name: "Bash", arguments: JSON.stringify({ command: "git grep auth" }) },
+            },
+          ],
         },
         { role: "tool", tool_call_id: "call_gg", content: "auth.ts:1:export\nexit 0" },
       ]);
@@ -1047,7 +1137,13 @@ function prefixParents(): { a: HowTo; b: HowTo } {
     cue: "fix foo.ts",
     steps: [
       ...prefix,
-      { name: "Bash", args: { command: "pytest tests/auth/session.test.ts -q" }, files: ["auth.ts"], exit: 0, order: 2 },
+      {
+        name: "Bash",
+        args: { command: "pytest tests/auth/session.test.ts -q" },
+        files: ["auth.ts"],
+        exit: 0,
+        order: 2,
+      },
     ],
     files: ["foo.ts", "auth.ts"],
     verify: "pytest tests/auth/session.test.ts -q",
@@ -1060,7 +1156,13 @@ function prefixParents(): { a: HowTo; b: HowTo } {
     cue: "fix foo.ts",
     steps: [
       ...prefix,
-      { name: "Bash", args: { command: "npm test -- tests/auth/login.test.ts" }, files: ["login.ts"], exit: 0, order: 2 },
+      {
+        name: "Bash",
+        args: { command: "npm test -- tests/auth/login.test.ts" },
+        files: ["login.ts"],
+        exit: 0,
+        order: 2,
+      },
     ],
     files: ["foo.ts", "login.ts"],
     verify: "npm test -- tests/auth/login.test.ts",
@@ -1090,7 +1192,10 @@ function writeEditThenWindow(id: string, cmd: string): unknown[] {
         {
           id: `${id}-w`,
           type: "function",
-          function: { name: "Write", arguments: JSON.stringify({ path: "foo.ts", file_path: "foo.ts", contents: "export const n = 1;\n" }) },
+          function: {
+            name: "Write",
+            arguments: JSON.stringify({ path: "foo.ts", file_path: "foo.ts", contents: "export const n = 1;\n" }),
+          },
         },
         {
           id: `${id}-e`,
@@ -1361,10 +1466,20 @@ describe("M11.4 omit stale place", () => {
       expect(row).toBeTruthy();
       const exists = (f: string) => !/auth\.ts$/.test(f);
       const omitted = omitStalePlace(row, { exists });
-      expect(omitted.steps.some((s) => /^write$/i.test(s.name) && /auth\.ts/.test(`${jsonHay(s.args)} ${(s.files ?? []).join(" ")}`))).toBe(false);
-      expect(omitted.gaps.some((g) => g.kind === "unknown" && /auth\.ts/.test(`${g.place ?? ""} ${g.reason ?? ""}`))).toBe(true);
+      expect(
+        omitted.steps.some(
+          (s) => /^write$/i.test(s.name) && /auth\.ts/.test(`${jsonHay(s.args)} ${(s.files ?? []).join(" ")}`),
+        ),
+      ).toBe(false);
+      expect(
+        omitted.gaps.some((g) => g.kind === "unknown" && /auth\.ts/.test(`${g.place ?? ""} ${g.reason ?? ""}`)),
+      ).toBe(true);
       expect(omitted.gaps.some((g) => /missing place/i.test(g.reason))).toBe(true);
-      expect(omitted.steps.some((s) => /pytest/i.test(`${s.name} ${jsonHay(s.args)}`) || (s.files ?? []).some((f) => /keep\.ts$/.test(f)))).toBe(true);
+      expect(
+        omitted.steps.some(
+          (s) => /pytest/i.test(`${s.name} ${jsonHay(s.args)}`) || (s.files ?? []).some((f) => /keep\.ts$/.test(f)),
+        ),
+      ).toBe(true);
       expect(omitted.files.some((f) => /keep\.ts$/.test(f))).toBe(true);
       expect(omitted.files.some((f) => /(^|\/)auth\.ts$/.test(f))).toBe(false);
       assertPathsFrom(row, omitted.files);
@@ -1375,7 +1490,11 @@ describe("M11.4 omit stale place", () => {
       const view = views[0]!;
       expect(view.gaps.some((g) => g.kind === "unknown")).toBe(true);
       expect(view.gaps.some((g) => /auth\.ts/.test(`${g.place ?? ""} ${g.reason ?? ""}`))).toBe(true);
-      expect(view.steps.some((s) => /^write$/i.test(s.name) && /auth\.ts/.test(`${jsonHay(s.args)} ${(s.files ?? []).join(" ")}`))).toBe(false);
+      expect(
+        view.steps.some(
+          (s) => /^write$/i.test(s.name) && /auth\.ts/.test(`${jsonHay(s.args)} ${(s.files ?? []).join(" ")}`),
+        ),
+      ).toBe(false);
       assertPathsFrom(row, view.files);
       expect(stepsGapsBlob(view)).not.toContain("src/auth.ts");
       assertNoInventedCommands(view);
@@ -1391,7 +1510,13 @@ describe("M11.4 omit stale place", () => {
       store.put({
         cue: "auth pytest flake",
         steps: [
-          { name: "Write", args: { path: "definitely-not-in-store.ts" }, files: ["definitely-not-in-store.ts"], exit: 0, order: 0 },
+          {
+            name: "Write",
+            args: { path: "definitely-not-in-store.ts" },
+            files: ["definitely-not-in-store.ts"],
+            exit: 0,
+            order: 0,
+          },
           { name: "Bash", args: { command: PYTEST_CMD }, files: ["also-missing.ts"], exit: 0, order: 1 },
         ],
         files: ["definitely-not-in-store.ts", "also-missing.ts"],
@@ -1417,8 +1542,9 @@ describe("M11.4 omit stale place", () => {
 describe("M11.4 shared-prefix merge does not invent steps", () => {
   test("mergeSharedPrefix keeps Write+Edit only; no pytest+npm concat; sleep does not invent a third path", async () => {
     const { a, b } = prefixParents();
-    const fromStore = (howtoMod as { mergeSharedPrefix?: typeof mergeSharedPrefix }).mergeSharedPrefix
-      ?? (sleepMod as { mergeSharedPrefix?: typeof mergeSharedPrefix }).mergeSharedPrefix;
+    const fromStore =
+      (howtoMod as { mergeSharedPrefix?: typeof mergeSharedPrefix }).mergeSharedPrefix ??
+      (sleepMod as { mergeSharedPrefix?: typeof mergeSharedPrefix }).mergeSharedPrefix;
     expect(typeof fromStore).toBe("function");
     const merged = mergeSharedPrefix(a, b);
     expect(merged).toBeTruthy();
@@ -1633,10 +1759,12 @@ describe("M12.4 schema-rename WIN", () => {
       const injected = mem.inject([{ role: "user", content: FLAKE_CMD_CUE }]);
       assertFlakeProcedure(packetOf(injected));
 
-      const mixed = mem.inject([{
-        role: "user",
-        content: `${FLAKE_TEXT_CUE} ${FLAKE_CMD_CUE}`,
-      }]);
+      const mixed = mem.inject([
+        {
+          role: "user",
+          content: `${FLAKE_TEXT_CUE} ${FLAKE_CMD_CUE}`,
+        },
+      ]);
       assertFlakeProcedure(packetOf(mixed));
     });
   });
@@ -1706,23 +1834,27 @@ describe("M12.4 snapshot flake cue", () => {
 describe("M12.4 Start does not dump last-k how-to", () => {
   test("SessionStart briefing has pins+gists only; empty cue inject dumps no [procedure]", async () => {
     const session = "s-m124-start";
-    await withMem("eden-m124-start-", async (mem, dir) => {
-      putFlakeSkill(dir);
-      mem.remember("Always run tests before committing", { kind: "constraint" });
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      const hay = JSON.stringify(start ?? {});
-      expect(hay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-      expect(hay).not.toMatch(/howto\.jsonl|how-to dump/i);
-      if (hay.includes(MEMORY_MARK)) {
-        expect(hay).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
+    await withMem(
+      "eden-m124-start-",
+      async (mem, dir) => {
+        putFlakeSkill(dir);
+        mem.remember("Always run tests before committing", { kind: "constraint" });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const hay = JSON.stringify(start ?? {});
         expect(hay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-      }
+        expect(hay).not.toMatch(/howto\.jsonl|how-to dump/i);
+        if (hay.includes(MEMORY_MARK)) {
+          expect(hay).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
+          expect(hay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        }
 
-      const empty = packetOf(mem.inject([]));
-      expect(empty).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-      const blank = packetOf(mem.inject([{ role: "user", content: "" }]));
-      expect(blank).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-    }, session);
+        const empty = packetOf(mem.inject([]));
+        expect(empty).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        const blank = packetOf(mem.inject([{ role: "user", content: "" }]));
+        expect(blank).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+      },
+      session,
+    );
   });
 });
 
@@ -1776,7 +1908,9 @@ describe("M12.4 fail-open", () => {
         }).not.toThrow();
         expect(`${packetOf(unread as unknown[])}\n${JSON.stringify(unread)}`).toMatch(/Clerk/i);
       } finally {
-        try { chmodSync(path, 0o600); } catch {}
+        try {
+          chmodSync(path, 0o600);
+        } catch {}
       }
     });
   });
@@ -1862,7 +1996,15 @@ describe("M12.4 secrets stay out of [procedure]", () => {
     await withMem("eden-m124-secret-pkt-", async (mem, dir) => {
       new HowToStore(dir).put({
         cue: "auth pytest flake",
-        steps: [{ name: "Bash", args: { command: PYTEST_CMD, api_key: "sk-abc123XYZ999secret" }, files: ["auth.ts"], exit: 0, order: 0 }],
+        steps: [
+          {
+            name: "Bash",
+            args: { command: PYTEST_CMD, api_key: "sk-abc123XYZ999secret" },
+            files: ["auth.ts"],
+            exit: 0,
+            order: 0,
+          },
+        ],
         files: ["auth.ts"],
         verify: `${PYTEST_CMD} sk-abc123XYZ999secret`,
         exit: 0,
@@ -1910,37 +2052,41 @@ describe("M12.4 latest sees step command values", () => {
 describe("M14.4 one dir / same how-to id", () => {
   test("wrap sleep writes join(dir, howto.jsonl) not session/; Start silent; Submit injects same id", async () => {
     const session = "s-m14-onedir";
-    await withMem("eden-m14-onedir-", async (mem, dir) => {
-      observeToolTraces(mem, pytestWindow());
-      await mem.sleep();
+    await withMem(
+      "eden-m14-onedir-",
+      async (mem, dir) => {
+        observeToolTraces(mem, pytestWindow());
+        await mem.sleep();
 
-      const rootHowTo = join(dir, "howto.jsonl");
-      const sessionHowTo = join(dir, session, "howto.jsonl");
-      expect(howtoPath(dir)).toBe(rootHowTo);
-      expect(existsSync(rootHowTo)).toBe(true);
-      expect(existsSync(sessionHowTo)).toBe(false);
+        const rootHowTo = join(dir, "howto.jsonl");
+        const sessionHowTo = join(dir, session, "howto.jsonl");
+        expect(howtoPath(dir)).toBe(rootHowTo);
+        expect(existsSync(rootHowTo)).toBe(true);
+        expect(existsSync(sessionHowTo)).toBe(false);
 
-      const stored = assertHowToSkill(new HowToStore(dir).latest("auth pytest flake", 5));
-      expect(stored.id).toBeTruthy();
-      expect(retrieveHowTo(dir, "auth pytest flake").some((r) => r.id === stored.id)).toBe(true);
+        const stored = assertHowToSkill(new HowToStore(dir).latest("auth pytest flake", 5));
+        expect(stored.id).toBeTruthy();
+        expect(retrieveHowTo(dir, "auth pytest flake").some((r) => r.id === stored.id)).toBe(true);
 
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      const startHay = JSON.stringify(start ?? {});
-      expect(startHay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-      expect(startHay).not.toMatch(/howto\.jsonl|how-to dump/i);
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const startHay = JSON.stringify(start ?? {});
+        expect(startHay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(startHay).not.toMatch(/howto\.jsonl|how-to dump/i);
 
-      const afterStart = new HowToStore(dir).latest("auth pytest flake", 5);
-      expect(afterStart.some((r) => r.id === stored.id)).toBe(true);
-      expect(existsSync(sessionHowTo)).toBe(false);
+        const afterStart = new HowToStore(dir).latest("auth pytest flake", 5);
+        expect(afterStart.some((r) => r.id === stored.id)).toBe(true);
+        expect(existsSync(sessionHowTo)).toBe(false);
 
-      const submit = memoryHookResponse({
-        hook_event_name: "UserPromptSubmit",
-        session_id: session,
-        prompt: FLAKE_TEXT_CUE,
-      });
-      assertFlakeProcedure(JSON.stringify(submit ?? {}));
-      expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored.id)).toBe(true);
-    }, session);
+        const submit = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          session_id: session,
+          prompt: FLAKE_TEXT_CUE,
+        });
+        assertFlakeProcedure(JSON.stringify(submit ?? {}));
+        expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored.id)).toBe(true);
+      },
+      session,
+    );
   });
 
   test("wrap processMemory-style (no session) then hook Start: same how-to id on root", async () => {
@@ -1992,34 +2138,37 @@ describe("M14.4 one dir / same how-to id", () => {
 });
 
 describe("M14.4 cross-host inject", () => {
-  test.failing("wrap write then OpenAI injectBody / injectBodyThenObserveTools, Anthropic, hook Submit share [procedure]", async () => {
-    await withMem("eden-m14-xhost-", async (mem, dir) => {
-      observeToolTraces(mem, pytestWindow());
-      await mem.sleep();
-      const stored = assertHowToSkill(howtos(dir, "auth pytest flake", 5));
-      expect(howtoPath(dir)).toBe(join(dir, "howto.jsonl"));
+  test.failing(
+    "wrap write then OpenAI injectBody / injectBodyThenObserveTools, Anthropic, hook Submit share [procedure]",
+    async () => {
+      await withMem("eden-m14-xhost-", async (mem, dir) => {
+        observeToolTraces(mem, pytestWindow());
+        await mem.sleep();
+        const stored = assertHowToSkill(howtos(dir, "auth pytest flake", 5));
+        expect(howtoPath(dir)).toBe(join(dir, "howto.jsonl"));
 
-      const openaiBody = mem.injectBody({ messages: [{ role: "user", content: FLAKE_TEXT_CUE }] });
-      const openaiMsgs = Array.isArray(openaiBody.messages) ? openaiBody.messages : [];
-      assertFlakeProcedure(`${packetOf(openaiMsgs)}\n${JSON.stringify(openaiBody)}`);
+        const openaiBody = mem.injectBody({ messages: [{ role: "user", content: FLAKE_TEXT_CUE }] });
+        const openaiMsgs = Array.isArray(openaiBody.messages) ? openaiBody.messages : [];
+        assertFlakeProcedure(`${packetOf(openaiMsgs)}\n${JSON.stringify(openaiBody)}`);
 
-      const openaiTools = injectBodyThenObserveTools(mem, { messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
-      const toolMsgs = Array.isArray(openaiTools.messages) ? openaiTools.messages : [];
-      assertFlakeProcedure(`${packetOf(toolMsgs)}\n${JSON.stringify(openaiTools)}`);
+        const openaiTools = injectBodyThenObserveTools(mem, { messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
+        const toolMsgs = Array.isArray(openaiTools.messages) ? openaiTools.messages : [];
+        assertFlakeProcedure(`${packetOf(toolMsgs)}\n${JSON.stringify(openaiTools)}`);
 
-      await withProcessMem(mem, async () => {
-        const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: FLAKE_TEXT_CUE }] });
-        assertFlakeProcedure(JSON.stringify(anth));
+        await withProcessMem(mem, async () => {
+          const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: FLAKE_TEXT_CUE }] });
+          assertFlakeProcedure(JSON.stringify(anth));
 
-        const viaProc = withKnowFacts({ messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
-        assertFlakeProcedure(JSON.stringify(viaProc));
+          const viaProc = withKnowFacts({ messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
+          assertFlakeProcedure(JSON.stringify(viaProc));
+        });
+
+        const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: FLAKE_TEXT_CUE });
+        assertFlakeProcedure(JSON.stringify(submit ?? {}));
+        expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored.id)).toBe(true);
       });
-
-      const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: FLAKE_TEXT_CUE });
-      assertFlakeProcedure(JSON.stringify(submit ?? {}));
-      expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored.id)).toBe(true);
-    });
-  });
+    },
+  );
 });
 
 describe("M14.4 chat-only zero how-to", () => {
@@ -2113,49 +2262,56 @@ describe("M14.4 fail-open and no BrainMemory product", () => {
 });
 
 describe("M35.4 schema-rename command→cmd", () => {
-  test.failing("stored command key still injects [procedure] on a cmd cue (inject, OpenAI, Anthropic, hook)", async () => {
-    expect(FLAKE_CMD_CUE).toContain('"cmd"');
-    expect(FLAKE_CMD_CUE).not.toContain('"command"');
-    await withMem("eden-m354-rename-", async (mem, dir) => {
-      putFlakeSkill(dir);
-      const rows = howtos(dir);
-      expect(rows.length).toBeGreaterThan(0);
-      expect(rows.some((r) => /"command"/.test(skillHay(r)))).toBe(true);
+  test.failing(
+    "stored command key still injects [procedure] on a cmd cue (inject, OpenAI, Anthropic, hook)",
+    async () => {
+      expect(FLAKE_CMD_CUE).toContain('"cmd"');
+      expect(FLAKE_CMD_CUE).not.toContain('"command"');
+      await withMem("eden-m354-rename-", async (mem, dir) => {
+        putFlakeSkill(dir);
+        const rows = howtos(dir);
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows.some((r) => /"command"/.test(skillHay(r)))).toBe(true);
 
-      assertFlakeProcedure(packetOf(mem.inject([{ role: "user", content: FLAKE_CMD_CUE }])));
+        assertFlakeProcedure(packetOf(mem.inject([{ role: "user", content: FLAKE_CMD_CUE }])));
 
-      const openai = injectBodyThenObserveTools(mem, { messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
-      assertFlakeProcedure(JSON.stringify(openai));
+        const openai = injectBodyThenObserveTools(mem, { messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
+        assertFlakeProcedure(JSON.stringify(openai));
 
-      await withProcessMem(mem, async () => {
-        const via = withKnowFacts({ messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
-        assertFlakeProcedure(JSON.stringify(via));
-        const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
-        assertFlakeProcedure(JSON.stringify(anth));
+        await withProcessMem(mem, async () => {
+          const via = withKnowFacts({ messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
+          assertFlakeProcedure(JSON.stringify(via));
+          const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: FLAKE_CMD_CUE }] });
+          assertFlakeProcedure(JSON.stringify(anth));
+        });
+
+        const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: FLAKE_CMD_CUE });
+        assertFlakeProcedure(JSON.stringify(submit));
       });
-
-      const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: FLAKE_CMD_CUE });
-      assertFlakeProcedure(JSON.stringify(submit));
-    });
-  });
+    },
+  );
 
   test("empty cue and SessionStart dump no [procedure]; chat-only Clerk has none", async () => {
     const session = "s-m354-start";
-    await withMem("eden-m354-empty-", async (mem, dir) => {
-      putFlakeSkill(dir);
-      mem.observe([{ role: "user", content: "Auth is Clerk" }]);
-      mem.remember("Always run tests before committing", { kind: "constraint" });
+    await withMem(
+      "eden-m354-empty-",
+      async (mem, dir) => {
+        putFlakeSkill(dir);
+        mem.observe([{ role: "user", content: "Auth is Clerk" }]);
+        mem.remember("Always run tests before committing", { kind: "constraint" });
 
-      expect(packetOf(mem.inject([]))).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-      expect(packetOf(mem.inject([{ role: "user", content: "" }]))).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(packetOf(mem.inject([]))).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(packetOf(mem.inject([{ role: "user", content: "" }]))).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
 
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      expect(JSON.stringify(start ?? {})).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        expect(JSON.stringify(start ?? {})).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
 
-      const clerk = packetOf(mem.inject([{ role: "user", content: "what is auth using?" }]));
-      expect(clerk).toMatch(/Clerk/i);
-      expect(clerk).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-    }, session);
+        const clerk = packetOf(mem.inject([{ role: "user", content: "what is auth using?" }]));
+        expect(clerk).toMatch(/Clerk/i);
+        expect(clerk).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+      },
+      session,
+    );
   });
 });
 
@@ -2182,13 +2338,15 @@ describe("M45.2 failed child does not prune parent how-to", () => {
         const child = openMemory({ dir, session: childName, cwd: project, child: true });
         expect(child.jsonlDir).not.toBe(dir);
         expect(child.howtoDir).toBe(dir);
-        persistToolTraces(child.jsonlDir, [{
-          name: "Bash",
-          args: { command: PYTEST_CMD },
-          files: ["auth.ts"],
-          exit: 1,
-          t: Date.now(),
-        }]);
+        persistToolTraces(child.jsonlDir, [
+          {
+            name: "Bash",
+            args: { command: PYTEST_CMD },
+            files: ["auth.ts"],
+            exit: 1,
+            t: Date.now(),
+          },
+        ]);
         expect(loadTraces(dir, childName).some((t) => t.exit === 1)).toBe(true);
 
         await expect(child.sleep({ session: childName })).resolves.toBeUndefined();
@@ -2222,5 +2380,3 @@ describe("M45.2 failed child does not prune parent how-to", () => {
     }
   });
 });
-
-

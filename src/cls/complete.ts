@@ -55,16 +55,67 @@ const REL_ALIASES: Record<string, string> = {
 const REL_ALT = Object.keys(REL_ALIASES).join("|");
 
 const QUERY_STOP = new Set([
-  "the", "a", "an", "of", "is", "was", "are", "were", "be", "been", "being",
-  "what", "which", "who", "whom", "whose", "how", "when", "where", "why",
-  "to", "in", "on", "for", "and", "or", "from", "at", "by", "as", "that",
-  "this", "these", "those", "with", "into", "than", "then", "so", "if",
-  "not", "no", "yes", "it", "its", "his", "her", "their", "our", "your", "my",
-  "do", "does", "did",
+  "the",
+  "a",
+  "an",
+  "of",
+  "is",
+  "was",
+  "are",
+  "were",
+  "be",
+  "been",
+  "being",
+  "what",
+  "which",
+  "who",
+  "whom",
+  "whose",
+  "how",
+  "when",
+  "where",
+  "why",
+  "to",
+  "in",
+  "on",
+  "for",
+  "and",
+  "or",
+  "from",
+  "at",
+  "by",
+  "as",
+  "that",
+  "this",
+  "these",
+  "those",
+  "with",
+  "into",
+  "than",
+  "then",
+  "so",
+  "if",
+  "not",
+  "no",
+  "yes",
+  "it",
+  "its",
+  "his",
+  "her",
+  "their",
+  "our",
+  "your",
+  "my",
+  "do",
+  "does",
+  "did",
 ]);
 
 function clip(s: string): string {
-  return String(s ?? "").replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim();
+  return String(s ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:!?]+$/g, "")
+    .trim();
 }
 
 function normEnt(s: string): string {
@@ -80,7 +131,10 @@ function stripRole(s: string): string {
 }
 
 export function canonRel(p: string): string {
-  const x = clip(p).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const x = clip(p)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
   if (REL_ALIASES[x]) return REL_ALIASES[x]!;
   for (const [k, v] of Object.entries(REL_ALIASES)) {
     if (x.includes(k)) return v;
@@ -116,14 +170,16 @@ function isWall(t: number): boolean {
 
 /** max(serial) per (s,p): a numbered serial beats a wall-clock stamp. */
 function factBeats(a: HopFact, b: HopFact): boolean {
-  const aW = isWall(a.t), bW = isWall(b.t);
+  const aW = isWall(a.t),
+    bW = isWall(b.t);
   if (aW !== bW) return !aW;
   if (a.t !== b.t) return a.t > b.t;
   return a.i > b.i;
 }
 
 function timeBeats(a: number, b: number): number {
-  const aW = isWall(a), bW = isWall(b);
+  const aW = isWall(a),
+    bW = isWall(b);
   if (aW !== bW) return aW ? -1 : 1;
   return a - b;
 }
@@ -166,7 +222,11 @@ function hopSentences(text: string): string[] {
   if (!t.trim()) return [];
   return t
     .split(/(?<=[.!?])\s+|(?<=\.)\n/)
-    .map((s) => String(s ?? "").replace(/\s+/g, " ").trim())
+    .map((s) =>
+      String(s ?? "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
     .filter((s) => s.length >= 8);
 }
 
@@ -207,11 +267,14 @@ function expandHopRows(rows: HopSource[]): HopSource[] {
 }
 
 function contentTokens(q: string): string[] {
-  return normEnt(q).split(/\s+/).filter((t) => t.length >= 3 && !QUERY_STOP.has(t));
+  return normEnt(q)
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !QUERY_STOP.has(t));
 }
 
 function sameEntity(a: string, b: string): boolean {
-  const na = normEnt(a), nb = normEnt(b);
+  const na = normEnt(a),
+    nb = normEnt(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
   if (na.length >= 4 && nb.length >= 4 && (na.includes(nb) || nb.includes(na))) return true;
@@ -222,7 +285,8 @@ function sameEntity(a: string, b: string): boolean {
 }
 
 function mentionsEntity(body: string, entity: string): boolean {
-  const b = normEnt(body), ent = normEnt(entity);
+  const b = normEnt(body),
+    ent = normEnt(entity);
   if (!b || !ent) return false;
   if (` ${b} `.includes(` ${ent} `)) return true;
   const eToks = ent.split(/\s+/).filter((t) => t.length >= 2);
@@ -250,10 +314,17 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
   if (!raw || raw.endsWith("?") || /\bis based in (?:what|which|who|where)\b/i.test(raw)) return undefined;
 
   const take = (s: string, p: string, o: string) => {
-    const ns = stripRole(normEnt(s)), np = canonRel(p), no = normEnt(o);
+    const ns = stripRole(normEnt(s)),
+      np = canonRel(p),
+      no = normEnt(o);
     if (!ns || !np || !no || ns === no) return undefined;
     // Question tails belong on the object ("based in what city"), not "who portrayed".
-    if (no.split(/\s+/).some((t) => t === "what" || t === "which" || t === "who" || t === "where" || t === "whom" || t === "how")) return undefined;
+    if (
+      no
+        .split(/\s+/)
+        .some((t) => t === "what" || t === "which" || t === "who" || t === "where" || t === "whom" || t === "how")
+    )
+      return undefined;
     return { s: ns, p: np, o: no };
   };
 
@@ -290,7 +361,9 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
   m = raw.match(/^(.+?)\s+(?:was|is|were|are)\s+directed by\s+(.+)$/i);
   if (m) return take(m[1]!.replace(/^(?:the\s+)?(?:romantic comedy|film|movie)\s+/i, ""), "director", m[2]!);
 
-  m = raw.match(/^(?:the\s+)?director of\s+(?:the\s+)?(?:romantic comedy|film|movie)?\s*[""]?(.+?)[""]?\s+(?:is|was|are|were)\s+(.+)$/i);
+  m = raw.match(
+    /^(?:the\s+)?director of\s+(?:the\s+)?(?:romantic comedy|film|movie)?\s*[""]?(.+?)[""]?\s+(?:is|was|are|were)\s+(.+)$/i,
+  );
   if (m && !/^(?:based|located|born|from|directed)\b/i.test(clip(m[2]!))) return take(m[1]!, "director", m[2]!);
 
   m = raw.match(/^(.+?)\s+(?:is|was|are|were)\s+based in\s+(.+)$/i);
@@ -302,10 +375,14 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
   m = raw.match(/^(.+?)\s+has a population of\s+(.+)$/i);
   if (m) return take(m[1]!, "population", m[2]!);
 
-  m = raw.match(/^(.+?)\s+(?:is|was|are|were)\s+(?:the\s+)?(?:woman|man|actor|actress|person)\s+who\s+portrayed\s+(.+?)(?:\s+in\b|$)/i);
+  m = raw.match(
+    /^(.+?)\s+(?:is|was|are|were)\s+(?:the\s+)?(?:woman|man|actor|actress|person)\s+who\s+portrayed\s+(.+?)(?:\s+in\b|$)/i,
+  );
   if (m) return take(m[2]!, "portrayed", m[1]!);
 
-  m = raw.match(/^(?:the\s+)?(?:woman|man|actor|actress|person)\s+who\s+portrayed\s+(.+?)\s+(?:is|was|are|were)\s+(.+)$/i);
+  m = raw.match(
+    /^(?:the\s+)?(?:woman|man|actor|actress|person)\s+who\s+portrayed\s+(.+?)\s+(?:is|was|are|were)\s+(.+)$/i,
+  );
   if (m) return take(m[1]!, "portrayed", m[2]!);
 
   m = raw.match(/^(.+?)\s+portrayed\s+(.+?)(?:\s+in\b|\s*$)/i);
@@ -315,7 +392,9 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
   if (m) return take(m[1]!, "position", m[2]!);
 
   // Official FC-MH frames (not REL_ALIASES): associated/created/affiliated/located.
-  m = raw.match(/^(.+?)\s+(?:is|was|are|were)\s+(?:associated with|affiliated with|located in|created in)\s+(?:the\s+)?([a-z]+)\s+of\s+(.+)$/i);
+  m = raw.match(
+    /^(.+?)\s+(?:is|was|are|were)\s+(?:associated with|affiliated with|located in|created in)\s+(?:the\s+)?([a-z]+)\s+of\s+(.+)$/i,
+  );
   if (m) return take(m[1]!, m[2]!, m[3]!);
 
   m = raw.match(/^(.+?)\s+(?:is|was|are|were)\s+associated with\s+(.+)$/i);
@@ -336,7 +415,10 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
   m = raw.match(/^(?:the\s+)?([a-z]+(?:\s+[a-z]+){0,3})\s+of\s+(.+?)\s+(?:is|was|are|were)\s+(?:now\s+)?(.+)$/i);
   if (m) {
     const rel = m[1]!.toLowerCase();
-    const last = rel.split(/\s+/).filter((t) => t.length >= 3 && !QUERY_STOP.has(t)).pop();
+    const last = rel
+      .split(/\s+/)
+      .filter((t) => t.length >= 3 && !QUERY_STOP.has(t))
+      .pop();
     if (last && last.length >= 3 && !QUERY_STOP.has(last)) return take(m[2]!, last, m[3]!);
   }
 
@@ -359,7 +441,8 @@ function maxPerKey(rows: HopSource[]): HopFact[] {
 }
 
 function lookup(s: string, p: string, facts: HopFact[]): HopFact | undefined {
-  const ns = normEnt(s), np = canonRel(p);
+  const ns = normEnt(s),
+    np = canonRel(p);
   if (!ns || !np) return undefined;
   let hit: HopFact | undefined;
   for (const f of facts) {
@@ -398,7 +481,10 @@ function parseSelfAsk(q: string): Chain | null {
       extra.push(canonRel(trail[1]!));
       seed = clip(seed.slice(0, trail.index));
     }
-    seed = seed.replace(/^(?:the|a|an)\s+/i, "").replace(/[.,;:]+$/g, "").trim();
+    seed = seed
+      .replace(/^(?:the|a|an)\s+/i, "")
+      .replace(/[.,;:]+$/g, "")
+      .trim();
   }
 
   const quoted = raw.match(/["“]([^"”]{2,80})["”]/);
@@ -419,7 +505,9 @@ function parseSelfAsk(q: string): Chain | null {
   }
 
   if (!ofRels.length) {
-    const who = raw.match(/\b(?:(?:the\s+)?(?:woman|man|actor|actress|person)\s+)?who\s+portrayed\s+(.+?)(?:\s+in\s+.+)?$/i);
+    const who = raw.match(
+      /\b(?:(?:the\s+)?(?:woman|man|actor|actress|person)\s+)?who\s+portrayed\s+(.+?)(?:\s+in\s+.+)?$/i,
+    );
     if (who) {
       seed = clip(who[1]!);
       ofRels.push("portrayed");
@@ -438,7 +526,8 @@ function parseSelfAsk(q: string): Chain | null {
 }
 
 function lexicalScore(body: string, entity: string, extra: string[]): number {
-  const b = normEnt(body), ent = normEnt(entity);
+  const b = normEnt(body),
+    ent = normEnt(entity);
   if (!b || !ent) return 0;
   const bSet = new Set(b.split(/\s+/));
   let score = 0;
@@ -573,11 +662,7 @@ function pickOutgoing(ent: string, facts: HopFact[], qToks: string[], seen: Set<
     if (!sameEntity(f.s, ent)) continue;
     if (seen.has(normEnt(f.o))) continue;
     const ov = overlapScore(f, qSet);
-    if (
-      !best ||
-      ov > bestOverlap ||
-      (ov === bestOverlap && factBeats(f, best))
-    ) {
+    if (!best || ov > bestOverlap || (ov === bestOverlap && factBeats(f, best))) {
       best = f;
       bestOverlap = ov;
     }
@@ -645,10 +730,7 @@ function bfsHops(q: string, rows: HopSource[]): HopFact[] {
     if (!path.length) continue;
     const last = path[path.length - 1]!;
     const bestLast = best[best.length - 1];
-    if (
-      path.length > best.length ||
-      (path.length === best.length && bestLast != null && factBeats(last, bestLast))
-    ) {
+    if (path.length > best.length || (path.length === best.length && bestLast != null && factBeats(last, bestLast))) {
       best = path;
     }
   }
@@ -744,7 +826,10 @@ export function completeScores(
 ): Float64Array {
   try {
     if (!query || !episodes.length || skipGraphText(query)) return scores;
-    const hops = hopChain(query, episodes.map((e) => ({ text: e.text, i: e.i, at: e.i })));
+    const hops = hopChain(
+      query,
+      episodes.map((e) => ({ text: e.text, i: e.i, at: e.i })),
+    );
     if (!hops.length) return scores;
     const out = new Float64Array(scores);
     let mx = 0;

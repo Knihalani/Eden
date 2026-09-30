@@ -24,12 +24,7 @@ import {
  * as evidence to surface exactly one tool.
  */
 
-function prog(opts: {
-  name: string;
-  seq?: string[];
-  url?: string;
-  cmd?: string;
-}): StretchProgram {
+function prog(opts: { name: string; seq?: string[]; url?: string; cmd?: string }): StretchProgram {
   const first = opts.seq?.[0] ?? opts.name;
   const args: Record<string, unknown> = {};
   if (opts.url) args.u = { kind: "literal", value: opts.url };
@@ -105,27 +100,19 @@ describe("intent ranking", () => {
     expect(githubResourceKey("api.github.com/repos/acme/app/pulls/{id}")).toBe(
       githubResourceKey("github.com/KaiavN/Eden/pulls/{id}"),
     );
-    expect(githubBareUrls("look at github.com/acme/app/issues/1")).toEqual([
-      "https://github.com/acme/app/issues/1",
-    ]);
+    expect(githubBareUrls("look at github.com/acme/app/issues/1")).toEqual(["https://github.com/acme/app/issues/1"]);
     const other = rankPrograms(
       [{ role: "user", content: "https://github.com/KaiavN/Eden/pulls/12" }],
       [GH, KUBECTL, TICKET],
     );
     expect(other[0]?.program.name).toBe("github_pr_bundle");
-    const bare = rankPrograms(
-      [{ role: "user", content: "look at github.com/acme/app/pulls/12" }],
-      [GH],
-    );
+    const bare = rankPrograms([{ role: "user", content: "look at github.com/acme/app/pulls/12" }], [GH]);
     expect(bare[0]?.program.name).toBe("github_pr_bundle");
   });
 
   test("trailing English after a CLI still surfaces the template program", () => {
     const psql = prog({ name: "psql_who", seq: ["Bash"], cmd: "psql -c 'select 1'" });
-    const ranked = rankPrograms(
-      [{ role: "user", content: "psql -c 'select 1' please" }],
-      [psql, GH, TICKET],
-    );
+    const ranked = rankPrograms([{ role: "user", content: "psql -c 'select 1' please" }], [psql, GH, TICKET]);
     expect(ranked[0]?.program.name).toBe("psql_who");
     expect(rankPrograms([{ role: "user", content: "please handle ticket 123" }], [psql])).toEqual([]);
   });
@@ -163,7 +150,10 @@ describe("intent ranking", () => {
   });
 
   test("a corrupt program is skipped, not fatal", () => {
-    const broken = { ...prog({ name: "broken", url: "https://x.test/a/{id}" }), steps: null } as unknown as StretchProgram;
+    const broken = {
+      ...prog({ name: "broken", url: "https://x.test/a/{id}" }),
+      steps: null,
+    } as unknown as StretchProgram;
     expect(() => rankPrograms(GH_MESSAGE, [broken, GH])).not.toThrow();
     const ranked = rankPrograms(GH_MESSAGE, [broken, GH]);
     expect(ranked.find((m) => m.program.name === "broken")).toBeUndefined();
@@ -253,15 +243,11 @@ describe("injectTools under the surface policy", () => {
 
   test("default (env unset): jit — one schema on evidence, nothing on silence", () => {
     withEnv(undefined, () => {
-      const hit = injectTools(
-        [clientTool],
-        selectForRequest([GH, KUBECTL], GH_MESSAGE),
-      ) as Array<{ function?: { name?: string } }>;
+      const hit = injectTools([clientTool], selectForRequest([GH, KUBECTL], GH_MESSAGE)) as Array<{
+        function?: { name?: string };
+      }>;
       expect(hit.map((t) => t.function?.name)).toEqual(["github_pr_bundle", "lookupTicket"]);
-      const miss = injectTools(
-        [clientTool],
-        selectForRequest([GH, KUBECTL], UNRELATED_MESSAGE),
-      ) as unknown[];
+      const miss = injectTools([clientTool], selectForRequest([GH, KUBECTL], UNRELATED_MESSAGE)) as unknown[];
       expect(miss).toEqual([clientTool]);
     });
   });
@@ -284,10 +270,9 @@ describe("injectTools under the surface policy", () => {
 
   test("jit: exactly one Eden schema, ahead of the client's own", () => {
     withEnv("jit", () => {
-      const out = injectTools(
-        [clientTool],
-        selectForRequest([TICKET, GH], GH_MESSAGE),
-      ) as Array<{ function?: { name?: string } }>;
+      const out = injectTools([clientTool], selectForRequest([TICKET, GH], GH_MESSAGE)) as Array<{
+        function?: { name?: string };
+      }>;
       expect(out.length).toBe(2);
       expect(out[0]!.function!.name).toBe("github_pr_bundle");
       expect(out[1]).toBe(clientTool);
@@ -296,10 +281,7 @@ describe("injectTools under the surface policy", () => {
 
   test("jit with no evidence: nothing injected even though programs are live", () => {
     withEnv("jit", () => {
-      const out = injectTools(
-        [clientTool],
-        selectForRequest([GH], VAGUE_MESSAGE),
-      ) as unknown[];
+      const out = injectTools([clientTool], selectForRequest([GH], VAGUE_MESSAGE)) as unknown[];
       expect(out.length).toBe(1);
       expect(out[0]).toBe(clientTool);
     });
@@ -430,7 +412,10 @@ describe("JIT injection-rate guards", () => {
       expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
       const follow = [
         ...GH_MESSAGE,
-        { role: "assistant", tool_calls: [{ type: "function", function: { name: "github_pr_bundle", arguments: "{}" } }] },
+        {
+          role: "assistant",
+          tool_calls: [{ type: "function", function: { name: "github_pr_bundle", arguments: "{}" } }],
+        },
       ];
       expect(selectForRequest([GH], follow, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
       expect(jit.unusedStreak).toBe(0);

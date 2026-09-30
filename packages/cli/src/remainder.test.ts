@@ -3,7 +3,19 @@ import { mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { hintIdOf } from "@eden/wrap";
 import { resolve } from "node:path";
-import { armRemainder, armRemainderFromBatch, claimRemainder, parseToolCalls, ARM_SLACK_CALLS, appendLedgerRow, hostDropReason, ledgerPath, remainderPath, remainderHintOf, joinAgainstCwd } from "./remainder";
+import {
+  armRemainder,
+  armRemainderFromBatch,
+  claimRemainder,
+  parseToolCalls,
+  ARM_SLACK_CALLS,
+  appendLedgerRow,
+  hostDropReason,
+  ledgerPath,
+  remainderPath,
+  remainderHintOf,
+  joinAgainstCwd,
+} from "./remainder";
 
 const pr = {
   name: "pr_summary",
@@ -360,7 +372,9 @@ describe("remainder path identity (cwd-join)", () => {
       const row = Object.values(Object.values(store.sessions)[0]!.byKey)[0]!;
       expect(row.hintId).toBe(ABS);
       expect(row.input.file_path).toBe(ABS);
-      expect(await claimRemainder("s-cwd", "Grep", { pattern: "TODO", path: REL }, undefined, undefined, CWD)).toMatchObject({
+      expect(
+        await claimRemainder("s-cwd", "Grep", { pattern: "TODO", path: REL }, undefined, undefined, CWD),
+      ).toMatchObject({
         tool: "Grep",
         program: "pr_write",
       });
@@ -406,8 +420,12 @@ describe("remainder path identity (cwd-join)", () => {
       });
 
       expect(await armRemainder("s-issue", pr, { issue: "I-1", file_path: REL }, undefined, CWD)).toBe(true);
-      expect(await claimRemainder("s-issue", "Grep", { issue: "I-2", path: ABS }, undefined, undefined, CWD)).toBeNull();
-      expect(await claimRemainder("s-issue", "Grep", { issue: "I-1", path: ABS }, undefined, undefined, CWD)).toMatchObject({
+      expect(
+        await claimRemainder("s-issue", "Grep", { issue: "I-2", path: ABS }, undefined, undefined, CWD),
+      ).toBeNull();
+      expect(
+        await claimRemainder("s-issue", "Grep", { issue: "I-1", path: ABS }, undefined, undefined, CWD),
+      ).toMatchObject({
         tool: "Grep",
       });
     } finally {
@@ -433,7 +451,16 @@ describe("remainder path identity (cwd-join)", () => {
       expect(await claimRemainder("s-mix-rel", "Write", { file_path: ABS }, undefined, undefined, CWD)).toMatchObject({
         tool: "Write",
       });
-      expect(await claimRemainder("s-mix-rel", "Write", { file_path: resolve(CWD, "./other.ts") }, undefined, undefined, CWD)).toBeNull();
+      expect(
+        await claimRemainder(
+          "s-mix-rel",
+          "Write",
+          { file_path: resolve(CWD, "./other.ts") },
+          undefined,
+          undefined,
+          CWD,
+        ),
+      ).toBeNull();
     } finally {
       restore();
     }

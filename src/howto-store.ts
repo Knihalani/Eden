@@ -54,14 +54,43 @@ function redactArgs(args: Record<string, unknown>): Record<string, unknown> {
   const r = redact(args);
   const rec = r && typeof r === "object" && !Array.isArray(r) ? (r as Record<string, unknown>) : args;
   const scrubbed = scrubMemoryValue(rec);
-  return scrubbed && typeof scrubbed === "object" && !Array.isArray(scrubbed) ? (scrubbed as Record<string, unknown>) : rec;
+  return scrubbed && typeof scrubbed === "object" && !Array.isArray(scrubbed)
+    ? (scrubbed as Record<string, unknown>)
+    : rec;
 }
 
 /** Weak cue words — not enough to bind two skills into one family. */
 const FAMILY_STOP = new Set([
-  "the", "a", "an", "to", "of", "and", "or", "for", "fix", "how", "do", "run",
-  "use", "with", "on", "in", "at", "i", "we", "my", "our", "this", "that",
-  "failing", "failed", "error", "bug", "issue", "test", "tests",
+  "the",
+  "a",
+  "an",
+  "to",
+  "of",
+  "and",
+  "or",
+  "for",
+  "fix",
+  "how",
+  "do",
+  "run",
+  "use",
+  "with",
+  "on",
+  "in",
+  "at",
+  "i",
+  "we",
+  "my",
+  "our",
+  "this",
+  "that",
+  "failing",
+  "failed",
+  "error",
+  "bug",
+  "issue",
+  "test",
+  "tests",
 ]);
 
 function jsonlFile(dir: string, name: string): boolean {
@@ -192,11 +221,16 @@ function load(path: string): HowTo[] {
 function persist(path: string, rows: HowTo[]): void {
   const body = rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");
   writeFileAtomic(path, body);
-  try { chmodSync(path, 0o600); } catch {}
+  try {
+    chmodSync(path, 0o600);
+  } catch {}
 }
 
 function tokens(s: string): string[] {
-  return s.toLowerCase().split(/[^a-z0-9_]+/).filter(Boolean);
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9_]+/)
+    .filter(Boolean);
 }
 
 function schemaArgHay(row: HowTo): string {
@@ -269,7 +303,10 @@ function fingerprint(row: { steps: HowToStep[]; files: string[]; verify?: string
     })
     .sort((a, b) => a.seq - b.seq)
     .map((s, i) => `${i}|${s.key}`);
-  const files = [...row.files].map((f) => f.trim().toLowerCase()).filter(Boolean).sort();
+  const files = [...row.files]
+    .map((f) => f.trim().toLowerCase())
+    .filter(Boolean)
+    .sort();
   return `${steps.join(";")}#${files.join(",")}#${verifyStem(row.verify)}`;
 }
 
@@ -540,7 +577,7 @@ function namedFileGone(file: string, cwd: string, exists?: (file: string) => boo
 
 function shouldCheckFiles(dir: string, opts?: HowToPruneOpts): { check: boolean; cwd: string } {
   if (typeof opts?.exists === "function") {
-    return { check: true, cwd: (typeof opts.cwd === "string" && opts.cwd.trim()) ? opts.cwd.trim() : dir };
+    return { check: true, cwd: typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : dir };
   }
   const cwd = typeof opts?.cwd === "string" ? opts.cwd.trim() : "";
   if (cwd && cwd !== dir) return { check: true, cwd };
@@ -614,7 +651,10 @@ function neighborKeptName(
   return undefined;
 }
 
-function unchangedHowToView(row: HowTo | null | undefined, gaps: HowToGap[] = []): { steps: HowToStep[]; files: string[]; gaps: HowToGap[] } {
+function unchangedHowToView(
+  row: HowTo | null | undefined,
+  gaps: HowToGap[] = [],
+): { steps: HowToStep[]; files: string[]; gaps: HowToGap[] } {
   const steps = row && Array.isArray(row.steps) ? row.steps : [];
   const files = row && Array.isArray(row.files) ? row.files : [];
   return { steps, files, gaps };
@@ -624,7 +664,10 @@ function unchangedHowToView(row: HowTo | null | undefined, gaps: HowToGap[] = []
  * Omit steps whose place cells (files / selector-like args) are gone. Never invent a replacement path.
  * Retrieve/view-time only — not a second whole-row prune. Does not persist. Does not call pruneStale.
  */
-export function omitStalePlace(row: HowTo, opts?: HowToPruneOpts): { steps: HowToStep[]; files: string[]; gaps: HowToGap[] } {
+export function omitStalePlace(
+  row: HowTo,
+  opts?: HowToPruneOpts,
+): { steps: HowToStep[]; files: string[]; gaps: HowToGap[] } {
   try {
     const { check, cwd } = shouldCheckFiles("", opts);
     if (!check) return unchangedHowToView(row);
@@ -718,7 +761,9 @@ export class HowToStore {
     this.lockPath = `${this.path}.lock`;
     try {
       mkdirSync(root, { recursive: true });
-      try { chmodSync(root, 0o700); } catch {}
+      try {
+        chmodSync(root, 0o700);
+      } catch {}
     } catch {}
   }
 

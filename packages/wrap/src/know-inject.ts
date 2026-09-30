@@ -68,7 +68,9 @@ function messagesForPlaceInject(messages: unknown[], body: object): unknown[] {
     }
     if (idx < 0) return list;
     const last = list[idx] as Record<string, unknown>;
-    const files = [...placePathsFrom(last), ...extra].filter((n, i, a) => a.findIndex((x) => x.toLowerCase() === n.toLowerCase()) === i).slice(0, 8);
+    const files = [...placePathsFrom(last), ...extra]
+      .filter((n, i, a) => a.findIndex((x) => x.toLowerCase() === n.toLowerCase()) === i)
+      .slice(0, 8);
     if (!files.length) return list;
     const copy = list.slice();
     copy[idx] = { ...last, files };
@@ -109,18 +111,29 @@ export function withKnowFactsAnthropic(body: {
       if (!m || typeof m !== "object") continue;
       const o = m as { role?: string; content?: unknown };
       if (o.role !== "system" || typeof o.content !== "string") continue;
-      if (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:")) extras.push({ type: "text", text: o.content });
+      if (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:"))
+        extras.push({ type: "text", text: o.content });
     }
     if (!extras.some((e) => e.text.includes("Eden Know:"))) {
-      const card = injectFromRequest({ text: blob, tools: toolNames(body as Record<string, unknown>), calls: toolCalls(messages) });
+      const card = injectFromRequest({
+        text: blob,
+        tools: toolNames(body as Record<string, unknown>),
+        calls: toolCalls(messages),
+      });
       if (card) extras.push({ type: "text", text: injectNote(card) });
     }
     observeToolTraces(mem, body.messages);
     if (!extras.length) return stripUpstreamPlaceFields(body) as typeof body;
     if (typeof body.system === "string") {
-      return stripUpstreamPlaceFields({ ...body, system: [{ type: "text", text: body.system }, ...extras] }) as typeof body;
+      return stripUpstreamPlaceFields({
+        ...body,
+        system: [{ type: "text", text: body.system }, ...extras],
+      }) as typeof body;
     }
-    return stripUpstreamPlaceFields({ ...body, system: [...(Array.isArray(body.system) ? body.system : []), ...extras] }) as typeof body;
+    return stripUpstreamPlaceFields({
+      ...body,
+      system: [...(Array.isArray(body.system) ? body.system : []), ...extras],
+    }) as typeof body;
   } catch {
     return body;
   }

@@ -302,10 +302,7 @@ describe("M44 project identity", () => {
           await mem.sleep({ session });
           mem.close();
         };
-        await Promise.all([
-          write("session-alpha", SQLITE),
-          write("session-bravo", CLERK),
-        ]);
+        await Promise.all([write("session-alpha", SQLITE), write("session-bravo", CLERK)]);
       });
       assertJsonlParseable(join(dir, "semantic.jsonl"));
       assertJsonlParseable(join(dir, "gists.jsonl"));
@@ -380,7 +377,8 @@ describe("M44 project identity", () => {
         memoryHookResponse({
           hook_event_name: "UserPromptSubmit",
           session_id: SESSION_A,
-          prompt: "We decided to use postgres for the database because durability then we decided to use sqlite for the database.",
+          prompt:
+            "We decided to use postgres for the database because durability then we decided to use sqlite for the database.",
         });
         memoryHookResponse({ hook_event_name: "Stop", session_id: SESSION_A });
         const db = memoryHookResponse({

@@ -59,9 +59,9 @@ describe("reconciliation: billed classes vs provider window", () => {
     expect(classes.frontier).toBe(50);
     expect(classes.compiled).toBe(100);
     expect(billedTokens(classes)).toBe(t!.prompt_tokens! + t!.completion_tokens!);
-    expect(
-      reconcileTokenClasses(classes, { prompt: t!.prompt_tokens!, completion: t!.completion_tokens! }).ok,
-    ).toBe(true);
+    expect(reconcileTokenClasses(classes, { prompt: t!.prompt_tokens!, completion: t!.completion_tokens! }).ok).toBe(
+      true,
+    );
     expect(classes.providerCache).toBe(13);
     expect(billedTokens(classes)).not.toBe(billedTokens(classes) + (classes.providerCache ?? 0));
   });
@@ -97,7 +97,9 @@ describe("reconciliation: billed classes vs provider window", () => {
         continue;
       }
       expect(rec.tokenClasses).toBeTruthy();
-      expect(reconcileTokenClasses(rec.tokenClasses!, { prompt: rec.prompt_tokens!, completion: rec.completion_tokens! }).ok).toBe(true);
+      expect(
+        reconcileTokenClasses(rec.tokenClasses!, { prompt: rec.prompt_tokens!, completion: rec.completion_tokens! }).ok,
+      ).toBe(true);
     }
     const skipped = state.receipts.find((r) => r.skipped?.includes("fetchDetails"));
     expect(skipped).toBeTruthy();
@@ -124,7 +126,9 @@ describe("reconciliation: billed classes vs provider window", () => {
     expect(rec.cache_write_tokens).toBe(10);
     expect(rec.cache_input_tokens).toBe(100);
     expect(rec.tokenClasses?.providerCache).toBe(40);
-    expect(providerCacheHitPct(rec.cached_tokens, rec.prompt_tokens, rec.cache_write_tokens, rec.cache_input_tokens)).toBe(0.4);
+    expect(
+      providerCacheHitPct(rec.cached_tokens, rec.prompt_tokens, rec.cache_write_tokens, rec.cache_input_tokens),
+    ).toBe(0.4);
     expect(providerCacheHitPct(rec.cached_tokens, rec.prompt_tokens)).toBe(0.8);
   });
 });

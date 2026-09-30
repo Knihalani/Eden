@@ -77,7 +77,11 @@ const SESSION = "s-m301-detqa";
 const K = 10;
 
 function wsTokens(s: string): string[] {
-  return String(s ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  return String(s ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
 }
 
 function tokCount(s: string): number {
@@ -98,7 +102,12 @@ function padFiller(minToks: number, seed = 0): string {
 }
 
 function firstSent(chunk: string): string {
-  return String(chunk ?? "").split(/(?<=[.!?])\s+/).map((s) => s.trim()).find(Boolean) ?? "";
+  return (
+    String(chunk ?? "")
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .find(Boolean) ?? ""
+  );
 }
 
 function longBook(minToks = 800): string {
@@ -146,26 +155,27 @@ async function withMem<T>(
   session = SESSION,
 ): Promise<T> {
   const dir = tmpDir();
-  return withEnv({
-    EDEN_MEMORY: "on",
-    EDEN_MEMORY_DIR: dir,
-    EDEN_HOME: undefined,
-    EDEN_KNOW: "0",
-    EDEN_MEMORY_CAP: String(K),
-    ...vars,
-  }, async () => {
-    try {
-      const mem = openMemory({ dir, session });
-      return await fn(mem, dir);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+  return withEnv(
+    {
+      EDEN_MEMORY: "on",
+      EDEN_MEMORY_DIR: dir,
+      EDEN_HOME: undefined,
+      EDEN_KNOW: "0",
+      EDEN_MEMORY_CAP: String(K),
+      ...vars,
+    },
+    async () => {
+      try {
+        const mem = openMemory({ dir, session });
+        return await fn(mem, dir);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 }
 
-async function withSleptBook<T>(
-  fn: (mem: AgentMemory, dir: string, story: string) => T | Promise<T>,
-): Promise<T> {
+async function withSleptBook<T>(fn: (mem: AgentMemory, dir: string, story: string) => T | Promise<T>): Promise<T> {
   return withMem(async (mem, dir) => {
     const story = longBook(800);
     expect(encodeLane(story)).toBe("narrative");
@@ -192,11 +202,12 @@ function packetNotes(pkt: string): string[] {
 
 function anthMemoryText(body: { system?: unknown }): string {
   const sys = body.system;
-  const parts = typeof sys === "string"
-    ? [sys]
-    : Array.isArray(sys)
-      ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-      : [];
+  const parts =
+    typeof sys === "string"
+      ? [sys]
+      : Array.isArray(sys)
+        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+        : [];
   return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
 }
 
@@ -432,12 +443,16 @@ describe("M30.1 fail-open", () => {
       const booms: { mockRestore(): void }[] = [];
       try {
         const mod = await import("./gist-retrieve");
-        booms.push(spyOn(mod, "retrieveGists").mockImplementation(() => {
-          throw new Error("m30 retrieveGists boom");
-        }));
-        booms.push(spyOn(GistStore.prototype, "hier").mockImplementation(() => {
-          throw new Error("m30 GistStore.hier boom");
-        }));
+        booms.push(
+          spyOn(mod, "retrieveGists").mockImplementation(() => {
+            throw new Error("m30 retrieveGists boom");
+          }),
+        );
+        booms.push(
+          spyOn(GistStore.prototype, "hier").mockImplementation(() => {
+            throw new Error("m30 GistStore.hier boom");
+          }),
+        );
         let out: unknown;
         expect(() => {
           out = mem.inject(list);
@@ -452,10 +467,7 @@ describe("M30.1 fail-open", () => {
 
 describe("M30.1 honesty", () => {
   test("owner files are not BrainMemory / memory_search", () => {
-    const files = [
-      join(import.meta.dir, "gist-retrieve.ts"),
-      join(import.meta.dir, "index.ts"),
-    ];
+    const files = [join(import.meta.dir, "gist-retrieve.ts"), join(import.meta.dir, "index.ts")];
     for (const p of files) {
       expect(existsSync(p)).toBe(true);
       const code = codeWithoutComments(readFileSync(p, "utf8"));

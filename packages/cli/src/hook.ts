@@ -1,11 +1,36 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, withFileLockAsync, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
+import {
+  edenHome,
+  ensureHome,
+  appendJsonl,
+  eventsPath,
+  readConfig,
+  readJson,
+  withFileLock,
+  withFileLockAsync,
+  outboxPath,
+  wrapPlaneUrl,
+  writeFileAtomic,
+} from "./home";
 import { redact, isStretchEnd, inDistribution, protocolHeaders } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
-import { eligibleForTransparent, executeTransparent, inSessionBucket, postToolUseReplacement, type LiveTool } from "./transparent";
+import {
+  eligibleForTransparent,
+  executeTransparent,
+  inSessionBucket,
+  postToolUseReplacement,
+  type LiveTool,
+} from "./transparent";
 import { applyHookOutput } from "./transcript-diff";
-import { appendLedgerRow, armRemainder, armRemainderFromBatch, claimRemainder, parseToolCalls, remainderDenyReason } from "./remainder";
+import {
+  appendLedgerRow,
+  armRemainder,
+  armRemainderFromBatch,
+  claimRemainder,
+  parseToolCalls,
+  remainderDenyReason,
+} from "./remainder";
 import { mapHostToolName } from "./shapes";
 import { memoryHookResponse } from "./memory-hook";
 
@@ -27,13 +52,77 @@ export type HookIn = {
 export type HookHost = "claude" | "gemini" | "opencode" | "codex" | "unknown";
 
 const EVENT_ALIASES: Record<string, string> = {
-  AfterToolUse: "PostToolUse", AfterTool: "PostToolUse", post_tool: "PostToolUse", "tool.execute.after": "PostToolUse",
-  AfterToolBatch: "PostToolBatch", post_tool_batch: "PostToolBatch",
-  BeforeToolUse: "PreToolUse", BeforeTool: "PreToolUse", pre_tool: "PreToolUse", "tool.execute.before": "PreToolUse",
-  SessionEnd: "Stop", session_stop: "Stop", session_end: "Stop", sessionEnd: "Stop", "session-end": "Stop", "session.deleted": "Stop", "session-deleted": "Stop", AfterAgent: "Stop", afterAgent: "Stop", SubagentStop: "Stop", subagent_stop: "Stop", afterAgentResponse: "Stop", AfterAgentResponse: "Stop", stop: "Stop", after_agent: "Stop", "after-agent": "Stop", agent_end: "Stop", turn_complete: "Stop", "subagent-stop": "Stop", "session.idle": "Stop", "session-idle": "Stop", "message.completed": "Stop", "chat.completed": "Stop", "session.updated": "Stop", "session-updated": "Stop", session_update: "Stop", sessionUpdate: "Stop", "agent.completed": "Stop",
-  session_start: "SessionStart", sessionStart: "SessionStart", "session-start": "SessionStart", "session.created": "SessionStart", sessionCreated: "SessionStart", "session-created": "SessionStart",
-  user_prompt_submit: "UserPromptSubmit", userPromptSubmit: "UserPromptSubmit", "user-prompt-submit": "UserPromptSubmit", prompt_submit: "UserPromptSubmit", userPrompt: "UserPromptSubmit", user_message: "UserPromptSubmit", prompt: "UserPromptSubmit", beforeSubmitPrompt: "UserPromptSubmit", beforeSubmit: "UserPromptSubmit", composerSubmit: "UserPromptSubmit", "prompt.submit": "UserPromptSubmit", "prompt-submit": "UserPromptSubmit", "prompt.submitted": "UserPromptSubmit", "chat.message": "UserPromptSubmit", "chat.updated": "UserPromptSubmit", "message.updated": "UserPromptSubmit", "message.created": "UserPromptSubmit", BeforeAgent: "UserPromptSubmit",
-  pre_compact: "PreCompact", preCompact: "PreCompact", "pre-compact": "PreCompact", PreCompress: "PreCompact", precompress: "PreCompact", compact: "PreCompact", "experimental.session.compacting": "PreCompact", "session.compacted": "PreCompact", "context.compact": "PreCompact",
+  AfterToolUse: "PostToolUse",
+  AfterTool: "PostToolUse",
+  post_tool: "PostToolUse",
+  "tool.execute.after": "PostToolUse",
+  AfterToolBatch: "PostToolBatch",
+  post_tool_batch: "PostToolBatch",
+  BeforeToolUse: "PreToolUse",
+  BeforeTool: "PreToolUse",
+  pre_tool: "PreToolUse",
+  "tool.execute.before": "PreToolUse",
+  SessionEnd: "Stop",
+  session_stop: "Stop",
+  session_end: "Stop",
+  sessionEnd: "Stop",
+  "session-end": "Stop",
+  "session.deleted": "Stop",
+  "session-deleted": "Stop",
+  AfterAgent: "Stop",
+  afterAgent: "Stop",
+  SubagentStop: "Stop",
+  subagent_stop: "Stop",
+  afterAgentResponse: "Stop",
+  AfterAgentResponse: "Stop",
+  stop: "Stop",
+  after_agent: "Stop",
+  "after-agent": "Stop",
+  agent_end: "Stop",
+  turn_complete: "Stop",
+  "subagent-stop": "Stop",
+  "session.idle": "Stop",
+  "session-idle": "Stop",
+  "message.completed": "Stop",
+  "chat.completed": "Stop",
+  "session.updated": "Stop",
+  "session-updated": "Stop",
+  session_update: "Stop",
+  sessionUpdate: "Stop",
+  "agent.completed": "Stop",
+  session_start: "SessionStart",
+  sessionStart: "SessionStart",
+  "session-start": "SessionStart",
+  "session.created": "SessionStart",
+  sessionCreated: "SessionStart",
+  "session-created": "SessionStart",
+  user_prompt_submit: "UserPromptSubmit",
+  userPromptSubmit: "UserPromptSubmit",
+  "user-prompt-submit": "UserPromptSubmit",
+  prompt_submit: "UserPromptSubmit",
+  userPrompt: "UserPromptSubmit",
+  user_message: "UserPromptSubmit",
+  prompt: "UserPromptSubmit",
+  beforeSubmitPrompt: "UserPromptSubmit",
+  beforeSubmit: "UserPromptSubmit",
+  composerSubmit: "UserPromptSubmit",
+  "prompt.submit": "UserPromptSubmit",
+  "prompt-submit": "UserPromptSubmit",
+  "prompt.submitted": "UserPromptSubmit",
+  "chat.message": "UserPromptSubmit",
+  "chat.updated": "UserPromptSubmit",
+  "message.updated": "UserPromptSubmit",
+  "message.created": "UserPromptSubmit",
+  BeforeAgent: "UserPromptSubmit",
+  pre_compact: "PreCompact",
+  preCompact: "PreCompact",
+  "pre-compact": "PreCompact",
+  PreCompress: "PreCompact",
+  precompress: "PreCompact",
+  compact: "PreCompact",
+  "experimental.session.compacting": "PreCompact",
+  "session.compacted": "PreCompact",
+  "context.compact": "PreCompact",
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -128,7 +217,7 @@ export async function runHook(): Promise<void> {
   try {
     body = JSON.parse(raw || "{}") as HookIn;
   } catch {
-    body = {}
+    body = {};
   }
   const HOOK_TIMEOUT_MS = 2_500;
   let out: Record<string, unknown> = { ok: true };
@@ -156,7 +245,8 @@ function readConfigSafely(): { steer_hooks?: boolean } | null {
   }
 }
 
-function readJsonl(path: string): Array<Record<string, unknown>> {  if (!existsSync(path)) return [];
+function readJsonl(path: string): Array<Record<string, unknown>> {
+  if (!existsSync(path)) return [];
   return readFileSync(path, "utf8")
     .split("\n")
     .filter(Boolean)
@@ -258,10 +348,7 @@ export function recordAppendedEvent(path: string, append: () => void): number {
   return lines;
 }
 
-export async function respondToHook(
-  raw: HookIn,
-  locker: HookLocker = withFileLock,
-): Promise<Record<string, unknown>> {
+export async function respondToHook(raw: HookIn, locker: HookLocker = withFileLock): Promise<Record<string, unknown>> {
   const { hook: body, host } = normalizeHookIn(raw);
   ensureHome();
   const session = body.session_id || "local";
@@ -366,7 +453,12 @@ export async function respondToHook(
   }
   if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
     try {
-      const orig = String((raw as Record<string, unknown>).hook_event_name ?? (raw as Record<string, unknown>).hookEventName ?? (raw as Record<string, unknown>).event ?? "");
+      const orig = String(
+        (raw as Record<string, unknown>).hook_event_name ??
+          (raw as Record<string, unknown>).hookEventName ??
+          (raw as Record<string, unknown>).event ??
+          "",
+      );
       const subagent = orig === "SubagentStop" || orig === "subagent_stop" || orig === "subagent-stop";
       memoryHookResponse({
         ...(raw as Record<string, unknown>),
@@ -382,9 +474,7 @@ export async function respondToHook(
     if (events.length >= 2) flushSession(session, events);
   }
   const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
-  const live = (
-    Array.isArray(liveRaw) ? liveRaw : []
-  ) as Array<{
+  const live = (Array.isArray(liveRaw) ? liveRaw : []) as Array<{
     name: string;
     sequence?: string[];
     envelope?: { inputs?: Record<string, unknown[]> };
@@ -420,8 +510,7 @@ export async function respondToHook(
       }
     } catch {}
     if (live.some((t) => t.name === name)) return { ok: true };
-    const steerHooks =
-      process.env.EDEN_STEER_HOOKS === "1" || cfg?.steer_hooks === true;
+    const steerHooks = process.env.EDEN_STEER_HOOKS === "1" || cfg?.steer_hooks === true;
     if (!steerHooks) return { ok: true };
     const hits = live
       .filter((t) => (t.sequence ?? [])[0] === name && inSessionBucket(t, body.session_id))

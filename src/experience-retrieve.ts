@@ -29,25 +29,101 @@ export type ExperienceSlice = {
 };
 
 const STOP = new Set([
-  "the", "of", "is", "a", "an", "on", "to", "and", "in", "for", "this", "that",
-  "with", "from", "into", "about", "these", "then", "still", "has", "out",
-  "please", "how", "should", "what", "why", "was", "are", "you", "your", "its",
-  "our", "not", "never", "use", "used", "just", "last", "week", "down", "look",
-  "next", "need", "before", "or", "no", "do", "does", "did", "can", "could",
-  "would", "which", "where", "when", "who", "whom", "shown", "show", "page",
+  "the",
+  "of",
+  "is",
+  "a",
+  "an",
+  "on",
+  "to",
+  "and",
+  "in",
+  "for",
+  "this",
+  "that",
+  "with",
+  "from",
+  "into",
+  "about",
+  "these",
+  "then",
+  "still",
+  "has",
+  "out",
+  "please",
+  "how",
+  "should",
+  "what",
+  "why",
+  "was",
+  "are",
+  "you",
+  "your",
+  "its",
+  "our",
+  "not",
+  "never",
+  "use",
+  "used",
+  "just",
+  "last",
+  "week",
+  "down",
+  "look",
+  "next",
+  "need",
+  "before",
+  "or",
+  "no",
+  "do",
+  "does",
+  "did",
+  "can",
+  "could",
+  "would",
+  "which",
+  "where",
+  "when",
+  "who",
+  "whom",
+  "shown",
+  "show",
+  "page",
 ]);
 /** AX chrome is not a place cell — "heading" must not pull every snapshot. */
 const AX_SKIP = new Set([
-  "heading", "button", "landmark", "rootwebarea", "role", "banner", "navigation",
-  "main", "contentinfo", "complementary", "form", "img", "link", "text",
-  "statictext", "submit", "click", "snapshot", "tree", "area", "web", "open",
+  "heading",
+  "button",
+  "landmark",
+  "rootwebarea",
+  "role",
+  "banner",
+  "navigation",
+  "main",
+  "contentinfo",
+  "complementary",
+  "form",
+  "img",
+  "link",
+  "text",
+  "statictext",
+  "submit",
+  "click",
+  "snapshot",
+  "tree",
+  "area",
+  "web",
+  "open",
 ]);
 
 /** Keep hyphen/dot compounds (`change-request`, `auth.ts`) plus alphanumerics.
  *  Query may split compounds so `change-request` still hits `change`+`request` in hay.
  *  Hay must NOT split (`other-catalog` is not the token `catalog`). */
 export function tokList(s: string, splitParts = true): string[] {
-  const raw = String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:[.-][a-z0-9]+)+|[a-z0-9]+/g) ?? [];
+  const raw =
+    String(s ?? "")
+      .toLowerCase()
+      .match(/[a-z0-9]+(?:[.-][a-z0-9]+)+|[a-z0-9]+/g) ?? [];
   const out: string[] = [];
   const seen = new Set<string>();
   const push = (w: string) => {
@@ -139,7 +215,9 @@ function scrubState(st: ExperienceState): ExperienceState {
       const r = redact(t);
       if (typeof r === "string") t = r;
     } catch {}
-    try { t = scrubMemoryText(t); } catch {}
+    try {
+      t = scrubMemoryText(t);
+    } catch {}
     return t;
   };
   const next: ExperienceState = { ...st };
@@ -164,12 +242,17 @@ function withoutTombstone(traj: ExperienceTraj, dir: string): ExperienceTraj | n
         const v = next[key];
         if (typeof v !== "string" || !v.trim()) continue;
         let cleaned = v;
-        try { cleaned = scrubTombstonedIdentity(v, dir); } catch { cleaned = v; }
+        try {
+          cleaned = scrubTombstonedIdentity(v, dir);
+        } catch {
+          cleaned = v;
+        }
         if (cleaned) next[key] = cleaned;
         else delete next[key];
       }
-      const useful = [next.url, next.action, next.thought, next.tree, next.goal, next.outcome]
-        .some((x) => typeof x === "string" && x.trim());
+      const useful = [next.url, next.action, next.thought, next.tree, next.goal, next.outcome].some(
+        (x) => typeof x === "string" && x.trim(),
+      );
       if (useful) states.push(next);
     }
     if (!states.length) return null;
@@ -220,9 +303,10 @@ function bestState(traj: ExperienceTraj, qToks: string[], qPlaces: Set<string>):
     const n = overlap(qToks, hay) + 3 * placeHits(qPlaces, placeCues(hay));
     const compound = compoundHits(qToks, hay);
     const hasTree = Boolean(st.tree && (overlap(qToks, st.tree) > 0 || compoundHits(qToks, st.tree) > 0));
-    const better = n > bestN
-      || (n === bestN && compound > bestCompound)
-      || (n === bestN && compound === bestCompound && hasTree && !bestTree);
+    const better =
+      n > bestN ||
+      (n === bestN && compound > bestCompound) ||
+      (n === bestN && compound === bestCompound && hasTree && !bestTree);
     if (better) {
       best = st;
       bestN = n;
@@ -230,7 +314,7 @@ function bestState(traj: ExperienceTraj, qToks: string[], qPlaces: Set<string>):
       bestTree = hasTree;
     }
   }
-  return bestN > 0 ? best : traj.states[traj.states.length - 1] ?? null;
+  return bestN > 0 ? best : (traj.states[traj.states.length - 1] ?? null);
 }
 
 function windowAround(hay: string, needles: string[], cap: number): string {
@@ -296,11 +380,7 @@ function latestT(traj: ExperienceTraj): number {
  * Rank traj files by lexical overlap + url/path place. ≤k token-capped slices.
  * Empty cue / missing dir / throw → [].
  */
-export function retrieveExperience(
-  dir: string,
-  cue: string,
-  opts?: { k?: number },
-): ExperienceSlice[] {
+export function retrieveExperience(dir: string, cue: string, opts?: { k?: number }): ExperienceSlice[] {
   try {
     const q = String(cue ?? "").trim();
     if (!q) return [];
@@ -333,7 +413,13 @@ export function retrieveExperience(
         // Skip one torn file.
       }
     }
-    ranked.sort((a, b) => b.score - a.score || b.compounds - a.compounds || latestT(b.traj) - latestT(a.traj) || a.traj.id.localeCompare(b.traj.id));
+    ranked.sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.compounds - a.compounds ||
+        latestT(b.traj) - latestT(a.traj) ||
+        a.traj.id.localeCompare(b.traj.id),
+    );
     const best = ranked[0]?.score ?? 0;
     const floor = best > 0 ? Math.max(1, Math.ceil(best * 0.5)) : 1;
     const out: ExperienceSlice[] = [];
@@ -342,7 +428,9 @@ export function retrieveExperience(
       if (hit.score < floor) continue;
       if (ranked[0] && ranked[0].compounds > 0 && hit.compounds === 0 && hit.place === 0) continue;
       let text = formatSlice(hit.st, qToks);
-      try { text = scrubTombstonedIdentity(text, dir); } catch {}
+      try {
+        text = scrubTombstonedIdentity(text, dir);
+      } catch {}
       if (!text) continue;
       const row: ExperienceSlice = {
         id: hit.traj.id,

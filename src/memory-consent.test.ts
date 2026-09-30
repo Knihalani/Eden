@@ -46,10 +46,21 @@ async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T 
   }
 }
 
-async function withMem<T>(fn: (mem: AgentMemory, dir: string) => T | Promise<T>, extra: Record<string, string | undefined> = {}): Promise<T> {
+async function withMem<T>(
+  fn: (mem: AgentMemory, dir: string) => T | Promise<T>,
+  extra: Record<string, string | undefined> = {},
+): Promise<T> {
   const dir = tmpDir();
   return withEnv(
-    { EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_SLEEP_EVERY: "0", EDEN_SLEEP_IDLE: "0", EDEN_KNOW: "0", ...extra },
+    {
+      EDEN_MEMORY_DIR: dir,
+      EDEN_HOME: undefined,
+      EDEN_MEMORY: "on",
+      EDEN_SLEEP_EVERY: "0",
+      EDEN_SLEEP_IDLE: "0",
+      EDEN_KNOW: "0",
+      ...extra,
+    },
     async () => {
       try {
         const mem = openMemory({ dir });
@@ -78,7 +89,14 @@ function hookContext(raw: Record<string, unknown> | null): string {
 }
 
 function jsonlContents(root: string): string {
-  const names = new Set(["memories.jsonl", "semantic.jsonl", "gists.jsonl", "howto.jsonl", "howtos.jsonl", "traces.jsonl"]);
+  const names = new Set([
+    "memories.jsonl",
+    "semantic.jsonl",
+    "gists.jsonl",
+    "howto.jsonl",
+    "howtos.jsonl",
+    "traces.jsonl",
+  ]);
   const chunks: string[] = [];
   const walk = (dir: string) => {
     if (!existsSync(dir)) return;
@@ -161,43 +179,66 @@ describe("M43 forget and pin in language", () => {
 
   test.failing("remember / always pins sqlite and it survives a small store cap", async () => {
     for (const utterance of PIN_UTTERANCES) {
-      await withMem(async (mem) => {
-        mem.observe([{ role: "user", content: utterance }]);
-        const pinned = mem.memories().filter((r) => /sqlite/i.test(r.text));
-        expect(pinned.length).toBeGreaterThan(0);
-        expect(pinned.some(isPin)).toBe(true);
+      await withMem(
+        async (mem) => {
+          mem.observe([{ role: "user", content: utterance }]);
+          const pinned = mem.memories().filter((r) => /sqlite/i.test(r.text));
+          expect(pinned.length).toBeGreaterThan(0);
+          expect(pinned.some(isPin)).toBe(true);
 
-        for (let i = 0; i < 16; i++) {
-          mem.remember(`The banner color is shade${i}.`, { kind: "fact", sal: 0 });
-        }
-        const live = mem.memories().filter((r) => /sqlite/i.test(r.text));
-        expect(live.length).toBeGreaterThan(0);
-        expect(live.some(isPin)).toBe(true);
-        const pkt = packet(mem.inject([{ role: "user", content: SQLITE_CUE }]));
-        expect(pkt).toContain(MEMORY_MARK);
-        expect(pkt).toMatch(/sqlite/i);
-      }, { EDEN_MEMORY_STORE_CAP: "8" });
+          for (let i = 0; i < 16; i++) {
+            mem.remember(`The banner color is shade${i}.`, { kind: "fact", sal: 0 });
+          }
+          const live = mem.memories().filter((r) => /sqlite/i.test(r.text));
+          expect(live.length).toBeGreaterThan(0);
+          expect(live.some(isPin)).toBe(true);
+          const pkt = packet(mem.inject([{ role: "user", content: SQLITE_CUE }]));
+          expect(pkt).toContain(MEMORY_MARK);
+          expect(pkt).toMatch(/sqlite/i);
+        },
+        { EDEN_MEMORY_STORE_CAP: "8" },
+      );
     }
   });
 
   test("readonly: forget sqlite and remember postgres are no-ops", async () => {
     const dir = tmpDir();
     try {
-      await withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_SLEEP_EVERY: "0", EDEN_SLEEP_IDLE: "0", EDEN_KNOW: "0" }, () => {
-        const mem = openMemory({ dir });
-        mem.observe([{ role: "user", content: "Use sqlite." }]);
-        mem.close();
-      });
-      await withEnv({ EDEN_MEMORY: "readonly", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_SLEEP_EVERY: "0", EDEN_SLEEP_IDLE: "0", EDEN_KNOW: "0" }, () => {
-        const mem = openMemory({ dir });
-        mem.observe([{ role: "user", content: "forget sqlite" }]);
-        mem.observe([{ role: "user", content: "remember always use postgres" }]);
-        const pkt = packet(mem.inject([{ role: "user", content: SQLITE_CUE }]));
-        expect(pkt).toContain(MEMORY_MARK);
-        expect(pkt).toMatch(/sqlite/i);
-        expect(mem.memories().some((r) => /postgres/i.test(r.text))).toBe(false);
-        mem.close();
-      });
+      await withEnv(
+        {
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_SLEEP_EVERY: "0",
+          EDEN_SLEEP_IDLE: "0",
+          EDEN_KNOW: "0",
+        },
+        () => {
+          const mem = openMemory({ dir });
+          mem.observe([{ role: "user", content: "Use sqlite." }]);
+          mem.close();
+        },
+      );
+      await withEnv(
+        {
+          EDEN_MEMORY: "readonly",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_SLEEP_EVERY: "0",
+          EDEN_SLEEP_IDLE: "0",
+          EDEN_KNOW: "0",
+        },
+        () => {
+          const mem = openMemory({ dir });
+          mem.observe([{ role: "user", content: "forget sqlite" }]);
+          mem.observe([{ role: "user", content: "remember always use postgres" }]);
+          const pkt = packet(mem.inject([{ role: "user", content: SQLITE_CUE }]));
+          expect(pkt).toContain(MEMORY_MARK);
+          expect(pkt).toMatch(/sqlite/i);
+          expect(mem.memories().some((r) => /postgres/i.test(r.text))).toBe(false);
+          mem.close();
+        },
+      );
       const blob = jsonlContents(dir);
       expect(blob).toMatch(/sqlite/i);
       expect(blob).not.toMatch(/postgres/i);
@@ -209,32 +250,62 @@ describe("M43 forget and pin in language", () => {
   test("off: forget and pin are no-ops and inject is the original list", async () => {
     const dir = tmpDir();
     try {
-      await withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_SLEEP_EVERY: "0", EDEN_SLEEP_IDLE: "0", EDEN_KNOW: "0" }, () => {
-        const mem = openMemory({ dir });
-        mem.observe([{ role: "user", content: "Use sqlite." }]);
-        mem.close();
-      });
-      await withEnv({ EDEN_MEMORY: "0", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_SLEEP_EVERY: "0", EDEN_SLEEP_IDLE: "0", EDEN_KNOW: "0" }, () => {
-        const mem = openMemory({ dir });
-        mem.observe([{ role: "user", content: "forget sqlite" }]);
-        mem.observe([{ role: "user", content: "remember always use postgres" }]);
-        const list = [{ role: "user", content: SQLITE_CUE }];
-        const out = mem.inject(list);
-        expect(out).toBe(list);
-        expect(packet(out)).not.toContain(MEMORY_MARK);
-        expect(JSON.stringify(out)).not.toMatch(/403/);
-        mem.close();
-      });
+      await withEnv(
+        {
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_SLEEP_EVERY: "0",
+          EDEN_SLEEP_IDLE: "0",
+          EDEN_KNOW: "0",
+        },
+        () => {
+          const mem = openMemory({ dir });
+          mem.observe([{ role: "user", content: "Use sqlite." }]);
+          mem.close();
+        },
+      );
+      await withEnv(
+        {
+          EDEN_MEMORY: "0",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_SLEEP_EVERY: "0",
+          EDEN_SLEEP_IDLE: "0",
+          EDEN_KNOW: "0",
+        },
+        () => {
+          const mem = openMemory({ dir });
+          mem.observe([{ role: "user", content: "forget sqlite" }]);
+          mem.observe([{ role: "user", content: "remember always use postgres" }]);
+          const list = [{ role: "user", content: SQLITE_CUE }];
+          const out = mem.inject(list);
+          expect(out).toBe(list);
+          expect(packet(out)).not.toContain(MEMORY_MARK);
+          expect(JSON.stringify(out)).not.toMatch(/403/);
+          mem.close();
+        },
+      );
       const blob = jsonlContents(dir);
       expect(blob).toMatch(/sqlite/i);
       expect(blob).not.toMatch(/postgres/i);
-      await withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_SLEEP_EVERY: "0", EDEN_SLEEP_IDLE: "0", EDEN_KNOW: "0" }, () => {
-        const mem = openMemory({ dir });
-        const pkt = packet(mem.inject([{ role: "user", content: SQLITE_CUE }]));
-        expect(pkt).toMatch(/sqlite/i);
-        expect(pkt).not.toMatch(/postgres/i);
-        mem.close();
-      });
+      await withEnv(
+        {
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_SLEEP_EVERY: "0",
+          EDEN_SLEEP_IDLE: "0",
+          EDEN_KNOW: "0",
+        },
+        () => {
+          const mem = openMemory({ dir });
+          const pkt = packet(mem.inject([{ role: "user", content: SQLITE_CUE }]));
+          expect(pkt).toMatch(/sqlite/i);
+          expect(pkt).not.toMatch(/postgres/i);
+          mem.close();
+        },
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -246,7 +317,12 @@ describe("M43 forget and pin in language", () => {
       mem.close();
       const blob = jsonlContents(dir);
       expect(blob).not.toContain(SECRET);
-      expect(mem.memories().map((r) => r.text).join("\n")).not.toContain(SECRET);
+      expect(
+        mem
+          .memories()
+          .map((r) => r.text)
+          .join("\n"),
+      ).not.toContain(SECRET);
     });
   });
 
@@ -372,7 +448,10 @@ describe("M43 adversarial forget", () => {
     await withMem(async (mem, dir) => {
       mem.observe([{ role: "user", content: PG }]);
       await mem.sleep();
-      const gistBefore = new GistStore(dir).latest("", 3).map((g) => g.text).join("\n");
+      const gistBefore = new GistStore(dir)
+        .latest("", 3)
+        .map((g) => g.text)
+        .join("\n");
       expect(gistBefore).toMatch(/stack uses postgres/i);
       mem.observe([{ role: "user", content: FORGET_PG }]);
       await mem.sleep();
@@ -447,8 +526,8 @@ describe("M43 adversarial forget", () => {
     await withMem(async (mem, dir) => {
       mem.observe([{ role: "user", content: PG }]);
       mem.close();
-      appendFileSync(join(dir, "memories.jsonl"), "{\"id\":\n");
-      appendFileSync(join(dir, "semantic.jsonl"), "{\"s\":\"stack\"\n");
+      appendFileSync(join(dir, "memories.jsonl"), '{"id":\n');
+      appendFileSync(join(dir, "semantic.jsonl"), '{"s":"stack"\n');
       const again = openMemory({ dir });
       expect(() => again.inject([{ role: "user", content: PG_CUE }])).not.toThrow();
       expect(packet(again.inject([{ role: "user", content: PG_CUE }]))).toMatch(/postgres/i);

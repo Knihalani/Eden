@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as doctorMod from "./doctor";
-import { applyCodexToml, geminiHookConfig, hookCommand, opencodePluginSource, preHookCommand, codexHooksJson } from "./setup";
+import {
+  applyCodexToml,
+  geminiHookConfig,
+  hookCommand,
+  opencodePluginSource,
+  preHookCommand,
+  codexHooksJson,
+} from "./setup";
 import {
   autoApproveCheck,
   collectDoctor,
@@ -40,7 +47,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     writeFileSync(join(home, "live-tools.json"), "[]");
     try {
       const checks = await collectDoctor({
@@ -94,7 +104,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     writeFileSync(join(home, "live-tools.json"), JSON.stringify([{ name: "lookupTicket", rollout: "canary" }]));
     try {
       const checks = await collectDoctor({
@@ -105,7 +118,9 @@ describe("doctor", () => {
           return new Response("no", { status: 404 });
         }) as typeof fetch,
       });
-      expect(checks.find((c) => c.name === "live-tools")?.detail).toBe("1 programs · 1 Canary on disk · wrap serving 0");
+      expect(checks.find((c) => c.name === "live-tools")?.detail).toBe(
+        "1 programs · 1 Canary on disk · wrap serving 0",
+      );
       expect(checks.find((c) => c.name === "agent-http")?.ok).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.EDEN_HOME;
@@ -119,7 +134,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
@@ -143,13 +161,17 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8787" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8787" }),
+    );
     const seen: string[] = [];
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
           seen.push(String(input));
-          if (String(input).includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (String(input).includes(":8788/health"))
+            return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
           if (String(input).includes(":8794/health")) return new Response(JSON.stringify({ ok: true }));
           return new Response("no", { status: 404 });
         }) as typeof fetch,
@@ -170,7 +192,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async () => {
@@ -196,7 +221,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     const { writeHookdPid, clearHookdPid } = await import("./hookd");
     writeHookdPid(99999999);
     try {
@@ -205,7 +233,8 @@ describe("doctor", () => {
       );
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
-          if (String(input).includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (String(input).includes(":8788/health"))
+            return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
           if (String(input).includes(":8794/health")) {
             return new Response(JSON.stringify({ ok: true, service: "eden-hookd", pid: 4242 }));
           }
@@ -230,13 +259,17 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     const { writeHookdPid, clearHookdPid } = await import("./hookd");
     writeHookdPid(process.pid);
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
-          if (String(input).includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (String(input).includes(":8788/health"))
+            return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
           if (String(input).includes(":8794/health")) {
             return new Response(JSON.stringify({ ok: true, service: "eden-hookd", pid: process.pid }));
           }
@@ -259,13 +292,17 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     const { writeHookdPid, clearHookdPid } = await import("./hookd");
     writeHookdPid(99999999);
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
-          if (String(input).includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (String(input).includes(":8788/health"))
+            return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
           throw new Error("hookd down");
         }) as typeof fetch,
       });
@@ -282,16 +319,15 @@ describe("doctor", () => {
   test("live-tools names Canary vs Live in the same words as Home", () => {
     expect(liveToolsDetail([])).toBe("0 programs");
     expect(liveToolsDetail([{ name: "old" }])).toBe("1 programs");
+    expect(liveToolsDetail([{ name: "a", rollout: "canary" }, { name: "b", rollout: "canary" }, { name: "c" }])).toBe(
+      "3 programs · 2 Canary · 1 Live",
+    );
     expect(
       liveToolsDetail([
         { name: "a", rollout: "canary" },
         { name: "b", rollout: "canary" },
-        { name: "c" },
       ]),
-    ).toBe("3 programs · 2 Canary · 1 Live");
-    expect(liveToolsDetail([{ name: "a", rollout: "canary" }, { name: "b", rollout: "canary" }])).toBe(
-      "2 programs · 2 Canary",
-    );
+    ).toBe("2 programs · 2 Canary");
     expect(liveToolsDoctorLine([{ name: "a", rollout: "canary" }], 0)).toBe(
       "1 programs · 1 Canary on disk · wrap serving 0",
     );
@@ -303,7 +339,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
@@ -360,7 +399,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     writeFileSync(join(home, "knock.json"), JSON.stringify({ tool_id: "desk" }));
     try {
       const checks = await collectDoctor({
@@ -394,7 +436,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
@@ -436,7 +481,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_gated", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_gated", base_url: "http://127.0.0.1:8788" }),
+    );
 
     function authOf(init?: RequestInit): string | undefined {
       const h = init?.headers;
@@ -519,11 +567,15 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
-          if (String(input).includes(":8794/health")) return new Response(JSON.stringify({ ok: true, service: "eden-hookd" }));
+          if (String(input).includes(":8794/health"))
+            return new Response(JSON.stringify({ ok: true, service: "eden-hookd" }));
           throw new Error("wrap down");
         }) as typeof fetch,
       });
@@ -667,7 +719,10 @@ describe("doctor", () => {
     const prevAllow = process.env.EDEN_NET_ALLOW;
     process.env.EDEN_HOME = home;
     delete process.env.EDEN_NET_ALLOW;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
@@ -704,7 +759,10 @@ describe("doctor", () => {
     const prevHome = process.env.EDEN_HOME;
     const prevAllow = process.env.EDEN_NET_ALLOW;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     const fakeFetch = (async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
@@ -747,9 +805,7 @@ describe("doctor", () => {
     expect(surfaceModeOf("JIT")).toBe("jit");
     expect(surfaceModeOf("shadow")).toBe("jit-shadow");
     expect(surfaceModeOf("bogus")).toBe("all");
-    expect(surfaceCheck(undefined).detail).toBe(
-      "EDEN_SURFACE jit · default after soak PASS precision=1.000 n=38",
-    );
+    expect(surfaceCheck(undefined).detail).toBe("EDEN_SURFACE jit · default after soak PASS precision=1.000 n=38");
     expect(surfaceCheck("all").ok).toBe(true);
     expect(surfaceCheck("all").detail).toMatch(/opt-out · default jit/);
     expect(surfaceCheck("jit").name).toBe("surface");
@@ -760,7 +816,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async (input: string | URL | Request) => {
@@ -799,7 +858,10 @@ describe("doctor", () => {
     const prev = process.env.EDEN_AUTO_APPROVE;
     process.env.EDEN_HOME = home;
     delete process.env.EDEN_AUTO_APPROVE;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     const fakeFetch = (async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
@@ -858,7 +920,10 @@ describe("doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     const hung = () => new Promise<Response>(() => {}) as Promise<Response>;
     const t0 = Date.now();
     try {
@@ -932,7 +997,10 @@ describe("M13.3 memory hooks doctor", () => {
     mkdirSync(home, { recursive: true });
     const prev = process.env.EDEN_HOME;
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }),
+    );
     try {
       const checks = await collectDoctor({
         fetch: (async () => new Response("no", { status: 404 })) as unknown as typeof fetch,
@@ -1018,10 +1086,7 @@ describe("M14.2 extra-host memory doctor", () => {
       expect(halfCodex.some((c) => c.ok === false)).toBe(true);
       expect(halfCodex.some((c) => /half-wired|PostToolUse|missing|post_tool/i.test(c.detail))).toBe(true);
 
-      writeFileSync(
-        join(home, ".codex", "hooks.json"),
-        JSON.stringify(codexHooksJson(hookCmd, preCmd), null, 2),
-      );
+      writeFileSync(join(home, ".codex", "hooks.json"), JSON.stringify(codexHooksJson(hookCmd, preCmd), null, 2));
       writeFileSync(join(home, ".codex", "config.toml"), applyCodexToml("", hookCmd, preCmd));
       let wired: ExtraHostCheck[] = [];
       expect(() => {
@@ -1042,7 +1107,7 @@ describe("M14.2 extra-host memory doctor", () => {
       mkdirSync(join(home, ".codex"), { recursive: true });
       writeFileSync(
         join(home, ".codex", "config.toml"),
-        "[features]\ncodex_hooks = true\n\n[hooks.eden]\npost_tool = [\"sh\", \"-c\", \"echo hi\"]\n",
+        '[features]\ncodex_hooks = true\n\n[hooks.eden]\npost_tool = ["sh", "-c", "echo hi"]\n',
       );
       const rows = extraHostMemoryCheck({ homedir: home });
       const codex = namedHost(rows, /codex/i);
@@ -1063,7 +1128,10 @@ describe("M14.2 extra-host memory doctor", () => {
       expect(halfOc.some((c) => /half-wired|missing|plugin/i.test(c.detail))).toBe(true);
 
       mkdirSync(join(home, ".config", "opencode", "plugin"), { recursive: true });
-      writeFileSync(join(home, ".config", "opencode", "plugin", "eden-recorder.js"), opencodePluginSource("/abs/cli.ts"));
+      writeFileSync(
+        join(home, ".config", "opencode", "plugin", "eden-recorder.js"),
+        opencodePluginSource("/abs/cli.ts"),
+      );
       let wired: ExtraHostCheck[] = [];
       expect(() => {
         wired = extraHostMemoryCheck({ homedir: home });
@@ -1106,7 +1174,7 @@ describe("M14.2 extra-host memory doctor", () => {
     const home = mkdtempSync(join(tmpdir(), "eden-m14-doc-cursor-"));
     try {
       mkdirSync(join(home, ".cursor"), { recursive: true });
-      writeFileSync(join(home, ".cursor", "hooks.json"), "{\"hooks\":{}}");
+      writeFileSync(join(home, ".cursor", "hooks.json"), '{"hooks":{}}');
       const rows = extraHostMemoryCheck({ homedir: home });
       const cursor = namedHost(rows, /cursor/i);
       expect(cursor.length).toBeGreaterThan(0);

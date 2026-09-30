@@ -41,34 +41,52 @@ const AREA_SET = new Set<string>([
 /** Glue for implementer cards. Not STOP — extra query tokens like “AAAA record” stay unknown. */
 const CARD_GLUE = new Set(["record", "type", "scheme", "uri", "link", "relation"]);
 /** Filler in technique queries; pack AND still saw them, card grounding should not require them. */
-const TECH_OPTIONAL = new Set(["command", "line", "cli", "tool", "using", "with", "from", "into", "this", "that", "nested", "output", "records", "services", "without", "compile", "step", "please", "just"]);
+const TECH_OPTIONAL = new Set([
+  "command",
+  "line",
+  "cli",
+  "tool",
+  "using",
+  "with",
+  "from",
+  "into",
+  "this",
+  "that",
+  "nested",
+  "output",
+  "records",
+  "services",
+  "without",
+  "compile",
+  "step",
+  "please",
+  "just",
+]);
 const MAX_TOKENS = 48;
 const ENTITY = /&(?:#x?[0-9a-f]+|[a-z]+);/i;
 const URLISH = /https?:\/\//i;
 
 /** English countries that take a definite article: the United Kingdom, the Netherlands, … */
-const THE_COUNTRY = new Set(
-  [
-    "united kingdom",
-    "united states",
-    "united states of america",
-    "united arab emirates",
-    "netherlands",
-    "philippines",
-    "czech republic",
-    "dominican republic",
-    "democratic republic of the congo",
-    "ivory coast",
-    "bahamas",
-    "gambia",
-    "maldives",
-    "seychelles",
-    "comoros",
-    "solomon islands",
-    "marshall islands",
-    "central african republic",
-  ],
-);
+const THE_COUNTRY = new Set([
+  "united kingdom",
+  "united states",
+  "united states of america",
+  "united arab emirates",
+  "netherlands",
+  "philippines",
+  "czech republic",
+  "dominican republic",
+  "democratic republic of the congo",
+  "ivory coast",
+  "bahamas",
+  "gambia",
+  "maldives",
+  "seychelles",
+  "comoros",
+  "solomon islands",
+  "marshall islands",
+  "central african republic",
+]);
 
 type Hit = { s: string; p: string; o: string; e: string; url?: string };
 type KnowSearch = {
@@ -82,7 +100,10 @@ export type FactCard = { fact: string; confidence: number; url?: string };
 export function citeableUrl(raw?: string): string | undefined {
   const u = (raw || "").trim();
   if (u.length < 12 || u.length > 240 || !/^https?:\/\//i.test(u) || /[\s<>"'\\]/.test(u)) return;
-  try { const p = new URL(u); if ((p.protocol === "http:" || p.protocol === "https:") && p.hostname.includes(".")) return u; } catch {}
+  try {
+    const p = new URL(u);
+    if ((p.protocol === "http:" || p.protocol === "https:") && p.hostname.includes(".")) return u;
+  } catch {}
 }
 
 function sourceOf(raw: Hit, s: string): string | undefined {
@@ -96,13 +117,24 @@ function extract() {
 }
 
 function toks(s: string): string[] {
-  const expanded = s.length < 96 && (s.includes("rfc") || s.includes("RFC") || s.includes("w3c") || s.includes("W3C") || /utf8/i.test(s))
-    ? s.replace(/\b(rfc)(\d{1,5})\b/gi, "$1 $2").replace(/\b(w3c)([a-z0-9-]+)/gi, "$1 $2").replace(/\butf8\b/gi, "utf-8")
-    : s;
-  const parts = expanded.toLowerCase().split(/[^a-z0-9+.-]+/).filter((t) => t.length > 1);
+  const expanded =
+    s.length < 96 &&
+    (s.includes("rfc") || s.includes("RFC") || s.includes("w3c") || s.includes("W3C") || /utf8/i.test(s))
+      ? s
+          .replace(/\b(rfc)(\d{1,5})\b/gi, "$1 $2")
+          .replace(/\b(w3c)([a-z0-9-]+)/gi, "$1 $2")
+          .replace(/\butf8\b/gi, "utf-8")
+      : s;
+  const parts = expanded
+    .toLowerCase()
+    .split(/[^a-z0-9+.-]+/)
+    .filter((t) => t.length > 1);
   if (!expanded.includes("-")) return parts;
   const out: string[] = [];
-  for (const p of parts) { out.push(p); if (p.includes("-")) for (const bit of p.split("-")) if (bit.length > 1) out.push(bit); }
+  for (const p of parts) {
+    out.push(p);
+    if (p.includes("-")) for (const bit of p.split("-")) if (bit.length > 1) out.push(bit);
+  }
   return out;
 }
 
@@ -110,11 +142,16 @@ function toks(s: string): string[] {
 function rewriteQuery(q: string): string {
   const t = q.trim();
   if (!t) return t;
-  const sax = /^(.+?)['\u2019]s capital$/i.exec(t)?.[1]?.replace(/\s+/g, " ").trim().replace(/^(the|a)\s+/i, "");
+  const sax = /^(.+?)['\u2019]s capital$/i
+    .exec(t)?.[1]
+    ?.replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(the|a)\s+/i, "");
   if (sax && sax.length >= 2) return `capital of ${sax}`;
   const cs = t.includes("=") ? /^charset\s*=\s*["']?([a-z0-9][a-z0-9._:+-]{1,40})["']?$/i.exec(t)?.[1] : undefined;
   if (cs || (t.length <= 5 && /^utf8$/i.test(t))) return cs ? (/^utf8$/i.test(cs) ? "utf-8" : cs) : "utf-8";
-  const spdx = (t.includes("SPDX") || t.includes("spdx")) && /^SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)$/i.exec(t)?.[1];
+  const spdx =
+    (t.includes("SPDX") || t.includes("spdx")) && /^SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)$/i.exec(t)?.[1];
   if (spdx) return spdx;
   const wk = t.includes("well-known") && /(?:^|\/)\.well-known\/([a-z0-9][a-z0-9._-]{1,48})$/i.exec(t)?.[1];
   if (wk) return `IANA well-known ${wk.toLowerCase()}`;
@@ -122,7 +159,10 @@ function rewriteQuery(q: string): string {
   if (uri) return uri.toLowerCase();
   const used = /^what(?:'s| is)\s+([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
   const usedBare = /^([A-Za-z][\w.+-]{1,40})\s+used for\??$/i.exec(t);
-  return phraseExact(t) || (used ? `used for ${used[1]!.toLowerCase()}` : usedBare ? `used for ${usedBare[1]!.toLowerCase()}` : t);
+  return (
+    phraseExact(t) ||
+    (used ? `used for ${used[1]!.toLowerCase()}` : usedBare ? `used for ${usedBare[1]!.toLowerCase()}` : t)
+  );
 }
 
 function capTokens(s: string, n = MAX_TOKENS): string {
@@ -137,7 +177,9 @@ function mediaWant(q: string): string | undefined {
 function rfcTitle(o: string, e: string): string {
   const { shortTitle } = extract();
   const clean = (s: string) => shortTitle(s.replace(/^RFC\s*\d+\s*[:\-–]\s*/i, ""));
-  const a = clean(o), b = clean(e), uri = (s: string) => /\(URI\)/i.test(s);
+  const a = clean(o),
+    b = clean(e),
+    uri = (s: string) => /\(URI\)/i.test(s);
   if (uri(a) !== uri(b)) return uri(a) ? a : b;
   return b.split(/\s+/).filter(Boolean).length > a.split(/\s+/).filter(Boolean).length ? b : a;
 }
@@ -154,13 +196,21 @@ function articleFor(word: string): "a" | "an" {
 }
 
 function countryForCard(s: string): string {
-  const country = s.replace(/^the\s+/i, "").replace(/\s+/g, " ").trim();
+  const country = s
+    .replace(/^the\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
   return THE_COUNTRY.has(country.toLowerCase()) ? `the ${country}` : country;
 }
 
 function rankHits(q: string, hits: Hit[]): Hit[] {
   const mediaQ = mediaWant(q);
-  const list = mediaQ ? hits.filter((h) => { const m = ianaMedia(h.s) || ""; return m === mediaQ || (mediaQ === "application/json" && m.endsWith("/json")); }) : hits.slice();
+  const list = mediaQ
+    ? hits.filter((h) => {
+        const m = ianaMedia(h.s) || "";
+        return m === mediaQ || (mediaQ === "application/json" && m.endsWith("/json"));
+      })
+    : hits.slice();
   if (mediaQ && !list.length) return [];
   const ql = q.trim().toLowerCase();
   const wantObs = /\bobsolet/.test(ql);
@@ -174,12 +224,28 @@ function rankHits(q: string, hits: Hit[]): Hit[] {
     if (techniqueQ && h.p === "is" && h.o.toLowerCase().startsWith("used for")) {
       const ot = toks(h.o);
       let n = 0;
-      for (const t of techRest) if (ot.includes(t) || (t.length >= 4 && ot.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4))) n++;
+      for (const t of techRest)
+        if (
+          ot.includes(t) ||
+          (t.length >= 4 && ot.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4))
+        )
+          n++;
       return -8 - n - Math.min(h.o.length, 80) / 80;
     }
     if (mediaQ && (ianaMedia(h.s) || "") === mediaQ) return 0;
     if (sl === ql || sl === `rfc ${ql.replace(/^rfc\s+/, "")}`) return h.p === "is" ? 0 : 0.4;
-    if (sl === `iana method ${ql}` || sl === `iana http ${ql}` || sl === `iana header ${ql}` || sl === `iana charset ${ql}` || sl === `iana scheme ${ql}` || sl === `spdx ${ql}` || sl === `iana dns ${ql}` || sl === `iana well-known ${ql}` || (/^utf-?8$/i.test(ql) && sl === "iana charset utf-8")) return 0;
+    if (
+      sl === `iana method ${ql}` ||
+      sl === `iana http ${ql}` ||
+      sl === `iana header ${ql}` ||
+      sl === `iana charset ${ql}` ||
+      sl === `iana scheme ${ql}` ||
+      sl === `spdx ${ql}` ||
+      sl === `iana dns ${ql}` ||
+      sl === `iana well-known ${ql}` ||
+      (/^utf-?8$/i.test(ql) && sl === "iana charset utf-8")
+    )
+      return 0;
     return h.p === "capital" ? 1 : h.p === "is" ? 2 : 3;
   };
   return list.sort((a, b) => score(a) - score(b));
@@ -189,20 +255,28 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   const { looksLikeCode, decodeEntities } = extract();
   const n = { s: decodeEntities(raw.s), p: raw.p, o: decodeEntities(raw.o), e: decodeEntities(raw.e) };
   if (n.p === "about" || n.p === "date") return;
-  if (n.p !== "capital" && n.p !== "is" && n.p !== "obsoletes" && n.p !== "updates" && looksLikeCode(`${n.o} ${n.e}`)) return;
+  if (n.p !== "capital" && n.p !== "is" && n.p !== "obsoletes" && n.p !== "updates" && looksLikeCode(`${n.o} ${n.e}`))
+    return;
   let fact = "";
   if (n.p === "capital") fact = `The capital of ${countryForCard(n.s)} is ${n.o}.`;
   else if (/^RFC\s+\d/i.test(n.s) && n.p === "is") {
     if (/^(?:obsoleted|updated) by RFC\s+\d/i.test(n.o)) fact = `${n.s} is ${n.o}.`;
-    else { const title = rfcTitle(n.o, n.e); fact = AREA_SET.has(title) ? `${n.s} is ${articleFor(title)} ${title} RFC.` : `${n.s} is ${title}.`; }
+    else {
+      const title = rfcTitle(n.o, n.e);
+      fact = AREA_SET.has(title) ? `${n.s} is ${articleFor(title)} ${title} RFC.` : `${n.s} is ${title}.`;
+    }
   } else if (/^W3C\s+/i.test(n.s) && n.p === "is") fact = `${n.s} is ${n.o}.`;
-  else if (/^IANA\s+media\s+/i.test(n.s) && n.p === "is") fact = `${n.s.replace(/^IANA\s+media\s+/i, "")} is ${articleFor(n.o)} ${n.o} media type.`;
+  else if (/^IANA\s+media\s+/i.test(n.s) && n.p === "is")
+    fact = `${n.s.replace(/^IANA\s+media\s+/i, "")} is ${articleFor(n.o)} ${n.o} media type.`;
   else if (/^SPDX\s+/i.test(n.s) && n.p === "is") {
     const id = n.s.replace(/^SPDX\s+/i, "");
     fact = tautology(n.o, `${id} license`) || tautology(n.o, id) ? `${id} is an SPDX license.` : `${id} is ${n.o}.`;
-  } else if (/^IANA\s+method\s+/i.test(n.s) && n.p === "is") fact = `${n.s.replace(/^IANA\s+method\s+/i, "")} is ${n.o}.`;
-  else if (/^IANA\s+http\s+/i.test(n.s) && n.p === "is") fact = `HTTP ${n.s.replace(/^IANA\s+http\s+/i, "")} is ${n.o}.`;
-  else if (/^IANA\s+protocol\s+/i.test(n.s) && n.p === "is") fact = `${n.o} is protocol ${n.s.replace(/^IANA\s+protocol\s+/i, "")}.`;
+  } else if (/^IANA\s+method\s+/i.test(n.s) && n.p === "is")
+    fact = `${n.s.replace(/^IANA\s+method\s+/i, "")} is ${n.o}.`;
+  else if (/^IANA\s+http\s+/i.test(n.s) && n.p === "is")
+    fact = `HTTP ${n.s.replace(/^IANA\s+http\s+/i, "")} is ${n.o}.`;
+  else if (/^IANA\s+protocol\s+/i.test(n.s) && n.p === "is")
+    fact = `${n.o} is protocol ${n.s.replace(/^IANA\s+protocol\s+/i, "")}.`;
   else if (/^IANA\s+scheme\s+/i.test(n.s) && n.p === "is") {
     const sch = n.s.replace(/^IANA\s+scheme\s+/i, "");
     fact = n.o.trim().toLowerCase() === sch.toLowerCase() ? `${sch} is a URI scheme.` : `${sch} is ${n.o}.`;
@@ -216,7 +290,8 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   } else if (/^IANA\s+header\s+/i.test(n.s) && n.p === "is") {
     const h = n.s.replace(/^IANA\s+header\s+/i, "");
     fact = tautology(n.o, `${h} http field header`) ? `${h} is an HTTP header.` : `${h} is ${n.o}.`;
-  } else if (/^IANA\s+dns\s+/i.test(n.s) && n.p === "is") fact = `${n.s.replace(/^IANA\s+dns\s+/i, "")} is ${articleFor(n.o)} ${n.o} record.`;
+  } else if (/^IANA\s+dns\s+/i.test(n.s) && n.p === "is")
+    fact = `${n.s.replace(/^IANA\s+dns\s+/i, "")} is ${articleFor(n.o)} ${n.o} record.`;
   else if (/^IANA\s+well-known\s+/i.test(n.s) && n.p === "is") {
     const wk = n.s.replace(/^IANA\s+well-known\s+/i, "");
     fact = n.o.trim().toLowerCase() === wk.toLowerCase() ? `${wk} is a well-known URI.` : `${wk} is ${n.o}.`;
@@ -229,19 +304,35 @@ function cardFromHit(q: string, raw: Hit): FactCard | undefined {
   fact = capTokens(fact, MAX_TOKENS);
   if (!fact.trim() || ENTITY.test(fact) || URLISH.test(fact)) return;
   const blob = `${n.s} ${n.p} ${n.o} ${n.e}`.toLowerCase();
-  const blobTokList = toks(blob), blobToks = new Set(blobTokList);
+  const blobTokList = toks(blob),
+    blobToks = new Set(blobTokList);
   const techniqueQ = q.trim().toLowerCase().startsWith("used for ");
   const qtoks = toks(q).filter((t) => !STOP.has(t) && !(techniqueQ && TECH_OPTIONAL.has(t)));
-  const queryHit = !qtoks.length || qtoks.every((t) => blobToks.has(t) || (techniqueQ && t.length >= 4 && blobTokList.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4)));
-  const grounded = toks(fact).map((t) => t.replace(/^[.-]+|[.-]+$/g, "")).filter((t) => t.length > 1).every((t) => STOP.has(t) || CARD_GLUE.has(t) || blobToks.has(t) || blob.includes(t));
+  const queryHit =
+    !qtoks.length ||
+    qtoks.every(
+      (t) =>
+        blobToks.has(t) ||
+        (techniqueQ &&
+          t.length >= 4 &&
+          blobTokList.some((b) => b.startsWith(t) && b.length - t.length > 0 && b.length - t.length <= 4)),
+    );
+  const grounded = toks(fact)
+    .map((t) => t.replace(/^[.-]+|[.-]+$/g, ""))
+    .filter((t) => t.length > 1)
+    .every((t) => STOP.has(t) || CARD_GLUE.has(t) || blobToks.has(t) || blob.includes(t));
   if (!grounded || !queryHit) return;
-  const typed = n.p === "capital" || n.p === "is" || n.p === "obsoletes" || n.p === "updates", url = sourceOf(raw, n.s);
+  const typed = n.p === "capital" || n.p === "is" || n.p === "obsoletes" || n.p === "updates",
+    url = sourceOf(raw, n.s);
   return url ? { fact, confidence: typed ? 0.6 : 0.5, url } : { fact, confidence: typed ? 0.6 : 0.5 };
 }
 
 export function formatCard(q: string, hits: Hit[]): FactCard | { unknown: true } {
   if (!q.trim()) return { unknown: true };
-  for (const raw of rankHits(q, hits)) { const card = cardFromHit(q, raw); if (card) return card; }
+  for (const raw of rankHits(q, hits)) {
+    const card = cardFromHit(q, raw);
+    if (card) return card;
+  }
   return { unknown: true };
 }
 
@@ -293,17 +384,18 @@ function ensureFlash() {
 
 function canonCountry(name: string): string | undefined {
   if (Object.prototype.hasOwnProperty.call(CAPITAL_OF, name)) return name;
-  if (!CAPITAL_NAME.size) for (const country of Object.keys(CAPITAL_OF)) {
-    const k = country.toLowerCase();
-    if (!CAPITAL_NAME.has(k)) CAPITAL_NAME.set(k, country);
-  }
+  if (!CAPITAL_NAME.size)
+    for (const country of Object.keys(CAPITAL_OF)) {
+      const k = country.toLowerCase();
+      if (!CAPITAL_NAME.has(k)) CAPITAL_NAME.set(k, country);
+    }
   return CAPITAL_NAME.get(name.toLowerCase());
 }
 
 function internFact(key: string, fact: string): FactCard {
   const k = key.toLowerCase();
   const c = INTERN.get(key) || INTERN.get(k) || Object.freeze({ fact, confidence: CONF });
-  return INTERN.set(key, c), k !== key && INTERN.set(k, c), c;
+  return (INTERN.set(key, c), k !== key && INTERN.set(k, c), c);
 }
 
 function keep(t: string, c: FactCard | undefined): FactCard | undefined {
@@ -326,62 +418,115 @@ function buildTyped(t: string): FactCard | undefined {
   const cached = INTERN.get(t);
   if (cached) return cached;
 
-  if (n >= 9 && t.slice(0, 9).toLowerCase() === "used for ") { const fact = HOT_TECH[t.slice(9).trim().toLowerCase()]; if (fact) return keep(t, internFact(t.toLowerCase(), fact)); }
+  if (n >= 9 && t.slice(0, 9).toLowerCase() === "used for ") {
+    const fact = HOT_TECH[t.slice(9).trim().toLowerCase()];
+    if (fact) return keep(t, internFact(t.toLowerCase(), fact));
+  }
 
   if (n >= 7 && n <= 10 && (t.startsWith("RFC ") || t.startsWith("rfc "))) {
     const rest = t.slice(4);
     if (rest.length < 3 || rest.length > 5 || rest !== String(+rest)) return;
-    const num = +rest, hit = RFC_INTERN.get(num);
-    if (hit) return INTERN.set(t, hit), hit;
+    const num = +rest,
+      hit = RFC_INTERN.get(num);
+    if (hit) return (INTERN.set(t, hit), hit);
     const title = rfcTitleHot(num);
     if (!title) return;
     const card = Object.freeze({ fact: `RFC ${num} is ${title}.`, confidence: CONF });
-    return RFC_INTERN.set(num, card), INTERN.set(t, card), card;
+    return (RFC_INTERN.set(num, card), INTERN.set(t, card), card);
   }
 
   if (n >= 12 && t.slice(0, 11).toLowerCase() === "capital of ") {
-    const country = canonCountry(t.slice(11).trim()), city = country && CAPITAL_OF[country];
+    const country = canonCountry(t.slice(11).trim()),
+      city = country && CAPITAL_OF[country];
     if (!country || !city) return;
     return keep(t, internFact(`capital of ${country}`, `The capital of ${countryForCard(country)} is ${city}.`));
   }
 
-  if (n === 3 && t >= "100" && t <= "599" && t === String(+t)) { const reason = HTTP_REASON[+t]; if (reason) return keep(t, internFact(t, `HTTP ${t} is ${reason}.`)); }
-  if (n >= 7 && n <= 8 && /^HTTP\s*[1-5]\d{2}$/i.test(t)) { const code = t.replace(/\D/g, ""), reason = HTTP_REASON[+code]; if (reason) return keep(t, internFact(code, `HTTP ${code} is ${reason}.`)); }
+  if (n === 3 && t >= "100" && t <= "599" && t === String(+t)) {
+    const reason = HTTP_REASON[+t];
+    if (reason) return keep(t, internFact(t, `HTTP ${t} is ${reason}.`));
+  }
+  if (n >= 7 && n <= 8 && /^HTTP\s*[1-5]\d{2}$/i.test(t)) {
+    const code = t.replace(/\D/g, ""),
+      reason = HTTP_REASON[+code];
+    if (reason) return keep(t, internFact(code, `HTTP ${code} is ${reason}.`));
+  }
 
-  const media = mediaWant(t), sub = media?.split("/")[1] || "";
-  if (media && aliasableMediaSubtype(sub)) { const obj = MEDIA_SUBTYPE_OBJECT[sub.toLowerCase()] || sub; return keep(t, internFact(t, `${media} is ${articleFor(obj)} ${obj} media type.`)); }
+  const media = mediaWant(t),
+    sub = media?.split("/")[1] || "";
+  if (media && aliasableMediaSubtype(sub)) {
+    const obj = MEDIA_SUBTYPE_OBJECT[sub.toLowerCase()] || sub;
+    return keep(t, internFact(t, `${media} is ${articleFor(obj)} ${obj} media type.`));
+  }
 
   const up = t.toUpperCase();
-  if (METHOD_SET.has(up) && n <= 7) { const obj = METHOD_OBJECT[up]; if (obj) return keep(t, internFact(up, `${up} is ${obj}.`)); }
+  if (METHOD_SET.has(up) && n <= 7) {
+    const obj = METHOD_OBJECT[up];
+    if (obj) return keep(t, internFact(up, `${up} is ${obj}.`));
+  }
   if (HEADER_SET.has(t)) return keep(t, internFact(t, `${t} is an HTTP header.`));
   const spdx = SPDX_OBJECT[t] ? t : (ensureFlash(), SPDX_LC.get(t.toLowerCase()));
   if (spdx) return keep(t, internFact(spdx, `${spdx} is an SPDX license.`));
 
   const csKey = t.toLowerCase() === "utf8" ? "utf-8" : t.toLowerCase();
   if (csKey === "utf-8" || Object.prototype.hasOwnProperty.call(CHARSET_OBJECT, csKey)) {
-    const shown = csKey === "utf-8" ? "UTF-8" : t, obj = CHARSET_OBJECT[csKey] || shown;
-    const fact = tautology(obj, csKey) || obj.toLowerCase() === csKey || shown === obj ? `${shown} is a charset.` : `${shown} is ${obj}.`;
+    const shown = csKey === "utf-8" ? "UTF-8" : t,
+      obj = CHARSET_OBJECT[csKey] || shown;
+    const fact =
+      tautology(obj, csKey) || obj.toLowerCase() === csKey || shown === obj
+        ? `${shown} is a charset.`
+        : `${shown} is ${obj}.`;
     return keep(t, internFact(csKey, fact));
   }
 
-  if (PROTO_SET.has(up)) { ensureFlash(); const num = PROTO_BY_NAME.get(up); if (num !== undefined) return keep(t, internFact(up, `${up} is protocol ${num}.`)); }
+  if (PROTO_SET.has(up)) {
+    ensureFlash();
+    const num = PROTO_BY_NAME.get(up);
+    if (num !== undefined) return keep(t, internFact(up, `${up} is protocol ${num}.`));
+  }
   const scheme = t.toLowerCase();
-  if (SCHEME_SET.has(scheme) && Object.prototype.hasOwnProperty.call(SCHEME_OBJECT, scheme)) return keep(t, internFact(scheme, `${scheme} is ${SCHEME_OBJECT[scheme]}.`));
+  if (SCHEME_SET.has(scheme) && Object.prototype.hasOwnProperty.call(SCHEME_OBJECT, scheme))
+    return keep(t, internFact(scheme, `${scheme} is ${SCHEME_OBJECT[scheme]}.`));
 
-  if (n >= 9 && t.slice(0, 9).toLowerCase() === "iana dns ") { const rr = t.slice(9).trim().toUpperCase(), obj = DNS_OBJECT[rr]; if (obj) return keep(t, internFact(`iana dns ${rr}`, `${rr} is ${articleFor(obj)} ${obj} record.`)); }
-  if (DNS_SET.has(up) && DNS_OBJECT[up]) { const obj = DNS_OBJECT[up]!; return keep(t, internFact(up, `${up} is ${articleFor(obj)} ${obj} record.`)); }
+  if (n >= 9 && t.slice(0, 9).toLowerCase() === "iana dns ") {
+    const rr = t.slice(9).trim().toUpperCase(),
+      obj = DNS_OBJECT[rr];
+    if (obj) return keep(t, internFact(`iana dns ${rr}`, `${rr} is ${articleFor(obj)} ${obj} record.`));
+  }
+  if (DNS_SET.has(up) && DNS_OBJECT[up]) {
+    const obj = DNS_OBJECT[up]!;
+    return keep(t, internFact(up, `${up} is ${articleFor(obj)} ${obj} record.`));
+  }
 
-  if (n >= 4 && t.slice(0, 4).toLowerCase() === "w3c ") { const slug = t.slice(4).trim().toLowerCase(), obj = W3C_OBJECT[slug]; if (obj) return keep(t, internFact(`w3c ${slug}`, `W3C ${slug} is ${obj}.`)); }
-  if (n >= 7 && t.slice(0, 7).toLowerCase() === "whatwg ") { const slug = t.slice(7).trim().toLowerCase(), obj = WHATWG_OBJECT[slug]; if (obj) return keep(t, internFact(`whatwg ${slug}`, `WHATWG ${slug} is ${obj}.`)); }
+  if (n >= 4 && t.slice(0, 4).toLowerCase() === "w3c ") {
+    const slug = t.slice(4).trim().toLowerCase(),
+      obj = W3C_OBJECT[slug];
+    if (obj) return keep(t, internFact(`w3c ${slug}`, `W3C ${slug} is ${obj}.`));
+  }
+  if (n >= 7 && t.slice(0, 7).toLowerCase() === "whatwg ") {
+    const slug = t.slice(7).trim().toLowerCase(),
+      obj = WHATWG_OBJECT[slug];
+    if (obj) return keep(t, internFact(`whatwg ${slug}`, `WHATWG ${slug} is ${obj}.`));
+  }
   if (n >= 15 && t.slice(0, 14).toLowerCase() === "unicode block ") {
     const raw = t.slice(14).trim();
     if (!BLOCK_LC.size) for (const name of Object.keys(UNICODE_BLOCK_OBJECT)) BLOCK_LC.set(name.toLowerCase(), name);
-    const name = Object.prototype.hasOwnProperty.call(UNICODE_BLOCK_OBJECT, raw) ? raw : BLOCK_LC.get(raw.toLowerCase());
+    const name = Object.prototype.hasOwnProperty.call(UNICODE_BLOCK_OBJECT, raw)
+      ? raw
+      : BLOCK_LC.get(raw.toLowerCase());
     const obj = name && UNICODE_BLOCK_OBJECT[name];
     if (name && obj) return keep(t, internFact(`unicode block ${name}`, `Unicode Block ${name} is ${obj}.`));
   }
-  if (n >= 15 && t.slice(0, 14).toLowerCase() === "iana language ") { const tag = t.slice(14).trim().toLowerCase(), obj = LANG_OBJECT[tag]; if (obj) return keep(t, internFact(`iana language ${tag}`, `IANA language ${tag} is ${obj}.`)); }
-  if (n >= 16 && t.slice(0, 16).toLowerCase() === "iana well-known ") { const wk = t.slice(16).trim().toLowerCase(), obj = WELLKNOWN_OBJECT[wk]; if (obj) return keep(t, internFact(`iana well-known ${wk}`, `${wk} is ${obj}.`)); }
+  if (n >= 15 && t.slice(0, 14).toLowerCase() === "iana language ") {
+    const tag = t.slice(14).trim().toLowerCase(),
+      obj = LANG_OBJECT[tag];
+    if (obj) return keep(t, internFact(`iana language ${tag}`, `IANA language ${tag} is ${obj}.`));
+  }
+  if (n >= 16 && t.slice(0, 16).toLowerCase() === "iana well-known ") {
+    const wk = t.slice(16).trim().toLowerCase(),
+      obj = WELLKNOWN_OBJECT[wk];
+    if (obj) return keep(t, internFact(`iana well-known ${wk}`, `${wk} is ${obj}.`));
+  }
   if (n === 4 && SCRIPT_OBJECT[t]) return keep(t, internFact(t, `Unicode Script ${t} is ${SCRIPT_OBJECT[t]}.`));
 }
 
@@ -392,17 +537,28 @@ function sharedStore(): KnowSearch {
 
 export function knowQuery(q: string, store?: KnowSearch) {
   if (!q.trim()) return { unknown: true };
-  const nq = rewriteQuery(q), flash = buildTyped(nq);
-  if (flash || (!store && /^(what|how|why|where|when|who|can |could |please )\b/i.test(q.trim()))) return flash || { unknown: true };
+  const nq = rewriteQuery(q),
+    flash = buildTyped(nq);
+  if (flash || (!store && /^(what|how|why|where|when|who|can |could |please )\b/i.test(q.trim())))
+    return flash || { unknown: true };
   const s = store ?? sharedStore();
   const searchHits = (query: string) => {
     const hits = s.search(query, 8).filter((h) => h.p !== "about" && h.p !== "date");
     if (!/\b(obsoletes|obsoleted|updates|updated)\b/i.test(query)) return hits;
-    const want = /\bupdates?\b/i.test(query) && !/\bobsolet/i.test(query) ? "updates" : "obsoletes", edge = hits.find((h) => h.p === want) || hits.find((h) => h.p === "is" && /obsoleted by|updated by/i.test(h.o));
+    const want = /\bupdates?\b/i.test(query) && !/\bobsolet/i.test(query) ? "updates" : "obsoletes",
+      edge = hits.find((h) => h.p === want) || hits.find((h) => h.p === "is" && /obsoleted by|updated by/i.test(h.o));
     return edge ? [edge, ...hits.filter((h) => h !== edge)] : hits;
   };
-  let query = nq, hits = searchHits(query);
-  if (!hits.length && /^used for /i.test(nq)) for (const alt of techniqueQueryFallbacks(nq)) { hits = searchHits(alt); if (hits.length) { query = alt; break; } }
+  let query = nq,
+    hits = searchHits(query);
+  if (!hits.length && /^used for /i.test(nq))
+    for (const alt of techniqueQueryFallbacks(nq)) {
+      hits = searchHits(alt);
+      if (hits.length) {
+        query = alt;
+        break;
+      }
+    }
   return formatCard(query, hits);
 }
 

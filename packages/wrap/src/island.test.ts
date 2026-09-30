@@ -18,7 +18,9 @@ function fakeFetch(calls: { n: number }, latencyMs = 0): typeof fetch {
     const body = JSON.parse(String(init.body));
     const user = JSON.parse(body.messages[1].content);
     return new Response(
-      JSON.stringify({ choices: [{ message: { content: JSON.stringify({ owner: user.repos?.[0]?.split("/")[0] ?? "?" }) } }] }),
+      JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ owner: user.repos?.[0]?.split("/")[0] ?? "?" }) } }],
+      }),
       { status: 200 },
     );
   };
@@ -86,8 +88,20 @@ function twoIslandProgram(): StretchProgram {
     description: "independent islands",
     inputSchema: { type: "object" },
     steps: [
-      { id: "a", kind: "island", input: { kind: "input", path: "left" }, system: "s", outputSchema: { type: "object" } },
-      { id: "b", kind: "island", input: { kind: "input", path: "right" }, system: "s", outputSchema: { type: "object" } },
+      {
+        id: "a",
+        kind: "island",
+        input: { kind: "input", path: "left" },
+        system: "s",
+        outputSchema: { type: "object" },
+      },
+      {
+        id: "b",
+        kind: "island",
+        input: { kind: "input", path: "right" },
+        system: "s",
+        outputSchema: { type: "object" },
+      },
     ],
     returns: { kind: "from", step: "b", path: "" },
     contract: { witnesses: 1, minLlmReduction: 5, allowExact: true },
@@ -102,7 +116,15 @@ function oneIslandProgram(): StretchProgram {
     name: "one_island",
     description: "lone island",
     inputSchema: { type: "object" },
-    steps: [{ id: "a", kind: "island", input: { kind: "input", path: "left" }, system: "s", outputSchema: { type: "object" } }],
+    steps: [
+      {
+        id: "a",
+        kind: "island",
+        input: { kind: "input", path: "left" },
+        system: "s",
+        outputSchema: { type: "object" },
+      },
+    ],
     returns: { kind: "from", step: "a", path: "" },
     contract: { witnesses: 1, minLlmReduction: 5, allowExact: true },
     manifest: null,
@@ -328,12 +350,16 @@ describe("island-miss batching", () => {
       const method = String(init?.method ?? "GET").toUpperCase();
       if (u.includes("messages/batches") && method === "POST") {
         calls.batch++;
-        return new Response(JSON.stringify({ id: "msgbatch_cents", processing_status: "in_progress" }), { status: 200 });
+        return new Response(JSON.stringify({ id: "msgbatch_cents", processing_status: "in_progress" }), {
+          status: 200,
+        });
       }
       if (u.includes("messages/batches/msgbatch_cents") && method === "GET") {
         gets++;
         if (gets < 2) {
-          return new Response(JSON.stringify({ id: "msgbatch_cents", processing_status: "in_progress" }), { status: 200 });
+          return new Response(JSON.stringify({ id: "msgbatch_cents", processing_status: "in_progress" }), {
+            status: 200,
+          });
         }
         const mk = (custom_id: string, owner: string) => ({
           custom_id,
@@ -360,7 +386,12 @@ describe("island-miss batching", () => {
     const out = await runProgram(
       twoIslandProgram(),
       { left: { repos: ["acme/app"] }, right: { repos: ["beta/app"] } },
-      { registry: registryFrom({}), island: wrapIsland({ apiKey: "sk-test", fetch: fetchFn })!, llmCents: 1, checkEnvelope: false },
+      {
+        registry: registryFrom({}),
+        island: wrapIsland({ apiKey: "sk-test", fetch: fetchFn })!,
+        llmCents: 1,
+        checkEnvelope: false,
+      },
     );
     expect(calls.batch).toBe(1);
     expect(calls.chat).toBe(0);
@@ -371,12 +402,16 @@ describe("island-miss batching", () => {
 
   test("runProgram: a lone blocking island stays sync (full cents)", async () => {
     const calls = { chat: 0, batch: 0 };
-    const out = await runProgram(oneIslandProgram(), { left: { repos: ["acme/app"] } }, {
-      registry: registryFrom({}),
-      island: wrapIsland({ apiKey: "sk-test", fetch: fakeProvider(calls) }),
-      llmCents: 1,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      oneIslandProgram(),
+      { left: { repos: ["acme/app"] } },
+      {
+        registry: registryFrom({}),
+        island: wrapIsland({ apiKey: "sk-test", fetch: fakeProvider(calls) }),
+        llmCents: 1,
+        checkEnvelope: false,
+      },
+    );
     expect(calls.batch).toBe(0);
     expect(calls.chat).toBe(1);
     expect(out.stats.cents).toBe(1);
@@ -387,14 +422,27 @@ describe("island-miss batching", () => {
     const calls = { chat: 0, batch: 0 };
     const program: StretchProgram = {
       ...oneIslandProgram(),
-      steps: [{ id: "a", kind: "island", input: { kind: "literal", value: { repos: ["x/y"] } }, system: "s", outputSchema: { type: "object" }, pinned: true }],
+      steps: [
+        {
+          id: "a",
+          kind: "island",
+          input: { kind: "literal", value: { repos: ["x/y"] } },
+          system: "s",
+          outputSchema: { type: "object" },
+          pinned: true,
+        },
+      ],
     };
     await expect(
-      runProgram(program, {}, {
-        registry: registryFrom({}),
-        island: wrapIsland({ apiKey: "sk-test", fetch: fakeProvider(calls) }),
-        checkEnvelope: false,
-      }),
+      runProgram(
+        program,
+        {},
+        {
+          registry: registryFrom({}),
+          island: wrapIsland({ apiKey: "sk-test", fetch: fakeProvider(calls) }),
+          checkEnvelope: false,
+        },
+      ),
     ).rejects.toThrow(/pinned island miss/);
     expect(calls.chat).toBe(0);
     expect(calls.batch).toBe(0);

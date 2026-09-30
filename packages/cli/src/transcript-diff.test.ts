@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { applyHookOutput, applyOpenCodeAfter, applyOpenCodeHostOutput, applyCodexAfter, applyGeminiAfter, modelVisibleText } from "./transcript-diff";
+import {
+  applyHookOutput,
+  applyOpenCodeAfter,
+  applyOpenCodeHostOutput,
+  applyCodexAfter,
+  applyGeminiAfter,
+  modelVisibleText,
+} from "./transcript-diff";
 import { postToolUseReplacement } from "./transparent";
 import { BUILTIN_TOOLS, matchesNativeShape } from "./shapes";
 

@@ -63,14 +63,17 @@ async function withMem<T>(
   session?: string,
 ): Promise<T> {
   const dir = tmpDir(prefix);
-  return withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_MEMORY_CAP: undefined }, async () => {
-    try {
-      const mem = openMemory({ dir, session });
-      return await fn(mem, dir);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+  return withEnv(
+    { EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_MEMORY_CAP: undefined },
+    async () => {
+      try {
+        const mem = openMemory({ dir, session });
+        return await fn(mem, dir);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 }
 
 function packetOf(messages: unknown[]): string {
@@ -89,19 +92,23 @@ function hookHay(raw: Record<string, unknown> | null): string {
 function seedGold(dir: string): void {
   putExperience(dir, {
     id: "q25-change-request",
-    states: [{
-      url: "https://example.test/change-request",
-      tree: GOLD_TREE,
-      t: 1,
-    }],
+    states: [
+      {
+        url: "https://example.test/change-request",
+        tree: GOLD_TREE,
+        t: 1,
+      },
+    ],
   });
   putExperience(dir, {
     id: "other-catalog",
-    states: [{
-      url: "https://example.test/other-catalog",
-      tree: DIST_TREE,
-      t: 2,
-    }],
+    states: [
+      {
+        url: "https://example.test/other-catalog",
+        tree: DIST_TREE,
+        t: 2,
+      },
+    ],
   });
 }
 
@@ -173,32 +180,41 @@ describe("M24.2 packet merge — labeled slices; Start has no traj dump", () => 
     });
   });
 
-  test("empty cue inject and notesFor(\"\") do not dump traj files", async () => {
+  test('empty cue inject and notesFor("") do not dump traj files', async () => {
     await withMem("eden-m24-nodump-", (mem, dir) => {
       seedGold(dir);
       expect(packetOf(mem.inject([{ role: "user", content: "" }]))).not.toContain(GOLD_MARKER);
       expect(packetOf(mem.inject([]))).not.toContain(GOLD);
-      expect(mem.notesFor("").map((r) => r.text).join("\n")).not.toContain(GOLD_MARKER);
+      expect(
+        mem
+          .notesFor("")
+          .map((r) => r.text)
+          .join("\n"),
+      ).not.toContain(GOLD_MARKER);
       expect(packetOf(mem.inject([{ role: "user", content: "what's 2+2?" }]))).not.toContain(GOLD_MARKER);
     });
   });
 
   test("SessionStart briefing is pins+gists, not a traj dump", async () => {
     const session = "s-m24-start";
-    await withMem("eden-m24-start-", (mem, dir) => {
-      seedGold(dir);
-      mem.remember("Always run tests before committing", { kind: "constraint" });
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      const hay = hookHay(start);
-      expect(hay).not.toContain(GOLD_MARKER);
-      expect(hay).not.toContain(DISTRACTOR);
-      expect(hay).not.toMatch(/RootWebArea/);
-      expect(hay).not.toMatch(new RegExp(`${EXPERIENCE_DIRNAME}/`));
-      if (hay.includes(MEMORY_MARK)) {
-        expect(hay).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
+    await withMem(
+      "eden-m24-start-",
+      (mem, dir) => {
+        seedGold(dir);
+        mem.remember("Always run tests before committing", { kind: "constraint" });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const hay = hookHay(start);
+        expect(hay).not.toContain(GOLD_MARKER);
+        expect(hay).not.toContain(DISTRACTOR);
         expect(hay).not.toMatch(/RootWebArea/);
-      }
-    }, session);
+        expect(hay).not.toMatch(new RegExp(`${EXPERIENCE_DIRNAME}/`));
+        if (hay.includes(MEMORY_MARK)) {
+          expect(hay).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
+          expect(hay).not.toMatch(/RootWebArea/);
+        }
+      },
+      session,
+    );
   });
 });
 
@@ -221,7 +237,10 @@ describe("M24.3 gold_in_packet Change-request (q25-shaped)", () => {
       expect(packetOf((openai as { messages?: unknown[] }).messages ?? [])).toContain(GOLD);
 
       const real = AgentMemory.prototype.inject;
-      const inject = spyOn(AgentMemory.prototype, "inject").mockImplementation(function (this: AgentMemory, messages: unknown[]) {
+      const inject = spyOn(AgentMemory.prototype, "inject").mockImplementation(function (
+        this: AgentMemory,
+        messages: unknown[],
+      ) {
         return real.call(mem, messages);
       });
       try {
@@ -261,13 +280,15 @@ describe("M24.3 gold_in_packet Change-request (q25-shaped)", () => {
     try {
       putExperience(dir, {
         id: "q25-change-request",
-        states: [{
-          url: "https://example.test/change-request?" + "x".repeat(400),
-          action: "click Submit on the change-request catalog ".repeat(8),
-          thought: "planning to inspect the change-request catalog next ".repeat(8),
-          tree: GOLD_TREE,
-          t: 1,
-        }],
+        states: [
+          {
+            url: "https://example.test/change-request?" + "x".repeat(400),
+            action: "click Submit on the change-request catalog ".repeat(8),
+            thought: "planning to inspect the change-request catalog next ".repeat(8),
+            tree: GOLD_TREE,
+            t: 1,
+          },
+        ],
       });
       const hit = retrieveExperience(dir, Q25_CUE)[0];
       expect(hit?.text).toContain(GOLD);
@@ -284,7 +305,12 @@ describe("M24.3 gold_in_packet Change-request (q25-shaped)", () => {
         id: "q25-change-request",
         states: [
           { url: "https://example.test/change-request", tree: GOLD_TREE, t: 1 },
-          { url: "https://example.test/change-request", action: "click catalog change-request retry", thought: "inspect change-request catalog", t: 2 },
+          {
+            url: "https://example.test/change-request",
+            action: "click catalog change-request retry",
+            thought: "inspect change-request catalog",
+            t: 2,
+          },
         ],
       });
       const hit = retrieveExperience(dir, Q25_CUE)[0];
@@ -358,11 +384,13 @@ describe("M24.3 gold_in_packet Change-request (q25-shaped)", () => {
     await withMem("eden-m24-alice-", (mem, dir) => {
       putExperience(dir, {
         id: "q25-change-request",
-        states: [{
-          url: "https://example.test/change-request",
-          tree: `${GOLD_TREE} The catalog chairperson is Alice`,
-          t: 1,
-        }],
+        states: [
+          {
+            url: "https://example.test/change-request",
+            tree: `${GOLD_TREE} The catalog chairperson is Alice`,
+            t: 1,
+          },
+        ],
       });
       mem.observe([{ role: "user", content: "The catalog chairperson is Bob." }]);
       sleep(mem);

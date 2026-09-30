@@ -10,7 +10,11 @@ const ON = new Set(["1", "true", "yes", "on"]);
 
 export function memoryLogEnabled(raw = process.env.EDEN_MEMORY_LOG): boolean {
   try {
-    return ON.has(String(raw ?? "").trim().toLowerCase());
+    return ON.has(
+      String(raw ?? "")
+        .trim()
+        .toLowerCase(),
+    );
   } catch {
     return false;
   }

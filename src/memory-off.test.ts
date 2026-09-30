@@ -37,7 +37,14 @@ function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T {
 }
 
 function jsonlContents(root: string): string {
-  const names = new Set(["memories.jsonl", "semantic.jsonl", "gists.jsonl", "howto.jsonl", "howtos.jsonl", "traces.jsonl"]);
+  const names = new Set([
+    "memories.jsonl",
+    "semantic.jsonl",
+    "gists.jsonl",
+    "howto.jsonl",
+    "howtos.jsonl",
+    "traces.jsonl",
+  ]);
   const chunks: string[] = [];
   const walk = (dir: string) => {
     if (!existsSync(dir)) return;

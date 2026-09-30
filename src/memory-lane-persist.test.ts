@@ -83,7 +83,10 @@ describe("M17.2 lane persist + eviction", () => {
     try {
       const p = jsonlPath(dir);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(p, `${JSON.stringify({ id: "m-legacy", text: "CI is GitHub Actions", kind: "fact", tags: [], at: 1 })}\n`);
+      writeFileSync(
+        p,
+        `${JSON.stringify({ id: "m-legacy", text: "CI is GitHub Actions", kind: "fact", tags: [], at: 1 })}\n`,
+      );
       const mem = openMemory({ dir });
       expect(mem.memories()[0]?.lane).toBe("chat");
       mem.close();

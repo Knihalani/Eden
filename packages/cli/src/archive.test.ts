@@ -1,14 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  archiveCli,
-  archiveHelp,
-  archiveStatus,
-  compactArchive,
-  compactHotFile,
-  formatArchiveStatus,
-} from "./archive";
+import { archiveCli, archiveHelp, archiveStatus, compactArchive, compactHotFile, formatArchiveStatus } from "./archive";
 
 describe("archival tiers", () => {
   let home: string;

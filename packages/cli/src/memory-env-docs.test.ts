@@ -37,7 +37,13 @@ function envNames(text: string): string[] {
 
 describe("M49.4 memory env docs", () => {
   test("CLI README names the floor, sleep, import, and three states", () => {
-    for (const needle of ["EDEN_MEMORY_MIN", "EDEN_SLEEP_EVERY", "EDEN_SLEEP_IDLE", "EDEN_SLEEP_BUDGET", "eden memory import"]) {
+    for (const needle of [
+      "EDEN_MEMORY_MIN",
+      "EDEN_SLEEP_EVERY",
+      "EDEN_SLEEP_IDLE",
+      "EDEN_SLEEP_BUDGET",
+      "eden memory import",
+    ]) {
       expect(cliReadme).toContain(needle);
     }
     expect(cliReadme).toMatch(/\bon\b/);
@@ -46,7 +52,14 @@ describe("M49.4 memory env docs", () => {
   });
 
   test("plugin README keeps three states, the floor, and sleep names", () => {
-    for (const needle of ["EDEN_MEMORY_MIN", "EDEN_SLEEP_EVERY", "EDEN_SLEEP_IDLE", "EDEN_SLEEP_BUDGET", "readonly", "off"]) {
+    for (const needle of [
+      "EDEN_MEMORY_MIN",
+      "EDEN_SLEEP_EVERY",
+      "EDEN_SLEEP_IDLE",
+      "EDEN_SLEEP_BUDGET",
+      "readonly",
+      "off",
+    ]) {
       expect(pluginReadme).toContain(needle);
     }
     expect(pluginReadme).toMatch(/\bon\b/);

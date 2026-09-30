@@ -1,4 +1,12 @@
-import { canaryPct, envelopeLine, formatDiffCard, llmBadge, type ProgramDiff, type Refusal, type StretchProgram } from "@eden/ir";
+import {
+  canaryPct,
+  envelopeLine,
+  formatDiffCard,
+  llmBadge,
+  type ProgramDiff,
+  type Refusal,
+  type StretchProgram,
+} from "@eden/ir";
 import { readConfig, resolveApiKey, wrapBase } from "./home";
 
 export function approveHelp(): string {
@@ -70,10 +78,7 @@ function rowLine(c: CandidateRow): string {
   return reason ? `${c.id}  ${c.verdict}  ${reason}` : `${c.id}  ${c.verdict}`;
 }
 
-export async function approveCli(
-  args: string[] = [],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+export async function approveCli(args: string[] = [], opts?: { fetch?: typeof fetch }): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(approveHelp());
     return 0;
@@ -160,10 +165,7 @@ export async function approveCli(
   return 0;
 }
 
-export async function promoteCli(
-  args: string[] = [],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+export async function promoteCli(args: string[] = [], opts?: { fetch?: typeof fetch }): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(approveHelp());
     return 0;

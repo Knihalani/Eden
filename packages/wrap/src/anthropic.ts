@@ -37,7 +37,8 @@ interface AnthropicRequest {
   stream?: boolean;
 }
 
-const VOLATILE_TEXT = /(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})|(?:available skills)|(?:skill(?:s)?\s+(?:list|index|listing))/i;
+const VOLATILE_TEXT =
+  /(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})|(?:available skills)|(?:skill(?:s)?\s+(?:list|index|listing))/i;
 
 type SystemBlock = { type: string; text?: string; cache_control?: { type: "ephemeral" } };
 
@@ -101,11 +102,7 @@ export function steerAnthropicToolUses(
 
   const steered = steerToolCalls(openaiCalls, programs);
   const survivingIds = new Set(steered.map((c) => c.id).filter((id): id is string => typeof id === "string"));
-  const byId = new Map(
-    steered
-      .filter((c) => typeof c.id === "string" && c.function)
-      .map((c) => [c.id as string, c]),
-  );
+  const byId = new Map(steered.filter((c) => typeof c.id === "string" && c.function).map((c) => [c.id as string, c]));
   return content.flatMap((block) => {
     if (block.type !== "tool_use") return [block];
     if (!block.id || !survivingIds.has(block.id)) return []; // absorbed by the compiled run
@@ -148,7 +145,11 @@ export function anthropicMessageToSse(msg: AnthropicMessage): string {
   blocks.forEach((block, i) => {
     if (block.type === "text") {
       sse("content_block_start", { type: "content_block_start", index: i, content_block: { type: "text", text: "" } });
-      sse("content_block_delta", { type: "content_block_delta", index: i, delta: { type: "text_delta", text: block.text ?? "" } });
+      sse("content_block_delta", {
+        type: "content_block_delta",
+        index: i,
+        delta: { type: "text_delta", text: block.text ?? "" },
+      });
       sse("content_block_stop", { type: "content_block_stop", index: i });
       return;
     }
@@ -179,7 +180,16 @@ export function anthropicMessageToSse(msg: AnthropicMessage): string {
 }
 
 export async function handleAnthropicMessages(req: Request, opts: AnthropicProxyOpts): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization, anthropic-version, x-api-key", "access-control-max-age": "86400" } });
+  if (req.method === "OPTIONS")
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsOrigin(req),
+        "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+        "access-control-allow-headers": "content-type, authorization, anthropic-version, x-api-key",
+        "access-control-max-age": "86400",
+      },
+    });
   let body: AnthropicRequest;
   try {
     body = (await req.json()) as AnthropicRequest;
@@ -194,7 +204,10 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
     body = withOpenFileHeaders(body as unknown as Record<string, unknown>, header) as unknown as AnthropicRequest;
   } catch {}
 
-  const live = filterCanary(opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest), opts.state.sessionId);
+  const live = filterCanary(
+    opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest),
+    opts.state.sessionId,
+  );
   const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   const shouldSteer = steerable && live.length > 0 && Array.isArray(body.tools);
   if (shouldSteer) {
@@ -236,7 +249,12 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
         "content-type": "application/json",
       },
       body: JSON.stringify(stripUpstreamPlaceFields(body as unknown as Record<string, unknown>)),
-      signal: AbortSignal.timeout((() => { const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS); return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000; })()),
+      signal: AbortSignal.timeout(
+        (() => {
+          const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
+          return Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000;
+        })(),
+      ),
     });
   } catch {
     upstreamRes = undefined;
@@ -270,9 +288,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
     run.prompt_tokens += u.input_tokens ?? 0;
     run.completion_tokens += u.output_tokens ?? 0;
   }
-  const texts = (msg.content ?? [])
-    .filter((b) => b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text);
+  const texts = (msg.content ?? []).filter((b) => b.type === "text" && typeof b.text === "string").map((b) => b.text);
   if (texts.length) run.output = redact(texts.join("\n"));
   if (shouldSteer && msg.stop_reason === "tool_use" && Array.isArray(msg.content)) {
     try {
@@ -281,8 +297,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
         opts.state.jit,
         msg.content.filter((b) => b.type === "tool_use" && b.name).map((b) => b.name!),
       );
-    } catch {
-    }
+    } catch {}
   }
 
   if (wantsStream) {

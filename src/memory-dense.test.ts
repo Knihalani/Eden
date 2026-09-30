@@ -114,7 +114,9 @@ describe("M33.2 dense RAG rejected", () => {
   test.failing("howtoEmbedScore / edenHowtoEmbed stays a degrade-to-0 how-to hook, not a RAG lane", () => {
     const src = readFileSync(INDEX_PATH, "utf8");
     expect(src).toContain(HOWTO_EMBED_FREEZE);
-    expect(src).toMatch(/Optional local embed on lexical miss\. Absent hook → 0 \(degrade\)\. No network, no new dep\./);
+    expect(src).toMatch(
+      /Optional local embed on lexical miss\. Absent hook → 0 \(degrade\)\. No network, no new dep\./,
+    );
     const calls = src.match(/\bhowtoEmbedScore\s*\(/g) ?? [];
     expect(calls).toEqual(["howtoEmbedScore(", "howtoEmbedScore("]);
     expect(src).toMatch(/return howtoEmbedScore\(q, howtoHayText\(row\)\);/);

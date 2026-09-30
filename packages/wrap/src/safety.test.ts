@@ -54,7 +54,14 @@ function program(sequence: string[], steps: Step[], name = "stretch"): StretchPr
     steps,
     returns: { kind: "from", step: steps[steps.length - 1]!.id, path: "" },
     contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-    manifest: { llmReduction: 3, latencyReduction: 1, costReduction: 1, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+    manifest: {
+      llmReduction: 3,
+      latencyReduction: 1,
+      costReduction: 1,
+      skipRateBefore: 0,
+      skipRateAfter: 0,
+      nShadow: 3,
+    },
   }) as StretchProgram;
 }
 
@@ -89,10 +96,7 @@ describe("wrap never applies a mutation twice", () => {
     );
     const state = createState({ programs: [p] });
     const tools = wrapTools(c.tools, state);
-    await Promise.all([
-      tools.lookupTicket!.execute({ id: "T-100" }),
-      tools.writeRecord!.execute({ id: "T-100" }),
-    ]);
+    await Promise.all([tools.lookupTicket!.execute({ id: "T-100" }), tools.writeRecord!.execute({ id: "T-100" })]);
     expect(c.calls.filter((n) => n === "writeRecord")).toHaveLength(1);
   });
 
@@ -171,7 +175,14 @@ describe("wrap never applies a mutation twice", () => {
         allowExact: false,
         envelope: { inputs: { id: ["T-100"] } },
       },
-      manifest: { llmReduction: 3, latencyReduction: 1, costReduction: 1, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+      manifest: {
+        llmReduction: 3,
+        latencyReduction: 1,
+        costReduction: 1,
+        skipRateBefore: 0,
+        skipRateAfter: 0,
+        nShadow: 3,
+      },
     }) as StretchProgram;
     const state = createState({ programs: [p] });
     const tools = wrapTools(c.tools, state);
@@ -182,7 +193,11 @@ describe("wrap never applies a mutation twice", () => {
 });
 
 describe("wrap stops trusting an arming that has gone stale", () => {
-  function armed(): { c: Counter; state: ReturnType<typeof createState>; tools: Record<string, { execute: (a: Record<string, unknown>) => unknown }> } {
+  function armed(): {
+    c: Counter;
+    state: ReturnType<typeof createState>;
+    tools: Record<string, { execute: (a: Record<string, unknown>) => unknown }>;
+  } {
     const c = counted(["lookupTicket", "notify", "ping"]);
     const p = program(
       ["lookupTicket", "notify"],
@@ -349,7 +364,9 @@ describe("wrap follows a program that has been rebuilt or pulled back", () => {
   test("a new build of the same id replaces the cached compiled tool", async () => {
     const c = counted(["lookupTicket", "repair"]);
     const state = createState({
-      programs: [program(["lookupTicket"], [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }], "flow")],
+      programs: [
+        program(["lookupTicket"], [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }], "flow"),
+      ],
     });
     const tools = wrapTools(c.tools, state);
 
@@ -365,7 +382,9 @@ describe("wrap follows a program that has been rebuilt or pulled back", () => {
   test("an unchanged program is not rebuilt on every lookup", async () => {
     const c = counted(["lookupTicket"]);
     const state = createState({
-      programs: [program(["lookupTicket"], [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }], "flow")],
+      programs: [
+        program(["lookupTicket"], [{ id: "lookupTicket", kind: "tool", tool: "lookupTicket", args: idArg }], "flow"),
+      ],
     });
     const tools = wrapTools(c.tools, state);
     expect(tools.flow).toBe(tools.flow);

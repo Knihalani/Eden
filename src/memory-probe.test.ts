@@ -112,7 +112,8 @@ function anthropicText(body: { system?: unknown; messages?: unknown[] }): string
   if (typeof sys === "string") chunks.push(sys);
   else if (Array.isArray(sys)) {
     for (const b of sys) {
-      if (b && typeof b === "object" && typeof (b as { text?: unknown }).text === "string") chunks.push((b as { text: string }).text);
+      if (b && typeof b === "object" && typeof (b as { text?: unknown }).text === "string")
+        chunks.push((b as { text: string }).text);
     }
   }
   chunks.push(packetOf(body.messages ?? []));
@@ -247,7 +248,10 @@ describe("M36.1 empty cue", () => {
         [] as { role: string; content: string }[],
         [{ role: "user", content: "" }],
         [{ role: "user", content: "   " }],
-        [{ role: "user", content: "" }, { role: "assistant", content: "" }],
+        [
+          { role: "user", content: "" },
+          { role: "assistant", content: "" },
+        ],
       ];
       for (const list of lists) {
         const calls: string[] = [];
@@ -339,34 +343,45 @@ describe("M36.1 unicode path", () => {
     const parent = tmpDir("eden-m36-uni-");
     const dir = join(parent, "记忆-café-日本語");
     try {
-      await withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_MEMORY_CAP: undefined }, async () => {
-        const mem = openMemory({ dir });
-        mem.observe([{ role: "user", content: "The unicode catalog token M36UNI is durable." }]);
-        mem.close();
-        const reloaded = openMemory({ dir });
-        expect(reloaded.memories().some((r) => r.text.includes("M36UNI"))).toBe(true);
-        const list = [{ role: "user", content: "what is the unicode catalog token" }];
-        let pkt = "";
-        expect(() => {
-          pkt = packetOf(reloaded.inject(list));
-        }).not.toThrow();
-        expect(pkt).toContain("M36UNI");
-        const traced = injectBodyThenObserveTools(reloaded, { model: "gpt-4o", messages: [{ role: "user", content: "unicode catalog token M36UNI" }] });
-        expect(packetOf((traced.messages ?? []) as unknown[])).toContain("M36UNI");
-        const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => reloaded);
-        try {
-          const wrapped = withKnowFacts({ messages: [{ role: "user", content: "unicode catalog token M36UNI" }] });
-          expect(packetOf((wrapped.messages ?? []) as unknown[])).toContain("M36UNI");
-          const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: "unicode catalog token M36UNI" }] });
-          expect(anthropicText(anth)).toContain("M36UNI");
-        } finally {
-          procSpy.mockRestore();
-        }
-        const hook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "unicode catalog token M36UNI" });
-        expect(hookContext(hook)).toContain("M36UNI");
-        reloaded.close();
-        assertJsonlIntact(dir);
-      });
+      await withEnv(
+        { EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_MEMORY_CAP: undefined },
+        async () => {
+          const mem = openMemory({ dir });
+          mem.observe([{ role: "user", content: "The unicode catalog token M36UNI is durable." }]);
+          mem.close();
+          const reloaded = openMemory({ dir });
+          expect(reloaded.memories().some((r) => r.text.includes("M36UNI"))).toBe(true);
+          const list = [{ role: "user", content: "what is the unicode catalog token" }];
+          let pkt = "";
+          expect(() => {
+            pkt = packetOf(reloaded.inject(list));
+          }).not.toThrow();
+          expect(pkt).toContain("M36UNI");
+          const traced = injectBodyThenObserveTools(reloaded, {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "unicode catalog token M36UNI" }],
+          });
+          expect(packetOf((traced.messages ?? []) as unknown[])).toContain("M36UNI");
+          const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => reloaded);
+          try {
+            const wrapped = withKnowFacts({ messages: [{ role: "user", content: "unicode catalog token M36UNI" }] });
+            expect(packetOf((wrapped.messages ?? []) as unknown[])).toContain("M36UNI");
+            const anth = withKnowFactsAnthropic({
+              messages: [{ role: "user", content: "unicode catalog token M36UNI" }],
+            });
+            expect(anthropicText(anth)).toContain("M36UNI");
+          } finally {
+            procSpy.mockRestore();
+          }
+          const hook = memoryHookResponse({
+            hook_event_name: "UserPromptSubmit",
+            prompt: "unicode catalog token M36UNI",
+          });
+          expect(hookContext(hook)).toContain("M36UNI");
+          reloaded.close();
+          assertJsonlIntact(dir);
+        },
+      );
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }
@@ -377,25 +392,34 @@ describe("M36.1 concurrent persist", () => {
   test("two in-process writers do not tear JSONL", async () => {
     const dir = tmpDir("eden-m36-race-");
     try {
-      await withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY_CAP: undefined, EDEN_MEMORY_STORE_CAP: undefined }, async () => {
-        const writer = async (tag: string) => {
-          const mem = openMemory({ dir });
-          for (let i = 0; i < 12; i++) {
-            mem.observe([{ role: "user", content: `The ${tag} catalog item ${i} is durable.` }]);
-            await Bun.sleep(1);
-          }
-          mem.close();
-        };
-        await Promise.all([writer("alpha"), writer("bravo")]);
-        assertJsonlIntact(dir);
-        const reloaded = openMemory({ dir });
-        const texts = reloaded.memories().map((r) => r.text);
-        expect(texts.some((t) => /alpha catalog item 0/i.test(t))).toBe(true);
-        expect(texts.some((t) => /bravo catalog item 0/i.test(t))).toBe(true);
-        expect(texts.filter((t) => /catalog item/i.test(t)).length).toBe(24);
-        expect(() => reloaded.inject([{ role: "user", content: "alpha catalog" }])).not.toThrow();
-        reloaded.close();
-      });
+      await withEnv(
+        {
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_MEMORY_CAP: undefined,
+          EDEN_MEMORY_STORE_CAP: undefined,
+        },
+        async () => {
+          const writer = async (tag: string) => {
+            const mem = openMemory({ dir });
+            for (let i = 0; i < 12; i++) {
+              mem.observe([{ role: "user", content: `The ${tag} catalog item ${i} is durable.` }]);
+              await Bun.sleep(1);
+            }
+            mem.close();
+          };
+          await Promise.all([writer("alpha"), writer("bravo")]);
+          assertJsonlIntact(dir);
+          const reloaded = openMemory({ dir });
+          const texts = reloaded.memories().map((r) => r.text);
+          expect(texts.some((t) => /alpha catalog item 0/i.test(t))).toBe(true);
+          expect(texts.some((t) => /bravo catalog item 0/i.test(t))).toBe(true);
+          expect(texts.filter((t) => /catalog item/i.test(t)).length).toBe(24);
+          expect(() => reloaded.inject([{ role: "user", content: "alpha catalog" }])).not.toThrow();
+          reloaded.close();
+        },
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -429,7 +453,10 @@ describe("M36.1 concurrent persist", () => {
       }
       assertJsonlIntact(dir);
       const reloaded = openMemory({ dir });
-      const texts = reloaded.memories().map((r) => r.text).join("\n");
+      const texts = reloaded
+        .memories()
+        .map((r) => r.text)
+        .join("\n");
       expect(texts).toMatch(/alpha process item 0/i);
       expect(texts).toMatch(/bravo process item 0/i);
       expect(reloaded.memories().filter((r) => /process item/i.test(r.text)).length).toBe(20);
@@ -449,23 +476,33 @@ describe("M36.1 k=40 is not product", () => {
     await withEnv({ EDEN_MEMORY_CAP: undefined }, () => {
       expect(memoryRetrieveCap()).toBe(PACKET_CHAT_K_DEFAULT);
     });
-    await withMem("eden-m36-k40-", (mem) => {
-      expect(memoryRetrieveCap()).toBe(PACKET_CHAT_K_MAX);
-      expect(memoryRetrieveCap()).not.toBe(40);
-      mem.quiet(() => {
-        for (let n = 1; n <= 40; n++) mem.remember(`Hard packet slot ${n} belongs to the omega catalog.`);
-      });
-      const notes = mem.notesFor("omega catalog");
-      expect(notes.length).toBeGreaterThan(0);
-      expect(notes.length).toBeLessThanOrEqual(PACKET_CHAT_K_MAX);
-      const cue = [{ role: "user", content: "omega catalog" }];
-      for (const hay of livePackets(mem, cue, "omega catalog")) {
-        const lines = bullets(hay);
-        expect(lines.length).toBeLessThanOrEqual(PACKET_CHAT_K_MAX);
-        expect(lines.length).toBeGreaterThan(0);
-      }
-    }, { cap: "40" });
-    const owners = ["index.ts", "../packages/wrap/src/know-inject.ts", "../packages/wrap/src/proxy.ts", "../packages/wrap/src/tool-observe.ts", "../packages/cli/src/memory-hook.ts"];
+    await withMem(
+      "eden-m36-k40-",
+      (mem) => {
+        expect(memoryRetrieveCap()).toBe(PACKET_CHAT_K_MAX);
+        expect(memoryRetrieveCap()).not.toBe(40);
+        mem.quiet(() => {
+          for (let n = 1; n <= 40; n++) mem.remember(`Hard packet slot ${n} belongs to the omega catalog.`);
+        });
+        const notes = mem.notesFor("omega catalog");
+        expect(notes.length).toBeGreaterThan(0);
+        expect(notes.length).toBeLessThanOrEqual(PACKET_CHAT_K_MAX);
+        const cue = [{ role: "user", content: "omega catalog" }];
+        for (const hay of livePackets(mem, cue, "omega catalog")) {
+          const lines = bullets(hay);
+          expect(lines.length).toBeLessThanOrEqual(PACKET_CHAT_K_MAX);
+          expect(lines.length).toBeGreaterThan(0);
+        }
+      },
+      { cap: "40" },
+    );
+    const owners = [
+      "index.ts",
+      "../packages/wrap/src/know-inject.ts",
+      "../packages/wrap/src/proxy.ts",
+      "../packages/wrap/src/tool-observe.ts",
+      "../packages/cli/src/memory-hook.ts",
+    ];
     for (const rel of owners) {
       const code = codeWithoutComments(readProduct(rel));
       expect(code, rel).not.toMatch(/EDEN_MEMORY_CAP\s*[:=]\s*["']?40/);
@@ -492,7 +529,10 @@ describe("M36.1 label-strip", () => {
     await withMem("eden-m36-label-", (mem, dir) => {
       const shot = "The movie was great. label: 28";
       mem.observe([{ role: "user", content: shot }]);
-      const stored = mem.memories().map((r) => r.text).join("\n");
+      const stored = mem
+        .memories()
+        .map((r) => r.text)
+        .join("\n");
       expect(stored).toMatch(/label:\s*28/);
       const jsonl = readFileSync(join(dir, "memories.jsonl"), "utf8");
       expect(jsonl).toMatch(/label:\s*28/);
@@ -502,7 +542,9 @@ describe("M36.1 label-strip", () => {
       }
       const reloaded = openMemory({ dir });
       expect(reloaded.memories().some((r) => /label:\s*28/.test(r.text))).toBe(true);
-      expect(packetOf(reloaded.inject([{ role: "user", content: "The movie was great. label:" }]))).toMatch(/label:\s*28/);
+      expect(packetOf(reloaded.inject([{ role: "user", content: "The movie was great. label:" }]))).toMatch(
+        /label:\s*28/,
+      );
       reloaded.close();
     });
   });
@@ -549,7 +591,10 @@ describe("M36.1 leftover identity", () => {
         ],
       });
       await sleep({ dir, mem });
-      const memories = mem.memories().map((r) => r.text).join("\n");
+      const memories = mem
+        .memories()
+        .map((r) => r.text)
+        .join("\n");
       expect(memories).toMatch(/sqlite/i);
       expect(memories).not.toMatch(/postgres/i);
       const hit = packetOf(mem.inject([{ role: "user", content: "sqlite" }]));
@@ -567,7 +612,9 @@ describe("M36.1 leftover identity", () => {
       expect(gistText(dir)).toMatch(/sqlite/i);
       expect(gistText(dir)).not.toMatch(/postgres/i);
       for (const cue of [CUE_DB, "what should we use", "postgres", "sqlite"]) {
-        const slices = retrieveExperience(dir, cue).map((s) => s.text).join("\n");
+        const slices = retrieveExperience(dir, cue)
+          .map((s) => s.text)
+          .join("\n");
         expect(slices).not.toMatch(/postgres/i);
       }
       const start = hookContext(memoryHookResponse({ hook_event_name: "SessionStart" }));
@@ -577,34 +624,40 @@ describe("M36.1 leftover identity", () => {
   });
 
   test("cwd, email, and session_id are never stored", async () => {
-    await withMem("eden-m36-ids-", async (mem, dir) => {
-      mem.observe([{
-        role: "user",
-        content: `The database is sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}.`,
-      }]);
-      putExperience(dir, {
-        id: "traj-m36-ids",
-        session: SESSION,
-        cwd: CWD,
-        states: [{ thought: `goal for ${EMAIL} session ${SESSION} cwd ${CWD} the database is sqlite`, t: 4 }],
-      });
-      await sleep({ dir, mem, session: SESSION });
-      const blob = readNamed(dir);
-      expect(blob).not.toContain(SESSION);
-      expect(blob).not.toContain(EMAIL);
-      expect(blob).not.toContain(CWD);
-      expect(blob).toMatch(/sqlite/i);
-      const hook = memoryHookResponse({
-        hook_event_name: "UserPromptSubmit",
-        session_id: SESSION,
-        cwd: CWD,
-        prompt: "what database do we use",
-      });
-      const ctx = hookContext(hook);
-      expect(ctx).not.toContain(SESSION);
-      expect(ctx).not.toContain(EMAIL);
-      expect(ctx).not.toContain(CWD);
-    }, { session: SESSION, cwd: CWD });
+    await withMem(
+      "eden-m36-ids-",
+      async (mem, dir) => {
+        mem.observe([
+          {
+            role: "user",
+            content: `The database is sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}.`,
+          },
+        ]);
+        putExperience(dir, {
+          id: "traj-m36-ids",
+          session: SESSION,
+          cwd: CWD,
+          states: [{ thought: `goal for ${EMAIL} session ${SESSION} cwd ${CWD} the database is sqlite`, t: 4 }],
+        });
+        await sleep({ dir, mem, session: SESSION });
+        const blob = readNamed(dir);
+        expect(blob).not.toContain(SESSION);
+        expect(blob).not.toContain(EMAIL);
+        expect(blob).not.toContain(CWD);
+        expect(blob).toMatch(/sqlite/i);
+        const hook = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          session_id: SESSION,
+          cwd: CWD,
+          prompt: "what database do we use",
+        });
+        const ctx = hookContext(hook);
+        expect(ctx).not.toContain(SESSION);
+        expect(ctx).not.toContain(EMAIL);
+        expect(ctx).not.toContain(CWD);
+      },
+      { session: SESSION, cwd: CWD },
+    );
   });
 
   test("Auth is Clerk survives Auth is failing after sleep", async () => {
@@ -660,7 +713,9 @@ describe("M36.1 fail-open and EDEN_MEMORY=0", () => {
         throw new Error("m36 hook inject");
       });
       try {
-        expect(memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what database do we use" })).toBeNull();
+        expect(
+          memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what database do we use" }),
+        ).toBeNull();
         expect(memoryHookResponse({ hook_event_name: "SessionStart" })).toBeNull();
       } finally {
         boom.mockRestore();
@@ -671,27 +726,32 @@ describe("M36.1 fail-open and EDEN_MEMORY=0", () => {
   test("EDEN_MEMORY=0 is inject identity on wrap and hook", async () => {
     const dir = tmpDir("eden-m36-off-");
     try {
-      await withEnv({ EDEN_MEMORY: "0", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY_CAP: undefined }, async () => {
-        const mem = openMemory({ dir });
-        const list = [{ role: "user", content: "The database is sqlite." }];
-        const body = { model: "gpt-4o", messages: list };
-        expect(mem.inject(list)).toBe(list);
-        expect(mem.injectBody(body)).toBe(body);
-        expect(packetOf(list)).not.toContain(MEMORY_MARK);
-        mem.observe(list);
-        expect(mem.memories().some((r) => /sqlite/i.test(r.text))).toBe(false);
-        const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
-        try {
-          expect(withKnowFacts(body)).toBe(body);
-          expect(withKnowFactsAnthropic({ messages: list })).toEqual({ messages: list });
-          expect(injectBodyThenObserveTools(mem, body)).toBe(body);
-        } finally {
-          procSpy.mockRestore();
-        }
-        expect(memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "The database is sqlite." })).toBeNull();
-        expect(memoryHookResponse({ hook_event_name: "SessionStart" })).toBeNull();
-        mem.close();
-      });
+      await withEnv(
+        { EDEN_MEMORY: "0", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY_CAP: undefined },
+        async () => {
+          const mem = openMemory({ dir });
+          const list = [{ role: "user", content: "The database is sqlite." }];
+          const body = { model: "gpt-4o", messages: list };
+          expect(mem.inject(list)).toBe(list);
+          expect(mem.injectBody(body)).toBe(body);
+          expect(packetOf(list)).not.toContain(MEMORY_MARK);
+          mem.observe(list);
+          expect(mem.memories().some((r) => /sqlite/i.test(r.text))).toBe(false);
+          const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
+          try {
+            expect(withKnowFacts(body)).toBe(body);
+            expect(withKnowFactsAnthropic({ messages: list })).toEqual({ messages: list });
+            expect(injectBodyThenObserveTools(mem, body)).toBe(body);
+          } finally {
+            procSpy.mockRestore();
+          }
+          expect(
+            memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "The database is sqlite." }),
+          ).toBeNull();
+          expect(memoryHookResponse({ hook_event_name: "SessionStart" })).toBeNull();
+          mem.close();
+        },
+      );
       expect(readNamed(dir)).not.toMatch(/sqlite/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });

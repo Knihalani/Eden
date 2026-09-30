@@ -38,7 +38,10 @@ function normObjKey(o: string): string {
  * `Never` / `don't` are not the live choice and stay.
  */
 function positiveUseObject(text: string): string | undefined {
-  const raw = String(text ?? "").trim().replace(/\s+/g, " ").replace(/[.!?]+$/g, "");
+  const raw = String(text ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/g, "");
   if (!raw || /^(?:never|do not|don't)\b/i.test(raw)) return undefined;
   const m = raw.match(/^(?:(?:always|must|please)\s+)?(?:use|uses|using)\s+(.+)$/i);
   if (!m) return undefined;
@@ -56,7 +59,10 @@ function positiveUseObject(text: string): string | undefined {
  */
 export function subjectUsesAsserted(text: string): { s: string; p: string; o: string } | undefined {
   try {
-    const raw = String(text ?? "").trim().replace(/\s+/g, " ").replace(/[.!?]+$/g, "");
+    const raw = String(text ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/[.!?]+$/g, "");
     if (!raw || raw.endsWith("?") || isIclExemplar(raw)) return undefined;
     const m = raw.match(/^(?:the\s+)?([a-z][\w-]*)\s+uses\s+(\S(?:.*\S)?)$/i);
     if (!m) return undefined;
@@ -94,20 +100,33 @@ function joinKept(parts: string[]): string {
  * original text if the semantic store cannot be read.
  */
 export function scrubTombstonedIdentity(text: string, dir: string): string {
-  const raw = String(text ?? "").replace(/\s+/g, " ").trim();
+  const raw = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
   try {
     if (!raw || typeof dir !== "string" || !dir.trim()) return raw;
     const store = new SemanticStore(dir);
-    const dead = store.deadValues().map((o) => o.trim()).filter((o) => o.length >= 3);
+    const dead = store
+      .deadValues()
+      .map((o) => o.trim())
+      .filter((o) => o.length >= 3);
     if (!dead.length) return raw;
     const deadKeys = new Set(dead.map((o) => normObjKey(o)));
-    const liveObjs = new Set(store.live().map((r) => normObjKey(r.o)).filter((o) => o.length >= 3));
+    const liveObjs = new Set(
+      store
+        .live()
+        .map((r) => normObjKey(r.o))
+        .filter((o) => o.length >= 3),
+    );
     let s = raw;
     for (const o of [...dead].sort((a, b) => b.length - a.length)) {
       s = s.replace(new RegExp(`\\s+(?:instead of|rather than)\\s+${escapeRe(o)}\\b`, "gi"), "");
     }
     s = s.replace(/\s+/g, " ").trim();
-    const parts = s.split(/\s*(?:\|+|·)\s*|(?<=[.!?])\s+/).map((p) => p.trim()).filter(Boolean);
+    const parts = s
+      .split(/\s*(?:\|+|·)\s*|(?<=[.!?])\s+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
     const kept: string[] = [];
     for (const part of parts.length ? parts : [s]) {
       const bare = part.replace(/^\[[a-z][a-z0-9_-]*(?:\s*·[^\]]*)?\]\s+/i, "");
@@ -167,7 +186,9 @@ function load(path: string): Gist[] {
 
 function persist(path: string, rows: Gist[]): void {
   writeFileAtomic(path, rows.map((g) => JSON.stringify(g)).join("\n") + "\n");
-  try { chmodSync(path, 0o600); } catch {}
+  try {
+    chmodSync(path, 0o600);
+  } catch {}
 }
 
 /** GistStore: put(text, session, t); latest(session, k); replaceHier(nodes) */

@@ -146,7 +146,10 @@ function knockMention(home: string): string | null {
   }
 }
 
-export async function explainCli(args: string[] = [], opts?: { fetch?: typeof fetch; traces?: StretchTrace[] }): Promise<number> {
+export async function explainCli(
+  args: string[] = [],
+  opts?: { fetch?: typeof fetch; traces?: StretchTrace[] },
+): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(explainHelp());
     return 0;
