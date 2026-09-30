@@ -51,10 +51,7 @@ function importedLetter(accepted: number, total: number, candidateCount: number)
   return lines.join("\n");
 }
 
-async function listCandidates(
-  args: string[],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+async function listCandidates(args: string[], opts?: { fetch?: typeof fetch }): Promise<number> {
   let base: string;
   let key: string;
   try {
@@ -115,11 +112,7 @@ async function postTraces(
   return { ok: true, accepted };
 }
 
-async function importStretchTraces(
-  spec: string,
-  args: string[],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+async function importStretchTraces(spec: string, args: string[], opts?: { fetch?: typeof fetch }): Promise<number> {
   let traces: StretchTrace[] | "empty";
   try {
     traces = await loadCompileTraces(spec);
@@ -142,11 +135,7 @@ async function importStretchTraces(
   return 0;
 }
 
-async function importFile(
-  filePath: string,
-  args: string[],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+async function importFile(filePath: string, args: string[], opts?: { fetch?: typeof fetch }): Promise<number> {
   const { statSync, readFileSync } = await import("node:fs");
   try {
     const size = statSync(filePath).size;
@@ -170,7 +159,9 @@ async function importFile(
 
   const detected = detectAndParse(content);
   if (!detected || detected.traces.size === 0) {
-    console.error("Unrecognized trace format, or no tool calls found. Expected: LangSmith runs, OTel spans, or generic JSONL.");
+    console.error(
+      "Unrecognized trace format, or no tool calls found. Expected: LangSmith runs, OTel spans, or generic JSONL.",
+    );
     return 1;
   }
   const { format, traces: traceMap } = detected;
@@ -196,7 +187,9 @@ async function importFile(
     };
   });
   const totalTraces = traces.length;
-  console.log(`Detected ${format}: ${totalTraces} traces, ${totalEvents} tool calls (metrics estimated from event counts)`);
+  console.log(
+    `Detected ${format}: ${totalTraces} traces, ${totalEvents} tool calls (metrics estimated from event counts)`,
+  );
 
   const posted = await postTraces(traces, args, opts);
   if (!posted.ok) {
@@ -208,10 +201,7 @@ async function importFile(
   return 0;
 }
 
-export async function importTraces(
-  args: string[],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+export async function importTraces(args: string[], opts?: { fetch?: typeof fetch }): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(importHelp());
     return 0;

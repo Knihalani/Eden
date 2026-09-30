@@ -57,10 +57,7 @@ function firstPositional(args: string[]): string | undefined {
 
 export function parsePlayInput(raw: string | undefined): Record<string, unknown> {
   if (raw == null || raw === "") return {};
-  const text =
-    raw !== "-" && existsSync(raw) && !raw.trimStart().startsWith("{")
-      ? readFileSync(raw, "utf8")
-      : raw;
+  const text = raw !== "-" && existsSync(raw) && !raw.trimStart().startsWith("{") ? readFileSync(raw, "utf8") : raw;
   let json: unknown;
   try {
     json = JSON.parse(text);
@@ -103,7 +100,8 @@ function wrapRunErrorSentence(body: unknown): string {
   if (err === "no registry") return "play: no registry · start eden wrap";
   if (err === "wrap is down") return wrapDownSentence();
   if (err === "deopt") {
-    const reason = typeof rec?.reason === "string" && rec.reason.trim() ? rec.reason.trim() : "the run left the compiled path";
+    const reason =
+      typeof rec?.reason === "string" && rec.reason.trim() ? rec.reason.trim() : "the run left the compiled path";
     return `play: deopt · ${reason}`;
   }
   if (err) return `play: ${err}`;

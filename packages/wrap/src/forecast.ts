@@ -2,11 +2,7 @@ import type { StretchProgram } from "@eden/ir";
 import { remainingBudget, spend, type ForecastSpend } from "@eden/measure";
 import type { RunRecorder } from "./types";
 
-export {
-  forecastCopy,
-  remainingBudget,
-  type ForecastSpend,
-} from "@eden/measure";
+export { forecastCopy, remainingBudget, type ForecastSpend } from "@eden/measure";
 
 export function actualSpend(run: RunRecorder, now: number): ForecastSpend {
   return spend({

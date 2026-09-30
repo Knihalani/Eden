@@ -229,8 +229,12 @@ describe("M6.3 hook fail-open", () => {
         throw new Error("m6.3 hook inject");
       });
       try {
-        expect(memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What GitHub Actions CI do we use?" })).toBeNull();
-        expect(memoryHookResponse({ hook_event_name: "PreCompact", prompt: "What GitHub Actions CI do we use?" })).toBeNull();
+        expect(
+          memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What GitHub Actions CI do we use?" }),
+        ).toBeNull();
+        expect(
+          memoryHookResponse({ hook_event_name: "PreCompact", prompt: "What GitHub Actions CI do we use?" }),
+        ).toBeNull();
         expect(memoryHookResponse({ hook_event_name: "SessionStart" })).toBeNull();
       } finally {
         boom.mockRestore();
@@ -316,7 +320,12 @@ describe("M6.3 leftover tmp", () => {
       const leftover = `${jsonl}.${process.pid}.tmp`;
       writeFileSync(leftover, TORN);
       const mem = openMemory({ dir });
-      expect(mem.memories().map((r) => r.id).sort()).toEqual(["m-auth", "m-ci"]);
+      expect(
+        mem
+          .memories()
+          .map((r) => r.id)
+          .sort(),
+      ).toEqual(["m-auth", "m-ci"]);
       mem.remember(HEAL_FACT);
       mem.close();
       expect(existsSync(leftover)).toBe(false);
@@ -355,13 +364,22 @@ describe("M6.3 kill -9 mid-write analogue", () => {
       writeTornJsonl(dir);
       writeFileSync(`${jsonl}.${process.pid}.tmp`, `${JSON.stringify(VALID_CI)}\n{"id":"half"`);
       const mem = openMemory({ dir });
-      expect(mem.memories().map((r) => r.id).sort()).toEqual(["m-auth", "m-ci"]);
+      expect(
+        mem
+          .memories()
+          .map((r) => r.id)
+          .sort(),
+      ).toEqual(["m-auth", "m-ci"]);
       mem.remember(HEAL_FACT);
       mem.close();
       const rows = parseAllLines(jsonl);
       expect(readFileSync(jsonl, "utf8")).not.toContain(TORN);
       expect(rows.length).toBeGreaterThanOrEqual(3);
-      expect(rows.every((r) => typeof (r as { id?: string }).id === "string" && typeof (r as { text?: string }).text === "string")).toBe(true);
+      expect(
+        rows.every(
+          (r) => typeof (r as { id?: string }).id === "string" && typeof (r as { text?: string }).text === "string",
+        ),
+      ).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -402,13 +420,20 @@ describe("M6.3 kill -9 mid-write analogue", () => {
       expect(() => {
         mem = openMemory({ dir });
       }).not.toThrow();
-      expect(mem!.memories().map((r) => r.id).sort()).toEqual(["m-auth", "m-ci"]);
+      expect(
+        mem!
+          .memories()
+          .map((r) => r.id)
+          .sort(),
+      ).toEqual(["m-auth", "m-ci"]);
       expect(() => mem!.remember(HEAL_FACT)).not.toThrow();
       mem!.close();
       const rows = parseAllLines(jsonl);
       expect(readFileSync(jsonl, "utf8")).not.toContain(TORN);
       expect(rows.some((r) => /us-east-1/i.test(String((r as { text: string }).text)))).toBe(true);
-      try { unlinkSync(lock); } catch {}
+      try {
+        unlinkSync(lock);
+      } catch {}
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -430,8 +455,13 @@ describe("M6.3 kill -9 mid-write analogue", () => {
       mem.close();
       parseAllLines(jsonlPath(dir));
     } finally {
-      if (fd !== undefined) try { closeSync(fd); } catch {}
-      try { unlinkSync(lock); } catch {}
+      if (fd !== undefined)
+        try {
+          closeSync(fd);
+        } catch {}
+      try {
+        unlinkSync(lock);
+      } catch {}
       rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -448,11 +478,17 @@ describe("M6.3 probe wrap + hook fail-open true", () => {
 
     const anthropic = { messages: [{ role: "user", content: "What GitHub Actions CI do we use?" }] };
     expect(() => withKnowFactsAnthropic(anthropic)).not.toThrow();
-    expect(() => withKnowFacts({ messages: [{ role: "user", content: "What GitHub Actions CI do we use?" }] })).not.toThrow();
+    expect(() =>
+      withKnowFacts({ messages: [{ role: "user", content: "What GitHub Actions CI do we use?" }] }),
+    ).not.toThrow();
 
     withHookDir(() => {
-      expect(() => memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What GitHub Actions CI do we use?" })).not.toThrow();
-      expect(() => memoryHookResponse({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_response: { stdout: "ok" } })).not.toThrow();
+      expect(() =>
+        memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What GitHub Actions CI do we use?" }),
+      ).not.toThrow();
+      expect(() =>
+        memoryHookResponse({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_response: { stdout: "ok" } }),
+      ).not.toThrow();
     });
   });
 });

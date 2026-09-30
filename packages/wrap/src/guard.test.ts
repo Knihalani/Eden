@@ -59,12 +59,7 @@ describe("guard loop branch", () => {
       manifest: manifestOf("loop_bundle"),
     });
     const run = runWithLoopWarning(
-      [
-        { name: "search" },
-        { name: "write" },
-        { name: "search" },
-        { name: "write" },
-      ],
+      [{ name: "search" }, { name: "write" }, { name: "search" }, { name: "write" }],
       ["search", "write"],
     );
     const d = decideGuard({
@@ -99,10 +94,7 @@ describe("guard loop branch", () => {
   });
 
   test("a mixed stalled loop with nothing compiled halts", () => {
-    const run = runWithLoopWarning(
-      [{ name: "search" }, { name: "write" }, { name: "search" }],
-      ["search", "write"],
-    );
+    const run = runWithLoopWarning([{ name: "search" }, { name: "write" }, { name: "search" }], ["search", "write"]);
     const d = decideGuard({
       name: "search",
       run,

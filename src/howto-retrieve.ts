@@ -55,7 +55,11 @@ export function retrieveHowTo(
     const harmed = harmedIdsOrSkip(root);
     if (harmed && harmed.size) {
       live = rows.filter((row) => {
-        try { return !(row?.id && harmed.has(row.id)); } catch { return true; }
+        try {
+          return !(row?.id && harmed.has(row.id));
+        } catch {
+          return true;
+        }
       });
     }
     const out: HowToView[] = [];
@@ -79,10 +83,7 @@ function capK(k?: number): number {
   return Math.min(HOWTO_RETRIEVE_K, n);
 }
 
-function viewHowTo(
-  row: HowTo,
-  opts?: { exists?: (file: string) => boolean; cwd?: string },
-): HowToView {
+function viewHowTo(row: HowTo, opts?: { exists?: (file: string) => boolean; cwd?: string }): HowToView {
   const omitted = applyOmit(row, opts);
   const view: HowToView = {
     ...row,
@@ -290,7 +291,10 @@ function neighborGap(steps: HowToStep[], i: number, reason: string): HowToGap {
 }
 
 function copyGap(g: { kind?: string; reason?: string; after?: string; before?: string; place?: string }): HowToGap {
-  const gap: HowToGap = { kind: "unknown", reason: typeof g.reason === "string" && g.reason.trim() ? g.reason.trim() : "missing step" };
+  const gap: HowToGap = {
+    kind: "unknown",
+    reason: typeof g.reason === "string" && g.reason.trim() ? g.reason.trim() : "missing step",
+  };
   const after = typeof g.after === "string" ? safeGapText(g.after) : undefined;
   const before = typeof g.before === "string" ? safeGapText(g.before) : undefined;
   const place = typeof g.place === "string" ? safeGapText(g.place) : undefined;

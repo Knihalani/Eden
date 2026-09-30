@@ -112,7 +112,9 @@ describe("passive memory hooks", () => {
     process.env.EDEN_MEMORY_DIR = join(import.meta.dir, "../../.tmp-eden-mem-missing");
     mkdirSync(process.env.EDEN_MEMORY_DIR, { recursive: true });
     expect(messagesFromTranscript("/no/such/transcript.jsonl")).toEqual([]);
-    expect(memoryHookResponse({ hook_event_name: "PreCompact", transcript_path: "/no/such/transcript.jsonl" })).toBeNull();
+    expect(
+      memoryHookResponse({ hook_event_name: "PreCompact", transcript_path: "/no/such/transcript.jsonl" }),
+    ).toBeNull();
     rmSync(process.env.EDEN_MEMORY_DIR, { recursive: true, force: true });
   });
 
@@ -266,8 +268,19 @@ describe("passive memory hooks", () => {
     expect(prose).toMatch(/Bash|auth\.ts|exit 0/);
 
     const rows = readFileSync(join(memDir, "s-m9", "traces.jsonl"), "utf8")
-      .split("\n").filter(Boolean)
-      .map((line) => JSON.parse(line) as { name?: string; args?: { command?: unknown }; files?: string[]; exit?: number; t?: number; order?: number });
+      .split("\n")
+      .filter(Boolean)
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            name?: string;
+            args?: { command?: unknown };
+            files?: string[];
+            exit?: number;
+            t?: number;
+            order?: number;
+          },
+      );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.name).toBe("Bash");
     expect(String(rows[0]!.args?.command ?? "")).toMatch(/pytest/);
@@ -285,7 +298,8 @@ describe("passive memory hooks", () => {
       tool_response: "passed auth.ts\nexit 0",
     });
     const again = readFileSync(join(memDir, "s-m9", "traces.jsonl"), "utf8")
-      .split("\n").filter(Boolean)
+      .split("\n")
+      .filter(Boolean)
       .map((line) => JSON.parse(line) as { order?: number });
     expect(again.map((x) => x.order)).toEqual([0, 1]);
 
@@ -455,12 +469,14 @@ describe("passive memory hooks", () => {
     try {
       const cyclic: Record<string, unknown> = { note: "loop" };
       cyclic.self = cyclic;
-      expect(memoryHookResponse({
-        hook_event_name: "SubagentStop",
-        session_id: "s-cycle",
-        tool_name: "Bash",
-        tool_response: cyclic,
-      })).toBeNull();
+      expect(
+        memoryHookResponse({
+          hook_event_name: "SubagentStop",
+          session_id: "s-cycle",
+          tool_name: "Bash",
+          tool_response: cyclic,
+        }),
+      ).toBeNull();
 
       const continued = await respondToHook({
         hook_event_name: "SubagentStop",
@@ -478,13 +494,15 @@ describe("passive memory hooks", () => {
         throw new Error("m45 observe boom");
       });
       try {
-        expect(memoryHookResponse({
-          hook_event_name: "SubagentStop",
-          session_id: "s-boom",
-          agent_id: "explore",
-          tool_name: "Bash",
-          tool_response: "FAIL src/auth.test.ts\nexit 1",
-        })).toBeNull();
+        expect(
+          memoryHookResponse({
+            hook_event_name: "SubagentStop",
+            session_id: "s-boom",
+            agent_id: "explore",
+            tool_name: "Bash",
+            tool_response: "FAIL src/auth.test.ts\nexit 1",
+          }),
+        ).toBeNull();
       } finally {
         boom.mockRestore();
       }
@@ -542,8 +560,15 @@ describe("passive memory hooks", () => {
       const trans = join(dir, "pacific.jsonl");
       const lines: string[] = [];
       for (let i = 0; i < 20; i++) {
-        lines.push(JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }));
-        lines.push(JSON.stringify({ type: "assistant", message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` } }));
+        lines.push(
+          JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }),
+        );
+        lines.push(
+          JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` },
+          }),
+        );
       }
       writeFileSync(trans, `${lines.join("\n")}\n`);
 
@@ -591,7 +616,9 @@ describe("passive memory hooks", () => {
       const ctx = [
         later?.additional_context,
         (later?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
-      ].map((x) => String(x ?? "")).join("\n");
+      ]
+        .map((x) => String(x ?? ""))
+        .join("\n");
       expect(ctx).toContain(MEMORY_MARK);
       expect(ctx).toMatch(/\[fact(?:\s*·[^\]]*)?\].*Bob/);
       expect(ctx).not.toMatch(/Alice/);
@@ -622,8 +649,12 @@ describe("passive memory hooks", () => {
         throw new Error("m3.4 hook fail-open");
       });
       try {
-        expect(memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What GitHub Actions CI do we use?" })).toBeNull();
-        expect(memoryHookResponse({ hook_event_name: "PreCompact", prompt: "What GitHub Actions CI do we use?" })).toBeNull();
+        expect(
+          memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "What GitHub Actions CI do we use?" }),
+        ).toBeNull();
+        expect(
+          memoryHookResponse({ hook_event_name: "PreCompact", prompt: "What GitHub Actions CI do we use?" }),
+        ).toBeNull();
       } finally {
         boom.mockRestore();
       }
@@ -654,8 +685,15 @@ describe("passive memory hooks", () => {
       const trans = join(dir, "pacific.jsonl");
       const lines: string[] = [];
       for (let i = 0; i < 20; i++) {
-        lines.push(JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }));
-        lines.push(JSON.stringify({ type: "assistant", message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` } }));
+        lines.push(
+          JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }),
+        );
+        lines.push(
+          JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` },
+          }),
+        );
       }
       writeFileSync(trans, `${lines.join("\n")}\n`);
 
@@ -687,8 +725,15 @@ describe("passive memory hooks", () => {
       const trans = join(dir, "t.jsonl");
       const lines: string[] = [];
       for (let i = 0; i < 20; i++) {
-        lines.push(JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }));
-        lines.push(JSON.stringify({ type: "assistant", message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` } }));
+        lines.push(
+          JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }),
+        );
+        lines.push(
+          JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` },
+          }),
+        );
       }
       writeFileSync(trans, `${lines.join("\n")}\n`);
 
@@ -805,7 +850,10 @@ describe("passive memory hooks", () => {
         prompt: "CI is GitHub Actions",
       });
       const jsonl = readFileSync(join(dir, session_id, "memories.jsonl"), "utf8");
-      const recs = jsonl.split("\n").filter(Boolean).map((line) => JSON.parse(line) as { text?: string; ep?: string });
+      const recs = jsonl
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { text?: string; ep?: string });
       expect(recs.length).toBeGreaterThanOrEqual(2);
       const eps = new Set(recs.map((r) => r.ep).filter(Boolean));
       expect(eps.size).toBe(1);
@@ -843,7 +891,8 @@ describe("passive memory hooks", () => {
       const src = readFileSync(join(import.meta.dir, "../../../src/index.ts"), "utf8");
       const body = src.match(/export function processMemory\(\)[\s\S]*?\n\}/)?.[0] ?? "";
       expect(body).toBeTruthy();
-      const isolated = body.match(/if \(process\.argv\.some\(\(a\) => a\.endsWith\("\.test\.ts"\)\)\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+      const isolated =
+        body.match(/if \(process\.argv\.some\(\(a\) => a\.endsWith\("\.test\.ts"\)\)\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
       expect(isolated).toBeTruthy();
       expect(isolated).not.toMatch(/session\s*:/);
       expect(body).toMatch(/EDEN_MEMORY_CHILD/);
@@ -895,11 +944,20 @@ function m13HookCtx(out: Record<string, unknown> | null): string {
   return [
     out?.additional_context,
     (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
-  ].map((x) => String(x ?? "")).join("\n");
+  ]
+    .map((x) => String(x ?? ""))
+    .join("\n");
 }
 
 function m13JsonlContents(root: string): string {
-  const names = new Set(["memories.jsonl", "semantic.jsonl", "gists.jsonl", "howto.jsonl", "howtos.jsonl", "traces.jsonl"]);
+  const names = new Set([
+    "memories.jsonl",
+    "semantic.jsonl",
+    "gists.jsonl",
+    "howto.jsonl",
+    "howtos.jsonl",
+    "traces.jsonl",
+  ]);
   const chunks: string[] = [];
   const walk = (dir: string) => {
     if (!existsSync(dir)) return;
@@ -1183,7 +1241,11 @@ describe("M17 hook encode lanes", () => {
         const jsonl = readFileSync(join(dir, "s-m17", "memories.jsonl"), "utf8");
         expect(jsonl).toContain(M17_ICL_LONG);
         expect(jsonl).toMatch(/"lane":"icl"/);
-        const later = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "The movie review. label:", session_id: "s-m17" });
+        const later = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          prompt: "The movie review. label:",
+          session_id: "s-m17",
+        });
         expect(m13HookCtx(later)).toMatch(/label:\s*28/);
       });
     } finally {
@@ -1196,45 +1258,47 @@ describe("M38.2 hook honors an omitted packet; Start still briefs", () => {
   test("what's 2+2? Submit/PreCompact are null; SessionStart after observe+sleep briefs pins or gists", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m38-hook-"));
     try {
-      await m13WithEnv({
-        EDEN_MEMORY: "on",
-        EDEN_MEMORY_DIR: dir,
-        EDEN_HOME: undefined,
-        EDEN_KNOW: "0",
-        EDEN_MEMORY_MIN: undefined,
-      }, async () => {
-        const mem = openMemory({ dir, session: "s-m38" });
-        mem.remember("Use sqlite.");
-        mem.observe([{ role: "user", content: "Always run tests before committing." }]);
-        await mem.sleep({ session: "s-m38" });
-        mem.close();
+      await m13WithEnv(
+        {
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_KNOW: "0",
+          EDEN_MEMORY_MIN: undefined,
+        },
+        async () => {
+          const mem = openMemory({ dir, session: "s-m38" });
+          mem.remember("Use sqlite.");
+          mem.observe([{ role: "user", content: "Always run tests before committing." }]);
+          await mem.sleep({ session: "s-m38" });
+          mem.close();
 
-        const submit = memoryHookResponse({
-          hook_event_name: "UserPromptSubmit",
-          session_id: "s-m38",
-          prompt: "what's 2+2?",
-        });
-        expect(submit).toBeNull();
-        expect(m13HookCtx(submit)).not.toContain(MEMORY_MARK);
+          const submit = memoryHookResponse({
+            hook_event_name: "UserPromptSubmit",
+            session_id: "s-m38",
+            prompt: "what's 2+2?",
+          });
+          expect(submit).toBeNull();
+          expect(m13HookCtx(submit)).not.toContain(MEMORY_MARK);
 
-        const pre = memoryHookResponse({
-          hook_event_name: "PreCompact",
-          session_id: "s-m38",
-          prompt: "what's 2+2?",
-        });
-        expect(pre).toBeNull();
-        expect(m13HookCtx(pre)).not.toContain(MEMORY_MARK);
+          const pre = memoryHookResponse({
+            hook_event_name: "PreCompact",
+            session_id: "s-m38",
+            prompt: "what's 2+2?",
+          });
+          expect(pre).toBeNull();
+          expect(m13HookCtx(pre)).not.toContain(MEMORY_MARK);
 
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: "s-m38" });
-        const ctx = m13HookCtx(start);
-        expect(ctx).toContain(MEMORY_MARK);
-        expect(ctx).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
-        expect(ctx).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
-        expect(ctx).toMatch(/Always run tests before committing/i);
-      });
+          const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: "s-m38" });
+          const ctx = m13HookCtx(start);
+          expect(ctx).toContain(MEMORY_MARK);
+          expect(ctx).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
+          expect(ctx).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(ctx).toMatch(/Always run tests before committing/i);
+        },
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 });
-

@@ -5,12 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { openMemory } from "../../../src/index";
 import { loadToolTraces, tracesPath } from "../../../src/tool-trace";
 import { withKnowFactsAnthropic } from "./know-inject";
-import {
-  injectBodyThenObserveTools,
-  observeToolTraces,
-  toolTraceMessages,
-  TOOL_TRACE_MAX,
-} from "./tool-observe";
+import { injectBodyThenObserveTools, observeToolTraces, toolTraceMessages, TOOL_TRACE_MAX } from "./tool-observe";
 
 function tmpMem() {
   const dir = mkdtempSync(join(tmpdir(), "eden-tool-obs-"));
@@ -18,7 +13,10 @@ function tmpMem() {
 }
 
 function stored(dir: string, mem: { memories(): { text: string }[] }): string {
-  const live = mem.memories().map((m) => m.text).join("\n");
+  const live = mem
+    .memories()
+    .map((m) => m.text)
+    .join("\n");
   let file = "";
   try {
     file = readFileSync(join(dir, "memories.jsonl"), "utf8");
@@ -176,7 +174,10 @@ describe("observeToolTraces", () => {
             {
               id: "call_py",
               type: "function",
-              function: { name: "Bash", arguments: JSON.stringify({ command: "pytest tests/auth/session.test.ts -q" }) },
+              function: {
+                name: "Bash",
+                arguments: JSON.stringify({ command: "pytest tests/auth/session.test.ts -q" }),
+              },
             },
           ],
         },
@@ -202,7 +203,9 @@ describe("observeToolTraces", () => {
       observeToolTraces(mem, [
         {
           role: "assistant",
-          content: [{ type: "tool_use", id: "tu_py", name: "Bash", input: { command: "pytest tests/auth/session.test.ts -q" } }],
+          content: [
+            { type: "tool_use", id: "tu_py", name: "Bash", input: { command: "pytest tests/auth/session.test.ts -q" } },
+          ],
         },
         {
           role: "user",
@@ -244,7 +247,10 @@ describe("observeToolTraces", () => {
             },
             {
               id: "c2",
-              function: { name: "Bash", arguments: JSON.stringify({ command: "pytest tests/auth/session.test.ts -q" }) },
+              function: {
+                name: "Bash",
+                arguments: JSON.stringify({ command: "pytest tests/auth/session.test.ts -q" }),
+              },
             },
           ],
         },

@@ -307,52 +307,56 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test.failing("wrap processMemory EDEN_MEMORY_CHILD injects parent sqlite from a subprocess", async () => {
-    const dir = tmpDir();
-    const cwd = process.cwd();
-    const src = `
+  test.failing(
+    "wrap processMemory EDEN_MEMORY_CHILD injects parent sqlite from a subprocess",
+    async () => {
+      const dir = tmpDir();
+      const cwd = process.cwd();
+      const src = `
       import { processMemory } from ${JSON.stringify(INDEX)};
       const mem = processMemory();
       const out = mem.inject([{ role: "user", content: ${JSON.stringify(DB_CUE)} }]);
       process.stdout.write(JSON.stringify({ child: mem.child, session: mem.session, packet: out }));
       mem.close();
     `;
-    try {
-      const parent = openMemory({ dir, session: "wrap-a" });
-      parent.observe([{ role: "user", content: SQLITE }]);
-      await parent.sleep({ session: "wrap-a" });
-      parent.close();
+      try {
+        const parent = openMemory({ dir, session: "wrap-a" });
+        parent.observe([{ role: "user", content: SQLITE }]);
+        await parent.sleep({ session: "wrap-a" });
+        parent.close();
 
-      const env = {
-        ...process.env,
-        EDEN_MEMORY: "on",
-        EDEN_MEMORY_DIR: dir,
-        EDEN_KNOW: "0",
-        EDEN_SLEEP_EVERY: "0",
-        EDEN_SLEEP_IDLE: "0",
-        EDEN_MEMORY_PARENT: "wrap-a",
-        EDEN_MEMORY_CHILD: "child-1",
-      };
-      delete env.EDEN_HOME;
-      delete env.EDEN_MEMORY_MIN;
-      delete env.EDEN_MEMORY_SESSION;
-      const proc = Bun.spawn(["bun", "-e", src], { cwd, env, stdout: "pipe", stderr: "pipe" });
-      const code = await proc.exited;
-      const stdout = await new Response(proc.stdout).text();
-      if (code !== 0) {
-        throw new Error(`wrap child ${code}: ${await new Response(proc.stderr).text()}\n${stdout}`);
+        const env = {
+          ...process.env,
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_KNOW: "0",
+          EDEN_SLEEP_EVERY: "0",
+          EDEN_SLEEP_IDLE: "0",
+          EDEN_MEMORY_PARENT: "wrap-a",
+          EDEN_MEMORY_CHILD: "child-1",
+        };
+        delete env.EDEN_HOME;
+        delete env.EDEN_MEMORY_MIN;
+        delete env.EDEN_MEMORY_SESSION;
+        const proc = Bun.spawn(["bun", "-e", src], { cwd, env, stdout: "pipe", stderr: "pipe" });
+        const code = await proc.exited;
+        const stdout = await new Response(proc.stdout).text();
+        if (code !== 0) {
+          throw new Error(`wrap child ${code}: ${await new Response(proc.stderr).text()}\n${stdout}`);
+        }
+        const parsed = JSON.parse(stdout) as { child?: boolean; session?: string; packet?: unknown };
+        expect(parsed.child).toBe(true);
+        expect(parsed.session).toBe("wrap-a--child-1");
+        expect(JSON.stringify(parsed.packet)).toContain(MEMORY_MARK);
+        expect(JSON.stringify(parsed.packet)).toMatch(/sqlite/i);
+        expect(existsSync(join(dir, "wrap-a--child-1", "semantic.jsonl"))).toBe(false);
+        expect(existsSync(join(dir, "semantic.jsonl"))).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
       }
-      const parsed = JSON.parse(stdout) as { child?: boolean; session?: string; packet?: unknown };
-      expect(parsed.child).toBe(true);
-      expect(parsed.session).toBe("wrap-a--child-1");
-      expect(JSON.stringify(parsed.packet)).toContain(MEMORY_MARK);
-      expect(JSON.stringify(parsed.packet)).toMatch(/sqlite/i);
-      expect(existsSync(join(dir, "wrap-a--child-1", "semantic.jsonl"))).toBe(false);
-      expect(existsSync(join(dir, "semantic.jsonl"))).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }, 30_000);
+    },
+    30_000,
+  );
 
   test("EDEN_MEMORY_PARENT alone does not suffix a parent Submit into parent--sub", async () => {
     const dir = tmpDir();
@@ -434,8 +438,20 @@ describe("M45 subagent share", () => {
     try {
       const a = new HowToStore(dir);
       const b = new HowToStore(dir);
-      const left = a.put({ cue: "auth pytest flake", steps: [{ name: "Bash", exit: 0 }], files: ["auth.ts"], exit: 0, t: 1 });
-      const right = b.put({ cue: "lint the api", steps: [{ name: "Bash", exit: 0 }], files: ["api.ts"], exit: 0, t: 2 });
+      const left = a.put({
+        cue: "auth pytest flake",
+        steps: [{ name: "Bash", exit: 0 }],
+        files: ["auth.ts"],
+        exit: 0,
+        t: 1,
+      });
+      const right = b.put({
+        cue: "lint the api",
+        steps: [{ name: "Bash", exit: 0 }],
+        files: ["api.ts"],
+        exit: 0,
+        t: 2,
+      });
       expect(left?.id).toBeTruthy();
       expect(right?.id).toBeTruthy();
       const ids = new HowToStore(dir).latest("auth api lint pytest", 10).map((r) => r.id);
@@ -490,10 +506,12 @@ describe("M45 subagent share", () => {
     const secret = "sk-m45childsecretkeyvalue";
     try {
       const child = openMemory({ dir, session: CHILD, child: true, cwd: "/tmp/eden-m45-cwd" });
-      child.observe([{
-        role: "user",
-        content: `The token is ${secret}. Mail me at ada@example.com about session ${CHILD}.`,
-      }]);
+      child.observe([
+        {
+          role: "user",
+          content: `The token is ${secret}. Mail me at ada@example.com about session ${CHILD}.`,
+        },
+      ]);
       child.close();
       const text = readFileSync(join(dir, CHILD, "memories.jsonl"), "utf8");
       expect(text).not.toContain(secret);
@@ -514,7 +532,7 @@ describe("M45 subagent share", () => {
       await parent.sleep({ session: PARENT });
       parent.close();
       const { appendFileSync } = await import("node:fs");
-      appendFileSync(join(dir, "semantic.jsonl"), "{\"s\":\"stack\"\n");
+      appendFileSync(join(dir, "semantic.jsonl"), '{"s":"stack"\n');
       const child = openMemory({ dir, session: CHILD, child: true });
       let out: unknown;
       expect(() => {
@@ -527,10 +545,12 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test.failing("wrap injectBody and Anthropic child env inject parent sqlite and fail open", async () => {
-    const dir = tmpDir();
-    const cwd = process.cwd();
-    const src = `
+  test.failing(
+    "wrap injectBody and Anthropic child env inject parent sqlite and fail open",
+    async () => {
+      const dir = tmpDir();
+      const cwd = process.cwd();
+      const src = `
       import { processMemory } from ${JSON.stringify(INDEX)};
       import { withKnowFactsAnthropic } from ${JSON.stringify(KNOW)};
       const mem = processMemory();
@@ -546,38 +566,47 @@ describe("M45 subagent share", () => {
       process.stdout.write(JSON.stringify({ child: mem.child, session: mem.session, body, anth, pass, anthPass }));
       mem.close();
     `;
-    try {
-      const parent = openMemory({ dir, session: "wrap-a" });
-      parent.observe([{ role: "user", content: SQLITE }]);
-      await parent.sleep({ session: "wrap-a" });
-      parent.close();
-      const env = {
-        ...process.env,
-        EDEN_MEMORY: "on",
-        EDEN_MEMORY_DIR: dir,
-        EDEN_KNOW: "0",
-        EDEN_SLEEP_EVERY: "0",
-        EDEN_SLEEP_IDLE: "0",
-        EDEN_MEMORY_PARENT: "wrap-a",
-        EDEN_MEMORY_CHILD: "child-1",
-      };
-      delete env.EDEN_HOME;
-      delete env.EDEN_MEMORY_MIN;
-      delete env.EDEN_MEMORY_SESSION;
-      const proc = Bun.spawn(["bun", "-e", src], { cwd, env, stdout: "pipe", stderr: "pipe" });
-      const code = await proc.exited;
-      const stdout = await new Response(proc.stdout).text();
-      if (code !== 0) throw new Error(`wrap surfaces ${code}: ${await new Response(proc.stderr).text()}\n${stdout}`);
-      const parsed = JSON.parse(stdout) as { child?: boolean; session?: string; body?: unknown; anth?: unknown; pass?: unknown; anthPass?: unknown };
-      expect(parsed.child).toBe(true);
-      expect(parsed.session).toBe("wrap-a--child-1");
-      expect(JSON.stringify(parsed.body)).toMatch(/sqlite/i);
-      expect(JSON.stringify(parsed.anth)).toMatch(/sqlite/i);
-      expect(parsed.pass).toEqual({ messages: [{ role: "user", content: DB_CUE }] });
-      expect(JSON.stringify(parsed.anthPass)).not.toContain(MEMORY_MARK);
-      expect(existsSync(join(dir, "wrap-a--child-1", "semantic.jsonl"))).toBe(false);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }, 30_000);
+      try {
+        const parent = openMemory({ dir, session: "wrap-a" });
+        parent.observe([{ role: "user", content: SQLITE }]);
+        await parent.sleep({ session: "wrap-a" });
+        parent.close();
+        const env = {
+          ...process.env,
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_KNOW: "0",
+          EDEN_SLEEP_EVERY: "0",
+          EDEN_SLEEP_IDLE: "0",
+          EDEN_MEMORY_PARENT: "wrap-a",
+          EDEN_MEMORY_CHILD: "child-1",
+        };
+        delete env.EDEN_HOME;
+        delete env.EDEN_MEMORY_MIN;
+        delete env.EDEN_MEMORY_SESSION;
+        const proc = Bun.spawn(["bun", "-e", src], { cwd, env, stdout: "pipe", stderr: "pipe" });
+        const code = await proc.exited;
+        const stdout = await new Response(proc.stdout).text();
+        if (code !== 0) throw new Error(`wrap surfaces ${code}: ${await new Response(proc.stderr).text()}\n${stdout}`);
+        const parsed = JSON.parse(stdout) as {
+          child?: boolean;
+          session?: string;
+          body?: unknown;
+          anth?: unknown;
+          pass?: unknown;
+          anthPass?: unknown;
+        };
+        expect(parsed.child).toBe(true);
+        expect(parsed.session).toBe("wrap-a--child-1");
+        expect(JSON.stringify(parsed.body)).toMatch(/sqlite/i);
+        expect(JSON.stringify(parsed.anth)).toMatch(/sqlite/i);
+        expect(parsed.pass).toEqual({ messages: [{ role: "user", content: DB_CUE }] });
+        expect(JSON.stringify(parsed.anthPass)).not.toContain(MEMORY_MARK);
+        expect(existsSync(join(dir, "wrap-a--child-1", "semantic.jsonl"))).toBe(false);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 });

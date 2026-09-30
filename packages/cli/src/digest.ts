@@ -220,15 +220,20 @@ function asRequest(value: unknown): {
     : [];
   const name =
     fromProgram ||
-    (sequence.length <= 2 ? sequence.join("_") : sequence.length ? `${sequence[0]}_to_${sequence[sequence.length - 1]}` : "Request");
+    (sequence.length <= 2
+      ? sequence.join("_")
+      : sequence.length
+        ? `${sequence[0]}_to_${sequence[sequence.length - 1]}`
+        : "Request");
   const refusal = asRecord(row.refusal);
   const origin = program ? asRecord(program.origin) : asRecord(row.origin);
-  const failureMode =
-    /replacement is waiting/i.test(typeof program?.description === "string" ? program.description : "")
-      ? "refresh"
-      : typeof origin?.mode === "string" && origin.mode !== "happy"
-        ? origin.mode
-        : undefined;
+  const failureMode = /replacement is waiting/i.test(
+    typeof program?.description === "string" ? program.description : "",
+  )
+    ? "refresh"
+    : typeof origin?.mode === "string" && origin.mode !== "happy"
+      ? origin.mode
+      : undefined;
   const verdict = typeof row.verdict === "string" && row.verdict ? row.verdict : "pending";
   const refused = Boolean(refusal);
   const fail = failureMode ? failureModeLabel(failureMode) : "";
@@ -243,7 +248,7 @@ function asRequest(value: unknown): {
           repeats: Number.isFinite(Number(refusal?.repeats)) ? Math.round(Number(refusal?.repeats)) : undefined,
         })
       : null;
-  const status = fail ? `${fail}${from}` : refusedStatus ?? requestStatus(verdict, refused);
+  const status = fail ? `${fail}${from}` : (refusedStatus ?? requestStatus(verdict, refused));
   const waste = Number(refusal?.wastedTokens ?? program?.wastedTokens ?? row.wastedTokens);
   return {
     id: row.id,
@@ -256,7 +261,11 @@ function asRequest(value: unknown): {
   };
 }
 
-export function digestFromInbox(inbox: InboxSlice | null | undefined, receipts: unknown[] = [], now = Date.now()): DigestInput {
+export function digestFromInbox(
+  inbox: InboxSlice | null | undefined,
+  receipts: unknown[] = [],
+  now = Date.now(),
+): DigestInput {
   if (!inbox) return { ...EMPTY_DIGEST };
   const workflows = (inbox.live ?? []).flatMap((row) => {
     const item = asWorkflow(row);
@@ -353,10 +362,7 @@ export async function loadDigestInput(
   }
 }
 
-export async function digestCli(
-  args: string[] = [],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+export async function digestCli(args: string[] = [], opts?: { fetch?: typeof fetch }): Promise<number> {
   try {
     if (args.includes("--help") || args.includes("-h") || args.includes("help")) {
       console.log(digestHelp());

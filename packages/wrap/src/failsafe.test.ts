@@ -51,17 +51,20 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
       killAfterWarning: true,
       fetch: (async (_url: string, init?: RequestInit) => {
         upstreamBody = String(init?.body);
-        return new Response(
-          JSON.stringify({ choices: [{ message: { content: "upstream said hi" } }] }),
-          { status: 200 },
-        );
+        return new Response(JSON.stringify({ choices: [{ message: { content: "upstream said hi" } }] }), {
+          status: 200,
+        });
       }) as unknown as typeof fetch,
     });
     state.run.firstWarningAt = 1; // kill switch condition met
     const res = await handleChatCompletions(
       new Request("http://local/v1/chat/completions", {
         method: "POST",
-        body: JSON.stringify({ model: "gpt-4o", messages: [], tools: [{ type: "function", function: { name: "x", parameters: {} } }] }),
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [],
+          tools: [{ type: "function", function: { name: "x", parameters: {} } }],
+        }),
       }),
       { state, getPrograms: () => [p] },
     );
@@ -75,12 +78,18 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
   test("a throwing program list cannot break the request", async () => {
     const state = createState({
       fetch: (async () =>
-        new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 })) as unknown as typeof fetch,
+        new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), {
+          status: 200,
+        })) as unknown as typeof fetch,
     });
     const res = await handleChatCompletions(
       new Request("http://local/v1/chat/completions", {
         method: "POST",
-        body: JSON.stringify({ model: "gpt-4o", messages: [], tools: [{ type: "function", function: { name: "x", parameters: {} } }] }),
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [],
+          tools: [{ type: "function", function: { name: "x", parameters: {} } }],
+        }),
       }),
       {
         state,
@@ -142,7 +151,7 @@ describe("prime directive: a broken Eden never breaks the agent", () => {
     }
     expect(state.run.warnings.some((w) => w.kind === "fail_streak")).toBe(true);
     await expect(tools.boom.execute({})).rejects.toThrow("no");
-    await expect((tools.ok.execute({}) as Promise<unknown>)).resolves.toEqual({ fine: true });
+    await expect(tools.ok.execute({}) as Promise<unknown>).resolves.toEqual({ fine: true });
   });
 
   test("observe mode: the executed-call ceiling never fires", async () => {
@@ -348,7 +357,14 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
     try {
       const p = threeStepProgram("mp3", "boom_a", "mid_b", "end_c");
       const state = createState({ programs: [p], baseUrl: cap.url, apiKey: "k", enforce: false });
-      const tools = wrapTools({ boom_a: async (): Promise<never> => { throw new Error("x"); } }, state);
+      const tools = wrapTools(
+        {
+          boom_a: async (): Promise<never> => {
+            throw new Error("x");
+          },
+        },
+        state,
+      );
       const boom = (tools as unknown as Record<string, { execute: () => Promise<unknown> }>).boom_a!;
       await boom.execute().catch(() => {});
       await boom.execute().catch(() => {});
@@ -366,7 +382,14 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
       try {
         const p = threeStepProgram("mp3e", "boom_a", "mid_b", "end_c");
         const state = createState({ programs: [p], baseUrl: cap.url, apiKey: "k", enforce: true });
-        const tools = wrapTools({ boom_a: async (): Promise<never> => { throw new Error("x"); } }, state);
+        const tools = wrapTools(
+          {
+            boom_a: async (): Promise<never> => {
+              throw new Error("x");
+            },
+          },
+          state,
+        );
         const boom = (tools as unknown as Record<string, { execute: () => Promise<unknown> }>).boom_a!;
         await boom.execute().catch(() => {});
         await boom.execute().catch(() => {});
@@ -392,7 +415,10 @@ describe("phase 1: pure-compiled tool fallback policy (M4)", () => {
     ];
     p.name = "compiled_only";
     const state = createState({ programs: [p] });
-    const tools = wrapTools({ other: async () => ({ ok: true }) }, state) as Record<string, { execute: (a: unknown) => Promise<unknown> }>;
+    const tools = wrapTools({ other: async () => ({ ok: true }) }, state) as Record<
+      string,
+      { execute: (a: unknown) => Promise<unknown> }
+    >;
     const def = tools["compiled_only"];
     expect(def).toBeDefined();
     const out = (await def!.execute({})) as { eden?: string };
@@ -485,7 +511,14 @@ describe("phase 2: branched programs steer end-to-end", () => {
     if (!prog) throw new Error("no fork program mined");
     const live = {
       ...prog,
-      manifest: { llmReduction: 8, latencyReduction: 8, costReduction: 8, skipRateBefore: 0.2, skipRateAfter: 0, nShadow: 6 },
+      manifest: {
+        llmReduction: 8,
+        latencyReduction: 8,
+        costReduction: 8,
+        skipRateBefore: 0.2,
+        skipRateAfter: 0,
+        nShadow: 6,
+      },
     };
     const calls: string[] = [];
     const world = {

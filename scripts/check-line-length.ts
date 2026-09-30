@@ -60,7 +60,10 @@ export function overlongLines(path: string, text: string, width: number): Overlo
     if (length > width) {
       const literalLength = literals
         .filter(([start, end]) => start < lineEnd && end > lineStart)
-        .reduce((sum, [start, end]) => sum + lengthOf(text.slice(Math.max(start, lineStart), Math.min(end, lineEnd))), 0);
+        .reduce(
+          (sum, [start, end]) => sum + lengthOf(text.slice(Math.max(start, lineStart), Math.min(end, lineEnd))),
+          0,
+        );
       if (length - literalLength > width) found.push({ line: index + 1, length });
     }
     lineStart = lineEnd + 1;

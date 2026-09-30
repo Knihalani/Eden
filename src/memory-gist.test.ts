@@ -78,7 +78,11 @@ const { retrieveGists, isSummaryCue, GIST_CHAR_CAP, promoteNarrativeGists } = gi
 const m291 = describe.skipIf(!gistRetrieveReady);
 
 function wsTokens(s: string): string[] {
-  return String(s ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  return String(s ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
 }
 
 function tokCount(s: string): number {
@@ -99,7 +103,12 @@ function padFiller(minToks: number, seed = 0): string {
 }
 
 function firstSent(chunk: string): string {
-  return String(chunk ?? "").split(/(?<=[.!?])\s+/).map((s) => s.trim()).find(Boolean) ?? "";
+  return (
+    String(chunk ?? "")
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .find(Boolean) ?? ""
+  );
 }
 
 /**
@@ -152,21 +161,24 @@ async function withMem<T>(
   session = SESSION,
 ): Promise<T> {
   const dir = tmpDir();
-  return withEnv({
-    EDEN_MEMORY: "on",
-    EDEN_MEMORY_DIR: dir,
-    EDEN_HOME: undefined,
-    EDEN_KNOW: "0",
-    EDEN_MEMORY_CAP: String(K),
-    ...vars,
-  }, async () => {
-    try {
-      const mem = openMemory({ dir, session });
-      return await fn(mem, dir);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+  return withEnv(
+    {
+      EDEN_MEMORY: "on",
+      EDEN_MEMORY_DIR: dir,
+      EDEN_HOME: undefined,
+      EDEN_KNOW: "0",
+      EDEN_MEMORY_CAP: String(K),
+      ...vars,
+    },
+    async () => {
+      try {
+        const mem = openMemory({ dir, session });
+        return await fn(mem, dir);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 }
 
 async function withSleptBook<T>(
@@ -218,11 +230,12 @@ function gistHitText(h: GistHit): string {
 
 function anthMemoryText(body: { system?: unknown }): string {
   const sys = body.system;
-  const parts = typeof sys === "string"
-    ? [sys]
-    : Array.isArray(sys)
-      ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-      : [];
+  const parts =
+    typeof sys === "string"
+      ? [sys]
+      : Array.isArray(sys)
+        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+        : [];
   return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
 }
 
@@ -363,7 +376,9 @@ describe("M29.3 token / k cap", () => {
       const rec = mem.remember(huge, { kind: "gist" });
       if (rec.text.length > GIST_CAP) {
         const notes = mem.notesFor("Hierarchical gist marker", K);
-        const gistNotes = notes.filter((r) => r.kind === "gist" || /^\[gist(?:\s*·[^\]]*)?\]/.test(r.text) || (r.tags ?? []).includes("gist"));
+        const gistNotes = notes.filter(
+          (r) => r.kind === "gist" || /^\[gist(?:\s*·[^\]]*)?\]/.test(r.text) || (r.tags ?? []).includes("gist"),
+        );
         expect(gistNotes.length).toBeGreaterThan(0);
         for (const n of gistNotes) {
           const m = String(n.text).match(/^\[gist(?:\s*·[^\]]*)?\]\s*(.*)$/s);
@@ -438,16 +453,22 @@ describe("M29 isolation", () => {
       try {
         if (gistRetrieveReady && retrieveGists) {
           const mod = await import("./gist-retrieve");
-          booms.push(spyOn(mod, "retrieveGists").mockImplementation(() => {
-            throw new Error("m29 retrieveGists boom");
-          }));
+          booms.push(
+            spyOn(mod, "retrieveGists").mockImplementation(() => {
+              throw new Error("m29 retrieveGists boom");
+            }),
+          );
         }
-        booms.push(spyOn(GistStore.prototype, "hier").mockImplementation(() => {
-          throw new Error("m29 GistStore.hier boom");
-        }));
-        booms.push(spyOn(GistStore.prototype, "latest").mockImplementation(() => {
-          throw new Error("m29 GistStore.latest boom");
-        }));
+        booms.push(
+          spyOn(GistStore.prototype, "hier").mockImplementation(() => {
+            throw new Error("m29 GistStore.hier boom");
+          }),
+        );
+        booms.push(
+          spyOn(GistStore.prototype, "latest").mockImplementation(() => {
+            throw new Error("m29 GistStore.latest boom");
+          }),
+        );
         let out: unknown;
         expect(() => {
           out = mem.inject(list);
@@ -466,21 +487,23 @@ describe("M29 adversarial locks", () => {
     try {
       const gs = new GistStore(dir);
       gs.put("session pin Auth is Clerk", SESSION, 1);
-      gs.replaceHier([{
-        text: "HIERONLY-ZYX miller walked beside the river at dawn",
-        session: SESSION,
-        t: 2,
-        kind: "hier",
-        level: 2,
-        i: 0,
-      }]);
+      gs.replaceHier([
+        {
+          text: "HIERONLY-ZYX miller walked beside the river at dawn",
+          session: SESSION,
+          t: 2,
+          kind: "hier",
+          level: 2,
+          i: 0,
+        },
+      ]);
       const latest = gs.latest(SESSION, 8);
       expect(latest.length).toBeGreaterThan(0);
       expect(latest.every((g) => (g.kind ?? "session") === "session")).toBe(true);
       expect(latest.some((g) => g.kind === "hier")).toBe(false);
       expect(latest.some((g) => /HIERONLY-ZYX/.test(g.text))).toBe(false);
       expect(gs.hier().some((g) => /HIERONLY-ZYX/.test(g.text))).toBe(true);
-      appendFileSync(gs.path, "{\"text\":\"torn-partial\n");
+      appendFileSync(gs.path, '{"text":"torn-partial\n');
       const after = new GistStore(dir);
       expect(() => after.latest(SESSION, 8)).not.toThrow();
       expect(() => after.hier()).not.toThrow();
@@ -491,12 +514,19 @@ describe("M29 adversarial locks", () => {
   });
 
   test("hier L2 follows ingestOrder, not UUID src sort", () => {
-    if (!gistRetrieveReady || typeof promoteNarrativeGists !== "function" || typeof retrieveGists !== "function") return;
+    if (!gistRetrieveReady || typeof promoteNarrativeGists !== "function" || typeof retrieveGists !== "function")
+      return;
     const dir = tmpDir("eden-m29-ingest-");
     try {
       const cs = new ChunkStore(dir);
-      cs.put("Zebra pack opens the ledger at dusk. Villagers said the oak still slept under the silt waiting for summer rain.", { src: "zzz-uuid-bbbb", t: 10 });
-      cs.put("Alpha pack closes the ochre flood at dawn. Fog hung low over the marsh and the herons waited on one leg.", { src: "aaa-uuid-aaaa", t: 11 });
+      cs.put(
+        "Zebra pack opens the ledger at dusk. Villagers said the oak still slept under the silt waiting for summer rain.",
+        { src: "zzz-uuid-bbbb", t: 10 },
+      );
+      cs.put(
+        "Alpha pack closes the ochre flood at dawn. Fog hung low over the marsh and the herons waited on one leg.",
+        { src: "aaa-uuid-aaaa", t: 11 },
+      );
       expect(cs.ingestOrder()[0]?.src).toBe("zzz-uuid-bbbb");
       expect(cs.all()[0]?.src).toBe("aaa-uuid-aaaa");
       promoteNarrativeGists(dir);
@@ -575,7 +605,10 @@ describe("M29 honesty", () => {
     expect(self).not.toMatch(/\bmemory_search\s*\(/);
     const index = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
     expect(index).toMatch(/"command", "cmd"/);
-    const bridge = readFileSync(join(import.meta.dir, "..", "benchmarks", "memoryagentbench", "inject-bridge.ts"), "utf8");
+    const bridge = readFileSync(
+      join(import.meta.dir, "..", "benchmarks", "memoryagentbench", "inject-bridge.ts"),
+      "utf8",
+    );
     expect(bridge).toMatch(/case "flush"/);
     expect(bridge).toMatch(/consolidate\(/);
     expect(codeWithoutComments(bridge)).not.toMatch(/\bBrainMemory\b/);

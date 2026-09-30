@@ -118,10 +118,7 @@ export function programFirstStepShapes(p: StretchProgram): string[] {
 
 const MAX_SLOT_COMBOS = 200;
 
-export function recoverShellInput(
-  p: StretchProgram,
-  args: Record<string, unknown>,
-): Record<string, unknown> | null {
+export function recoverShellInput(p: StretchProgram, args: Record<string, unknown>): Record<string, unknown> | null {
   const expr = firstCommandTemplate(p);
   const live = typeof args.command === "string" ? args.command : null;
   if (!expr || !live) return null;

@@ -1,17 +1,13 @@
 /** HTML → text + structured slots. No Playwright: JSON-LD / OG / noscript live in the first bytes. */
 
-import {
-  MEDIA_SUBTYPE_OBJECT,
-  SPDX_KEEP,
-} from "./names";
+import { MEDIA_SUBTYPE_OBJECT, SPDX_KEEP } from "./names";
 import { mediaTypeNames } from "./media-type-tab";
 import { adaptCapitalLabel, noteCapitalLabel } from "./adapt";
 import { TOOL_DOC_HOSTS, githubToolUrl, talkUrl, toolDocsUrl } from "./tools";
 
 const MEDIA_TAB = new Set(mediaTypeNames());
 
-const PAYWALL_HOST =
-  /(^|\.)(wsj|ft|economist|nytimes|washingtonpost|bloomberg|wired|theathletic)\.com$/i;
+const PAYWALL_HOST = /(^|\.)(wsj|ft|economist|nytimes|washingtonpost|bloomberg|wired|theathletic)\.com$/i;
 
 export function hostOf(url: string): string {
   try {
@@ -113,7 +109,10 @@ export function canonicalUrl(raw: string): string {
     const drop = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid", "oldid"];
     for (const k of drop) u.searchParams.delete(k);
     if (/wikipedia\.org$/i.test(u.hostname) && /^\/wiki\//i.test(u.pathname)) {
-      u.pathname = u.pathname.replace(/\/wiki\/([^/]+)$/i, (_, t) => `/wiki/${decodeURIComponent(t).replace(/ /g, "_")}`);
+      u.pathname = u.pathname.replace(
+        /\/wiki\/([^/]+)$/i,
+        (_, t) => `/wiki/${decodeURIComponent(t).replace(/ /g, "_")}`,
+      );
     }
     return u.href;
   } catch {
@@ -288,7 +287,10 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
   let i = 0;
   while (i < n) {
     const lt = html.indexOf("<", i);
-    if (lt < 0) { parts.push(html.slice(i)); break; }
+    if (lt < 0) {
+      parts.push(html.slice(i));
+      break;
+    }
     if (lt > i) parts.push(html.slice(i, lt));
     if (html.charCodeAt(lt + 1) === 33 && html.startsWith("<!--", lt)) {
       const end = html.indexOf("-->", lt + 4);
@@ -305,7 +307,10 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
     if (!isClose && (name === "script" || name === "style")) {
       const isLd = !textOnly && name === "script" && open.includes("ld+json");
       const end = closeTagFrom(html, gt + 1, `</${name}>`);
-      if (isLd) { const parsed = parseLdJson(html.slice(gt + 1, Math.max(gt + 1, end - 9))); if (parsed !== undefined) jsonLd.push(parsed); }
+      if (isLd) {
+        const parsed = parseLdJson(html.slice(gt + 1, Math.max(gt + 1, end - 9)));
+        if (parsed !== undefined) jsonLd.push(parsed);
+      }
       i = end;
       parts.push(" ");
       continue;
@@ -315,56 +320,111 @@ export function scanHtml(html: string, textOnly = false): HtmlScan {
       parts.push(" ");
       continue;
     }
-    if (!isClose && (open.includes("mw-navigation") || open.includes('role="navigation"') || open.includes("role='navigation'") || (open.includes("class=") && /class=["'][^"']*\b(?:references|navbox|mw-jump-link|vector-menu)\b/i.test(open)))) {
+    if (
+      !isClose &&
+      (open.includes("mw-navigation") ||
+        open.includes('role="navigation"') ||
+        open.includes("role='navigation'") ||
+        (open.includes("class=") && /class=["'][^"']*\b(?:references|navbox|mw-jump-link|vector-menu)\b/i.test(open)))
+    ) {
       i = closeTagFrom(html, gt + 1, `</${name}>`);
       parts.push(" ");
       continue;
     }
 
     if (!textOnly && name === "table") {
-      if (!isClose) { if (tableDepth === 0) { tableOpen = open; tableStart = gt + 1; } tableDepth++; }
-      else if (tableDepth > 0 && --tableDepth === 0) tables.push({ open: tableOpen, inner: html.slice(tableStart, lt) });
+      if (!isClose) {
+        if (tableDepth === 0) {
+          tableOpen = open;
+          tableStart = gt + 1;
+        }
+        tableDepth++;
+      } else if (tableDepth > 0 && --tableDepth === 0)
+        tables.push({ open: tableOpen, inner: html.slice(tableStart, lt) });
     }
     if (!textOnly && name === "dl") {
-      if (!isClose) { if (dlDepth === 0) dlStart = gt + 1; dlDepth++; }
-      else if (dlDepth > 0 && --dlDepth === 0) dls.push(html.slice(dlStart, lt));
+      if (!isClose) {
+        if (dlDepth === 0) dlStart = gt + 1;
+        dlDepth++;
+      } else if (dlDepth > 0 && --dlDepth === 0) dls.push(html.slice(dlStart, lt));
     }
     if (!textOnly && !isClose && name === "meta") {
-      const key = (attrGet(open, "name") || attrGet(open, "property")).toLowerCase(), val = attrGet(open, "content");
+      const key = (attrGet(open, "name") || attrGet(open, "property")).toLowerCase(),
+        val = attrGet(open, "content");
       if (key && val && metas[key] === undefined) metas[key] = val;
       if (key.startsWith("og:") && val) og[key.slice(3)] = val;
       if (key === "mw:pageprop/displaytitle" && val) displaytitle = val;
     }
     if (!textOnly && !isClose && name === "link") {
-      const rel = attrGet(open, "rel").toLowerCase(), href = attrGet(open, "href");
+      const rel = attrGet(open, "rel").toLowerCase(),
+        href = attrGet(open, "href");
       if (rel.includes("canonical") && href) canonical = href;
     }
     if (!isClose && name === "title" && !title) {
       const end = closeTagFrom(html, gt + 1, "</title>");
-      title = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - 8)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+      title = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - 8)).replace(/<[^>]+>/g, " "))
+        .replace(/\s+/g, " ")
+        .trim();
       i = end;
       parts.push(" ");
       continue;
     }
-    if (!textOnly && !isClose && name === "h1") h1.push(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</h1>") - 5)));
-    if (!textOnly && !isClose && name === "span" && /\bh1\b/.test(open) && open.includes("class=")) spanH1.push(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</span>") - 7)));
-    if (!textOnly && !isClose && !shortDescription && (name === "div" || name === "span") && open.includes("shortdescription")) {
+    if (!textOnly && !isClose && name === "h1")
+      h1.push(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</h1>") - 5)));
+    if (!textOnly && !isClose && name === "span" && /\bh1\b/.test(open) && open.includes("class="))
+      spanH1.push(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</span>") - 7)));
+    if (
+      !textOnly &&
+      !isClose &&
+      !shortDescription &&
+      (name === "div" || name === "span") &&
+      open.includes("shortdescription")
+    ) {
       const end = closeTagFrom(html, gt + 1, `</${name}>`);
-      const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - name.length - 3)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+      const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, end - name.length - 3)).replace(/<[^>]+>/g, " "))
+        .replace(/\s+/g, " ")
+        .trim();
       if (t.length >= 4 && t.length <= 80) shortDescription = t;
     }
     if (!textOnly && !isClose && name === "span" && open.includes("mw-page-title-main")) {
-      const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</span>") - 7)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+      const t = decodeEntities(
+        html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, "</span>") - 7)).replace(/<[^>]+>/g, " "),
+      )
+        .replace(/\s+/g, " ")
+        .trim();
       if (t) mwTitle = t;
     }
-    if (!textOnly && !isClose && (open.includes("itemscope") || open.includes("itemtype") || /typeof\s*=\s*["'][^"']*Country/i.test(open))) {
+    if (
+      !textOnly &&
+      !isClose &&
+      (open.includes("itemscope") || open.includes("itemtype") || /typeof\s*=\s*["'][^"']*Country/i.test(open))
+    ) {
       itemSlices.push(html.slice(lt, Math.min(n, lt + 4000)));
     }
 
     i = gt + 1;
     parts.push(BLOCK_PUNCT.has(name) ? ". " : " ");
   }
-  return { text: decodeEntities(parts.join("")).replace(/\s+/g, " ").replace(/(?:\s*\.){2,}/g, ".").replace(/\s+\./g, ".").trim(), jsonLd, tables, dls, metas, og, title, h1, spanH1, canonical, displaytitle, mwTitle, itemSlices, shortDescription };
+  return {
+    text: decodeEntities(parts.join(""))
+      .replace(/\s+/g, " ")
+      .replace(/(?:\s*\.){2,}/g, ".")
+      .replace(/\s+\./g, ".")
+      .trim(),
+    jsonLd,
+    tables,
+    dls,
+    metas,
+    og,
+    title,
+    h1,
+    spanH1,
+    canonical,
+    displaytitle,
+    mwTitle,
+    itemSlices,
+    shortDescription,
+  };
 }
 
 /** Tag-scan, not nested `[\s\S]*?` — µs/KB on wiki list pages. */
@@ -373,9 +433,17 @@ export function htmlToText(html: string): string {
 }
 
 function parseLdJson(raw: string): unknown | undefined {
-  const s = decodeEntities(raw).replace(/^\s*<!\[CDATA\[/i, "").replace(/\]\]>\s*$/i, "").replace(/<!--[\s\S]*?-->/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").trim();
+  const s = decodeEntities(raw)
+    .replace(/^\s*<!\[CDATA\[/i, "")
+    .replace(/\]\]>\s*$/i, "")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .trim();
   if (!s) return;
-  for (const candidate of [s, s.replace(/,\s*([}\]])/g, "$1")]) try { return JSON.parse(candidate); } catch {}
+  for (const candidate of [s, s.replace(/,\s*([}\]])/g, "$1")])
+    try {
+      return JSON.parse(candidate);
+    } catch {}
 }
 
 export function jsonLdBlocks(html: string): unknown[] {
@@ -386,11 +454,17 @@ export function jsonLdBlocks(html: string): unknown[] {
     const mark = html.indexOf("ld+json", from);
     if (mark < 0) break;
     const lt = html.lastIndexOf("<script", mark);
-    if (lt < 0 || lt < from) { from = mark + 7; continue; }
+    if (lt < 0 || lt < from) {
+      from = mark + 7;
+      continue;
+    }
     const gt = html.indexOf(">", mark);
     if (gt < 0) break;
     const open = html.slice(lt, gt + 1);
-    if (!/type\s*=\s*["']application\/ld\+json/i.test(open)) { from = mark + 7; continue; }
+    if (!/type\s*=\s*["']application\/ld\+json/i.test(open)) {
+      from = mark + 7;
+      continue;
+    }
     const end = closeTagFrom(html, gt + 1, "</script>");
     const parsed = parseLdJson(html.slice(gt + 1, Math.max(gt + 1, end - 9)));
     if (parsed !== undefined) out.push(parsed);
@@ -401,17 +475,25 @@ export function jsonLdBlocks(html: string): unknown[] {
 
 export function openGraph(html: string): Record<string, string> {
   const og: Record<string, string> = {};
-  for (const m of html.matchAll(/<meta[^>]+(?:property|name)=["']og:([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi)) og[m[1]!.toLowerCase()] = m[2]!;
-  for (const m of html.matchAll(/<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']og:([^"']+)["'][^>]*>/gi)) og[m[2]!.toLowerCase()] = m[1]!;
+  for (const m of html.matchAll(/<meta[^>]+(?:property|name)=["']og:([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi))
+    og[m[1]!.toLowerCase()] = m[2]!;
+  for (const m of html.matchAll(/<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']og:([^"']+)["'][^>]*>/gi))
+    og[m[2]!.toLowerCase()] = m[1]!;
   return og;
 }
 
 /** DC.Title / citation_title / displaytitle — both attribute orders. */
 export function namedMeta(html: string, names: string[]): Record<string, string> {
-  const want = new Set(names.map((n) => n.toLowerCase())), out: Record<string, string> = {};
+  const want = new Set(names.map((n) => n.toLowerCase())),
+    out: Record<string, string> = {};
   for (const m of html.matchAll(/<meta\b([^>]+)>/gi)) {
-    const tag = m[1]!, key = tag.match(/(?:name|property)\s*=\s*["']([^"']+)["']/i)?.[1], val = tag.match(/content\s*=\s*["']([^"']*)["']/i)?.[1];
-    if (key && val != null) { const k = key.toLowerCase(); if (want.has(k) && out[k] === undefined) out[k] = decodeEntities(val); }
+    const tag = m[1]!,
+      key = tag.match(/(?:name|property)\s*=\s*["']([^"']+)["']/i)?.[1],
+      val = tag.match(/content\s*=\s*["']([^"']*)["']/i)?.[1];
+    if (key && val != null) {
+      const k = key.toLowerCase();
+      if (want.has(k) && out[k] === undefined) out[k] = decodeEntities(val);
+    }
   }
   return out;
 }
@@ -419,7 +501,8 @@ export function namedMeta(html: string, names: string[]): Record<string, string>
 export function htmlAlternateHrefs(html: string): string[] {
   const out: string[] = [];
   for (const m of html.matchAll(/<link\b([^>]+)>/gi)) {
-    const tag = m[1]!, rel = tag.match(/\brel\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+    const tag = m[1]!,
+      rel = tag.match(/\brel\s*=\s*["']([^"']+)["']/i)?.[1] || "";
     if (!/\balternate\b/i.test(rel)) continue;
     const href = tag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1];
     if (href && !/action=edit|application\/x-wiki/i.test(tag)) out.push(href);
@@ -429,10 +512,16 @@ export function htmlAlternateHrefs(html: string): string[] {
 
 export function opinionTrash(text: string): boolean {
   const t = text.toLowerCase();
-  return /sheeple|worst ever|wake up|donate now|only true path|be saved|cannot believe/.test(t) && !/capital of|m\/s|rfc |etag|voted \d|shipped |released |perihelion|\d{4}/.test(t);
+  return (
+    /sheeple|worst ever|wake up|donate now|only true path|be saved|cannot believe/.test(t) &&
+    !/capital of|m\/s|rfc |etag|voted \d|shipped |released |perihelion|\d{4}/.test(t)
+  );
 }
 
-export function englishEnough(text: string): boolean { const letters = (text.match(/[A-Za-z]/g) || []).length; return letters >= 40 && letters / Math.max(text.length, 1) > 0.35; }
+export function englishEnough(text: string): boolean {
+  const letters = (text.match(/[A-Za-z]/g) || []).length;
+  return letters >= 40 && letters / Math.max(text.length, 1) > 0.35;
+}
 
 export type Triple = { s: string; p: string; o: string; e: string };
 
@@ -474,9 +563,14 @@ export const CATALOG_URL_NEEDLES = [
 
 export function qualityUrlSql(col = "url"): string {
   const parts = CATALOG_URL_NEEDLES.map((n) => {
-    const needle = n.toLowerCase().replace(/'/g, ""), slash = needle.indexOf("/"), host = slash >= 0 ? needle.slice(0, slash) : needle, path = slash >= 0 ? needle.slice(slash) : "";
+    const needle = n.toLowerCase().replace(/'/g, ""),
+      slash = needle.indexOf("/"),
+      host = slash >= 0 ? needle.slice(0, slash) : needle,
+      path = slash >= 0 ? needle.slice(slash) : "";
     const hostMatch = `(${col} = 'https://${host}' OR ${col} = 'http://${host}' OR ${col} LIKE 'https://${host}/%' OR ${col} LIKE 'http://${host}/%' OR ${col} LIKE 'https://${host}?%' OR ${col} LIKE 'http://${host}?%' OR ${col} LIKE 'https://%.${host}' OR ${col} LIKE 'http://%.${host}' OR ${col} LIKE 'https://%.${host}/%' OR ${col} LIKE 'http://%.${host}/%' OR ${col} LIKE 'https://%.${host}?%' OR ${col} LIKE 'http://%.${host}?%')`;
-    return path ? `(${hostMatch} AND (${col} LIKE '%${path}' OR ${col} LIKE '%${path}/%' OR ${col} LIKE '%${path}?%'))` : hostMatch;
+    return path
+      ? `(${hostMatch} AND (${col} LIKE '%${path}' OR ${col} LIKE '%${path}/%' OR ${col} LIKE '%${path}?%'))`
+      : hostMatch;
   });
   return `(${parts.join(" OR ")})`;
 }
@@ -491,7 +585,13 @@ export function frozenEncyclopedia(t: { s: string; p: string; o: string; e?: str
   if (t.p === "obsoletes" || t.p === "updates" || t.p === "version") return false;
   if (t.p === "id") {
     const o = t.o.trim();
-    return /^[A-Z]{2}$/.test(o) || /^\+\d{1,4}$/.test(o) || /^\.[A-Za-z]{2,8}$/.test(o) || /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/.test(o) || /\b(ISO 3166|calling code|population | area |geo )/i.test(t.e || "");
+    return (
+      /^[A-Z]{2}$/.test(o) ||
+      /^\+\d{1,4}$/.test(o) ||
+      /^\.[A-Za-z]{2,8}$/.test(o) ||
+      /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/.test(o) ||
+      /\b(ISO 3166|calling code|population | area |geo )/i.test(t.e || "")
+    );
   }
   return t.p === "is" && !/^used for /i.test(t.o) && !/^(obsoleted|updated) by\b/i.test(t.o);
 }
@@ -502,9 +602,15 @@ export function qualityHost(url: string): boolean {
   const host = hostOf(url);
   if (!host) return false;
   let path = "";
-  try { path = new URL(url).pathname.toLowerCase(); } catch { return false; }
+  try {
+    path = new URL(url).pathname.toLowerCase();
+  } catch {
+    return false;
+  }
   for (const n of CATALOG_URL_NEEDLES) {
-    const needle = n.toLowerCase(), slash = needle.indexOf("/"), catalogHost = slash >= 0 ? needle.slice(0, slash) : needle;
+    const needle = n.toLowerCase(),
+      slash = needle.indexOf("/"),
+      catalogHost = slash >= 0 ? needle.slice(0, slash) : needle;
     if (host !== catalogHost && !host.endsWith(`.${catalogHost}`)) continue;
     if (slash < 0) return true;
     const prefix = needle.slice(slash);
@@ -516,7 +622,14 @@ export function qualityHost(url: string): boolean {
 /** What occupies the on-disk graph. Frozen encyclopedia stays out. */
 export function persistable(url: string, t: Triple): boolean {
   if (junkGraphFact(t) || frozenEncyclopedia(t) || !HOT_PRED.has(t.p) || looksLikeCode(`${t.o} ${t.e}`)) return false;
-  if (t.p === "is") return t.s.length >= 2 && t.s.length <= 96 && t.o.length >= 8 && t.o.length <= 72 && t.s.toLowerCase() !== t.o.toLowerCase();
+  if (t.p === "is")
+    return (
+      t.s.length >= 2 &&
+      t.s.length <= 96 &&
+      t.o.length >= 8 &&
+      t.o.length <= 72 &&
+      t.s.toLowerCase() !== t.o.toLowerCase()
+    );
   if ((t.p === "obsoletes" || t.p === "updates") && /^RFC\s+\d/i.test(t.s) && /RFC\s+\d/i.test(t.o)) return true;
   return (t.p === "id" || t.p === "version") && qualityHost(url) && t.o.length <= 48;
 }
@@ -526,16 +639,26 @@ export function ldText(v: unknown, depth = 0): string {
   if (v == null || depth > 5) return "";
   if (typeof v === "string" || typeof v === "number") return String(v).replace(/\s+/g, " ").trim();
   if (typeof v === "boolean") return "";
-  if (Array.isArray(v)) { for (const x of v) { const t = ldText(x, depth + 1); if (t) return t; } return ""; }
+  if (Array.isArray(v)) {
+    for (const x of v) {
+      const t = ldText(x, depth + 1);
+      if (t) return t;
+    }
+    return "";
+  }
   if (typeof v !== "object") return "";
   const o = v as Record<string, unknown>;
   if (o["@value"] != null) return ldText(o["@value"], depth + 1);
   if (typeof o.en === "string") return o.en.replace(/\s+/g, " ").trim();
   if (typeof o["en-US"] === "string") return String(o["en-US"]).replace(/\s+/g, " ").trim();
-  if (o.name != null) { const n = ldText(o.name, depth + 1); if (n) return n; }
+  if (o.name != null) {
+    const n = ldText(o.name, depth + 1);
+    if (n) return n;
+  }
   if (typeof o.headline === "string") return o.headline.replace(/\s+/g, " ").trim();
   if (typeof o["@id"] === "string") {
-    const id = o["@id"], wiki = wikiPageName(id);
+    const id = o["@id"],
+      wiki = wikiPageName(id);
     if (wiki && !wikiNsSkip(wiki) && !/^Q\d+$/i.test(wiki)) return wiki;
     if (/\/entity\/Q\d+/i.test(id) || /^Q\d+$/i.test(id) || /^https?:/i.test(id)) return "";
   }
@@ -592,11 +715,26 @@ function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): voi
       }
       const tel = ldText(o.telephone ?? o.telephonePrefix);
       if (tel) {
-        const code = tel.replace(/[^\d+]/g, " ").trim().split(/\s+/)[0];
-        if (code && /^\+?\d{1,4}$/.test(code)) into.push({ s: country, p: "id", o: code.startsWith("+") ? code : `+${code}`, e: `${country} calling code ${code}`.slice(0, 280) });
+        const code = tel
+          .replace(/[^\d+]/g, " ")
+          .trim()
+          .split(/\s+/)[0];
+        if (code && /^\+?\d{1,4}$/.test(code))
+          into.push({
+            s: country,
+            p: "id",
+            o: code.startsWith("+") ? code : `+${code}`,
+            e: `${country} calling code ${code}`.slice(0, 280),
+          });
       }
       const desc = ldText(o.description ?? o.abstract);
-      if (desc && desc.length >= 8 && desc.length <= 72 && !looksLikeCode(desc) && country.toLowerCase() !== desc.toLowerCase()) {
+      if (
+        desc &&
+        desc.length >= 8 &&
+        desc.length <= 72 &&
+        !looksLikeCode(desc) &&
+        country.toLowerCase() !== desc.toLowerCase()
+      ) {
         into.push({ s: country, p: "is", o: desc.slice(0, 72), e: desc.slice(0, 280) });
       }
       const pop = tidyPopulation(ldText(o.population ?? o.populationEstimate ?? o.census));
@@ -607,14 +745,16 @@ function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): voi
       if (place) {
         const pretty = CONTINENT.test(place) ? place.replace(/\b[a-z]/g, (c) => c.toUpperCase()) : place;
         const oPlace = `a country in ${pretty}`;
-        if (oPlace.length >= 8 && oPlace.length <= 72) into.push({ s: country, p: "is", o: oPlace, e: oPlace.slice(0, 280) });
+        if (oPlace.length >= 8 && oPlace.length <= 72)
+          into.push({ s: country, p: "is", o: oPlace, e: oPlace.slice(0, 280) });
       }
       const legis = tidyProper(ldText(o.legislature));
       if (legis) {
         const oLeg = `the legislature of ${country}`;
         if (oLeg.length >= 8 && oLeg.length <= 72) into.push({ s: legis, p: "is", o: oLeg, e: oLeg.slice(0, 280) });
       }
-      const geo = o.geo && typeof o.geo === "object" && !Array.isArray(o.geo) ? (o.geo as Record<string, unknown>) : undefined;
+      const geo =
+        o.geo && typeof o.geo === "object" && !Array.isArray(o.geo) ? (o.geo as Record<string, unknown>) : undefined;
       const lat = ldText(o.latitude ?? geo?.latitude);
       const lng = ldText(o.longitude ?? geo?.longitude);
       if (lat && lng && /^-?\d+(?:\.\d+)?$/.test(lat) && /^-?\d+(?:\.\d+)?$/.test(lng)) {
@@ -625,7 +765,13 @@ function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): voi
   } else {
     const desc = ldText(o.description ?? o.abstract);
     if (name && desc && desc.length >= 8 && !looksLikeCode(desc) && name.toLowerCase() !== desc.toLowerCase()) {
-      const oDesc = desc.length <= 72 ? desc : desc.slice(0, 72).replace(/\s+\S*$/, "").trim();
+      const oDesc =
+        desc.length <= 72
+          ? desc
+          : desc
+              .slice(0, 72)
+              .replace(/\s+\S*$/, "")
+              .trim();
       if (oDesc.length >= 8 && oDesc.length <= 72) {
         into.push({ s: name, p: "is", o: oDesc, e: desc.slice(0, 280) });
       }
@@ -965,8 +1111,16 @@ const COUNTRY_IS_HINT_RE = new RegExp(`\\b(${PROPER_NAME}) is a country\\b`, "iu
 
 /** Drop template CSS, refs, and parser-output chrome before reading a cell. */
 function stripCellChrome(raw: string): string {
-  if (raw.length < 12 || (raw.indexOf("<s") < 0 && raw.indexOf("<S") < 0 && !raw.includes("reference") && !raw.includes("cite-"))) return raw;
-  return raw.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<sup\b[^>]*\breference\b[^>]*>[\s\S]*?<\/sup>/gi, " ").replace(/<span\b[^>]*\bcite-bracket\b[^>]*>[\s\S]*?<\/span>/gi, " ");
+  if (
+    raw.length < 12 ||
+    (raw.indexOf("<s") < 0 && raw.indexOf("<S") < 0 && !raw.includes("reference") && !raw.includes("cite-"))
+  )
+    return raw;
+  return raw
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<sup\b[^>]*\breference\b[^>]*>[\s\S]*?<\/sup>/gi, " ")
+    .replace(/<span\b[^>]*\bcite-bracket\b[^>]*>[\s\S]*?<\/span>/gi, " ");
 }
 
 function stripMarkup(raw: string): string {
@@ -980,43 +1134,76 @@ function stripMarkup(raw: string): string {
 }
 
 function consecutiveHeads(s: string): number {
-  let max = 0, run = 0;
+  let max = 0,
+    run = 0;
   for (const w of s.split(/\s+/)) {
-    if (!w || /^(and|of|the|da|de|del|do|van|von|di|du|la|le|el|al)$/i.test(w)) { run = 0; continue; }
-    if (/^\p{Lu}/u.test(w)) { if (++run > max) max = run; } else run = 0;
+    if (!w || /^(and|of|the|da|de|del|do|van|von|di|du|la|le|el|al)$/i.test(w)) {
+      run = 0;
+      continue;
+    }
+    if (/^\p{Lu}/u.test(w)) {
+      if (++run > max) max = run;
+    } else run = 0;
   }
   return max;
 }
 
 function tidyCapital(raw: string): string | undefined {
-  const t = stripMarkup(raw).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  const t = stripMarkup(raw)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   const o = (t.match(PROPER_NAME_RE)?.[1] || t.split(/[,;]/)[0] || "").trim().replace(/[.,]+$/g, "");
-  if (o.length < 2 || o.length > 48 || NAME_JUNK.test(o) || CONTINENT.test(o) || /^flag of /i.test(o) || consecutiveHeads(o) >= 4) return;
+  if (
+    o.length < 2 ||
+    o.length > 48 ||
+    NAME_JUNK.test(o) ||
+    CONTINENT.test(o) ||
+    /^flag of /i.test(o) ||
+    consecutiveHeads(o) >= 4
+  )
+    return;
   return o;
 }
 
 function tidyIso(raw: string): string | undefined {
-  const o = stripMarkup(raw).replace(/^ISO\s*3166(?:-[12])?:?\s*/i, "").trim().match(/\b([A-Za-z]{2})\b/)?.[1]?.toUpperCase();
+  const o = stripMarkup(raw)
+    .replace(/^ISO\s*3166(?:-[12])?:?\s*/i, "")
+    .trim()
+    .match(/\b([A-Za-z]{2})\b/)?.[1]
+    ?.toUpperCase();
   return o && /^[A-Z]{2}$/.test(o) ? o : undefined;
 }
 
 function tidyPopulation(raw: string): string | undefined {
-  const o = stripMarkup(raw).replace(/\([^)]*\)/g, " ").match(/(\d{1,3}(?:,\d{3}){1,4}|\d{4,12}|\d+(?:\.\d+)?\s*(?:million|billion))/i)?.[1]?.replace(/\s+/g, " ").trim();
+  const o = stripMarkup(raw)
+    .replace(/\([^)]*\)/g, " ")
+    .match(/(\d{1,3}(?:,\d{3}){1,4}|\d{4,12}|\d+(?:\.\d+)?\s*(?:million|billion))/i)?.[1]
+    ?.replace(/\s+/g, " ")
+    .trim();
   return o && o.length >= 2 && o.length <= 48 ? o : undefined;
 }
 
 function tidyArea(raw: string): string | undefined {
-  const m = stripMarkup(raw).replace(/\([^)]*\)/g, " ").replace(/km\s*[²2]/gi, "km2").replace(/km²/g, "km2").match(/([\d,]+(?:\.\d+)?)\s*(km2|sq\s*mi|km)\b/i);
+  const m = stripMarkup(raw)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/km\s*[²2]/gi, "km2")
+    .replace(/km²/g, "km2")
+    .match(/([\d,]+(?:\.\d+)?)\s*(km2|sq\s*mi|km)\b/i);
   if (!m) return;
   const o = `${m[1]} ${/sq/i.test(m[2]!) ? "sq mi" : "km2"}`;
   return o.length <= 48 ? o : undefined;
 }
 
 function tidyGov(raw: string): string | undefined {
-  let t = stripMarkup(raw).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  let t = stripMarkup(raw)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (t.length < 6 || t.length > 60 || /^(government|republic|none|n\/a|country|state)$/i.test(t)) return;
   t = t.charAt(0).toLowerCase() + t.slice(1);
-  if (!/^(a|an|the)\s/i.test(t)) t = `${/^[aeiou]/i.test(t) && !/^(uni|u[bcdfghjklmnpqrstvwxyz])/i.test(t) ? "an" : "a"} ${t}`;
+  if (!/^(a|an|the)\s/i.test(t))
+    t = `${/^[aeiou]/i.test(t) && !/^(uni|u[bcdfghjklmnpqrstvwxyz])/i.test(t) ? "an" : "a"} ${t}`;
   return t.length >= 8 && t.length <= 72 ? t : undefined;
 }
 
@@ -1030,7 +1217,9 @@ function cellLead(raw: string): string {
   for (const m of cleaned.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
     const attrs = m[1]!;
     if (isFileLinkAttrs(attrs) || /File:/i.test(attrs)) continue;
-    let text = decodeEntities(m[2]!.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+    let text = decodeEntities(m[2]!.replace(/<[^>]+>/g, " "))
+      .replace(/\s+/g, " ")
+      .trim();
     if (!text) text = attrGet(`<a ${attrs}>`, "title");
     if (!text || /^\[\s*\d+\s*\]$/.test(text) || /^flag of /i.test(text)) continue;
     return text;
@@ -1040,23 +1229,33 @@ function cellLead(raw: string): string {
     const t = decodeEntities(title).replace(/\s+/g, " ").trim();
     if (t) return t;
   }
-  return decodeEntities(cleaned.replace(/<[^>]+>/g, " ")).replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+  return decodeEntities(cleaned.replace(/<[^>]+>/g, " "))
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function headerLabel(raw: string): string {
   return lab(decodeEntities(raw.replace(/<[^>]+>/g, " "))).replace(/^[•·*]+\s*/, "");
 }
 
-function lab(s: string): string { return s.replace(/\s+/g, " ").trim().toLowerCase(); }
+function lab(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
 
 /** Infobox labels: "Capital", "Capital city", "Capital and largest city", infobox-label spans. */
 function isCapitalLabel(label: string): boolean {
   const t = lab(label);
-  return !!t && !/\b(country|continent)\b/.test(t) && (adaptCapitalLabel(t) || /^capital\b/.test(t) || /^official capital\b/.test(t));
+  return (
+    !!t &&
+    !/\b(country|continent)\b/.test(t) &&
+    (adaptCapitalLabel(t) || /^capital\b/.test(t) || /^official capital\b/.test(t))
+  );
 }
 
 const isIsoLabel = (s: string) => /iso\s*3166/.test(lab(s));
-const isLanguageLabel = (s: string) => /^(official\s+languages?|national\s+languages?|working\s+languages?)\b/.test(lab(s));
+const isLanguageLabel = (s: string) =>
+  /^(official\s+languages?|national\s+languages?|working\s+languages?)\b/.test(lab(s));
 const isCurrencyLabel = (s: string) => /^currency\b/.test(lab(s));
 const isCallingLabel = (s: string) => /^(calling\s+code|telephone\s+code)\b/.test(lab(s));
 const isDemonymLabel = (s: string) => /^(demonym|gentilic)\b/.test(lab(s));
@@ -1073,10 +1272,12 @@ function isAreaLabel(label: string): boolean {
 }
 
 const isLegislatureLabel = (s: string) => /^(legislature|parliament|congress|national assembly)\b/.test(lab(s));
-const isGovernmentLabel = (s: string) => /^(government|government type|system of government|political system)\b/.test(lab(s));
+const isGovernmentLabel = (s: string) =>
+  /^(government|government type|system of government|political system)\b/.test(lab(s));
 const isTimezoneLabel = (s: string) => /^(time\s*zone|timezone|utc offset)\b/.test(lab(s));
 const isDrivingLabel = (s: string) => /^(driving\s+side|drives\s+on)\b/.test(lab(s));
-const isHeadLabel = (s: string) => /^(president|monarch|king|queen|head of state|head of government|prime minister)\b/.test(lab(s));
+const isHeadLabel = (s: string) =>
+  /^(president|monarch|king|queen|head of state|head of government|prime minister)\b/.test(lab(s));
 const isAnthemLabel = (s: string) => /^(anthem|national anthem)\b/.test(lab(s));
 const isMottoLabel = (s: string) => /^(national\s+)?motto$/.test(lab(s));
 const isOfficialNameLabel = (s: string) => /^(official name|conventional long name|long name)\b/.test(lab(s));
@@ -1129,10 +1330,22 @@ function namedEntities(raw: string): string[] {
   };
   for (const m of cleaned.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
     if (/wiki\/File:/i.test(m[1]!) || /File:/i.test(m[1]!) || /#cite_/i.test(m[1]!)) continue;
-    add(tidyProper(decodeEntities(m[2]!.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim()));
+    add(
+      tidyProper(
+        decodeEntities(m[2]!.replace(/<[^>]+>/g, " "))
+          .replace(/\s+/g, " ")
+          .trim(),
+      ),
+    );
   }
   for (const m of cleaned.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
-    add(tidyProper(decodeEntities(m[1]!.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim()));
+    add(
+      tidyProper(
+        decodeEntities(m[1]!.replace(/<[^>]+>/g, " "))
+          .replace(/\s+/g, " ")
+          .trim(),
+      ),
+    );
   }
   if (!out.length) {
     for (const m of cleaned.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)) {
@@ -1207,9 +1420,7 @@ function isOpenTag(html: string, lt: number, namelen: number): boolean {
 
 function spanN(open: string, name: string): number {
   const re =
-    name === "rowspan"
-      ? /\browspan\s*=\s*(?:"(\d+)"|'(\d+)'|(\d+))/i
-      : /\bcolspan\s*=\s*(?:"(\d+)"|'(\d+)'|(\d+))/i;
+    name === "rowspan" ? /\browspan\s*=\s*(?:"(\d+)"|'(\d+)'|(\d+))/i : /\bcolspan\s*=\s*(?:"(\d+)"|'(\d+)'|(\d+))/i;
   const m = open.match(re);
   const n = Number(m?.[1] || m?.[2] || m?.[3] || 1);
   return Number.isFinite(n) && n >= 1 && n < 200 ? n : 1;
@@ -1438,9 +1649,13 @@ export function wikiSubject(url: string, html: string, scan?: HtmlScan): string 
     if (scan.displaytitle) candidates.push(scan.displaytitle);
     const n = scan.canonical ? wikiPageName(scan.canonical) : undefined;
     if (n) candidates.push(n);
-    const h1 = html.includes("firstHeading") ? html.match(/id=["']firstHeading["'][^>]*>([\s\S]{2,80}?)<\/h1>/i)?.[1] : undefined;
+    const h1 = html.includes("firstHeading")
+      ? html.match(/id=["']firstHeading["'][^>]*>([\s\S]{2,80}?)<\/h1>/i)?.[1]
+      : undefined;
     if (h1) candidates.push(h1);
-    const redir = html.includes("redirectText") ? html.match(/class=["'][^"']*\bredirectText\b[^"']*["'][\s\S]{0,200}?<a\b[^>]*>([\s\S]{2,80}?)<\/a>/i)?.[1] : undefined;
+    const redir = html.includes("redirectText")
+      ? html.match(/class=["'][^"']*\bredirectText\b[^"']*["'][\s\S]{0,200}?<a\b[^>]*>([\s\S]{2,80}?)<\/a>/i)?.[1]
+      : undefined;
     if (redir) candidates.push(redir);
     if (scan.og.title) candidates.push(scan.og.title);
     if (scan.metas["dc.title"]) candidates.push(scan.metas["dc.title"]);
@@ -1448,17 +1663,28 @@ export function wikiSubject(url: string, html: string, scan?: HtmlScan): string 
   } else {
     const main = html.match(/<span\b[^>]*class="[^"]*\bmw-page-title-main\b[^"]*"[^>]*>([\s\S]{1,80}?)<\/span>/i)?.[1];
     if (main) candidates.push(main);
-    const dt = html.match(/property=["']mw:PageProp\/displaytitle["'][^>]*content=["']([^"']+)["']/i)?.[1] || html.match(/content=["']([^"']+)["'][^>]*property=["']mw:PageProp\/displaytitle["']/i)?.[1];
+    const dt =
+      html.match(/property=["']mw:PageProp\/displaytitle["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/content=["']([^"']+)["'][^>]*property=["']mw:PageProp\/displaytitle["']/i)?.[1];
     if (dt) candidates.push(dt);
-    const n = wikiPageName(html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] || html.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["']/i)?.[1] || "");
+    const n = wikiPageName(
+      html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1] ||
+        html.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["']/i)?.[1] ||
+        "",
+    );
     if (n) candidates.push(n);
     const h1 = html.match(/id=["']firstHeading["'][^>]*>([\s\S]{2,80}?)<\/h1>/i)?.[1];
     if (h1) candidates.push(h1);
-    const redir = html.match(/class=["'][^"']*\bredirectText\b[^"']*["'][\s\S]{0,200}?<a\b[^>]*>([\s\S]{2,80}?)<\/a>/i)?.[1];
+    const redir = html.match(
+      /class=["'][^"']*\bredirectText\b[^"']*["'][\s\S]{0,200}?<a\b[^>]*>([\s\S]{2,80}?)<\/a>/i,
+    )?.[1];
     if (redir) candidates.push(redir);
     for (const v of Object.values(namedMeta(html, ["og:title", "dc.title", "citation_title"]))) candidates.push(v);
   }
-  for (const c of candidates) { const t = wikiCleanTitle(c); if (t) return t; }
+  for (const c of candidates) {
+    const t = wikiCleanTitle(c);
+    if (t) return t;
+  }
   return fromUrl;
 }
 
@@ -1476,9 +1702,15 @@ export function wikiIso(url: string, html: string, scan?: HtmlScan): Triple | un
   if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return;
   let raw: string | undefined;
   for (const { label, data } of wikiInfoboxPairs(html, scan?.tables)) {
-    if (isIsoLabel(label)) { raw = data; break; }
+    if (isIsoLabel(label)) {
+      raw = data;
+      break;
+    }
   }
-  if (!raw) raw = html.match(/"iso3166code"\s*:\s*\{\s*"wt"\s*:\s*"((?:\\.|[^"\\]){2,12})"/i)?.[1] || html.match(/\|\s*iso(?:_?3166_?code|code)\s*=\s*([A-Za-z]{2})\b/i)?.[1];
+  if (!raw)
+    raw =
+      html.match(/"iso3166code"\s*:\s*\{\s*"wt"\s*:\s*"((?:\\.|[^"\\]){2,12})"/i)?.[1] ||
+      html.match(/\|\s*iso(?:_?3166_?code|code)\s*=\s*([A-Za-z]{2})\b/i)?.[1];
   const o = tidyIso(raw || "");
   return o ? { s: name, p: "id", o, e: `${name} ISO 3166-1 alpha-2 ${o}`.slice(0, 280) } : undefined;
 }
@@ -1514,13 +1746,18 @@ export function wikiCapitalTable(html: string, tables?: { open: string; inner: s
       if (!country || !capital || seen.has(country)) continue;
       seen.add(country);
       capitals.push({ s: country, p: "capital", o: capital, e: `capital of ${country} is ${capital}`.slice(0, 280) });
-      if (cols.continent != null && cells.length > cols.continent) { const hit = continentIs(country, cellLead(cells[cols.continent]!)); if (hit) rest.push(hit); }
+      if (cols.continent != null && cells.length > cols.continent) {
+        const hit = continentIs(country, cellLead(cells[cols.continent]!));
+        if (hit) rest.push(hit);
+      }
       if (cols.notes != null && cells.length > cols.notes) {
         const noteText = stripMarkup(cells[cols.notes]!);
         if (/^see also\b/i.test(noteText)) continue;
-        const noteCont = cols.continent != null && cells.length > cols.continent ? cellLead(cells[cols.continent]!) : "";
+        const noteCont =
+          cols.continent != null && cells.length > cols.continent ? cellLead(cells[cols.continent]!) : "";
         for (const t of capitalProse(noteText)) {
-          if (t.p !== "capital" || seen.has(t.s) || /melbourne|sydney/i.test(t.o) || /melbourne|sydney/i.test(t.s)) continue;
+          if (t.p !== "capital" || seen.has(t.s) || /melbourne|sydney/i.test(t.o) || /melbourne|sydney/i.test(t.s))
+            continue;
           seen.add(t.s);
           capitals.push(t);
           const hit = noteCont ? continentIs(t.s, noteCont) : undefined;
@@ -1534,19 +1771,38 @@ export function wikiCapitalTable(html: string, tables?: { open: string; inner: s
 
 function attrOrInner(scope: string, key: string): string {
   const k = `(?:[\\w.]+:|https?:\\/\\/schema\\.org\\/)?${key}`;
-  return scope.match(new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*content\\s*=\\s*["']([^"']+)["']`, "i"))?.[1]
-    || scope.match(new RegExp(`content\\s*=\\s*["']([^"']+)["'][^>]*(?:itemprop|property)\\s*=\\s*["']${k}["']`, "i"))?.[1]
-    || scope.match(new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*>\\s*(?:<[^>]+>)*\\s*([A-Z][^<]{1,60})`, "i"))?.[1]?.trim()
-    || "";
+  return (
+    scope.match(
+      new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*content\\s*=\\s*["']([^"']+)["']`, "i"),
+    )?.[1] ||
+    scope.match(
+      new RegExp(`content\\s*=\\s*["']([^"']+)["'][^>]*(?:itemprop|property)\\s*=\\s*["']${k}["']`, "i"),
+    )?.[1] ||
+    scope
+      .match(
+        new RegExp(`(?:itemprop|property)\\s*=\\s*["']${k}["'][^>]*>\\s*(?:<[^>]+>)*\\s*([A-Z][^<]{1,60})`, "i"),
+      )?.[1]
+      ?.trim() ||
+    ""
+  );
 }
 
 function countryFactsFromScope(scope: string): Triple[] {
   const out: Triple[] = [];
   const country = tidyCapital(attrOrInner(scope, "name"));
-  const city = tidyCapital(attrOrInner(scope, "capital")) || tidyCapital(scope.match(/(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?capital["'][\s\S]{0,400}?(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?name["'][^>]*>([\s\S]{1,60}?)</i)?.[1] || "");
-  if (country && city) out.push({ s: country, p: "capital", o: city, e: `capital of ${country} is ${city}`.slice(0, 280) });
+  const city =
+    tidyCapital(attrOrInner(scope, "capital")) ||
+    tidyCapital(
+      scope.match(
+        /(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?capital["'][\s\S]{0,400}?(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?name["'][^>]*>([\s\S]{1,60}?)</i,
+      )?.[1] || "",
+    );
+  if (country && city)
+    out.push({ s: country, p: "capital", o: city, e: `capital of ${country} is ${city}`.slice(0, 280) });
   if (country) {
-    const iso = tidyIso(attrOrInner(scope, "isoCode") || attrOrInner(scope, "iso3166Code") || attrOrInner(scope, "identifier"));
+    const iso = tidyIso(
+      attrOrInner(scope, "isoCode") || attrOrInner(scope, "iso3166Code") || attrOrInner(scope, "identifier"),
+    );
     if (iso) out.push({ s: country, p: "id", o: iso, e: `${country} ISO 3166-1 alpha-2 ${iso}`.slice(0, 280) });
     const lang = tidyProper(attrOrInner(scope, "officialLanguage"));
     if (lang) pushIs(out, lang, `an official language of ${country}`);
@@ -1559,12 +1815,15 @@ function countryFactsFromScope(scope: string): Triple[] {
 function structuredCountryCapitals(html: string, slices?: string[]): Triple[] {
   const out: Triple[] = [];
   if (slices) {
-    for (const scope of slices) if (/Country/i.test(scope) && /(?:itemtype|typeof)\s*=\s*["'][^"']*Country/i.test(scope)) out.push(...countryFactsFromScope(scope));
+    for (const scope of slices)
+      if (/Country/i.test(scope) && /(?:itemtype|typeof)\s*=\s*["'][^"']*Country/i.test(scope))
+        out.push(...countryFactsFromScope(scope));
     return out;
   }
   const re = /(?:itemtype|typeof)\s*=\s*["'][^"']*Country[^"']*["']/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) out.push(...countryFactsFromScope(html.slice(Math.max(0, m.index - 120), m.index + 4000)));
+  while ((m = re.exec(html)))
+    out.push(...countryFactsFromScope(html.slice(Math.max(0, m.index - 120), m.index + 4000)));
   return out;
 }
 
@@ -1577,12 +1836,14 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
   for (const { label, data } of pairs) {
     if (isLanguageLabel(label)) {
       const official = !/^national\s+languages?\b/.test(lab(label));
-      for (const lang of namedEntities(data).slice(0, 4)) pushIs(out, lang, official ? `an official language of ${name}` : `a national language of ${name}`);
+      for (const lang of namedEntities(data).slice(0, 4))
+        pushIs(out, lang, official ? `an official language of ${name}` : `a national language of ${name}`);
     } else if (isCurrencyLabel(label)) {
       const cur = namedEntities(data)[0];
       if (cur) pushIs(out, cur, `the currency of ${name}`);
       const code = stripMarkup(data).match(/\(([A-Z]{3})\)/)?.[1];
-      if (code && !/^(THE|AND|FOR|GDP|ISO|UTC|USA|UN|NEW)$/.test(code)) out.push({ s: name, p: "id", o: code, e: `${name} currency ${code}`.slice(0, 280) });
+      if (code && !/^(THE|AND|FOR|GDP|ISO|UTC|USA|UN|NEW)$/.test(code))
+        out.push({ s: name, p: "id", o: code, e: `${name} currency ${code}`.slice(0, 280) });
     } else if (isLargestCityLabel(label) && !CONTINENT.test(name)) {
       const city = tidyCapital(data);
       if (city) pushIs(out, city, `the largest city of ${name}`);
@@ -1591,7 +1852,8 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       if (motto && !junkMotto(motto)) pushIs(out, motto, `the motto of ${name}`);
     } else if (isOfficialNameLabel(label)) {
       const official = tidyProper(data) || namedEntities(data)[0];
-      if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) pushIs(out, official, `the official name of ${name}`);
+      if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official))
+        pushIs(out, official, `the official name of ${name}`);
     } else if (isCapitalLabel(label) && !CONTINENT.test(name)) {
       const city = tidyCapital(data);
       if (city) {
@@ -1602,14 +1864,26 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       const iso = tidyIso(data);
       if (iso) out.push({ s: name, p: "id", o: iso, e: `${name} ISO 3166-1 alpha-2 ${iso}`.slice(0, 280) });
     } else if (isCallingLabel(label)) {
-      const code = stripMarkup(data).replace(/[^\d+]/g, " ").trim().split(/\s+/)[0];
-      if (code && /^\+?\d{1,4}$/.test(code)) out.push({ s: name, p: "id", o: code.startsWith("+") ? code : `+${code}`, e: `${name} calling code ${code}`.slice(0, 280) });
+      const code = stripMarkup(data)
+        .replace(/[^\d+]/g, " ")
+        .trim()
+        .split(/\s+/)[0];
+      if (code && /^\+?\d{1,4}$/.test(code))
+        out.push({
+          s: name,
+          p: "id",
+          o: code.startsWith("+") ? code : `+${code}`,
+          e: `${name} calling code ${code}`.slice(0, 280),
+        });
     } else if (isDemonymLabel(label)) {
       const dem = namedEntities(data)[0];
       if (dem) pushIs(out, dem, `a demonym of ${name}`);
     } else if (isTldLabel(label)) {
-      const tld = stripMarkup(data).match(/\.[a-z0-9-]{2,24}/i)?.[0]?.toLowerCase();
-      if (tld && tld.length >= 3 && tld.length <= 24) out.push({ s: name, p: "id", o: tld, e: `${name} TLD ${tld}`.slice(0, 280) });
+      const tld = stripMarkup(data)
+        .match(/\.[a-z0-9-]{2,24}/i)?.[0]
+        ?.toLowerCase();
+      if (tld && tld.length >= 3 && tld.length <= 24)
+        out.push({ s: name, p: "id", o: tld, e: `${name} TLD ${tld}`.slice(0, 280) });
     } else if (isPopulationLabel(label)) {
       const pop = tidyPopulation(data);
       if (pop) out.push({ s: name, p: "id", o: pop, e: `${name} population ${pop}`.slice(0, 280) });
@@ -1624,14 +1898,27 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       if (gov) out.push({ s: name, p: "is", o: gov, e: gov.slice(0, 280) });
     } else if (isTimezoneLabel(label)) {
       const tzRaw = stripMarkup(data).replace(/\s+/g, " ");
-      const tz = tzRaw.match(/\bUTC\s*[+\-−±]\s*\d{1,2}(?::\d{2})?\b/i)?.[0]?.replace(/\s+/g, "").replace("−", "-").replace("±", "+") || tzRaw.match(/\b([A-Z]{2,5})\b/)?.[1];
-      if (tz && tz.length <= 48 && !/^(THE|AND|UTC)$/i.test(tz)) out.push({ s: name, p: "id", o: tz, e: `${name} time zone ${tz}`.slice(0, 280) });
+      const tz =
+        tzRaw
+          .match(/\bUTC\s*[+\-−±]\s*\d{1,2}(?::\d{2})?\b/i)?.[0]
+          ?.replace(/\s+/g, "")
+          .replace("−", "-")
+          .replace("±", "+") || tzRaw.match(/\b([A-Z]{2,5})\b/)?.[1];
+      if (tz && tz.length <= 48 && !/^(THE|AND|UTC)$/i.test(tz))
+        out.push({ s: name, p: "id", o: tz, e: `${name} time zone ${tz}`.slice(0, 280) });
     } else if (isDrivingLabel(label)) {
-      const side = stripMarkup(data).match(/\b(left|right)\b/i)?.[1]?.toLowerCase();
+      const side = stripMarkup(data)
+        .match(/\b(left|right)\b/i)?.[1]
+        ?.toLowerCase();
       if (side) out.push({ s: name, p: "id", o: side, e: `${name} drives on the ${side}`.slice(0, 280) });
     } else if (isHeadLabel(label)) {
       const person = namedEntities(data)[0];
-      if (person) pushIs(out, person, `${/prime minister/i.test(label) ? "the prime minister of" : /head of government/i.test(label) ? "the head of government of" : /president/i.test(label) ? "the president of" : "the head of state of"} ${name}`);
+      if (person)
+        pushIs(
+          out,
+          person,
+          `${/prime minister/i.test(label) ? "the prime minister of" : /head of government/i.test(label) ? "the head of government of" : /president/i.test(label) ? "the president of" : "the head of state of"} ${name}`,
+        );
     } else if (isAnthemLabel(label)) {
       const anthem = namedEntities(data)[0];
       if (anthem) pushIs(out, anthem, `the anthem of ${name}`);
@@ -1673,7 +1960,8 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
   if (!out.some((t) => /official name of/i.test(t.o))) {
     const wt = html.match(/\|\s*(?:conventional_long_name|official_name)\s*=\s*([^\n]+)/i)?.[1];
     const official = wt ? tidyProper(wt) || namedEntities(wt)[0] : undefined;
-    if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) pushIs(out, official, `the official name of ${name}`);
+    if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official))
+      pushIs(out, official, `the official name of ${name}`);
   }
   if (!out.some((t) => /motto of/i.test(t.o))) {
     const wt = html.match(/\|\s*(?:national_motto|motto)\s*=\s*([^\n]+)/i)?.[1];
@@ -1699,7 +1987,10 @@ export function defListFacts(url: string, html: string, scan?: HtmlScan): Triple
   const pairs = defListPairs(html, scan?.dls);
   if (!pairs.length) return [];
   const name = wikiSubject(url, html, scan);
-  const s = name && !wikiNsSkip(name) && !/^List of /i.test(name) ? name : tidyCapital(pairs.find((p) => /^(country|nation|state)\b/.test(p.label))?.data || "");
+  const s =
+    name && !wikiNsSkip(name) && !/^List of /i.test(name)
+      ? name
+      : tidyCapital(pairs.find((p) => /^(country|nation|state)\b/.test(p.label))?.data || "");
   return s && !wikiNsSkip(s) && !/^List of /i.test(s) ? extrasFromPairs(s, pairs) : [];
 }
 
@@ -1715,14 +2006,21 @@ function wikiShortDescription(html: string): string | undefined {
   const gt = tagCloseGt(html, lt);
   if (gt < 0) return;
   const name = tagNameAt(html, lt) || "div";
-  const t = decodeEntities(html.slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, `</${name}>`) - name.length - 3)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  const t = decodeEntities(
+    html
+      .slice(gt + 1, Math.max(gt + 1, closeTagFrom(html, gt + 1, `</${name}>`) - name.length - 3))
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
   return t.length >= 4 && t.length <= 80 ? t : undefined;
 }
 
 function shortDescObject(desc: string): string | undefined {
   let o = desc.replace(/\s+/g, " ").trim();
   if (/^country in /i.test(o)) o = `a ${o.charAt(0).toLowerCase()}${o.slice(1)}`;
-  else if (o.length >= 8 && !/^(a|an|the)\s/i.test(o)) o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o.charAt(0).toLowerCase()}${o.slice(1)}`;
+  else if (o.length >= 8 && !/^(a|an|the)\s/i.test(o))
+    o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o.charAt(0).toLowerCase()}${o.slice(1)}`;
   return o.length >= 8 && o.length <= 72 && !looksLikeCode(o) ? o : undefined;
 }
 
@@ -1733,16 +2031,27 @@ export function wikiLeadIs(url: string, html: string, text: string, scan?: HtmlS
   const tryObj = (oRaw: string): Triple | undefined => {
     const o = stripMarkup(oRaw).replace(/\s+/g, " ").trim();
     if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return;
-    if (/^the capital\b|^capital of\b|^official language/i.test(o) || /^(and largest city|ISO |Official |Currency|Capital)\b/i.test(o) || name.toLowerCase() === o.toLowerCase()) return;
+    if (
+      /^the capital\b|^capital of\b|^official language/i.test(o) ||
+      /^(and largest city|ISO |Official |Currency|Capital)\b/i.test(o) ||
+      name.toLowerCase() === o.toLowerCase()
+    )
+      return;
     return { s: name, p: "is", o, e: o.slice(0, 280) };
   };
   const short = scan?.shortDescription || (html ? wikiShortDescription(html) : undefined);
-  if (short) { const hit = tryObj(shortDescObject(short) || ""); if (hit) return hit; }
+  if (short) {
+    const hit = tryObj(shortDescObject(short) || "");
+    if (hit) return hit;
+  }
   const metas = scan ? scan.metas : html ? namedMeta(html, ["description", "og:description", "dc.description"]) : {};
   const og = scan ? scan.og : html ? openGraph(html) : {};
   const nameRe = escapeRe(name);
   const lead = new RegExp(`(?:^|[.!?\\n]\\s+)${nameRe}\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`, "i");
-  const official = new RegExp(`(?:^|[.!?\\n]\\s+)${nameRe},\\s+officially\\s+[^,.]{2,80},\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`, "i");
+  const official = new RegExp(
+    `(?:^|[.!?\\n]\\s+)${nameRe},\\s+officially\\s+[^,.]{2,80},\\s+is\\s+(.{8,72}?)(?:\\.|$|,)`,
+    "i",
+  );
   for (const c of [metas.description, metas["og:description"], metas["dc.description"], og.description, text]) {
     if (typeof c !== "string" || c.length < 12) continue;
     const blob = `. ${c.trim()}`;
@@ -1789,18 +2098,31 @@ function startsAsciiCi(s: string, i: number, needleLc: string): boolean {
 function capitalProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
-  const add = (country: string, city: string, ev: string) => { const s = tidyCapital(country), o = tidyCapital(city); if (!s || !o || seen.has(s) || CONTINENT.test(s) || CONTINENT.test(o)) return; seen.add(s); out.push({ s, p: "capital", o, e: ev.slice(0, 280) }); };
+  const add = (country: string, city: string, ev: string) => {
+    const s = tidyCapital(country),
+      o = tidyCapital(city);
+    if (!s || !o || seen.has(s) || CONTINENT.test(s) || CONTINENT.test(o)) return;
+    seen.add(s);
+    out.push({ s, p: "capital", o, e: ev.slice(0, 280) });
+  };
   const head = text.slice(0, 12_000);
   for (const needle of ["capital city of ", "capital of "]) {
     let i = 0;
     while ((i = findAsciiCi(head, needle, i)) >= 0) {
-      const afterOf = i + needle.length, country = takeProperAt(head, afterOf);
+      const afterOf = i + needle.length,
+        country = takeProperAt(head, afterOf);
       if (country) {
         let j = skipWs(head, country.end);
-        if (startsAsciiCi(head, j, "is ")) { const city = takeProperAt(head, j + 3); if (city) add(country.name, city.name, head.slice(Math.max(0, i - 24), city.end)); }
+        if (startsAsciiCi(head, j, "is ")) {
+          const city = takeProperAt(head, j + 3);
+          if (city) add(country.name, city.name, head.slice(Math.max(0, i - 24), city.end));
+        }
       }
       const was = head.slice(Math.max(0, i - 80), i).match(WAS_CAPITAL_RE);
-      if (was) { const country2 = takeProperAt(head, afterOf); if (country2) add(country2.name, was[1]!, `${was[1]} ${head.slice(i, country2.end)}`); }
+      if (was) {
+        const country2 = takeProperAt(head, afterOf);
+        if (country2) add(country2.name, was[1]!, `${was[1]} ${head.slice(i, country2.end)}`);
+      }
       i += 8;
     }
   }
@@ -1810,7 +2132,10 @@ function capitalProse(text: string): Triple[] {
       const owner = head.slice(Math.max(0, i - 80), i).match(NAME_TAIL_RE);
       let j = skipWs(head, i + suffix.length);
       if (startsAsciiCi(head, j, "city")) j = skipWs(head, j + 4);
-      if (owner && startsAsciiCi(head, j, "is ")) { const city = takeProperAt(head, j + 3); if (city) add(owner[1]!, city.name, head.slice(Math.max(0, i - 40), city.end)); }
+      if (owner && startsAsciiCi(head, j, "is ")) {
+        const city = takeProperAt(head, j + 3);
+        if (city) add(owner[1]!, city.name, head.slice(Math.max(0, i - 40), city.end));
+      }
       i += 8;
     }
   }
@@ -1820,46 +2145,103 @@ function capitalProse(text: string): Triple[] {
 function extrasFromProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
-  const add = (t: Triple) => { if (t.o.length < 8 || t.o.length > 72) return; const k = `${t.s}\0${t.p}\0${t.o}`; if (seen.has(k)) return; seen.add(k); out.push(t); };
+  const add = (t: Triple) => {
+    if (t.o.length < 8 || t.o.length > 72) return;
+    const k = `${t.s}\0${t.p}\0${t.o}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(t);
+  };
   const head = text.slice(0, 12_000);
   let i = 0;
   while ((i = findAsciiCi(head, "official language of ", i)) >= 0) {
     const country = takeProperAt(head, i + "official language of ".length);
     const langM = head.slice(Math.max(0, i - 80), i).match(LANG_IS_RE);
     if (langM && country) {
-      const lang = tidyProper(langM[1]!), ctry = tidyCapital(country.name);
-      if (lang && ctry) add({ s: lang, p: "is", o: `an official language of ${ctry}`, e: head.slice(Math.max(0, i - 40), country.end).slice(0, 280) });
+      const lang = tidyProper(langM[1]!),
+        ctry = tidyCapital(country.name);
+      if (lang && ctry)
+        add({
+          s: lang,
+          p: "is",
+          o: `an official language of ${ctry}`,
+          e: head.slice(Math.max(0, i - 40), country.end).slice(0, 280),
+        });
     }
     i += 12;
   }
   i = 0;
   while ((i = findAsciiCi(head, "official languages of ", i)) >= 0) {
     const country = takeProperAt(head, i + "official languages of ".length);
-    if (country) { let j = skipWs(head, country.end); if (startsAsciiCi(head, j, "is ")) { const lang = takeProperAt(head, j + 3), ctry = tidyCapital(country.name), l = lang ? tidyProper(lang.name) : undefined; if (l && ctry) add({ s: l, p: "is", o: `an official language of ${ctry}`, e: head.slice(i, lang!.end).slice(0, 280) }); } }
+    if (country) {
+      let j = skipWs(head, country.end);
+      if (startsAsciiCi(head, j, "is ")) {
+        const lang = takeProperAt(head, j + 3),
+          ctry = tidyCapital(country.name),
+          l = lang ? tidyProper(lang.name) : undefined;
+        if (l && ctry)
+          add({ s: l, p: "is", o: `an official language of ${ctry}`, e: head.slice(i, lang!.end).slice(0, 280) });
+      }
+    }
     i += 12;
   }
   i = 0;
   while ((i = findAsciiCi(head, "currency of ", i)) >= 0) {
     const country = takeProperAt(head, i + "currency of ".length);
-    if (country) { let j = skipWs(head, country.end); if (startsAsciiCi(head, j, "is ")) { j = skipWs(head, j + 3); if (startsAsciiCi(head, j, "the ")) j += 4; const cur = tidyProper(head.slice(j, j + 48)), ctry = tidyCapital(country.name); if (cur && ctry) add({ s: cur, p: "is", o: `the currency of ${ctry}`, e: head.slice(i, j + cur.length).slice(0, 280) }); } }
+    if (country) {
+      let j = skipWs(head, country.end);
+      if (startsAsciiCi(head, j, "is ")) {
+        j = skipWs(head, j + 3);
+        if (startsAsciiCi(head, j, "the ")) j += 4;
+        const cur = tidyProper(head.slice(j, j + 48)),
+          ctry = tidyCapital(country.name);
+        if (cur && ctry)
+          add({ s: cur, p: "is", o: `the currency of ${ctry}`, e: head.slice(i, j + cur.length).slice(0, 280) });
+      }
+    }
     i += 10;
   }
-  const hint = tidyCapital(head.match(CAPITAL_OF_HINT_RE)?.[1] || "") || tidyCapital(head.match(COUNTRY_IS_HINT_RE)?.[1] || "");
+  const hint =
+    tidyCapital(head.match(CAPITAL_OF_HINT_RE)?.[1] || "") || tidyCapital(head.match(COUNTRY_IS_HINT_RE)?.[1] || "");
   const langsAreAt = findAsciiCi(head, "official languages are ", 0);
   if (hint && langsAreAt >= 0) {
-    const rest = head.slice(langsAreAt + "official languages are ".length, langsAreAt + 200), cut = rest.split(".")[0] || rest;
-    for (const lang of namedEntities(cut).slice(0, 4)) add({ s: lang, p: "is", o: `an official language of ${hint}`, e: cut.slice(0, 280) });
+    const rest = head.slice(langsAreAt + "official languages are ".length, langsAreAt + 200),
+      cut = rest.split(".")[0] || rest;
+    for (const lang of namedEntities(cut).slice(0, 4))
+      add({ s: lang, p: "is", o: `an official language of ${hint}`, e: cut.slice(0, 280) });
   }
-  for (const m of head.matchAll(/\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|all-in-one\s+|all in one\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi)) {
+  for (const m of head.matchAll(
+    /\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|all-in-one\s+|all in one\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi,
+  )) {
     const s = tidyProper(m[1]!);
-    if (s && !/^(this|it|there|what|github|the)$/i.test(s)) { const kind = m[2]!.replace(/\s+/g, " ").trim().toLowerCase(); add({ s, p: "is", o: /^[aeiou]/i.test(kind) ? `an ${kind}` : `a ${kind}`, e: m[0]!.slice(0, 280) }); }
+    if (s && !/^(this|it|there|what|github|the)$/i.test(s)) {
+      const kind = m[2]!.replace(/\s+/g, " ").trim().toLowerCase();
+      add({ s, p: "is", o: /^[aeiou]/i.test(kind) ? `an ${kind}` : `a ${kind}`, e: m[0]!.slice(0, 280) });
+    }
   }
   for (const t of techniquesFromProse(head)) add(t);
   return out;
 }
 
-const SPDX_EXTRACT: Record<string, string> = { MIT: "MIT License", "Apache-2.0": "Apache License 2.0", "BSD-2-Clause": "BSD 2-Clause License", "BSD-3-Clause": "BSD 3-Clause License", ISC: "ISC License", "GPL-2.0-only": "GNU GPL v2", "GPL-3.0-only": "GNU GPL v3", "LGPL-3.0-only": "GNU LGPL v3", "MPL-2.0": "Mozilla Public License 2.0", "AGPL-3.0-only": "GNU AGPL v3", Unlicense: "The Unlicense", "CC0-1.0": "CC0 1.0 Universal", "0BSD": "BSD Zero Clause License", "BlueOak-1.0.0": "Blue Oak Model License" };
-function spdxObjectName(id: string): string { return SPDX_EXTRACT[id] ?? `${id} license`; }
+const SPDX_EXTRACT: Record<string, string> = {
+  MIT: "MIT License",
+  "Apache-2.0": "Apache License 2.0",
+  "BSD-2-Clause": "BSD 2-Clause License",
+  "BSD-3-Clause": "BSD 3-Clause License",
+  ISC: "ISC License",
+  "GPL-2.0-only": "GNU GPL v2",
+  "GPL-3.0-only": "GNU GPL v3",
+  "LGPL-3.0-only": "GNU LGPL v3",
+  "MPL-2.0": "Mozilla Public License 2.0",
+  "AGPL-3.0-only": "GNU AGPL v3",
+  Unlicense: "The Unlicense",
+  "CC0-1.0": "CC0 1.0 Universal",
+  "0BSD": "BSD Zero Clause License",
+  "BlueOak-1.0.0": "Blue Oak Model License",
+};
+function spdxObjectName(id: string): string {
+  return SPDX_EXTRACT[id] ?? `${id} license`;
+}
 
 function rfcMentionsFromText(text: string): Triple[] {
   const out: Triple[] = [];
@@ -1868,16 +2250,40 @@ function rfcMentionsFromText(text: string): Triple[] {
     if (seen.has(num)) return;
     const o = shortTitle(title.replace(/^RFC\s*\d+\s*[:\-–]?\s*/i, ""));
     if (o.length < 8 || rfcGistJunk(o) || /^RFC\s*\d+$/i.test(o) || /^Editor$/i.test(o)) return;
-    seen.add(num); out.push({ s: `RFC ${num}`, p: "is", o, e: ev.slice(0, 280) });
+    seen.add(num);
+    out.push({ s: `RFC ${num}`, p: "is", o, e: ev.slice(0, 280) });
   };
   const head = text.slice(0, 48_000);
-  for (const re of [/\bRFC\s*(\d{3,5})\s*[:\-–]\s*([A-Z][^\n.]{8,80})/g, /\bRFC\s*(\d{3,5})\s+(?!is\b|was\b|defines\b|specifies\b|obsoletes\b|updates\b|and\b)([A-Z][A-Za-z][^.\n]{6,70})/g, /\bRFC\s*(\d{3,5})\s+\(([A-Z][^)]{8,80})\)/g]) for (const m of head.matchAll(re)) add(m[1]!, m[2]!, m[0]!);
+  for (const re of [
+    /\bRFC\s*(\d{3,5})\s*[:\-–]\s*([A-Z][^\n.]{8,80})/g,
+    /\bRFC\s*(\d{3,5})\s+(?!is\b|was\b|defines\b|specifies\b|obsoletes\b|updates\b|and\b)([A-Z][A-Za-z][^.\n]{6,70})/g,
+    /\bRFC\s*(\d{3,5})\s+\(([A-Z][^)]{8,80})\)/g,
+  ])
+    for (const m of head.matchAll(re)) add(m[1]!, m[2]!, m[0]!);
   return out.slice(0, 64);
 }
 
 function ianaKindFromUrl(url: string): string | undefined {
   if (!/iana\.org/i.test(url)) return;
-  return /http-status-codes/i.test(url) ? "http" : /protocol-numbers/i.test(url) ? "protocol" : /media-types/i.test(url) ? "media" : /uri-schemes/i.test(url) ? "scheme" : /http-methods/i.test(url) ? "method" : /character-sets/i.test(url) ? "charset" : /http-fields|message-headers/i.test(url) ? "header" : /dns-parameters/i.test(url) ? "dns" : /well-known-uris/i.test(url) ? "wellknown" : undefined;
+  return /http-status-codes/i.test(url)
+    ? "http"
+    : /protocol-numbers/i.test(url)
+      ? "protocol"
+      : /media-types/i.test(url)
+        ? "media"
+        : /uri-schemes/i.test(url)
+          ? "scheme"
+          : /http-methods/i.test(url)
+            ? "method"
+            : /character-sets/i.test(url)
+              ? "charset"
+              : /http-fields|message-headers/i.test(url)
+                ? "header"
+                : /dns-parameters/i.test(url)
+                  ? "dns"
+                  : /well-known-uris/i.test(url)
+                    ? "wellknown"
+                    : undefined;
 }
 
 function xmlTag(block: string, tag: string): string {
@@ -1893,23 +2299,34 @@ function ianaRecordsFromBody(url: string, body: string): Triple[] {
   for (const m of body.matchAll(/<record\b[^>]*>([\s\S]*?)<\/record>/gi)) {
     const b = m[1]!;
     if (kind === "http") {
-      const value = xmlTag(b, "value"), desc = xmlTag(b, "description");
-      if (/^\d{3}$/.test(value) && desc.length >= 2 && desc.length <= 72 && !skip.test(desc)) out.push({ s: `IANA http ${value}`, p: "is", o: desc, e: "" });
+      const value = xmlTag(b, "value"),
+        desc = xmlTag(b, "description");
+      if (/^\d{3}$/.test(value) && desc.length >= 2 && desc.length <= 72 && !skip.test(desc))
+        out.push({ s: `IANA http ${value}`, p: "is", o: desc, e: "" });
     } else if (kind === "protocol") {
-      const value = xmlTag(b, "value"), name = xmlTag(b, "name");
-      if (/^\d+$/.test(value) && name && !skip.test(name) && name.length <= 72) out.push({ s: `IANA protocol ${value}`, p: "is", o: name.slice(0, 72), e: "" });
+      const value = xmlTag(b, "value"),
+        name = xmlTag(b, "name");
+      if (/^\d+$/.test(value) && name && !skip.test(name) && name.length <= 72)
+        out.push({ s: `IANA protocol ${value}`, p: "is", o: name.slice(0, 72), e: "" });
     } else if (kind === "method") {
-      const value = xmlTag(b, "value") || xmlTag(b, "name"), desc = xmlTag(b, "description") || xmlTag(b, "semantics");
-      if (/^[A-Z][A-Z0-9-]{0,24}$/.test(value) && desc.length >= 2 && desc.length <= 72) out.push({ s: `IANA method ${value}`, p: "is", o: desc, e: "" });
+      const value = xmlTag(b, "value") || xmlTag(b, "name"),
+        desc = xmlTag(b, "description") || xmlTag(b, "semantics");
+      if (/^[A-Z][A-Z0-9-]{0,24}$/.test(value) && desc.length >= 2 && desc.length <= 72)
+        out.push({ s: `IANA method ${value}`, p: "is", o: desc, e: "" });
     } else if (kind === "charset") {
       const name = (xmlTag(b, "preferred_alias") || xmlTag(b, "name")).toLowerCase();
-      if (/^(utf-8|us-ascii|iso-8859-\d+|windows-125\d)$/i.test(name)) out.push({ s: `IANA charset ${name}`, p: "is", o: name.toUpperCase() === "UTF-8" ? "UTF-8" : name, e: "" });
+      if (/^(utf-8|us-ascii|iso-8859-\d+|windows-125\d)$/i.test(name))
+        out.push({ s: `IANA charset ${name}`, p: "is", o: name.toUpperCase() === "UTF-8" ? "UTF-8" : name, e: "" });
     } else if (kind === "header") {
-      const name = xmlTag(b, "name"), desc = xmlTag(b, "description") || xmlTag(b, "status") || `HTTP field ${name}`;
-      if (/^[A-Za-z][A-Za-z0-9-]*$/.test(name) && desc.length >= 2 && desc.length <= 72) out.push({ s: `IANA header ${name}`, p: "is", o: desc, e: "" });
+      const name = xmlTag(b, "name"),
+        desc = xmlTag(b, "description") || xmlTag(b, "status") || `HTTP field ${name}`;
+      if (/^[A-Za-z][A-Za-z0-9-]*$/.test(name) && desc.length >= 2 && desc.length <= 72)
+        out.push({ s: `IANA header ${name}`, p: "is", o: desc, e: "" });
     } else if (kind === "dns") {
-      const typ = xmlTag(b, "type"), meaning = xmlTag(b, "meaning");
-      if (/^[A-Z][A-Z0-9-]{0,15}$/.test(typ) && meaning.length >= 2 && meaning.length <= 72) out.push({ s: `IANA dns ${typ}`, p: "is", o: meaning, e: "" });
+      const typ = xmlTag(b, "type"),
+        meaning = xmlTag(b, "meaning");
+      if (/^[A-Z][A-Z0-9-]{0,15}$/.test(typ) && meaning.length >= 2 && meaning.length <= 72)
+        out.push({ s: `IANA dns ${typ}`, p: "is", o: meaning, e: "" });
     }
     if (out.length >= 128) break;
   }
@@ -1919,22 +2336,30 @@ function ianaRecordsFromBody(url: string, body: string): Triple[] {
 function mediaFromText(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
-  for (const m of text.slice(0, 48_000).matchAll(/\b((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9][a-z0-9!#$&^_.+-]*)\b/gi)) {
+  for (const m of text
+    .slice(0, 48_000)
+    .matchAll(
+      /\b((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9][a-z0-9!#$&^_.+-]*)\b/gi,
+    )) {
     const typ = m[1]!.toLowerCase();
     if (seen.has(typ) || !MEDIA_TAB.has(typ)) continue;
     seen.add(typ);
-    const sub = typ.split("/")[1] || "", o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
+    const sub = typ.split("/")[1] || "",
+      o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
     if (o.length >= 2) out.push({ s: `IANA media ${typ}`, p: "is", o, e: m[0]!.slice(0, 280) });
   }
   return out.slice(0, 24);
 }
 
 function mediaFromUrl(url: string): Triple[] {
-  const m = url.match(/\/media-types\/((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9+.-]+)/i);
+  const m = url.match(
+    /\/media-types\/((?:application|text|image|audio|video|font|message|model|multipart|haptics)\/[a-z0-9+.-]+)/i,
+  );
   if (!m) return [];
   const typ = m[1]!.toLowerCase();
   if (!MEDIA_TAB.has(typ)) return [];
-  const sub = typ.split("/")[1] || "", o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
+  const sub = typ.split("/")[1] || "",
+    o = MEDIA_SUBTYPE_OBJECT[sub] || sub;
   return [{ s: `IANA media ${typ}`, p: "is", o, e: typ }];
 }
 
@@ -1944,27 +2369,41 @@ function spdxFromText(text: string): Triple[] {
   const add = (raw: string, ev: string) => {
     const lc = raw.toLowerCase();
     let id = "";
-    for (const k of SPDX_KEEP) if (k.toLowerCase() === lc) { id = k; break; }
+    for (const k of SPDX_KEEP)
+      if (k.toLowerCase() === lc) {
+        id = k;
+        break;
+      }
     if (!id || seen.has(id)) return;
     const o = spdxObjectName(id);
     if (o.length < 2) return;
-    seen.add(id); out.push({ s: `SPDX ${id}`, p: "is", o, e: ev.slice(0, 280) });
+    seen.add(id);
+    out.push({ s: `SPDX ${id}`, p: "is", o, e: ev.slice(0, 280) });
   };
   const head = text.slice(0, 48_000);
-  for (const re of [/SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)/gi, /\bSPDX\s+([A-Za-z0-9.+-]+)/gi]) for (const m of head.matchAll(re)) add(m[1]!, m[0]!);
+  for (const re of [/SPDX-License-Identifier\s*:\s*([A-Za-z0-9.+-]+)/gi, /\bSPDX\s+([A-Za-z0-9.+-]+)/gi])
+    for (const m of head.matchAll(re)) add(m[1]!, m[0]!);
   return out.slice(0, 16);
 }
 
 function isoFromText(url: string, html: string, text: string): Triple | undefined {
   const name = wikiSubject(url, html);
   if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return;
-  const o = tidyIso(text.match(/\bISO\s*3166(?:-1)?(?:-[12])?(?:[^A-Z]{0,48})(?:alpha-2)?[:\s]+([A-Z]{2})\b/i)?.[1] || "");
+  const o = tidyIso(
+    text.match(/\bISO\s*3166(?:-1)?(?:-[12])?(?:[^A-Z]{0,48})(?:alpha-2)?[:\s]+([A-Z]{2})\b/i)?.[1] || "",
+  );
   return o ? { s: name, p: "id", o, e: `${name} ISO 3166-1 alpha-2 ${o}`.slice(0, 280) } : undefined;
 }
 
 /** xml2rfc: `<rfc number="9110" docName="..." obsoletes="..." updates="...">` plus `<title>`. */
 export function rfcXmlNumber(xml: string): string | undefined {
-  return xml.match(/<rfc\b[^>]*\bnumber\s*=\s*["'](\d{3,5})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']RFC["'][^>]*\bvalue\s*=\s*["'](\d{3,5})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{3,5})["'][^>]*\bname\s*=\s*["']RFC["']/i)?.[1] || xml.match(/<docName>\s*rfc0*(\d{3,5})\s*<\/docName>/i)?.[1] || xml.match(/<rfc\b[^>]*\bdocName\s*=\s*["']rfc0*(\d{3,5})["']/i)?.[1];
+  return (
+    xml.match(/<rfc\b[^>]*\bnumber\s*=\s*["'](\d{3,5})["']/i)?.[1] ||
+    xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']RFC["'][^>]*\bvalue\s*=\s*["'](\d{3,5})["']/i)?.[1] ||
+    xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{3,5})["'][^>]*\bname\s*=\s*["']RFC["']/i)?.[1] ||
+    xml.match(/<docName>\s*rfc0*(\d{3,5})\s*<\/docName>/i)?.[1] ||
+    xml.match(/<rfc\b[^>]*\bdocName\s*=\s*["']rfc0*(\d{3,5})["']/i)?.[1]
+  );
 }
 
 export function rfcTitleFromXml(xml: string): string | undefined {
@@ -1981,41 +2420,82 @@ export function rfcEdgesFromXml(xml: string, num: string): Triple[] {
   const take = (attr: string, pred: "obsoletes" | "updates") => {
     const raw = tag.match(new RegExp(`\\b${attr}\\s*=\\s*["']([^"']+)["']`, "i"))?.[1];
     if (!raw) return;
-    const nums = [...raw.matchAll(/\b(\d{3,5})\b/g)].map((x) => x[1]!).filter((n) => n !== num).slice(0, 8);
+    const nums = [...raw.matchAll(/\b(\d{3,5})\b/g)]
+      .map((x) => x[1]!)
+      .filter((n) => n !== num)
+      .slice(0, 8);
     if (!nums.length) return;
     let o = "";
-    for (const n of nums) { const next = o ? `${o}, RFC ${n}` : `RFC ${n}`; if (next.length > 72) break; o = next; }
+    for (const n of nums) {
+      const next = o ? `${o}, RFC ${n}` : `RFC ${n}`;
+      if (next.length > 72) break;
+      o = next;
+    }
     if (o) out.push({ s: `RFC ${num}`, p: pred, o, e: "" });
   };
-  take("obsoletes", "obsoletes"); take("updates", "updates");
+  take("obsoletes", "obsoletes");
+  take("updates", "updates");
   return out;
 }
 
-const RFC_CAT: Record<string, string> = { std: "an Internet Standard", bcp: "a Best Current Practice", info: "an Informational RFC", exp: "an Experimental RFC", historic: "a Historic RFC" };
+const RFC_CAT: Record<string, string> = {
+  std: "an Internet Standard",
+  bcp: "a Best Current Practice",
+  info: "an Informational RFC",
+  exp: "an Experimental RFC",
+  historic: "a Historic RFC",
+};
 
 /** Map xml2rfc `category=` / `Category:` / `Status:` to a persistable RFC `is` object. Never the Status-of-This-Memo gist. */
 function rfcStatusObject(raw: string): string | undefined {
   const t = decodeEntities(raw).replace(/\s+/g, " ").trim().toLowerCase();
   if (!t || t.length > 56) return;
-  return RFC_CAT[t] || (/^std\b|standards?\s*track|internet\s+standard/.test(t) ? "an Internet Standard" : /proposed standard/.test(t) ? "a Proposed Standard" : /draft standard/.test(t) ? "a Draft Standard" : /best current practice|^bcp\b/.test(t) ? "a Best Current Practice" : /^info\b|informational/.test(t) ? "an Informational RFC" : /^exp\b|experimental/.test(t) ? "an Experimental RFC" : /historic/.test(t) ? "a Historic RFC" : undefined);
+  return (
+    RFC_CAT[t] ||
+    (/^std\b|standards?\s*track|internet\s+standard/.test(t)
+      ? "an Internet Standard"
+      : /proposed standard/.test(t)
+        ? "a Proposed Standard"
+        : /draft standard/.test(t)
+          ? "a Draft Standard"
+          : /best current practice|^bcp\b/.test(t)
+            ? "a Best Current Practice"
+            : /^info\b|informational/.test(t)
+              ? "an Informational RFC"
+              : /^exp\b|experimental/.test(t)
+                ? "an Experimental RFC"
+                : /historic/.test(t)
+                  ? "a Historic RFC"
+                  : undefined)
+  );
 }
 
 export function rfcStatusFromXml(xml: string, num: string): Triple[] {
   const out: Triple[] = [];
   const tag = xml.match(/<rfc\b([^>]*)>/i)?.[1] ?? "";
-  const cat = tag.match(/\bcategory\s*=\s*["']([^"']+)["']/i)?.[1], o = cat ? rfcStatusObject(cat) : undefined;
+  const cat = tag.match(/\bcategory\s*=\s*["']([^"']+)["']/i)?.[1],
+    o = cat ? rfcStatusObject(cat) : undefined;
   if (o) out.push({ s: `RFC ${num}`, p: "is", o, e: `category ${cat}`.slice(0, 280) });
-  const std = xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']STD["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']STD["']/i)?.[1];
+  const std =
+    xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']STD["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] ||
+    xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']STD["']/i)?.[1];
   if (std) out.push({ s: `RFC ${num}`, p: "id", o: `STD ${std}`, e: `STD ${std}` });
-  const bcp = xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']BCP["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] || xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']BCP["']/i)?.[1];
+  const bcp =
+    xml.match(/<seriesInfo\b[^>]*\bname\s*=\s*["']BCP["'][^>]*\bvalue\s*=\s*["'](\d{1,4})["']/i)?.[1] ||
+    xml.match(/<seriesInfo\b[^>]*\bvalue\s*=\s*["'](\d{1,4})["'][^>]*\bname\s*=\s*["']BCP["']/i)?.[1];
   if (bcp) out.push({ s: `RFC ${num}`, p: "id", o: `BCP ${bcp}`, e: `BCP ${bcp}` });
   return out;
 }
 
 /** Header `Category:` / `Status:` / `STD n` — not the “Status of This Memo” boilerplate paragraph. */
 export function rfcStatusFromText(num: string, html: string, text: string): Triple[] {
-  const head = `${html.slice(0, 2500)}\n${text.slice(0, 2500)}`, out: Triple[] = [];
-  const cat = head.match(/\bCategory:\s*([A-Za-z][A-Za-z \-]{1,40})/i)?.[1] || head.match(/\bStatus:\s*(Internet Standard|Proposed Standard|Draft Standard|Best Current Practice|Informational|Experimental|Historic)\b/i)?.[1];
+  const head = `${html.slice(0, 2500)}\n${text.slice(0, 2500)}`,
+    out: Triple[] = [];
+  const cat =
+    head.match(/\bCategory:\s*([A-Za-z][A-Za-z \-]{1,40})/i)?.[1] ||
+    head.match(
+      /\bStatus:\s*(Internet Standard|Proposed Standard|Draft Standard|Best Current Practice|Informational|Experimental|Historic)\b/i,
+    )?.[1];
   const o = cat ? rfcStatusObject(cat) : undefined;
   if (o) out.push({ s: `RFC ${num}`, p: "is", o, e: (cat || o).slice(0, 280) });
   const std = head.match(/\bSTD\s+(\d{1,4})\b/i)?.[1];
@@ -2026,33 +2506,73 @@ export function rfcStatusFromText(num: string, html: string, text: string): Trip
 }
 
 export function shortTitle(s: string): string {
-  const c = decodeEntities(s).replace(/\b(Light|Dark|Auto)\b/gi, " ").replace(/\s+RF\.?$/i, " ").replace(/\s+/g, " ").trim();
-  return c.split(/\s+RFC\s+\d/i)[0]!.trim().split(/\s+/).slice(0, 20).join(" ").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim();
+  const c = decodeEntities(s)
+    .replace(/\b(Light|Dark|Auto)\b/gi, " ")
+    .replace(/\s+RF\.?$/i, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return c
+    .split(/\s+RFC\s+\d/i)[0]!
+    .trim()
+    .split(/\s+/)
+    .slice(0, 20)
+    .join(" ")
+    .replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "")
+    .trim();
 }
 
 function rfcGistJunk(s: string): boolean {
-  return /table of contents|january 20|february 20|when server|status of this|copyright notice|this document specifies|this memo|internet society|network working group/i.test(s);
+  return /table of contents|january 20|february 20|when server|status of this|copyright notice|this document specifies|this memo|internet society|network working group/i.test(
+    s,
+  );
 }
 
 function innerText(raw: string): string {
-  return decodeEntities(raw.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  return decodeEntities(raw.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Prefer `<span class="h1">` / real `<h1>` / RFC XML `<title>` / DC.Title so the gist is the RFC title, not “When server”. */
-export function rfcTitleFromHtml(html: string, num: string, text: string, ogTitle?: string, scan?: HtmlScan): string | undefined {
+export function rfcTitleFromHtml(
+  html: string,
+  num: string,
+  text: string,
+  ogTitle?: string,
+  scan?: HtmlScan,
+): string | undefined {
   const candidates: string[] = [];
   const rfcPrefix = new RegExp(`^RFC\\s*${num}\\s*[:\\-–]?\\s*`, "i");
   if (scan) {
     for (const s of scan.spanH1) candidates.push(innerText(s));
-    for (const h of scan.h1) { const t = innerText(h).replace(rfcPrefix, "").trim(); if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t); }
-    if (scan.title) { const t = innerText(scan.title).replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim(); if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t); }
+    for (const h of scan.h1) {
+      const t = innerText(h).replace(rfcPrefix, "").trim();
+      if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t);
+    }
+    if (scan.title) {
+      const t = innerText(scan.title)
+        .replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "")
+        .replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "")
+        .trim();
+      if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t);
+    }
     if (scan.metas["citation_title"]) candidates.push(scan.metas["citation_title"]);
     if (scan.metas["dc.title"]) candidates.push(scan.metas["dc.title"]);
   } else {
-    for (const m of html.matchAll(/<span\b[^>]*class="[^"]*\bh1\b[^"]*"[^>]*>([\s\S]{4,200}?)<\/span>/gi)) candidates.push(innerText(m[1]!));
-    for (const m of html.matchAll(/<h1\b[^>]*>([\s\S]{2,240}?)<\/h1>/gi)) { const t = innerText(m[1]!).replace(rfcPrefix, "").trim(); if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t); }
+    for (const m of html.matchAll(/<span\b[^>]*class="[^"]*\bh1\b[^"]*"[^>]*>([\s\S]{4,200}?)<\/span>/gi))
+      candidates.push(innerText(m[1]!));
+    for (const m of html.matchAll(/<h1\b[^>]*>([\s\S]{2,240}?)<\/h1>/gi)) {
+      const t = innerText(m[1]!).replace(rfcPrefix, "").trim();
+      if (t && !/^RFC\s*\d+$/i.test(t)) candidates.push(t);
+    }
     const title = html.match(/<title\b[^>]*>([\s\S]{4,240}?)<\/title>/i)?.[1];
-    if (title) { const t = innerText(title).replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "").replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "").trim(); if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t); }
+    if (title) {
+      const t = innerText(title)
+        .replace(/^RFC\s*\d+\s*[:\-–|]\s*/i, "")
+        .replace(/\s*[|\-–]\s*RFC Editor\s*$/i, "")
+        .trim();
+      if (t && !/^rfc\s*\d+$/i.test(t)) candidates.push(t);
+    }
     const metas = namedMeta(html, ["citation_title", "dc.title", "dc.identifier"]);
     if (metas["citation_title"]) candidates.push(metas["citation_title"]);
     if (metas["dc.title"]) candidates.push(metas["dc.title"]);
@@ -2062,22 +2582,28 @@ export function rfcTitleFromHtml(html: string, num: string, text: string, ogTitl
   const colon = text.match(new RegExp(`\\bRFC\\s*${num}\\s*[:\\-–]\\s*([A-Z][^\\n.]{8,80})`, "i"));
   if (colon) candidates.push(colon[1]!.trim());
   if (ogTitle) candidates.push(ogTitle);
-  for (const c of candidates) { const o = shortTitle(c); if (o.length >= 8 && !rfcGistJunk(o) && !/^RFC\s*\d+$/i.test(o) && !/^Editor$/i.test(o)) return o; }
+  for (const c of candidates) {
+    const o = shortTitle(c);
+    if (o.length >= 8 && !rfcGistJunk(o) && !/^RFC\s*\d+$/i.test(o) && !/^Editor$/i.test(o)) return o;
+  }
   return undefined;
 }
 
 function rfcNumsListed(raw: string, self: string): string[] {
-  const seen = new Set<string>(), out: string[] = [];
+  const seen = new Set<string>(),
+    out: string[] = [];
   for (const m of raw.matchAll(/\b(?:RFC\s*)?(\d{3,5})\b/gi)) {
     const n = m[1]!;
     if (n === self || seen.has(n)) continue;
-    seen.add(n); out.push(n);
+    seen.add(n);
+    out.push(n);
   }
   return out;
 }
 
 export function rfcEdgesFromText(num: string, text: string): Triple[] {
-  const head = text.slice(0, 3500), out: Triple[] = [];
+  const head = text.slice(0, 3500),
+    out: Triple[] = [];
   const emit = (nums: string[], pred: "obsoletes" | "updates") => {
     if (!nums.length) return;
     const o = nums.map((n) => `RFC ${n}`).join(", ");
@@ -2087,13 +2613,17 @@ export function rfcEdgesFromText(num: string, text: string): Triple[] {
     const m = head.match(new RegExp(`\\b${label}:\\s*([0-9][0-9,\\s]{0,80})`, "i"));
     if (m) emit(rfcNumsListed(m[1]!, num).slice(0, 4), pred);
   };
-  take("Obsoletes", "obsoletes"); take("Updates", "updates");
+  take("Obsoletes", "obsoletes");
+  take("Updates", "updates");
   const prose = (word: string, pred: "obsoletes" | "updates") => {
     if (out.some((t) => t.p === pred)) return;
-    const m = head.match(new RegExp(`\\b${word}\\s+((?:RFC\\s*)?\\d{3,5}(?:\\s*(?:,|;|and|&)\\s*(?:RFC\\s*)?\\d{3,5}){0,8})`, "i"));
+    const m = head.match(
+      new RegExp(`\\b${word}\\s+((?:RFC\\s*)?\\d{3,5}(?:\\s*(?:,|;|and|&)\\s*(?:RFC\\s*)?\\d{3,5}){0,8})`, "i"),
+    );
     if (m) emit(rfcNumsListed(m[1]!, num).slice(0, 4), pred);
   };
-  prose("obsoletes", "obsoletes"); prose("updates", "updates");
+  prose("obsoletes", "obsoletes");
+  prose("updates", "updates");
   return out;
 }
 
@@ -2105,14 +2635,18 @@ function softwareName(url: string, scan?: HtmlScan): string | undefined {
       const repo = u.pathname.split("/").filter(Boolean)[1];
       if (!repo) return;
       const decoded = decodeURIComponent(repo);
-      return /[A-Z.]/.test(decoded) || decoded.includes("-") ? decoded : decoded.charAt(0).toUpperCase() + decoded.slice(1);
+      return /[A-Z.]/.test(decoded) || decoded.includes("-")
+        ? decoded
+        : decoded.charAt(0).toUpperCase() + decoded.slice(1);
     }
   } catch {}
-  const title = (scan?.og.title || scan?.title || "").replace(/\s+/g, " ").trim(), h1 = scan?.h1[0] ? innerText(scan.h1[0]!) : "";
+  const title = (scan?.og.title || scan?.title || "").replace(/\s+/g, " ").trim(),
+    h1 = scan?.h1[0] ? innerText(scan.h1[0]!) : "";
   return tidyProper((h1 || title).replace(/\s*[-–|].*$/, "").trim());
 }
 
-const TOOL_SKIP = /^(this|it|there|what|which|that|and|github|the|a|an|you|we|they|use|used|using|cookie|cookies|here|only|data|system|software|example|project|plugin|service|information|program)$/i;
+const TOOL_SKIP =
+  /^(this|it|there|what|which|that|and|github|the|a|an|you|we|they|use|used|using|cookie|cookies|here|only|data|system|software|example|project|plugin|service|information|program)$/i;
 
 function tidyToolName(raw: string): string | undefined {
   const proper = tidyProper(raw);
@@ -2123,8 +2657,16 @@ function tidyToolName(raw: string): string | undefined {
 
 function tidyTechniqueObject(raw: string): string | undefined {
   let rest = stripMarkup(raw).replace(/\s+/g, " ").trim();
-  rest = (rest.split(/(?<=\w)[.!](?:\s|$)/)[0] || rest).trim().replace(/^(to|for)\s+/i, "").replace(/[,;:\s]+$/g, "").trim();
-  if (rest.length > 56) rest = rest.slice(0, 56).replace(/\s+\S*$/, "").trim();
+  rest = (rest.split(/(?<=\w)[.!](?:\s|$)/)[0] || rest)
+    .trim()
+    .replace(/^(to|for)\s+/i, "")
+    .replace(/[,;:\s]+$/g, "")
+    .trim();
+  if (rest.length > 56)
+    rest = rest
+      .slice(0, 56)
+      .replace(/\s+\S*$/, "")
+      .trim();
   if (rest.length < 4 || /^(this|it|that|them|you|your|their)\b/i.test(rest)) return;
   const o = `used for ${rest}`;
   return o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o) ? undefined : o;
@@ -2133,7 +2675,12 @@ function tidyTechniqueObject(raw: string): string | undefined {
 export function techniquesFromProse(text: string): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
-  const add = (t: Triple) => { const k = `${t.s}\0${t.p}\0${t.o}`; if (out.length >= 16 || seen.has(k)) return; seen.add(k); out.push(t); };
+  const add = (t: Triple) => {
+    const k = `${t.s}\0${t.p}\0${t.o}`;
+    if (out.length >= 16 || seen.has(k)) return;
+    seen.add(k);
+    out.push(t);
+  };
   const head = text.slice(0, 12_000);
   const pats = [
     /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
@@ -2150,10 +2697,12 @@ export function techniquesFromProse(text: string): Triple[] {
     /\b([A-Za-z][\w.+-]{1,40})\s+works(?:\s+(?:great|well|fine))?\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
     /\byou (?:should|can|want to)\s+use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
   ];
-  for (const re of pats) for (const m of head.matchAll(re)) {
-    const s = tidyToolName(m[1]!), o = s && tidyTechniqueObject(m[2]!);
-    if (s && o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
-  }
+  for (const re of pats)
+    for (const m of head.matchAll(re)) {
+      const s = tidyToolName(m[1]!),
+        o = s && tidyTechniqueObject(m[2]!);
+      if (s && o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+    }
   return out;
 }
 
@@ -2161,17 +2710,24 @@ function tidySoftwareObject(raw: string): string | undefined {
   let o = stripMarkup(raw).replace(/\s+/g, " ").trim();
   if (!o) return;
   o = (o.split(/(?<=\w)[.!](?:\s|$)/)[0] || o).trim();
-  if (o.length > 72) o = o.slice(0, 72).replace(/\s+\S*$/, "").trim();
+  if (o.length > 72)
+    o = o
+      .slice(0, 72)
+      .replace(/\s+\S*$/, "")
+      .trim();
   o = o.replace(/[,;:\s]+$/g, "").trim();
   if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return;
-  return !/^(a|an|the)\s/i.test(o) && /^(runtime|compiler|bundler|framework|library|language)\b/i.test(o) ? `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o}` : o;
+  return !/^(a|an|the)\s/i.test(o) && /^(runtime|compiler|bundler|framework|library|language)\b/i.test(o)
+    ? `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o}`
+    : o;
 }
 
 export function softwareLeadIs(url: string, html: string, text: string, scan?: HtmlScan): Triple | undefined {
   if (!toolDocsUrl(url)) return;
   const name = softwareName(url, scan);
   if (!name || name.length < 2 || name.length > 40) return;
-  const metas = scan?.metas ?? (html ? namedMeta(html, ["description", "og:description"]) : {}), og = scan?.og ?? (html ? openGraph(html) : {});
+  const metas = scan?.metas ?? (html ? namedMeta(html, ["description", "og:description"]) : {}),
+    og = scan?.og ?? (html ? openGraph(html) : {});
   for (const c of [og.description, metas["og:description"], metas.description, text]) {
     if (typeof c !== "string" || c.length < 8) continue;
     const o = tidySoftwareObject(c);
@@ -2182,19 +2738,26 @@ export function softwareLeadIs(url: string, html: string, text: string, scan?: H
 }
 
 function rfcEdgeInverses(edges: Triple[]): Triple[] {
-  const out: Triple[] = [], seen = new Set<string>();
+  const out: Triple[] = [],
+    seen = new Set<string>();
   for (const t of edges) {
     if (t.p !== "obsoletes" && t.p !== "updates") continue;
     const verb = t.p === "obsoletes" ? "obsoleted by" : "updated by";
     for (const n of rfcNumsListed(t.o, "").slice(0, 8)) {
-      const o = `${verb} ${t.s}`, k = `${n}\0${o}`;
-      if (o.length >= 8 && o.length <= 72 && !seen.has(k)) { seen.add(k); out.push({ s: `RFC ${n}`, p: "is", o, e: (t.e || o).slice(0, 280) }); }
+      const o = `${verb} ${t.s}`,
+        k = `${n}\0${o}`;
+      if (o.length >= 8 && o.length <= 72 && !seen.has(k)) {
+        seen.add(k);
+        out.push({ s: `RFC ${n}`, p: "is", o, e: (t.e || o).slice(0, 280) });
+      }
     }
   }
   return out;
 }
 
-function isCapitalListUrl(url: string): boolean { return /\/wiki\/List_of_[^/?#]*capital/i.test(url); }
+function isCapitalListUrl(url: string): boolean {
+  return /\/wiki\/List_of_[^/?#]*capital/i.test(url);
+}
 
 function wantsCapitalTable(url: string, html: string, tables?: { open: string; inner: string }[]): boolean {
   if (isCapitalListUrl(url)) return true;
@@ -2207,17 +2770,30 @@ function wantsCapitalTable(url: string, html: string, tables?: { open: string; i
     }
     return false;
   }
-  return /<th\b[^>]*>[\s\S]{0,160}?\b(?:capitals?|city\/town|cities|city|towns|town|seat)\b/i.test(html) && /<th\b[^>]*>[\s\S]{0,160}?\b(?:country|countries|territory|territories|nation|nations|sovereign|state)\b/i.test(html);
+  return (
+    /<th\b[^>]*>[\s\S]{0,160}?\b(?:capitals?|city\/town|cities|city|towns|town|seat)\b/i.test(html) &&
+    /<th\b[^>]*>[\s\S]{0,160}?\b(?:country|countries|territory|territories|nation|nations|sovereign|state)\b/i.test(
+      html,
+    )
+  );
 }
 
 export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean, scanIn?: HtmlScan): Triple[] {
-  const html = isHtml ? htmlOrText : "", scan = isHtml ? scanIn ?? scanHtml(htmlOrText) : undefined, text = scan ? scan.text : htmlOrText.replace(/\s+/g, " ").trim(), og = scan ? scan.og : {}, ld = scan ? scan.jsonLd : [], out: Triple[] = [];
+  const html = isHtml ? htmlOrText : "",
+    scan = isHtml ? (scanIn ?? scanHtml(htmlOrText)) : undefined,
+    text = scan ? scan.text : htmlOrText.replace(/\s+/g, " ").trim(),
+    og = scan ? scan.og : {},
+    ld = scan ? scan.jsonLd : [],
+    out: Triple[] = [];
   for (const block of ld) walkLd(block, out, text.slice(0, 280));
   if (isHtml) out.push(...structuredCountryCapitals(html, scan?.itemSlices));
-  const listPage = isCapitalListUrl(url) || /\/wiki\/List_of_/i.test(url), wikiPage = /wikipedia\.org|wikidata\.org/i.test(url);
+  const listPage = isCapitalListUrl(url) || /\/wiki\/List_of_/i.test(url),
+    wikiPage = /wikipedia\.org|wikidata\.org/i.test(url);
   if (wikiPage && !listPage) {
-    const wikiCap = wikiCapital(url, html, text, scan); if (wikiCap) out.push(wikiCap);
-    const wikiId = wikiIso(url, html, scan) || isoFromText(url, html, text); if (wikiId) out.push(wikiId);
+    const wikiCap = wikiCapital(url, html, text, scan);
+    if (wikiCap) out.push(wikiCap);
+    const wikiId = wikiIso(url, html, scan) || isoFromText(url, html, text);
+    if (wikiId) out.push(wikiId);
   }
   if (isHtml && wantsCapitalTable(url, html, scan?.tables)) {
     out.push(...wikiCapitalTable(html, scan?.tables));
@@ -2231,19 +2807,31 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
     for (let i = 0, n = out.length; i < n; i++) {
       const t = out[i]!;
       if (t.p !== "capital" || t.s.toLowerCase() === t.o.toLowerCase()) continue;
-      for (const o of [`the capital of ${t.s}`, `a city in ${t.s}`]) if (o.length >= 8 && o.length <= 72) out.push({ s: t.o, p: "is", o, e: t.e });
+      for (const o of [`the capital of ${t.s}`, `a city in ${t.s}`])
+        if (o.length >= 8 && o.length <= 72) out.push({ s: t.o, p: "is", o, e: t.e });
     }
   }
-  for (const t of [wikiPage && !listPage ? wikiLeadIs(url, html, text, scan) : undefined, softwareLeadIs(url, html, text, scan)]) if (t) out.push(t);
+  for (const t of [
+    wikiPage && !listPage ? wikiLeadIs(url, html, text, scan) : undefined,
+    softwareLeadIs(url, html, text, scan),
+  ])
+    if (t) out.push(t);
   const rfcUrl = url.match(/rfc[-/_]?(\d{3,5})/i);
   const rfcNum = rfcUrl?.[1] || (isHtml ? rfcXmlNumber(html) : undefined);
   if (rfcNum) {
     const metas = scan?.metas ?? (isHtml ? namedMeta(html, ["citation_title", "dc.title"]) : {});
-    const titled = rfcTitleFromHtml(html, rfcNum, text, og.title || metas["citation_title"] || metas["dc.title"], scan) || text.match(new RegExp(`\\bRFC\\s*${rfcNum}\\s*[:\\-–]\\s*([A-Z][^\\n.]{8,70})`, "i"))?.[1];
+    const titled =
+      rfcTitleFromHtml(html, rfcNum, text, og.title || metas["citation_title"] || metas["dc.title"], scan) ||
+      text.match(new RegExp(`\\bRFC\\s*${rfcNum}\\s*[:\\-–]\\s*([A-Z][^\\n.]{8,70})`, "i"))?.[1];
     const o = shortTitle(titled || "Internet standard");
     if (!rfcGistJunk(o)) out.push({ s: `RFC ${rfcNum}`, p: "is", o, e: (titled || text).slice(0, 280) });
     const rfcEdges = [...rfcEdgesFromText(rfcNum, text), ...(isHtml ? rfcEdgesFromXml(html, rfcNum) : [])];
-    out.push(...rfcEdges, ...rfcEdgeInverses(rfcEdges), ...(isHtml ? rfcStatusFromXml(html, rfcNum) : []), ...rfcStatusFromText(rfcNum, isHtml ? html : "", text));
+    out.push(
+      ...rfcEdges,
+      ...rfcEdgeInverses(rfcEdges),
+      ...(isHtml ? rfcStatusFromXml(html, rfcNum) : []),
+      ...rfcStatusFromText(rfcNum, isHtml ? html : "", text),
+    );
   }
   if (findAsciiCi(text, "rfc", 0) >= 0) out.push(...rfcMentionsFromText(text));
   if (text.includes("/")) out.push(...mediaFromText(text));
@@ -2253,14 +2841,34 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
   const tr = url.match(/w3\.org\/TR\/([^/?#]+)/i);
   if (tr) {
     const slug = tr[1]!.replace(/\/+$/, "");
-    const htmlTitle = (scan?.title || html.match(/<title>([^<]{4,160})<\/title>/i)?.[1] || "").replace(/\s*[-–|]\s*W3C[\s\S]*$/i, "").trim();
-    const h1 = (scan?.h1[0] ? innerText(scan.h1[0]!) : "") || html.match(/<h1[^>]*>([\s\S]{4,180}?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const abs = html.match(/id=["']abstract["'][\s\S]{0,240}<p[^>]*>([^<]{16,140})/i)?.[1] || text.match(/Abstract\s+(.{16,140}?)(?:\s+Status|\s+This document)/i)?.[1];
+    const htmlTitle = (scan?.title || html.match(/<title>([^<]{4,160})<\/title>/i)?.[1] || "")
+      .replace(/\s*[-–|]\s*W3C[\s\S]*$/i, "")
+      .trim();
+    const h1 =
+      (scan?.h1[0] ? innerText(scan.h1[0]!) : "") ||
+      html
+        .match(/<h1[^>]*>([\s\S]{4,180}?)<\/h1>/i)?.[1]
+        ?.replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    const abs =
+      html.match(/id=["']abstract["'][\s\S]{0,240}<p[^>]*>([^<]{16,140})/i)?.[1] ||
+      text.match(/Abstract\s+(.{16,140}?)(?:\s+Status|\s+This document)/i)?.[1];
     const label = shortTitle(h1 || htmlTitle || slug.replace(/-/g, " "));
-    if (label) out.push({ s: `W3C ${slug}`, p: "is", o: shortTitle(h1 || htmlTitle || abs || label), e: (htmlTitle || abs || label).slice(0, 280) });
+    if (label)
+      out.push({
+        s: `W3C ${slug}`,
+        p: "is",
+        o: shortTitle(h1 || htmlTitle || abs || label),
+        e: (htmlTitle || abs || label).slice(0, 280),
+      });
   }
-  if (og.title && og.description && og.description.length <= 80 && (rfcUrl || tr)) out.push({ s: og.title.slice(0, 160), p: "is", o: og.description.slice(0, 80), e: og.description.slice(0, 280) });
-  for (let i = 0, n = out.length; i < n; i++) { const inv = isoInverse(out[i]!); if (inv) out.push(inv); }
+  if (og.title && og.description && og.description.length <= 80 && (rfcUrl || tr))
+    out.push({ s: og.title.slice(0, 160), p: "is", o: og.description.slice(0, 80), e: og.description.slice(0, 280) });
+  for (let i = 0, n = out.length; i < n; i++) {
+    const inv = isoInverse(out[i]!);
+    if (inv) out.push(inv);
+  }
   const seen = new Set<string>();
   const capitals: Triple[] = [];
   const rest: Triple[] = [];
@@ -2282,7 +2890,11 @@ const LINK_PREFER =
 export function wikiGrowUrls(base: string, html: string): string[] {
   if (!/wikipedia\.org/i.test(base)) return [];
   let host = "en.wikipedia.org";
-  try { host = new URL(base).host; } catch { /* keep en */ }
+  try {
+    host = new URL(base).host;
+  } catch {
+    /* keep en */
+  }
   const cap = /\/wiki\/(?:List_of_|Outline_of_)/i.test(base) ? 400 : 160;
   const out: string[] = [];
   const seen = new Set<string>();
@@ -2291,7 +2903,11 @@ export function wikiGrowUrls(base: string, html: string): string[] {
     const slug = raw.replace(/ /g, "_");
     if (WIKI_LINK_SKIP.test(`/wiki/${slug}`)) return;
     let title = slug.replace(/_/g, " ");
-    try { title = decodeURIComponent(title); } catch { /* keep */ }
+    try {
+      title = decodeURIComponent(title);
+    } catch {
+      /* keep */
+    }
     if (wikiNsSkip(title) || !title.trim()) return;
     const url = canonicalUrl(`https://${host}/wiki/${slug}`);
     if (seen.has(url) || skipHost(url)) return;
@@ -2315,10 +2931,19 @@ export function extractLinks(base: string, htmlOrText: string): string[] {
       const u = new URL(href.replace(/[),.;]+$/, ""), base);
       if (u.protocol !== "http:" && u.protocol !== "https:") return;
       const hrefNoHash = canonicalUrl(u.href.split("#")[0]!);
-      if (seen.has(hrefNoHash) || skipHost(hrefNoHash) || WIKI_LINK_SKIP.test(hrefNoHash) || /[?&]action=edit\b/i.test(hrefNoHash) || /\/w\/index\.php/i.test(hrefNoHash)) return;
+      if (
+        seen.has(hrefNoHash) ||
+        skipHost(hrefNoHash) ||
+        WIKI_LINK_SKIP.test(hrefNoHash) ||
+        /[?&]action=edit\b/i.test(hrefNoHash) ||
+        /\/w\/index\.php/i.test(hrefNoHash)
+      )
+        return;
       seen.add(hrefNoHash);
       urls.push(hrefNoHash);
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   };
   for (const href of htmlAlternateHrefs(htmlOrText)) add(href);
   const abs = /https?:\/\/[^\s"'<>]+/gi;
@@ -2329,7 +2954,12 @@ export function extractLinks(base: string, htmlOrText: string): string[] {
   const prefer: string[] = [];
   const rest: string[] = [];
   for (const u of urls) (talkUrl(u) || githubToolUrl(u) || LINK_PREFER.test(u) ? prefer : rest).push(u);
-  return [...prefer, ...rest].slice(0, /\/wiki\/List_of_/i.test(base) || talkUrl(base) || /\/(?:issues|discussions|questions\/tagged)(?:\/|$)/i.test(base) ? 400 : 160);
+  return [...prefer, ...rest].slice(
+    0,
+    /\/wiki\/List_of_/i.test(base) || talkUrl(base) || /\/(?:issues|discussions|questions\/tagged)(?:\/|$)/i.test(base)
+      ? 400
+      : 160,
+  );
 }
 
 export { ttlDaysFor, pageTtl, ttlDaysOnSkip, type TtlHints } from "./ttl";

@@ -16,65 +16,162 @@ import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { applyProvenanceLabel, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
-import { attachPlaceCues, hookLane, isNoopCue, packNotes, parseRuleTime, placePathsFrom, stripMemoryPacket, writeAliasTags, WRITE_ALIASES, PACKET_BYTE_CAP, PACKET_BULLET_MAX } from "./memory-sota";
+import {
+  attachPlaceCues,
+  hookLane,
+  isNoopCue,
+  packNotes,
+  parseRuleTime,
+  placePathsFrom,
+  stripMemoryPacket,
+  writeAliasTags,
+  WRITE_ALIASES,
+  PACKET_BYTE_CAP,
+  PACKET_BULLET_MAX,
+} from "./memory-sota";
 
-export { attachPlaceCues, isNoopCue, packNotes, placePathsFrom, goldFirstNotes, PACKET_BULLET_MAX, PACKET_BYTE_CAP } from "./memory-sota";
+export {
+  attachPlaceCues,
+  isNoopCue,
+  packNotes,
+  placePathsFrom,
+  goldFirstNotes,
+  PACKET_BULLET_MAX,
+  PACKET_BYTE_CAP,
+} from "./memory-sota";
 /** Tokens with M32: Harbor prompt Δ 150854 → 178613 (+27759) and total +26941 are agent traces. No 89-task claim. No dual-API. */
 export const PROCEDURE_TOKEN_CAP = 300;
 export const PROCEDURE_CHAR_CAP = PROCEDURE_TOKEN_CAP * 4;
 export const FACT_CHAR_CAP = PROCEDURE_CHAR_CAP;
-export { EXPERIENCE_RETRIEVE_K, EXPERIENCE_RETRIEVE_K_MAX, EXPERIENCE_SLICE_CHAR_CAP, EXPERIENCE_SLICE_TOKEN_CAP } from "./experience-retrieve";
+export {
+  EXPERIENCE_RETRIEVE_K,
+  EXPERIENCE_RETRIEVE_K_MAX,
+  EXPERIENCE_SLICE_CHAR_CAP,
+  EXPERIENCE_SLICE_TOKEN_CAP,
+} from "./experience-retrieve";
 export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
 export { applyProvenanceLabel, relativeMemoryAge } from "./memory-provenance";
 export { sleep } from "./sleep";
-export const MEMORY_MARK = "Eden Memory:", memoryInjectSwallows = { n: 0 };
+export const MEMORY_MARK = "Eden Memory:",
+  memoryInjectSwallows = { n: 0 };
 
 function sentenceParts(t: string): string[] {
-  return t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 8);
+  return t
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 8);
 }
 
 export function encodeLane(text: string): MemoryLaneKind {
   const t = String(text ?? "").trim();
-  return !t ? "chat" : isIclExemplar(t) ? "icl" : t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150) ? "narrative" : "chat";
+  return !t
+    ? "chat"
+    : isIclExemplar(t)
+      ? "icl"
+      : t.length > 400 || (sentenceParts(t).length >= 2 && t.length >= 150)
+        ? "narrative"
+        : "chat";
 }
 
 function leadingSerial(text: string): number | undefined {
-  const n = Number(String(text ?? "").trim().replace(/^\[[^\]]+\]\s+/, "").match(/^(\d+)[.)]\s+\S/)?.[1]); return Number.isFinite(n) ? n : undefined;
+  const n = Number(
+    String(text ?? "")
+      .trim()
+      .replace(/^\[[^\]]+\]\s+/, "")
+      .match(/^(\d+)[.)]\s+\S/)?.[1],
+  );
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function rankKindBoost(r: MemoryRecord): number {
-  const k = String(r.kind ?? ""); return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
+  const k = String(r.kind ?? "");
+  return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
 }
 
 function capMemoryBody(r: MemoryRecord, body: string): string {
-  const text = String(body ?? ""); if (r.lane === "icl" || isIclExemplar(text)) return text;
-  if (r.kind === "procedure") { const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180)); return text.length <= cap ? text : text.slice(-cap); }
+  const text = String(body ?? "");
+  if (r.lane === "icl" || isIclExemplar(text)) return text;
+  if (r.kind === "procedure") {
+    const cap = Math.min(PROCEDURE_CHAR_CAP, Math.max(240, PACKET_BYTE_CAP - 180));
+    return text.length <= cap ? text : text.slice(-cap);
+  }
   return /\d+[.)]\s+\S/.test(text) || text.length <= FACT_CHAR_CAP ? text : text.slice(0, FACT_CHAR_CAP);
 }
 
 function omitConflictingIdentity(text: string, store: SemanticStore): string {
-  const raw = String(text ?? "").trim(); if (!raw) return "";
-  const parts = sentenceParts(raw), units = parts.length ? parts : [raw], kept: string[] = [];
-  for (const s of units) { try { const fact = objectAsserted(s); if (fact) { const live = store.get(fact.s, fact.p); if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue; if (store.supersededObject(fact.o)) continue; } } catch {} kept.push(s); }
+  const raw = String(text ?? "").trim();
+  if (!raw) return "";
+  const parts = sentenceParts(raw),
+    units = parts.length ? parts : [raw],
+    kept: string[] = [];
+  for (const s of units) {
+    try {
+      const fact = objectAsserted(s);
+      if (fact) {
+        const live = store.get(fact.s, fact.p);
+        if (live && live.o.trim().toLowerCase() !== fact.o.trim().toLowerCase()) continue;
+        if (store.supersededObject(fact.o)) continue;
+      }
+    } catch {}
+    kept.push(s);
+  }
   return kept.join(" ").trim();
 }
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
-export type MemoryRecord = { id: string; text: string; kind: MemoryKind; tags?: string[]; at: number; ep?: string; sal?: number; lane?: MemoryLaneKind; invalidAt?: number; validUntil?: number; heat?: number; };
+export type MemoryRecord = {
+  id: string;
+  text: string;
+  kind: MemoryKind;
+  tags?: string[];
+  at: number;
+  ep?: string;
+  sal?: number;
+  lane?: MemoryLaneKind;
+  invalidAt?: number;
+  validUntil?: number;
+  heat?: number;
+};
 
 function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
-  return !(typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
+  return (
+    !(typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) &&
+    !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now)
+  );
 }
 
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
-  const byKey = new Map<string, T>(), rest: T[] = [];
+  const byKey = new Map<string, T>(),
+    rest: T[] = [];
   for (const row of rows) {
-    let a: ReturnType<typeof objectAsserted>; try { a = objectAsserted(row.rec.text); } catch { a = undefined; }
-    if (!a) { rest.push(row); continue; }
-    const k = `${a.s}\0${a.p}`, prev = byKey.get(k);
-    if (!prev) { byKey.set(k, row); continue; }
-    const serial = leadingSerial(row.rec.text), prevSerial = leadingSerial(prev.rec.text);
-    if (serial != null && prevSerial != null) { if (serial >= prevSerial) byKey.set(k, row); continue; } if (serial != null) { byKey.set(k, row); continue; } if (prevSerial != null) continue; if (row.rec.at >= prev.rec.at) byKey.set(k, row);
+    let a: ReturnType<typeof objectAsserted>;
+    try {
+      a = objectAsserted(row.rec.text);
+    } catch {
+      a = undefined;
+    }
+    if (!a) {
+      rest.push(row);
+      continue;
+    }
+    const k = `${a.s}\0${a.p}`,
+      prev = byKey.get(k);
+    if (!prev) {
+      byKey.set(k, row);
+      continue;
+    }
+    const serial = leadingSerial(row.rec.text),
+      prevSerial = leadingSerial(prev.rec.text);
+    if (serial != null && prevSerial != null) {
+      if (serial >= prevSerial) byKey.set(k, row);
+      continue;
+    }
+    if (serial != null) {
+      byKey.set(k, row);
+      continue;
+    }
+    if (prevSerial != null) continue;
+    if (row.rec.at >= prev.rec.at) byKey.set(k, row);
   }
   return [...byKey.values(), ...rest];
 }
@@ -82,123 +179,400 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
 export type MemoryOptions = { dir?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
-  const s = typeof raw === "string" ? raw.trim() : ""; return s && !s.includes("\0") && !s.includes("/") && !s.includes("\\") && !s.split("--").join("").includes("..") && /^[A-Za-z0-9._-]+$/.test(s) && s !== "." && s !== ".." ? s : undefined;
+  const s = typeof raw === "string" ? raw.trim() : "";
+  return s &&
+    !s.includes("\0") &&
+    !s.includes("/") &&
+    !s.includes("\\") &&
+    !s.split("--").join("").includes("..") &&
+    /^[A-Za-z0-9._-]+$/.test(s) &&
+    s !== "." &&
+    s !== ".."
+    ? s
+    : undefined;
 }
 
 export function childSessionName(parent?: string, child?: string): string | undefined {
-  const p = memorySessionName(parent), c = memorySessionName(child);
-  return p && c ? memorySessionName(`${p}--${c}`) : c ?? p;
+  const p = memorySessionName(parent),
+    c = memorySessionName(child);
+  return p && c ? memorySessionName(`${p}--${c}`) : (c ?? p);
 }
 
 type Compiled = { rec: MemoryRecord; needles: string[] };
 
-const STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","into","about","these","then","still","has","out","please","how","should","what","why","was","are","you","your","its","our","not","never","use","used","just","last","week","down","look","next","need","before","merge","prefers","user","memory","ran","fact","such","or","no","app","where","who","whom","whose","does","did","which","when"]);
+const STOP = new Set([
+  "the",
+  "of",
+  "is",
+  "a",
+  "an",
+  "on",
+  "to",
+  "and",
+  "in",
+  "for",
+  "this",
+  "that",
+  "with",
+  "from",
+  "into",
+  "about",
+  "these",
+  "then",
+  "still",
+  "has",
+  "out",
+  "please",
+  "how",
+  "should",
+  "what",
+  "why",
+  "was",
+  "are",
+  "you",
+  "your",
+  "its",
+  "our",
+  "not",
+  "never",
+  "use",
+  "used",
+  "just",
+  "last",
+  "week",
+  "down",
+  "look",
+  "next",
+  "need",
+  "before",
+  "merge",
+  "prefers",
+  "user",
+  "memory",
+  "ran",
+  "fact",
+  "such",
+  "or",
+  "no",
+  "app",
+  "where",
+  "who",
+  "whom",
+  "whose",
+  "does",
+  "did",
+  "which",
+  "when",
+]);
 
 function compileNeedles(rec: MemoryRecord): Compiled {
-  return { rec, needles: [...new Set([...(rec.tags ?? []).filter((t) => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t) && !/^[a-z]\d[a-z]$/.test(t) && !/^[a-z]{3,}\d+[a-z]$/.test(t)), ...(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w) && !/^[a-z]\d[a-z]$/.test(w) && !/^[a-z]{3,}\d+[a-z]$/.test(w))])] };
+  return {
+    rec,
+    needles: [
+      ...new Set([
+        ...(rec.tags ?? []).filter(
+          (t) =>
+            t.length >= 3 &&
+            !STOP.has(t) &&
+            !/^\d+$/.test(t) &&
+            !/^[a-z]\d[a-z]$/.test(t) &&
+            !/^[a-z]{3,}\d+[a-z]$/.test(t),
+        ),
+        ...((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter(
+          (w) =>
+            w.length >= 3 &&
+            !STOP.has(w) &&
+            !/^\d+$/.test(w) &&
+            !/^[a-z]\d[a-z]$/.test(w) &&
+            !/^[a-z]{3,}\d+[a-z]$/.test(w),
+        ),
+      ]),
+    ],
+  };
 }
 
 export function queryHay(text: string): Set<string> {
-  return new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
+  return new Set(((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(text));
 }
 
-const TOOL_ROLES = new Set(["tool", "function"]), TOOL_BLOCKS = new Set(["tool_result", "tool_use", "function_call", "function_result"]);
+const TOOL_ROLES = new Set(["tool", "function"]),
+  TOOL_BLOCKS = new Set(["tool_result", "tool_use", "function_call", "function_result"]);
 
 function convBlob(list: unknown[]): string {
-  if (list.length === 1) { const o = list[0] as Record<string, unknown> | undefined; if (TOOL_ROLES.has(String(o?.role ?? "").toLowerCase())) return ""; if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content; }
+  if (list.length === 1) {
+    const o = list[0] as Record<string, unknown> | undefined;
+    if (TOOL_ROLES.has(String(o?.role ?? "").toLowerCase())) return "";
+    if (typeof o?.content === "string" && !(o.reasoning_content || o.thinking || o.reasoning)) return o.content;
+  }
   const parts: string[] = [];
   for (const m of list) {
-    if (!m || typeof m !== "object") continue; const o = m as Record<string, unknown>, c = o.content ?? o.llmContent, role = String(o.role ?? "").toLowerCase(); if (TOOL_ROLES.has(role)) continue;
-    if (typeof c === "string" && c) parts.push(c); else if (Array.isArray(c) || Array.isArray(o.parts) || (c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).parts))) { for (const b of (Array.isArray(c) ? c : Array.isArray(o.parts) ? o.parts as unknown[] : (c as Record<string, unknown>).parts as unknown[])) { if (b && typeof b === "object") { const type = String((b as Record<string, unknown>).type || "").toLowerCase(); if (TOOL_BLOCKS.has(type)) continue; const t = ["text","content","llmContent","value"].map((k) => (b as Record<string, unknown>)[k]).find((v) => typeof v === "string" && v); if (t) parts.push(t as string); } } }
-    const r = o.reasoning_content ?? o.thinking ?? o.reasoning; if (typeof r === "string" && r) parts.push(r);
+    if (!m || typeof m !== "object") continue;
+    const o = m as Record<string, unknown>,
+      c = o.content ?? o.llmContent,
+      role = String(o.role ?? "").toLowerCase();
+    if (TOOL_ROLES.has(role)) continue;
+    if (typeof c === "string" && c) parts.push(c);
+    else if (
+      Array.isArray(c) ||
+      Array.isArray(o.parts) ||
+      (c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).parts))
+    ) {
+      for (const b of Array.isArray(c)
+        ? c
+        : Array.isArray(o.parts)
+          ? (o.parts as unknown[])
+          : ((c as Record<string, unknown>).parts as unknown[])) {
+        if (b && typeof b === "object") {
+          const type = String((b as Record<string, unknown>).type || "").toLowerCase();
+          if (TOOL_BLOCKS.has(type)) continue;
+          const t = ["text", "content", "llmContent", "value"]
+            .map((k) => (b as Record<string, unknown>)[k])
+            .find((v) => typeof v === "string" && v);
+          if (t) parts.push(t as string);
+        }
+      }
+    }
+    const r = o.reasoning_content ?? o.thinking ?? o.reasoning;
+    if (typeof r === "string" && r) parts.push(r);
   }
   return parts.join("\n");
 }
 
 export function cueFor(list: unknown[]): string {
-  const m = Array.isArray(list) ? list.findLast((x) => { if (!x || typeof x !== "object") return false; const role = String((x as { role?: unknown }).role ?? "").toLowerCase(); if (role === "system") return false; const text = convBlob([x]).trim(); return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human"); }) : undefined;
-  const raw = m && typeof m === "object" ? convBlob([m]).trim() : ""; if (!raw) return "";
-  const paras = raw.split(/\n\n/).map((p) => p.trim()).filter(Boolean), ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
+  const m = Array.isArray(list)
+    ? list.findLast((x) => {
+        if (!x || typeof x !== "object") return false;
+        const role = String((x as { role?: unknown }).role ?? "").toLowerCase();
+        if (role === "system") return false;
+        const text = convBlob([x]).trim();
+        return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human");
+      })
+    : undefined;
+  const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
+  if (!raw) return "";
+  const paras = raw
+      .split(/\n\n/)
+      .map((p) => p.trim())
+      .filter(Boolean),
+    ask = (p: string) => p.length <= 280 || /[?？]$/.test(p);
   return ask(paras.at(-1)!) ? paras.at(-1)! : ask(paras[0]!) ? paras[0]! : paras.at(-1)!;
 }
 
-const CHAT = /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
-const ACK_PREFIX = /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
+const CHAT =
+  /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
+const ACK_PREFIX =
+  /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 
 function extractDurable(blob: string): string[] {
-  const seen = new Set<string>(), out: string[] = [];
-  let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, ""); if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1))) whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
-  const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"), numberedWhole = /^\d+[.)]\s+\S/.test(whole), label = whole.match(SPEAKER_LABEL)?.[1];
-  const chunks = labeledWhole ? [whole] : numberedWhole ? splitNumberedItems(whole) : blob.replace(ACK_PREFIX, "").split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/).flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
+  const seen = new Set<string>(),
+    out: string[] = [];
+  let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
+  if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1)))
+    whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
+  const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"),
+    numberedWhole = /^\d+[.)]\s+\S/.test(whole),
+    label = whole.match(SPEAKER_LABEL)?.[1];
+  const chunks = labeledWhole
+    ? [whole]
+    : numberedWhole
+      ? splitNumberedItems(whole)
+      : blob
+          .replace(ACK_PREFIX, "")
+          .split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/)
+          .flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
   for (const raw of chunks) {
-    let t = raw.trim().replace(/\s+/g, " ").replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "").replace(ACK_PREFIX, "").replace(SECRET_INLINE, "[REDACTED]");
-    if (t.length < 8 || t.length > (labeledWhole ? 800 : 400) || t.startsWith("{") || t.startsWith("[") || t.startsWith("http") || t.startsWith("#") || /^(const|let|import |export |function )\b/.test(t) || t.includes(MEMORY_MARK) || t.includes("Eden Know:") || CHAT.test(t) || /qx\d+z/i.test(t)) continue; if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
-    const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i); if (rem) t = rem[1]!.trim(); t = t.replace(/^[.\s]+|[.\s]+$/g, "");
-    if (SPEAKER_LABEL.test(t)) { const sp = new Set((s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])((t.match(SPEAKER_LABEL)?.[1] || "").replace(/:$/, ""))); if (!(s => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(t).some((w) => !sp.has(w) && (w.length >= 5 || /^\d/.test(w)) && !STOP.has(w))) continue; }
-    if (t.length >= 8 && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.push(t); }
+    let t = raw
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "")
+      .replace(ACK_PREFIX, "")
+      .replace(SECRET_INLINE, "[REDACTED]");
+    if (
+      t.length < 8 ||
+      t.length > (labeledWhole ? 800 : 400) ||
+      t.startsWith("{") ||
+      t.startsWith("[") ||
+      t.startsWith("http") ||
+      t.startsWith("#") ||
+      /^(const|let|import |export |function )\b/.test(t) ||
+      t.includes(MEMORY_MARK) ||
+      t.includes("Eden Know:") ||
+      CHAT.test(t) ||
+      /qx\d+z/i.test(t)
+    )
+      continue;
+    if (label && !SPEAKER_LABEL.test(t)) t = `${label} ${t}`;
+    const rem = /\b(?:don'?t|do not|never)\s+remember\b/i.test(t) ? null : t.match(/\bremember(?: that)?\s+(.+)/i);
+    if (rem) t = rem[1]!.trim();
+    t = t.replace(/^[.\s]+|[.\s]+$/g, "");
+    if (SPEAKER_LABEL.test(t)) {
+      const sp = new Set(
+        ((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(
+          (t.match(SPEAKER_LABEL)?.[1] || "").replace(/:$/, ""),
+        ),
+      );
+      if (
+        !((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(t).some(
+          (w) => !sp.has(w) && (w.length >= 5 || /^\d/.test(w)) && !STOP.has(w),
+        )
+      )
+        continue;
+    }
+    if (t.length >= 8 && !seen.has(t.toLowerCase())) {
+      seen.add(t.toLowerCase());
+      out.push(t);
+    }
   }
   return out;
 }
 
 function load(path: string): Compiled[] {
-  const out: Compiled[] = [], idx = new Map<string, number>();
-  let raw = ""; try { raw = readFileSync(path, "utf8"); } catch { return out; }
+  const out: Compiled[] = [],
+    idx = new Map<string, number>();
+  let raw = "";
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    return out;
+  }
   for (const t of raw.split("\n")) {
-    try { const parsed = JSON.parse(t); const rec = (Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2], kind: "episode" } : parsed) as MemoryRecord; if (rec?.id && rec.text) { if (!rec.kind) rec.kind = "fact"; const c = compileNeedles(rec), at = idx.get(rec.id); if (at != null) out[at] = c; else idx.set(rec.id, out.length), out.push(c); } } catch {}
+    try {
+      const parsed = JSON.parse(t);
+      const rec = (
+        Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2], kind: "episode" } : parsed
+      ) as MemoryRecord;
+      if (rec?.id && rec.text) {
+        if (!rec.kind) rec.kind = "fact";
+        const c = compileNeedles(rec),
+          at = idx.get(rec.id);
+        if (at != null) out[at] = c;
+        else (idx.set(rec.id, out.length), out.push(c));
+      }
+    } catch {}
   }
   return out;
 }
 
-const STATUS_OBJECT = /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
+const STATUS_OBJECT =
+  /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
 
-export const PACKET_CHAT_K_MIN = 6, PACKET_CHAT_K_MAX = 10, PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
+export const PACKET_CHAT_K_MIN = 6,
+  PACKET_CHAT_K_MAX = 10,
+  PACKET_CHAT_K_DEFAULT = PACKET_CHAT_K_MIN;
 
 export function memoryRetrieveCap(): number {
-  const raw = Number(process.env.EDEN_MEMORY_CAP); return !Number.isFinite(raw) || raw <= 0 ? PACKET_CHAT_K_MIN : Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
+  const raw = Number(process.env.EDEN_MEMORY_CAP);
+  return !Number.isFinite(raw) || raw <= 0
+    ? PACKET_CHAT_K_MIN
+    : Math.min(PACKET_CHAT_K_MAX, Math.max(PACKET_CHAT_K_MIN, Math.floor(raw)));
 }
 
 export function memoryStoreCap(): number {
-  const raw = Number(process.env.EDEN_MEMORY_STORE_CAP); return !Number.isFinite(raw) || raw <= 0 ? 2000 : Math.floor(raw);
+  const raw = Number(process.env.EDEN_MEMORY_STORE_CAP);
+  return !Number.isFinite(raw) || raw <= 0 ? 2000 : Math.floor(raw);
 }
 
-function mergeNarrativeLane(lexical: MemoryRecord[], text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
-  const q = String(text ?? "").trim(); if (!q) return lexical;
-  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled }), chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
+function mergeNarrativeLane(
+  lexical: MemoryRecord[],
+  text: string,
+  cap: number,
+  dir: string,
+  compiled: MemoryRecord[] = [],
+): MemoryRecord[] {
+  const q = String(text ?? "").trim();
+  if (!q) return lexical;
+  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))),
+    hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled }),
+    chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
   if (!hits.length) return chat.length ? chat : lexical;
   const chunks: MemoryRecord[] = [];
-  for (const hit of hits) { const body = String(hit?.text ?? "").trim(); if (body) chunks.push({ id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`, text: body, kind: "episode", lane: "narrative", tags: ["chunk"], at: Number.isFinite(hit.t) ? hit.t : 0 }); }
+  for (const hit of hits) {
+    const body = String(hit?.text ?? "").trim();
+    if (body)
+      chunks.push({
+        id: hit.id || `chunk:${hit.src || "anon"}:${chunks.length}`,
+        text: body,
+        kind: "episode",
+        lane: "narrative",
+        tags: ["chunk"],
+        at: Number.isFinite(hit.t) ? hit.t : 0,
+      });
+  }
   if (!chunks.length) return chat.length ? chat : lexical;
   const out: MemoryRecord[] = [];
-  for (const c of [...chunks, ...chat]) { if (out.length >= cap) break; if (out.some((p) => p.id === c.id)) continue; out.push(c); }
+  for (const c of [...chunks, ...chat]) {
+    if (out.length >= cap) break;
+    if (out.some((p) => p.id === c.id)) continue;
+    out.push(c);
+  }
   return out;
 }
 
 function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
-  const q = String(text ?? "").trim(); if (!q) return [];
-  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))), hits = retrieveIcl(dir, q, { k, fallback: compiled });
+  const q = String(text ?? "").trim();
+  if (!q) return [];
+  const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))),
+    hits = retrieveIcl(dir, q, { k, fallback: compiled });
   if (!hits.length) return [];
-  const out: MemoryRecord[] = [], seen = new Set<string>();
-  for (const hit of hits) { if (out.length >= cap) break; const body = String(hit?.text ?? "").trim(), id = hit.id || `icl:${out.length}`; if (!body || seen.has(id) || seen.has(body.toLowerCase())) continue; seen.add(id); seen.add(body.toLowerCase()); out.push({ id, text: body, kind: "fact", lane: "icl", tags: ["icl"], at: Number.isFinite(hit.t) ? hit.t : 0 }); }
+  const out: MemoryRecord[] = [],
+    seen = new Set<string>();
+  for (const hit of hits) {
+    if (out.length >= cap) break;
+    const body = String(hit?.text ?? "").trim(),
+      id = hit.id || `icl:${out.length}`;
+    if (!body || seen.has(id) || seen.has(body.toLowerCase())) continue;
+    seen.add(id);
+    seen.add(body.toLowerCase());
+    out.push({ id, text: body, kind: "fact", lane: "icl", tags: ["icl"], at: Number.isFinite(hit.t) ? hit.t : 0 });
+  }
   return out;
 }
 
 function howtoProcedureRecord(view: ReturnType<typeof howtoRetrieve.retrieveHowTo>[number]): MemoryRecord {
-  const cue = typeof view.cue === "string" ? view.cue.trim() : "", files: string[] = [], add = (f: unknown) => { if (typeof f === "string" && f.trim() && !files.includes(f.trim())) files.push(f.trim()); };
+  const cue = typeof view.cue === "string" ? view.cue.trim() : "",
+    files: string[] = [],
+    add = (f: unknown) => {
+      if (typeof f === "string" && f.trim() && !files.includes(f.trim())) files.push(f.trim());
+    };
   if (Array.isArray(view.files)) for (const f of view.files) add(f);
-  if (!files.length && Array.isArray(view.steps)) { for (const s of view.steps) { if (Array.isArray(s?.files)) for (const f of s.files) add(f); const args = s?.args; if (args) for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]); } }
+  if (!files.length && Array.isArray(view.steps)) {
+    for (const s of view.steps) {
+      if (Array.isArray(s?.files)) for (const f of s.files) add(f);
+      const args = s?.args;
+      if (args) for (const k of ["path", "file", "filepath", "filename"] as const) add(args[k]);
+    }
+  }
   let verify = typeof view.verify === "string" ? view.verify.trim() : "";
-  if (!verify && Array.isArray(view.steps)) { for (let i = view.steps.length - 1; i >= 0; i--) { const args = view.steps[i]?.args; if (!args) continue; for (const k of ["command", "cmd", "script"] as const) { const v = args[k]; if (typeof v === "string" && v.trim()) { verify = v.trim(); break; } } if (verify) break; } }
-  let text = cue; if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" "); if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
+  if (!verify && Array.isArray(view.steps)) {
+    for (let i = view.steps.length - 1; i >= 0; i--) {
+      const args = view.steps[i]?.args;
+      if (!args) continue;
+      for (const k of ["command", "cmd", "script"] as const) {
+        const v = args[k];
+        if (typeof v === "string" && v.trim()) {
+          verify = v.trim();
+          break;
+        }
+      }
+      if (verify) break;
+    }
+  }
+  let text = cue;
+  if (files.length) text = text ? `${text} → ${files.join(" ")}` : files.join(" ");
+  if (verify) text = text ? `${text} · verify: ${verify}` : `verify: ${verify}`;
   return { id: view.id, kind: "procedure", tags: ["howto", "procedure"], text, at: view.t };
 }
 
 function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir: string): MemoryRecord[] {
-  const q = String(text ?? "").trim(); if (!q || !/\bflake\b/i.test(q)) return lexical;
-  const views = howtoRetrieve.retrieveHowTo(dir, q); if (!views.length) return lexical;
-  const rec = howtoProcedureRecord(views[0]!); if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
+  const q = String(text ?? "").trim();
+  if (!q || !/\bflake\b/i.test(q)) return lexical;
+  const views = howtoRetrieve.retrieveHowTo(dir, q);
+  if (!views.length) return lexical;
+  const rec = howtoProcedureRecord(views[0]!);
+  if (!/unknown:/i.test(rec.text)) rec.text = `${rec.text} · unknown: flake`;
   const kept = lexical.filter((l) => l.id !== rec.id).slice(0, Math.max(0, cap - 1));
   return [...kept, rec];
 }
@@ -206,9 +580,19 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
 let memSeq = 0;
 
 export class AgentMemory {
-  readonly dir: string; readonly session?: string; readonly child: boolean; private scrubSession?: string; private scrubCwd?: string;
-  private compiled: Compiled[]; private path: string; private batch = 0; private dirty = false; private seenLower = new Set<string>();
-  private post: Map<string, Compiled[]> | null = null; private knownIds = new Set<string>(); private sem?: SemanticStore;
+  readonly dir: string;
+  readonly session?: string;
+  readonly child: boolean;
+  private scrubSession?: string;
+  private scrubCwd?: string;
+  private compiled: Compiled[];
+  private path: string;
+  private batch = 0;
+  private dirty = false;
+  private seenLower = new Set<string>();
+  private post: Map<string, Compiled[]> | null = null;
+  private knownIds = new Set<string>();
+  private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
     this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined;
@@ -216,16 +600,28 @@ export class AgentMemory {
     const proj = typeof opts.project === "string" && opts.project.trim() ? opts.project.trim() : undefined;
     const pathy = !!proj && (proj.includes("/") || proj.includes("\\") || /^[A-Za-z]:/.test(proj));
     this.scrubCwd = cwdOpt || (pathy ? proj : undefined);
-    mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true }); const session = memorySessionName(opts.session); this.session = session; this.child = opts.child === true;
-    if (session) mkdirSync(join(this.dir, session), { recursive: true }); this.path = join(this.dir, session || "", "memories.jsonl");
-    this.compiled = load(this.path); this.knownIds = new Set(this.compiled.map((c) => c.rec.id)); this.rebuildSeen();
+    mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true });
+    const session = memorySessionName(opts.session);
+    this.session = session;
+    this.child = opts.child === true;
+    if (session) mkdirSync(join(this.dir, session), { recursive: true });
+    this.path = join(this.dir, session || "", "memories.jsonl");
+    this.compiled = load(this.path);
+    this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
+    this.rebuildSeen();
   }
 
-  get jsonlDir(): string { return join(this.dir, this.session || ""); }
+  get jsonlDir(): string {
+    return join(this.dir, this.session || "");
+  }
 
-  private semantic(): SemanticStore { return (this.sem ??= new SemanticStore(this.dir)); }
+  private semantic(): SemanticStore {
+    return (this.sem ??= new SemanticStore(this.dir));
+  }
 
-  memories(): MemoryRecord[] { return this.compiled.map((c) => c.rec); }
+  memories(): MemoryRecord[] {
+    return this.compiled.map((c) => c.rec);
+  }
 
   private persistText(text: string): string {
     let t = String(text ?? "");
@@ -240,150 +636,573 @@ export class AgentMemory {
     try {
       // IR redact is key=value only — "password is hunter2" would otherwise persist.
       // Do not use "auth is" / "token is": those eat Clerk facts and ordinary speech.
-      t = t.replace(
-        /\b((?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+)[^\s,.;]+/gi,
-        "$1[REDACTED]",
-      );
+      t = t.replace(/\b((?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+)[^\s,.;]+/gi, "$1[REDACTED]");
     } catch {}
-    try { t = scrubMemoryText(t, { session: this.scrubSession, cwd: this.scrubCwd }); } catch {}
+    try {
+      t = scrubMemoryText(t, { session: this.scrubSession, cwd: this.scrubCwd });
+    } catch {}
     return t;
   }
 
-  remember(text: string, opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {}): MemoryRecord {
-    const rec: MemoryRecord = { id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`, text: this.persistText(String(text || "").trim()), kind: opts.kind || "fact", tags: (opts.tags || []).map((t) => String(t).toLowerCase()), at: Date.now(), ...(opts.lane ? { lane: opts.lane } : {}), ...(this.session ? { ep: opaqueId(this.session) } : {}) };
-    try { if (memoryConsent() !== "on") return rec; } catch { return rec; }
-    const pin = opts.pin === true || ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text); if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
-    rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => { if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false; if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true; return Object.values(WRITE_ALIASES).some((a) => a.includes(t)); }); if (!rec.tags.length) delete rec.tags;
-    try { const until = parseRuleTime(rec.text)?.until; if (typeof until === "number") rec.validUntil = until; } catch {}
-    try { const fact = objectAsserted(rec.text); if (fact && !STATUS_OBJECT.test(fact.o)) { const live = this.semantic().get(fact.s, fact.p); const serial = leadingSerial(rec.text); if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at); } } catch {}
-    const c = compileNeedles(rec), i = this.compiled.findIndex((x) => x.rec.id === rec.id); i >= 0 && this.compiled.splice(i, 1); try { this.invalidateSameCopula(rec); } catch {}
-    this.compiled.push(c); this.knownIds.add(rec.id); this.post = null; this.seenLower.add(rec.text.toLowerCase());
-    return this.flush(true), rec;
+  remember(
+    text: string,
+    opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {},
+  ): MemoryRecord {
+    const rec: MemoryRecord = {
+      id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`,
+      text: this.persistText(String(text || "").trim()),
+      kind: opts.kind || "fact",
+      tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
+      at: Date.now(),
+      ...(opts.lane ? { lane: opts.lane } : {}),
+      ...(this.session ? { ep: opaqueId(this.session) } : {}),
+    };
+    try {
+      if (memoryConsent() !== "on") return rec;
+    } catch {
+      return rec;
+    }
+    const pin =
+      opts.pin === true ||
+      ((t) =>
+        !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) &&
+        (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
+    if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
+    rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => {
+      if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false;
+      if (t === "pin" || WRITE_ALIASES[t] || (opts.tags || []).some((x) => String(x).toLowerCase() === t)) return true;
+      return Object.values(WRITE_ALIASES).some((a) => a.includes(t));
+    });
+    if (!rec.tags.length) delete rec.tags;
+    try {
+      const until = parseRuleTime(rec.text)?.until;
+      if (typeof until === "number") rec.validUntil = until;
+    } catch {}
+    try {
+      const fact = objectAsserted(rec.text);
+      if (fact && !STATUS_OBJECT.test(fact.o)) {
+        const live = this.semantic().get(fact.s, fact.p);
+        const serial = leadingSerial(rec.text);
+        if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at);
+      }
+    } catch {}
+    const c = compileNeedles(rec),
+      i = this.compiled.findIndex((x) => x.rec.id === rec.id);
+    i >= 0 && this.compiled.splice(i, 1);
+    try {
+      this.invalidateSameCopula(rec);
+    } catch {}
+    this.compiled.push(c);
+    this.knownIds.add(rec.id);
+    this.post = null;
+    this.seenLower.add(rec.text.toLowerCase());
+    return (this.flush(true), rec);
   }
 
   private invalidateSameCopula(incoming: MemoryRecord): void {
-    let asserted: ReturnType<typeof objectAsserted>; try { asserted = objectAsserted(incoming.text); } catch { return; } if (!asserted) return;
-    const now = incoming.at ?? Date.now(), incomingSerial = leadingSerial(incoming.text);
+    let asserted: ReturnType<typeof objectAsserted>;
+    try {
+      asserted = objectAsserted(incoming.text);
+    } catch {
+      return;
+    }
+    if (!asserted) return;
+    const now = incoming.at ?? Date.now(),
+      incomingSerial = leadingSerial(incoming.text);
     for (const c of this.compiled) {
-      if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt))) continue;
-      let other: ReturnType<typeof objectAsserted>; try { other = objectAsserted(c.rec.text); } catch { continue; }
-      if (!other || other.s !== asserted.s || other.p !== asserted.p) continue; if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
-      const liveSerial = leadingSerial(c.rec.text); if ((incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) || (incomingSerial == null && liveSerial != null)) continue;
+      if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt)))
+        continue;
+      let other: ReturnType<typeof objectAsserted>;
+      try {
+        other = objectAsserted(c.rec.text);
+      } catch {
+        continue;
+      }
+      if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
+      if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
+      const liveSerial = leadingSerial(c.rec.text);
+      if (
+        (incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) ||
+        (incomingSerial == null && liveSerial != null)
+      )
+        continue;
       c.rec.invalidAt = now;
     }
   }
 
-  private rebuildSeen() { this.seenLower = new Set(); this.post = null; for (const c of this.compiled) this.seenLower.add(c.rec.text.toLowerCase()); }
-
-  private ensureIndex() { if (this.post) return; const post = new Map<string, Compiled[]>(); for (const c of this.compiled) if (isLiveRow(c.rec)) for (const w of c.needles) { let arr = post.get(w); if (!arr) post.set(w, arr = []); arr.push(c); } this.post = post; }
-
-  observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
-    try { if (memoryConsent() !== "on") return []; } catch { return []; }
-    this.batch++; try {
-    const list = (Array.isArray(messages) ? messages : []).filter((m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system"), out: MemoryRecord[] = [], items = list.map((m) => ({ role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"), text: convBlob([m]).trim().replace(/\s+/g, " ") })).filter((i) => i.text), batchLive = new Map<string, string>();
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i]!, safe = this.persistText(stripMemoryPacket(it.text)), lane = encodeLane(it.text);
-      if (lane === "icl" || lane === "narrative") {
-        let text = safe;
-        if (lane === "narrative" && opts.keepLiveIdentity) try { text = omitConflictingIdentity(text, this.semantic()); } catch {}
-        if (text && !this.seenLower.has(text.toLowerCase())) { const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane }); out.push(rec); try { if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at }); else new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at }); } catch {} }
-        continue;
-      }
-      const before = out.length; let coveredChars = 0, skippedIdentity = false;
-      for (const raw of extractDurable(it.text)) {
-        let text = raw; try { const asserted = objectAsserted(text); if (asserted && /\b(?:instead of|rather than)\b/i.test(text)) text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`; } catch {} text = this.persistText(text);
-        try { const fact = objectAsserted(text); if (fact) { const store = this.semantic(), live = store.get(fact.s, fact.p); if (opts.keepLiveIdentity) { const obj = fact.o.trim().toLowerCase(), slot = `${fact.s}\0${fact.p}`, fromBatch = batchLive.get(slot); if (!(fromBatch && fromBatch !== obj)) { if (live && live.o.trim().toLowerCase() !== obj) { skippedIdentity = true; continue; } if (store.supersededObject(fact.o)) { skippedIdentity = true; continue; } } } const serial = leadingSerial(text); if (!(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) && !STATUS_OBJECT.test(fact.o)) { store.put(fact.s, fact.p, fact.o, serial ?? Date.now()); batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase()); } } } catch {}
-        if (this.seenLower.has(text.toLowerCase())) continue;
-        const pin = ((t) => !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) && (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text), asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
-        let kind: MemoryKind = asQuestion ? "episode" : pin ? "constraint" : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text) ? "constraint" : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(text) || (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text)) ? "episode" : "fact";
-        if (kind === "fact" && !asQuestion && !pin) try { if (!objectAsserted(text)) kind = "episode"; } catch { kind = "episode"; }
-        out.push(this.remember(text, { kind, pin }));
-        coveredChars += text.length;
-      }
-      try { if (!skippedIdentity && !isNoopCue(it.text) && !CHAT.test(it.text.trim()) && safe.length >= 8) { let identityTurn = false; try { identityTurn = !!objectAsserted(safe); } catch {} if (!(opts.keepLiveIdentity && identityTurn) && (out.length === before || coveredChars / Math.max(1, safe.length) < 0.85)) { const key = safe.replace(/[.!?]+$/g, "").toLowerCase(); if (!this.seenLower.has(safe.toLowerCase()) && !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) && ![...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key)) out.push(this.remember(safe, { kind: "episode" })); } } } catch {}
-    }
-    return out;
-    } finally { this.batch--; this.flush(false); if (!opts.deferSleep) { try { noteSleepActivity(this); } catch {} try { scheduleIncrementalSleep(this, { session: this.session }); } catch {} } }
+  private rebuildSeen() {
+    this.seenLower = new Set();
+    this.post = null;
+    for (const c of this.compiled) this.seenLower.add(c.rec.text.toLowerCase());
   }
 
-  private flush(mark: boolean) { if (mark) this.dirty = true; if (this.batch || !this.dirty) return; this.persist(); }
+  private ensureIndex() {
+    if (this.post) return;
+    const post = new Map<string, Compiled[]>();
+    for (const c of this.compiled)
+      if (isLiveRow(c.rec))
+        for (const w of c.needles) {
+          let arr = post.get(w);
+          if (!arr) post.set(w, (arr = []));
+          arr.push(c);
+        }
+    this.post = post;
+  }
+
+  observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
+    try {
+      if (memoryConsent() !== "on") return [];
+    } catch {
+      return [];
+    }
+    this.batch++;
+    try {
+      const list = (Array.isArray(messages) ? messages : []).filter(
+          (m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system",
+        ),
+        out: MemoryRecord[] = [],
+        items = list
+          .map((m) => ({
+            role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"),
+            text: convBlob([m]).trim().replace(/\s+/g, " "),
+          }))
+          .filter((i) => i.text),
+        batchLive = new Map<string, string>();
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]!,
+          safe = this.persistText(stripMemoryPacket(it.text)),
+          lane = encodeLane(it.text);
+        if (lane === "icl" || lane === "narrative") {
+          let text = safe;
+          if (lane === "narrative" && opts.keepLiveIdentity)
+            try {
+              text = omitConflictingIdentity(text, this.semantic());
+            } catch {}
+          if (text && !this.seenLower.has(text.toLowerCase())) {
+            const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane });
+            out.push(rec);
+            try {
+              if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at });
+              else new IclIndex(this.dir).put(text, { src: rec.id, t: rec.at });
+            } catch {}
+          }
+          continue;
+        }
+        const before = out.length;
+        let coveredChars = 0,
+          skippedIdentity = false;
+        for (const raw of extractDurable(it.text)) {
+          let text = raw;
+          try {
+            const asserted = objectAsserted(text);
+            if (asserted && /\b(?:instead of|rather than)\b/i.test(text))
+              text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`;
+          } catch {}
+          text = this.persistText(text);
+          try {
+            const fact = objectAsserted(text);
+            if (fact) {
+              const store = this.semantic(),
+                live = store.get(fact.s, fact.p);
+              if (opts.keepLiveIdentity) {
+                const obj = fact.o.trim().toLowerCase(),
+                  slot = `${fact.s}\0${fact.p}`,
+                  fromBatch = batchLive.get(slot);
+                if (!(fromBatch && fromBatch !== obj)) {
+                  if (live && live.o.trim().toLowerCase() !== obj) {
+                    skippedIdentity = true;
+                    continue;
+                  }
+                  if (store.supersededObject(fact.o)) {
+                    skippedIdentity = true;
+                    continue;
+                  }
+                }
+              }
+              const serial = leadingSerial(text);
+              if (
+                !(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) &&
+                !STATUS_OBJECT.test(fact.o)
+              ) {
+                store.put(fact.s, fact.p, fact.o, serial ?? Date.now());
+                batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase());
+              }
+            }
+          } catch {}
+          if (this.seenLower.has(text.toLowerCase())) continue;
+          const pin = ((t) =>
+              !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) &&
+              (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text),
+            asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
+          let kind: MemoryKind = asQuestion
+            ? "episode"
+            : pin
+              ? "constraint"
+              : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text)
+                ? "constraint"
+                : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(
+                      text,
+                    ) ||
+                    (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text))
+                  ? "episode"
+                  : "fact";
+          if (kind === "fact" && !asQuestion && !pin)
+            try {
+              if (!objectAsserted(text)) kind = "episode";
+            } catch {
+              kind = "episode";
+            }
+          out.push(this.remember(text, { kind, pin }));
+          coveredChars += text.length;
+        }
+        try {
+          if (!skippedIdentity && !isNoopCue(it.text) && !CHAT.test(it.text.trim()) && safe.length >= 8) {
+            let identityTurn = false;
+            try {
+              identityTurn = !!objectAsserted(safe);
+            } catch {}
+            if (
+              !(opts.keepLiveIdentity && identityTurn) &&
+              (out.length === before || coveredChars / Math.max(1, safe.length) < 0.85)
+            ) {
+              const key = safe.replace(/[.!?]+$/g, "").toLowerCase();
+              if (
+                !this.seenLower.has(safe.toLowerCase()) &&
+                !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) &&
+                ![...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key)
+              )
+                out.push(this.remember(safe, { kind: "episode" }));
+            }
+          }
+        } catch {}
+      }
+      return out;
+    } finally {
+      this.batch--;
+      this.flush(false);
+      if (!opts.deferSleep) {
+        try {
+          noteSleepActivity(this);
+        } catch {}
+        try {
+          scheduleIncrementalSleep(this, { session: this.session });
+        } catch {}
+      }
+    }
+  }
+
+  private flush(mark: boolean) {
+    if (mark) this.dirty = true;
+    if (this.batch || !this.dirty) return;
+    this.persist();
+  }
 
   private persist() {
-    try { if (memoryConsent() !== "on") return; } catch { return; }
-    try { withFileLock(`${this.path}.lock`, () => { try { const mine = new Set(this.compiled.map((c) => c.rec.id)), byId = new Map<string, Compiled>(); for (const c of load(this.path)) if (mine.has(c.rec.id) || !this.knownIds.has(c.rec.id)) byId.set(c.rec.id, c); for (const c of this.compiled) byId.set(c.rec.id, c); this.compiled = [...byId.values()]; for (const c of this.compiled) this.knownIds.add(c.rec.id); } catch {} this.trimToStoreCap(); writeFileAtomic(this.path, this.compiled.map((x) => { const r = x.rec; return r.kind === "episode" && !r.tags && !r.lane && !r.ep && !r.invalidAt && !r.validUntil && !r.heat && !r.sal ? JSON.stringify([r.id, r.text]) : JSON.stringify({ ...r, kind: r.kind === "fact" ? undefined : r.kind, at: undefined, invalidAt: undefined, validUntil: undefined }); }).join("\n") + (this.compiled.length ? "\n" : "")); try { chmodSync(this.path, 0o600); } catch {} try { unlinkSync(`${this.path}.wal`); } catch {} }); this.rebuildSeen(); this.dirty = false; } catch {}
+    try {
+      if (memoryConsent() !== "on") return;
+    } catch {
+      return;
+    }
+    try {
+      withFileLock(`${this.path}.lock`, () => {
+        try {
+          const mine = new Set(this.compiled.map((c) => c.rec.id)),
+            byId = new Map<string, Compiled>();
+          for (const c of load(this.path))
+            if (mine.has(c.rec.id) || !this.knownIds.has(c.rec.id)) byId.set(c.rec.id, c);
+          for (const c of this.compiled) byId.set(c.rec.id, c);
+          this.compiled = [...byId.values()];
+          for (const c of this.compiled) this.knownIds.add(c.rec.id);
+        } catch {}
+        this.trimToStoreCap();
+        writeFileAtomic(
+          this.path,
+          this.compiled
+            .map((x) => {
+              const r = x.rec;
+              return r.kind === "episode" &&
+                !r.tags &&
+                !r.lane &&
+                !r.ep &&
+                !r.invalidAt &&
+                !r.validUntil &&
+                !r.heat &&
+                !r.sal
+                ? JSON.stringify([r.id, r.text])
+                : JSON.stringify({
+                    ...r,
+                    kind: r.kind === "fact" ? undefined : r.kind,
+                    at: undefined,
+                    invalidAt: undefined,
+                    validUntil: undefined,
+                  });
+            })
+            .join("\n") + (this.compiled.length ? "\n" : ""),
+        );
+        try {
+          chmodSync(this.path, 0o600);
+        } catch {}
+        try {
+          unlinkSync(`${this.path}.wal`);
+        } catch {}
+      });
+      this.rebuildSeen();
+      this.dirty = false;
+    } catch {}
   }
 
   private trimToStoreCap(): void {
-    const cap = memoryStoreCap(); if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
-    const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint", keep = this.compiled.filter((c) => pinned(c.rec)), rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => a.rec.at - b.rec.at);
-    this.compiled = keep.concat(rest.slice(Math.max(0, rest.length - Math.max(0, cap - keep.length)))); this.post = null;
+    const cap = memoryStoreCap();
+    if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
+    const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint",
+      keep = this.compiled.filter((c) => pinned(c.rec)),
+      rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => a.rec.at - b.rec.at);
+    this.compiled = keep.concat(rest.slice(Math.max(0, rest.length - Math.max(0, cap - keep.length))));
+    this.post = null;
   }
 
   relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
     const hay = queryHay(text);
     try {
       this.ensureIndex();
-      const ranked = [...hay].filter((t) => t.length >= 3 && !STOP.has(t)).map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 })).filter((x) => x.df > 0).sort((a, b) => a.df - b.df);
-      const poolCap = Math.max(cap * 6, 30), seen = new Set<Compiled>(), pool: Compiled[] = [];
-      for (const { t, df } of ranked) { if (df >= 80 && pool.length) break; for (const c of this.post!.get(t) ?? []) { if (seen.has(c)) continue; seen.add(c); pool.push(c); if (pool.length >= poolCap) break; } if (df >= 80 || pool.length >= poolCap) break; }
+      const ranked = [...hay]
+        .filter((t) => t.length >= 3 && !STOP.has(t))
+        .map((t) => ({ t, df: this.post!.get(t)?.length ?? 0 }))
+        .filter((x) => x.df > 0)
+        .sort((a, b) => a.df - b.df);
+      const poolCap = Math.max(cap * 6, 30),
+        seen = new Set<Compiled>(),
+        pool: Compiled[] = [];
+      for (const { t, df } of ranked) {
+        if (df >= 80 && pool.length) break;
+        for (const c of this.post!.get(t) ?? []) {
+          if (seen.has(c)) continue;
+          seen.add(c);
+          pool.push(c);
+          if (pool.length >= poolCap) break;
+        }
+        if (df >= 80 || pool.length >= poolCap) break;
+      }
       const scored: { rec: MemoryRecord; n: number; rare: number }[] = [];
-      for (const c of pool) { let n = 0, rare = 0; for (const x of c.needles) if (hay.has(x)) { n++; rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1); } if (n && c.needles.length <= 12 && !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) && !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)) scored.push({ rec: c.rec, n, rare }); }
-      return liveCopulaLatest(scored).sort((a, b) => (b.n + rankKindBoost(b.rec)) - (a.n + rankKindBoost(a.rec)) || b.rare - a.rare || b.rec.at - a.rec.at).slice(0, Math.max(0, Math.floor(Number(cap) || 0))).map((x) => x.rec);
-    } catch { return []; }
+      for (const c of pool) {
+        let n = 0,
+          rare = 0;
+        for (const x of c.needles)
+          if (hay.has(x)) {
+            n++;
+            rare += 1 / Math.max(1, this.post?.get(x)?.length ?? 1);
+          }
+        if (
+          n &&
+          c.needles.length <= 12 &&
+          !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) &&
+          !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
+        )
+          scored.push({ rec: c.rec, n, rare });
+      }
+      return liveCopulaLatest(scored)
+        .sort(
+          (a, b) => b.n + rankKindBoost(b.rec) - (a.n + rankKindBoost(a.rec)) || b.rare - a.rare || b.rec.at - a.rec.at,
+        )
+        .slice(0, Math.max(0, Math.floor(Number(cap) || 0)))
+        .map((x) => x.rec);
+    } catch {
+      return [];
+    }
   }
 
   notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
-    const cap = Math.max(0, Math.floor(Number(k) || 0)), route = routeMemory(text);
-    let recs: MemoryRecord[] = route === "icl-index" ? mergeIclLane(text, cap, this.dir, this.compiled.map((c) => c.rec)) : this.relevant(text, k);
-    if (route !== "icl-index") { if (route === "gist-chunk") recs = mergeNarrativeLane(recs, text, cap, this.dir, this.compiled.map((c) => c.rec)); recs = mergeHowtoLane(recs, text, cap, this.dir); }
-    const kept = recs.map((n) => { const raw = String(n.text ?? ""); if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n; try { const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, "")); if (!fact) return n; return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` }; } catch { return n; } });
-    try { return kept.map((r) => ({ ...r, text: applyProvenanceLabel(r, capMemoryBody(r, stripPacketLabel(r.text).body)) })); } catch { return kept; }
+    const cap = Math.max(0, Math.floor(Number(k) || 0)),
+      route = routeMemory(text);
+    let recs: MemoryRecord[] =
+      route === "icl-index"
+        ? mergeIclLane(
+            text,
+            cap,
+            this.dir,
+            this.compiled.map((c) => c.rec),
+          )
+        : this.relevant(text, k);
+    if (route !== "icl-index") {
+      if (route === "gist-chunk")
+        recs = mergeNarrativeLane(
+          recs,
+          text,
+          cap,
+          this.dir,
+          this.compiled.map((c) => c.rec),
+        );
+      recs = mergeHowtoLane(recs, text, cap, this.dir);
+    }
+    const kept = recs.map((n) => {
+      const raw = String(n.text ?? "");
+      if (!/\b(?:instead of|rather than)\b/i.test(raw)) return n;
+      try {
+        const fact = objectAsserted(raw.replace(/^\[[^\]]+\]\s+/, ""));
+        if (!fact) return n;
+        return { ...n, text: fact.p === "uses" ? `${fact.s} uses ${fact.o}.` : `The ${fact.s} is ${fact.o}.` };
+      } catch {
+        return n;
+      }
+    });
+    try {
+      return kept.map((r) => ({
+        ...r,
+        text: applyProvenanceLabel(r, capMemoryBody(r, stripPacketLabel(r.text).body)),
+      }));
+    } catch {
+      return kept;
+    }
   }
 
   inject(messages: unknown[]): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
-      try { if (memoryConsent() === "off") return list; } catch { return list; }
-      const blob = convBlob(list), notes: { role: "system"; content: string }[] = [], cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
-      if (!blob.includes(MEMORY_MARK)) {
-        let silent = false; try { if (cue && isNoopCue(cue)) silent = true; else if (hookLane(cue) === "none") silent = true; } catch {}
-        const retrieved = !silent && cue ? this.notesFor(cue) : []; let packet = retrieved;
-        try { if (retrieved.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(retrieved, this.dir); } catch {}
-        if (packet.length) { try { logMemoryNotes(packet); } catch {} const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap())); if (packed.length) notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") }); }
+      try {
+        if (memoryConsent() === "off") return list;
+      } catch {
+        return list;
       }
-      try { if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim())) this.observe(list, { deferSleep: true }); } catch {}
+      const blob = convBlob(list),
+        notes: { role: "system"; content: string }[] = [],
+        cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
+      if (!blob.includes(MEMORY_MARK)) {
+        let silent = false;
+        try {
+          if (cue && isNoopCue(cue)) silent = true;
+          else if (hookLane(cue) === "none") silent = true;
+        } catch {}
+        const retrieved = !silent && cue ? this.notesFor(cue) : [];
+        let packet = retrieved;
+        try {
+          if (retrieved.length && cue && routeMemory(cue) === "sf-assemble")
+            packet = assembleNotes(retrieved, this.dir);
+        } catch {}
+        if (packet.length) {
+          try {
+            logMemoryNotes(packet);
+          } catch {}
+          const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
+          if (packed.length)
+            notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
+        }
+      }
+      try {
+        if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim()))
+          this.observe(list, { deferSleep: true });
+      } catch {}
       if (!notes.length) return list;
-      const next = list.slice(), i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
-      return next.splice(i < 0 ? next.length : i, 0, ...notes), next;
-    } catch { memoryInjectSwallows.n++; return list; }
+      const next = list.slice(),
+        i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
+      return (next.splice(i < 0 ? next.length : i, 0, ...notes), next);
+    } catch {
+      memoryInjectSwallows.n++;
+      return list;
+    }
   }
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
-    try { if (memoryConsent() === "off") return body; } catch { return body; }
-    const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages", m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [], sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
     try {
-      const paths = placePathsFrom(body); let msgs = m;
-      if (paths.length) { msgs = m.slice(); const idx = msgs.findLastIndex((o) => { if (!o || typeof o !== "object") return false; const role = String((o as { role?: unknown }).role ?? "").toLowerCase(); return role === "user" || role === "human"; }); if (idx >= 0) { const last = { ...(msgs[idx] as Record<string, unknown>) }; last.open_files = [...placePathsFrom(last), ...paths]; msgs[idx] = last; } }
+      if (memoryConsent() === "off") return body;
+    } catch {
+      return body;
+    }
+    const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages",
+      m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [],
+      sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
+    try {
+      const paths = placePathsFrom(body);
+      let msgs = m;
+      if (paths.length) {
+        msgs = m.slice();
+        const idx = msgs.findLastIndex((o) => {
+          if (!o || typeof o !== "object") return false;
+          const role = String((o as { role?: unknown }).role ?? "").toLowerCase();
+          return role === "user" || role === "human";
+        });
+        if (idx >= 0) {
+          const last = { ...(msgs[idx] as Record<string, unknown>) };
+          last.open_files = [...placePathsFrom(last), ...paths];
+          msgs[idx] = last;
+        }
+      }
       const next = this.inject(msgs);
-      if (sys) try { this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], { keepLiveIdentity: true }); } catch {}
+      if (sys)
+        try {
+          this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], {
+            keepLiveIdentity: true,
+          });
+        } catch {}
       return next === m ? body : { ...body, [key]: next };
-    } catch { memoryInjectSwallows.n++; return body; }
+    } catch {
+      memoryInjectSwallows.n++;
+      return body;
+    }
   }
 
-  quiet(fn: () => void) { this.batch++; const sem = this.semantic(); sem.beginBatch(); try { fn(); } finally { try { sem.endBatch(); } catch {} this.batch--; this.flush(false); } }
+  quiet(fn: () => void) {
+    this.batch++;
+    const sem = this.semantic();
+    sem.beginBatch();
+    try {
+      fn();
+    } finally {
+      try {
+        sem.endBatch();
+      } catch {}
+      this.batch--;
+      this.flush(false);
+    }
+  }
 
-  dropWhere(pred: (r: MemoryRecord) => boolean): void { this.compiled = this.compiled.filter((c) => !pred(c.rec)); this.post = null; this.flush(true); }
+  dropWhere(pred: (r: MemoryRecord) => boolean): void {
+    this.compiled = this.compiled.filter((c) => !pred(c.rec));
+    this.post = null;
+    this.flush(true);
+  }
 
-  rewriteWhere(pred: (r: MemoryRecord) => string | undefined): void { let dirty = false; this.compiled = this.compiled.map((c) => { const next = pred(c.rec); if (typeof next !== "string" || next === c.rec.text) return c; dirty = true; return compileNeedles({ ...c.rec, text: next }); }); if (dirty) this.post = null, this.flush(true); }
+  rewriteWhere(pred: (r: MemoryRecord) => string | undefined): void {
+    let dirty = false;
+    this.compiled = this.compiled.map((c) => {
+      const next = pred(c.rec);
+      if (typeof next !== "string" || next === c.rec.text) return c;
+      dirty = true;
+      return compileNeedles({ ...c.rec, text: next });
+    });
+    if (dirty) ((this.post = null), this.flush(true));
+  }
 
-  patchWhere(fn: (r: MemoryRecord) => MemoryRecord | undefined): void { let dirty = false; this.compiled = this.compiled.map((c) => { let next: MemoryRecord | undefined; try { next = fn(c.rec); } catch { return c; } if (!next || next === c.rec) return c; dirty = true; return compileNeedles(next); }); if (dirty) this.post = null, this.flush(true); }
+  patchWhere(fn: (r: MemoryRecord) => MemoryRecord | undefined): void {
+    let dirty = false;
+    this.compiled = this.compiled.map((c) => {
+      let next: MemoryRecord | undefined;
+      try {
+        next = fn(c.rec);
+      } catch {
+        return c;
+      }
+      if (!next || next === c.rec) return c;
+      dirty = true;
+      return compileNeedles(next);
+    });
+    if (dirty) ((this.post = null), this.flush(true));
+  }
 
-  close() { this.flush(false); }
+  close() {
+    this.flush(false);
+  }
 
-  async sleep(opts?: { session?: string }): Promise<void> { try { const { consolidate } = await import("./sleep"); consolidate(this, { session: opts?.session ?? this.session, mode: "full" }); } catch {} }
+  async sleep(opts?: { session?: string }): Promise<void> {
+    try {
+      const { consolidate } = await import("./sleep");
+      consolidate(this, { session: opts?.session ?? this.session, mode: "full" });
+    } catch {}
+  }
 }
 
-export function openMemory(opts: MemoryOptions = {}): AgentMemory { return new AgentMemory(opts); }
+export function openMemory(opts: MemoryOptions = {}): AgentMemory {
+  return new AgentMemory(opts);
+}
 
 let proc: AgentMemory | undefined;
 
@@ -391,9 +1210,18 @@ export function processMemory(): AgentMemory {
   if (process.argv.some((a) => a.endsWith(".test.ts"))) {
     return openMemory({ dir: join(tmpdir(), "eden-m-" + Math.random().toString(36).slice(2)) });
   }
-  const dir = process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined), root = dir || join(homedir(), ".eden", "memory"), parent = memorySessionName(process.env.EDEN_MEMORY_SESSION) ?? memorySessionName(process.env.EDEN_MEMORY_PARENT), childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
-  const session = childId ? childSessionName(parent, childId) : parent, child = !!childId;
-  if (proc && (proc.dir !== root || proc.session !== session || proc.child !== child)) { try { proc.close(); } catch {} proc = undefined; }
+  const dir =
+      process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
+    root = dir || join(homedir(), ".eden", "memory"),
+    parent = memorySessionName(process.env.EDEN_MEMORY_SESSION) ?? memorySessionName(process.env.EDEN_MEMORY_PARENT),
+    childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
+  const session = childId ? childSessionName(parent, childId) : parent,
+    child = !!childId;
+  if (proc && (proc.dir !== root || proc.session !== session || proc.child !== child)) {
+    try {
+      proc.close();
+    } catch {}
+    proc = undefined;
+  }
   return (proc ??= openMemory({ dir, session, child }));
 }
-

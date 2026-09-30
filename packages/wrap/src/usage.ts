@@ -38,18 +38,15 @@ export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
       ? (u.prompt_tokens_details as Record<string, unknown>)
       : null;
   const cached =
-    coerceInt(u.cache_read_input_tokens) ??
-    coerceInt(details?.cached_tokens) ??
-    coerceInt(u.cached_tokens);
-  const cacheWrite =
-    coerceInt(u.cache_creation_input_tokens) ?? coerceInt(details?.cache_creation_tokens);
+    coerceInt(u.cache_read_input_tokens) ?? coerceInt(details?.cached_tokens) ?? coerceInt(u.cached_tokens);
+  const cacheWrite = coerceInt(u.cache_creation_input_tokens) ?? coerceInt(details?.cache_creation_tokens);
   if (cached == null && cacheWrite == null) return null;
   const denom =
     "cache_read_input_tokens" in u || "cache_creation_input_tokens" in u
       ? (coerceInt(u.cache_read_input_tokens) ?? 0) +
         (coerceInt(u.cache_creation_input_tokens) ?? 0) +
         (coerceInt(u.input_tokens) ?? 0)
-      : coerceInt(u.prompt_tokens) ?? null;
+      : (coerceInt(u.prompt_tokens) ?? null);
   return {
     cached: cached ?? 0,
     ...(cacheWrite != null ? { cacheWrite } : {}),
@@ -61,7 +58,18 @@ export function islandUsage(raw: unknown, batched = false): IslandUsage | undefi
   const u = parseUsage(raw);
   const cache = parseCacheTokens(raw);
   if (!u && !batched) return undefined;
-  return { prompt_tokens: u?.prompt ?? 0, completion_tokens: u?.completion ?? 0, ...(batched ? { batched: true as const } : {}), ...(cache ? { cached_tokens: cache.cached, ...(cache.cacheWrite != null ? { cache_write_tokens: cache.cacheWrite } : {}), ...(cache.denom != null ? { cache_input_tokens: cache.denom } : {}) } : {}) };
+  return {
+    prompt_tokens: u?.prompt ?? 0,
+    completion_tokens: u?.completion ?? 0,
+    ...(batched ? { batched: true as const } : {}),
+    ...(cache
+      ? {
+          cached_tokens: cache.cached,
+          ...(cache.cacheWrite != null ? { cache_write_tokens: cache.cacheWrite } : {}),
+          ...(cache.denom != null ? { cache_input_tokens: cache.denom } : {}),
+        }
+      : {}),
+  };
 }
 
 export function recordCompletion(run: RunRecorder, json: Record<string, unknown>): void {
@@ -84,8 +92,22 @@ export function recordCompletion(run: RunRecorder, json: Record<string, unknown>
     const choice = choices[0] as Record<string, unknown>;
     for (const part of [choice.message, choice.delta]) {
       if (!part || typeof part !== "object") continue;
-      const text = ((c: unknown) => typeof c === "string" ? c : Array.isArray(c) ? (c.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") || undefined) : undefined)((part as Record<string, unknown>).content);
-      if (text != null) { out = text; break; }
+      const text = ((c: unknown) =>
+        typeof c === "string"
+          ? c
+          : Array.isArray(c)
+            ? c
+                .map((p) =>
+                  p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string"
+                    ? (p as { text: string }).text
+                    : "",
+                )
+                .join("") || undefined
+            : undefined)((part as Record<string, unknown>).content);
+      if (text != null) {
+        out = text;
+        break;
+      }
     }
   }
   if (out != null) run.output = redact(out);
@@ -153,11 +175,7 @@ export function attachChatUsage(trace: StretchTrace, usage: ChatUsage | null): S
       ? {
           prompt_tokens: usage.prompt_tokens,
           completion_tokens: usage.completion_tokens,
-          ...cacheHitSpread(
-            usage.cached_tokens ?? 0,
-            usage.cache_write_tokens ?? 0,
-            usage.cache_input_tokens ?? 0,
-          ),
+          ...cacheHitSpread(usage.cached_tokens ?? 0, usage.cache_write_tokens ?? 0, usage.cache_input_tokens ?? 0),
         }
       : {}),
   };
@@ -223,7 +241,10 @@ export class SseUsageParser {
       this.usage = { ...(this.usage ?? {}), ...next };
     }
     const choices = json.choices;
-    if (Array.isArray(choices) && choices.some((c) => c && typeof c === "object" && (c as { finish_reason?: unknown }).finish_reason)) {
+    if (
+      Array.isArray(choices) &&
+      choices.some((c) => c && typeof c === "object" && (c as { finish_reason?: unknown }).finish_reason)
+    ) {
       this.finished = true;
     }
   }
@@ -255,8 +276,7 @@ export function tapSseUsage(stream: ReadableStream<Uint8Array>, run: RunRecorder
       parser.commit(run);
       try {
         await reader.cancel();
-      } catch {
-      }
+      } catch {}
     },
   });
 }

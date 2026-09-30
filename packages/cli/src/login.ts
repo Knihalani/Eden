@@ -27,10 +27,7 @@ export function formatStatus(
   if (!health?.ok) return `${base} · down · key ${short}`;
   const fails = health.fails ? ` · fails ${health.fails}` : "";
   const tokens = health.savings?.tokensSavedMean;
-  const save =
-    tokens != null && Number.isFinite(tokens) && tokens > 0
-      ? ` · ${Math.round(tokens)} tokens saved`
-      : "";
+  const save = tokens != null && Number.isFinite(tokens) && tokens > 0 ? ` · ${Math.round(tokens)} tokens saved` : "";
   return `${base} · ok · traces ${health.traces ?? 0} · live ${health.live ?? 0}${fails}${save} · key ${short}`;
 }
 
@@ -83,7 +80,8 @@ export async function savings(): Promise<void> {
       tokensSavedMean?: number;
       timeSavedMsMean?: number;
     };
-    const tok = j.tokensSavedMean != null && j.tokensSavedMean > 0 ? `${Math.round(j.tokensSavedMean)} tokens saved` : "";
+    const tok =
+      j.tokensSavedMean != null && j.tokensSavedMean > 0 ? `${Math.round(j.tokensSavedMean)} tokens saved` : "";
     const time = j.timeSavedMsMean != null && j.timeSavedMsMean > 0 ? `${Math.round(j.timeSavedMsMean)} ms saved` : "";
     const x = [tok, time].filter(Boolean).join(" · ") || "not measured";
     console.log(`live ${j.live ?? 0} · ${j.runs ?? 0} runs · ${j.fail ?? 0} failed · ${x}`);

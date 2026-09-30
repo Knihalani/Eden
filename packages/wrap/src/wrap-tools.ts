@@ -5,7 +5,7 @@ import {
   evidenceLedger,
   type EvidenceLedger,
   firstWarningIndex,
-    isMutating,
+  isMutating,
   isReadName,
   judgeGrounding,
   mayServe,
@@ -16,7 +16,8 @@ import {
   usableTrace,
   hashStretch,
   liveTimeSavedMs,
-  protocolHeaders, MAX_RUN_STEPS,
+  protocolHeaders,
+  MAX_RUN_STEPS,
 } from "@eden/ir";
 import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram } from "@eden/runtime";
 import { emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
@@ -73,11 +74,19 @@ const armedReceipts = new WeakMap<Armed, Receipt>();
 
 export function wrapTimeoutMs(explicit?: number): number {
   const env = Number(process.env.EDEN_TIMEOUT_MS);
-  return Math.min(300_000, Math.max(1, explicit && explicit > 0 ? explicit : Number.isFinite(env) && env > 0 ? env : 60_000));
+  return Math.min(
+    300_000,
+    Math.max(1, explicit && explicit > 0 ? explicit : Number.isFinite(env) && env > 0 ? env : 60_000),
+  );
 }
 
 export function createState(opts: EdenOpts = {}): WrapState {
-  const sessionId = typeof opts.sessionId === "string" && opts.sessionId.length > 0 ? opts.sessionId : typeof process.env.EDEN_SESSION === "string" && process.env.EDEN_SESSION.length > 0 ? process.env.EDEN_SESSION : "";
+  const sessionId =
+    typeof opts.sessionId === "string" && opts.sessionId.length > 0
+      ? opts.sessionId
+      : typeof process.env.EDEN_SESSION === "string" && process.env.EDEN_SESSION.length > 0
+        ? process.env.EDEN_SESSION
+        : "";
   const fleetId = wrapFleetId(opts.fleetId);
   const agentId = wrapAgentId(opts.agentId, sessionId);
   const region = wrapRegion(opts.region);
@@ -113,7 +122,11 @@ async function sendPost(state: WrapState, path: string, body: unknown): Promise<
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json", ...protocolHeaders() },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(((e) => Number.isFinite(e) && e > 0 ? Math.min(120_000, e) : 10_000)(Number(process.env.EDEN_CONTROL_TIMEOUT_MS))),
+      signal: AbortSignal.timeout(
+        ((e) => (Number.isFinite(e) && e > 0 ? Math.min(120_000, e) : 10_000))(
+          Number(process.env.EDEN_CONTROL_TIMEOUT_MS),
+        ),
+      ),
     });
     return r.ok || !(r.status === 429 || r.status >= 500);
   } catch {
@@ -130,9 +143,25 @@ export async function flushOutbox(state: WrapState): Promise<void> {
     job.tries++;
     if (job.tries < MAX_POST_TRIES && q.length < MAX_OUTBOX) q.push(job);
     else state.droppedPosts++; // retries exhausted, or no room to wait — counted, not silent
-    ((state, delayMs) => { if (flushers.has(state)) return; const t = setTimeout(() => { flushers.delete(state); void flushOutbox(state); }, delayMs); t.unref?.(); flushers.set(state, t); })(state, Math.min(30_000, 200 * 2 ** Math.min(job.tries, 8)));
+    ((state, delayMs) => {
+      if (flushers.has(state)) return;
+      const t = setTimeout(() => {
+        flushers.delete(state);
+        void flushOutbox(state);
+      }, delayMs);
+      t.unref?.();
+      flushers.set(state, t);
+    })(state, Math.min(30_000, 200 * 2 ** Math.min(job.tries, 8)));
   } else if (q.length) {
-    ((state, delayMs) => { if (flushers.has(state)) return; const t = setTimeout(() => { flushers.delete(state); void flushOutbox(state); }, delayMs); t.unref?.(); flushers.set(state, t); })(state, 0);
+    ((state, delayMs) => {
+      if (flushers.has(state)) return;
+      const t = setTimeout(() => {
+        flushers.delete(state);
+        void flushOutbox(state);
+      }, delayMs);
+      t.unref?.();
+      flushers.set(state, t);
+    })(state, 0);
   }
 }
 
@@ -140,13 +169,31 @@ function post(state: WrapState, path: string, body: unknown): void {
   void sendPost(state, path, body).then((ok) => {
     if (ok) return;
     const q = ((s, q = outboxes.get(s) ?? []) => (outboxes.set(s, q), q))(state);
-    if (q.length >= MAX_OUTBOX) { state.droppedPosts++; return; }
+    if (q.length >= MAX_OUTBOX) {
+      state.droppedPosts++;
+      return;
+    }
     q.push({ path, body, tries: 0 });
-    ((state, delayMs) => { if (flushers.has(state)) return; const t = setTimeout(() => { flushers.delete(state); void flushOutbox(state); }, delayMs); t.unref?.(); flushers.set(state, t); })(state, 50);
+    ((state, delayMs) => {
+      if (flushers.has(state)) return;
+      const t = setTimeout(() => {
+        flushers.delete(state);
+        void flushOutbox(state);
+      }, delayMs);
+      t.unref?.();
+      flushers.set(state, t);
+    })(state, 50);
   });
 }
 
-function publishReceipt(state: WrapState, r: Receipt): void { state.receipts.push(r); if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES); try { state.opts.onReceipt?.(r); } catch {} post(state, "/v1/receipts", r); }
+function publishReceipt(state: WrapState, r: Receipt): void {
+  state.receipts.push(r);
+  if (state.receipts.length > MAX_TRACES + 256) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
+  try {
+    state.opts.onReceipt?.(r);
+  } catch {}
+  post(state, "/v1/receipts", r);
+}
 
 export async function pullLive(state: WrapState): Promise<void> {
   const base = state.opts.baseUrl;
@@ -156,14 +203,23 @@ export async function pullLive(state: WrapState): Promise<void> {
   try {
     const r = await fn(`${base.replace(/\/$/, "")}/v1/tools`, {
       headers: { authorization: `Bearer ${key}`, ...protocolHeaders() },
-      signal: AbortSignal.timeout(((e) => Number.isFinite(e) && e > 0 ? Math.min(120_000, e) : 10_000)(Number(process.env.EDEN_CONTROL_TIMEOUT_MS))),
+      signal: AbortSignal.timeout(
+        ((e) => (Number.isFinite(e) && e > 0 ? Math.min(120_000, e) : 10_000))(
+          Number(process.env.EDEN_CONTROL_TIMEOUT_MS),
+        ),
+      ),
     });
     if (!r.ok) return;
     const j = (await r.json()) as {
       tools?: Array<{ program: StretchProgram; state: string; rollout?: "canary" | "live" }>;
     };
     const rows = j.tools ?? [];
-    const pulled = rows.filter((t) => t.state === "live").map((t) => { const rollout = t.rollout === "canary" || t.rollout === "live" ? t.rollout : undefined; return rollout ? { ...t.program, rollout } : t.program; });
+    const pulled = rows
+      .filter((t) => t.state === "live")
+      .map((t) => {
+        const rollout = t.rollout === "canary" || t.rollout === "live" ? t.rollout : undefined;
+        return rollout ? { ...t.program, rollout } : t.program;
+      });
     const known = new Set(rows.map((t) => t.program?.id).filter((id): id is string => typeof id === "string" && !!id));
     const localOnly = state.programs.filter((p) => p.manifest && !known.has(p.id));
     state.programs = [...pulled, ...localOnly];
@@ -173,8 +229,7 @@ export async function pullLive(state: WrapState): Promise<void> {
       if (t.state === "live") state.pausedIds.delete(id);
       else state.pausedIds.add(id);
     }
-  } catch {
-  }
+  } catch {}
 }
 
 function compiledReceipt(
@@ -260,7 +315,9 @@ function stampRemainderSkip(state: WrapState, armed: Armed, toolName: string): v
     last.sharedAcross = n;
     if (!last.reason.includes(line)) last.reason = `${last.reason} · ${line}`;
   }
-  try { state.opts.onReceipt?.(last); } catch {}
+  try {
+    state.opts.onReceipt?.(last);
+  } catch {}
   post(state, "/v1/receipts", last);
 }
 
@@ -281,7 +338,14 @@ export async function runCompiled(
     if (!mayServe(program, input)) throw new DeoptError("input not in witness envelope");
     const baseReg =
       registry ??
-      registryFrom(Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, (typeof v === "function" ? { description: k, execute: v } : v).execute])));
+      registryFrom(
+        Object.fromEntries(
+          Object.entries(tools).map(([k, v]) => [
+            k,
+            (typeof v === "function" ? { description: k, execute: v } : v).execute,
+          ]),
+        ),
+      );
     const result = await runProgram(program, input, {
       registry: {
         ...(baseReg.has ? { has: (name: string) => baseReg.has!(name) } : {}),
@@ -293,7 +357,13 @@ export async function runCompiled(
       timeoutMs: wrapTimeoutMs(state.opts.timeoutMs),
     });
     const receipt = compiledReceipt(program, true, result.stats);
-    ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
+    ((s, r) => {
+      if (s.agentId) r.agentId = s.agentId;
+      if (s.parentRunId) r.parentRunId = s.parentRunId;
+      if (s.fleetId) r.fleetId = s.fleetId;
+      if (s.region) r.region = s.region;
+      return r;
+    })(state, receipt);
     const stats = result.stats;
     const run = state.run;
     if (stats.islandUsageMeasured) {
@@ -324,7 +394,13 @@ export async function runCompiled(
       },
       err,
     );
-    ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
+    ((s, r) => {
+      if (s.agentId) r.agentId = s.agentId;
+      if (s.parentRunId) r.parentRunId = s.parentRunId;
+      if (s.fleetId) r.fleetId = s.fleetId;
+      if (s.region) r.region = s.region;
+      return r;
+    })(state, receipt);
     publishReceipt(state, receipt);
     throw err;
   }
@@ -345,22 +421,35 @@ function markDirty(state: WrapState, rec: Record<string, unknown> | undefined, n
   try {
     const mutating = names ? names.some((n) => isMutating(n)) : true;
     if (!mutating) return;
-    const k = ((rec) => { try { if (!rec) return undefined; const id = hintIdOf(rec); if (id == null || id === "") return undefined; return String(id); } catch { return undefined; } })(rec);
+    const k = ((rec) => {
+      try {
+        if (!rec) return undefined;
+        const id = hintIdOf(rec);
+        if (id == null || id === "") return undefined;
+        return String(id);
+      } catch {
+        return undefined;
+      }
+    })(rec);
     if (k) {
       state.dirtyEntities.add(k);
       state.dirtyAt.set(k, performance.now());
     }
-  } catch {
-  }
+  } catch {}
 }
 
-function staleRead(
-  state: WrapState,
-  rec: Record<string, unknown> | undefined,
-  armed?: Armed,
-): boolean {
+function staleRead(state: WrapState, rec: Record<string, unknown> | undefined, armed?: Armed): boolean {
   try {
-    const k = ((rec) => { try { if (!rec) return undefined; const id = hintIdOf(rec); if (id == null || id === "") return undefined; return String(id); } catch { return undefined; } })(rec);
+    const k = ((rec) => {
+      try {
+        if (!rec) return undefined;
+        const id = hintIdOf(rec);
+        if (id == null || id === "") return undefined;
+        return String(id);
+      } catch {
+        return undefined;
+      }
+    })(rec);
     if (!k || !state.dirtyEntities.has(k)) return false;
     const writtenAt = state.dirtyAt.get(k);
     if (writtenAt == null) return true;
@@ -406,156 +495,186 @@ export function wrapTools<T extends ToolsIn>(
     return ev;
   };
   const registry = registryFrom(
-    Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, (typeof v === "function" ? { description: k, execute: v } : v).execute])),
+    Object.fromEntries(
+      Object.entries(tools).map(([k, v]) => [
+        k,
+        (typeof v === "function" ? { description: k, execute: v } : v).execute,
+      ]),
+    ),
   );
   const wrapped: Record<string, ToolDef> = {};
   const compiledCache = new Map<string, { program: StretchProgram; def: ToolDef }>();
   let calls = 0;
   let skipSeq = 0;
 
-  const note = (): void => safely(() => {
-    if (run.warnings.length >= MAX_WARNINGS) return;
-    const budget = {
-      duration_ms: Math.max(0, performance.now() - run.t0),
-      llmCalls: run.llmCalls,
-      ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
-    };
-    const stampWarn = (): void => { if (run.firstWarningAt != null) return; const at = firstWarningIndex(run.events, run.warnings); if (at == null) return; run.firstWarningAt = at; run.warnBudget = budget; };
-    if (run.events.length < 2 && state.programs.length === 0) { stampWarn(); return; }
-    const required = state.programs.length === 0 ? [] : requiredChecks(filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId), run.events);
-    const ledger = required.length === 0 ? undefined : evidenceLedger(run.events, required);
-    const fresh = takeSignals(run.events, budget, run.seenSignals, required, ledger);
-    for (const w of fresh) {
-      if (run.warnings.length >= MAX_WARNINGS) break;
-      run.warnings.push(w);
-      try { state.opts.onWarning?.(w); } catch {}
-    }
-    run.evidence = ledger ?? EMPTY_LEDGER;
-    stampWarn();
-    if (fresh.some((w) => w.kind === "fail_streak")) {
-      run.tripped = true;
-      const last = run.events.at(-1)?.name;
-      if (last && enforcementEnabled(state.opts)) {
-        for (const p of state.programs) {
-          if (!p.manifest || state.pausedIds.has(p.id)) continue;
-          if (!(p.sequence ?? []).includes(last)) continue;
-          state.pausedIds.add(p.id);
-          post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
+  const note = (): void =>
+    safely(() => {
+      if (run.warnings.length >= MAX_WARNINGS) return;
+      const budget = {
+        duration_ms: Math.max(0, performance.now() - run.t0),
+        llmCalls: run.llmCalls,
+        ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+      };
+      const stampWarn = (): void => {
+        if (run.firstWarningAt != null) return;
+        const at = firstWarningIndex(run.events, run.warnings);
+        if (at == null) return;
+        run.firstWarningAt = at;
+        run.warnBudget = budget;
+      };
+      if (run.events.length < 2 && state.programs.length === 0) {
+        stampWarn();
+        return;
+      }
+      const required =
+        state.programs.length === 0
+          ? []
+          : requiredChecks(
+              filterCanary(
+                state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
+                state.sessionId,
+              ),
+              run.events,
+            );
+      const ledger = required.length === 0 ? undefined : evidenceLedger(run.events, required);
+      const fresh = takeSignals(run.events, budget, run.seenSignals, required, ledger);
+      for (const w of fresh) {
+        if (run.warnings.length >= MAX_WARNINGS) break;
+        run.warnings.push(w);
+        try {
+          state.opts.onWarning?.(w);
+        } catch {}
+      }
+      run.evidence = ledger ?? EMPTY_LEDGER;
+      stampWarn();
+      if (fresh.some((w) => w.kind === "fail_streak")) {
+        run.tripped = true;
+        const last = run.events.at(-1)?.name;
+        if (last && enforcementEnabled(state.opts)) {
+          for (const p of state.programs) {
+            if (!p.manifest || state.pausedIds.has(p.id)) continue;
+            if (!(p.sequence ?? []).includes(last)) continue;
+            state.pausedIds.add(p.id);
+            post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
+          }
         }
       }
-    }
-  }, undefined);
+    }, undefined);
   const emit = (
     input: Record<string, unknown> | undefined,
     owner?: { id: number; startedAt: number; invocations: Map<number, Invocation> },
-  ): void => safely(() => {
-    if (!run.events.length) return;
-    let events = run.events;
-    let consumed = true;
-    try {
-      if (owner) {
-        const mine: TraceEvent[] = [];
-        const rest: TraceEvent[] = [];
-        for (const ev of run.events as TaggedEvent[]) {
-          const id = ev[INVOCATION];
-          if (id === owner.id) {
-            mine.push(ev);
-            continue;
+  ): void =>
+    safely(() => {
+      if (!run.events.length) return;
+      let events = run.events;
+      let consumed = true;
+      try {
+        if (owner) {
+          const mine: TraceEvent[] = [];
+          const rest: TraceEvent[] = [];
+          for (const ev of run.events as TaggedEvent[]) {
+            const id = ev[INVOCATION];
+            if (id === owner.id) {
+              mine.push(ev);
+              continue;
+            }
+            const rec = id != null ? owner.invocations.get(id) : undefined;
+            if (!rec || (rec.done && rec.finishedAt <= owner.startedAt)) mine.push(ev);
+            else rest.push(ev);
           }
-          const rec = id != null ? owner.invocations.get(id) : undefined;
-          if (!rec || (rec.done && rec.finishedAt <= owner.startedAt)) mine.push(ev);
-          else rest.push(ev);
+          if (!mine.length) {
+            consumed = false;
+            return;
+          }
+          run.events = rest;
+          events = mine;
         }
-        if (!mine.length) {
-          consumed = false;
-          return;
+        let lastOk: unknown;
+        for (let i = events.length - 1; i >= 0; i--) {
+          const ev = events[i]!;
+          if (ev.ok && !ev.skipped) {
+            lastOk = ev.result;
+            break;
+          }
         }
-        run.events = rest;
-        events = mine;
-      }
-      let lastOk: unknown;
-      for (let i = events.length - 1; i >= 0; i--) {
-        const ev = events[i]!;
-        if (ev.ok && !ev.skipped) {
-          lastOk = ev.result;
-          break;
+        const output = lastOk ?? run.output;
+        const classes = emptyTokenClasses();
+        const agentP = run.measured ? run.prompt_tokens : 0;
+        const agentC = run.measured ? run.completion_tokens : 0;
+        addTokenClass(classes, "frontier", agentP + agentC);
+        const islandP = run.island_measured ? run.island_prompt_tokens : 0;
+        const islandC = run.island_measured ? run.island_completion_tokens : 0;
+        const islandTok = islandP + islandC;
+        if (run.island_measured) {
+          const cls = run.island_memoized && islandTok === 0 ? "memoized" : "compiled";
+          addTokenClass(classes, cls, islandTok);
+        }
+        const cached = run.cached_tokens + (run.island_measured ? run.island_cached_tokens : 0);
+        const cacheWrite = run.cache_write_tokens + (run.island_measured ? run.island_cache_write_tokens : 0);
+        const cacheInput = run.cache_input_tokens + (run.island_measured ? run.island_cache_input_tokens : 0);
+        if (cached > 0) classes.providerCache = cached;
+        const measured = run.measured || run.island_measured;
+        const prompt = agentP + islandP;
+        const completion = agentC + islandC;
+        const trace: StretchTrace = {
+          id: crypto.randomUUID(),
+          events,
+          input: (redact(input ?? events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
+          output: output === undefined ? undefined : redact(output),
+          llmCalls: run.llmCalls,
+          duration_ms: performance.now() - run.t0,
+          cost_cents: run.cost,
+          complete: events.at(-1)?.ok,
+          ...(measured ? { prompt_tokens: prompt, completion_tokens: completion, tokenClasses: classes } : {}),
+          ...cacheHitSpread(cached, cacheWrite, cacheInput),
+          ...(run.warnings.length ? { warnings: run.warnings.slice() } : {}),
+          ...(run.firstWarningAt != null ? { firstWarningAt: run.firstWarningAt } : {}),
+          ...(run.evidence ? { evidence: run.evidence } : {}),
+          ...(events.some((e) => e.skipped) ? { skipped: events.filter((e) => e.skipped).map((e) => e.name) } : {}),
+        };
+        const nowBudget = {
+          duration_ms: trace.duration_ms,
+          llmCalls: trace.llmCalls,
+          ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+        };
+        const spent = postWarningSpend(nowBudget, run.warnBudget);
+        if (spent) trace.postWarning = spent;
+        trace.usable = usableTrace(trace);
+        trace.grounded = judgeGrounding(trace).grounded;
+        if (state.droppedPosts > 0) {
+          (trace as StretchTrace & { dropped_posts?: number }).dropped_posts = state.droppedPosts;
+        }
+        if (state.agentId) trace.agentId = state.agentId;
+        if (state.parentRunId) trace.parentRunId = state.parentRunId;
+        if (state.spanId) {
+          trace.spanId = state.spanId;
+          trace.spanName = state.parentRunId ? "invoke_agent" : "invoke_workflow";
+        }
+        if (state.fleetId) trace.fleetId = state.fleetId;
+        if (state.region) trace.region = state.region;
+        state.traces.push(trace);
+        if (state.traces.length > MAX_TRACES + 256) state.traces.splice(0, state.traces.length - MAX_TRACES);
+        try {
+          state.opts.onTrace?.(trace);
+        } catch {}
+        post(state, "/v1/traces", trace);
+      } catch {
+      } finally {
+        const hadLoopWarning = run.warnings.some((w) => w.kind === "repeat_ngram" || w.kind === "repeat_visits");
+        if (!owner) run.events = [];
+        if (consumed) {
+          if (!hadLoopWarning) run.rawExecuted = 0;
+          run.warnings = [];
+          run.seenSignals.clear();
+          run.firstWarningAt = undefined;
+          run.warnBudget = undefined;
+          run.evidence = undefined;
+          run.tripped = false;
+          resetUsage(run);
+          run.t0 = performance.now();
         }
       }
-      const output = lastOk ?? run.output;
-      const classes = emptyTokenClasses();
-      const agentP = run.measured ? run.prompt_tokens : 0;
-      const agentC = run.measured ? run.completion_tokens : 0;
-      addTokenClass(classes, "frontier", agentP + agentC);
-      const islandP = run.island_measured ? run.island_prompt_tokens : 0;
-      const islandC = run.island_measured ? run.island_completion_tokens : 0;
-      const islandTok = islandP + islandC;
-      if (run.island_measured) {
-        const cls = run.island_memoized && islandTok === 0 ? "memoized" : "compiled";
-        addTokenClass(classes, cls, islandTok);
-      }
-      const cached = run.cached_tokens + (run.island_measured ? run.island_cached_tokens : 0);
-      const cacheWrite = run.cache_write_tokens + (run.island_measured ? run.island_cache_write_tokens : 0);
-      const cacheInput = run.cache_input_tokens + (run.island_measured ? run.island_cache_input_tokens : 0);
-      if (cached > 0) classes.providerCache = cached;
-      const measured = run.measured || run.island_measured;
-      const prompt = agentP + islandP;
-      const completion = agentC + islandC;
-      const trace: StretchTrace = {
-        id: crypto.randomUUID(),
-        events,
-        input: (redact(input ?? events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
-        output: output === undefined ? undefined : redact(output),
-        llmCalls: run.llmCalls,
-        duration_ms: performance.now() - run.t0,
-        cost_cents: run.cost,
-        complete: events.at(-1)?.ok,
-        ...(measured ? { prompt_tokens: prompt, completion_tokens: completion, tokenClasses: classes } : {}),
-        ...cacheHitSpread(cached, cacheWrite, cacheInput),
-        ...(run.warnings.length ? { warnings: run.warnings.slice() } : {}),
-        ...(run.firstWarningAt != null ? { firstWarningAt: run.firstWarningAt } : {}),
-        ...(run.evidence ? { evidence: run.evidence } : {}),
-        ...(events.some((e) => e.skipped) ? { skipped: events.filter((e) => e.skipped).map((e) => e.name) } : {}),
-      };
-      const nowBudget = {
-        duration_ms: trace.duration_ms,
-        llmCalls: trace.llmCalls,
-        ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
-      };
-      const spent = postWarningSpend(nowBudget, run.warnBudget);
-      if (spent) trace.postWarning = spent;
-      trace.usable = usableTrace(trace);
-      trace.grounded = judgeGrounding(trace).grounded;
-      if (state.droppedPosts > 0) {
-        (trace as StretchTrace & { dropped_posts?: number }).dropped_posts = state.droppedPosts;
-      }
-      if (state.agentId) trace.agentId = state.agentId;
-      if (state.parentRunId) trace.parentRunId = state.parentRunId;
-      if (state.spanId) {
-        trace.spanId = state.spanId;
-        trace.spanName = state.parentRunId ? "invoke_agent" : "invoke_workflow";
-      }
-      if (state.fleetId) trace.fleetId = state.fleetId;
-      if (state.region) trace.region = state.region;
-      state.traces.push(trace); if (state.traces.length > MAX_TRACES + 256) state.traces.splice(0, state.traces.length - MAX_TRACES);
-      try { state.opts.onTrace?.(trace); } catch {}
-      post(state, "/v1/traces", trace);
-     } catch {
-    } finally {
-      const hadLoopWarning = run.warnings.some((w) => w.kind === "repeat_ngram" || w.kind === "repeat_visits");
-      if (!owner) run.events = [];
-      if (consumed) {
-        if (!hadLoopWarning) run.rawExecuted = 0;
-        run.warnings = [];
-        run.seenSignals.clear();
-        run.firstWarningAt = undefined;
-        run.warnBudget = undefined;
-        run.evidence = undefined;
-        run.tripped = false;
-        resetUsage(run);
-        run.t0 = performance.now();
-      }
-    }
-  }, undefined);
+    }, undefined);
 
   const armTail = (program: StretchProgram, input: Record<string, unknown>): { key: string; armed: Armed } | null => {
     const key = `${program.id}#${++skipSeq}`;
@@ -593,7 +712,9 @@ export function wrapTools<T extends ToolsIn>(
         llmCalls: run.llmCalls,
       };
       if (run.warnings.length < MAX_WARNINGS) run.warnings.push(w);
-      try { state.opts.onWarning?.(w); } catch {}
+      try {
+        state.opts.onWarning?.(w);
+      } catch {}
       const receipt: Receipt = {
         toolId: program.id,
         version: program.version,
@@ -605,7 +726,13 @@ export function wrapTools<T extends ToolsIn>(
         reason: detail,
         fingerprint: hashStretch(program),
       };
-      ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, receipt);
+      ((s, r) => {
+        if (s.agentId) r.agentId = s.agentId;
+        if (s.parentRunId) r.parentRunId = s.parentRunId;
+        if (s.fleetId) r.fleetId = s.fleetId;
+        if (s.region) r.region = s.region;
+        return r;
+      })(state, receipt);
       publishReceipt(state, receipt);
       return null;
     }
@@ -641,7 +768,13 @@ export function wrapTools<T extends ToolsIn>(
     note();
     if (line) {
       const prog = state.programs.find((p) => p.id === armed.programId);
-      const rec = ((s, r: Receipt) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, {
+      const rec = ((s, r: Receipt) => {
+        if (s.agentId) r.agentId = s.agentId;
+        if (s.parentRunId) r.parentRunId = s.parentRunId;
+        if (s.fleetId) r.fleetId = s.fleetId;
+        if (s.region) r.region = s.region;
+        return r;
+      })(state, {
         toolId: armed.programId,
         version: prog?.version ?? "0",
         ms: 0,
@@ -662,7 +795,10 @@ export function wrapTools<T extends ToolsIn>(
 
   const compiledFor = (name: string): ToolDef | undefined => {
     if (!state.programs.length) return undefined;
-    const p = filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId).find((x) => x.name === name || x.id === name);
+    const p = filterCanary(
+      state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
+      state.sessionId,
+    ).find((x) => x.name === name || x.id === name);
     if (!p) return undefined;
     const cached = compiledCache.get(p.id);
     if (cached && cached.program === p) return cached.def;
@@ -679,7 +815,10 @@ export function wrapTools<T extends ToolsIn>(
           if (state.opts.failOpen === false) throw err;
           const first = (p.sequence ?? [])[0];
           const canReplay = (p.sequence ?? []).every((n) => isReadName(n)) && !!first && first in tools;
-          if (canReplay) return (typeof tools[first] === "function" ? { description: first!, execute: tools[first] } : tools[first]!).execute(args);
+          if (canReplay)
+            return (
+              typeof tools[first] === "function" ? { description: first!, execute: tools[first] } : tools[first]!
+            ).execute(args);
           return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
         }
       },
@@ -691,234 +830,322 @@ export function wrapTools<T extends ToolsIn>(
   for (const [name, def] of Object.entries(tools)) {
     const spec = typeof def === "function" ? { description: name, execute: def } : def;
     const runOne = async (args: Record<string, unknown>, selfId: number, startedAt: number): Promise<unknown> => {
-        if (state.opts.baseUrl && calls % PULL_EVERY === 0) void pullLive(state);
-        safely(() => noteJitUsed(state.jit, [name]), undefined);
-        const live = state.programs.length === 0 ? NO_LIVE : filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId);
-        const owner = { id: selfId, startedAt, invocations };
-
-        const prefixHits = live.length ? safely(() => live.filter((p) => (p.sequence ?? [])[0] === name).map((p) => ({ p, input: extractInput(p, args) })).filter(({ p, input }) => mayServe(p, input) && !(isReadName(name) && staleRead(state, input))), NO_PREFIX) : NO_PREFIX;
-        prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
-        const hit = prefixHits[0];
-        if (hit) {
-          if (enforcementEnabled(state.opts)) {
-            const guard = safely(
-              () => decideGuard({ name, run, live, opts: state.opts, now: performance.now() }),
-              null,
+      if (state.opts.baseUrl && calls % PULL_EVERY === 0) void pullLive(state);
+      safely(() => noteJitUsed(state.jit, [name]), undefined);
+      const live =
+        state.programs.length === 0
+          ? NO_LIVE
+          : filterCanary(
+              state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
+              state.sessionId,
             );
-            if (guard && (guard.action === "halt" || guard.action === "block")) {
-              emit(run.events[0]?.args, owner);
-              return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason, ...(guard.detail ? { detail: guard.detail } : {}) };
-            }
+      const owner = { id: selfId, startedAt, invocations };
+
+      const prefixHits = live.length
+        ? safely(
+            () =>
+              live
+                .filter((p) => (p.sequence ?? [])[0] === name)
+                .map((p) => ({ p, input: extractInput(p, args) }))
+                .filter(({ p, input }) => mayServe(p, input) && !(isReadName(name) && staleRead(state, input))),
+            NO_PREFIX,
+          )
+        : NO_PREFIX;
+      prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
+      const hit = prefixHits[0];
+      if (hit) {
+        if (enforcementEnabled(state.opts)) {
+          const guard = safely(() => decideGuard({ name, run, live, opts: state.opts, now: performance.now() }), null);
+          if (guard && (guard.action === "halt" || guard.action === "block")) {
+            emit(run.events[0]?.args, owner);
+            return {
+              eden: guard.action === "block" ? "blocked" : "halted",
+              reason: guard.reason,
+              ...(guard.detail ? { detail: guard.detail } : {}),
+            };
           }
-          const sessionArmed = safely(() => {
-            const t = performance.now();
-            for (const [, armed] of store.all(session, t)) {
-              if (armed.programId !== hit.p.id) continue;
-              if (((armed, cur) => { if (eq(cur, armed.input)) return true; const rec = armed.input as Record<string, unknown> | null; if (!rec || typeof rec !== "object") return false; const keys = Object.keys(cur); return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k])); })(armed, hit.input as Record<string, unknown>)) return true;
-            }
-            return false;
-          }, false);
-          const fleetHit = safely((): FleetHit | undefined => {
-            if (!fleetId || !isProgramReadOnly(hit.p)) return undefined;
-            const t = performance.now();
-            for (const found of store.allFleet(fleetId, t)) {
-              if (found.armed.programId !== hit.p.id) continue;
-              if (((armed, cur) => { if (eq(cur, armed.input)) return true; const rec = armed.input as Record<string, unknown> | null; if (!rec || typeof rec !== "object") return false; const keys = Object.keys(cur); return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k])); })(found.armed, hit.input as Record<string, unknown>)) return found;
-            }
-            return undefined;
-          }, undefined);
-          if (fleetHit) {
-            const ok = await Promise.race([fleetHit.armed.settled, new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs)))]);
-            if (ok) {
-              if (!(isReadName(name) && staleRead(state, args, fleetHit.armed))) {
+        }
+        const sessionArmed = safely(() => {
+          const t = performance.now();
+          for (const [, armed] of store.all(session, t)) {
+            if (armed.programId !== hit.p.id) continue;
+            if (
+              ((armed, cur) => {
+                if (eq(cur, armed.input)) return true;
+                const rec = armed.input as Record<string, unknown> | null;
+                if (!rec || typeof rec !== "object") return false;
+                const keys = Object.keys(cur);
+                return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k]));
+              })(armed, hit.input as Record<string, unknown>)
+            )
+              return true;
+          }
+          return false;
+        }, false);
+        const fleetHit = safely((): FleetHit | undefined => {
+          if (!fleetId || !isProgramReadOnly(hit.p)) return undefined;
+          const t = performance.now();
+          for (const found of store.allFleet(fleetId, t)) {
+            if (found.armed.programId !== hit.p.id) continue;
+            if (
+              ((armed, cur) => {
+                if (eq(cur, armed.input)) return true;
+                const rec = armed.input as Record<string, unknown> | null;
+                if (!rec || typeof rec !== "object") return false;
+                const keys = Object.keys(cur);
+                return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k]));
+              })(found.armed, hit.input as Record<string, unknown>)
+            )
+              return found;
+          }
+          return undefined;
+        }, undefined);
+        if (fleetHit) {
+          const ok = await Promise.race([
+            fleetHit.armed.settled,
+            new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
+          ]);
+          if (ok) {
+            if (!(isReadName(name) && staleRead(state, args, fleetHit.armed))) {
               skipAsShared(fleetHit.armed, name, selfId);
               return { eden: "steered", skipped: name };
-              }
             }
-          } else if (!sessionArmed) {
+          }
+        } else if (!sessionArmed) {
           if (run.events.length) emit(run.events[0]?.args, owner);
           const pair = safely(() => armTail(hit.p, hit.input), null);
           if (pair) {
-          const { armed } = pair;
-          try {
-            const value = await runCompiled(state, hit.p, hit.input, tools, registry);
-            armed.armedAt = performance.now();
-            armed.armedAtCall = calls;
-            const compiled = [...state.receipts].reverse().find((r) => r.toolId === hit.p.id && r.ok);
-            if (compiled) armedReceipts.set(armed, compiled);
-            try { armed.closed = true; armed.resolveSettled(true); } catch {}
-            if (!armed.rest.size) emit(hit.input, owner);
-            return value;
-          } catch (err) {
-            armed.headErr = err;
-            try { armed.closed = true; armed.resolveSettled(false); } catch {}
-            if (state.opts.failOpen === false) throw err;
-            void pullLive(state);
-            const touched = isDeopt(err) && !isReplaySafe(err);
-            const unknownState = !isDeopt(err);
-            if ((touched || unknownState) && !(hit.p.sequence ?? []).every((n) => isReadName(n))) {
-              return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
-            }
-          }
-          }
-          }
-        }
-
-        const now = performance.now();
-        let steeredSkip = false;
-        let structuredDeopt: string | null = null;
-        const seenArmed = new Set<Armed>();
-        const candidates: Array<{ session: string; key: string; armed: Armed }> = [];
-        if (store.sessionSize(session)) {
-          for (const [key, armed] of store.scan(session, name, args, now)) {
-            seenArmed.add(armed);
-            candidates.push({ session, key, armed });
-          }
-        }
-        if (fleetId) {
-          for (const hit of store.scanFleet(fleetId, name, args, now)) {
-            if (seenArmed.has(hit.armed)) continue;
-            candidates.push(hit);
-          }
-        }
-        for (const { session: armSession, key: id, armed } of candidates) {
-          if (safely(() => armExpired(armed, now), false)) {
-            store.delete(armSession, id);
-            continue;
-          }
-          const inputMatches = safely(() => {
-            const liveP = live.find((p) => p.id === armed.programId);
-            const cur = liveP ? extractInput(liveP, args) : args;
-            return ((armed, cur) => { if (eq(cur, armed.input)) return true; const rec = armed.input as Record<string, unknown> | null; if (!rec || typeof rec !== "object") return false; const keys = Object.keys(cur); return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k])); })(armed, cur as Record<string, unknown>);
-          }, false);
-          if (!inputMatches) continue;
-          safely(() => {
-            armed.matchedCalls++;
-          }, undefined);
-          const remaining = safely(() => armed.rest.get(name), 0);
-          const fleetServed =
-            armed.readOnly === true &&
-            !!fleetId &&
-            armed.fleetId === fleetId &&
-            (armed.served?.has(name) === true);
-          if (!remaining && !fleetServed) continue;
-          const decRest = () => { const left = armed.rest.get(name)!; if (left > 1) armed.rest.set(name, left - 1); else armed.rest.delete(name); };
-          const ok = await Promise.race([armed.settled, new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs)))]);
-          if (ok) {
-            if (isReadName(name) && staleRead(state, args, armed)) continue;
-            if (fleetServed && !remaining) {
-              skipAsShared(armed, name, selfId);
-              steeredSkip = true;
-              break;
-            }
-            const stillThere = safely(() => store.get(armSession, id) === armed && !!armed.rest.get(name), false);
-            if (!stillThere) {
-              if (!fleetServed) continue;
-              skipAsShared(armed, name, selfId);
-              steeredSkip = true;
-              break;
-            }
-            safely(() => { decRest(); }, undefined);
-            skipAsShared(armed, name, selfId);
-            if (!armed.rest.size) {
-              if (!(armed.readOnly && armed.fleetId)) store.delete(armSession, id);
-              emit(armed.input, owner);
-            }
-            steeredSkip = true;
-            break;
-          }
-          const doneByCompiled = safely(() => {
-            const e = armed.headErr;
-            return isDeopt(e) && Array.isArray((e as { toolCalls?: string[] }).toolCalls)
-              ? (e as { toolCalls: string[] }).toolCalls.includes(name)
-              : null;
-          }, null);
-          if (doneByCompiled === true) {
-            safely(() => { decRest(); if (!armed.rest.size) store.delete(armSession, id); }, undefined);
-            steeredSkip = true;
-            break;
-          }
-          if (!isReadName(name)) {
-            const reason = safely(
-              () => (armed.headErr instanceof Error ? armed.headErr.message : String(armed.headErr)),
-              "compiled run failed",
-            );
-            structuredDeopt = reason;
-            break;
-          }
-        }
-        if (steeredSkip) return { eden: "steered", skipped: name };
-        if (structuredDeopt != null) return { eden: "deopt", reason: structuredDeopt };
-
-        if (enforcementEnabled(state.opts)) {
-          const guard = safely(() => decideGuard({ name, run, live, opts: state.opts, now }), null);
-          if (guard && guard.action !== "steer") {
-            emit(run.events[0]?.args, owner);
-            return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason, ...(guard.detail ? { detail: guard.detail } : {}) };
-          }
-          if (guard && guard.action === "steer") {
-            const steeredIn = safely(() => extractInput(guard.program, args), null);
-            const pair = steeredIn ? safely(() => armTail(guard.program, steeredIn), null) : null;
-            if (pair && steeredIn) {
-              const { key: armKey, armed } = pair;
+            const { armed } = pair;
+            try {
+              const value = await runCompiled(state, hit.p, hit.input, tools, registry);
+              armed.armedAt = performance.now();
+              armed.armedAtCall = calls;
+              const compiled = [...state.receipts].reverse().find((r) => r.toolId === hit.p.id && r.ok);
+              if (compiled) armedReceipts.set(armed, compiled);
               try {
-                const value = await runCompiled(state, guard.program, steeredIn, tools, registry);
-                armed.armedAt = performance.now();
-                armed.armedAtCall = calls;
-                try { armed.closed = true; armed.resolveSettled(true); } catch {}
-                if (!armed.rest.size) emit(steeredIn, owner);
-                return value;
-              } catch (err) {
-                armed.headErr = err;
-                try { armed.closed = true; armed.resolveSettled(false); } catch {}
-                emit(run.events[0]?.args, owner);
-                const touched = isDeopt(err) && !isReplaySafe(err);
-                if (!((guard.program.sequence ?? []).every((n) => isReadName(n)) && !touched)) {
-                  return { eden: "halted", reason: guard.reason };
-                }
+                armed.closed = true;
+                armed.resolveSettled(true);
+              } catch {}
+              if (!armed.rest.size) emit(hit.input, owner);
+              return value;
+            } catch (err) {
+              armed.headErr = err;
+              try {
+                armed.closed = true;
+                armed.resolveSettled(false);
+              } catch {}
+              if (state.opts.failOpen === false) throw err;
+              void pullLive(state);
+              const touched = isDeopt(err) && !isReplaySafe(err);
+              const unknownState = !isDeopt(err);
+              if ((touched || unknownState) && !(hit.p.sequence ?? []).every((n) => isReadName(n))) {
+                return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
               }
             }
           }
         }
+      }
 
-        const t0 = performance.now();
-        const envSteps = Number(process.env.EDEN_MAX_STEPS);
-        if (enforcementEnabled(state.opts) && run.rawExecuted >= (Number.isFinite(envSteps) && envSteps > 0 ? Math.min(10_000, Math.max(10, Math.floor(envSteps))) : MAX_RUN_STEPS)) {
-          run.rawExecuted = 0;
-          note();
-          const marker: TraceEvent = { name, args: {}, ok: true, skipped: true, duration_ms: 0 };
-          run.events.push(marker);
-          emit(run.events[0]?.args, owner);
-          return { eden: "halted", reason: "max_steps" };
+      const now = performance.now();
+      let steeredSkip = false;
+      let structuredDeopt: string | null = null;
+      const seenArmed = new Set<Armed>();
+      const candidates: Array<{ session: string; key: string; armed: Armed }> = [];
+      if (store.sessionSize(session)) {
+        for (const [key, armed] of store.scan(session, name, args, now)) {
+          seenArmed.add(armed);
+          candidates.push({ session, key, armed });
         }
-        try {
-          const result = await spec.execute(args);
-          run.rawExecuted++;
-          if (isMutating(name)) markDirty(state, args, [name]);
-          noteJitUsed(state.jit, [name]);
-          run.events.push(
-            tag({
+      }
+      if (fleetId) {
+        for (const hit of store.scanFleet(fleetId, name, args, now)) {
+          if (seenArmed.has(hit.armed)) continue;
+          candidates.push(hit);
+        }
+      }
+      for (const { session: armSession, key: id, armed } of candidates) {
+        if (safely(() => armExpired(armed, now), false)) {
+          store.delete(armSession, id);
+          continue;
+        }
+        const inputMatches = safely(() => {
+          const liveP = live.find((p) => p.id === armed.programId);
+          const cur = liveP ? extractInput(liveP, args) : args;
+          return ((armed, cur) => {
+            if (eq(cur, armed.input)) return true;
+            const rec = armed.input as Record<string, unknown> | null;
+            if (!rec || typeof rec !== "object") return false;
+            const keys = Object.keys(cur);
+            return keys.length > 0 && keys.every((k) => k in rec && eq(cur[k], rec[k]));
+          })(armed, cur as Record<string, unknown>);
+        }, false);
+        if (!inputMatches) continue;
+        safely(() => {
+          armed.matchedCalls++;
+        }, undefined);
+        const remaining = safely(() => armed.rest.get(name), 0);
+        const fleetServed =
+          armed.readOnly === true && !!fleetId && armed.fleetId === fleetId && armed.served?.has(name) === true;
+        if (!remaining && !fleetServed) continue;
+        const decRest = () => {
+          const left = armed.rest.get(name)!;
+          if (left > 1) armed.rest.set(name, left - 1);
+          else armed.rest.delete(name);
+        };
+        const ok = await Promise.race([
+          armed.settled,
+          new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
+        ]);
+        if (ok) {
+          if (isReadName(name) && staleRead(state, args, armed)) continue;
+          if (fleetServed && !remaining) {
+            skipAsShared(armed, name, selfId);
+            steeredSkip = true;
+            break;
+          }
+          const stillThere = safely(() => store.get(armSession, id) === armed && !!armed.rest.get(name), false);
+          if (!stillThere) {
+            if (!fleetServed) continue;
+            skipAsShared(armed, name, selfId);
+            steeredSkip = true;
+            break;
+          }
+          safely(() => {
+            decRest();
+          }, undefined);
+          skipAsShared(armed, name, selfId);
+          if (!armed.rest.size) {
+            if (!(armed.readOnly && armed.fleetId)) store.delete(armSession, id);
+            emit(armed.input, owner);
+          }
+          steeredSkip = true;
+          break;
+        }
+        const doneByCompiled = safely(() => {
+          const e = armed.headErr;
+          return isDeopt(e) && Array.isArray((e as { toolCalls?: string[] }).toolCalls)
+            ? (e as { toolCalls: string[] }).toolCalls.includes(name)
+            : null;
+        }, null);
+        if (doneByCompiled === true) {
+          safely(() => {
+            decRest();
+            if (!armed.rest.size) store.delete(armSession, id);
+          }, undefined);
+          steeredSkip = true;
+          break;
+        }
+        if (!isReadName(name)) {
+          const reason = safely(
+            () => (armed.headErr instanceof Error ? armed.headErr.message : String(armed.headErr)),
+            "compiled run failed",
+          );
+          structuredDeopt = reason;
+          break;
+        }
+      }
+      if (steeredSkip) return { eden: "steered", skipped: name };
+      if (structuredDeopt != null) return { eden: "deopt", reason: structuredDeopt };
+
+      if (enforcementEnabled(state.opts)) {
+        const guard = safely(() => decideGuard({ name, run, live, opts: state.opts, now }), null);
+        if (guard && guard.action !== "steer") {
+          emit(run.events[0]?.args, owner);
+          return {
+            eden: guard.action === "block" ? "blocked" : "halted",
+            reason: guard.reason,
+            ...(guard.detail ? { detail: guard.detail } : {}),
+          };
+        }
+        if (guard && guard.action === "steer") {
+          const steeredIn = safely(() => extractInput(guard.program, args), null);
+          const pair = steeredIn ? safely(() => armTail(guard.program, steeredIn), null) : null;
+          if (pair && steeredIn) {
+            const { key: armKey, armed } = pair;
+            try {
+              const value = await runCompiled(state, guard.program, steeredIn, tools, registry);
+              armed.armedAt = performance.now();
+              armed.armedAtCall = calls;
+              try {
+                armed.closed = true;
+                armed.resolveSettled(true);
+              } catch {}
+              if (!armed.rest.size) emit(steeredIn, owner);
+              return value;
+            } catch (err) {
+              armed.headErr = err;
+              try {
+                armed.closed = true;
+                armed.resolveSettled(false);
+              } catch {}
+              emit(run.events[0]?.args, owner);
+              const touched = isDeopt(err) && !isReplaySafe(err);
+              if (!((guard.program.sequence ?? []).every((n) => isReadName(n)) && !touched)) {
+                return { eden: "halted", reason: guard.reason };
+              }
+            }
+          }
+        }
+      }
+
+      const t0 = performance.now();
+      const envSteps = Number(process.env.EDEN_MAX_STEPS);
+      if (
+        enforcementEnabled(state.opts) &&
+        run.rawExecuted >=
+          (Number.isFinite(envSteps) && envSteps > 0
+            ? Math.min(10_000, Math.max(10, Math.floor(envSteps)))
+            : MAX_RUN_STEPS)
+      ) {
+        run.rawExecuted = 0;
+        note();
+        const marker: TraceEvent = { name, args: {}, ok: true, skipped: true, duration_ms: 0 };
+        run.events.push(marker);
+        emit(run.events[0]?.args, owner);
+        return { eden: "halted", reason: "max_steps" };
+      }
+      try {
+        const result = await spec.execute(args);
+        run.rawExecuted++;
+        if (isMutating(name)) markDirty(state, args, [name]);
+        noteJitUsed(state.jit, [name]);
+        run.events.push(
+          tag(
+            {
               name,
               args: redact(args) as Record<string, unknown>,
               result: redact(result),
               ok: true,
               duration_ms: performance.now() - t0,
               tokenClass: "frontier",
-            }, selfId),
-          );
-          note();
-          const last = live.length !== 0 && live.some((p) => (p.sequence ?? []).at(-1) === name);
-          if (last || FLUSH_NAME.test(name) || run.events.length >= 12) {
-            emit(run.events[0]?.args, owner);
-          }
-          return result;
-        } catch (err) {
-          run.rawExecuted++;
-          run.events.push(tag({ name, args: redact(args) as Record<string, unknown>, ok: false, duration_ms: performance.now() - t0, tokenClass: "frontier" }, selfId));
-          if (run.firstWarningAt == null) run.firstWarningAt = run.events.length - 1;
-          note();
-          throw err;
+            },
+            selfId,
+          ),
+        );
+        note();
+        const last = live.length !== 0 && live.some((p) => (p.sequence ?? []).at(-1) === name);
+        if (last || FLUSH_NAME.test(name) || run.events.length >= 12) {
+          emit(run.events[0]?.args, owner);
         }
+        return result;
+      } catch (err) {
+        run.rawExecuted++;
+        run.events.push(
+          tag(
+            {
+              name,
+              args: redact(args) as Record<string, unknown>,
+              ok: false,
+              duration_ms: performance.now() - t0,
+              tokenClass: "frontier",
+            },
+            selfId,
+          ),
+        );
+        if (run.firstWarningAt == null) run.firstWarningAt = run.events.length - 1;
+        note();
+        throw err;
+      }
     };
     wrapped[name] = {
       ...spec,
@@ -967,11 +1194,21 @@ export function wrapTools<T extends ToolsIn>(
       return undefined;
     },
     has(target, prop) {
-      if (typeof prop === "string" && filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId).some((x) => x.name === prop)) return true;
+      if (
+        typeof prop === "string" &&
+        filterCanary(
+          state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
+          state.sessionId,
+        ).some((x) => x.name === prop)
+      )
+        return true;
       return prop in target;
     },
     ownKeys(target) {
-      const extra = filterCanary(state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)), state.sessionId).map((p) => p.name);
+      const extra = filterCanary(
+        state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id)),
+        state.sessionId,
+      ).map((p) => p.name);
       return [...new Set([...Object.keys(target), ...extra])];
     },
     getOwnPropertyDescriptor(target, prop) {

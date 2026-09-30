@@ -50,7 +50,12 @@ function orgHeaders(key: string): Record<string, string> {
   };
 }
 
-async function pullFromApi(base: string, key: string, format: "jsonl" | "csv", path: "/v1/audit" | "/v1/audit/review"): Promise<string> {
+async function pullFromApi(
+  base: string,
+  key: string,
+  format: "jsonl" | "csv",
+  path: "/v1/audit" | "/v1/audit/review",
+): Promise<string> {
   const url = `${base.replace(/\/$/, "")}${path}?format=${format}`;
   const res = await fetch(url, {
     headers: orgHeaders(key),
@@ -70,10 +75,7 @@ function reviewFromStore(path: string, format: "jsonl" | "csv"): string {
   return exportAccessReview(store, format);
 }
 
-async function dump(
-  args: string[],
-  kind: "export" | "review",
-): Promise<string> {
+async function dump(args: string[], kind: "export" | "review"): Promise<string> {
   const format = formatOf(args);
   const storePath = arg(args, "--store");
   const urlFlag = arg(args, "--url");

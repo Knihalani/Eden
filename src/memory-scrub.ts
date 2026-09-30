@@ -24,7 +24,9 @@ export function opaqueProject(raw?: string): string | undefined {
   const s = raw.trim();
   if (!s) return undefined;
   let cwd = "";
-  try { cwd = process.cwd(); } catch {}
+  try {
+    cwd = process.cwd();
+  } catch {}
   if ((cwd && s === cwd) || s.includes("/") || s.includes("\\") || /^[A-Za-z]:/.test(s)) return opaqueId(s);
   return s;
 }

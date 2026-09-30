@@ -1,13 +1,33 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { applyFlushTruncate, dropConsumedLines } from "./hook";
-import { eventsPath, liveToolsPath, outboxPath, readConfig, ensureHome, edenHome, readJson, resolveApiKey, withFileLock, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
+import {
+  eventsPath,
+  liveToolsPath,
+  outboxPath,
+  readConfig,
+  ensureHome,
+  edenHome,
+  readJson,
+  resolveApiKey,
+  withFileLock,
+  wrapPlaneUrl,
+  sitePlaneUrl,
+  writeFileAtomic,
+} from "./home";
 import { protocolHeaders, whenToUseOf } from "@eden/ir";
 import { refreshOptedInSurfaces, type ManifestTool } from "./manifest";
 
 function ingestible(row: Record<string, unknown>): boolean {
   const hook = String(row.hook || "");
   if (hook === "PreToolUse") return false;
-  if (hook === "SessionStart" || hook === "Stop" || hook === "SessionEnd" || hook === "UserPromptSubmit" || hook === "PreCompact") return false;
+  if (
+    hook === "SessionStart" ||
+    hook === "Stop" ||
+    hook === "SessionEnd" ||
+    hook === "UserPromptSubmit" ||
+    hook === "PreCompact"
+  )
+    return false;
   return Boolean(row.name);
 }
 
@@ -57,7 +77,9 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
   const outbox = existsSync(outboxPath()) ? readFileSync(outboxPath(), "utf8") : "";
   const dropRuns = new Set<string>();
   const runsDir = `${edenHome()}/runs`;
-  const files = existsSync(runsDir) ? readdirSync(runsDir).filter((f) => f.endsWith(".jsonl") && !f.endsWith(".sent.jsonl")) : [];
+  const files = existsSync(runsDir)
+    ? readdirSync(runsDir).filter((f) => f.endsWith(".jsonl") && !f.endsWith(".sent.jsonl"))
+    : [];
   const runIds = new Set(files.map((f) => f.replace(/\.jsonl$/, "")));
   for (const line of outbox.split("\n")) {
     if (!line.trim()) continue;
@@ -69,14 +91,16 @@ export async function drain(opts: DrainOpts = {}): Promise<void> {
   for (const runId of runIds) {
     const path = eventsPath(runId);
     const lines = existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").filter(Boolean) : [];
-    const events = lines.flatMap((l) => {
-      try {
-        const e = JSON.parse(l) as Record<string, unknown>;
-        return ingestible(e) ? [e] : [];
-      } catch {
-        return [];
-      }
-    }).map((e, i) => ({
+    const events = lines
+      .flatMap((l) => {
+        try {
+          const e = JSON.parse(l) as Record<string, unknown>;
+          return ingestible(e) ? [e] : [];
+        } catch {
+          return [];
+        }
+      })
+      .map((e, i) => ({
         event_id: e.event_id ?? e.id,
         seq: typeof e.seq === "number" ? e.seq : i + 1,
         name: e.name,
@@ -182,10 +206,13 @@ export function projectLiveTools(tools: unknown): ManifestTool[] {
       (program ? whenFromProgram(program) : undefined) ??
       nonEmptyString(t.description);
     const readOnly =
-      typeof t.read_only === "boolean" ? t.read_only : typeof program?.read_only === "boolean" ? program.read_only : undefined;
+      typeof t.read_only === "boolean"
+        ? t.read_only
+        : typeof program?.read_only === "boolean"
+          ? program.read_only
+          : undefined;
     const envelope = program?.contract?.envelope ?? t.envelope ?? null;
-    const writes =
-      t.transparent_writes === true || program?.transparent_writes === true;
+    const writes = t.transparent_writes === true || program?.transparent_writes === true;
     const rawRollout = t.rollout ?? program?.rollout;
     const rollout = rawRollout === "canary" || rawRollout === "live" ? rawRollout : undefined;
     return {

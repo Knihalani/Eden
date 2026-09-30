@@ -19,13 +19,33 @@ type Row = {
   seq: number;
 };
 
-const STATUS_OBJECT = /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
-const SKIP_SUBJ = new Set(["it", "this", "that", "there", "here", "he", "she", "they", "we", "i", "you", "one", "what", "who", "which"]);
+const STATUS_OBJECT =
+  /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
+const SKIP_SUBJ = new Set([
+  "it",
+  "this",
+  "that",
+  "there",
+  "here",
+  "he",
+  "she",
+  "they",
+  "we",
+  "i",
+  "you",
+  "one",
+  "what",
+  "who",
+  "which",
+]);
 /** Wrap/hook synthetic tool turns — experience, not identity. */
 const TOOL_PROSE = /^(?:the\s+\S+\s+tool result is |tool\s+\S+\s+(?:result is|was called))/i;
 
 function normS(s: string): string {
-  let x = String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  let x = String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
   // Numbered facts leak "8. The chairperson…" into s; strip serial + articles so LWW shares a key.
   x = x.replace(/^\d+\s+/, "");
   while (/^(?:the|a|an)\s+/.test(x)) x = x.replace(/^(?:the|a|an)\s+/, "");
@@ -33,11 +53,16 @@ function normS(s: string): string {
 }
 
 function normP(p: string): string {
-  return String(p ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return String(p ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 function normO(o: string): string {
-  return String(o ?? "").trim().replace(/\s+/g, " ");
+  return String(o ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function oEq(a: string, b: string): boolean {
@@ -70,7 +95,9 @@ export class SemanticStore {
   private hold = 0;
   private dirtyBatch = false;
   /** Ops applied during hold. endBatch replays them onto a fresh disk load. */
-  private batchOps: Array<{ kind: "put"; s: string; p: string; o: string; t: number } | { kind: "tomb"; s: string; p: string; t: number }> = [];
+  private batchOps: Array<
+    { kind: "put"; s: string; p: string; o: string; t: number } | { kind: "tomb"; s: string; p: string; t: number }
+  > = [];
 
   constructor(dir: string) {
     this.dir = dir;
@@ -78,7 +105,9 @@ export class SemanticStore {
     this.lockPath = `${this.path}.lock`;
     try {
       mkdirSync(dir, { recursive: true });
-      try { chmodSync(dir, 0o700); } catch {}
+      try {
+        chmodSync(dir, 0o700);
+      } catch {}
     } catch {}
     this.load();
   }
@@ -112,7 +141,9 @@ export class SemanticStore {
           else this.applyTomb(op.s, op.p, op.t);
         }
         writeFileAtomic(this.path, this.serialize());
-        try { chmodSync(this.path, 0o600); } catch {}
+        try {
+          chmodSync(this.path, 0o600);
+        } catch {}
       });
       this.batchOps = [];
       this.dirtyBatch = false;
@@ -122,7 +153,9 @@ export class SemanticStore {
   }
 
   put(s: string, p: string, o: string, t: number): void {
-    const ns = normS(scrubMemoryText(s)), np = normP(scrubMemoryText(p)), no = normO(scrubMemoryText(o));
+    const ns = normS(scrubMemoryText(s)),
+      np = normP(scrubMemoryText(p)),
+      no = normO(scrubMemoryText(o));
     if (!ns || !np || !no || !Number.isFinite(t)) return;
     const apply = () => this.applyPut(ns, np, no, t);
     if (this.hold > 0) {
@@ -135,7 +168,8 @@ export class SemanticStore {
   }
 
   tombstone(s: string, p: string, t: number): void {
-    const ns = normS(s), np = normP(p);
+    const ns = normS(s),
+      np = normP(p);
     if (!ns || !np || !Number.isFinite(t)) return;
     const apply = () => this.applyTomb(ns, np, t);
     if (this.hold > 0) {
@@ -296,13 +330,19 @@ export class SemanticStore {
   }
 
   private serialize(): string {
-    return this.rows.map((r) => JSON.stringify({
-      s: r.s,
-      p: r.p,
-      o: r.o,
-      t: r.t,
-      ...(r.tombstone ? { tombstone: true } : {}),
-    })).join("\n") + (this.rows.length ? "\n" : "");
+    return (
+      this.rows
+        .map((r) =>
+          JSON.stringify({
+            s: r.s,
+            p: r.p,
+            o: r.o,
+            t: r.t,
+            ...(r.tombstone ? { tombstone: true } : {}),
+          }),
+        )
+        .join("\n") + (this.rows.length ? "\n" : "")
+    );
   }
 
   /** Reload disk under the lock so two SemanticStore instances cannot clobber each other. */
@@ -314,7 +354,9 @@ export class SemanticStore {
         this.load();
         fn();
         writeFileAtomic(this.path, this.serialize());
-        try { chmodSync(this.path, 0o600); } catch {}
+        try {
+          chmodSync(this.path, 0o600);
+        } catch {}
       });
     } catch {
       // Fail-open: lock/disk faults must not throw into inject/sleep.
@@ -327,7 +369,9 @@ export class SemanticStore {
  * Status objects ("Auth is failing") are not identity — returns undefined.
  */
 export function objectAsserted(text: string): { s: string; p: string; o: string } | undefined {
-  let raw = String(text ?? "").trim().replace(/\s+/g, " ");
+  let raw = String(text ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
   if (!raw || raw.endsWith("?") || isIclExemplar(raw) || isToolProse(raw)) return undefined;
   raw = raw.replace(/^\d+[.)]\s+/, "").replace(/^[.\s]+|[.\s]+$/g, "");
   const pin = raw.match(/^(?:please\s+)?pin\s+([A-Za-z][\w-]*)/i);
@@ -335,16 +379,27 @@ export function objectAsserted(text: string): { s: string; p: string; o: string 
   raw = raw.replace(/^(?:always|never|must|from now on)\s+/i, "");
   const use = raw.match(/^(?:(?:we|i|you|they)\s+(?:are\s+)?)?(?:use|uses|using)\s+(.+)$/i);
   if (use) {
-    const o = use[1]!.replace(/\s+(?:instead of|rather than)\b.*$/i, "").replace(/\s+instead$/i, "").replace(/\s+(?:for|as|in|to|on)\s+.*$/i, "").replace(/[.,;:!?]+$/g, "").trim();
+    const o = use[1]!
+      .replace(/\s+(?:instead of|rather than)\b.*$/i, "")
+      .replace(/\s+instead$/i, "")
+      .replace(/\s+(?:for|as|in|to|on)\s+.*$/i, "")
+      .replace(/[.,;:!?]+$/g, "")
+      .trim();
     if (!o || isStatusObject(o)) return undefined;
     return { s: "stack", p: "uses", o };
   }
   const m = raw.match(/^(?:the\s+)?(.{1,120}?)\s+(is\s+now|are\s+now|was|were|is|are)\s+(\S.*)$/i);
   if (!m) return undefined;
-  let s = m[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  let s = m[1]!
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
   while (/^(?:the|a|an)\s+/.test(s)) s = s.replace(/^(?:the|a|an)\s+/, "");
   if (!s || SKIP_SUBJ.has(s)) return undefined;
-  const o = m[3]!.replace(/\s+(?:instead of|rather than)\b.*$/i, "").replace(/[.,;:!?]+$/g, "").trim();
+  const o = m[3]!
+    .replace(/\s+(?:instead of|rather than)\b.*$/i, "")
+    .replace(/[.,;:!?]+$/g, "")
+    .trim();
   if (!o || isStatusObject(o)) return undefined;
   return { s, p: "is", o };
 }
@@ -363,14 +418,21 @@ function looksCodeInput(text: string): boolean {
   const v = inputHead(text);
   if (!v) return false;
   if (/[\\/]/.test(v)) return true;
-  if (/\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|kts|c|cc|cpp|h|hpp|cs|php|swift|m|mm|json|ya?ml|toml|md|txt|sql|sh|bash|zsh)\b/i.test(v)) return true;
+  if (
+    /\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|kts|c|cc|cpp|h|hpp|cs|php|swift|m|mm|json|ya?ml|toml|md|txt|sql|sh|bash|zsh)\b/i.test(
+      v,
+    )
+  )
+    return true;
   if (/^src\b/i.test(v)) return true;
   return false;
 }
 
 export function isIclExemplar(text: string): boolean {
   try {
-    const t = String(text ?? "").replace(/^\s*(?:\d+[.)]\s+|[>\-*]+\s+)*/, "").trim();
+    const t = String(text ?? "")
+      .replace(/^\s*(?:\d+[.)]\s+|[>\-*]+\s+)*/, "")
+      .trim();
     if (/\blabel\s*:/i.test(t)) return true;
     const codeIn = looksCodeInput(t);
     if (/\binput\s*:/i.test(t) && /\boutput\s*:/i.test(t) && !codeIn) return true;
@@ -391,7 +453,8 @@ const LIKE_RE = /\blike[ds]?\b/i;
 const NUMBERED_LINE_RE = /^\s*\d+[.)]\s+/;
 const COPULA_RE = /\b(?:is|are|was|were|uses)\b/i;
 const DOC_ID_RE = /\b(?:RFC|ISO|CVE|IEEE|W3C|PEP)\s*[-.]?\s*\d/i;
-const VERSION_TITLE_RE = /\b(?:Node|Python|TypeScript|JavaScript|React|Vue|Angular|Java|Ruby|PHP|Go|Rust|Swift|Kotlin|Scala|Perl|Deno|Bun)\s+v?\d/i;
+const VERSION_TITLE_RE =
+  /\b(?:Node|Python|TypeScript|JavaScript|React|Vue|Angular|Java|Ruby|PHP|Go|Rust|Swift|Kotlin|Scala|Perl|Deno|Bun)\s+v?\d/i;
 
 function countTitleYears(t: string, cap = 8): number {
   TITLE_YEAR_RE.lastIndex = 0;
@@ -437,7 +500,10 @@ function countNonCopulaNumberedTitleYears(t: string, cap = 8): number {
 
 function looksMovieTitleList(t: string): boolean {
   if (looksIdentityList(t) || looksVersionish(t) || COPULA_RE.test(t)) return false;
-  const parts = t.split(/\s*,\s*|\n/).map((s) => s.trim().replace(/^and\s+/i, "")).filter(Boolean);
+  const parts = t
+    .split(/\s*,\s*|\n/)
+    .map((s) => s.trim().replace(/^and\s+/i, ""))
+    .filter(Boolean);
   if (parts.length < 2) return false;
   let n = 0;
   for (const p of parts) {
@@ -479,7 +545,8 @@ export function isRecsysShot(text: string): boolean {
     if (countNonCopulaNumberedTitleYears(t) >= 2) return true;
     if (years >= 2 && looksMovieTitleList(t)) return true;
     if (SPEAKER_RE.test(t) && MOVIE_VOCAB_RE.test(t)) return true;
-    if (SPEAKER_RE.test(t) && LIKE_RE.test(t) && years >= 1 && !looksVersionish(t) && hasMovieLikeTitleYear(t)) return true;
+    if (SPEAKER_RE.test(t) && LIKE_RE.test(t) && years >= 1 && !looksVersionish(t) && hasMovieLikeTitleYear(t))
+      return true;
     return false;
   } catch {
     return false;
@@ -488,7 +555,11 @@ export function isRecsysShot(text: string): boolean {
 
 /** Wrap/hook "Tool X result is …" / "The X tool result is …" — not an identity copula. */
 export function isToolProse(text: string): boolean {
-  return TOOL_PROSE.test(String(text ?? "").replace(/\s+/g, " ").trim());
+  return TOOL_PROSE.test(
+    String(text ?? "")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
 }
 
 /** True if sleep should drop this episode text (asserted object is gone). */

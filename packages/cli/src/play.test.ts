@@ -185,10 +185,9 @@ describe("eden play", () => {
     const { code, out, err } = await capture(() =>
       playCli(["desk", "--input", "{}"], {
         fetch: (async () =>
-          new Response(
-            JSON.stringify({ error: "paused", program: "desk" }),
-            { status: 409 },
-          )) as unknown as typeof fetch,
+          new Response(JSON.stringify({ error: "paused", program: "desk" }), {
+            status: 409,
+          })) as unknown as typeof fetch,
       }),
     );
     expect(code).toBe(1);

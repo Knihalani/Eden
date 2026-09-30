@@ -73,7 +73,9 @@ describe("hook", () => {
     }
     const cursorPath = join(home, "runs", "cur.jsonl.cursor.json");
     const cursor = JSON.parse(readFileSync(cursorPath, "utf8")) as { lines: number };
-    const actual = readFileSync(join(home, "runs", "cur.jsonl"), "utf8").split("\n").filter(Boolean).length;
+    const actual = readFileSync(join(home, "runs", "cur.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean).length;
     expect(cursor.lines).toBe(actual);
 
     rmSync(cursorPath);
@@ -85,7 +87,9 @@ describe("hook", () => {
       tool_response: { ok: true },
     });
     const rebuilt = JSON.parse(readFileSync(cursorPath, "utf8")) as { lines: number };
-    const afterRebuild = readFileSync(join(home, "runs", "cur.jsonl"), "utf8").split("\n").filter(Boolean).length;
+    const afterRebuild = readFileSync(join(home, "runs", "cur.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean).length;
     expect(rebuilt.lines).toBe(afterRebuild);
     expect(rebuilt.lines).toBe(4);
 
@@ -103,7 +107,10 @@ describe("hook", () => {
     const home = join(import.meta.dir, "../../.tmp-eden-flush");
     mkdirSync(join(home, "runs"), { recursive: true });
     const path = join(home, "runs", "s.jsonl");
-    writeFileSync(path, `${JSON.stringify({ id: "a", name: "a" })}\n${JSON.stringify({ id: "b", name: "b" })}\n${JSON.stringify({ id: "c", name: "c" })}\n`);
+    writeFileSync(
+      path,
+      `${JSON.stringify({ id: "a", name: "a" })}\n${JSON.stringify({ id: "b", name: "b" })}\n${JSON.stringify({ id: "c", name: "c" })}\n`,
+    );
     applyFlushTruncate(path, ["a", "b"]);
     const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
     expect(lines).toHaveLength(1);
@@ -117,21 +124,48 @@ describe("hook", () => {
     const home = join(import.meta.dir, "../../.tmp-eden-hook2");
     mkdirSync(home, { recursive: true });
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "live-tools.json"), JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"] }]));
+    writeFileSync(
+      join(home, "live-tools.json"),
+      JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"] }]),
+    );
     delete process.env.EDEN_STEER_HOOKS;
-    const observe = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-100" } });
+    const observe = await respondToHook({
+      hook_event_name: "PreToolUse",
+      tool_name: "lookupTicket",
+      tool_input: { id: "T-100" },
+    });
     expect((observe as { ok?: boolean }).ok).toBe(true);
     process.env.EDEN_STEER_HOOKS = "1";
     try {
-      const out = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-100" } });
-      expect((out as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe("deny");
+      const out = await respondToHook({
+        hook_event_name: "PreToolUse",
+        tool_name: "lookupTicket",
+        tool_input: { id: "T-100" },
+      });
+      expect(
+        (out as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision,
+      ).toBe("deny");
       writeFileSync(
         join(home, "live-tools.json"),
-        JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"], envelope: { inputs: { id: ["T-100", "T-101", "T-102"] } } }]),
+        JSON.stringify([
+          {
+            name: "resolve_ticket",
+            sequence: ["lookupTicket"],
+            envelope: { inputs: { id: ["T-100", "T-101", "T-102"] } },
+          },
+        ]),
       );
-      const ood = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-999" } });
+      const ood = await respondToHook({
+        hook_event_name: "PreToolUse",
+        tool_name: "lookupTicket",
+        tool_input: { id: "T-999" },
+      });
       expect((ood as { ok?: boolean }).ok).toBe(true);
-      const self = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "resolve_ticket", tool_input: { id: "T-100" } });
+      const self = await respondToHook({
+        hook_event_name: "PreToolUse",
+        tool_name: "resolve_ticket",
+        tool_input: { id: "T-100" },
+      });
       expect((self as { ok?: boolean }).ok).toBe(true);
     } finally {
       delete process.env.EDEN_STEER_HOOKS;
@@ -190,7 +224,8 @@ describe("hook", () => {
   });
 
   test("hookd pid file: stale is not alive; --stop on missing is 0", async () => {
-    const { writeHookdPid, readHookdPid, hookdPidAlive, clearHookdPid, stopHookd, hookdPidPath } = await import("./hookd");
+    const { writeHookdPid, readHookdPid, hookdPidAlive, clearHookdPid, stopHookd, hookdPidPath } =
+      await import("./hookd");
     const home = join(import.meta.dir, "../../.tmp-eden-hookd-pid");
     rmSync(home, { recursive: true, force: true });
     mkdirSync(home, { recursive: true });
@@ -431,7 +466,12 @@ describe("hook", () => {
         session_id: "batch",
         tool_calls: [
           { tool_name: "Grep", tool_input: { issue: "101", pattern: "TODO" }, tool_use_id: "g1", tool_response: "ok" },
-          { tool_name: "Bash", tool_input: { issue: "101", command: "gh pr view" }, tool_use_id: "b1", tool_response: "ok" },
+          {
+            tool_name: "Bash",
+            tool_input: { issue: "101", command: "gh pr view" },
+            tool_use_id: "b1",
+            tool_response: "ok",
+          },
         ],
       })) as { hookSpecificOutput?: { additionalContext?: string; hookEventName?: string }; decision?: string };
       expect(batch.decision).toBeUndefined();
@@ -676,7 +716,10 @@ describe("hook", () => {
     const home = join(import.meta.dir, "../../.tmp-eden-hook-steer-still");
     mkdirSync(home, { recursive: true });
     process.env.EDEN_HOME = home;
-    writeFileSync(join(home, "live-tools.json"), JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"] }]));
+    writeFileSync(
+      join(home, "live-tools.json"),
+      JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"] }]),
+    );
     delete process.env.EDEN_STEER_HOOKS;
     const observe = await respondToHook({
       hook_event_name: "PreToolUse",
@@ -691,11 +734,12 @@ describe("hook", () => {
         tool_name: "lookupTicket",
         tool_input: { id: "T-100" },
       });
-      expect((out as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe(
-        "deny",
-      );
       expect(
-        (out as { hookSpecificOutput?: { permissionDecisionReason?: string } }).hookSpecificOutput?.permissionDecisionReason,
+        (out as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision,
+      ).toBe("deny");
+      expect(
+        (out as { hookSpecificOutput?: { permissionDecisionReason?: string } }).hookSpecificOutput
+          ?.permissionDecisionReason,
       ).toContain("resolve_ticket");
     } finally {
       delete process.env.EDEN_STEER_HOOKS;
@@ -1037,7 +1081,12 @@ describe("mcp", () => {
     let sent: { content?: Array<{ text?: string }>; isError?: boolean } | undefined;
     try {
       await handleMcp(
-        { jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "ticket_stretch", arguments: { id: "T-100" } } },
+        {
+          jsonrpc: "2.0",
+          id: 11,
+          method: "tools/call",
+          params: { name: "ticket_stretch", arguments: { id: "T-100" } },
+        },
         {
           base: "http://127.0.0.1:8788",
           key: "k",

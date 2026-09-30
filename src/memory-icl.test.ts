@@ -21,7 +21,9 @@ function tmpDir(prefix = "eden-m191-"): string {
 function jsonlLines(dir: string): string[] {
   const p = join(dir, "icl.jsonl");
   if (!existsSync(p)) return [];
-  return readFileSync(p, "utf8").split("\n").filter((l) => l.length > 0);
+  return readFileSync(p, "utf8")
+    .split("\n")
+    .filter((l) => l.length > 0);
 }
 
 function parseJsonl(dir: string): unknown[] {
@@ -68,8 +70,7 @@ describe("M19.1 store-all keeps label:", () => {
     const dir = tmpDir("eden-m191-one-");
     try {
       const store = new IclIndex(dir);
-      const long =
-        `${"word ".repeat(600)}Classify this review. Excellent acting. label: 28`.trim();
+      const long = `${"word ".repeat(600)}Classify this review. Excellent acting. label: 28`.trim();
       expect(store.put(long).length).toBe(1);
       expect(store.all().length).toBe(1);
       expect(store.all()[0]!.text).toMatch(/label:\s*28/);
@@ -139,15 +140,13 @@ describe("M19.1 100+1 label diversity", () => {
     try {
       const store = new IclIndex(dir);
       for (let i = 0; i < 100; i++) {
-        store.put(
-          `Classify this review. Excellent acting and a moving plot about family. item ${i}. label: 28`,
-          { t: i + 1 },
-        );
+        store.put(`Classify this review. Excellent acting and a moving plot about family. item ${i}. label: 28`, {
+          t: i + 1,
+        });
       }
-      store.put(
-        "Classify this review. Excellent acting and a moving plot about family. item gold. label: 7",
-        { t: 101 },
-      );
+      store.put("Classify this review. Excellent acting and a moving plot about family. item gold. label: 7", {
+        t: 101,
+      });
       expect(store.all().length).toBe(101);
       expect(ICL_RETRIEVE_K).toBe(10);
       const cue = "Classify this review. Excellent acting and a moving plot about family. label:";
@@ -167,15 +166,13 @@ describe("M19.1 100+1 label diversity", () => {
     try {
       const store = new IclIndex(dir);
       for (let i = 0; i < 100; i++) {
-        store.put(
-          `Classify this review. Excellent acting and a moving plot about family. take ${i}. label: 28`,
-          { t: i + 1 },
-        );
+        store.put(`Classify this review. Excellent acting and a moving plot about family. take ${i}. label: 28`, {
+          t: i + 1,
+        });
       }
-      store.put(
-        "Classify this review. Excellent acting and a moving plot about family. take gold. label: 7",
-        { t: 101 },
-      );
+      store.put("Classify this review. Excellent acting and a moving plot about family. take gold. label: 7", {
+        t: 101,
+      });
       const cue = "Classify this review. Excellent acting and a moving plot about family. label:";
       let hits: ReturnType<typeof retrieveIcl> = [];
       expect(() => {
@@ -190,9 +187,7 @@ describe("M19.1 100+1 label diversity", () => {
       const texts = [...new Set(hits.map((h) => h.text))];
       expect(ids.size).toBe(hits.length);
       expect(texts.length).toBeGreaterThan(1);
-      const labels = new Set(
-        hits.map((h) => h.text.match(/label:\s*(\S+)/i)?.[1]?.replace(/[.,;:!?]+$/g, "") ?? ""),
-      );
+      const labels = new Set(hits.map((h) => h.text.match(/label:\s*(\S+)/i)?.[1]?.replace(/[.,;:!?]+$/g, "") ?? ""));
       const goldAmongUnique = texts.some((t) => /label:\s*7/.test(t));
       expect(labels.size > 1 || goldAmongUnique).toBe(true);
       expect(goldAmongUnique).toBe(true);
@@ -207,10 +202,9 @@ describe("M19.1 100+1 label diversity", () => {
       const store = new IclIndex(dir);
       const majority = "Classify this review. Excellent acting and a moving plot about family. same shot. label: 28";
       for (let i = 0; i < 10; i++) store.put(majority, { t: i + 1 });
-      store.put(
-        "Classify this review. Excellent acting and a moving plot about family. same shot. label: 7",
-        { t: 11 },
-      );
+      store.put("Classify this review. Excellent acting and a moving plot about family. same shot. label: 7", {
+        t: 11,
+      });
       expect(store.all().length).toBe(11);
       const cue = "Classify this review. Excellent acting and a moving plot about family. label:";
       let hits: ReturnType<typeof retrieveIcl> = [];
@@ -279,17 +273,20 @@ describe("M19.1 fallback + fail-open", () => {
       expect(() => {
         store.put("The movie was great. label: 28 token sk-abc123XYZ999 ghp_abc123XYZ999");
       }).not.toThrow();
-      const blob = `${jsonlLines(dir).join("\n")}\n${store.all().map((r) => r.text).join("\n")}`;
+      const blob = `${jsonlLines(dir).join("\n")}\n${store
+        .all()
+        .map((r) => r.text)
+        .join("\n")}`;
       expect(blob).toMatch(/label:\s*28/);
       expect(blob).not.toContain("sk-abc123XYZ999");
       expect(blob).not.toContain("ghp_abc123XYZ999");
-      writeFileSync(join(dir, "icl.jsonl"), "{not json\n{\"id\":\"x\",\"text\":\n", "utf8");
+      writeFileSync(join(dir, "icl.jsonl"), '{not json\n{"id":"x","text":\n', "utf8");
       expect(() => store.all()).not.toThrow();
       expect(() => retrieveIcl(dir, "The movie was great. label:")).not.toThrow();
       expect(retrieveIcl(dir, "The movie was great. label:")).toEqual([]);
       writeFileSync(
         join(dir, "icl.jsonl"),
-        "{torn\n{\"id\":\"keep\",\"text\":\"Classify this review. label: 7\",\"t\":1}\n{\"id\":\"bad\",\"text\":\n",
+        '{torn\n{"id":"keep","text":"Classify this review. label: 7","t":1}\n{"id":"bad","text":\n',
         "utf8",
       );
       expect(() => store.all()).not.toThrow();

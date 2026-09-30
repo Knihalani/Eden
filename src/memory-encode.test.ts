@@ -18,7 +18,10 @@ function withMem(fn: (mem: ReturnType<typeof openMemory>) => void): void {
 }
 
 function stored(mem: ReturnType<typeof openMemory>): string {
-  return mem.memories().map((r) => r.text).join("\n");
+  return mem
+    .memories()
+    .map((r) => r.text)
+    .join("\n");
 }
 
 function has(mem: ReturnType<typeof openMemory>, needle: string): boolean {

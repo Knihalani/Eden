@@ -82,10 +82,7 @@ function readConfigSafely(): Config | null {
   return cfgCache.cfg;
 }
 
-const TRANSPARENT_TIMEOUT_MS = Math.min(
-  8_000,
-  Math.max(1_000, Number(process.env.EDEN_TRANSPARENT_MS) || 6_000),
-);
+const TRANSPARENT_TIMEOUT_MS = Math.min(8_000, Math.max(1_000, Number(process.env.EDEN_TRANSPARENT_MS) || 6_000));
 
 export async function executeTransparent(entry: LiveTool, input: Record<string, unknown>): Promise<string | null> {
   const cfg = readConfigSafely();
@@ -107,9 +104,7 @@ export async function executeTransparent(entry: LiveTool, input: Record<string, 
     if (!res.ok) return null;
     const json = (await res.json()) as { ok?: boolean; facts?: unknown; table?: string };
     if (json.ok === false) return null;
-    const factsText =
-      json.table ||
-      (json.facts ? JSON.stringify(json.facts) : null);
+    const factsText = json.table || (json.facts ? JSON.stringify(json.facts) : null);
     return typeof factsText === "string" && factsText.length > 0 ? factsText : null;
   } catch {
     return null;
@@ -132,10 +127,7 @@ export function postToolUseReplacement(
   const additionalContext = suffix.trim();
   const updatedToolOutput = isBuiltInTool(toolName)
     ? mergeSentinel(toolName, originalOutput, suffix)
-    : capMerged(
-        typeof originalOutput === "string" ? originalOutput : nativeTextOf(toolName, originalOutput),
-        suffix,
-      );
+    : capMerged(typeof originalOutput === "string" ? originalOutput : nativeTextOf(toolName, originalOutput), suffix);
 
   const hookSpecificOutput: Record<string, unknown> = {
     hookEventName: "PostToolUse",

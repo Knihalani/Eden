@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { inCanary, redact, type StretchProgram } from "@eden/ir";
-import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, flushOutbox } from "../src/index";
+import {
+  eden,
+  extractInput,
+  injectTools,
+  steerToolCalls,
+  wrapTools,
+  createState,
+  handleChatCompletions,
+  wrapTimeoutMs,
+  flushOutbox,
+} from "../src/index";
 import type { OpenAiHandle } from "../src/eden";
 import { createTicketShip, ticketShipProgram, OOD_ID, WITNESS_IDS } from "../../runtime/src/ticketship";
 
@@ -43,7 +53,10 @@ describe("steer + inject", () => {
     const program = liveProgram();
     let steered = 0;
     for (const id of WITNESS_IDS) {
-      const out = steerToolCalls([{ function: { name: "lookupTicket", arguments: JSON.stringify({ id }) } }], [program]);
+      const out = steerToolCalls(
+        [{ function: { name: "lookupTicket", arguments: JSON.stringify({ id }) } }],
+        [program],
+      );
       if (out[0]?.function?.name === program.name) steered++;
     }
     expect(steered).toBe(WITNESS_IDS.length);
@@ -77,9 +90,7 @@ describe("steer + inject", () => {
       id: "soft",
       contract: { ...liveProgram().contract, softMatch: true },
     };
-    const call = (id: unknown) => [
-      { function: { name: "lookupTicket", arguments: JSON.stringify({ id }) } },
-    ];
+    const call = (id: unknown) => [{ function: { name: "lookupTicket", arguments: JSON.stringify({ id }) } }];
     expect(steerToolCalls(call(novel), [strict])[0]!.function?.name).toBe("lookupTicket");
     expect(steerToolCalls(call(novel), [soft])[0]!.function?.name).toBe(soft.name);
     expect(steerToolCalls(call(123), [soft])[0]!.function?.name).toBe("lookupTicket");
@@ -219,7 +230,10 @@ describe("steer + inject", () => {
 
   test("injects compiled schema", () => {
     const p = liveProgram();
-    const tools = injectTools([{ type: "function", function: { name: "lookupTicket", parameters: {} } }], [p]) as Array<{
+    const tools = injectTools(
+      [{ type: "function", function: { name: "lookupTicket", parameters: {} } }],
+      [p],
+    ) as Array<{
       function: { name: string };
     }>;
     expect(tools[0]!.function.name).toBe("resolve_ticket");
@@ -318,8 +332,14 @@ describe("wrapTools", () => {
     const worldIn = createTicketShip({ llmMs: 0 });
     const worldOut = createTicketShip({ llmMs: 0 });
     const worldEmpty = createTicketShip({ llmMs: 0 });
-    const toolsIn = wrapTools(worldIn.tools, createState({ programs: [canary], island: worldIn.island, sessionId: inId }));
-    const toolsOut = wrapTools(worldOut.tools, createState({ programs: [canary], island: worldOut.island, sessionId: outId }));
+    const toolsIn = wrapTools(
+      worldIn.tools,
+      createState({ programs: [canary], island: worldIn.island, sessionId: inId }),
+    );
+    const toolsOut = wrapTools(
+      worldOut.tools,
+      createState({ programs: [canary], island: worldOut.island, sessionId: outId }),
+    );
     const toolsEmpty = wrapTools(
       worldEmpty.tools,
       createState({ programs: [canary], island: worldEmpty.island, sessionId: "" }),
@@ -382,7 +402,9 @@ describe("wrapTools", () => {
     const program = liveProgram();
     const state = createState({ programs: [program], island: world.island });
     const tools = wrapTools(world.tools, state);
-    const compiled = (tools as Record<string, { execute: (a: Record<string, unknown>) => Promise<unknown> }>)[program.name];
+    const compiled = (tools as Record<string, { execute: (a: Record<string, unknown>) => Promise<unknown> }>)[
+      program.name
+    ];
     const out = await compiled!.execute({ id: OOD_ID });
     expect(out).toBeTruthy();
     expect(world.verified.has(OOD_ID)).toBe(false);
@@ -449,7 +471,9 @@ describe("openai proxy", () => {
             choices: [
               {
                 message: {
-                  tool_calls: [{ id: "c1", type: "function", function: { name: "lookupTicket", arguments: "{\"id\":\"T-100\"}" } }],
+                  tool_calls: [
+                    { id: "c1", type: "function", function: { name: "lookupTicket", arguments: '{"id":"T-100"}' } },
+                  ],
                 },
               },
             ],
@@ -463,7 +487,9 @@ describe("openai proxy", () => {
       }),
       { state, getPrograms: () => [p] },
     );
-    const json = (await res.json()) as { choices: Array<{ message: { tool_calls: Array<{ function: { name: string } }> } }> };
+    const json = (await res.json()) as {
+      choices: Array<{ message: { tool_calls: Array<{ function: { name: string } }> } }>;
+    };
     expect(json.choices[0]!.message.tool_calls[0]!.function.name).toBe("resolve_ticket");
   });
 
@@ -499,7 +525,8 @@ describe("openai proxy", () => {
       `data: [DONE]\n\n`,
     ].join("");
     const state = createState({
-      fetch: (async () => new Response(sse, { headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch,
+      fetch: (async () =>
+        new Response(sse, { headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch,
     });
     const res = await handleChatCompletions(
       new Request("http://local/v1/chat/completions", {
@@ -518,7 +545,11 @@ describe("openai proxy", () => {
 
   test("failed upstream stream does not invent an LLM call", async () => {
     const state = createState({
-      fetch: (async () => new Response("nope", { status: 502, headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch,
+      fetch: (async () =>
+        new Response("nope", {
+          status: 502,
+          headers: { "content-type": "text/event-stream" },
+        })) as unknown as typeof fetch,
     });
     const res = await handleChatCompletions(
       new Request("http://local/v1/chat/completions", {
@@ -662,7 +693,10 @@ describe("openai proxy", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { model?: string; choices?: Array<{ message?: { content?: string } }> };
       expect(body.model).toBe("eden");
-      expect(JSON.parse(body.choices?.[0]?.message?.content || "{}")).toEqual({ played: "resolve_ticket", id: "T-100" });
+      expect(JSON.parse(body.choices?.[0]?.message?.content || "{}")).toEqual({
+        played: "resolve_ticket",
+        id: "T-100",
+      });
       expect(called).toBe(0);
     } finally {
       if (prev === undefined) delete process.env.OPENAI_API_KEY;
@@ -704,10 +738,17 @@ describe("openai proxy", () => {
         },
       );
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { model?: string; fail_open?: boolean; choices?: Array<{ message?: { content?: string } }> };
+      const body = (await res.json()) as {
+        model?: string;
+        fail_open?: boolean;
+        choices?: Array<{ message?: { content?: string } }>;
+      };
       expect(body.model).toBe("eden");
       expect(body.fail_open).toBeUndefined();
-      expect(JSON.parse(body.choices?.[0]?.message?.content || "{}")).toEqual({ played: "resolve_ticket", id: "T-100" });
+      expect(JSON.parse(body.choices?.[0]?.message?.content || "{}")).toEqual({
+        played: "resolve_ticket",
+        id: "T-100",
+      });
       expect(called).toBe(0);
     } finally {
       if (prev === undefined) delete process.env.OPENAI_API_KEY;
@@ -752,7 +793,12 @@ describe("openai proxy", () => {
     const res = await handleChatCompletions(
       new Request("http://local/v1/chat/completions", {
         method: "POST",
-        body: JSON.stringify({ model: "gpt-4o", messages: [], stream: true, tools: [{ type: "function", function: { name: "lookupTicket" } }] }),
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [],
+          stream: true,
+          tools: [{ type: "function", function: { name: "lookupTicket" } }],
+        }),
       }),
       { state, getPrograms: () => [p] },
     );
@@ -807,7 +853,9 @@ describe("pullLive", () => {
       apiKey: "eden_dev",
       baseUrl: "http://x",
       fetch: (async () =>
-        new Response(JSON.stringify({ tools: [{ program: paused, state: "paused" }] }), { status: 200 })) as unknown as typeof fetch,
+        new Response(JSON.stringify({ tools: [{ program: paused, state: "paused" }] }), {
+          status: 200,
+        })) as unknown as typeof fetch,
     });
     await pullLive(state);
     expect(state.programs).toEqual([]);
@@ -821,7 +869,9 @@ describe("pullLive", () => {
       apiKey: "eden_dev",
       baseUrl: "http://x",
       fetch: (async () =>
-        new Response(JSON.stringify({ tools: [{ program, state: "live" }] }), { status: 200 })) as unknown as typeof fetch,
+        new Response(JSON.stringify({ tools: [{ program, state: "live" }] }), {
+          status: 200,
+        })) as unknown as typeof fetch,
     });
     state.pausedIds.add(program.id);
     await pullLive(state);
@@ -908,13 +958,23 @@ describe("the proxy speaks the protocol its clients read", () => {
       .split("\n\n")
       .map((l) => l.replace(/^data: /, "").trim())
       .filter((l) => l && l !== "[DONE]")
-      .map((l) => JSON.parse(l) as { object: string; choices: Array<{ delta?: Record<string, unknown>; finish_reason: string | null }> });
+      .map(
+        (l) =>
+          JSON.parse(l) as {
+            object: string;
+            choices: Array<{ delta?: Record<string, unknown>; finish_reason: string | null }>;
+          },
+      );
     return { text, chunks };
   };
 
   test("a streamed reply carries delta, not message", async () => {
     const { text, chunks } = await streamed(
-      { id: "x", model: "gpt-4o", choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }] },
+      {
+        id: "x",
+        model: "gpt-4o",
+        choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+      },
       [{ type: "function", function: { name: "lookupTicket" } }],
     );
     expect(text).toContain("[DONE]");
@@ -934,7 +994,9 @@ describe("the proxy speaks the protocol its clients read", () => {
             index: 0,
             message: {
               role: "assistant",
-              tool_calls: [{ id: "c1", type: "function", function: { name: "lookupTicket", arguments: '{"id":"T-100"}' } }],
+              tool_calls: [
+                { id: "c1", type: "function", function: { name: "lookupTicket", arguments: '{"id":"T-100"}' } },
+              ],
             },
             finish_reason: "tool_calls",
           },
@@ -1186,7 +1248,11 @@ describe("online signal bus", () => {
         },
       ],
       returns: { kind: "literal", value: null },
-      contract: { witnesses: 2, minLlmReduction: 2, envelope: { inputs: { "db.host": ["db.example.com"], "db.user": ["deploy"] } } },
+      contract: {
+        witnesses: 2,
+        minLlmReduction: 2,
+        envelope: { inputs: { "db.host": ["db.example.com"], "db.user": ["deploy"] } },
+      },
       manifest: { name: "db_dump" },
     } as unknown as StretchProgram;
     const steered = steerToolCalls(

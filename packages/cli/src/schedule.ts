@@ -48,10 +48,7 @@ async function fetchJson(
   }
 }
 
-export async function scheduleCli(
-  args: string[] = [],
-  opts?: { fetch?: typeof fetch },
-): Promise<number> {
+export async function scheduleCli(args: string[] = [], opts?: { fetch?: typeof fetch }): Promise<number> {
   if (args.includes("--help") || args.includes("-h") || args.length === 0) {
     console.log(scheduleHelp());
     return args.length === 0 ? 1 : 0;
@@ -70,7 +67,11 @@ export async function scheduleCli(
     const now = takeFlag(args, "--now");
     const body: { now?: string } = {};
     if (now) body.now = now;
-    const res = await fetchJson(`${base}/v1/schedule/tick`, { method: "POST", headers, body: JSON.stringify(body) }, fetchFn);
+    const res = await fetchJson(
+      `${base}/v1/schedule/tick`,
+      { method: "POST", headers, body: JSON.stringify(body) },
+      fetchFn,
+    );
     if (!res.ok) {
       if (res.status === 0) {
         console.log("schedule: wrap is down · start eden wrap");
@@ -87,12 +88,16 @@ export async function scheduleCli(
 
   const id = idOf(args);
   if (!id) {
-    console.log("schedule: id required\neden schedule <id> --cron \"30 14 * * *\"");
+    console.log('schedule: id required\neden schedule <id> --cron "30 14 * * *"');
     return 1;
   }
 
   if (args.includes("--delete")) {
-    const res = await fetchJson(`${base}/v1/tools/${encodeURIComponent(id)}/schedule`, { method: "DELETE", headers }, fetchFn);
+    const res = await fetchJson(
+      `${base}/v1/tools/${encodeURIComponent(id)}/schedule`,
+      { method: "DELETE", headers },
+      fetchFn,
+    );
     if (!res.ok) {
       if (res.status === 0) {
         console.log("schedule: wrap is down · start eden wrap");

@@ -96,10 +96,7 @@ d("adversarial: hostile payloads", () => {
 
   test("__proto__ pollution attempt in args is neutralized", async () => {
     const state = createState({ programs: [] });
-    const tools = wrapTools(
-      { save: async (a: Record<string, unknown>) => ({ got: Object.keys(a).sort() }) },
-      state,
-    );
+    const tools = wrapTools({ save: async (a: Record<string, unknown>) => ({ got: Object.keys(a).sort() }) }, state);
     const malicious = JSON.parse('{"__proto__": {"isAdmin": true}, "id": "T-1"}');
     const out = (await tools.save.execute(malicious)) as { got: string[] };
     expect(out.got).toContain("id");

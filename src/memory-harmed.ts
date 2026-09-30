@@ -47,7 +47,11 @@ function readRows(path: string): HarmedRow[] {
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line) continue;
     let row: { id?: unknown; at?: unknown } | null = null;
-    try { row = JSON.parse(line) as { id?: unknown; at?: unknown }; } catch { continue; }
+    try {
+      row = JSON.parse(line) as { id?: unknown; at?: unknown };
+    } catch {
+      continue;
+    }
     const id = cleanId(row?.id);
     if (!id || seen.has(id)) continue;
     seen.add(id);
@@ -88,8 +92,12 @@ export function markHarmed(dir: string, ids: Iterable<string>): void {
     }
     if (!fresh.length) return;
     const path = harmedPath(dir);
-    try { mkdirSync(dir, { recursive: true }); } catch {}
-    try { chmodSync(dir, 0o700); } catch {}
+    try {
+      mkdirSync(dir, { recursive: true });
+    } catch {}
+    try {
+      chmodSync(dir, 0o700);
+    } catch {}
     withFileLock(`${path}.lock`, () => {
       const rows = readRows(path);
       const have = new Set(rows.map((r) => r.id));
@@ -104,7 +112,9 @@ export function markHarmed(dir: string, ids: Iterable<string>): void {
       if (!added) return;
       const body = rows.map((r) => JSON.stringify({ id: r.id, at: r.at })).join("\n") + "\n";
       writeFileAtomic(path, body);
-      try { chmodSync(path, 0o600); } catch {}
+      try {
+        chmodSync(path, 0o600);
+      } catch {}
     });
   } catch {
     // Fail-open: lock/disk faults must not throw into the host.

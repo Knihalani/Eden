@@ -86,9 +86,11 @@ function factObject(got: unknown): string {
 }
 
 function importsClsSemantic(src: string): boolean {
-  return /(?:^|\n)\s*(?:import|export)\s+[^;\n]*from\s+["'][^"']*cls\/semantic["']/.test(src)
-    || /(?:^|\n)\s*import\s*\(\s*["'][^"']*cls\/semantic["']\s*\)/.test(src)
-    || /(?:^|\n)\s*require\s*\(\s*["'][^"']*cls\/semantic["']\s*\)/.test(src);
+  return (
+    /(?:^|\n)\s*(?:import|export)\s+[^;\n]*from\s+["'][^"']*cls\/semantic["']/.test(src) ||
+    /(?:^|\n)\s*import\s*\(\s*["'][^"']*cls\/semantic["']\s*\)/.test(src) ||
+    /(?:^|\n)\s*require\s*\(\s*["'][^"']*cls\/semantic["']\s*\)/.test(src)
+  );
 }
 
 const LONG_FACTS = [
@@ -311,85 +313,107 @@ describe("M7.2 ICL exemplars skip SemanticStore", () => {
 describe("M7.3 gists + SessionStart", () => {
   test("long session + sleep: a gist exists and SessionStart injects it", async () => {
     const session = "s-m74-long";
-    await withMem("eden-m74-gist-", async (mem, dir) => {
-      mem.quiet(() => {
-        for (const fact of LONG_FACTS) mem.remember(fact);
-      });
-      await sleep({ dir, mem, session });
-      const gists = new GistStore(dir).latest(session, 5);
-      expect(gists.length).toBeGreaterThan(0);
-      const gistText = gists.map((g) => g.text).join("\n");
-      expect(gistText.length).toBeGreaterThan(0);
-      expect(existsSync(join(dir, "gists.jsonl"))).toBe(true);
+    await withMem(
+      "eden-m74-gist-",
+      async (mem, dir) => {
+        mem.quiet(() => {
+          for (const fact of LONG_FACTS) mem.remember(fact);
+        });
+        await sleep({ dir, mem, session });
+        const gists = new GistStore(dir).latest(session, 5);
+        expect(gists.length).toBeGreaterThan(0);
+        const gistText = gists.map((g) => g.text).join("\n");
+        expect(gistText.length).toBeGreaterThan(0);
+        expect(existsSync(join(dir, "gists.jsonl"))).toBe(true);
 
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      const ctx = hookContext(start);
-      expect(ctx).toContain(MEMORY_MARK);
-      expect(ctx).toMatch(/\[gist(?:\s*·[^\]]*)?\]/i);
-      expect(ctx).toContain(gists[0]!.text);
-    }, session);
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const ctx = hookContext(start);
+        expect(ctx).toContain(MEMORY_MARK);
+        expect(ctx).toMatch(/\[gist(?:\s*·[^\]]*)?\]/i);
+        expect(ctx).toContain(gists[0]!.text);
+      },
+      session,
+    );
   });
 
   test("SessionStart has pin+gist, not last-k unpinned junk", async () => {
     const session = "s-m74-junk";
-    await withMem("eden-m74-start-", async (mem, dir) => {
-      mem.remember("Always run bun test before you push.", { kind: "constraint" });
-      mem.quiet(() => {
-        for (const fact of LONG_FACTS) mem.remember(fact);
-      });
-      mem.remember("Lunch menu chatter and random weather talk from the hallway.", { kind: "episode" });
-      await sleep({ dir, mem, session });
-      const gists = new GistStore(dir).latest(session, 5);
-      expect(gists.length).toBeGreaterThan(0);
+    await withMem(
+      "eden-m74-start-",
+      async (mem, dir) => {
+        mem.remember("Always run bun test before you push.", { kind: "constraint" });
+        mem.quiet(() => {
+          for (const fact of LONG_FACTS) mem.remember(fact);
+        });
+        mem.remember("Lunch menu chatter and random weather talk from the hallway.", { kind: "episode" });
+        await sleep({ dir, mem, session });
+        const gists = new GistStore(dir).latest(session, 5);
+        expect(gists.length).toBeGreaterThan(0);
 
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      const ctx = hookContext(start);
-      expect(ctx).toContain(MEMORY_MARK);
-      expect(ctx).toMatch(/bun test/i);
-      expect(ctx).toMatch(/\[gist(?:\s*·[^\]]*)?\]/i);
-      expect(ctx).toContain(gists[0]!.text);
-      expect(ctx).not.toMatch(/lunch menu chatter/i);
-      expect(ctx).not.toMatch(/weather talk from the hallway/i);
-    }, session);
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const ctx = hookContext(start);
+        expect(ctx).toContain(MEMORY_MARK);
+        expect(ctx).toMatch(/bun test/i);
+        expect(ctx).toMatch(/\[gist(?:\s*·[^\]]*)?\]/i);
+        expect(ctx).toContain(gists[0]!.text);
+        expect(ctx).not.toMatch(/lunch menu chatter/i);
+        expect(ctx).not.toMatch(/weather talk from the hallway/i);
+      },
+      session,
+    );
   });
 
   test("SessionStart after a later sleep does not brief a tombstoned gist name", async () => {
     const session = "s-m74-gist-lww";
-    await withMem("eden-m74-gist-lww-", async (mem, dir) => {
-      mem.observe([{ role: "user", content: "The database is postgres." }]);
-      await sleep({ dir, mem, session });
-      mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
-      await sleep({ dir, mem, session });
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      const ctx = hookContext(start);
-      expect(ctx).toContain(MEMORY_MARK);
-      expect(ctx).toMatch(/sqlite/i);
-      expect(ctx).not.toMatch(/postgres/i);
-    }, session);
+    await withMem(
+      "eden-m74-gist-lww-",
+      async (mem, dir) => {
+        mem.observe([{ role: "user", content: "The database is postgres." }]);
+        await sleep({ dir, mem, session });
+        mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
+        await sleep({ dir, mem, session });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const ctx = hookContext(start);
+        expect(ctx).toContain(MEMORY_MARK);
+        expect(ctx).toMatch(/sqlite/i);
+        expect(ctx).not.toMatch(/postgres/i);
+      },
+      session,
+    );
   });
 
   test("SessionStart transcript re-observe does not brief instead-of postgres", async () => {
     const session = "s-m74-start-trans";
-    await withMem("eden-m74-start-trans-", async (mem, dir) => {
-      mem.observe([{ role: "user", content: "The database is postgres." }]);
-      mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
-      await sleep({ dir, mem, session });
-      const trans = join(dir, "t.jsonl");
-      writeFileSync(
-        trans,
-        ["The database is postgres.", "The database is sqlite instead of postgres."]
-          .map((c) => JSON.stringify({ type: "user", message: { role: "user", content: c } }))
-          .join("\n") + "\n",
-      );
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session, transcript_path: trans });
-      const ctx = hookContext(start);
-      expect(ctx).toContain(MEMORY_MARK);
-      expect(ctx).toMatch(/sqlite/i);
-      expect(ctx).not.toMatch(/postgres/i);
-      const pkt = packetOf(openMemory({ dir, session }).inject([{ role: "user", content: "what database do we use" }]));
-      expect(pkt).toMatch(/sqlite/i);
-      expect(pkt).not.toMatch(/postgres/i);
-    }, session);
+    await withMem(
+      "eden-m74-start-trans-",
+      async (mem, dir) => {
+        mem.observe([{ role: "user", content: "The database is postgres." }]);
+        mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
+        await sleep({ dir, mem, session });
+        const trans = join(dir, "t.jsonl");
+        writeFileSync(
+          trans,
+          ["The database is postgres.", "The database is sqlite instead of postgres."]
+            .map((c) => JSON.stringify({ type: "user", message: { role: "user", content: c } }))
+            .join("\n") + "\n",
+        );
+        const start = memoryHookResponse({
+          hook_event_name: "SessionStart",
+          session_id: session,
+          transcript_path: trans,
+        });
+        const ctx = hookContext(start);
+        expect(ctx).toContain(MEMORY_MARK);
+        expect(ctx).toMatch(/sqlite/i);
+        expect(ctx).not.toMatch(/postgres/i);
+        const pkt = packetOf(
+          openMemory({ dir, session }).inject([{ role: "user", content: "what database do we use" }]),
+        );
+        expect(pkt).toMatch(/sqlite/i);
+        expect(pkt).not.toMatch(/postgres/i);
+      },
+      session,
+    );
   });
 
   test("injectBody system postgres after sqlite sleep does not resurrect postgres", async () => {
@@ -398,7 +422,10 @@ describe("M7.3 gists + SessionStart", () => {
       mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
       await sleep({ dir, mem });
       expect(factObject(new SemanticStore(dir).get("database", "is"))).toMatch(/sqlite/i);
-      mem.injectBody({ system: "The database is postgres.", messages: [{ role: "user", content: "what database do we use" }] });
+      mem.injectBody({
+        system: "The database is postgres.",
+        messages: [{ role: "user", content: "what database do we use" }],
+      });
       await sleep({ dir, mem });
       const live = factObject(new SemanticStore(dir).get("database", "is"));
       expect(live).toMatch(/sqlite/i);
@@ -509,7 +536,10 @@ describe("M7.1 Stop/SessionEnd runs sleep", () => {
     const trans = join(dir, "t.jsonl");
     await withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
       try {
-        writeFileSync(trans, `${JSON.stringify({ type: "user", message: { role: "user", content: "Auth is Clerk" } })}\n`);
+        writeFileSync(
+          trans,
+          `${JSON.stringify({ type: "user", message: { role: "user", content: "Auth is Clerk" } })}\n`,
+        );
         const consSpy = spyOn(sleepMod, "consolidate");
         const sleepFnSpy = spyOn(sleepMod, "sleep");
         const memSleep = spyOn(AgentMemory.prototype, "sleep");
@@ -656,18 +686,22 @@ describe("M42.1 after N observes a gist may appear and the open fact survives", 
   test("EDEN_SLEEP_EVERY=3 writes a gist and the postgres packet still matches", async () => {
     const session = "s-m42-every";
     await withEnv({ EDEN_SLEEP_EVERY: "3", EDEN_SLEEP_IDLE: "0", EDEN_MEMORY: "on" }, () =>
-      withMem("eden-m42-every-", async (mem, dir) => {
-        mem.observe([{ role: "user", content: "The database is postgres." }]);
-        mem.observe([{ role: "user", content: "Auth is Clerk." }]);
-        mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
-        await flushSleep();
-        const gists = new GistStore(dir).latest(session, 5);
-        const gistFile = existsSync(join(dir, "gists.jsonl"));
-        expect(gistFile || gists.length > 0 || new GistStore(dir).latest("", 5).length > 0).toBe(true);
-        const pkt = packetOf(mem.inject([{ role: "user", content: "what database do we use" }]));
-        expect(pkt).toMatch(/postgres/i);
-        expect(hasPostgresEpisode(mem)).toBe(true);
-      }, session),
+      withMem(
+        "eden-m42-every-",
+        async (mem, dir) => {
+          mem.observe([{ role: "user", content: "The database is postgres." }]);
+          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+          mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
+          await flushSleep();
+          const gists = new GistStore(dir).latest(session, 5);
+          const gistFile = existsSync(join(dir, "gists.jsonl"));
+          expect(gistFile || gists.length > 0 || new GistStore(dir).latest("", 5).length > 0).toBe(true);
+          const pkt = packetOf(mem.inject([{ role: "user", content: "what database do we use" }]));
+          expect(pkt).toMatch(/postgres/i);
+          expect(hasPostgresEpisode(mem)).toBe(true);
+        },
+        session,
+      ),
     );
   });
 });
@@ -676,25 +710,32 @@ describe("M42.1 no mid-task tombstone", () => {
   test("incremental keeps the postgres episode; full sleep tombstones it out of the packet", async () => {
     const session = "s-m42-notomb";
     await withEnv({ EDEN_SLEEP_EVERY: "2", EDEN_SLEEP_IDLE: "0", EDEN_MEMORY: "on" }, () =>
-      withMem("eden-m42-notomb-", async (mem, dir) => {
-        const drop = spyOn(mem, "dropWhere");
-        try {
-          plantSupersede(mem);
-          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
-          mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
-          await flushSleep();
-          expect(drop).not.toHaveBeenCalled();
-          expect(hasPostgresEpisode(mem)).toBe(true);
-          const live = mem.memories().map((r) => r.text).join("\n");
-          expect(live).toMatch(/postgres/i);
-          await sleep({ dir, mem, session });
-          const pkt = packetOf(mem.inject([{ role: "user", content: "what database do we use" }]));
-          expect(pkt).toMatch(/sqlite/i);
-          expect(pkt).not.toMatch(/postgres/i);
-        } finally {
-          drop.mockRestore();
-        }
-      }, session),
+      withMem(
+        "eden-m42-notomb-",
+        async (mem, dir) => {
+          const drop = spyOn(mem, "dropWhere");
+          try {
+            plantSupersede(mem);
+            mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+            mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
+            await flushSleep();
+            expect(drop).not.toHaveBeenCalled();
+            expect(hasPostgresEpisode(mem)).toBe(true);
+            const live = mem
+              .memories()
+              .map((r) => r.text)
+              .join("\n");
+            expect(live).toMatch(/postgres/i);
+            await sleep({ dir, mem, session });
+            const pkt = packetOf(mem.inject([{ role: "user", content: "what database do we use" }]));
+            expect(pkt).toMatch(/sqlite/i);
+            expect(pkt).not.toMatch(/postgres/i);
+          } finally {
+            drop.mockRestore();
+          }
+        },
+        session,
+      ),
     );
   });
 });
@@ -734,35 +775,47 @@ describe("M42.3 Stop still full", () => {
   test("after incremental, Stop tombstones postgres out of the inject packet", async () => {
     const session = "s-m42-stop";
     await withEnv({ EDEN_SLEEP_EVERY: "2", EDEN_SLEEP_IDLE: "0", EDEN_MEMORY: "on" }, () =>
-      withMem("eden-m42-stop-", async (mem, dir) => {
-        plantSupersede(mem);
-        mem.observe([{ role: "user", content: "Auth is Clerk." }]);
-        mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
-        await flushSleep();
-        expect(hasPostgresEpisode(mem)).toBe(true);
-        const stop = memoryHookResponse({ hook_event_name: "Stop", session_id: session });
-        expect(stop).toBeNull();
-        const pkt = packetOf(openMemory({ dir, session }).inject([{ role: "user", content: "what database do we use" }]));
-        expect(pkt).toMatch(/sqlite/i);
-        expect(pkt).not.toMatch(/postgres/i);
-      }, session),
+      withMem(
+        "eden-m42-stop-",
+        async (mem, dir) => {
+          plantSupersede(mem);
+          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+          mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
+          await flushSleep();
+          expect(hasPostgresEpisode(mem)).toBe(true);
+          const stop = memoryHookResponse({ hook_event_name: "Stop", session_id: session });
+          expect(stop).toBeNull();
+          const pkt = packetOf(
+            openMemory({ dir, session }).inject([{ role: "user", content: "what database do we use" }]),
+          );
+          expect(pkt).toMatch(/sqlite/i);
+          expect(pkt).not.toMatch(/postgres/i);
+        },
+        session,
+      ),
     );
   });
 
   test("SessionEnd after incremental also full-tombstones postgres", async () => {
     const session = "s-m42-end";
     await withEnv({ EDEN_SLEEP_EVERY: "2", EDEN_SLEEP_IDLE: "0", EDEN_MEMORY: "on" }, () =>
-      withMem("eden-m42-end-", async (mem, dir) => {
-        plantSupersede(mem);
-        mem.observe([{ role: "user", content: "Auth is Clerk." }]);
-        mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
-        await flushSleep();
-        expect(hasPostgresEpisode(mem)).toBe(true);
-        memoryHookResponse({ hook_event_name: "SessionEnd", session_id: session });
-        const pkt = packetOf(openMemory({ dir, session }).inject([{ role: "user", content: "what database do we use" }]));
-        expect(pkt).toMatch(/sqlite/i);
-        expect(pkt).not.toMatch(/postgres/i);
-      }, session),
+      withMem(
+        "eden-m42-end-",
+        async (mem, dir) => {
+          plantSupersede(mem);
+          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+          mem.observe([{ role: "user", content: "CI is GitHub Actions." }]);
+          await flushSleep();
+          expect(hasPostgresEpisode(mem)).toBe(true);
+          memoryHookResponse({ hook_event_name: "SessionEnd", session_id: session });
+          const pkt = packetOf(
+            openMemory({ dir, session }).inject([{ role: "user", content: "what database do we use" }]),
+          );
+          expect(pkt).toMatch(/sqlite/i);
+          expect(pkt).not.toMatch(/postgres/i);
+        },
+        session,
+      ),
     );
   });
 });
@@ -881,12 +934,16 @@ describe("M42 sleep-clock.json omits identifiers", () => {
       const dir = tmpDir("eden-m42-clock-");
       try {
         const mem = openMemory({ dir, session, cwd });
-        mem.observe([{
-          role: "user",
-          content: `The database is sqlite. Contact ${email}. cwd ${cwd}. session ${session}. session_id ${session}.`,
-        }]);
+        mem.observe([
+          {
+            role: "user",
+            content: `The database is sqlite. Contact ${email}. cwd ${cwd}. session ${session}. session_id ${session}.`,
+          },
+        ]);
         await flushSleep();
-        const raw = existsSync(join(dir, "sleep-clock.json")) ? readFileSync(join(dir, "sleep-clock.json"), "utf8") : "";
+        const raw = existsSync(join(dir, "sleep-clock.json"))
+          ? readFileSync(join(dir, "sleep-clock.json"), "utf8")
+          : "";
         expect(raw.length).toBeGreaterThan(0);
         expect(raw).not.toContain(session);
         expect(raw).not.toContain(email);
@@ -911,7 +968,10 @@ describe("M42 consent off does not write incremental gists", () => {
         mem.observe([{ role: "user", content: "Auth is Clerk." }]);
         await flushSleep();
         const gistBefore = existsSync(join(dir, "gists.jsonl"));
-        const textBefore = new GistStore(dir).latest("", 5).map((g) => g.text).join("\n");
+        const textBefore = new GistStore(dir)
+          .latest("", 5)
+          .map((g) => g.text)
+          .join("\n");
         const put = spyOn(GistStore.prototype, "put");
         try {
           await withEnv({ EDEN_MEMORY: "0", EDEN_SLEEP_EVERY: "1", EDEN_SLEEP_IDLE: "0" }, async () => {
@@ -922,7 +982,12 @@ describe("M42 consent off does not write incremental gists", () => {
           });
           expect(put).not.toHaveBeenCalled();
           expect(existsSync(join(dir, "gists.jsonl"))).toBe(gistBefore);
-          expect(new GistStore(dir).latest("", 5).map((g) => g.text).join("\n")).toBe(textBefore);
+          expect(
+            new GistStore(dir)
+              .latest("", 5)
+              .map((g) => g.text)
+              .join("\n"),
+          ).toBe(textBefore);
         } finally {
           put.mockRestore();
         }

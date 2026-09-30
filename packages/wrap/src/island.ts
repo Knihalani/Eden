@@ -4,10 +4,17 @@ import { islandUsage } from "./usage";
 
 export { withIslandBatch } from "./island-batch";
 
-export function wrapIsland(opts: { apiKey?: string; upstream?: string; fetch?: typeof fetch } = {}): IslandCaller | undefined {
+export function wrapIsland(
+  opts: { apiKey?: string; upstream?: string; fetch?: typeof fetch } = {},
+): IslandCaller | undefined {
   const key = opts.apiKey || process.env.OPENAI_API_KEY;
   if (!key) return undefined;
-  const raw = (opts.upstream || process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const raw = (
+    opts.upstream ||
+    process.env.OPENAI_API_BASE ||
+    process.env.OPENAI_BASE_URL ||
+    "https://api.openai.com/v1"
+  ).replace(/\/$/, "");
   const baseURL = /127\.0\.0\.1:8788|localhost:8788/.test(raw) ? "https://api.openai.com/v1" : raw;
   const sync = openaiIsland({ apiKey: key, baseURL, fetch: opts.fetch });
   return withWitnessMemo(withIslandBatch(sync, { apiKey: key, baseURL, fetch: opts.fetch }));
@@ -64,17 +71,29 @@ export function withWitnessMemo(
 
 const ISLAND_BACKOFF_MS = 300;
 
-class NonJsonReply extends Error { constructor() { super("island returned non-JSON"); } }
+class NonJsonReply extends Error {
+  constructor() {
+    super("island returned non-JSON");
+  }
+}
 
-export function openaiIsland(opts: {
-  model?: string;
-  apiKey?: string;
-  baseURL?: string;
-  fetch?: typeof fetch;
-} = {}): IslandCaller {
+export function openaiIsland(
+  opts: {
+    model?: string;
+    apiKey?: string;
+    baseURL?: string;
+    fetch?: typeof fetch;
+  } = {},
+): IslandCaller {
   return async ({ system, input, outputSchema, signal }) => {
-    const fallback = (process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    const base = (opts.baseURL || (/127\.0\.0\.1:8788|localhost:8788/.test(fallback) ? "https://api.openai.com/v1" : fallback)).replace(/\/$/, "");
+    const fallback = (
+      process.env.OPENAI_API_BASE ||
+      process.env.OPENAI_BASE_URL ||
+      "https://api.openai.com/v1"
+    ).replace(/\/$/, "");
+    const base = (
+      opts.baseURL || (/127\.0\.0\.1:8788|localhost:8788/.test(fallback) ? "https://api.openai.com/v1" : fallback)
+    ).replace(/\/$/, "");
     const key = opts.apiKey || process.env.OPENAI_API_KEY || "";
     const fn = opts.fetch ?? fetch;
 
@@ -97,9 +116,7 @@ export function openaiIsland(opts: {
               { role: "user", content: JSON.stringify(input) },
             ],
           }),
-          signal: signal
-            ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-            : AbortSignal.timeout(timeoutMs),
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
         });
         if (!res.ok) {
           if (attempt < 2 && (res.status === 429 || res.status >= 500)) {
@@ -121,10 +138,10 @@ export function openaiIsland(opts: {
         }
       } catch (err) {
         lastErr = err;
-        if (signal?.aborted && err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message))) throw err;
+        if (signal?.aborted && err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message)))
+          throw err;
         const transient =
-          err instanceof NonJsonReply ||
-          !(err instanceof Error && /^island llm \d+$/.test(err.message));
+          err instanceof NonJsonReply || !(err instanceof Error && /^island llm \d+$/.test(err.message));
         if (attempt < 2 && transient) continue;
         throw err;
       }

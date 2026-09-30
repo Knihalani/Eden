@@ -14,8 +14,7 @@ export type HookLane = "copula" | "path" | "procedure" | "time" | "none";
 
 const NOOP_EXACT =
   /^(?:ok|okay|thanks|thank you|got it|gotcha|nice|cool|will do|sure|yeah|yep|yup|lol|lmao|asdf|qwerty|hi|hey|yo|continue|lgtm|ok go|sounds good|ship it|thx|ty|np|kk|cheers)\s*[.!?]?\s*$/i;
-const MATH_CUE =
-  /^\s*(?:what(?:'s| is)\s+)?\d+\s*(?:\+|plus|\-|minus|\*|x|×|times|\/|÷|divided by)\s*\d+\s*\??\s*$/i;
+const MATH_CUE = /^\s*(?:what(?:'s| is)\s+)?\d+\s*(?:\+|plus|\-|minus|\*|x|×|times|\/|÷|divided by)\s*\d+\s*\??\s*$/i;
 const CONTENT_TERM =
   /\b(?:auth|sqlite|postgres|clerk|flake|commit|test|database|provider|session|file|src\/|\.ts|\.py|adr|dlq|sqs|sidecar|istio|mesh)\b/i;
 
@@ -39,7 +38,21 @@ export function isNoopCue(cue: string): boolean {
 }
 
 const PATH_NAME = /(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+|[A-Za-z0-9._-]+\.[A-Za-z]{1,12}/;
-const PLACE_PATH_KEYS = ["open_files", "openFiles", "files", "file_paths", "filePaths", "file_path", "filePath", "path", "filename", "file", "filepath", "recently_viewed_files", "recentlyViewedFiles"] as const;
+const PLACE_PATH_KEYS = [
+  "open_files",
+  "openFiles",
+  "files",
+  "file_paths",
+  "filePaths",
+  "file_path",
+  "filePath",
+  "path",
+  "filename",
+  "file",
+  "filepath",
+  "recently_viewed_files",
+  "recentlyViewedFiles",
+] as const;
 const PLACE_GOAL_KEYS = ["last_goal", "lastGoal", "current_goal", "currentGoal"] as const;
 const PLACE_OBJ_KEYS = ["path", "file_path", "filePath", "filepath", "filename", "file", "uri", "name"] as const;
 const PLACE_SKIP_KEYS = new Set([
@@ -117,8 +130,14 @@ function placePush(out: string[], name: string): void {
 function placeNamesFromString(raw: string, cwds: string[], out: string[]): void {
   let s = raw.trim();
   if (!s || s.length > 200 || /[\r\n]/.test(s) || PLACE_EMAIL.test(s) || /^cwd$/i.test(s)) return;
-  s = s.replace(/^file:\/\//i, "").replace(/\\/g, "/").replace(/[?#].*$/, "").replace(/\/+$/, "");
-  try { if (s.includes("%")) s = decodeURIComponent(s); } catch {}
+  s = s
+    .replace(/^file:\/\//i, "")
+    .replace(/\\/g, "/")
+    .replace(/[?#].*$/, "")
+    .replace(/\/+$/, "");
+  try {
+    if (s.includes("%")) s = decodeURIComponent(s);
+  } catch {}
   if (!s || s.length > 200 || /[\r\n]/.test(s) || PLACE_EMAIL.test(s)) return;
   for (const c of cwds) {
     if (s.toLowerCase() === c.toLowerCase()) return;
@@ -185,7 +204,8 @@ function placeScan(o: Record<string, unknown>, cwds: string[], out: string[], de
   if (depth === 0) {
     for (const nest of ["context", "editor"] as const) {
       const child = o[nest];
-      if (child && typeof child === "object" && !Array.isArray(child)) placeScan(child as Record<string, unknown>, cwds, out, depth + 1);
+      if (child && typeof child === "object" && !Array.isArray(child))
+        placeScan(child as Record<string, unknown>, cwds, out, depth + 1);
     }
   }
 }
@@ -233,7 +253,9 @@ export function parseRuleTime(text: string): { at?: number; until?: number } | u
   try {
     const t = String(text ?? "");
     if (!t.trim()) return undefined;
-    const until = t.match(/\b(?:valid(?:_|\s+)?until|until|expires?(?:\s+on)?)\s+(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4})\b/i);
+    const until = t.match(
+      /\b(?:valid(?:_|\s+)?until|until|expires?(?:\s+on)?)\s+(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4})\b/i,
+    );
     const asOf = t.match(/\b(?:as of|since|on|after|before)\s+(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4})\b/i);
     const iso = t.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
     const stamp = (raw: string): number | undefined => {
@@ -279,7 +301,10 @@ export function hookLane(cue: string): HookLane {
   }
 }
 
-const MEMORY_BLOCK = new RegExp(`${MEMORY_PACKET_MARK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?(?=\\n\\S|$)`, "g");
+const MEMORY_BLOCK = new RegExp(
+  `${MEMORY_PACKET_MARK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?(?=\\n\\S|$)`,
+  "g",
+);
 const LABELED_LINE = /^\s*-\s+\[(?:fact|episode|rule|gist|procedure)[^\]]*\]\s+/gim;
 
 export function stripMemoryPacket(text: string): string {
@@ -297,7 +322,9 @@ export function stripMemoryPacket(text: string): string {
 export type PackNote = { text: string; id?: string; kind?: string; at?: number; src?: string };
 
 function looksCopula(text: string): boolean {
-  const t = String(text ?? "").replace(/^\s*-\s+/, "").replace(/^\[[^\]]+\]\s+/, "");
+  const t = String(text ?? "")
+    .replace(/^\s*-\s+/, "")
+    .replace(/^\[[^\]]+\]\s+/, "");
   return /\b(?:is|are|was|were|uses?)\s+\S/.test(t) || /\s=\s/.test(t);
 }
 
@@ -331,15 +358,48 @@ export function packNotes(notes: PackNote[], byteCap = PACKET_BYTE_CAP, bulletMa
   return picked;
 }
 
-const PACK_STOP = new Set(["the","of","is","a","an","on","to","and","in","for","this","that","with","from","what","why","how","who","was","are","you","your","do","we","our","use"]);
+const PACK_STOP = new Set([
+  "the",
+  "of",
+  "is",
+  "a",
+  "an",
+  "on",
+  "to",
+  "and",
+  "in",
+  "for",
+  "this",
+  "that",
+  "with",
+  "from",
+  "what",
+  "why",
+  "how",
+  "who",
+  "was",
+  "are",
+  "you",
+  "your",
+  "do",
+  "we",
+  "our",
+  "use",
+]);
 
 function packBody(n: PackNote): string {
-  return String(n.text ?? "").replace(/^\s*-\s+/, "").replace(/^\[[^\]]+\]\s+/, "").toLowerCase();
+  return String(n.text ?? "")
+    .replace(/^\s*-\s+/, "")
+    .replace(/^\[[^\]]+\]\s+/, "")
+    .toLowerCase();
 }
 
 /** Cue tokens that actually discriminate. Rarer in the retrieved set first. */
 export function cueContentTokens(cue: string): string[] {
-  const toks = String(cue ?? "").toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]{3,}/g) ?? [];
+  const toks =
+    String(cue ?? "")
+      .toLowerCase()
+      .match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]{3,}/g) ?? [];
   return [...new Set(toks.filter((t) => !PACK_STOP.has(t)))];
 }
 
@@ -374,7 +434,12 @@ export function goldFirstNotes<T extends PackNote>(cue: string, notes: T[]): T[]
     for (const n of ranked) (packBody(n).includes(rarest) ? hit : miss).push(n);
     if (!hit.length) return ranked;
     const cop = (n: T) => looksCopula(n.text) || String(n.kind ?? "") === "fact";
-    const sortHit = (a: T[], b: T[]) => [...a.filter(cop), ...a.filter((n) => !cop(n)), ...b.filter(cop), ...b.filter((n) => !cop(n))];
+    const sortHit = (a: T[], b: T[]) => [
+      ...a.filter(cop),
+      ...a.filter((n) => !cop(n)),
+      ...b.filter(cop),
+      ...b.filter((n) => !cop(n)),
+    ];
     return sortHit(hit, miss);
   } catch {
     return Array.isArray(notes) ? notes : [];
@@ -393,12 +458,19 @@ export const WRITE_ALIASES: Record<string, string[]> = {
 export function writeAliasTags(tags: string[], text = ""): string[] {
   const set = new Set<string>();
   for (const t of tags ?? []) {
-    const k = String(t ?? "").toLowerCase().trim();
+    const k = String(t ?? "")
+      .toLowerCase()
+      .trim();
     if (k) set.add(k);
   }
   const blob = String(text ?? "").toLowerCase();
   for (const w of blob.match(/[a-z0-9]+(?:[._-][a-z0-9]+)+|[a-z0-9]+/g) ?? []) set.add(w);
-  if (set.has("dead-letters") || set.has("dead_letters") || set.has("deadletters") || (set.has("dead") && set.has("letters"))) {
+  if (
+    set.has("dead-letters") ||
+    set.has("dead_letters") ||
+    set.has("deadletters") ||
+    (set.has("dead") && set.has("letters"))
+  ) {
     set.add("dlq");
     set.add("sqs");
   }
@@ -431,7 +503,10 @@ export function preferObservationOverSources<T extends ObservationNote>(notes: T
         }
         const m = bare.match(/^(?:the\s+)?(.{1,80}?)\s+(?:is|are)\s+(\S.*)$/i);
         if (m) {
-          const s = m[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+          const s = m[1]!
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .trim();
           const o = m[2]!.replace(/[.,;:!?]+$/g, "").trim();
           if (s && o) facts.push({ s, p: "is", o });
         }
@@ -441,14 +516,24 @@ export function preferObservationOverSources<T extends ObservationNote>(notes: T
     return notes.filter((n) => {
       const k = String(n.kind ?? "").toLowerCase();
       if (k === "gist" || k === "digest") return true;
-      const bare = String(n.text ?? "").replace(/^\[[^\]]+\]\s+/, "").trim();
+      const bare = String(n.text ?? "")
+        .replace(/^\[[^\]]+\]\s+/, "")
+        .trim();
       const use = bare.match(/^(?:the\s+)?([a-z][\w-]*)\s+uses\s+(\S.*)$/i);
-      const m = use ? { s: use[1]!.toLowerCase(), p: "uses", o: use[2]!.replace(/[.,;:!?]+$/g, "").trim() }
+      const m = use
+        ? { s: use[1]!.toLowerCase(), p: "uses", o: use[2]!.replace(/[.,;:!?]+$/g, "").trim() }
         : (() => {
-          const hit = bare.match(/^(?:the\s+)?(.{1,80}?)\s+(?:is|are)\s+(\S.*)$/i);
-          if (!hit) return undefined;
-          return { s: hit[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(), p: "is", o: hit[2]!.replace(/[.,;:!?]+$/g, "").trim() };
-        })();
+            const hit = bare.match(/^(?:the\s+)?(.{1,80}?)\s+(?:is|are)\s+(\S.*)$/i);
+            if (!hit) return undefined;
+            return {
+              s: hit[1]!
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, " ")
+                .trim(),
+              p: "is",
+              o: hit[2]!.replace(/[.,;:!?]+$/g, "").trim(),
+            };
+          })();
       if (!m?.s || !m.o) return true;
       const g = facts.find((f) => f.s === m.s && f.p === m.p);
       if (!g) return true;

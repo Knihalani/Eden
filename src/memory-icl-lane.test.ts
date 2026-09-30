@@ -63,11 +63,12 @@ function openaiMemoryText(body: Record<string, unknown>): string {
 
 function anthropicMemoryText(body: { system?: unknown }): string {
   const sys = body.system;
-  const parts = typeof sys === "string"
-    ? [sys]
-    : Array.isArray(sys)
-      ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-      : [];
+  const parts =
+    typeof sys === "string"
+      ? [sys]
+      : Array.isArray(sys)
+        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+        : [];
   return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
 }
 
@@ -75,7 +76,9 @@ function hookCtx(out: Record<string, unknown> | null): string {
   return [
     out?.additional_context,
     (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
-  ].map((x) => String(x ?? "")).join("\n");
+  ]
+    .map((x) => String(x ?? ""))
+    .join("\n");
 }
 
 function seedIclAndClerk(mem: AgentMemory): void {
@@ -104,7 +107,10 @@ describe("M19.2 chat fact cue does not pull ICL shots", () => {
       for (let i = 0; i < 8; i++) {
         mem.observe([{ role: "user", content: `The movie was great. Take ${i}. label: 28` }]);
       }
-      const notes = mem.notesFor("The movie was great.").map((r) => r.text).join("\n");
+      const notes = mem
+        .notesFor("The movie was great.")
+        .map((r) => r.text)
+        .join("\n");
       expect(notes).toMatch(/label:\s*28/);
       const pkt = packetOf(mem.inject([{ role: "user", content: "The movie was great." }]));
       expect(pkt).toMatch(/label:\s*28/);
@@ -115,7 +121,10 @@ describe("M19.2 chat fact cue does not pull ICL shots", () => {
     withMem((mem) => {
       seedIclAndClerk(mem);
       for (const cue of [...CHAT_CUES, "Auth is Clerk/failing"]) {
-        const notes = mem.notesFor(cue).map((r) => r.text).join("\n");
+        const notes = mem
+          .notesFor(cue)
+          .map((r) => r.text)
+          .join("\n");
         expect(notes).toMatch(/Clerk/);
         expect(notes).not.toMatch(/label:\s*28/);
         expect(notes).not.toMatch(/The movie was great/i);
@@ -135,21 +144,28 @@ describe("M39.3 ICL gold survives near-dup on the product path", () => {
     withMem((mem) => {
       mem.quiet(() => {
         for (let i = 0; i < 100; i++) {
-          mem.observe([{
-            role: "user",
-            content: `Classify this review. Excellent acting and a moving plot about family. take ${i}. label: 28`,
-          }]);
+          mem.observe([
+            {
+              role: "user",
+              content: `Classify this review. Excellent acting and a moving plot about family. take ${i}. label: 28`,
+            },
+          ]);
         }
-        mem.observe([{
-          role: "user",
-          content: "Classify this review. Excellent acting and a moving plot about family. take gold. label: 7",
-        }]);
+        mem.observe([
+          {
+            role: "user",
+            content: "Classify this review. Excellent acting and a moving plot about family. take gold. label: 7",
+          },
+        ]);
         mem.observe([{ role: "user", content: "Auth is Clerk" }]);
       });
       const cue = "Classify this review. Excellent acting and a moving plot about family. label:";
       let notes = "";
       expect(() => {
-        notes = mem.notesFor(cue).map((r) => r.text).join("\n");
+        notes = mem
+          .notesFor(cue)
+          .map((r) => r.text)
+          .join("\n");
       }).not.toThrow();
       expect(notes).toMatch(/label:\s*7/);
       let pkt = "";
@@ -158,7 +174,10 @@ describe("M39.3 ICL gold survives near-dup on the product path", () => {
       }).not.toThrow();
       expect(pkt).toMatch(/label:\s*7/);
       const chatCue = "What provider is Auth?";
-      const chatNotes = mem.notesFor(chatCue).map((r) => r.text).join("\n");
+      const chatNotes = mem
+        .notesFor(chatCue)
+        .map((r) => r.text)
+        .join("\n");
       expect(chatNotes).toMatch(/Clerk/);
       expect(chatNotes).not.toMatch(/label:\s*7/);
       expect(chatNotes).not.toMatch(/label:\s*28/);
@@ -175,7 +194,10 @@ describe("M19.2 ICL cue is index-only", () => {
     withMem((mem) => {
       seedIclAndClerk(mem);
       for (const cue of [ICL_CUE, ICL_CUE_OFFICIAL]) {
-        const notes = mem.notesFor(cue).map((r) => r.text).join("\n");
+        const notes = mem
+          .notesFor(cue)
+          .map((r) => r.text)
+          .join("\n");
         expect(notes).toMatch(/label:\s*28/);
         expect(notes).not.toMatch(/Auth is Clerk/);
         expect(notes).not.toMatch(/Clerk/);
@@ -201,7 +223,10 @@ describe("M19.2 ICL cue is index-only", () => {
   test("empty cue / SessionStart do not dump ICL shots", () => {
     withMem((mem, dir) => {
       seedIclAndClerk(mem);
-      const empty = mem.notesFor("").map((r) => r.text).join("\n");
+      const empty = mem
+        .notesFor("")
+        .map((r) => r.text)
+        .join("\n");
       expect(empty).not.toMatch(/label:\s*28/);
       expect(packetOf(mem.inject([{ role: "user", content: "" }]))).not.toMatch(/label:\s*28/);
       withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, () => {

@@ -32,7 +32,9 @@ describe("coding registry", () => {
     await expect(reg.execute("Write", { path: "../escape.txt", contents: "nope" })).rejects.toThrow(/outside/);
     const out = (await reg.execute("Write", { path: "note2.txt", contents: "alpha" })) as { ok: boolean };
     expect(out.ok).toBe(true);
-    await expect(reg.execute("Edit", { path: "note2.txt", old_string: "missing", new_string: "x" })).rejects.toThrow(/old_string/);
+    await expect(reg.execute("Edit", { path: "note2.txt", old_string: "missing", new_string: "x" })).rejects.toThrow(
+      /old_string/,
+    );
     await reg.execute("Edit", { path: "note2.txt", old_string: "alpha", new_string: "beta" });
     const read = (await reg.execute("Read", { path: "note2.txt" })) as { content: string };
     expect(read.content).toBe("beta");
@@ -96,9 +98,9 @@ describe("coding registry", () => {
       symlinkSync("later.txt", join(dir, "inside-link.txt"));
       const reg = codingRegistry(dir);
       await expect(reg.execute("Write", { path: "escape-link.txt", contents: "x" })).rejects.toThrow(/outside/);
-      await expect(
-        reg.execute("Edit", { path: "escape-link.txt", old_string: "a", new_string: "b" }),
-      ).rejects.toThrow(/outside/);
+      await expect(reg.execute("Edit", { path: "escape-link.txt", old_string: "a", new_string: "b" })).rejects.toThrow(
+        /outside/,
+      );
       expect(existsSync(join(outside, "created.txt"))).toBe(false);
       // A dangling link that stays inside the workspace still works.
       await reg.execute("Write", { path: "inside-link.txt", contents: "ok" });

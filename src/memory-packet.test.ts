@@ -220,12 +220,16 @@ describe("M8.4 retrieveText does not rewrite rules", () => {
       expect(stored?.text).toBe(NEVER_LOG);
       const hit = mem.notesFor("console.log").find((r) => /console\.log/i.test(r.text));
       expect(hit).toBeTruthy();
-      expect(hit!.text).toMatch(new RegExp(`^${kindLabel("rule")}\\s+${NEVER_LOG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+      expect(hit!.text).toMatch(
+        new RegExp(`^${kindLabel("rule")}\\s+${NEVER_LOG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+      );
       expect(hit!.text).not.toMatch(/never no/i);
       expect(hit!.text).not.toMatch(/Never 0/);
       expect(hit!.text).not.toMatch(/Never no/);
       const pkt = packetOf(mem.inject([{ role: "user", content: "should we console.log in production" }]));
-      expect(pkt).toMatch(new RegExp(`-\\s*${kindLabel("rule")}\\s+${NEVER_LOG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+      expect(pkt).toMatch(
+        new RegExp(`-\\s*${kindLabel("rule")}\\s+${NEVER_LOG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+      );
       expect(pkt).not.toMatch(/never no/i);
       expect(pkt).not.toMatch(/Never 0/);
     });
@@ -248,9 +252,13 @@ describe("M8.4 episode kind", () => {
       mem.remember(EPISODE, { kind: "episode" });
       const hit = mem.notesFor("the flake is in src/auth.test.ts").find((r) => /auth\.test\.ts/.test(r.text));
       expect(hit?.kind).toBe("episode");
-      expect(hit?.text).toMatch(new RegExp(`^${kindLabel("episode")}\\s+${EPISODE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+      expect(hit?.text).toMatch(
+        new RegExp(`^${kindLabel("episode")}\\s+${EPISODE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+      );
       const pkt = packetOf(mem.inject([{ role: "user", content: "the flake is in src/auth.test.ts" }]));
-      expect(pkt).toMatch(new RegExp(`-\\s*${kindLabel("episode")}\\s+${EPISODE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+      expect(pkt).toMatch(
+        new RegExp(`-\\s*${kindLabel("episode")}\\s+${EPISODE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+      );
     });
   });
 });
@@ -258,43 +266,47 @@ describe("M8.4 episode kind", () => {
 describe("M8.4 gist + empty cue", () => {
   test("after sleep, SessionStart has [gist]; notesFor labels kinds it has; empty cue does not dump last-k", async () => {
     const session = "s-m84-gist";
-    await withMemAsync("eden-m84-gist-", async (mem, dir) => {
-      mem.remember(RULE, { kind: "constraint" });
-      mem.remember(FACT, { kind: "fact" });
-      mem.remember(GIST, { kind: "gist" });
-      mem.quiet(() => {
-        mem.remember("CI is GitHub Actions");
-        mem.remember("Auth is Clerk");
-        mem.remember("The deploy region is us-east-1");
-        mem.remember("Kai timezone is Pacific");
-        mem.remember("The cache is Redis");
-        mem.remember("The queue is SQS");
-        mem.remember("Node version is 18");
-      });
-      await sleep({ dir, mem, session });
-      const gists = new GistStore(dir).latest(session, 5);
-      expect(gists.length).toBeGreaterThan(0);
+    await withMemAsync(
+      "eden-m84-gist-",
+      async (mem, dir) => {
+        mem.remember(RULE, { kind: "constraint" });
+        mem.remember(FACT, { kind: "fact" });
+        mem.remember(GIST, { kind: "gist" });
+        mem.quiet(() => {
+          mem.remember("CI is GitHub Actions");
+          mem.remember("Auth is Clerk");
+          mem.remember("The deploy region is us-east-1");
+          mem.remember("Kai timezone is Pacific");
+          mem.remember("The cache is Redis");
+          mem.remember("The queue is SQS");
+          mem.remember("Node version is 18");
+        });
+        await sleep({ dir, mem, session });
+        const gists = new GistStore(dir).latest(session, 5);
+        expect(gists.length).toBeGreaterThan(0);
 
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-      const ctx = hookContext(start);
-      expect(ctx).toContain(MEMORY_MARK);
-      expect(ctx).toMatch(new RegExp(kindLabel("gist")));
-      expect(ctx).toMatch(new RegExp(kindLabel("rule")));
-      notDoublePrefixed("rule", ctx);
-      notDoublePrefixed("gist", ctx);
-      expect(ctx).toContain(gists[0]!.text);
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const ctx = hookContext(start);
+        expect(ctx).toContain(MEMORY_MARK);
+        expect(ctx).toMatch(new RegExp(kindLabel("gist")));
+        expect(ctx).toMatch(new RegExp(kindLabel("rule")));
+        notDoublePrefixed("rule", ctx);
+        notDoublePrefixed("gist", ctx);
+        expect(ctx).toContain(gists[0]!.text);
 
-      const notes = mem.notesFor(PACKET_CUE);
-      expect(notes.some((r) => kindPrefix("rule").test(r.text) && r.text.includes(RULE))).toBe(true);
-      expect(notes.some((r) => kindPrefix("fact").test(r.text) && /Clerk/.test(r.text))).toBe(true);
-      const gistHit = notes.find((r) => r.kind === "gist" || /GitHub Actions; Node 18/.test(r.text));
-      if (gistHit) expect(gistHit.text).toMatch(kindPrefix("gist"));
+        const notes = mem.notesFor(PACKET_CUE);
+        expect(notes.some((r) => kindPrefix("rule").test(r.text) && r.text.includes(RULE))).toBe(true);
+        expect(notes.some((r) => kindPrefix("fact").test(r.text) && /Clerk/.test(r.text))).toBe(true);
+        const gistHit = notes.find((r) => r.kind === "gist" || /GitHub Actions; Node 18/.test(r.text));
+        if (gistHit) expect(gistHit.text).toMatch(kindPrefix("gist"));
 
-      const empty = packetOf(mem.inject([{ role: "assistant", content: "working" }]));
-      expect(empty).not.toMatch(/Clerk/);
-      expect(empty).not.toMatch(/Always run tests/);
-      expect(empty).not.toContain(MEMORY_MARK);
-    }, session);
+        const empty = packetOf(mem.inject([{ role: "assistant", content: "working" }]));
+        expect(empty).not.toMatch(/Clerk/);
+        expect(empty).not.toMatch(/Always run tests/);
+        expect(empty).not.toContain(MEMORY_MARK);
+      },
+      session,
+    );
   });
 });
 
@@ -366,7 +378,9 @@ describe("M20.3 packet size bound", () => {
       expect(hit!.text).not.toContain("x".repeat(FACT_CAP + 1));
 
       const clerk = mem.notesFor("Clerk auth.provider").find((r) => /Clerk/.test(r.text));
-      expect(clerk?.text).toMatch(new RegExp(`^${kindLabel("fact")}\\s+${FACT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+      expect(clerk?.text).toMatch(
+        new RegExp(`^${kindLabel("fact")}\\s+${FACT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+      );
 
       const pkt = packetOf(mem.inject([{ role: "user", content: "widget catalog" }]));
       const bullets = pkt.split("\n").filter((l) => l.startsWith("- "));
@@ -532,9 +546,10 @@ describe("M34.3 packet budget", () => {
     expect(RESULTS).toMatch(/tokens total/);
     expect(RESULTS).toMatch(/Not the 89-task/);
     expect(RESULTS).toMatch(/No BrainMemory column/);
-    const upper = PACKET_CHAT_K_MAX * PROCEDURE_TOKEN_CAP
-      + EXPERIENCE_RETRIEVE_K_MAX * EXPERIENCE_SLICE_TOKEN_CAP
-      + PROCEDURE_TOKEN_CAP;
+    const upper =
+      PACKET_CHAT_K_MAX * PROCEDURE_TOKEN_CAP +
+      EXPERIENCE_RETRIEVE_K_MAX * EXPERIENCE_SLICE_TOKEN_CAP +
+      PROCEDURE_TOKEN_CAP;
     expect(upper).toBe(6300);
     expect(upper).toBeLessThan(27759);
   });
@@ -757,10 +772,12 @@ describe("M40 provenance", () => {
     const dir = tmpDir("eden-m40-ids-");
     try {
       const mem = openMemory({ dir, session: SESSION, cwd: CWD });
-      mem.observe([{
-        role: "user",
-        content: `The database is sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}.`,
-      }]);
+      mem.observe([
+        {
+          role: "user",
+          content: `The database is sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}.`,
+        },
+      ]);
       const pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
       expect(pkt).toMatch(/\[fact[^\]]*\]/);
       expect(pkt).toMatch(/sqlite/i);
@@ -779,32 +796,32 @@ describe("M40 provenance", () => {
 
   test("log is off by default and EDEN_MEMORY=0 stays identity", async () => {
     await withEnv({ EDEN_MEMORY_LOG: undefined }, () => {
-    withMem((mem) => {
-      mem.remember(SQLITE, { kind: "fact", id: LOG_ID });
-      const list = [{ role: "user", content: CUE }];
-      let pkt = "";
-      const stderr = captureStderr(() => {
-        pkt = packetOf(mem.inject(list));
+      withMem((mem) => {
+        mem.remember(SQLITE, { kind: "fact", id: LOG_ID });
+        const list = [{ role: "user", content: CUE }];
+        let pkt = "";
+        const stderr = captureStderr(() => {
+          pkt = packetOf(mem.inject(list));
+        });
+        expect(pkt).toContain(MEMORY_MARK);
+        expect(pkt).toMatch(/sqlite/i);
+        expect(pkt).not.toContain(LOG_ID);
+        expect(stderr).not.toContain(LOG_ID);
+        expect(stderr).not.toContain("EDEN_MEMORY_LOG");
+        const off = [{ role: "user", content: CUE }];
+        const identity = (() => {
+          const prev = process.env.EDEN_MEMORY;
+          process.env.EDEN_MEMORY = "0";
+          try {
+            return mem.inject(off);
+          } finally {
+            if (prev === undefined) delete process.env.EDEN_MEMORY;
+            else process.env.EDEN_MEMORY = prev;
+          }
+        })();
+        expect(identity).toBe(off);
+        expect(packetOf(identity as unknown[])).not.toContain(MEMORY_MARK);
       });
-      expect(pkt).toContain(MEMORY_MARK);
-      expect(pkt).toMatch(/sqlite/i);
-      expect(pkt).not.toContain(LOG_ID);
-      expect(stderr).not.toContain(LOG_ID);
-      expect(stderr).not.toContain("EDEN_MEMORY_LOG");
-      const off = [{ role: "user", content: CUE }];
-      const identity = (() => {
-        const prev = process.env.EDEN_MEMORY;
-        process.env.EDEN_MEMORY = "0";
-        try {
-          return mem.inject(off);
-        } finally {
-          if (prev === undefined) delete process.env.EDEN_MEMORY;
-          else process.env.EDEN_MEMORY = prev;
-        }
-      })();
-      expect(identity).toBe(off);
-      expect(packetOf(identity as unknown[])).not.toContain(MEMORY_MARK);
-    });
     });
   });
 
@@ -827,69 +844,79 @@ describe("M40 provenance", () => {
 
   test("wrap and hook default to labeled notes without log chrome", async () => {
     const dir = tmpDir("eden-m40-host-");
-    await withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_LOG: undefined }, async () => {
-      const mem = openMemory({ dir, session: "s-m40-host" });
-      try {
-        mem.remember(SQLITE, { kind: "fact", id: LOG_ID });
-        const messages = [{ role: "user", content: CUE }];
-        const body = mem.injectBody({ model: "gpt-4o", messages });
-        const openai = packetOf((body.messages ?? []) as unknown[]);
-        expect(openai).toContain(MEMORY_MARK);
-        expect(openai).toMatch(/\[fact[^\]]*\]/);
-        expect(openai).toMatch(/sqlite/i);
-        expect(openai).not.toContain(LOG_ID);
-        await withProcessMem(mem, () => {
-          const anth = withKnowFactsAnthropic({ system: "You are a coding agent.", messages });
-          const anthHay = JSON.stringify(anth);
-          expect(anthHay).toContain(MEMORY_MARK);
-          expect(anthHay).toMatch(/\[fact[^\]]*\]/);
-          expect(anthHay).toMatch(/sqlite/i);
-          expect(anthHay).not.toContain(LOG_ID);
-          const hook = memoryHookResponse({
-            hook_event_name: "UserPromptSubmit",
-            session_id: "s-m40-host",
-            prompt: CUE,
+    await withEnv(
+      { EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_LOG: undefined },
+      async () => {
+        const mem = openMemory({ dir, session: "s-m40-host" });
+        try {
+          mem.remember(SQLITE, { kind: "fact", id: LOG_ID });
+          const messages = [{ role: "user", content: CUE }];
+          const body = mem.injectBody({ model: "gpt-4o", messages });
+          const openai = packetOf((body.messages ?? []) as unknown[]);
+          expect(openai).toContain(MEMORY_MARK);
+          expect(openai).toMatch(/\[fact[^\]]*\]/);
+          expect(openai).toMatch(/sqlite/i);
+          expect(openai).not.toContain(LOG_ID);
+          await withProcessMem(mem, () => {
+            const anth = withKnowFactsAnthropic({ system: "You are a coding agent.", messages });
+            const anthHay = JSON.stringify(anth);
+            expect(anthHay).toContain(MEMORY_MARK);
+            expect(anthHay).toMatch(/\[fact[^\]]*\]/);
+            expect(anthHay).toMatch(/sqlite/i);
+            expect(anthHay).not.toContain(LOG_ID);
+            const hook = memoryHookResponse({
+              hook_event_name: "UserPromptSubmit",
+              session_id: "s-m40-host",
+              prompt: CUE,
+            });
+            const ctx = hookContext(hook);
+            expect(ctx).toContain(MEMORY_MARK);
+            expect(ctx).toMatch(/\[fact[^\]]*\]/);
+            expect(ctx).toMatch(/sqlite/i);
+            expect(ctx).not.toContain(LOG_ID);
+            expect(String(hook?.additional_context ?? "")).not.toContain(LOG_ID);
           });
-          const ctx = hookContext(hook);
-          expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/\[fact[^\]]*\]/);
-          expect(ctx).toMatch(/sqlite/i);
-          expect(ctx).not.toContain(LOG_ID);
-          expect(String(hook?.additional_context ?? "")).not.toContain(LOG_ID);
-        });
-      } finally {
-        try { mem.close(); } catch {}
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
+        } finally {
+          try {
+            mem.close();
+          } catch {}
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
   });
 
   test("EDEN_MEMORY_LOG=1 does not leak note ids into additional_context", async () => {
     const dir = tmpDir("eden-m40-host-log-");
-    await withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_LOG: "1" }, async () => {
-      const mem = openMemory({ dir, session: "s-m40-host-log" });
-      try {
-        mem.remember(SQLITE, { kind: "fact", id: LOG_ID });
-        await withProcessMem(mem, () => {
-          let ctx = "";
-          const stderr = captureStderr(() => {
-            const hook = memoryHookResponse({
-              hook_event_name: "UserPromptSubmit",
-              session_id: "s-m40-host-log",
-              prompt: CUE,
+    await withEnv(
+      { EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_LOG: "1" },
+      async () => {
+        const mem = openMemory({ dir, session: "s-m40-host-log" });
+        try {
+          mem.remember(SQLITE, { kind: "fact", id: LOG_ID });
+          await withProcessMem(mem, () => {
+            let ctx = "";
+            const stderr = captureStderr(() => {
+              const hook = memoryHookResponse({
+                hook_event_name: "UserPromptSubmit",
+                session_id: "s-m40-host-log",
+                prompt: CUE,
+              });
+              ctx = hookContext(hook);
             });
-            ctx = hookContext(hook);
+            expect(ctx).toContain(MEMORY_MARK);
+            expect(ctx).toMatch(/sqlite/i);
+            expect(ctx).not.toContain(LOG_ID);
+            expect(stderr).toContain(LOG_ID);
           });
-          expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/sqlite/i);
-          expect(ctx).not.toContain(LOG_ID);
-          expect(stderr).toContain(LOG_ID);
-        });
-      } finally {
-        try { mem.close(); } catch {}
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
+        } finally {
+          try {
+            mem.close();
+          } catch {}
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
   });
 
   test("M40 pin: content words stay user, one label, serial 8 is 0m, gap is not verified", () => {
@@ -921,14 +948,21 @@ describe("M40 provenance", () => {
       mem.remember("auth pytest · verify: bun test", { kind: "procedure", tags: ["howto", "procedure"] });
       const ok = mem.notesFor("auth pytest bun test").find((r) => /verify:/i.test(r.text) && !/unknown:/i.test(r.text));
       expect(ok?.text).toMatch(/^\[procedure · verified\]/);
-      mem.remember("auth pytest · verify: bun test · unknown: missing step", { kind: "procedure", tags: ["howto", "procedure"] });
-      const both = mem.notesFor("auth pytest bun test missing step").find((r) => /verify:/i.test(r.text) && /unknown:/i.test(r.text));
+      mem.remember("auth pytest · verify: bun test · unknown: missing step", {
+        kind: "procedure",
+        tags: ["howto", "procedure"],
+      });
+      const both = mem
+        .notesFor("auth pytest bun test missing step")
+        .find((r) => /verify:/i.test(r.text) && /unknown:/i.test(r.text));
       expect(both?.text).toMatch(/unknown:/);
       expect(both?.text).not.toMatch(/^\[procedure · verified\]/);
-      expect(applyProvenanceLabel(
-        { kind: "procedure", tags: ["howto", "verified"] },
-        "auth pytest · verify: bun test · unknown: missing step",
-      )).not.toMatch(/^\[procedure · verified\]/);
+      expect(
+        applyProvenanceLabel(
+          { kind: "procedure", tags: ["howto", "verified"] },
+          "auth pytest · verify: bun test · unknown: missing step",
+        ),
+      ).not.toMatch(/^\[procedure · verified\]/);
     });
     withMem((mem, dir) => {
       new HowToStore(dir).put({
@@ -944,16 +978,22 @@ describe("M40 provenance", () => {
     });
     const dir = tmpDir("eden-m40-serial-");
     try {
-      writeFileSync(join(dir, "memories.jsonl"), `${JSON.stringify({
-        id: "serial8",
-        text: SQLITE,
-        kind: "fact",
-        tags: ["sleep", "tool", "gist"],
-        at: 8,
-        lane: "chat",
-      })}\n`);
+      writeFileSync(
+        join(dir, "memories.jsonl"),
+        `${JSON.stringify({
+          id: "serial8",
+          text: SQLITE,
+          kind: "fact",
+          tags: ["sleep", "tool", "gist"],
+          at: 8,
+          lane: "chat",
+        })}\n`,
+      );
       const mem = openMemory({ dir });
-      const text = mem.notesFor(CUE).map((r) => r.text).join("\n");
+      const text = mem
+        .notesFor(CUE)
+        .map((r) => r.text)
+        .join("\n");
       expect(text).toMatch(/^\[fact · 0m · user\]/m);
       expect(text).not.toMatch(/\d{3,}w/);
       expect(text).not.toContain(EMAIL);

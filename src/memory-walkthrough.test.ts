@@ -103,7 +103,9 @@ async function withSession<T>(
       try {
         return await fn(mem, dir);
       } finally {
-        try { mem.close(); } catch {}
+        try {
+          mem.close();
+        } catch {}
         rmSync(dir, { recursive: true, force: true });
       }
     },
@@ -149,11 +151,13 @@ function pytestWindow(): unknown[] {
   return [
     {
       role: "assistant",
-      tool_calls: [{
-        id: "call_pytest",
-        type: "function",
-        function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
-      }],
+      tool_calls: [
+        {
+          id: "call_pytest",
+          type: "function",
+          function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
+        },
+      ],
     },
     { role: "tool", tool_call_id: "call_pytest", content: PYTEST_OUT },
   ];
@@ -163,11 +167,13 @@ function failPytestWindow(): unknown[] {
   return [
     {
       role: "assistant",
-      tool_calls: [{
-        id: "call_pytest_fail",
-        type: "function",
-        function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
-      }],
+      tool_calls: [
+        {
+          id: "call_pytest_fail",
+          type: "function",
+          function: { name: "Bash", arguments: JSON.stringify({ command: PYTEST_CMD }) },
+        },
+      ],
     },
     { role: "tool", tool_call_id: "call_pytest_fail", content: FAIL_OUT, is_error: true },
   ];
@@ -210,7 +216,9 @@ function experienceHay(dir: string): string {
   const chunks: string[] = [];
   for (const name of readdirSync(exp)) {
     if (!name.endsWith(".jsonl")) continue;
-    try { chunks.push(readFileSync(join(exp, name), "utf8")); } catch {}
+    try {
+      chunks.push(readFileSync(join(exp, name), "utf8"));
+    } catch {}
   }
   return chunks.join("\n");
 }
@@ -305,11 +313,13 @@ async function forKnow(mem: AgentMemory, cue: string, check: (hay: string) => vo
 }
 
 function hookSubmit(session: string, prompt: string): string {
-  return hookContext(memoryHookResponse({
-    hook_event_name: "UserPromptSubmit",
-    session_id: session,
-    prompt,
-  }));
+  return hookContext(
+    memoryHookResponse({
+      hook_event_name: "UserPromptSubmit",
+      session_id: session,
+      prompt,
+    }),
+  );
 }
 
 function hookStop(session: string): void {
@@ -422,13 +432,15 @@ describe("M36.2 walkthrough 4 — failing pytest stored; flake cue retrieves it"
 
   test("hook PostToolUse failure then flake cue", async () => {
     await withSession("eden-m36-4h-", "s-m36-4h", async (_mem, dir) => {
-      expect(memoryHookResponse({
-        hook_event_name: "PostToolUse",
-        session_id: "s-m36-4h",
-        tool_name: "Bash",
-        tool_input: { command: PYTEST_CMD },
-        tool_response: FAIL_OUT,
-      })).toBeNull();
+      expect(
+        memoryHookResponse({
+          hook_event_name: "PostToolUse",
+          session_id: "s-m36-4h",
+          tool_name: "Bash",
+          tool_input: { command: PYTEST_CMD },
+          tool_response: FAIL_OUT,
+        }),
+      ).toBeNull();
       assertFailStored(dir, "s-m36-4h");
       assertFailRetrieved(hookSubmit("s-m36-4h", FLAKE_TEXT_CUE));
     });
@@ -465,13 +477,15 @@ describe("M36.2 walkthrough 5 — successful fix sleeps into [procedure]; chat-o
 
   test.failing("hook PostToolUse success, Stop, cmd cue", async () => {
     await withSession("eden-m36-5h-", "s-m36-5h", async () => {
-      expect(memoryHookResponse({
-        hook_event_name: "PostToolUse",
-        session_id: "s-m36-5h",
-        tool_name: "Bash",
-        tool_input: { command: PYTEST_CMD },
-        tool_response: PYTEST_OUT,
-      })).toBeNull();
+      expect(
+        memoryHookResponse({
+          hook_event_name: "PostToolUse",
+          session_id: "s-m36-5h",
+          tool_name: "Bash",
+          tool_input: { command: PYTEST_CMD },
+          tool_response: PYTEST_OUT,
+        }),
+      ).toBeNull();
       hookStop("s-m36-5h");
       assertProcedure(hookSubmit("s-m36-5h", FLAKE_CMD_CUE));
       assertProcedure(hookSubmit("s-m36-5h", FLAKE_TEXT_CUE));
@@ -547,15 +561,20 @@ describe("M36.2 walkthrough 6 — SessionStart is gists + pins; empty cue dumps 
   test.failing("hook SessionStart briefs pins and gists, not eviction junk or a traj dump", async () => {
     await withSession("eden-m36-6h-", "s-m36-6h", async (mem, dir) => {
       await seedBrief(mem, dir, "s-m36-6h");
-      const start = hookContext(memoryHookResponse({
-        hook_event_name: "SessionStart",
-        session_id: "s-m36-6h",
-      }));
+      const start = hookContext(
+        memoryHookResponse({
+          hook_event_name: "SessionStart",
+          session_id: "s-m36-6h",
+        }),
+      );
       expect(start).toContain(MEMORY_MARK);
       expect(start).toMatch(/\[rule(?:\s*·[^\]]*)?\]/);
       expect(start).toMatch(/Always run tests before committing/);
       expect(start).toMatch(/\[gist(?:\s*·[^\]]*)?\]/);
-      const bullets = flat(start).split("\n").map((l) => l.trim()).filter((l) => l.startsWith("-"));
+      const bullets = flat(start)
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("-"));
       expect(bullets.length).toBeGreaterThan(0);
       expect(bullets.every((l) => /^-\s*\[(rule|gist)(?:\s*·[^\]]*)?\]/.test(l))).toBe(true);
       expect(start).not.toMatch(/\[fact(?:\s*·[^\]]*)?\][^\n]*m36-quark-991/);
@@ -579,7 +598,9 @@ describe("M36.2 walkthrough 7 — fail-open and EDEN_MEMORY=0 identity", () => {
       const before = memoryInjectSwallows.n;
       try {
         let out: unknown;
-        expect(() => { out = mem.inject(list); }).not.toThrow();
+        expect(() => {
+          out = mem.inject(list);
+        }).not.toThrow();
         expect(out).toBe(list);
         expect(memoryInjectSwallows.n).toBe(before + 1);
       } finally {
@@ -596,7 +617,9 @@ describe("M36.2 walkthrough 7 — fail-open and EDEN_MEMORY=0 identity", () => {
       try {
         const list = user(AUTH_CUE);
         let out: unknown;
-        expect(() => { out = mem.inject(list); }).not.toThrow();
+        expect(() => {
+          out = mem.inject(list);
+        }).not.toThrow();
         expect(Array.isArray(out)).toBe(true);
         expect(JSON.stringify(out)).not.toMatch(/\b500\b|Internal Server Error/i);
       } finally {
@@ -620,7 +643,9 @@ describe("M36.2 walkthrough 7 — fail-open and EDEN_MEMORY=0 identity", () => {
       try {
         const list = user(cue);
         let out: unknown;
-        expect(() => { out = mem.inject(list); }).not.toThrow();
+        expect(() => {
+          out = mem.inject(list);
+        }).not.toThrow();
         expect(out).toBe(list);
         expect(packetOf(out as unknown[])).not.toContain(MEMORY_MARK);
         expect(memoryInjectSwallows.n).toBe(before);
@@ -638,7 +663,9 @@ describe("M36.2 walkthrough 7 — fail-open and EDEN_MEMORY=0 identity", () => {
       });
       try {
         let out: unknown;
-        expect(() => { out = mem.inject(user(AUTH_CUE)); }).not.toThrow();
+        expect(() => {
+          out = mem.inject(user(AUTH_CUE));
+        }).not.toThrow();
         expect(Array.isArray(out)).toBe(true);
         assertClerk(packetOf(out as unknown[]));
       } finally {
@@ -659,13 +686,17 @@ describe("M36.2 walkthrough 7 — fail-open and EDEN_MEMORY=0 identity", () => {
         mem.observe(user(CLERK));
         const before = memoryInjectSwallows.n;
         let injected: unknown;
-        expect(() => { injected = mem.inject(list); }).not.toThrow();
+        expect(() => {
+          injected = mem.inject(list);
+        }).not.toThrow();
         expect(injected).toBe(list);
         expect(memoryInjectSwallows.n).toBe(before + 1);
 
         const beforeBody = memoryInjectSwallows.n;
         let injectedBody: unknown;
-        expect(() => { injectedBody = mem.injectBody(body); }).not.toThrow();
+        expect(() => {
+          injectedBody = mem.injectBody(body);
+        }).not.toThrow();
         expect(injectedBody).toBe(body);
         expect(memoryInjectSwallows.n).toBe(beforeBody + 1);
 
@@ -712,15 +743,19 @@ describe("M36.2 walkthrough 7 — fail-open and EDEN_MEMORY=0 identity", () => {
           const anth = { system: "be brief", messages: list };
           expect(withKnowFactsAnthropic(anth)).toBe(anth);
         });
-        expect(memoryHookResponse({
-          hook_event_name: "UserPromptSubmit",
-          session_id: "s-m36-7z",
-          prompt: AUTH_CUE,
-        })).toBeNull();
-        expect(memoryHookResponse({
-          hook_event_name: "SessionStart",
-          session_id: "s-m36-7z",
-        })).toBeNull();
+        expect(
+          memoryHookResponse({
+            hook_event_name: "UserPromptSubmit",
+            session_id: "s-m36-7z",
+            prompt: AUTH_CUE,
+          }),
+        ).toBeNull();
+        expect(
+          memoryHookResponse({
+            hook_event_name: "SessionStart",
+            session_id: "s-m36-7z",
+          }),
+        ).toBeNull();
       });
     });
   });
@@ -783,13 +818,18 @@ describe("M36.2 walkthrough 8 — chat-only still gets 1–3 and 6–7; no diet 
       expect(empty).not.toContain(TRAJ_MARK);
       expect(empty).not.toMatch(/m36-quark-991/);
 
-      const start = hookContext(memoryHookResponse({
-        hook_event_name: "SessionStart",
-        session_id: "s-m36-8c",
-      }));
+      const start = hookContext(
+        memoryHookResponse({
+          hook_event_name: "SessionStart",
+          session_id: "s-m36-8c",
+        }),
+      );
       expect(start).toMatch(/\[rule(?:\s*·[^\]]*)?\]/);
       expect(start).toMatch(/\[gist(?:\s*·[^\]]*)?\]/);
-      const bullets = flat(start).split("\n").map((l) => l.trim()).filter((l) => l.startsWith("-"));
+      const bullets = flat(start)
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("-"));
       expect(bullets.every((l) => /^-\s*\[(rule|gist)(?:\s*·[^\]]*)?\]/.test(l))).toBe(true);
       expect(start).not.toMatch(/\[fact(?:\s*·[^\]]*)?\][^\n]*m36-quark-991/);
       expect(start).not.toContain(TRAJ_MARK);
@@ -921,7 +961,9 @@ describe("M36.2 walkthrough 10 — ICL shot survives a novel-sized narrative ing
       try {
         assertLaneStore(later, dir);
       } finally {
-        try { later.close(); } catch {}
+        try {
+          later.close();
+        } catch {}
       }
       assertIclShot(hookSubmit("s-m36-10h", ICL_CUE));
     });

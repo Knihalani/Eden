@@ -22,7 +22,14 @@ function program(): StretchProgram {
     ],
     returns: { kind: "from", step: "apply", path: "" },
     contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-    manifest: { llmReduction: 3, latencyReduction: 1, costReduction: 1, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+    manifest: {
+      llmReduction: 3,
+      latencyReduction: 1,
+      costReduction: 1,
+      skipRateBefore: 0,
+      skipRateAfter: 0,
+      nShadow: 3,
+    },
   }) as StretchProgram;
 }
 
@@ -53,7 +60,10 @@ describe("oblivious agents (tail calls after steering)", () => {
       },
     };
     const state = createState({ programs: [program()] });
-    const wrapped = wrapTools(tools, state) as Record<string, { execute: (a: Record<string, unknown>) => Promise<unknown> }>;
+    const wrapped = wrapTools(tools, state) as Record<
+      string,
+      { execute: (a: Record<string, unknown>) => Promise<unknown> }
+    >;
 
     const head = (await wrapped.lookup!.execute({ id: "X1", text: "refund please" })) as Record<string, unknown>;
     expect(head).toEqual({ applied: true });
@@ -93,7 +103,10 @@ describe("oblivious agents (tail calls after steering)", () => {
       },
     };
     const state = createState({ programs: [program()] });
-    const wrapped = wrapTools(tools, state) as Record<string, { execute: (a: Record<string, unknown>) => Promise<unknown> }>;
+    const wrapped = wrapTools(tools, state) as Record<
+      string,
+      { execute: (a: Record<string, unknown>) => Promise<unknown> }
+    >;
     await wrapped.lookup!.execute({ id: "X1", text: "refund please" });
 
     const out = (await wrapped.lookup!.execute({ id: "X2", text: "other" })) as Record<string, unknown>;

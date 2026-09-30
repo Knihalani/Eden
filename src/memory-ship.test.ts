@@ -77,7 +77,9 @@ describe("M50.1 ship locks", () => {
       expect(anthOut.messages).toEqual(anth.messages);
       expect(JSON.stringify(anthOut)).not.toContain(MEMORY_MARK);
       const hook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what database do we use" });
-      const ctx = String(hook?.additional_context ?? "") + String((hook?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "");
+      const ctx =
+        String(hook?.additional_context ?? "") +
+        String((hook?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "");
       expect(ctx).not.toContain(MEMORY_MARK);
     } finally {
       boom.mockRestore();
@@ -157,9 +159,15 @@ describe("M50.1 ship locks", () => {
       const math = second.inject([{ role: "user", content: "what's 2+2?" }]);
       expect(JSON.stringify(math)).not.toContain(MEMORY_MARK);
       const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: "s-m50-2" });
-      const brief = String(start?.additional_context ?? "") + String((start?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "");
+      const brief =
+        String(start?.additional_context ?? "") +
+        String((start?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "");
       expect(brief).toMatch(/sqlite/i);
-      const mathHook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what's 2+2?", session_id: "s-m50-2" });
+      const mathHook = memoryHookResponse({
+        hook_event_name: "UserPromptSubmit",
+        prompt: "what's 2+2?",
+        session_id: "s-m50-2",
+      });
       const mathCtx = String(mathHook?.additional_context ?? "");
       expect(mathCtx).not.toContain(MEMORY_MARK);
       second.close();

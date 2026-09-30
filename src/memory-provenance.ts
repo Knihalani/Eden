@@ -4,10 +4,7 @@
  */
 export const PACKET_KIND = "rule|fact|episode|gist|procedure";
 /** Matches `[fact]`, `[fact · 3h · user]`, `[fact | 3h | user]`, `[procedure · verified]`. */
-export const PACKET_LABEL_RE = new RegExp(
-  `^(\\s*\\[(?:${PACKET_KIND})(?:\\s*[·|][^\\]]*)?\\]\\s*)`,
-  "i",
-);
+export const PACKET_LABEL_RE = new RegExp(`^(\\s*\\[(?:${PACKET_KIND})(?:\\s*[·|][^\\]]*)?\\]\\s*)`, "i");
 const PACKET_KIND_RE = new RegExp(`^\\s*\\[(${PACKET_KIND})(?:\\s*[·|][^\\]]*)?\\]`, "i");
 
 export type MemoryProvenanceSrc = "user" | "tool" | "sleep";
@@ -142,7 +139,7 @@ export function applyProvenanceLabel<T extends ProvenanceNote>(r: T, body: strin
     try {
       const stripped = stripPacketLabel(body).body;
       const kind = noteKindToken(r, body);
-      return kind ? `[${kind}] ${stripped}`.trim() : (stripped || body);
+      return kind ? `[${kind}] ${stripped}`.trim() : stripped || body;
     } catch {
       return body;
     }

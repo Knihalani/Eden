@@ -103,7 +103,7 @@ export async function runner(args: string[]): Promise<void> {
   const key = resolveApiKey(args);
   const base = process.env.EDEN_BASE_URL || cfg?.base_url || "http://127.0.0.1:8788";
   const pollMs = Number(process.env.EDEN_RUNNER_POLL_MS || 3000);
-  const cwd = args.find(a => a.startsWith("--cwd="))?.split("=")[1] ?? process.cwd();
+  const cwd = args.find((a) => a.startsWith("--cwd="))?.split("=")[1] ?? process.cwd();
   // The Approve record `eden wrap` serves from. `eden wrap` writes the same file, hence the wait.
   const store = new Store(process.env.EDEN_DB || join(edenHome(), "control.sqlite"));
   store.db.exec("PRAGMA busy_timeout = 5000");
@@ -115,13 +115,14 @@ export async function runner(args: string[]): Promise<void> {
   console.log("Press Ctrl+C to stop.\n");
 
   let running = true;
-  process.on("SIGINT", () => { running = false; });
+  process.on("SIGINT", () => {
+    running = false;
+  });
 
   while (running) {
     try {
       await pollOnce(base, key, ctx);
-    } catch {
-    }
+    } catch {}
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   console.log("Runner stopped.");

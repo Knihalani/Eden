@@ -205,7 +205,11 @@ const samplesOf = (
   return out;
 };
 
-function paired<T>(blocks: readonly Block[], x: (b: Block) => T | undefined, y: (b: Block) => T | undefined): Array<{ x: T; y: T }> {
+function paired<T>(
+  blocks: readonly Block[],
+  x: (b: Block) => T | undefined,
+  y: (b: Block) => T | undefined,
+): Array<{ x: T; y: T }> {
   const out: Array<{ x: T; y: T }> = [];
   for (const b of blocks) {
     const vx = x(b);
@@ -263,8 +267,16 @@ export async function collectBench(traces: StretchTrace[], opts: BenchOpts = {})
     seed,
   });
 
-  const tokenPairs = paired(blocks, (b) => b.naiveTokens, (b) => b.compiledTokens);
-  const timePairs = paired(blocks, (b) => b.naiveMs, (b) => b.compiledMs);
+  const tokenPairs = paired(
+    blocks,
+    (b) => b.naiveTokens,
+    (b) => b.compiledTokens,
+  );
+  const timePairs = paired(
+    blocks,
+    (b) => b.naiveMs,
+    (b) => b.compiledMs,
+  );
   const synthetic = blocks.some((b) => b.syntheticClock);
 
   let tokens: BenchMetric;
@@ -280,7 +292,9 @@ export async function collectBench(traces: StretchTrace[], opts: BenchOpts = {})
       const estimated = hasIsland && tokenPairs.some((p) => p.y > 0);
       tokens = { delta: raw, measured: true, estimated };
       if (estimated) {
-        notes.push("tokens estimated: island usage is scaled from the recording, not metered — it cannot gate a ship decision alone.");
+        notes.push(
+          "tokens estimated: island usage is scaled from the recording, not metered — it cannot gate a ship decision alone.",
+        );
       }
     }
   }

@@ -37,20 +37,37 @@ function chatCompletion(id: string, content: string, extra?: Record<string, unkn
 }
 
 export function resolveUpstreamKey(opts: Pick<ProxyOpts, "upstreamKey">, req: Request): string {
-  const headerKey =
-    req.headers.get("x-openai-api-key")?.trim() ||
-    req.headers.get("openai-api-key")?.trim() ||
-    "";
-  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  const headerKey = req.headers.get("x-openai-api-key")?.trim() || req.headers.get("openai-api-key")?.trim() || "";
+  const bearer =
+    req.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "")
+      .trim() || "";
   const configured = (opts.upstreamKey || process.env.OPENAI_API_KEY || "").trim();
   for (const k of [headerKey, configured, bearer]) {
-    if (k && !((t) => t === "eden_dev" || t.startsWith("eden_") || ((e) => e.length > 0 && t === e)((process.env.EDEN_API_KEY || "").trim()))(k.trim())) return k;
+    if (
+      k &&
+      !((t) =>
+        t === "eden_dev" ||
+        t.startsWith("eden_") ||
+        ((e) => e.length > 0 && t === e)((process.env.EDEN_API_KEY || "").trim()))(k.trim())
+    )
+      return k;
   }
   return "";
 }
 
 export async function handleChatCompletions(req: Request, opts: ProxyOpts): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsOrigin(req), "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" } });
+  if (req.method === "OPTIONS")
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsOrigin(req),
+        "access-control-allow-methods": "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS",
+        "access-control-allow-headers": "content-type, authorization",
+        "access-control-max-age": "86400",
+      },
+    });
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -62,25 +79,44 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     body = withOpenFileHeaders(body, header);
   } catch {}
   let liveProgs: StretchProgram[] = [];
-  try { liveProgs = opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest); } catch {}
+  try {
+    liveProgs = opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest);
+  } catch {}
   const live = filterCanary(liveProgs, opts.state.sessionId);
-  const steerable =
-    !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
+  const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   const wantsStream = Boolean(body.stream);
   const clientOptedIn = Array.isArray(body.tools);
   const msgs = body.messages as unknown[] | undefined;
-  const blocked = ((t) => t === "eden_dev" || t.startsWith("eden_") || ((e) => e.length > 0 && t === e)((process.env.EDEN_API_KEY || "").trim()))((req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "").trim()) && !resolveUpstreamKey(opts, req);
+  const blocked =
+    ((t) =>
+      t === "eden_dev" ||
+      t.startsWith("eden_") ||
+      ((e) => e.length > 0 && t === e)((process.env.EDEN_API_KEY || "").trim()))(
+      (
+        req.headers
+          .get("authorization")
+          ?.replace(/^Bearer\s+/i, "")
+          .trim() || ""
+      ).trim(),
+    ) && !resolveUpstreamKey(opts, req);
   const picked = steerable
-    ? safely(
-        () => selectForRequest(live, msgs, blocked ? undefined : opts.state.jit),
-        [] as StretchProgram[],
-      )
+    ? safely(() => selectForRequest(live, msgs, blocked ? undefined : opts.state.jit), [] as StretchProgram[])
     : [];
   if (blocked) {
     const hit = picked[0];
     if (hit && opts.play) {
       try {
-        const text = !Array.isArray(body.messages) ? "" : body.messages.map((m) => (!m || typeof m !== "object" ? "" : typeof (m as { content?: unknown }).content === "string" ? (m as { content: string }).content : "")).join("\n");
+        const text = !Array.isArray(body.messages)
+          ? ""
+          : body.messages
+              .map((m) =>
+                !m || typeof m !== "object"
+                  ? ""
+                  : typeof (m as { content?: unknown }).content === "string"
+                    ? (m as { content: string }).content
+                    : "",
+              )
+              .join("\n");
         const raw: Record<string, unknown> = {};
         const ticket = text.match(/\bT-\d+\b/i);
         if (ticket) raw.id = ticket[0];
@@ -93,8 +129,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
         if (facts !== undefined && facts !== null) {
           return chatCompletion("eden-compiled", typeof facts === "string" ? facts : JSON.stringify(facts));
         }
-      } catch {
-      }
+      } catch {}
     }
     return chatCompletion(
       "eden-failopen",
@@ -119,7 +154,32 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       const upstreamRes = await fn(url, {
         method: "POST",
         headers: upHeaders,
-        body: JSON.stringify((() => { const tuned = ((url: string, body: Record<string, unknown>) => { if (!/nvidia\.com/i.test(url)) return body; const model = String(body.model || ""); if (!/deepseek-v4-flash/i.test(model)) return body; const next: Record<string, unknown> = { ...body }; const effort = String(next.reasoning_effort || "").toLowerCase(); if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none"; const prev = next.chat_template_kwargs && typeof next.chat_template_kwargs === "object" ? { ...(next.chat_template_kwargs as Record<string, unknown>) } : {}; if (next.reasoning_effort === "none") { prev.thinking = false; prev.reasoning_effort = "none"; } next.chat_template_kwargs = prev; return next; })(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body))); const prev = tuned.stream_options; const so = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {}; return { ...tuned, stream_options: { ...so, include_usage: true } }; })()),
+        body: JSON.stringify(
+          (() => {
+            const tuned = ((url: string, body: Record<string, unknown>) => {
+              if (!/nvidia\.com/i.test(url)) return body;
+              const model = String(body.model || "");
+              if (!/deepseek-v4-flash/i.test(model)) return body;
+              const next: Record<string, unknown> = { ...body };
+              const effort = String(next.reasoning_effort || "").toLowerCase();
+              if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none";
+              const prev =
+                next.chat_template_kwargs && typeof next.chat_template_kwargs === "object"
+                  ? { ...(next.chat_template_kwargs as Record<string, unknown>) }
+                  : {};
+              if (next.reasoning_effort === "none") {
+                prev.thinking = false;
+                prev.reasoning_effort = "none";
+              }
+              next.chat_template_kwargs = prev;
+              return next;
+            })(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body)));
+            const prev = tuned.stream_options;
+            const so =
+              prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
+            return { ...tuned, stream_options: { ...so, include_usage: true } };
+          })(),
+        ),
         signal: AbortSignal.timeout(timeout),
       });
       const src = upstreamRes.body;
@@ -133,10 +193,33 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     }
   }
   const injected = safely(
-    () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit)) : body.tools),
+    () =>
+      shouldSteer
+        ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit))
+        : body.tools,
     body.tools,
   );
-  const steeredBody = ((url: string, body: Record<string, unknown>) => { if (!/nvidia\.com/i.test(url)) return body; const model = String(body.model || ""); if (!/deepseek-v4-flash/i.test(model)) return body; const next: Record<string, unknown> = { ...body }; const effort = String(next.reasoning_effort || "").toLowerCase(); if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none"; const prev = next.chat_template_kwargs && typeof next.chat_template_kwargs === "object" ? { ...(next.chat_template_kwargs as Record<string, unknown>) } : {}; if (next.reasoning_effort === "none") { prev.thinking = false; prev.reasoning_effort = "none"; } next.chat_template_kwargs = prev; return next; })(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), { ...body, stream: false, tools: injected })));
+  const steeredBody = ((url: string, body: Record<string, unknown>) => {
+    if (!/nvidia\.com/i.test(url)) return body;
+    const model = String(body.model || "");
+    if (!/deepseek-v4-flash/i.test(model)) return body;
+    const next: Record<string, unknown> = { ...body };
+    const effort = String(next.reasoning_effort || "").toLowerCase();
+    if (effort !== "none" && effort !== "high" && effort !== "max") next.reasoning_effort = "none";
+    const prev =
+      next.chat_template_kwargs && typeof next.chat_template_kwargs === "object"
+        ? { ...(next.chat_template_kwargs as Record<string, unknown>) }
+        : {};
+    if (next.reasoning_effort === "none") {
+      prev.thinking = false;
+      prev.reasoning_effort = "none";
+    }
+    next.chat_template_kwargs = prev;
+    return next;
+  })(
+    url,
+    stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), { ...body, stream: false, tools: injected })),
+  );
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {
@@ -149,7 +232,10 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     return Response.json({ error: { message: "upstream unavailable", fail_open: true } }, { status: 502 });
   }
   if (!upstreamRes.ok) {
-    return new Response(upstreamRes.body, { status: upstreamRes.status, headers: { "content-type": "application/json" } });
+    return new Response(upstreamRes.body, {
+      status: upstreamRes.status,
+      headers: { "content-type": "application/json" },
+    });
   }
   const text = await upstreamRes.text();
   let json: {
@@ -167,53 +253,60 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   safely(() => recordCompletion(opts.state.run, json as Record<string, unknown>), undefined);
   const choice = json.choices?.[0]?.message;
   if (shouldSteer && choice && Array.isArray(choice.tool_calls)) {
-    safely(
-      () => {
-        choice.tool_calls = steerToolCalls(choice.tool_calls as never, live);
-        const names = (choice.tool_calls as Array<{ function?: { name?: string }; name?: string }>).map(
-          (c) => c.function?.name || c.name || "",
-        );
-        noteJitUsed(opts.state.jit, names);
-      },
-      undefined,
-    );
+    safely(() => {
+      choice.tool_calls = steerToolCalls(choice.tool_calls as never, live);
+      const names = (choice.tool_calls as Array<{ function?: { name?: string }; name?: string }>).map(
+        (c) => c.function?.name || c.name || "",
+      );
+      noteJitUsed(opts.state.jit, names);
+    }, undefined);
   }
   if (wantsStream) {
-    return new Response(safely(() => {
-      const j = json as {
-        id?: string;
-        created?: number;
-        model?: string;
-        usage?: unknown;
-        choices?: Array<{ index?: number; message?: Record<string, unknown>; finish_reason?: string }>;
-      };
-      const base = {
-        id: j.id ?? `chatcmpl-${Date.now()}`,
-        object: "chat.completion.chunk",
-        created: j.created ?? Math.floor(Date.now() / 1000),
-        model: j.model ?? "",
-      };
-      const lines: string[] = [];
-      const choices = j.choices?.length ? j.choices : [{ index: 0, message: {}, finish_reason: "stop" }];
-      for (const [i, c] of choices.entries()) {
-        const index = c.index ?? i;
-        const { role, content, tool_calls, ...rest } = (c.message ?? {}) as Record<string, unknown>;
-        const delta: Record<string, unknown> = { role: role ?? "assistant", ...rest };
-        if (content !== undefined && content !== null) delta.content = content;
-        if (Array.isArray(tool_calls)) {
-          delta.tool_calls = tool_calls.map((t, k) => ({ index: k, ...(t as Record<string, unknown>) }));
+    return new Response(
+      safely(() => {
+        const j = json as {
+          id?: string;
+          created?: number;
+          model?: string;
+          usage?: unknown;
+          choices?: Array<{ index?: number; message?: Record<string, unknown>; finish_reason?: string }>;
+        };
+        const base = {
+          id: j.id ?? `chatcmpl-${Date.now()}`,
+          object: "chat.completion.chunk",
+          created: j.created ?? Math.floor(Date.now() / 1000),
+          model: j.model ?? "",
+        };
+        const lines: string[] = [];
+        const choices = j.choices?.length ? j.choices : [{ index: 0, message: {}, finish_reason: "stop" }];
+        for (const [i, c] of choices.entries()) {
+          const index = c.index ?? i;
+          const { role, content, tool_calls, ...rest } = (c.message ?? {}) as Record<string, unknown>;
+          const delta: Record<string, unknown> = { role: role ?? "assistant", ...rest };
+          if (content !== undefined && content !== null) delta.content = content;
+          if (Array.isArray(tool_calls)) {
+            delta.tool_calls = tool_calls.map((t, k) => ({ index: k, ...(t as Record<string, unknown>) }));
+          }
+          lines.push(`data: ${JSON.stringify({ ...base, choices: [{ index, delta, finish_reason: null }] })}\n\n`);
+          const finish: Record<string, unknown> = {
+            ...base,
+            choices: [{ index, delta: {}, finish_reason: c.finish_reason ?? "stop" }],
+          };
+          if (j.usage != null && i === choices.length - 1) finish.usage = j.usage;
+          lines.push(`data: ${JSON.stringify(finish)}\n\n`);
         }
-        lines.push(`data: ${JSON.stringify({ ...base, choices: [{ index, delta, finish_reason: null }] })}\n\n`);
-        const finish: Record<string, unknown> = { ...base, choices: [{ index, delta: {}, finish_reason: c.finish_reason ?? "stop" }] };
-        if (j.usage != null && i === choices.length - 1) finish.usage = j.usage;
-        lines.push(`data: ${JSON.stringify(finish)}\n\n`);
-      }
-      lines.push("data: [DONE]\n\n");
-      return lines.join("");
-    }, text), {
-      status: 200,
-      headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", ...corsOrigin(req) },
-    });
+        lines.push("data: [DONE]\n\n");
+        return lines.join("");
+      }, text),
+      {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache",
+          ...corsOrigin(req),
+        },
+      },
+    );
   }
   return safely(
     () => Response.json(json, { headers: corsOrigin(req) }),

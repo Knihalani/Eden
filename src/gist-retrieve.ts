@@ -56,7 +56,10 @@ function firstSentence(chunk: string): string {
 }
 
 function lastSentence(chunk: string): string {
-  const parts = String(chunk ?? "").split(SENT_SPLIT).map((p) => p.trim()).filter(Boolean);
+  const parts = String(chunk ?? "")
+    .split(SENT_SPLIT)
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (!parts.length) return "";
   return parts[parts.length - 1]!;
 }
@@ -78,7 +81,9 @@ function joinCap(parts: string[], cap = GIST_CHAR_CAP): string {
 }
 
 function capText(s: string): string {
-  let t = String(s ?? "").trim().slice(0, GIST_CHAR_CAP);
+  let t = String(s ?? "")
+    .trim()
+    .slice(0, GIST_CHAR_CAP);
   const toks = t.split(/\s+/).filter(Boolean);
   if (toks.length > GIST_TOKEN_CAP) t = toks.slice(0, GIST_TOKEN_CAP).join(" ");
   return t;
@@ -260,10 +265,18 @@ function evenPickHier(rows: Gist[], k: number): Gist[] {
 }
 
 function overlapCount(cue: string, text: string): number {
-  const qToks = new Set((String(cue).toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length > 2));
+  const qToks = new Set(
+    (
+      String(cue)
+        .toLowerCase()
+        .match(/[a-z0-9]+/g) ?? []
+    ).filter((w) => w.length > 2),
+  );
   if (!qToks.size) return 0;
   let n = 0;
-  for (const w of String(text ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+  for (const w of String(text ?? "")
+    .toLowerCase()
+    .match(/[a-z0-9]+/g) ?? []) {
     if (qToks.has(w)) n++;
   }
   return n;
@@ -307,11 +320,7 @@ function scoreHier(cue: string, rows: Gist[], k: number): Gist[] {
   return picked;
 }
 
-export function retrieveGists(
-  dir: string,
-  cue: string,
-  opts?: { k?: number; session?: string },
-): GistHit[] {
+export function retrieveGists(dir: string, cue: string, opts?: { k?: number; session?: string }): GistHit[] {
   try {
     const q = String(cue ?? "").trim();
     if (!q) return [];
@@ -370,9 +379,16 @@ export function leftoverChunksForGists<T extends { id?: string; text?: string }>
     if (!srcs.length) return rows.slice(0, cap);
     let order = rows;
     try {
-      const gistQ = (hits || []).map((h) => String(h?.text ?? "")).filter(Boolean).join(" ");
+      const gistQ = (hits || [])
+        .map((h) => String(h?.text ?? ""))
+        .filter(Boolean)
+        .join(" ");
       if (gistQ) {
-        const ranked = bm25Rank(gistQ, rows.map((r) => String(r.text ?? "")), rows.length);
+        const ranked = bm25Rank(
+          gistQ,
+          rows.map((r) => String(r.text ?? "")),
+          rows.length,
+        );
         if (ranked.length) {
           const seen = new Set<number>();
           const next: T[] = [];
