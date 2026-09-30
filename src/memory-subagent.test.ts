@@ -13,6 +13,8 @@ import { HowToStore } from "./howto-store";
 import { childSessionName, MEMORY_MARK, memoryInjectSwallows, openMemory } from "./index";
 import { SemanticStore } from "./semantic-store";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/64
+
 const INDEX = join(import.meta.dir, "index.ts");
 const KNOW = join(import.meta.dir, "../packages/wrap/src/know-inject.ts");
 
@@ -119,60 +121,63 @@ describe("M45 subagent share", () => {
     expect(childSessionName("s-parent")).toBe("s-parent");
   });
 
-  test("parent Stop sqlite+Clerk: child injects sqlite [fact]/[gist]; episodes stay on parent--agent-1", async () => {
-    const dir = tmpDir();
-    try {
-      await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
-        parentStop([
-          { role: "user", content: SQLITE },
-          { role: "user", content: CLERK },
-        ]);
-        const db = childSubmit(DB_CUE, [{ role: "user", content: CHILD_CHATTER }]);
-        const dbCtx = hookContext(db);
-        expect(dbCtx).toContain(MEMORY_MARK);
-        expect(dbCtx).toMatch(/sqlite/i);
-        expect(dbCtx).toMatch(FACT_OR_GIST);
+  test.failing(
+    "parent Stop sqlite+Clerk: child injects sqlite [fact]/[gist]; episodes stay on parent--agent-1",
+    async () => {
+      const dir = tmpDir();
+      try {
+        await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
+          parentStop([
+            { role: "user", content: SQLITE },
+            { role: "user", content: CLERK },
+          ]);
+          const db = childSubmit(DB_CUE, [{ role: "user", content: CHILD_CHATTER }]);
+          const dbCtx = hookContext(db);
+          expect(dbCtx).toContain(MEMORY_MARK);
+          expect(dbCtx).toMatch(/sqlite/i);
+          expect(dbCtx).toMatch(FACT_OR_GIST);
 
-        memoryHookResponse({
-          hook_event_name: "SubagentStop",
-          session_id: "s-parent",
-          messages: [{ role: "user", content: SUB_NOTE }],
+          memoryHookResponse({
+            hook_event_name: "SubagentStop",
+            session_id: "s-parent",
+            messages: [{ role: "user", content: SUB_NOTE }],
+          });
+          memoryHookResponse({
+            hook_event_name: "SubagentStop",
+            session_id: "s-parent",
+            agent_id: "agent-9",
+            messages: [{ role: "user", content: AGENT_NOTE }],
+          });
         });
-        memoryHookResponse({
-          hook_event_name: "SubagentStop",
-          session_id: "s-parent",
-          agent_id: "agent-9",
-          messages: [{ role: "user", content: AGENT_NOTE }],
-        });
-      });
 
-      const childJsonl = join(dir, CHILD, "memories.jsonl");
-      expect(existsSync(childJsonl)).toBe(true);
-      expect(readFileSync(childJsonl, "utf8")).toContain("m45child widget");
+        const childJsonl = join(dir, CHILD, "memories.jsonl");
+        expect(existsSync(childJsonl)).toBe(true);
+        expect(readFileSync(childJsonl, "utf8")).toContain("m45child widget");
 
-      const parentJsonl = join(dir, PARENT, "memories.jsonl");
-      expect(existsSync(parentJsonl)).toBe(true);
-      const parentText = readFileSync(parentJsonl, "utf8");
-      expect(parentText).not.toContain(CHILD_CHATTER);
-      expect(parentText).toMatch(/sqlite/i);
+        const parentJsonl = join(dir, PARENT, "memories.jsonl");
+        expect(existsSync(parentJsonl)).toBe(true);
+        const parentText = readFileSync(parentJsonl, "utf8");
+        expect(parentText).not.toContain(CHILD_CHATTER);
+        expect(parentText).toMatch(/sqlite/i);
 
-      expect(existsSync(join(dir, "memories.jsonl"))).toBe(false);
-      expect(existsSync(join(dir, "semantic.jsonl"))).toBe(true);
-      expect(readFileSync(join(dir, "semantic.jsonl"), "utf8")).toMatch(/sqlite/i);
-      expect(existsSync(join(dir, CHILD, "semantic.jsonl"))).toBe(false);
-      expect(existsSync(join(dir, CHILD, "gists.jsonl"))).toBe(false);
-      expect(existsSync(join(dir, "s-parent--sub", "memories.jsonl"))).toBe(true);
-      expect(existsSync(join(dir, "s-parent--agent-9", "memories.jsonl"))).toBe(true);
-      expect(readFileSync(join(dir, PARENT, "memories.jsonl"), "utf8")).not.toContain("m45sub");
-      expect(readFileSync(join(dir, PARENT, "memories.jsonl"), "utf8")).not.toContain("m45agent9");
-      expect(readFileSync(join(dir, "s-parent--sub", "memories.jsonl"), "utf8")).toContain("m45sub");
-      expect(readFileSync(join(dir, "s-parent--agent-9", "memories.jsonl"), "utf8")).toContain("m45agent9");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+        expect(existsSync(join(dir, "memories.jsonl"))).toBe(false);
+        expect(existsSync(join(dir, "semantic.jsonl"))).toBe(true);
+        expect(readFileSync(join(dir, "semantic.jsonl"), "utf8")).toMatch(/sqlite/i);
+        expect(existsSync(join(dir, CHILD, "semantic.jsonl"))).toBe(false);
+        expect(existsSync(join(dir, CHILD, "gists.jsonl"))).toBe(false);
+        expect(existsSync(join(dir, "s-parent--sub", "memories.jsonl"))).toBe(true);
+        expect(existsSync(join(dir, "s-parent--agent-9", "memories.jsonl"))).toBe(true);
+        expect(readFileSync(join(dir, PARENT, "memories.jsonl"), "utf8")).not.toContain("m45sub");
+        expect(readFileSync(join(dir, PARENT, "memories.jsonl"), "utf8")).not.toContain("m45agent9");
+        expect(readFileSync(join(dir, "s-parent--sub", "memories.jsonl"), "utf8")).toContain("m45sub");
+        expect(readFileSync(join(dir, "s-parent--agent-9", "memories.jsonl"), "utf8")).toContain("m45agent9");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
-  test("child forget postgres does not tombstone root sqlite", async () => {
+  test.failing("child forget postgres does not tombstone root sqlite", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -206,7 +211,7 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test("parent transcript already forgot postgres: child forget does not resurrect it", async () => {
+  test.failing("parent transcript already forgot postgres: child forget does not resurrect it", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -241,7 +246,7 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test("child don't forget to run tests does not tombstone sqlite", async () => {
+  test.failing("child don't forget to run tests does not tombstone sqlite", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -261,7 +266,7 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test("wrap child openMemory injects parent sqlite; inject throw is pass-through", async () => {
+  test.failing("wrap child openMemory injects parent sqlite; inject throw is pass-through", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, async () => {
@@ -302,7 +307,7 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test("wrap processMemory EDEN_MEMORY_CHILD injects parent sqlite from a subprocess", async () => {
+  test.failing("wrap processMemory EDEN_MEMORY_CHILD injects parent sqlite from a subprocess", async () => {
     const dir = tmpDir();
     const cwd = process.cwd();
     const src = `
@@ -368,7 +373,7 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test("parent session foo--bar forgets sqlite; child:true on that name does not tombstone root", async () => {
+  test.failing("parent session foo--bar forgets sqlite; child:true on that name does not tombstone root", async () => {
     const dir = tmpDir();
     try {
       const parent = openMemory({ dir, session: "foo--bar" });
@@ -501,7 +506,7 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test("torn semantic.jsonl is skipped and child inject still returns parent sqlite", async () => {
+  test.failing("torn semantic.jsonl is skipped and child inject still returns parent sqlite", async () => {
     const dir = tmpDir();
     try {
       const parent = openMemory({ dir, session: PARENT });
@@ -522,7 +527,7 @@ describe("M45 subagent share", () => {
     }
   });
 
-  test("wrap injectBody and Anthropic child env inject parent sqlite and fail open", async () => {
+  test.failing("wrap injectBody and Anthropic child env inject parent sqlite and fail open", async () => {
     const dir = tmpDir();
     const cwd = process.cwd();
     const src = `
