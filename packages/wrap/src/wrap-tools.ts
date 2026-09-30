@@ -374,13 +374,12 @@ function staleRead(
 const NO_LIVE: StretchProgram[] = [];
 const NO_PREFIX: { p: StretchProgram; input: Record<string, unknown> }[] = [];
 const FLUSH_NAME = /^(notify|complete|finalize|done)$/i;
-// Frozen at runtime, but @eden/ir types EvidenceLedger's arrays as mutable; no in-repo code mutates a ledger.
-const EMPTY_LEDGER = Object.freeze({
-  required: Object.freeze([] as string[]),
-  present: Object.freeze([] as string[]),
-  absent: Object.freeze([] as string[]),
-  failed: Object.freeze([] as string[]),
-}) as EvidenceLedger;
+const EMPTY_LEDGER: EvidenceLedger = Object.freeze({
+  required: Object.freeze([]),
+  present: Object.freeze([]),
+  absent: Object.freeze([]),
+  failed: Object.freeze([]),
+});
 
 export function safely<T>(fn: () => T, fallback: T): T {
   try {

@@ -273,10 +273,10 @@ export type OnlineWarning = SignalBudget & {
 };
 
 export type EvidenceLedger = {
-  required: string[];
-  present: string[];
-  absent: string[];
-  failed: string[];
+  required: readonly string[];
+  present: readonly string[];
+  absent: readonly string[];
+  failed: readonly string[];
 };
 
 export type StretchTrace = {
