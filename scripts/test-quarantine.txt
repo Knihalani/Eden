@@ -11,7 +11,6 @@ benchmarks/memoryagentbench/memory-ranker.test.ts  https://github.com/Knihalani/
 src/memory-char.test.ts                            https://github.com/Knihalani/Eden/issues/39
 src/memory-ranker.test.ts                          https://github.com/Knihalani/Eden/issues/59
 src/memory-router-inject.test.ts                   https://github.com/Knihalani/Eden/issues/61
-src/memory-subagent.test.ts                        https://github.com/Knihalani/Eden/issues/64
 
 # Every test in the file fails for one code change, so skipping the file loses no passing test.
 packages/measure/src/board.test.ts      https://github.com/Knihalani/Eden/issues/27
