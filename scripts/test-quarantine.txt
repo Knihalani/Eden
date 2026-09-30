@@ -19,7 +19,6 @@ src/memory-ranker.test.ts                          https://github.com/Knihalani/
 src/memory-recsys.test.ts                          https://github.com/Knihalani/Eden/issues/60
 src/memory-router-inject.test.ts                   https://github.com/Knihalani/Eden/issues/61
 src/memory-subagent.test.ts                        https://github.com/Knihalani/Eden/issues/64
-src/memory-wal.test.ts                             https://github.com/Knihalani/Eden/issues/65
 
 # Every test in the file fails for one code change, so skipping the file loses no passing test.
 packages/measure/src/board.test.ts      https://github.com/Knihalani/Eden/issues/27
