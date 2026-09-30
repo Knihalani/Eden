@@ -4,8 +4,8 @@ Passive memory for Claude Code. Durable facts persist without `remember()`. Matc
 
 `/plugin marketplace add .` then `/plugin install eden-memory`. Needs Bun. Works from this checkout, `EDEN_ROOT`, `eden hookd`/`eden wrap`, `eden` on PATH, or `bun $EDEN_ROOT/packages/cli/src/cli.ts hook`. `eden setup` installs the same hooks on Claude, Gemini, Codex, and OpenCode when present. Wrap injects the same store (`messages` or Gemini `contents[]`). Cursor-style and kebab OpenCode events work via hookd.
 
-hookd answers only callers that send its per-install key, which it keeps in `$EDEN_HOME/hookd.key`
-(mode 0600). The plugin and the hooks `eden setup` writes read it there. Hooks written by an older
-`eden setup` do not send it and get `{}` from hookd: run `eden setup` again.
+hookd answers only callers that send its key, a new one it writes to `$EDEN_HOME/hookd.key` (mode
+0600) each time it starts. The plugin and the hooks `eden setup` writes read it there. Hooks written
+by an older `eden setup` do not send it and get `{}` from hookd: run `eden setup` again.
 
 UserPromptSubmit / PreCompact inject then store. SessionStart briefs pins and gists then stores — not last-k retrieve, not how-to. Empty cue skips inject. PostToolUse / Stop / SessionEnd / SubagentStop store only.
