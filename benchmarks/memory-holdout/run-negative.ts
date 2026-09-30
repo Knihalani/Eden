@@ -14,7 +14,8 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, memoryConsent, memoryRetrieveCap, openMemory } from "../../src/index.ts";
+import { MEMORY_MARK, memoryRetrieveCap, openMemory } from "../../src/index.ts";
+import { memoryConsent } from "../../src/memory-consent.ts";
 
 export const HOLD_DIR = import.meta.dir;
 export const FIXTURE_PATH = join(HOLD_DIR, "negative-fixture.json");
