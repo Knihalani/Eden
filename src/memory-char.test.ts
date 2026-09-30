@@ -7,9 +7,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, openMemory, pathCues, type AgentMemory } from "./index";
+import { MEMORY_MARK, openMemory, type AgentMemory } from "./index";
+import { pathCues } from "./memory-sota";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
+
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/39
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
@@ -83,7 +86,7 @@ describe("M1.3 (1) please / fix the / we need to dropped", () => {
   const fixThe = "fix the flake in auth.test.ts";
   const weNeed = "we need to bump the timeout in the worker.";
 
-  test("today: CHAT/extractDurable stores please, fix the, we need to; secrets still redacted", () => {
+  test.failing("today: CHAT/extractDurable stores please, fix the, we need to; secrets still redacted", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: please }]);
       mem.observe([{ role: "user", content: fixThe }]);
@@ -122,7 +125,7 @@ describe("M1.3 (1) please / fix the / we need to dropped", () => {
 });
 
 describe("M1.3 (2) auth.ts not a path cue", () => {
-  test("today: pathCues keeps dotted filenames and directory segments", () => {
+  test.failing("today: pathCues keeps dotted filenames and directory segments", () => {
     const cues = pathCues("never mock src/lib/auth.ts in unit tests.");
     expect(cues.has("auth.ts")).toBe(true);
     expect(cues.has("src")).toBe(true);
@@ -190,7 +193,7 @@ describe("M1.3 (5) sal=0.6 pin + notesFor cues", () => {
   const weak = "We changed the timeout in the worker.";
 
   // WAVE-FIX: M5.3
-  test("sal=0.6 is persist-pinned through 2000 eviction-pressure remembers", () => {
+  test.failing("sal=0.6 is persist-pinned through 2000 eviction-pressure remembers", () => {
     withMem((mem) => {
       const rec = mem.remember(weak);
       expect(rec.sal).toBe(0.6);
@@ -205,7 +208,7 @@ describe("M1.3 (5) sal=0.6 pin + notesFor cues", () => {
     });
   }, 60_000);
 
-  test("notesFor clone keeps cues so intention text stays verbatim", () => {
+  test.failing("notesFor clone keeps cues so intention text stays verbatim", () => {
     withMem((mem) => {
       mem.remember("Never console.log in production", { kind: "constraint" });
       const hit = mem.notesFor("console.log").find((r) => /console\.log/i.test(r.text));
@@ -216,7 +219,7 @@ describe("M1.3 (5) sal=0.6 pin + notesFor cues", () => {
     });
   });
 
-  test("close+reopen still treats intention as verbatim (deriveCues on load)", () => {
+  test.failing("close+reopen still treats intention as verbatim (deriveCues on load)", () => {
     const dir = tmpDir("eden-m53-reload-");
     try {
       const a = openMemory({ dir });

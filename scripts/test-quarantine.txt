@@ -5,9 +5,7 @@
 # when gitignored data is absent. Both carry a comment that links their issue.
 
 # Cannot load: they import code the whatever loop deleted.
-benchmarks/memoryagentbench/memory-char.test.ts    https://github.com/Knihalani/Eden/issues/39
 benchmarks/memoryagentbench/memory-fixes.test.ts   https://github.com/Knihalani/Eden/issues/13
-src/memory-char.test.ts                            https://github.com/Knihalani/Eden/issues/39
 
 # Every test in the file fails for one code change, so skipping the file loses no passing test.
 packages/measure/src/board.test.ts      https://github.com/Knihalani/Eden/issues/27
