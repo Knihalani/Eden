@@ -274,7 +274,7 @@ describe("M13 honest off switch (wrap)", () => {
           expect(JSON.stringify(openaiOut)).not.toMatch(/403/);
 
           const anth = { system: "be brief", messages: [{ role: "user", content: M13_SQLITE_Q }] };
-          let anthOut: typeof anth | undefined;
+          let anthOut: ReturnType<typeof withKnowFactsAnthropic> | undefined;
           expect(() => {
             anthOut = withKnowFactsAnthropic(anth);
           }).not.toThrow();
@@ -567,7 +567,7 @@ describe("M41 wrap place cues", () => {
     const real = AgentMemory.prototype.notesFor;
     const notesFor = spyOn(AgentMemory.prototype, "notesFor").mockImplementation(function (this: AgentMemory, text?: string, k?: number, opts?: { fuse?: boolean }) {
       cues.push(String(text ?? ""));
-      return real.call(this, text, k, opts);
+      return real.call(this, text, k);
     });
     try {
       mem.remember("Kai timezone is Pacific");
@@ -597,7 +597,7 @@ describe("M41 wrap place cues", () => {
     const real = AgentMemory.prototype.notesFor;
     const notesFor = spyOn(AgentMemory.prototype, "notesFor").mockImplementation(function (this: AgentMemory, text?: string, k?: number, opts?: { fuse?: boolean }) {
       cues.push(String(text ?? ""));
-      return real.call(this, text, k, opts);
+      return real.call(this, text, k);
     });
     const proc = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
     try {

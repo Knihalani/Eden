@@ -170,7 +170,7 @@ describe("openaiIsland scrapes provider usage", () => {
         }),
         { status: 200 },
       );
-    const island = openaiIsland({ fetch: fn as typeof fetch });
+    const island = openaiIsland({ fetch: fn as unknown as typeof fetch });
     const out = await island({ system: "s", input: { repos: ["acme/app"] }, outputSchema: {} });
     expect(out).toBeInstanceOf(IslandReply);
     expect(unwrapIsland(out)).toEqual({
