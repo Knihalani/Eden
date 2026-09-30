@@ -1,4 +1,14 @@
-import { asRecord, getPath, inDistribution, interpolateSlots, mayServe, PTC_CALLERS, setKey, type StretchProgram, type ToolStep } from "@eden/ir";
+import {
+  asRecord,
+  getPath,
+  inDistribution,
+  interpolateShell,
+  mayServe,
+  PTC_CALLERS,
+  setKey,
+  type StretchProgram,
+  type ToolStep,
+} from "@eden/ir";
 import { parameterizeUrl, extractCommandUrls } from "../../core/src/urls";
 import { parseNamedCli, familyId } from "../../core/src/named-cli";
 import { commandShapeCached } from "../../core/src/shapes";
@@ -141,7 +151,8 @@ export function recoverShellInput(
       }
       cur[parts.at(-1)!] = pool.values[idx]!;
     }
-    if (interpolateSlots(expr, input) === live) return input;
+    // Rendered the way the runtime renders a shell command, so a match replays `live` itself.
+    if (interpolateShell(expr, input) === live) return input;
   }
   return null;
 }
