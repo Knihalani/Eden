@@ -3,7 +3,17 @@
  * Pin salience threshold is M5.3 — this file does not assert sal=0.6 pinning.
  */
 import { describe, expect, test } from "bun:test";
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, unlinkSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory } from "./index";
@@ -235,6 +245,36 @@ describe("M5.1 persist fail-open + mode + secrets", () => {
       for (const line of blob.split("\n").filter(Boolean)) JSON.parse(line);
       expect(blob).not.toMatch(/\bsk-/);
       expect(blob).not.toMatch(/\bghp_/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The extracted row was redacted, but the whole-turn episode row and the
+  // SemanticStore rows and tombstones it fed kept the raw value (a8370beb5).
+  test("whole-turn row and semantic tombstones keep no raw token in any store file", () => {
+    const dir = tmpDir("eden-m51-rawrow-");
+    const key = "sk-ant-api03-SECRETVALUE99";
+    const ghp = "ghp_abc123XYZ999";
+    try {
+      const mem = openMemory({ dir });
+      mem.observe([{ role: "user", content: `The deploy key is ${key}. Auth is Clerk.` }]);
+      mem.observe([{ role: "user", content: `The github token is ${ghp}` }]);
+      mem.observe([{ role: "user", content: "The deploy key is kept in the vault." }]);
+      mem.close();
+      const rows = mem.memories().map((r) => r.text);
+      expect(rows).toContain("The deploy key is [REDACTED]");
+      expect(rows).toContain("The github token is [REDACTED]");
+      const semantic = readFileSync(join(dir, "semantic.jsonl"), "utf8");
+      expect(semantic).toMatch(/"o":"\[REDACTED\]"[^\n]*"tombstone":true/);
+      const files = readdirSync(dir, { recursive: true, encoding: "utf8" });
+      const stored = files.filter((f) => statSync(join(dir, f)).isFile());
+      expect(stored.length).toBeGreaterThan(0);
+      const leaks = stored.filter((f) => {
+        const text = readFileSync(join(dir, f), "utf8");
+        return text.includes("SECRETVALUE99") || text.includes(ghp);
+      });
+      expect(leaks).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
