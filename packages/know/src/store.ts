@@ -1641,40 +1641,6 @@ class Crawl {
     return { hid, p, trail, qid };
   }
 
-  remapKey(k: FrKey, rid: (id: number) => number): FrKey {
-    return { hid: rid(k.hid), p: k.p.map(rid), trail: k.trail, qid: rid(k.qid) };
-  }
-
-  collectUsed(): { strs: string[]; rid: (id: number) => number; sid: (s: string) => number } {
-    const seen = new Set<string>([""]);
-    const take = (id: number) => {
-      const s = this.tok.get(id);
-      if (s) seen.add(s);
-    };
-    for (const e of this.frontier.values()) {
-      take(e.k.hid);
-      for (const id of e.k.p) take(id);
-      take(e.k.qid);
-      take(e.fid);
-    }
-    for (const e of this.pages.values()) {
-      take(e.k.hid);
-      for (const id of e.k.p) take(id);
-      take(e.k.qid);
-      take(e.src);
-      if (e.digest && !isHex16(e.digest)) seen.add(e.digest);
-    }
-    const strs = [...seen].filter(Boolean).sort();
-    const map = new Map<string, number>();
-    strs.forEach((s, i) => map.set(s, i + 1));
-    const rid = (id: number) => {
-      if (!id) return 0;
-      return map.get(this.tok.get(id)) || 0;
-    };
-    const sid = (s: string) => (s ? map.get(s) || 0 : 0);
-    return { strs, rid, sid };
-  }
-
   writeGrouped(
     w: W,
     items: { k: FrKey; write: (w: W) => void }[],
