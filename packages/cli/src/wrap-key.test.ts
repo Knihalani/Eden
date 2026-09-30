@@ -63,15 +63,20 @@ describe("resolveWrapKey", () => {
     }
   });
 
-  test("with no key it writes a 0600 config holding a fresh key, and later calls reuse it", () => {
+  test("with no key it returns a fresh key, saved 0600 with the bound origin only on save", () => {
     const first = resolveWrapKey([]);
-    expect(first.created).toBe(true);
     expect(first.key).toMatch(KEY_SHAPE);
     expect(first.key.startsWith(LOCAL_KEY_PREFIX)).toBe(true);
+    expect(first.replacesDevKey).toBe(false);
+    expect(existsSync(configAt(home))).toBe(false);
+    expect(first.save?.("http://127.0.0.1:9911")).toBe(true);
     expect(statSync(configAt(home)).mode & 0o777).toBe(0o600);
     expect(statSync(join(home, ".eden")).mode & 0o777).toBe(0o700);
-    expect(readKey(home)).toBe(first.key);
-    expect(resolveWrapKey([])).toEqual({ key: first.key, created: false });
+    expect(JSON.parse(readFileSync(configAt(home), "utf8"))).toEqual({
+      api_key: first.key,
+      base_url: "http://127.0.0.1:9911",
+    });
+    expect(resolveWrapKey([])).toEqual({ key: first.key });
     // Every client resolves the same key through the same config path.
     expect(resolveApiKey([])).toBe(first.key);
   });
@@ -82,21 +87,48 @@ describe("resolveWrapKey", () => {
     expect(resolveWrapKey([]).key).not.toBe(one);
   });
 
-  test("an explicit key, a configured key, --dev or EDEN_DEV=1 wins and nothing is written", () => {
-    expect(resolveWrapKey(["--key", "eden_flag"])).toEqual({ key: "eden_flag", created: false });
+  test("an explicit key, a configured key, --dev or EDEN_DEV=1 wins and nothing is saved", () => {
+    expect(resolveWrapKey(["--key", "eden_flag"])).toEqual({ key: "eden_flag" });
     process.env.EDEN_API_KEY = "eden_env";
-    expect(resolveWrapKey([])).toEqual({ key: "eden_env", created: false });
+    expect(resolveWrapKey([])).toEqual({ key: "eden_env" });
     delete process.env.EDEN_API_KEY;
-    expect(resolveWrapKey(["--dev"])).toEqual({ key: "eden_dev", created: false });
+    expect(resolveWrapKey(["--dev"])).toEqual({ key: "eden_dev" });
     process.env.EDEN_DEV = "1";
-    expect(resolveWrapKey([])).toEqual({ key: "eden_dev", created: false });
+    expect(resolveWrapKey([])).toEqual({ key: "eden_dev" });
     delete process.env.EDEN_DEV;
     expect(existsSync(configAt(home))).toBe(false);
 
     mkdirSync(join(home, ".eden"), { recursive: true });
     writeFileSync(configAt(home), JSON.stringify({ api_key: "eden_login", base_url: "http://127.0.0.1:8788" }));
-    expect(resolveWrapKey(["--dev"])).toEqual({ key: "eden_login", created: false });
-    expect(readKey(home)).toBe("eden_login");
+    expect(resolveWrapKey(["--dev"])).toEqual({ key: "eden_login" });
+    expect(resolveWrapKey([])).toEqual({ key: "eden_login" });
+  });
+
+  test("an eden_dev saved by an old init --dev is replaced unless --dev, EDEN_DEV=1 or an explicit key", () => {
+    mkdirSync(join(home, ".eden"), { recursive: true });
+    writeFileSync(configAt(home), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    expect(resolveWrapKey(["--dev"])).toEqual({ key: "eden_dev" });
+    process.env.EDEN_DEV = "1";
+    expect(resolveWrapKey([])).toEqual({ key: "eden_dev" });
+    delete process.env.EDEN_DEV;
+    process.env.EDEN_API_KEY = "eden_dev";
+    expect(resolveWrapKey([])).toEqual({ key: "eden_dev" });
+    delete process.env.EDEN_API_KEY;
+
+    const fresh = resolveWrapKey([]);
+    expect(fresh.key).toMatch(KEY_SHAPE);
+    expect(fresh.replacesDevKey).toBe(true);
+    expect(fresh.save?.("http://127.0.0.1:9911")).toBe(true);
+    expect(readKey(home)).toBe(fresh.key);
+    expect(resolveApiKey([])).toBe(fresh.key);
+  });
+
+  test("save refuses when another boot saved a key first, and leaves it alone", () => {
+    const mine = resolveWrapKey([]);
+    const theirs = resolveWrapKey([]);
+    expect(theirs.save?.("http://127.0.0.1:9912")).toBe(true);
+    expect(mine.save?.("http://127.0.0.1:9911")).toBe(false);
+    expect(readKey(home)).toBe(theirs.key);
   });
 
   test("writeConfig replaces a looser config.json with a new 0600 file", () => {
@@ -110,10 +142,11 @@ describe("resolveWrapKey", () => {
     expect(readKey(home)).toBe("eden_login");
   });
 
-  test("a config without a key keeps its other fields", () => {
+  test("a config without a key keeps its other fields; base_url becomes the bound origin", () => {
     mkdirSync(join(home, ".eden"), { recursive: true });
-    writeFileSync(configAt(home), JSON.stringify({ base_url: "http://127.0.0.1:9911", steer_hooks: false }));
-    const { key } = resolveWrapKey([]);
+    writeFileSync(configAt(home), JSON.stringify({ base_url: "https://useeden.vercel.app", steer_hooks: false }));
+    const { key, save } = resolveWrapKey([]);
+    expect(save?.("http://127.0.0.1:9911")).toBe(true);
     const cfg = JSON.parse(readFileSync(configAt(home), "utf8")) as Record<string, unknown>;
     expect(cfg).toEqual({ base_url: "http://127.0.0.1:9911", steer_hooks: false, api_key: key });
   });
@@ -146,15 +179,30 @@ function childEnv(home: string, extra: Record<string, string>): Record<string, s
 
 type Wrap = { url: string; stop: () => Promise<string> };
 
-async function bootWrap(home: string, args: string[] = [], env: Record<string, string> = {}): Promise<Wrap> {
-  const port = freePort();
-  const url = `http://127.0.0.1:${port}`;
-  const proc = Bun.spawn([process.execPath, CLI, "wrap", "--no-coding", "--port", String(port), ...args], {
-    env: childEnv(home, { EDEN_WRAP_URL: url, ...env }),
+type WrapProc = Subprocess<"ignore", "pipe", "pipe">;
+
+function spawnWrap(home: string, args: string[], env: Record<string, string> = {}): WrapProc {
+  const proc = Bun.spawn([process.execPath, CLI, "wrap", "--no-coding", ...args], {
+    env: childEnv(home, env),
     stdout: "pipe",
     stderr: "pipe",
   });
   procs.push(proc);
+  return proc;
+}
+
+/** Waits for a wrap that should refuse to start; kills it after 10 s if it did start. */
+async function exitCode(proc: Subprocess): Promise<number> {
+  const timer = setTimeout(() => proc.kill(), 10_000);
+  const code = await proc.exited;
+  clearTimeout(timer);
+  return code;
+}
+
+async function bootWrap(home: string, args: string[] = [], env: Record<string, string> = {}): Promise<Wrap> {
+  const port = freePort();
+  const url = `http://127.0.0.1:${port}`;
+  const proc = spawnWrap(home, ["--port", String(port), ...args], env);
   const stop = async () => {
     proc.kill();
     await proc.exited;
@@ -184,13 +232,49 @@ describe("eden wrap on loopback with no key", () => {
     expect(statSync(configAt(home)).mode & 0o777).toBe(0o600);
     expect((JSON.parse(readFileSync(configAt(home), "utf8")) as { base_url: string }).base_url).toBe(first.url);
     const out1 = await first.stop();
-    expect(out1).toContain(`Created a local wrap key in ${configAt(home)} (mode 0600).`);
+    const saved = `Saved a per-install wrap key in ${configAt(home)} (mode 0600). eden clients read it there.`;
+    expect(out1).toContain(saved);
     expect(out1).not.toContain(key);
 
     const second = await bootWrap(home);
     const out2 = await second.stop();
     expect(readKey(home)).toBe(key);
-    expect(out2).not.toContain("Created a local wrap key");
+    expect(out2).not.toContain("Saved a per-install wrap key");
+  });
+
+  test("the saved base_url is the port wrap bound, not a hosted EDEN_BASE_URL", async () => {
+    const home = tempHome();
+    const wrap = await bootWrap(home, [], { EDEN_BASE_URL: "https://useeden.vercel.app" });
+    await wrap.stop();
+    expect((JSON.parse(readFileSync(configAt(home), "utf8")) as { base_url: string }).base_url).toBe(wrap.url);
+  });
+
+  test("a port another process holds saves no key", async () => {
+    const home = tempHome();
+    const held = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("someone else") });
+    try {
+      expect(await exitCode(spawnWrap(home, ["--port", String(held.port)]))).not.toBe(0);
+    } finally {
+      held.stop(true);
+    }
+    expect(existsSync(configAt(home))).toBe(false);
+  });
+
+  test("an eden_dev saved by an old eden init --dev is replaced on a plain boot", async () => {
+    const home = tempHome();
+    mkdirSync(join(home, ".eden"), { recursive: true });
+    const old = { api_key: "eden_dev", base_url: "http://127.0.0.1:8788", steer_hooks: false };
+    writeFileSync(configAt(home), JSON.stringify(old));
+    const wrap = await bootWrap(home);
+    try {
+      expect(await inboxStatus(wrap.url, "Bearer eden_dev")).toBe(401);
+      expect(await inboxStatus(wrap.url, `Bearer ${readKey(home)}`)).toBe(200);
+    } finally {
+      expect(await wrap.stop()).toContain(", replacing the public eden_dev.");
+    }
+    const cfg = JSON.parse(readFileSync(configAt(home), "utf8")) as Record<string, unknown>;
+    expect(cfg).toEqual({ api_key: readKey(home), base_url: wrap.url, steer_hooks: false });
+    expect(readKey(home)).toMatch(KEY_SHAPE);
   });
 
   test("/v1 refuses Bearer eden_dev and accepts only the generated key", async () => {
@@ -220,17 +304,8 @@ describe("eden wrap on loopback with no key", () => {
 
   test("a non-loopback host still needs a key and writes none", async () => {
     const home = tempHome();
-    const args = [CLI, "wrap", "--no-coding", "--host", "0.0.0.0", "--port", String(freePort())];
-    const proc = Bun.spawn([process.execPath, ...args], {
-      env: childEnv(home, {}),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    procs.push(proc);
-    const timer = setTimeout(() => proc.kill(), 10_000);
-    const code = await proc.exited;
-    clearTimeout(timer);
-    expect(code).not.toBe(0);
+    const proc = spawnWrap(home, ["--host", "0.0.0.0", "--port", String(freePort())]);
+    expect(await exitCode(proc)).not.toBe(0);
     expect(await new Response(proc.stderr).text()).toContain("eden needs a key");
     expect(existsSync(configAt(home))).toBe(false);
   });
@@ -247,7 +322,6 @@ describe("local clients use the key a plain eden wrap wrote", () => {
     for (const name of ENV_NAMES) saved[name] = process.env[name];
     for (const name of ENV_NAMES) delete process.env[name];
     process.env.EDEN_HOME = join(home, ".eden");
-    process.env.EDEN_WRAP_URL = wrap.url;
   });
 
   afterEach(async () => {
