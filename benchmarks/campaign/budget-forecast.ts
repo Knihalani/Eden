@@ -9,18 +9,39 @@
  */
 
 import type { StretchProgram } from "@eden/ir";
+import type { ForecastView } from "@eden/measure";
 import {
+  actualSpend,
   createState,
   decideGuard,
   forecastCopy,
   remainingBudget,
-  remainingBudgetForRun,
+  wrapTimeoutMs,
   wrapTools,
   emptyRun,
   type EdenOpts,
+  type RunRecorder,
 } from "@eden/wrap";
 
 export { forecastCopy };
+
+/**
+ * The forecast decideGuard computes for a run: program budget vs actual spend and remaining timeout.
+ * Restored from @eden/wrap, which dropped it as unused in c0deff989; this harness is its only caller.
+ */
+function remainingBudgetForRun(args: {
+  program: StretchProgram;
+  run: RunRecorder;
+  now: number;
+  opts: Pick<EdenOpts, "timeoutMs">;
+}): ForecastView | null {
+  if (!args.program.budget) return null;
+  return remainingBudget({
+    predicted: args.program.budget,
+    actual: actualSpend(args.run, args.now),
+    remainingTimeoutMs: wrapTimeoutMs(args.opts.timeoutMs) - (args.now - args.run.t0),
+  });
+}
 
 /**
  * Pre-registered Wave 15.1 verdict. Recorded before the run.
