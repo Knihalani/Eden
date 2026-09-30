@@ -509,7 +509,7 @@ type SeenState = { map: Map<string, string>; slots: Buffer };
 
 function loadSeenMap(dir: string): SeenState {
   const map = new Map<string, string>();
-  let slots = Buffer.alloc(0);
+  let slots: Buffer = Buffer.alloc(0);
   for (const raw of readFramed(seenPath(dir), SEEN_MAGIC)) {
     const got = decodeSeenPayload(raw, map);
     if (got.byteLength) slots = got;
@@ -1645,7 +1645,7 @@ class Crawl {
     return { hid: rid(k.hid), p: k.p.map(rid), trail: k.trail, qid: rid(k.qid) };
   }
 
-  collectUsed(): { strs: string[]; rid: (id: number) => number } {
+  collectUsed(): { strs: string[]; rid: (id: number) => number; sid: (s: string) => number } {
     const seen = new Set<string>([""]);
     const take = (id: number) => {
       const s = this.tok.get(id);
@@ -3015,7 +3015,7 @@ function crawlQuery(crawl: Crawl, sql: string) {
     }
     m = /^SELECT digest FROM pages WHERE url = (.+)$/i.exec(q);
     if (m) {
-      const d = crawl.pageDigest(unquote(m[1]));
+      const d = crawl.pageDigest(unquote(m[1]!));
       return d ? { digest: d } : null;
     }
     m = /^SELECT url FROM frontier$/i.exec(q);
@@ -3025,7 +3025,7 @@ function crawlQuery(crawl: Crawl, sql: string) {
     }
     m = /^SELECT kept FROM host_prior WHERE host = (.+)$/i.exec(q);
     if (m) {
-      const kept = crawl.hostKept(unquote(m[1]));
+      const kept = crawl.hostKept(unquote(m[1]!));
       return kept === undefined ? null : { kept };
     }
     m = /^SELECT COUNT\(\*\) AS n FROM host_prior WHERE kept = 0$/i.exec(q);
@@ -3124,7 +3124,7 @@ export function openStore(dir = knowDir()) {
   };
 
   const packPath = join(dir, PACK_FILE);
-  let pack: KnowPack | null = null;
+  let pack: KnowPack | null | undefined = null;
   try {
     pack = decodePack(readFileSync(packPath));
   } catch {

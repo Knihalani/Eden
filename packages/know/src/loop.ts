@@ -251,7 +251,9 @@ export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): 
 
 export async function tickFeeds(store: KnowStore, n = FEED_URLS.length): Promise<TickStats> {
   const idx = Number(store.getMeta("feed_idx") || 0);
-  const urls = Array.from({ length: n }, (_, i) => FEED_URLS[(idx + i) % FEED_URLS.length]).filter(Boolean);
+  const urls = Array.from({ length: n }, (_, i) => FEED_URLS[(idx + i) % FEED_URLS.length]).filter(
+    (u): u is string => Boolean(u),
+  );
   const got = await mapPool(urls, Math.min(4, urls.length), async (url) => ({ url, got: await liveGet(url) }));
   let feeds = 0;
   for (const { url, got: r } of got) {
@@ -800,7 +802,7 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
       if (row && row.eid !== 0) continue;
     } else {
       const have = store.hasWalNodes(url);
-      if (have > 0) continue;
+      if (have) continue;
     }
     todo.push(url);
   }

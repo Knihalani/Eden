@@ -1297,7 +1297,7 @@ function takeRow(physical: TableCell[], pending: (PendingSpan | undefined)[], ex
       continue;
     }
     if (p >= physical.length) break;
-    const c = physical[p++];
+    const c = physical[p++]!;
     const span = c.colspan || 1;
     for (let k = 0; k < span; k++) {
       row[col] = c.inner;

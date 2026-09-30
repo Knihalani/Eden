@@ -448,7 +448,7 @@ export function hnTalkUrl(url: string): boolean {
   return path === "/item" || path === "/ask" || path === "/show" || path === "/newest";
 }
 
-const DISCOURSE_HOST_SET = new Set(DISCOURSE_TALK_HOSTS);
+const DISCOURSE_HOST_SET = new Set<string>(DISCOURSE_TALK_HOSTS);
 
 export function discourseTalkUrl(url: string): boolean {
   const host = hostOf(url);
