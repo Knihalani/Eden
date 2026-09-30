@@ -250,7 +250,9 @@ export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): 
 }
 
 export async function tickFeeds(store: KnowStore, n = FEED_URLS.length): Promise<TickStats> {
-  const idx = Number(store.getMeta("feed_idx") || 0);
+  const stored = Number(store.getMeta("feed_idx") || 0);
+  // A corrupt feed_idx would index no feed and be written back unchanged, so it would never recover.
+  const idx = Number.isInteger(stored) && stored >= 0 ? stored : 0;
   const urls = Array.from({ length: n }, (_, i) => FEED_URLS[(idx + i) % FEED_URLS.length]).filter(
     (u): u is string => Boolean(u),
   );

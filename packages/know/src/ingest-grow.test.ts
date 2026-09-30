@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +6,7 @@ import { adaptCapitalLabel, noteCapitalLabel, resetAdaptForTest } from "./adapt"
 import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApiBatchUrl, wikiRevisionPages, ttlDaysFor } from "./extract";
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
-import { tickRecrawl, tickWikiGrow } from "./loop";
+import { tickFeeds, tickRecrawl, tickWikiGrow } from "./loop";
 import { compactDue, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, expensiveLaneDue, shardOwns, shardWetIndex } from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
@@ -94,6 +94,34 @@ describe("feeds", () => {
     expect(SEED_URLS.some((u) => u.includes("developer.mozilla.org"))).toBe(true);
     expect(DEFAULT_WIKI).toBe(0);
     expect(DEFAULT_WIKI_GROW).toBe(0);
+  });
+
+  test("a corrupt feed_idx falls back to 0 instead of sticking", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-know-feeds-"));
+    const s = openStore(dir);
+    const fetched: string[] = [];
+    const rss = "<rss><channel><item><link>https://www.rfc-editor.org/rfc/rfc9110</link></item></channel></rss>";
+    const offline = async (input: string | URL | Request): Promise<Response> => {
+      const url = input instanceof Request ? input.url : String(input);
+      fetched.push(url);
+      return new Response(url.endsWith("/robots.txt") ? "User-agent: *\nAllow: /\n" : rss);
+    };
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(offline as typeof fetch);
+    try {
+      // "NaN" is what the bug wrote back; "0.5" indexes nothing and was written back unchanged too.
+      for (const bad of ["NaN", "not-a-number", "0.5"]) {
+        fetched.length = 0;
+        s.setMeta("feed_idx", bad);
+        const stats = await tickFeeds(s);
+        expect(fetched).toContain(FEED_URLS[0]!);
+        expect(stats.feeds).toBe(1);
+        expect(s.getMeta("feed_idx")).toBe("0");
+      }
+    } finally {
+      fetchSpy.mockRestore();
+      s.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
