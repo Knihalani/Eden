@@ -1,4 +1,5 @@
 import { getPath } from "./path";
+import type { Binding } from "./types";
 
 /**
  * Tools whose `command` argument is a command line a shell parses.
@@ -11,6 +12,18 @@ export const SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "bash", "shell"
 /** Is `key` of `tool` a shell command line? A shape-derived name (`Bash:kubectl.get.pods`) counts as its tool. */
 export function isShellCommand(tool: string, key: string): boolean {
   return key === "command" && SHELL_TOOLS.has(tool.split(":")[0]!);
+}
+
+/**
+ * Can a shell command line bound this way keep upstream data out of its syntax?
+ *
+ * Yes for the witnessed literal, the caller's own input, and a template, whose
+ * slot values interpolateShell quotes. Not for a command taken whole from an
+ * earlier step's result (a fetched record, an island's output): it would run
+ * whatever that step returned, and quoting it would stop it being a command.
+ */
+export function isSafeShellCommand(b: Binding): boolean {
+  return b.kind === "literal" || b.kind === "input" || (b.kind === "transform" && b.fn === "template");
 }
 
 /** Never shell syntax in any quoting context, so a value made only of these is spliced as is. */

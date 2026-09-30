@@ -74,6 +74,10 @@ async function run(p: StretchProgram, branch: string): Promise<Array<{ command: 
   return ran;
 }
 
+function bashCommands(p: StretchProgram): unknown[] {
+  return p.steps.flatMap((s) => (s.kind === "tool" && s.tool === "Bash" ? [s.args.command] : []));
+}
+
 describe("a compiled Bash template fed by an upstream step", () => {
   for (const source of ["get_ticket", "draft_branch_name"] as const) {
     test(`${source}: shell syntax in the value stays one literal argument`, async () => {
@@ -109,4 +113,19 @@ describe("a compiled Bash template fed by an upstream step", () => {
     }
   });
 
+  test("a command is never bound whole to an upstream result", () => {
+    // It used to bind as `from <source>.cmd`: the program ran whatever the fetch or island returned.
+    for (const source of ["get_ticket", "draft_branch_name"] as const) {
+      const constant = compile(source, ["git log", "git log", "git log"], (cmd) => [{ cmd }, cmd]);
+      expect(bashCommands(constant.programs[0]!)).toEqual([
+        { kind: "literal", value: "pwd" },
+        { kind: "literal", value: "git log" },
+        { kind: "literal", value: "ls -a" },
+      ]);
+      const checkouts = ["git checkout a1", "git checkout b2", "git checkout c3"];
+      const varying = compile(source, checkouts, (cmd) => [{ cmd }, cmd]);
+      expect(varying.programs).toEqual([]);
+      expect(varying.refusals.map((r) => r.code)).toEqual(["underdetermined_command"]);
+    }
+  });
 });
