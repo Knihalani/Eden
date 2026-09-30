@@ -79,7 +79,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   return [...byKey.values(), ...rest];
 }
 
-export type MemoryOptions = { dir?: string; session?: string; cwd?: string; child?: boolean };
+export type MemoryOptions = { dir?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
   const s = typeof raw === "string" ? raw.trim() : ""; return s && !s.includes("\0") && !s.includes("/") && !s.includes("\\") && !s.split("--").join("").includes("..") && /^[A-Za-z0-9._-]+$/.test(s) && s !== "." && s !== ".." ? s : undefined;
@@ -211,7 +211,11 @@ export class AgentMemory {
   private post: Map<string, Compiled[]> | null = null; private knownIds = new Set<string>(); private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
-    this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined; this.scrubCwd = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
+    this.scrubSession = typeof opts.session === "string" && opts.session ? opts.session : undefined;
+    const cwdOpt = typeof opts.cwd === "string" && opts.cwd.trim() ? opts.cwd.trim() : undefined;
+    const proj = typeof opts.project === "string" && opts.project.trim() ? opts.project.trim() : undefined;
+    const pathy = !!proj && (proj.includes("/") || proj.includes("\\") || /^[A-Za-z]:/.test(proj));
+    this.scrubCwd = cwdOpt || (pathy ? proj : undefined);
     mkdirSync((this.dir = opts.dir || join(homedir(), ".eden", "memory")), { recursive: true }); const session = memorySessionName(opts.session); this.session = session; this.child = opts.child === true;
     if (session) mkdirSync(join(this.dir, session), { recursive: true }); this.path = join(this.dir, session || "", "memories.jsonl");
     this.compiled = load(this.path); this.knownIds = new Set(this.compiled.map((c) => c.rec.id)); this.rebuildSeen();
