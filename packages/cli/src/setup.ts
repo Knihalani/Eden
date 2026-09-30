@@ -39,7 +39,9 @@ export function hookCommand(
   const bunHook = `bun ${shq(cliPath)} hook`;
   const ms = Number(process.env.EDEN_HOOKD_TIMEOUT_MS || 8000);
   const sec = Math.min(60, Math.max(2, Math.ceil((Number.isFinite(ms) ? ms : 8000) / 1000)));
-  const curl = `curl -sS --max-time ${sec} ${hookdKeyArg()} -H 'content-type: application/json'`;
+  // --fail: when hookd refuses the key (it changes on every hookd start), the hook falls through
+  // to the in-process `bun cli.ts hook` rather than printing hookd's `{}`.
+  const curl = `curl -sS --max-time ${sec} --fail ${hookdKeyArg()} -H 'content-type: application/json'`;
   const core = `${edenHomeExport()}; ${curl} --data-binary @- ${hookd} || ${bunHook}`;
   return opts.failOpen === false ? core : `${core} || echo '{}'`;
 }
