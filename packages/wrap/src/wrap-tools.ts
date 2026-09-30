@@ -3,6 +3,7 @@ import {
   addTokenClass,
   emptyTokenClasses,
   evidenceLedger,
+  type EvidenceLedger,
   firstWarningIndex,
     isMutating,
   isReadName,
@@ -373,12 +374,13 @@ function staleRead(
 const NO_LIVE: StretchProgram[] = [];
 const NO_PREFIX: { p: StretchProgram; input: Record<string, unknown> }[] = [];
 const FLUSH_NAME = /^(notify|complete|finalize|done)$/i;
+// Frozen at runtime, but @eden/ir types EvidenceLedger's arrays as mutable; no in-repo code mutates a ledger.
 const EMPTY_LEDGER = Object.freeze({
   required: Object.freeze([] as string[]),
   present: Object.freeze([] as string[]),
   absent: Object.freeze([] as string[]),
   failed: Object.freeze([] as string[]),
-});
+}) as EvidenceLedger;
 
 export function safely<T>(fn: () => T, fallback: T): T {
   try {
@@ -640,7 +642,7 @@ export function wrapTools<T extends ToolsIn>(
     note();
     if (line) {
       const prog = state.programs.find((p) => p.id === armed.programId);
-      const rec = ((s, r) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, {
+      const rec = ((s, r: Receipt) => { if (s.agentId) r.agentId = s.agentId; if (s.parentRunId) r.parentRunId = s.parentRunId; if (s.fleetId) r.fleetId = s.fleetId; if (s.region) r.region = s.region; return r; })(state, {
         toolId: armed.programId,
         version: prog?.version ?? "0",
         ms: 0,
@@ -678,7 +680,7 @@ export function wrapTools<T extends ToolsIn>(
           if (state.opts.failOpen === false) throw err;
           const first = (p.sequence ?? [])[0];
           const canReplay = (p.sequence ?? []).every((n) => isReadName(n)) && !!first && first in tools;
-          if (canReplay) return (typeof tools[first!] === "function" ? { description: first!, execute: tools[first!] } : tools[first!]!).execute(args);
+          if (canReplay) return (typeof tools[first] === "function" ? { description: first!, execute: tools[first] } : tools[first]!).execute(args);
           return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
         }
       },

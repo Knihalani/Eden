@@ -25,7 +25,7 @@ function prog(): StretchProgram {
 describe("red-team: arming store", () => {
   test("hostile session keys stay isolated (__proto__, '', long)", async () => {
     const writes: Record<string, number> = {};
-    const tools = (tag: string): Record<string, ToolDef> => ({
+    const tools = (tag: string) => ({
       lookup: { execute: async (a) => ({ id: a.id }) },
       write: {
         execute: async (a) => {
@@ -33,7 +33,7 @@ describe("red-team: arming store", () => {
           return { id: a.id };
         },
       },
-    });
+    }) satisfies Record<string, ToolDef>;
     const p = prog();
     const store = createArmingStore();
     const keys = ["__proto__", "", "x".repeat(400)];
@@ -53,7 +53,7 @@ describe("red-team: arming store", () => {
     const writes: Record<string, number> = {};
     const p = prog();
     const store = createArmingStore({ perSessionMax: 4, globalMax: 2 });
-    const mk = (tag: string): Record<string, ToolDef> => ({
+    const mk = (tag: string) => ({
       lookup: { execute: async (a) => ({ id: a.id }) },
       write: {
         execute: async (a) => {
@@ -61,7 +61,7 @@ describe("red-team: arming store", () => {
           return { id: a.id };
         },
       },
-    });
+    }) satisfies Record<string, ToolDef>;
     const a = wrapTools(mk("a"), createState({ programs: [p], arming: store, sessionId: "a" }));
     const b = wrapTools(mk("b"), createState({ programs: [p], arming: store, sessionId: "b" }));
     const c = wrapTools(mk("c"), createState({ programs: [p], arming: store, sessionId: "c" }));
@@ -82,7 +82,7 @@ describe("red-team: arming store", () => {
 
   test("name not in rest does not claim a different tool's write", async () => {
     const writes: string[] = [];
-    const tools: Record<string, ToolDef> = {
+    const tools = {
       lookup: { execute: async (a) => ({ id: a.id }) },
       write: {
         execute: async (a) => {
@@ -91,7 +91,7 @@ describe("red-team: arming store", () => {
         },
       },
       ping: { execute: async () => ({ pong: true }) },
-    };
+    } satisfies Record<string, ToolDef>;
     const w = wrapTools(tools, createState({ programs: [prog()] }));
     await w.lookup.execute({ id: "E-1", text: "t" });
     const ping = await w.ping.execute({});
@@ -104,7 +104,7 @@ describe("red-team: arming store", () => {
     const details: string[] = [];
     const writes: Record<string, number> = {};
     const p = prog();
-    const toolsFor = (tag: string): Record<string, ToolDef> => ({
+    const toolsFor = (tag: string) => ({
       lookup: { execute: async (a) => ({ id: a.id }) },
       write: {
         execute: async (a) => {
@@ -112,7 +112,7 @@ describe("red-team: arming store", () => {
           return { id: a.id };
         },
       },
-    });
+    }) satisfies Record<string, ToolDef>;
     const store = createArmingStore({ perSessionMax: 1 });
     const state = createState({
       programs: [p],
@@ -168,7 +168,7 @@ describe("red-team: arming store", () => {
 
   test("mutating program with a shared fleetId still writes once per session", async () => {
     const writes: Record<string, number> = {};
-    const tools = (tag: string): Record<string, ToolDef> => ({
+    const tools = (tag: string) => ({
       lookup: { execute: async (a) => ({ id: a.id }) },
       write: {
         execute: async (a) => {
@@ -176,7 +176,7 @@ describe("red-team: arming store", () => {
           return { id: a.id };
         },
       },
-    });
+    }) satisfies Record<string, ToolDef>;
     const p = prog();
     const store = createArmingStore();
     const a = wrapTools(tools("a"), createState({ programs: [p], arming: store, sessionId: "sess-a", fleetId: "f1" }));
