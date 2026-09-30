@@ -11,9 +11,9 @@ describe("bash jail", () => {
   const registry = codingRegistry(CWD);
 
   async function refuses(command: string) {
-    await expect(
-      registry.execute("Bash", { command }, { signal: new AbortController().signal }),
-    ).rejects.toThrow("path outside workspace");
+    await expect(registry.execute("Bash", { command }, { signal: new AbortController().signal })).rejects.toThrow(
+      "path outside workspace",
+    );
   }
 
   test("a path glued to a redirect is confined, not missed", async () => {
@@ -39,9 +39,9 @@ describe("bash jail", () => {
   });
 
   async function refusesProcess(command: string, message: RegExp) {
-    await expect(
-      registry.execute("Bash", { command }, { signal: new AbortController().signal }),
-    ).rejects.toThrow(message);
+    await expect(registry.execute("Bash", { command }, { signal: new AbortController().signal })).rejects.toThrow(
+      message,
+    );
   }
 
   test("process substitution is refused whole", async () => {
@@ -134,11 +134,9 @@ describe("bash timeout_ms coercion", () => {
     const ac = new AbortController();
     const t0 = performance.now();
     setTimeout(() => ac.abort(), 200);
-    const r = (await registry.execute(
-      "Bash",
-      { command: lateCommand("late-abort.txt") },
-      { signal: ac.signal },
-    )) as { code: number };
+    const r = (await registry.execute("Bash", { command: lateCommand("late-abort.txt") }, { signal: ac.signal })) as {
+      code: number;
+    };
     expect(r.code).not.toBe(0);
     expect(performance.now() - t0).toBeLessThan(900);
     await Bun.sleep(1300);

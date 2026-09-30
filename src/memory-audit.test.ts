@@ -151,7 +151,8 @@ describe("M36.4 caller audit", () => {
     for (const file of ["src/index.ts", "src/icl-index.ts", "src/chunk-retrieve.ts", "src/sleep.ts"]) {
       const code = stripComments(read(file));
       if (/notesFor\s*\([^)]*\bk\s*=\s*40\b/.test(code)) k40.push(`${file}: notesFor k=40`);
-      if (/function\s+memoryRetrieveCap[\s\S]{0,500}\breturn\s+40\b/.test(code)) k40.push(`${file}: memoryRetrieveCap returns 40`);
+      if (/function\s+memoryRetrieveCap[\s\S]{0,500}\breturn\s+40\b/.test(code))
+        k40.push(`${file}: memoryRetrieveCap returns 40`);
       if (/EDEN_MEMORY_CAP[^;\n]{0,80}\|\|\s*40\b/.test(code)) k40.push(`${file}: EDEN_MEMORY_CAP || 40`);
       if (/PACKET_CHAT_K_DEFAULT\s*=\s*40\b/.test(code)) k40.push(`${file}: PACKET_CHAT_K_DEFAULT = 40`);
       if (/ICL_RETRIEVE_K\s*=\s*40\b/.test(code)) k40.push(`${file}: ICL_RETRIEVE_K = 40`);

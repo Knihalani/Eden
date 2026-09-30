@@ -397,6 +397,23 @@ describe("hash covers canonical payload plus prev", () => {
     ])[0]!;
     const tampered = { ...rec, prev: "a".repeat(64) };
     expect(verifyAudit(JSON.stringify(tampered) + "\n").ok).toBe(false);
-    expect(hashPayload({ seq: 1, kind: "approval", id: "a", at: 1, tool_id: "t", name: "n", version: "v", state: "live", verdict: "", reason: "", ok: "" }, GENESIS).length).toBe(64);
+    expect(
+      hashPayload(
+        {
+          seq: 1,
+          kind: "approval",
+          id: "a",
+          at: 1,
+          tool_id: "t",
+          name: "n",
+          version: "v",
+          state: "live",
+          verdict: "",
+          reason: "",
+          ok: "",
+        },
+        GENESIS,
+      ).length,
+    ).toBe(64);
   });
 });

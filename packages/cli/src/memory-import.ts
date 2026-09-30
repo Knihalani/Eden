@@ -73,13 +73,22 @@ function collapse(s: string): string {
 
 function resultText(result: unknown): string {
   let raw = result;
-  try { raw = omitExperienceTree(result); } catch {}
+  try {
+    raw = omitExperienceTree(result);
+  } catch {}
   let s = "";
   if (typeof raw === "string") s = raw;
   else if (raw && typeof raw === "object") {
     const o = asRec(raw) ?? {};
-    s = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error].filter((x) => typeof x === "string" && x).join("\n");
-    if (!s) try { s = JSON.stringify(raw); } catch { s = ""; }
+    s = [o.stdout, o.stderr, o.text, o.content, o.llmContent, o.output, o.message, o.error]
+      .filter((x) => typeof x === "string" && x)
+      .join("\n");
+    if (!s)
+      try {
+        s = JSON.stringify(raw);
+      } catch {
+        s = "";
+      }
   }
   s = collapse(s);
   if (s.length > 360) s = s.slice(0, 360);
@@ -96,12 +105,21 @@ function toolSentence(name: string | undefined, result: unknown): string {
 function toolPayload(o: Record<string, unknown>): ToolBits | null {
   const role = String(o.role || "");
   if (role === "tool" || role === "function") {
-    const name = [o.tool_name, o.toolName, o.name, o.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
-    return { name, args: asArgs(o.tool_input ?? o.tool_args ?? o.args), result: o.tool_response ?? o.tool_output ?? o.content ?? o.result ?? o.output };
+    const name = [o.tool_name, o.toolName, o.name, o.tool].find((x) => typeof x === "string" && String(x).trim()) as
+      string | undefined;
+    return {
+      name,
+      args: asArgs(o.tool_input ?? o.tool_args ?? o.args),
+      result: o.tool_response ?? o.tool_output ?? o.content ?? o.result ?? o.output,
+    };
   }
-  const named = typeof o.tool_name === "string" || typeof o.toolName === "string" || (typeof o.tool === "string" && !o.role && !o.message);
+  const named =
+    typeof o.tool_name === "string" ||
+    typeof o.toolName === "string" ||
+    (typeof o.tool === "string" && !o.role && !o.message);
   if (!named) return null;
-  const name = [o.tool_name, o.toolName, o.tool].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
+  const name = [o.tool_name, o.toolName, o.tool].find((x) => typeof x === "string" && String(x).trim()) as
+    string | undefined;
   return {
     name,
     args: asArgs(o.tool_input ?? o.tool_args ?? o.args ?? o.parameters),
@@ -117,11 +135,16 @@ function splitParts(content: unknown): { text: string; tools: ToolBits[] } {
     const o = asRec(part);
     const typ = o ? String(o.type || "") : "";
     if (o && (typ === "tool_use" || typ === "tool_call")) {
-      tools.push({ name: typeof o.name === "string" ? o.name : undefined, args: asArgs(o.input ?? o.args ?? o.parameters), result: o.result ?? o.output });
+      tools.push({
+        name: typeof o.name === "string" ? o.name : undefined,
+        args: asArgs(o.input ?? o.args ?? o.parameters),
+        result: o.result ?? o.output,
+      });
       continue;
     }
     if (o && (typ === "tool_result" || typ === "tool_response")) {
-      const name = [o.name, o.tool_name, o.toolName].find((x) => typeof x === "string" && String(x).trim()) as string | undefined;
+      const name = [o.name, o.tool_name, o.toolName].find((x) => typeof x === "string" && String(x).trim()) as
+        string | undefined;
       tools.push({ name, result: o.content ?? o.output ?? o.result ?? part });
       continue;
     }
@@ -171,7 +194,9 @@ function fromObject(o: Record<string, unknown>, inherited?: ScrubEnv): ImportRec
   const msg = asRec(o.message) ?? o;
   const role = normRole(String(msg.role || o.type || ""));
   const raw = msg.content ?? msg.parts ?? msg.text;
-  const extra = [msg.llmContent, msg.reasoning_content, msg.thinking, msg.reasoning].filter((x) => typeof x === "string" && x).join("\n");
+  const extra = [msg.llmContent, msg.reasoning_content, msg.thinking, msg.reasoning]
+    .filter((x) => typeof x === "string" && x)
+    .join("\n");
   const parts = splitParts(raw);
   const out: ImportRec[] = parts.tools.map((bits) => stamp(toolRec(bits), env));
   const text = [parts.text, extra].filter(Boolean).join("\n");
@@ -194,7 +219,11 @@ function parseJsonl(text: string): ImportRec[] {
   const out: ImportRec[] = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
-    try { out.push(...fromValue(JSON.parse(line))); } catch { out.push(SKIP); }
+    try {
+      out.push(...fromValue(JSON.parse(line)));
+    } catch {
+      out.push(SKIP);
+    }
   }
   return out;
 }
@@ -208,7 +237,9 @@ function parseText(file: string, text: string): ImportRec[] {
     const lines = t.split("\n").filter((l) => l.trim());
     if (lines.length > 1) return parseJsonl(text);
   }
-  try { return fromValue(JSON.parse(text)); } catch {
+  try {
+    return fromValue(JSON.parse(text));
+  } catch {
     return text.includes("\n") ? parseJsonl(text) : [SKIP];
   }
 }
@@ -234,7 +265,11 @@ function listFiles(path: string): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
     let ents: Dirent[] = [];
-    try { ents = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    try {
+      ents = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const ent of ents) {
       if (ent.name === "node_modules" || ent.name === ".git") continue;
       const p = join(dir, ent.name);
@@ -276,13 +311,21 @@ export async function importMemoryPath(
     const records = listFiles(path).flatMap(recordsInFile);
     const dry = opts?.dryRun === true;
     let writes = false;
-    try { writes = !dry && memoryConsent() === "on"; } catch { writes = false; }
+    try {
+      writes = !dry && memoryConsent() === "on";
+    } catch {
+      writes = false;
+    }
     const cap = storeCap();
     let observed = 0;
     let mem: AgentMemory | undefined;
     const open = (): AgentMemory | undefined => {
       if (mem || !writes) return mem;
-      try { mem = openMemory({ dir: memoryDir(opts?.dir) }); } catch { mem = undefined; }
+      try {
+        mem = openMemory({ dir: memoryDir(opts?.dir) });
+      } catch {
+        mem = undefined;
+      }
       return mem;
     };
     for (const rec of records) {
@@ -295,13 +338,25 @@ export async function importMemoryPath(
         let content = rec.content;
         let toolArgs = rec.toolArgs;
         let toolResult = rec.toolResult;
-        try { content = scrubMemoryText(content, ctx); } catch {}
-        try { if (toolArgs) toolArgs = scrubMemoryValue(toolArgs, ctx) as Record<string, unknown>; } catch {}
-        try { if (toolResult !== undefined) toolResult = scrubMemoryValue(toolResult, ctx); } catch {}
+        try {
+          content = scrubMemoryText(content, ctx);
+        } catch {}
+        try {
+          if (toolArgs) toolArgs = scrubMemoryValue(toolArgs, ctx) as Record<string, unknown>;
+        } catch {}
+        try {
+          if (toolResult !== undefined) toolResult = scrubMemoryValue(toolResult, ctx);
+        } catch {}
         if (rec.kind === "tools") {
           if (content) mem.observe([{ role: "user", content }], { deferSleep: true });
           if (rec.toolName || toolResult !== undefined) {
-            putExperienceFromTool(mem.dir, { name: rec.toolName, args: toolArgs, result: toolResult, session: rec.session, cwd: rec.cwd });
+            putExperienceFromTool(mem.dir, {
+              name: rec.toolName,
+              args: toolArgs,
+              result: toolResult,
+              session: rec.session,
+              cwd: rec.cwd,
+            });
           }
         } else if (content) {
           mem.observe([{ role: rec.role || "user", content }], { deferSleep: true });
@@ -309,7 +364,9 @@ export async function importMemoryPath(
         observed++;
       } catch {}
     }
-    try { mem?.close(); } catch {}
+    try {
+      mem?.close();
+    } catch {}
     return { observed, skip: kinds.skip ?? 0, kinds };
   } catch {
     return { observed: 0, skip: kinds.skip ?? 0, kinds };

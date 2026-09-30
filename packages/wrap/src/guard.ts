@@ -1,10 +1,12 @@
-import { evidenceLedger, isCheckName, isReadName, isStretchEnd, latestRepeatStalled, type StretchProgram } from "@eden/ir";
 import {
-  forecastCopy,
-  matchingRunPrograms,
-  remainingBudget,
-  actualSpend,
-} from "./forecast";
+  evidenceLedger,
+  isCheckName,
+  isReadName,
+  isStretchEnd,
+  latestRepeatStalled,
+  type StretchProgram,
+} from "@eden/ir";
+import { forecastCopy, matchingRunPrograms, remainingBudget, actualSpend } from "./forecast";
 import type { EdenOpts, RunRecorder } from "./types";
 
 export type GuardDecision =
@@ -20,17 +22,16 @@ function hasNgram(sequence: string[] | undefined, ngram: string[]): boolean {
   return false;
 }
 
-export function requiredChecks(
-  live: StretchProgram[],
-  events: { name: string; skipped?: boolean }[],
-): string[] {
+export function requiredChecks(live: StretchProgram[], events: { name: string; skipped?: boolean }[]): string[] {
   const hit = matchingRunPrograms(live, events)[0];
   return hit ? (hit.sequence ?? []).filter(isCheckName) : [];
 }
 
-export const killAfterWarningEnabled = (opts: EdenOpts) => opts.killAfterWarning != null ? opts.killAfterWarning : process.env.EDEN_KILL_AFTER_WARNING === "1";
+export const killAfterWarningEnabled = (opts: EdenOpts) =>
+  opts.killAfterWarning != null ? opts.killAfterWarning : process.env.EDEN_KILL_AFTER_WARNING === "1";
 
-export const enforcementEnabled = (opts: EdenOpts) => opts.enforce != null ? opts.enforce : process.env.EDEN_ENFORCE === "1";
+export const enforcementEnabled = (opts: EdenOpts) =>
+  opts.enforce != null ? opts.enforce : process.env.EDEN_ENFORCE === "1";
 
 export function decideGuard(args: {
   name: string;
@@ -46,7 +47,9 @@ export function decideGuard(args: {
   if (run.tripped || run.warnings.some((w) => w.kind === "fail_streak")) {
     return { action: "halt", reason: "fail_streak" };
   }
-  const loop = [...run.warnings].reverse().find((w) => w.kind === "repeat_ngram" && w.ngram && new Set(w.ngram).size >= 2);
+  const loop = [...run.warnings]
+    .reverse()
+    .find((w) => w.kind === "repeat_ngram" && w.ngram && new Set(w.ngram).size >= 2);
   if (loop?.ngram && loop.ngram.includes(name)) {
     const allReads = loop.ngram.every((n) => isReadName(n));
     if (!allReads && latestRepeatStalled(run.events, loop.ngram)) {
@@ -66,7 +69,11 @@ export function decideGuard(args: {
     }
   }
   const elapsed = now - run.t0;
-  const cap = ((o) => { const e = o?.timeoutMs; const env = Number(process.env.EDEN_TIMEOUT_MS); return Math.min(300_000, Math.max(1, e && e > 0 ? e : Number.isFinite(env) && env > 0 ? env : 60_000)); })(opts);
+  const cap = ((o) => {
+    const e = o?.timeoutMs;
+    const env = Number(process.env.EDEN_TIMEOUT_MS);
+    return Math.min(300_000, Math.max(1, e && e > 0 ? e : Number.isFinite(env) && env > 0 ? env : 60_000));
+  })(opts);
   const remaining = cap - elapsed;
   const onPath = [...run.events, { name }];
   const matches = matchingRunPrograms(live, onPath);

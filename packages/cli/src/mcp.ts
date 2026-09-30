@@ -18,13 +18,16 @@ export class McpAuthError extends Error {
   }
 }
 
-export async function handleMcp(msg: Rpc, ctx: {
-  base: string;
-  key: string;
-  programs: () => Promise<StretchProgram[]>;
-  send: (id: unknown, result: unknown) => void;
-  error?: (id: unknown, code: number, message: string) => void;
-}): Promise<void> {
+export async function handleMcp(
+  msg: Rpc,
+  ctx: {
+    base: string;
+    key: string;
+    programs: () => Promise<StretchProgram[]>;
+    send: (id: unknown, result: unknown) => void;
+    error?: (id: unknown, code: number, message: string) => void;
+  },
+): Promise<void> {
   const fail = (id: unknown, code: number, message: string) => {
     if (ctx.error) ctx.error(id, code, message);
     else ctx.send(id, { error: { code, message } });
@@ -143,7 +146,11 @@ export async function handleMcp(msg: Rpc, ctx: {
       const r = await fetch(`${ctx.base.replace(/\/$/, "")}/v1/wrap-run`, {
         method: "POST",
         headers: { authorization: `Bearer ${ctx.key}`, "content-type": "application/json" },
-        body: JSON.stringify({ program: p, input: msg.params?.arguments ?? {}, timeoutMs: Number(process.env.EDEN_TIMEOUT_MS) || 60_000 }),
+        body: JSON.stringify({
+          program: p,
+          input: msg.params?.arguments ?? {},
+          timeoutMs: Number(process.env.EDEN_TIMEOUT_MS) || 60_000,
+        }),
         signal: edenTimeoutSignal(),
       });
       if (r.status === 401) {
@@ -196,7 +203,10 @@ export async function runMcp(args: string[] = process.argv.slice(2)): Promise<vo
   const programs = async (): Promise<StretchProgram[]> => {
     if (cached && Date.now() - cached.at < CACHE_MS) return cached.programs;
     try {
-      const r = await fetch(`${base.replace(/\/$/, "")}/v1/tools`, { headers: { authorization: `Bearer ${key}` }, signal: edenTimeoutSignal() });
+      const r = await fetch(`${base.replace(/\/$/, "")}/v1/tools`, {
+        headers: { authorization: `Bearer ${key}` },
+        signal: edenTimeoutSignal(),
+      });
       if (r.status === 401) throw new McpAuthError();
       if (!r.ok) throw new Error(`tools ${r.status}`);
       const j = (await r.json()) as { tools?: Array<{ program: StretchProgram; state: string }> };
@@ -221,30 +231,32 @@ export async function runMcp(args: string[] = process.argv.slice(2)): Promise<vo
   let chain = Promise.resolve();
   process.stdin.on("data", (c) => {
     leftover.push(c as Buffer);
-    chain = chain.then(async () => {
-      const text = Buffer.concat(leftover).toString("utf8");
-      leftover.length = 0;
-      const lines = text.split("\n");
-      if (!text.endsWith("\n")) leftover.push(Buffer.from(lines.pop() ?? ""));
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        let msg: Rpc;
-        try {
-          msg = JSON.parse(line) as Rpc;
-        } catch {
-          continue;
+    chain = chain
+      .then(async () => {
+        const text = Buffer.concat(leftover).toString("utf8");
+        leftover.length = 0;
+        const lines = text.split("\n");
+        if (!text.endsWith("\n")) leftover.push(Buffer.from(lines.pop() ?? ""));
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let msg: Rpc;
+          try {
+            msg = JSON.parse(line) as Rpc;
+          } catch {
+            continue;
+          }
+          try {
+            await handleMcp(msg, { base, key, programs, send, error });
+          } catch (err) {
+            const message = (err as Error)?.message ?? String(err);
+            if (msg.id !== undefined && msg.id !== null) error(msg.id, -32603, message);
+            else process.stderr.write(`eden mcp: ${message}\n`);
+          }
         }
-        try {
-          await handleMcp(msg, { base, key, programs, send, error });
-        } catch (err) {
-          const message = (err as Error)?.message ?? String(err);
-          if (msg.id !== undefined && msg.id !== null) error(msg.id, -32603, message);
-          else process.stderr.write(`eden mcp: ${message}\n`);
-        }
-      }
-    }).catch((err: unknown) => {
-      process.stderr.write(`eden mcp: ${(err as Error)?.message ?? String(err)}\n`);
-    });
+      })
+      .catch((err: unknown) => {
+        process.stderr.write(`eden mcp: ${(err as Error)?.message ?? String(err)}\n`);
+      });
   });
 }
 

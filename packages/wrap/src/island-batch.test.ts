@@ -3,7 +3,10 @@ import { unwrapIsland } from "@eden/ir";
 import { islandBatchUrl, PROVIDER_BATCH_CENTS, canUseProviderBatch, withIslandBatch } from "./island-batch";
 import { openaiIsland } from "./island";
 
-function fakeProvider(calls: { chat: number; batch: number; bodies: unknown[] }, opts: { batchStatus?: number } = {}): typeof fetch {
+function fakeProvider(
+  calls: { chat: number; batch: number; bodies: unknown[] },
+  opts: { batchStatus?: number } = {},
+): typeof fetch {
   const fn = async (url: unknown, init?: RequestInit) => {
     const u = String(url);
     if (u.includes("messages/batches")) {
@@ -23,7 +26,12 @@ function fakeProvider(calls: { chat: number; batch: number; bodies: unknown[] },
             result: {
               type: "succeeded",
               message: {
-                content: [{ type: "text", text: JSON.stringify({ id: JSON.parse(String(r.params.messages?.[0]?.content ?? "{}")).id }) }],
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({ id: JSON.parse(String(r.params.messages?.[0]?.content ?? "{}")).id }),
+                  },
+                ],
                 usage: { input_tokens: 8, output_tokens: 2 },
               },
             },
@@ -154,7 +162,9 @@ describe("island batch transport", () => {
         calls.get++;
         gets++;
         if (gets < 2) {
-          return new Response(JSON.stringify({ id: "msgbatch_poll", processing_status: "in_progress" }), { status: 200 });
+          return new Response(JSON.stringify({ id: "msgbatch_poll", processing_status: "in_progress" }), {
+            status: 200,
+          });
         }
         return new Response(
           JSON.stringify({
@@ -165,14 +175,20 @@ describe("island batch transport", () => {
                 custom_id: "0",
                 result: {
                   type: "succeeded",
-                  message: { content: [{ type: "text", text: JSON.stringify({ id: "A" }) }], usage: { input_tokens: 8, output_tokens: 2 } },
+                  message: {
+                    content: [{ type: "text", text: JSON.stringify({ id: "A" }) }],
+                    usage: { input_tokens: 8, output_tokens: 2 },
+                  },
                 },
               },
               {
                 custom_id: "1",
                 result: {
                   type: "succeeded",
-                  message: { content: [{ type: "text", text: JSON.stringify({ id: "B" }) }], usage: { input_tokens: 8, output_tokens: 2 } },
+                  message: {
+                    content: [{ type: "text", text: JSON.stringify({ id: "B" }) }],
+                    usage: { input_tokens: 8, output_tokens: 2 },
+                  },
                 },
               },
             ],
@@ -181,7 +197,9 @@ describe("island batch transport", () => {
         );
       }
       calls.chat++;
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ id: "sync" }) } }] }), { status: 200 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ id: "sync" }) } }] }), {
+        status: 200,
+      });
     }) as typeof fetch;
     const island = withIslandBatch(openaiIsland({ fetch: fetchFn }), { fetch: fetchFn });
     const [a, b] = await Promise.all([
@@ -204,7 +222,9 @@ describe("island batch transport", () => {
       const method = String(init?.method ?? "GET").toUpperCase();
       if (u.includes("messages/batches") && method === "POST") {
         calls.batch++;
-        return new Response(JSON.stringify({ id: "msgbatch_stuck", processing_status: "in_progress" }), { status: 200 });
+        return new Response(JSON.stringify({ id: "msgbatch_stuck", processing_status: "in_progress" }), {
+          status: 200,
+        });
       }
       if (u.includes("messages/batches") && method === "GET") {
         return new Response("not found", { status: 404 });

@@ -26,7 +26,14 @@ d("v2: proxy under concurrency", () => {
       steps: [],
       returns: { kind: "literal", value: null },
       contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-      manifest: { llmReduction: 8, latencyReduction: 8, costReduction: 8, skipRateBefore: 0.2, skipRateAfter: 0, nShadow: 6 },
+      manifest: {
+        llmReduction: 8,
+        latencyReduction: 8,
+        costReduction: 8,
+        skipRateBefore: 0.2,
+        skipRateAfter: 0,
+        nShadow: 6,
+      },
     } as unknown as StretchProgram;
     const state = createState({ programs: [prog] });
     const upstream = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -72,7 +79,14 @@ d("v2: proxy under concurrency", () => {
       steps: [],
       returns: { kind: "literal", value: null },
       contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-      manifest: { llmReduction: 8, latencyReduction: 8, costReduction: 8, skipRateBefore: 0.2, skipRateAfter: 0, nShadow: 6 },
+      manifest: {
+        llmReduction: 8,
+        latencyReduction: 8,
+        costReduction: 8,
+        skipRateBefore: 0.2,
+        skipRateAfter: 0,
+        nShadow: 6,
+      },
     } as unknown as StretchProgram;
     const state = createState({ programs: [prog] });
     const upstream = (async () =>
@@ -97,7 +111,13 @@ d("v2: proxy under concurrency", () => {
           new Request("http://local/v1/messages", {
             method: "POST",
             headers: { "content-type": "application/json", "x-api-key": "k" },
-            body: JSON.stringify({ model: "m", max_tokens: 10, stream: true, messages: [], tools: [{ name: "lookup", input_schema: {} }] }),
+            body: JSON.stringify({
+              model: "m",
+              max_tokens: 10,
+              stream: true,
+              messages: [],
+              tools: [{ name: "lookup", input_schema: {} }],
+            }),
           }),
           { state, getPrograms: () => [prog], fetch: upstream },
         ),
@@ -146,7 +166,12 @@ d("v2: sustained steering correctness (varied shapes)", () => {
         description: "v2 stress flow",
         inputSchema: { type: "object", properties: { k: { type: "string" } }, required: ["k"] },
         sequence: toolsUsed,
-        steps: toolsUsed.map((t, i) => ({ id: `s${i}`, kind: "tool", tool: t, args: { k: { kind: "input", path: "k" } } })),
+        steps: toolsUsed.map((t, i) => ({
+          id: `s${i}`,
+          kind: "tool",
+          tool: t,
+          args: { k: { kind: "input", path: "k" } },
+        })),
         returns: { kind: "from", step: `s${toolsUsed.length - 1}`, path: "" },
         contract: {
           witnesses: 3,
@@ -154,11 +179,22 @@ d("v2: sustained steering correctness (varied shapes)", () => {
           allowExact: false,
           envelope: { inputs: { k: witnessedKs } },
         },
-        manifest: { llmReduction: 8, latencyReduction: 8, costReduction: 8, skipRateBefore: 0.2, skipRateAfter: 0, nShadow: 6 },
+        manifest: {
+          llmReduction: 8,
+          latencyReduction: 8,
+          costReduction: 8,
+          skipRateBefore: 0.2,
+          skipRateAfter: 0,
+          nShadow: 6,
+        },
       }) as unknown as StretchProgram;
 
     const knowns = [["known-0-a", "known-0-b"], ["known-1-a"], ["known-2-a"]];
-    const shapes = [mk("a", ["alpha", "beta", "gamma"], knowns[0]!), mk("b", ["alpha", "delta"], knowns[1]!), mk("c", ["epsilon", "zeta"], knowns[2]!)];
+    const shapes = [
+      mk("a", ["alpha", "beta", "gamma"], knowns[0]!),
+      mk("b", ["alpha", "delta"], knowns[1]!),
+      mk("c", ["epsilon", "zeta"], knowns[2]!),
+    ];
     const state = createState({ programs: shapes });
     const executed: Record<string, number> = {};
     const track = (name: string, val: unknown) => async (a: Record<string, unknown>) => {

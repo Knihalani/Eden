@@ -49,11 +49,12 @@ function memorySystemText(messages: unknown[]): string {
 
 function anthropicMemoryText(body: { system?: unknown }): string {
   const sys = body.system;
-  const parts = typeof sys === "string"
-    ? [sys]
-    : Array.isArray(sys)
-      ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-      : [];
+  const parts =
+    typeof sys === "string"
+      ? [sys]
+      : Array.isArray(sys)
+        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+        : [];
   return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
 }
 
@@ -193,20 +194,24 @@ describe("M1.3 (5) sal=0.6 pin + notesFor cues", () => {
   const weak = "We changed the timeout in the worker.";
 
   // WAVE-FIX: M5.3
-  test.failing("sal=0.6 is persist-pinned through 2000 eviction-pressure remembers", () => {
-    withMem((mem) => {
-      const rec = mem.remember(weak);
-      expect(rec.sal).toBe(0.6);
-      mem.quiet(() => {
-        for (let n = 1; n <= 2000; n++) {
-          mem.remember(`Fact number ${n} is recorded here for eviction pressure.`);
-        }
+  test.failing(
+    "sal=0.6 is persist-pinned through 2000 eviction-pressure remembers",
+    () => {
+      withMem((mem) => {
+        const rec = mem.remember(weak);
+        expect(rec.sal).toBe(0.6);
+        mem.quiet(() => {
+          for (let n = 1; n <= 2000; n++) {
+            mem.remember(`Fact number ${n} is recorded here for eviction pressure.`);
+          }
+        });
+        expect(mem.memories().length).toBe(2000);
+        expect(mem.memories().some((r) => r.id === rec.id)).toBe(true);
+        expect(hasText(mem, "timeout in the worker")).toBe(true);
       });
-      expect(mem.memories().length).toBe(2000);
-      expect(mem.memories().some((r) => r.id === rec.id)).toBe(true);
-      expect(hasText(mem, "timeout in the worker")).toBe(true);
-    });
-  }, 60_000);
+    },
+    60_000,
+  );
 
   test.failing("notesFor clone keeps cues so intention text stays verbatim", () => {
     withMem((mem) => {

@@ -48,9 +48,7 @@ describe("eden bench", () => {
     expect(report.notes.join("\n")).toContain("tokens estimated");
 
     const printed = JSON.parse(formatBench(report)) as Record<string, unknown>;
-    expect(Object.keys(printed).sort()).toEqual(
-      ["ci", "n", "notes", "p_value", "time_ms", "tokens", "verdict"].sort(),
-    );
+    expect(Object.keys(printed).sort()).toEqual(["ci", "n", "notes", "p_value", "time_ms", "tokens", "verdict"].sort());
     expect(printed.verdict).toBe("WIN");
   });
 

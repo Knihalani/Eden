@@ -10,14 +10,7 @@ import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { extractCandidates, type CandidateText } from "./assemble";
-import {
-  MEMORY_MARK,
-  encodeLane,
-  memoryInjectSwallows,
-  openMemory,
-  sleep,
-  type AgentMemory,
-} from "./index";
+import { MEMORY_MARK, encodeLane, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
 import * as edenMem from "./index";
 import { MEMORY_LANE_KINDS } from "./memory-lanes";
 import { isIclExemplar, isRecsysShot, SemanticStore } from "./semantic-store";
@@ -36,8 +29,7 @@ const HOST_FILES = [
 ] as const;
 
 /** Case 1 recsys dialogue — store-all atom, not extractDurable chop. */
-const RECSYS_LIKED =
-  "I liked Superbad (2007), The Hangover (2009), and Knocked Up (2007). Recommend similar comedies.";
+const RECSYS_LIKED = "I liked Superbad (2007), The Hangover (2009), and Knocked Up (2007). Recommend similar comedies.";
 const RECSYS_CUE = "recommend comedies like Superbad (2007)";
 /** Case 2 numbered movie list — not a fact-serial extract. */
 const RECSYS_NUMBERED = "1. Superbad (2007)\n2. The Hangover (2009)\n3. Knocked Up (2007)";
@@ -73,10 +65,7 @@ function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T {
   }
 }
 
-async function withMem<T>(
-  prefix: string,
-  fn: (mem: AgentMemory, dir: string) => T | Promise<T>,
-): Promise<T> {
+async function withMem<T>(prefix: string, fn: (mem: AgentMemory, dir: string) => T | Promise<T>): Promise<T> {
   const dir = tmpDir(prefix);
   return withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
     try {
@@ -115,7 +104,9 @@ function factObject(got: unknown): string {
 }
 
 function flatten(s: string): string {
-  return String(s ?? "").trim().replace(/\s+/g, " ");
+  return String(s ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 /** M16.2 stays 5 kinds: recsys encode is narrative (or recsys if D added the string, not a 6th kind). */
@@ -124,7 +115,10 @@ function isRecsysLane(lane?: string): boolean {
 }
 
 function storedBlob(mem: AgentMemory): string {
-  return mem.memories().map((r) => r.text).join("\n");
+  return mem
+    .memories()
+    .map((r) => r.text)
+    .join("\n");
 }
 
 function movieRecs(mem: AgentMemory): ReturnType<AgentMemory["memories"]> {
@@ -132,7 +126,10 @@ function movieRecs(mem: AgentMemory): ReturnType<AgentMemory["memories"]> {
 }
 
 function movieKey(s: string): string {
-  return s.trim().toLowerCase().replace(/^(?:the|a|an)\s+/, "");
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:the|a|an)\s+/, "");
 }
 
 function tripleTouchesMovie(row: { s?: string; o?: string }): boolean {
@@ -144,7 +141,10 @@ function tripleTouchesMovie(row: { s?: string; o?: string }): boolean {
   });
 }
 
-function recsysCandidate(text: string, extra: Partial<CandidateText> & { tags?: string[] } = {}): CandidateText & { tags?: string[] } {
+function recsysCandidate(
+  text: string,
+  extra: Partial<CandidateText> & { tags?: string[] } = {},
+): CandidateText & { tags?: string[] } {
   return { text, t: extra.t ?? 1, ...extra };
 }
 
@@ -277,8 +277,7 @@ describe("M31.4 recsys / ICL false positives", () => {
 
   test("chairperson lists with years, EventQA years, coding years are not recsys", async () => {
     const chairYears = "8. The chairperson is Bob (2020)\n9. The treasurer is Alice (2021)";
-    const millerHere =
-      "Here is the conversation:\nUser: In 1847 the miller of Blackford walked beside the river.";
+    const millerHere = "Here is the conversation:\nUser: In 1847 the miller of Blackford walked beside the river.";
     const versailles = "The Treaty of Versailles (1919) followed the armistice (1918)";
     const nodeLts = "Node 18 (2018) and Node 20 (2023) are LTS";
     const tsRel = "TypeScript 4.9 (2022) replaced TypeScript 5.0 (2023)";
@@ -452,12 +451,16 @@ describe("M31.4 assemble firewall", () => {
       expect(recs.length).toBeGreaterThan(0);
       expect(recs.some((r) => (r.tags ?? []).some((t) => t.toLowerCase() === "recsys"))).toBe(true);
       for (const r of recs) {
-        expect(extractCandidates([recsysCandidate(r.text, {
-          t: r.at,
-          kind: r.kind,
-          lane: r.lane,
-          tags: r.tags,
-        })])).toEqual([]);
+        expect(
+          extractCandidates([
+            recsysCandidate(r.text, {
+              t: r.at,
+              kind: r.kind,
+              lane: r.lane,
+              tags: r.tags,
+            }),
+          ]),
+        ).toEqual([]);
       }
     });
   });

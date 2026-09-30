@@ -218,11 +218,13 @@ function pytestWindow(): unknown[] {
   return [
     {
       role: "assistant",
-      tool_calls: [{
-        id: "call_pytest_m25",
-        type: "function",
-        function: { name: "Bash", arguments: JSON.stringify({ command: "pytest tests/auth/session.test.ts -q" }) },
-      }],
+      tool_calls: [
+        {
+          id: "call_pytest_m25",
+          type: "function",
+          function: { name: "Bash", arguments: JSON.stringify({ command: "pytest tests/auth/session.test.ts -q" }) },
+        },
+      ],
     },
     { role: "tool", tool_call_id: "call_pytest_m25", content: "collected 1 item\nauth.ts touched\nexit 0" },
   ];
@@ -232,11 +234,15 @@ function anthropicPytestWindow(): unknown[] {
   return [
     {
       role: "assistant",
-      content: [{ type: "tool_use", id: "tu_py_m25", name: "Bash", input: { command: "pytest tests/auth/session.test.ts -q" } }],
+      content: [
+        { type: "tool_use", id: "tu_py_m25", name: "Bash", input: { command: "pytest tests/auth/session.test.ts -q" } },
+      ],
     },
     {
       role: "user",
-      content: [{ type: "tool_result", tool_use_id: "tu_py_m25", content: "collected 1 item\nauth.ts touched\nexit 0" }],
+      content: [
+        { type: "tool_result", tool_use_id: "tu_py_m25", content: "collected 1 item\nauth.ts touched\nexit 0" },
+      ],
     },
   ];
 }
@@ -248,76 +254,93 @@ function experienceJsonlFiles(root: string): string[] {
 describe("M25.1 Replay files — experience jsonl remains; gist from goal/outcome", () => {
   test("sleep keeps the traj file and gists the unique goal/outcome marker", async () => {
     const session = "s-m25-replay";
-    await withMem("eden-m25-replay-", async (mem, dir) => {
-      const id = "traj-m25-replay";
-      const goal = `Goal: ship ${GOLD_REPLAY} to staging`;
-      const outcome = `Outcome: ${GOLD_REPLAY} deployed`;
-      const path = seedTraj(dir, {
-        id,
-        session,
-        states: [{
-          thought: goal,
-          action: outcome,
+    await withMem(
+      "eden-m25-replay-",
+      async (mem, dir) => {
+        const id = "traj-m25-replay";
+        const goal = `Goal: ship ${GOLD_REPLAY} to staging`;
+        const outcome = `Outcome: ${GOLD_REPLAY} deployed`;
+        const path = seedTraj(dir, {
+          id,
+          session,
+          states: [
+            {
+              thought: goal,
+              action: outcome,
+              goal,
+              outcome,
+              t: 1,
+            },
+          ],
           goal,
           outcome,
-          t: 1,
-        }],
-        goal,
-        outcome,
-      });
-      expect(existsSync(path)).toBe(true);
-      expect(readFileSync(path, "utf8")).toContain(GOLD_REPLAY);
+        });
+        expect(existsSync(path)).toBe(true);
+        expect(readFileSync(path, "utf8")).toContain(GOLD_REPLAY);
 
-      await sleepReplay(mem, dir, undefined, session);
+        await sleepReplay(mem, dir, undefined, session);
 
-      expect(existsSync(path)).toBe(true);
-      expect(readFileSync(path, "utf8")).toContain(GOLD_REPLAY);
-      expect(experienceHay(dir)).toContain(GOLD_REPLAY);
-      const got = new ExperienceStore(dir).get(id);
-      expect(got).toBeTruthy();
-      expect(JSON.stringify(got)).toContain(GOLD_REPLAY);
+        expect(existsSync(path)).toBe(true);
+        expect(readFileSync(path, "utf8")).toContain(GOLD_REPLAY);
+        expect(experienceHay(dir)).toContain(GOLD_REPLAY);
+        const got = new ExperienceStore(dir).get(id);
+        expect(got).toBeTruthy();
+        expect(JSON.stringify(got)).toContain(GOLD_REPLAY);
 
-      const gists = gistTexts(dir);
-      expect(gists.length).toBeGreaterThan(0);
-      const hay = gistHay(dir);
-      expect(hay.length).toBeGreaterThan(0);
-      expect(hay).toContain(GOLD_REPLAY);
-    }, session);
+        const gists = gistTexts(dir);
+        expect(gists.length).toBeGreaterThan(0);
+        const hay = gistHay(dir);
+        expect(hay.length).toBeGreaterThan(0);
+        expect(hay).toContain(GOLD_REPLAY);
+      },
+      session,
+    );
   });
 });
 
 describe("M25.2 Procedure from success — exit 0 + verify becomes how-to; chat-only zero", () => {
   test("exit 0 + verify + files: after sleep, HowToStore has that verify", async () => {
     const session = "s-m25-ok";
-    await withMem("eden-m25-ok-", async (mem, dir) => {
-      const traj: ExtraTraj = {
-        id: "traj-m25-ok",
-        session,
-        states: [{
-          thought: `fix auth login ${GOLD_OK}`,
-          action: "wrote src/auth.ts then verified",
-          goal: `fix auth ${GOLD_OK}`,
-          outcome: `${GOLD_OK} tests passed`,
+    await withMem(
+      "eden-m25-ok-",
+      async (mem, dir) => {
+        const traj: ExtraTraj = {
+          id: "traj-m25-ok",
+          session,
+          states: [
+            {
+              thought: `fix auth login ${GOLD_OK}`,
+              action: "wrote src/auth.ts then verified",
+              goal: `fix auth ${GOLD_OK}`,
+              outcome: `${GOLD_OK} tests passed`,
+              exit: 0,
+              verify: VERIFY_OK,
+              files: ["src/auth.ts", "src/auth.test.ts"],
+              t: 2,
+            },
+          ],
           exit: 0,
           verify: VERIFY_OK,
           files: ["src/auth.ts", "src/auth.test.ts"],
-          t: 2,
-        }],
-        exit: 0,
-        verify: VERIFY_OK,
-        files: ["src/auth.ts", "src/auth.test.ts"],
-        goal: `fix auth ${GOLD_OK}`,
-        outcome: `${GOLD_OK} tests passed`,
-      };
-      seedTraj(dir, traj);
-      await sleepReplay(mem, dir, traj, session);
+          goal: `fix auth ${GOLD_OK}`,
+          outcome: `${GOLD_OK} tests passed`,
+        };
+        seedTraj(dir, traj);
+        await sleepReplay(mem, dir, traj, session);
 
-      expect(howtoEmpty(dir)).toBe(false);
-      expect(howtoHay(dir)).toContain(VERIFY_OK);
-      const rows = new HowToStore(dir).latest(VERIFY_OK, 10);
-      expect(rows.length).toBeGreaterThan(0);
-      expect(rows.some((r) => String(r.verify ?? "").includes(VERIFY_OK) || `${r.cue} ${JSON.stringify(r.steps)}`.includes(VERIFY_OK))).toBe(true);
-    }, session);
+        expect(howtoEmpty(dir)).toBe(false);
+        expect(howtoHay(dir)).toContain(VERIFY_OK);
+        const rows = new HowToStore(dir).latest(VERIFY_OK, 10);
+        expect(rows.length).toBeGreaterThan(0);
+        expect(
+          rows.some(
+            (r) =>
+              String(r.verify ?? "").includes(VERIFY_OK) || `${r.cue} ${JSON.stringify(r.steps)}`.includes(VERIFY_OK),
+          ),
+        ).toBe(true);
+      },
+      session,
+    );
   });
 
   test("chat-only observe then sleep: zero how-to (howto.jsonl missing or empty)", async () => {
@@ -337,78 +360,88 @@ describe("M25.2 Procedure from success — exit 0 + verify becomes how-to; chat-
 describe("M25.2 Dead-end stays episodic — exit ≠ 0 does not mint a procedure", () => {
   test("exit 1 + verify: experience file remains; HowToStore does not contain that verify", async () => {
     const session = "s-m25-dead";
-    await withMem("eden-m25-dead-", async (mem, dir) => {
-      const traj: ExtraTraj = {
-        id: "traj-m25-dead",
-        session,
-        states: [{
-          thought: `try auth patch ${GOLD_DEAD}`,
-          action: "tests failed",
-          goal: `fix auth ${GOLD_DEAD}`,
-          outcome: `${GOLD_DEAD} still failing`,
+    await withMem(
+      "eden-m25-dead-",
+      async (mem, dir) => {
+        const traj: ExtraTraj = {
+          id: "traj-m25-dead",
+          session,
+          states: [
+            {
+              thought: `try auth patch ${GOLD_DEAD}`,
+              action: "tests failed",
+              goal: `fix auth ${GOLD_DEAD}`,
+              outcome: `${GOLD_DEAD} still failing`,
+              exit: 1,
+              verify: VERIFY_DEAD,
+              files: ["src/auth.ts"],
+              t: 3,
+            },
+          ],
           exit: 1,
           verify: VERIFY_DEAD,
           files: ["src/auth.ts"],
-          t: 3,
-        }],
-        exit: 1,
-        verify: VERIFY_DEAD,
-        files: ["src/auth.ts"],
-      };
-      const path = seedTraj(dir, traj);
-      await sleepReplay(mem, dir, traj, session);
+        };
+        const path = seedTraj(dir, traj);
+        await sleepReplay(mem, dir, traj, session);
 
-      expect(existsSync(path)).toBe(true);
-      expect(readFileSync(path, "utf8")).toContain(GOLD_DEAD);
-      expect(experienceHay(dir)).toContain(VERIFY_DEAD);
-      expect(howtoHay(dir)).not.toContain(VERIFY_DEAD);
-      const rows = new HowToStore(dir).latest(VERIFY_DEAD, 10);
-      expect(rows.some((r) => String(r.verify ?? "").includes(VERIFY_DEAD))).toBe(false);
-    }, session);
+        expect(existsSync(path)).toBe(true);
+        expect(readFileSync(path, "utf8")).toContain(GOLD_DEAD);
+        expect(experienceHay(dir)).toContain(VERIFY_DEAD);
+        expect(howtoHay(dir)).not.toContain(VERIFY_DEAD);
+        const rows = new HowToStore(dir).latest(VERIFY_DEAD, 10);
+        expect(rows.some((r) => String(r.verify ?? "").includes(VERIFY_DEAD))).toBe(false);
+      },
+      session,
+    );
   });
 });
 
 describe("M25.4 Corrupt file fail-open — torn jsonl does not throw out of sleep", () => {
   test("good traj + experience/bad.jsonl torn JSON: sleep does not throw; inject returns array; good gist appears", async () => {
     const session = "s-m25-corrupt";
-    await withMem("eden-m25-corrupt-", async (mem, dir) => {
-      const id = "traj-m25-good";
-      const goal = `Goal: recover ${GOLD_CORRUPT}`;
-      const outcome = `Outcome: ${GOLD_CORRUPT} kept`;
-      const goodPath = seedTraj(dir, {
-        id,
-        session,
-        states: [{ thought: goal, action: outcome, goal, outcome, t: 4 }],
-        goal,
-        outcome,
-      });
-      mkdirSync(experienceDir(dir), { recursive: true });
-      writeFileSync(join(experienceDir(dir), "bad.jsonl"), "{{{not-json\n");
+    await withMem(
+      "eden-m25-corrupt-",
+      async (mem, dir) => {
+        const id = "traj-m25-good";
+        const goal = `Goal: recover ${GOLD_CORRUPT}`;
+        const outcome = `Outcome: ${GOLD_CORRUPT} kept`;
+        const goodPath = seedTraj(dir, {
+          id,
+          session,
+          states: [{ thought: goal, action: outcome, goal, outcome, t: 4 }],
+          goal,
+          outcome,
+        });
+        mkdirSync(experienceDir(dir), { recursive: true });
+        writeFileSync(join(experienceDir(dir), "bad.jsonl"), "{{{not-json\n");
 
-      let threw = false;
-      try {
-        await sleep({ dir, mem, session });
-      } catch {
-        threw = true;
-      }
-      expect(threw).toBe(false);
-      expect(existsSync(goodPath)).toBe(true);
-      expect(readFileSync(goodPath, "utf8")).toContain(GOLD_CORRUPT);
-      expect(existsSync(join(experienceDir(dir), "bad.jsonl"))).toBe(true);
+        let threw = false;
+        try {
+          await sleep({ dir, mem, session });
+        } catch {
+          threw = true;
+        }
+        expect(threw).toBe(false);
+        expect(existsSync(goodPath)).toBe(true);
+        expect(readFileSync(goodPath, "utf8")).toContain(GOLD_CORRUPT);
+        expect(existsSync(join(experienceDir(dir), "bad.jsonl"))).toBe(true);
 
-      const gists = gistTexts(dir);
-      expect(gists.length).toBeGreaterThan(0);
-      expect(gistHay(dir)).toContain(GOLD_CORRUPT);
+        const gists = gistTexts(dir);
+        expect(gists.length).toBeGreaterThan(0);
+        expect(gistHay(dir)).toContain(GOLD_CORRUPT);
 
-      const before = memoryInjectSwallows.n;
-      const list = [{ role: "user", content: `what happened to ${GOLD_CORRUPT}` }];
-      let out: unknown;
-      expect(() => {
-        out = mem.inject(list);
-      }).not.toThrow();
-      expect(Array.isArray(out)).toBe(true);
-      expect(memoryInjectSwallows.n).toBe(before);
-    }, session);
+        const before = memoryInjectSwallows.n;
+        const list = [{ role: "user", content: `what happened to ${GOLD_CORRUPT}` }];
+        let out: unknown;
+        expect(() => {
+          out = mem.inject(list);
+        }).not.toThrow();
+        expect(Array.isArray(out)).toBe(true);
+        expect(memoryInjectSwallows.n).toBe(before);
+      },
+      session,
+    );
   });
 
   test("inject catch still pass-through if sleep internals throw; swallows unchanged", async () => {
@@ -466,77 +499,96 @@ describe("M25 locks — consent, identifiers, no memory_search, chat observe ind
 
   test("EDEN_MEMORY=0 sleep is no-op (consent)", async () => {
     const session = "s-m25-off";
-    await withMem("eden-m25-off-", async (mem, dir) => {
-      const id = "traj-m25-off";
-      const path = seedTraj(dir, {
-        id,
-        session,
-        states: [{
-          thought: `Goal: ${GOLD_REPLAY} while consent on`,
-          action: `Outcome: ${GOLD_REPLAY} parked`,
-          t: 5,
-        }],
-      });
-      expect(existsSync(path)).toBe(true);
-      await withEnv({ EDEN_MEMORY: "0" }, async () => {
-        await sleep({ dir, mem, session });
-      });
-      expect(existsSync(path)).toBe(true);
-      expect(readFileSync(path, "utf8")).toContain(GOLD_REPLAY);
-      expect(gistHay(dir)).not.toContain(GOLD_REPLAY);
-      expect(howtoEmpty(dir)).toBe(true);
-    }, session);
+    await withMem(
+      "eden-m25-off-",
+      async (mem, dir) => {
+        const id = "traj-m25-off";
+        const path = seedTraj(dir, {
+          id,
+          session,
+          states: [
+            {
+              thought: `Goal: ${GOLD_REPLAY} while consent on`,
+              action: `Outcome: ${GOLD_REPLAY} parked`,
+              t: 5,
+            },
+          ],
+        });
+        expect(existsSync(path)).toBe(true);
+        await withEnv({ EDEN_MEMORY: "0" }, async () => {
+          await sleep({ dir, mem, session });
+        });
+        expect(existsSync(path)).toBe(true);
+        expect(readFileSync(path, "utf8")).toContain(GOLD_REPLAY);
+        expect(gistHay(dir)).not.toContain(GOLD_REPLAY);
+        expect(howtoEmpty(dir)).toBe(true);
+      },
+      session,
+    );
   });
 
   test("EDEN_MEMORY=readonly sleep writes no experience gist/how-to", async () => {
     const session = "s-m25-ro";
-    await withMem("eden-m25-ro-", async (mem, dir) => {
-      const path = seedTraj(dir, {
-        id: "traj-m25-ro",
-        session,
-        states: [{
-          thought: `Goal: ${GOLD_REPLAY} parked readonly`,
-          action: `Outcome: ${GOLD_REPLAY} still episodic`,
+    await withMem(
+      "eden-m25-ro-",
+      async (mem, dir) => {
+        const path = seedTraj(dir, {
+          id: "traj-m25-ro",
+          session,
+          states: [
+            {
+              thought: `Goal: ${GOLD_REPLAY} parked readonly`,
+              action: `Outcome: ${GOLD_REPLAY} still episodic`,
+              exit: 0,
+              verify: VERIFY_OK,
+              t: 7,
+            },
+          ],
           exit: 0,
           verify: VERIFY_OK,
-          t: 7,
-        }],
-        exit: 0,
-        verify: VERIFY_OK,
-      });
-      await withEnv({ EDEN_MEMORY: "readonly" }, async () => {
-        await sleep({ dir, mem, session });
-        putExperienceFromTool(dir, {
-          name: "Bash",
-          args: { command: VERIFY_OK },
-          result: "exit 0",
         });
-      });
-      expect(existsSync(path)).toBe(true);
-      expect(gistHay(dir)).not.toContain(GOLD_REPLAY);
-      expect(howtoHay(dir)).not.toContain(VERIFY_OK);
-      expect(new ExperienceStore(dir).ids()).toEqual(["traj-m25-ro"]);
-    }, session);
+        await withEnv({ EDEN_MEMORY: "readonly" }, async () => {
+          await sleep({ dir, mem, session });
+          putExperienceFromTool(dir, {
+            name: "Bash",
+            args: { command: VERIFY_OK },
+            result: "exit 0",
+          });
+        });
+        expect(existsSync(path)).toBe(true);
+        expect(gistHay(dir)).not.toContain(GOLD_REPLAY);
+        expect(howtoHay(dir)).not.toContain(VERIFY_OK);
+        expect(new ExperienceStore(dir).ids()).toEqual(["traj-m25-ro"]);
+      },
+      session,
+    );
   });
 
   test("identifiers (cwd/email/session_id) are not in gist/howto after sleep", async () => {
-    await withMem("eden-m25-ids-", async (mem, dir) => {
-      putExperience(dir, {
-        id: "traj-m25-ids",
-        session: SESSION,
-        cwd: FAKE_CWD,
-        states: [{
-          thought: `goal for ${EMAIL} session ${SESSION} cwd ${FAKE_CWD} ${GOLD_OK}`,
-          action: `outcome ${EMAIL} ${GOLD_OK}`,
-          t: 6,
-        }],
-      });
-      await sleep({ dir, mem, session: SESSION });
-      const hay = `${gistHay(dir)}\n${howtoHay(dir)}\n${experienceHay(dir)}`;
-      expect(hay).not.toContain(EMAIL);
-      expect(hay).not.toContain(SESSION);
-      expect(hay).not.toContain(FAKE_CWD);
-    }, SESSION, FAKE_CWD);
+    await withMem(
+      "eden-m25-ids-",
+      async (mem, dir) => {
+        putExperience(dir, {
+          id: "traj-m25-ids",
+          session: SESSION,
+          cwd: FAKE_CWD,
+          states: [
+            {
+              thought: `goal for ${EMAIL} session ${SESSION} cwd ${FAKE_CWD} ${GOLD_OK}`,
+              action: `outcome ${EMAIL} ${GOLD_OK}`,
+              t: 6,
+            },
+          ],
+        });
+        await sleep({ dir, mem, session: SESSION });
+        const hay = `${gistHay(dir)}\n${howtoHay(dir)}\n${experienceHay(dir)}`;
+        expect(hay).not.toContain(EMAIL);
+        expect(hay).not.toContain(SESSION);
+        expect(hay).not.toContain(FAKE_CWD);
+      },
+      SESSION,
+      FAKE_CWD,
+    );
   });
 });
 
@@ -555,14 +607,16 @@ describe("M25 named promoteExperienceHowTo — sleep must call the export, not a
       const id = "traj-m25-named";
       const path = writeTraj(dir, {
         id,
-        states: [{
-          thought: `fix auth ${GOLD_OK}`,
-          action: "wrote src/auth.ts then verified",
-          exit: 0,
-          verify: VERIFY_OK,
-          files: ["src/auth.ts"],
-          t: 8,
-        }],
+        states: [
+          {
+            thought: `fix auth ${GOLD_OK}`,
+            action: "wrote src/auth.ts then verified",
+            exit: 0,
+            verify: VERIFY_OK,
+            files: ["src/auth.ts"],
+            t: 8,
+          },
+        ],
         exit: 0,
         verify: VERIFY_OK,
         files: ["src/auth.ts"],
@@ -681,13 +735,15 @@ describe("M25 GistStore LWW — experience gist must not clobber Clerk/sqlite", 
 
       putExperience(dir, {
         id: "traj-m25-lww-exp",
-        states: [{
-          thought: `Goal: ${GOLD_REPLAY} only in experience gist`,
-          action: `Outcome: ${GOLD_REPLAY} done`,
-          goal: GOLD_REPLAY,
-          outcome: `${GOLD_REPLAY} done`,
-          t: Date.now() + 50_000,
-        }],
+        states: [
+          {
+            thought: `Goal: ${GOLD_REPLAY} only in experience gist`,
+            action: `Outcome: ${GOLD_REPLAY} done`,
+            goal: GOLD_REPLAY,
+            outcome: `${GOLD_REPLAY} done`,
+            t: Date.now() + 50_000,
+          },
+        ],
       });
       await sleep({ dir, mem, session: "s-m25-lww" });
       const afterExp = gistHay(dir);

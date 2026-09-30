@@ -48,12 +48,18 @@ function packetOf(messages: unknown[]): string {
 }
 
 function bullets(packet: string): string[] {
-  return packet.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("-"));
+  return packet
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("-"));
 }
 
 describe("hopChain current graph", () => {
   test("3-hop last hop is Belgium, not Dickens/UK", () => {
-    const hops = hopChain(QUERY, FACTS.map((text, i) => ({ text, at: i, i })));
+    const hops = hopChain(
+      QUERY,
+      FACTS.map((text, i) => ({ text, at: i, i })),
+    );
     expect(hops.length).toBe(3);
     expect(hops[0]!.o).toContain("darwin");
     expect(hops[1]!.o).toContain("amala");
@@ -131,11 +137,9 @@ describe("product inject 3-hop", () => {
 
   test.failing("4-hop inject last hop Europe first among facts", () => {
     withMem((mem) => {
-      for (const f of [
-        ...FACTS,
-        "8. Belgium is located in the continent of Europe.",
-      ]) mem.remember(f);
-      const cue = "Which continent is the country of citizenship of the spouse of the author of Our Mutual Friend located in?";
+      for (const f of [...FACTS, "8. Belgium is located in the continent of Europe."]) mem.remember(f);
+      const cue =
+        "Which continent is the country of citizenship of the spouse of the author of Our Mutual Friend located in?";
       const packet = packetOf(mem.inject([{ role: "user", content: cue }]));
       expect(packet).toContain(MEMORY_MARK);
       const facts = bullets(packet).filter((l) => /\[fact(?:\s*·[^\]]*)?\]/i.test(l));
@@ -234,18 +238,18 @@ describe("M22 hop-order two-hop overwrite", () => {
   test("ICL label: and novel alone are not hop triples", () => {
     expect(ICL).toMatch(/label:\s*28/);
     expect(NOVEL.length).toBeGreaterThan(400);
-    expect(hopChain(CUE, [
-      { text: ICL, at: 0, i: 0, id: "icl" },
-      { text: NOVEL, at: 1, i: 1, id: "nar" },
-      { text: "Player Zane plays lacrosse. label: 28", at: 2, i: 2, id: "icl-sport" },
-    ])).toEqual([]);
+    expect(
+      hopChain(CUE, [
+        { text: ICL, at: 0, i: 0, id: "icl" },
+        { text: NOVEL, at: 1, i: 1, id: "nar" },
+        { text: "Player Zane plays lacrosse. label: 28", at: 2, i: 2, id: "icl-sport" },
+      ]),
+    ).toEqual([]);
     const iclCue = "The movie was great. label:";
     expect(iclCue).toMatch(/label:/);
-    expect(hopChain(iclCue, [
-      { text: ICL, at: 0, i: 0, id: "icl" },
-      { text: NOVEL, at: 1, i: 1, id: "nar" },
-      ...sportRows,
-    ])).toEqual([]);
+    expect(
+      hopChain(iclCue, [{ text: ICL, at: 0, i: 0, id: "icl" }, { text: NOVEL, at: 1, i: 1, id: "nar" }, ...sportRows]),
+    ).toEqual([]);
   });
 
   test.failing("hop cue on mixed ICL/novel/Zane world still returns Canada", () => {
@@ -328,7 +332,8 @@ describe("M22 hop-order two-hop overwrite", () => {
       { text: "7. The United Kingdom is located in the continent of Europe.", i: 7, at: 7 },
     ];
     const q3 = "Which country is the spouse of the author of Our Mutual Friend a citizen of?";
-    const q4 = "Which continent is the country of citizenship of the spouse of the author of Our Mutual Friend located in?";
+    const q4 =
+      "Which continent is the country of citizenship of the spouse of the author of Our Mutual Friend located in?";
     const h3 = hopChain(q3, rows);
     const h4 = hopChain(q4, rows);
     expect(h3[h3.length - 1]!.o).toMatch(/belgium/i);
@@ -342,9 +347,15 @@ describe("M22 hop-order two-hop overwrite", () => {
   test("fail-open: completeNotes/completeScores throw leaves notes and scores unchanged", () => {
     const notes = [{ text: "keep me", id: "k" }];
     const boom = {
-      forEach() { throw new Error("m22 hopChain"); },
-      map() { throw new Error("m22 hopChain"); },
-      [Symbol.iterator]() { throw new Error("m22 hopChain"); },
+      forEach() {
+        throw new Error("m22 hopChain");
+      },
+      map() {
+        throw new Error("m22 hopChain");
+      },
+      [Symbol.iterator]() {
+        throw new Error("m22 hopChain");
+      },
       length: 1,
     } as never;
     expect(completeNotes(CUE, notes, boom)).toEqual(notes);
@@ -354,7 +365,9 @@ describe("M22 hop-order two-hop overwrite", () => {
     const scores = new Float64Array([7]);
     const badEpisodes = {
       length: 1,
-      map() { throw new Error("m22 completeScores"); },
+      map() {
+        throw new Error("m22 completeScores");
+      },
       [0]: episodes[0],
     } as never;
     const out = completeScores(CUE, badEpisodes, scores);
@@ -448,7 +461,9 @@ describe("M28.1 MH 2-hop needle over narrative chunks", () => {
     expect(hopRows.length).toBeGreaterThan(0);
     expect(hopRows[0]!.text).toMatch(/greenwich|village/i);
     const last = out.findIndex((r) => /greenwich|village/i.test(r.text));
-    const dirOnly = out.findIndex((r) => /directed by Adriana Trigiani/i.test(r.text) && !/greenwich|village/i.test(r.text));
+    const dirOnly = out.findIndex(
+      (r) => /directed by Adriana Trigiani/i.test(r.text) && !/greenwich|village/i.test(r.text),
+    );
     expect(last).toBe(0);
     if (dirOnly >= 0) expect(last).toBeLessThan(dirOnly);
   });
@@ -461,7 +476,9 @@ describe("M28.1 MH 2-hop needle over narrative chunks", () => {
     expect(out[0]!.text).toMatch(/greenwich|village/i);
     expect(out[0]!.text).toContain(BASED_NEEDLE);
     const last = out.findIndex((r) => /greenwich|village/i.test(r.text));
-    const dirOnly = out.findIndex((r) => /directed by Adriana Trigiani/i.test(r.text) && !/greenwich|village/i.test(r.text));
+    const dirOnly = out.findIndex(
+      (r) => /directed by Adriana Trigiani/i.test(r.text) && !/greenwich|village/i.test(r.text),
+    );
     expect(last).toBe(0);
     if (dirOnly >= 0) expect(last).toBeLessThan(dirOnly);
   });
@@ -475,7 +492,9 @@ describe("M28.1 MH 2-hop needle over narrative chunks", () => {
       const packet = packetOf(mem.inject([{ role: "user", content: MH_CUE }]));
       expect(packet).toContain(MEMORY_MARK);
       expect(packet).toMatch(/Greenwich Village/i);
-      expect(/miller|river|oak|silt/i.test(packet) && !/Greenwich Village|Adriana Trigiani|Big Stone Gap/i.test(packet)).toBe(false);
+      expect(
+        /miller|river|oak|silt/i.test(packet) && !/Greenwich Village|Adriana Trigiani|Big Stone Gap/i.test(packet),
+      ).toBe(false);
       const village = packet.search(/Greenwich Village/i);
       const directed = packet.search(/directed by Adriana Trigiani/i);
       expect(village).toBeGreaterThanOrEqual(0);
@@ -538,9 +557,15 @@ describe("M28 fail-open", () => {
   test("completeNotes/completeScores throw on MH cue leaves notes and scores unchanged", () => {
     const notes = [{ text: "keep me", id: "k" }];
     const boom = {
-      forEach() { throw new Error("m28 hopChain"); },
-      map() { throw new Error("m28 hopChain"); },
-      [Symbol.iterator]() { throw new Error("m28 hopChain"); },
+      forEach() {
+        throw new Error("m28 hopChain");
+      },
+      map() {
+        throw new Error("m28 hopChain");
+      },
+      [Symbol.iterator]() {
+        throw new Error("m28 hopChain");
+      },
       length: 1,
     } as never;
     expect(completeNotes(MH_CUE, notes, boom)).toEqual(notes);
@@ -550,7 +575,9 @@ describe("M28 fail-open", () => {
     const scores = new Float64Array([7]);
     const badEpisodes = {
       length: 1,
-      map() { throw new Error("m28 completeScores"); },
+      map() {
+        throw new Error("m28 completeScores");
+      },
       [0]: episodes[0],
     } as never;
     const out = completeScores(MH_CUE, badEpisodes, scores);
@@ -578,11 +605,12 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void): void
 
 function anthMemoryText(body: { system?: unknown }): string {
   const sys = body.system;
-  const parts = typeof sys === "string"
-    ? [sys]
-    : Array.isArray(sys)
-      ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-      : [];
+  const parts =
+    typeof sys === "string"
+      ? [sys]
+      : Array.isArray(sys)
+        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+        : [];
   return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
 }
 
@@ -606,10 +634,13 @@ describe("M28 wrap OpenAI / Anthropic / hook 2-hop + fail-open", () => {
       const mem = openMemory({ dir });
       const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
       try {
-        withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_CAP: "10" }, () => {
-          seed(mem);
-          fn(mem);
-        });
+        withEnv(
+          { EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_CAP: "10" },
+          () => {
+            seed(mem);
+            fn(mem);
+          },
+        );
       } finally {
         procSpy.mockRestore();
         mem.close();
@@ -703,7 +734,10 @@ describe("M28 interrogative chat must not steal Greenwich", () => {
       const brooklyn = packet.search(/Brooklyn/i);
       expect(village).toBeGreaterThanOrEqual(0);
       if (brooklyn >= 0) expect(village).toBeLessThan(brooklyn);
-      const hops = hopChain(MH_CUE, mem.memories().map((r, i) => ({ text: r.text, at: r.at, i, id: r.id })));
+      const hops = hopChain(
+        MH_CUE,
+        mem.memories().map((r, i) => ({ text: r.text, at: r.at, i, id: r.id })),
+      );
       expect(hops.some((h) => /greenwich|village/i.test(h.o))).toBe(true);
       expect(hops.every((h) => !/brooklyn/i.test(h.o))).toBe(true);
     });
@@ -744,7 +778,10 @@ describe("M28 interrogative chat must not steal Greenwich", () => {
       mem.observe([{ role: "user", content: "CI is CircleCI." }]);
       mem.observe([{ role: "user", content: directorStory }]);
       mem.observe([{ role: "user", content: basedStory }]);
-      const hops = hopChain(MH_CUE, mem.memories().map((r, i) => ({ text: r.text, at: r.at, i, id: r.id })));
+      const hops = hopChain(
+        MH_CUE,
+        mem.memories().map((r, i) => ({ text: r.text, at: r.at, i, id: r.id })),
+      );
       expect(hops.every((h) => !/vegetarian|dairy|circleci/i.test(h.o + h.text))).toBe(true);
       const packet = packetOf(mem.inject([{ role: "user", content: MH_CUE }]));
       expect(packet).toMatch(/Greenwich Village/i);

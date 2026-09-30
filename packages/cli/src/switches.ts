@@ -1,15 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const SKIP_DIR = new Set([
-  "node_modules",
-  "dist",
-  ".next",
-  ".git",
-  ".gauntlet",
-  "archived",
-  "coverage",
-]);
+const SKIP_DIR = new Set(["node_modules", "dist", ".next", ".git", ".gauntlet", "archived", "coverage"]);
 
 export const PATH_ALLOWLIST = new Set([
   "EDEN_AGENT",

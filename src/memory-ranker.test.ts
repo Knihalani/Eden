@@ -178,7 +178,10 @@ describe("M4.3 place + subject", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
       mem.observe([{ role: "user", content: "Auth is failing" }]);
-      const blob = mem.memories().map((r) => r.text).join("\n");
+      const blob = mem
+        .memories()
+        .map((r) => r.text)
+        .join("\n");
       expect(blob).toMatch(/Clerk/);
     });
   });
@@ -187,7 +190,10 @@ describe("M4.3 place + subject", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: "CI is GitHub Actions" }]);
       mem.observe([{ role: "user", content: "CI is failing" }]);
-      const blob = mem.memories().map((r) => r.text).join("\n");
+      const blob = mem
+        .memories()
+        .map((r) => r.text)
+        .join("\n");
       expect(blob).toMatch(/GitHub Actions/);
     });
   });
@@ -244,7 +250,12 @@ describe("M34.2 retrieve loop", () => {
       expect(mem.notesFor("auth.ts").some((r) => /auth\.ts/i.test(r.text))).toBe(true);
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
       mem.observe([{ role: "user", content: "Auth is failing" }]);
-      expect(mem.memories().map((r) => r.text).join("\n")).toMatch(/Clerk/);
+      expect(
+        mem
+          .memories()
+          .map((r) => r.text)
+          .join("\n"),
+      ).toMatch(/Clerk/);
     });
   });
 });

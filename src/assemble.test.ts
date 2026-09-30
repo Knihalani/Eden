@@ -43,7 +43,9 @@ function packetOf(messages: unknown[]): string {
 
 function laterThan(at: number): void {
   const end = at + 2;
-  while (Date.now() <= end) { /* wall clock must move for timestamp-only LWW */ }
+  while (Date.now() <= end) {
+    /* wall clock must move for timestamp-only LWW */
+  }
 }
 
 function factObject(got: unknown): string {
@@ -82,10 +84,12 @@ describe("extractCandidates", () => {
   });
 
   test("M20.1: one blob with 1. and 8. yields both serials; now/was/became extract", () => {
-    const blob = extractCandidates([{
-      text: "1. The chairperson of the committee is Alice.\n8. The chairperson of the committee is Bob.",
-      t: 50,
-    }]);
+    const blob = extractCandidates([
+      {
+        text: "1. The chairperson of the committee is Alice.\n8. The chairperson of the committee is Bob.",
+        t: 50,
+      },
+    ]);
     expect(blob.some((tr) => tr.o === "Alice" && tr.t === 1)).toBe(true);
     expect(blob.some((tr) => tr.o === "Bob" && tr.t === 8)).toBe(true);
 
@@ -106,12 +110,18 @@ describe("extractCandidates", () => {
     expect(got.some((tr) => tr.s === "auth" && tr.p === "is" && /Clerk/i.test(tr.o) && tr.recId === "adr")).toBe(true);
     expect(extractCandidates([{ text: "don't forget to use Clerk for auth because SSO.", t: 11 }])).toEqual([]);
     expect(extractCandidates([{ text: "We decided to use Clerk for auth because SSO. label: 7", t: 12 }])).toEqual([]);
-    expect(extractCandidates([{ text: "We decided to use Clerk for auth because SSO.", t: 13, lane: "icl" }])).toEqual([]);
+    expect(extractCandidates([{ text: "We decided to use Clerk for auth because SSO.", t: 13, lane: "icl" }])).toEqual(
+      [],
+    );
     expect(extractCandidates([{ text: "do not forget to use Clerk for auth because SSO.", t: 14 }])).toEqual([]);
-    const later = assemble(extractCandidates([{
-      text: "We decided to use postgres for the database because durability then we decided to use sqlite for the database.",
-      t: 15,
-    }]));
+    const later = assemble(
+      extractCandidates([
+        {
+          text: "We decided to use postgres for the database because durability then we decided to use sqlite for the database.",
+          t: 15,
+        },
+      ]),
+    );
     expect(later).toHaveLength(1);
     expect(later[0]!.s).toBe("database");
     expect(later[0]!.o).toBe("sqlite");
@@ -232,7 +242,11 @@ describe("assembleNotes keeps non-triples; fail-open", () => {
 
   test("fused note with both serials is scrubbed to the winner", () => {
     const out = assembleNotes([
-      { id: "fuse", text: "[fact] 8. The chairperson of the committee is Bob. | 1. The chairperson of the committee is Alice.", at: 9 },
+      {
+        id: "fuse",
+        text: "[fact] 8. The chairperson of the committee is Bob. | 1. The chairperson of the committee is Alice.",
+        at: 9,
+      },
     ]);
     expect(out.some((n) => /Bob/.test(n.text))).toBe(true);
     expect(out.some((n) => /Alice/.test(n.text))).toBe(false);
@@ -258,11 +272,13 @@ describe("assembleNotes keeps non-triples; fail-open", () => {
     expect(out[0]!.text).toMatch(/^\[fact · 1h · user\]/i);
     expect(out.some((n) => /postgres/i.test(n.text))).toBe(false);
 
-    const got = extractCandidates([{
-      text: "[fact · 3h · user] 8. The chairperson is Bob",
-      t: 999,
-      id: "c",
-    }]);
+    const got = extractCandidates([
+      {
+        text: "[fact · 3h · user] 8. The chairperson is Bob",
+        t: 999,
+        id: "c",
+      },
+    ]);
     expect(got.some((tr) => tr.t === 8 && /bob/i.test(tr.o))).toBe(true);
     expect(got.some((tr) => tr.t === 999)).toBe(false);
 
@@ -288,10 +304,13 @@ describe("assembleNotes keeps non-triples; fail-open", () => {
     try {
       const store = new SemanticStore(dir);
       store.put("database", "is", "sqlite", 9);
-      const out = assembleNotes([
-        { id: "old", text: "The database is postgres.", at: 1 },
-        { id: "new", text: "The database is sqlite.", at: 2 },
-      ], dir);
+      const out = assembleNotes(
+        [
+          { id: "old", text: "The database is postgres.", at: 1 },
+          { id: "new", text: "The database is sqlite.", at: 2 },
+        ],
+        dir,
+      );
       expect(out.some((n) => /sqlite/i.test(n.text))).toBe(true);
       expect(out.some((n) => /postgres/i.test(n.text))).toBe(false);
     } finally {
@@ -320,7 +339,10 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the millrace after the thaw.";
 
   function factLines(packet: string): string[] {
-    return packet.split("\n").map((l) => l.trim()).filter((l) => /^-\s*\[fact(?:\s*[·|][^\]]*)?\]/i.test(l));
+    return packet
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^-\s*\[fact(?:\s*[·|][^\]]*)?\]/i.test(l));
   }
 
   function seedSportWorld(mem: AgentMemory): void {
@@ -392,7 +414,10 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
       expect(facts[0]).toMatch(/Canada/);
       expect(facts[0]).not.toMatch(/Scotland/);
       expect(facts[0]).toMatch(/\[fact[^\]]*\].*Canada/i);
-      const bullets = pkt.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("-"));
+      const bullets = pkt
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("-"));
       const firstFactAt = bullets.findIndex((l) => /^-\s*\[fact(?:\s*[·|][^\]]*)?\]/i.test(l));
       const canadaFactAt = bullets.findIndex((l) => /^-\s*\[fact(?:\s*[·|][^\]]*)?\]/i.test(l) && /Canada/i.test(l));
       expect(firstFactAt).toBeGreaterThanOrEqual(0);
@@ -408,20 +433,24 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
   test("ICL label: and novel alone are not hop triples", () => {
     expect(ICL).toMatch(/label:\s*28/);
     expect(NOVEL.length).toBeGreaterThan(400);
-    expect(hopChain(CUE, [
-      { text: ICL, at: 0, i: 0 },
-      { text: NOVEL, at: 1, i: 1 },
-      { text: "Player Zane plays lacrosse. label: 28", at: 2, i: 2 },
-    ])).toEqual([]);
+    expect(
+      hopChain(CUE, [
+        { text: ICL, at: 0, i: 0 },
+        { text: NOVEL, at: 1, i: 1 },
+        { text: "Player Zane plays lacrosse. label: 28", at: 2, i: 2 },
+      ]),
+    ).toEqual([]);
     const iclCue = "The movie was great. label:";
     expect(iclCue).toMatch(/label:/);
-    expect(hopChain(iclCue, [
-      { text: ICL, at: 0, i: 0 },
-      { text: NOVEL, at: 1, i: 1 },
-      { text: PLAYS, at: 2, i: 2 },
-      { text: LOSER, at: 3, i: 3 },
-      { text: WINNER, at: 4, i: 4 },
-    ])).toEqual([]);
+    expect(
+      hopChain(iclCue, [
+        { text: ICL, at: 0, i: 0 },
+        { text: NOVEL, at: 1, i: 1 },
+        { text: PLAYS, at: 2, i: 2 },
+        { text: LOSER, at: 3, i: 3 },
+        { text: WINNER, at: 4, i: 4 },
+      ]),
+    ).toEqual([]);
   });
 
   test("ICL cue does not pull sport hops; stored label: is kept", async () => {
@@ -541,20 +570,24 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
         const facts = factLines(pkt);
         expect(facts[0]).toMatch(/Canada/);
         const hook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: CUE });
-        const spec = hook && typeof hook === "object" ? hook as {
-          additional_context?: string;
-          hookSpecificOutput?: { additionalContext?: string };
-        } : null;
+        const spec =
+          hook && typeof hook === "object"
+            ? (hook as {
+                additional_context?: string;
+                hookSpecificOutput?: { additionalContext?: string };
+              })
+            : null;
         const ctx = [spec?.additional_context, spec?.hookSpecificOutput?.additionalContext].join("\n");
         expect(ctx).toMatch(/Canada/);
         expect(ctx).not.toMatch(/Scotland/);
         const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: CUE }] });
         const sys = anth && typeof anth === "object" ? (anth as { system?: unknown }).system : undefined;
-        const anthText = typeof sys === "string"
-          ? sys
-          : Array.isArray(sys)
-            ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
-            : "";
+        const anthText =
+          typeof sys === "string"
+            ? sys
+            : Array.isArray(sys)
+              ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
+              : "";
         expect(anthText).toMatch(/Canada/);
         expect(anthText).not.toMatch(/Scotland/);
       } finally {
@@ -576,9 +609,16 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
       "6. Belgium is located in the continent of Europe.",
     ];
     const q3 = "Which country is the spouse of the author of Our Mutual Friend a citizen of?";
-    const q4 = "Which continent is the country of citizenship of the spouse of the author of Our Mutual Friend located in?";
-    const hops3 = hopChain(q3, rows.map((text, i) => ({ text, i, at: i })));
-    const hops4 = hopChain(q4, rows.map((text, i) => ({ text, i, at: i })));
+    const q4 =
+      "Which continent is the country of citizenship of the spouse of the author of Our Mutual Friend located in?";
+    const hops3 = hopChain(
+      q3,
+      rows.map((text, i) => ({ text, i, at: i })),
+    );
+    const hops4 = hopChain(
+      q4,
+      rows.map((text, i) => ({ text, i, at: i })),
+    );
     expect(hops3[hops3.length - 1]!.text).toMatch(/Belgium/);
     expect(hops3[hops3.length - 1]!.text).not.toMatch(/continent of Europe/);
     expect(hops4[hops4.length - 1]!.text).toMatch(/continent of Europe/);
@@ -781,7 +821,9 @@ describe("M20.4 kind firewall", () => {
   test("garbage or missing kind does not throw", () => {
     expect(() => extractCandidates([{ text: ALICE, t: 1 }])).not.toThrow();
     expect(() => extractCandidates([{ text: ALICE, t: 1, kind: "not-a-kind" }])).not.toThrow();
-    expect(() => extractCandidates([{ text: POSTGRES, t: 1, kind: 99 as never, lane: { x: 1 } as never }])).not.toThrow();
+    expect(() =>
+      extractCandidates([{ text: POSTGRES, t: 1, kind: 99 as never, lane: { x: 1 } as never }]),
+    ).not.toThrow();
     expect(() => extractCandidates([{ text: ALICE, t: 1, kind: null as never, lane: undefined }])).not.toThrow();
     expect(extractCandidates([{ text: ALICE, t: 1, kind: "not-a-kind" }]).some((tr) => tr.o === "Alice")).toBe(true);
     expect(() => assembleNotes([{ id: "g", text: POSTGRES, at: 1, kind: "???", lane: 0 as never }])).not.toThrow();
@@ -826,11 +868,13 @@ describe("M20.2 prior-override (Finland → ice hockey then basketball)", () => 
   });
 
   test("code picks max(serial): packet has basketball, not ice hockey", async () => {
-    const picked = assemble(extractCandidates([
-      { text: ORIGIN, t: 1000 },
-      { text: LOSER, t: 1001 },
-      { text: WINNER, t: 1002 },
-    ]));
+    const picked = assemble(
+      extractCandidates([
+        { text: ORIGIN, t: 1000 },
+        { text: LOSER, t: 1001 },
+        { text: WINNER, t: 1002 },
+      ]),
+    );
     expect(picked.some((tr) => /basketball/i.test(tr.o) && tr.t === 8)).toBe(true);
     expect(picked.some((tr) => /ice hockey/i.test(tr.o))).toBe(false);
 
@@ -878,10 +922,13 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
   test("incomplete retrieve of the loser does not demote a higher-serial live winner", () => {
     const dir = tmpDir("eden-m21-incomplete-");
     try {
-      assembleNotes([
-        { id: "win", text: SPORT_WIN, at: 1 },
-        { id: "lose", text: SPORT_LOSE, at: 2 },
-      ], dir);
+      assembleNotes(
+        [
+          { id: "win", text: SPORT_WIN, at: 1 },
+          { id: "lose", text: SPORT_LOSE, at: 2 },
+        ],
+        dir,
+      );
       expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/basketball/i);
       const incomplete = assembleNotes([{ id: "lose", text: SPORT_LOSE, at: 3 }], dir);
       expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/basketball/i);
@@ -909,14 +956,21 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
   test("tombstone emit: assembleNotes(dir) live is Bob; missing dir / throw does not throw", () => {
     expect(() => assembleNotes(null as never)).not.toThrow();
     expect(() => assembleNotes([{ id: "x", text: ALICE, at: 1 }], "/no/such/eden-m21-assemble-dir")).not.toThrow();
-    expect(assembleNotes([{ id: "x", text: "Auth is Clerk", at: 1 }], "/no/such/eden-m21-assemble-dir")).toHaveLength(1);
+    expect(assembleNotes([{ id: "x", text: "Auth is Clerk", at: 1 }], "/no/such/eden-m21-assemble-dir")).toHaveLength(
+      1,
+    );
 
     const dirNotes = tmpDir("eden-m21-tomb-notes-");
     try {
-      expect(() => assembleNotes([
-        { id: "a", text: ALICE, at: 2 },
-        { id: "b", text: BOB, at: 3 },
-      ], dirNotes)).not.toThrow();
+      expect(() =>
+        assembleNotes(
+          [
+            { id: "a", text: ALICE, at: 2 },
+            { id: "b", text: BOB, at: 3 },
+          ],
+          dirNotes,
+        ),
+      ).not.toThrow();
       const fromNotes = new SemanticStore(dirNotes);
       const notesLive = factObject(fromNotes.get(CHAIR_S, "is"));
       expect(notesLive).toMatch(/Bob/i);
@@ -959,20 +1013,24 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
         expect(pkt).toMatch(/basketball/i);
         expect(pkt).not.toMatch(/ice hockey/i);
         const hook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what is the sport of Alice" });
-        const spec = hook && typeof hook === "object" ? hook as {
-          additional_context?: string;
-          hookSpecificOutput?: { additionalContext?: string };
-        } : null;
+        const spec =
+          hook && typeof hook === "object"
+            ? (hook as {
+                additional_context?: string;
+                hookSpecificOutput?: { additionalContext?: string };
+              })
+            : null;
         const ctx = [spec?.additional_context, spec?.hookSpecificOutput?.additionalContext].join("\n");
         expect(ctx).toMatch(/basketball/i);
         expect(ctx).not.toMatch(/ice hockey/i);
         const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: "what is the sport of Alice" }] });
         const sys = anth && typeof anth === "object" ? (anth as { system?: unknown }).system : undefined;
-        const anthText = typeof sys === "string"
-          ? sys
-          : Array.isArray(sys)
-            ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
-            : "";
+        const anthText =
+          typeof sys === "string"
+            ? sys
+            : Array.isArray(sys)
+              ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
+              : "";
         expect(anthText).toMatch(/basketball/i);
         expect(anthText).not.toMatch(/ice hockey/i);
       } finally {

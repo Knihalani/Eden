@@ -112,7 +112,9 @@ function gistText(dir: string): string {
 function experienceFiles(dir: string): string[] {
   const exp = join(dir, EXPERIENCE_DIRNAME);
   if (!existsSync(exp)) return [];
-  return readdirSync(exp).filter((n) => n.endsWith(".jsonl")).map((n) => join(exp, n));
+  return readdirSync(exp)
+    .filter((n) => n.endsWith(".jsonl"))
+    .map((n) => join(exp, n));
 }
 
 /** Postgres then sqlite, plus traj files that still mention the loser. Files stay. */
@@ -127,7 +129,12 @@ async function seedSwitch(mem: AgentMemory, dir: string): Promise<string[]> {
     id: "traj-m35-db-switch",
     states: [
       { thought: "The database is postgres.", t: 2 },
-      { thought: "The database is sqlite instead of postgres.", goal: "The database is postgres.", outcome: "The database is sqlite.", t: 3 },
+      {
+        thought: "The database is sqlite instead of postgres.",
+        goal: "The database is postgres.",
+        outcome: "The database is sqlite.",
+        t: 3,
+      },
     ],
   });
   const files = experienceFiles(dir);
@@ -155,7 +162,9 @@ describe("M35.3 leftover identity — packet, gists, experience", () => {
       expect(pkt).toContain(MEMORY_MARK);
       expectLiveSqlite(pkt);
       expectLiveSqlite(gistText(dir));
-      const slices = retrieveExperience(dir, CUE).map((s) => s.text).join("\n");
+      const slices = retrieveExperience(dir, CUE)
+        .map((s) => s.text)
+        .join("\n");
       expect(slices).not.toMatch(/postgres/i);
       if (slices.trim()) expect(slices).toMatch(/sqlite/i);
       const live = new SemanticStore(dir).get("database", "is");
@@ -201,28 +210,37 @@ describe("M35.3 leftover identity — packet, gists, experience", () => {
 
 describe("M35.3 identifiers never stored", () => {
   test("session_id, email, and cwd are absent after observe + sleep", async () => {
-    await withMem("eden-m35-ids-", async (mem, dir) => {
-      mem.observe([{
-        role: "user",
-        content: `The database is sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}.`,
-      }]);
-      putExperience(dir, {
-        id: "traj-m35-ids",
-        session: SESSION,
-        cwd: CWD,
-        states: [{
-          thought: `goal for ${EMAIL} session ${SESSION} cwd ${CWD} the database is sqlite`,
-          t: 4,
-        }],
-      });
-      await sleep({ dir, mem, session: SESSION });
-      const blob = readNamed(dir);
-      expect(blob).not.toContain(SESSION);
-      expect(blob).not.toContain(EMAIL);
-      expect(blob).not.toContain(CWD);
-      expect(blob).toMatch(/sqlite/i);
-      expect(experienceFiles(dir).length).toBeGreaterThan(0);
-    }, SESSION, CWD);
+    await withMem(
+      "eden-m35-ids-",
+      async (mem, dir) => {
+        mem.observe([
+          {
+            role: "user",
+            content: `The database is sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}.`,
+          },
+        ]);
+        putExperience(dir, {
+          id: "traj-m35-ids",
+          session: SESSION,
+          cwd: CWD,
+          states: [
+            {
+              thought: `goal for ${EMAIL} session ${SESSION} cwd ${CWD} the database is sqlite`,
+              t: 4,
+            },
+          ],
+        });
+        await sleep({ dir, mem, session: SESSION });
+        const blob = readNamed(dir);
+        expect(blob).not.toContain(SESSION);
+        expect(blob).not.toContain(EMAIL);
+        expect(blob).not.toContain(CWD);
+        expect(blob).toMatch(/sqlite/i);
+        expect(experienceFiles(dir).length).toBeGreaterThan(0);
+      },
+      SESSION,
+      CWD,
+    );
   });
 });
 
@@ -265,42 +283,50 @@ describe("M35.3 wrap + hook leftover identity", () => {
   });
 
   test("hook UserPromptSubmit after Stop omits postgres", async () => {
-    await withMem("eden-m35-hook-", async (mem, dir) => {
-      await seedSwitch(mem, dir);
-      expect(memoryHookResponse({ hook_event_name: "Stop", session_id: SESSION })).toBeNull();
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
-      expect(`${hookContext(start)}\n${JSON.stringify(start ?? {})}`).not.toMatch(/postgres/i);
-      const submit = memoryHookResponse({
-        hook_event_name: "UserPromptSubmit",
-        session_id: SESSION,
-        prompt: CUE,
-      });
-      const ctx = hookContext(submit);
-      expectLiveSqlite(ctx);
-      expect(JSON.stringify(submit ?? {})).not.toMatch(/\bmemory_search\b/);
-      for (const p of experienceFiles(dir)) expect(existsSync(p)).toBe(true);
-    }, SESSION);
+    await withMem(
+      "eden-m35-hook-",
+      async (mem, dir) => {
+        await seedSwitch(mem, dir);
+        expect(memoryHookResponse({ hook_event_name: "Stop", session_id: SESSION })).toBeNull();
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
+        expect(`${hookContext(start)}\n${JSON.stringify(start ?? {})}`).not.toMatch(/postgres/i);
+        const submit = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          session_id: SESSION,
+          prompt: CUE,
+        });
+        const ctx = hookContext(submit);
+        expectLiveSqlite(ctx);
+        expect(JSON.stringify(submit ?? {})).not.toMatch(/\bmemory_search\b/);
+        for (const p of experienceFiles(dir)) expect(existsSync(p)).toBe(true);
+      },
+      SESSION,
+    );
   });
 
   test("SessionStart does not brief an Always-use-postgres pin after sqlite sleep", async () => {
-    await withMem("eden-m35-pin-", async (mem, dir) => {
-      mem.observe([{ role: "user", content: "Always use postgres." }]);
-      mem.observe([{ role: "user", content: "The database is postgres." }]);
-      mem.observe([{ role: "user", content: "Use sqlite instead of postgres." }]);
-      mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
-      await sleep({ dir, mem, session: SESSION });
-      const pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
-      expect(pkt).toMatch(/sqlite/i);
-      expect(pkt).not.toMatch(/always use postgres/i);
-      expect(pkt).not.toMatch(/database is postgres/i);
-      expect(gistText(dir)).toMatch(/sqlite/i);
-      expect(gistText(dir)).not.toMatch(/postgres/i);
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
-      const ctx = hookContext(start);
-      expect(ctx).toMatch(/sqlite/i);
-      expect(ctx).not.toMatch(/postgres/i);
-      expect(ctx).not.toMatch(/always use postgres/i);
-    }, SESSION);
+    await withMem(
+      "eden-m35-pin-",
+      async (mem, dir) => {
+        mem.observe([{ role: "user", content: "Always use postgres." }]);
+        mem.observe([{ role: "user", content: "The database is postgres." }]);
+        mem.observe([{ role: "user", content: "Use sqlite instead of postgres." }]);
+        mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
+        await sleep({ dir, mem, session: SESSION });
+        const pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
+        expect(pkt).toMatch(/sqlite/i);
+        expect(pkt).not.toMatch(/always use postgres/i);
+        expect(pkt).not.toMatch(/database is postgres/i);
+        expect(gistText(dir)).toMatch(/sqlite/i);
+        expect(gistText(dir)).not.toMatch(/postgres/i);
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
+        const ctx = hookContext(start);
+        expect(ctx).toMatch(/sqlite/i);
+        expect(ctx).not.toMatch(/postgres/i);
+        expect(ctx).not.toMatch(/always use postgres/i);
+      },
+      SESSION,
+    );
   });
 });
 
@@ -329,29 +355,38 @@ describe("M35.3 scrub does not destroy gold that merely contains postgres", () =
       expect(pkt).toMatch(/cache is postgres/i);
       expect(pkt).not.toMatch(/database is postgres/i);
       expect(pkt).not.toMatch(/always use postgres/i);
-      expect(mem.memories().map((r) => r.text).join("\n")).not.toMatch(/always use postgres/i);
+      expect(
+        mem
+          .memories()
+          .map((r) => r.text)
+          .join("\n"),
+      ).not.toMatch(/always use postgres/i);
       expect(gistText(dir)).toMatch(/cache is postgres/i);
       expect(gistText(dir)).not.toMatch(/always use postgres/i);
     });
   });
 
   test("SessionStart keeps a sqlite gist that mentions postgres as prose", async () => {
-    await withMem("eden-m35-gist-prose-", async (mem, dir) => {
-      mem.observe([{ role: "user", content: "The database is postgres." }]);
-      mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
-      await sleep({ dir, mem, session: SESSION });
-      const gold = "The database is sqlite. Miller mentioned postgres in the novel.";
-      new GistStore(dir).put(gold, SESSION, Date.now());
-      expect(gistText(dir)).toMatch(/Miller mentioned postgres/);
-      expect(gistText(dir)).toMatch(/sqlite/i);
-      await withEnv({ EDEN_MEMORY: "readonly" }, async () => {
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
-        const ctx = hookContext(start);
-        expect(ctx).toMatch(/sqlite/i);
-        expect(ctx).toMatch(/Miller mentioned postgres/);
-        expect(ctx).not.toMatch(/database is postgres/i);
-      });
-    }, SESSION);
+    await withMem(
+      "eden-m35-gist-prose-",
+      async (mem, dir) => {
+        mem.observe([{ role: "user", content: "The database is postgres." }]);
+        mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
+        await sleep({ dir, mem, session: SESSION });
+        const gold = "The database is sqlite. Miller mentioned postgres in the novel.";
+        new GistStore(dir).put(gold, SESSION, Date.now());
+        expect(gistText(dir)).toMatch(/Miller mentioned postgres/);
+        expect(gistText(dir)).toMatch(/sqlite/i);
+        await withEnv({ EDEN_MEMORY: "readonly" }, async () => {
+          const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
+          const ctx = hookContext(start);
+          expect(ctx).toMatch(/sqlite/i);
+          expect(ctx).toMatch(/Miller mentioned postgres/);
+          expect(ctx).not.toMatch(/database is postgres/i);
+        });
+      },
+      SESSION,
+    );
   });
 
   test("scrub fail-open returns the original text when deadValues throws", async () => {

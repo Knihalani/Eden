@@ -13,7 +13,16 @@ import {
 } from "@eden/wrap";
 import { eq } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
-import { edenHome, ensureHome, safeRunId, withFileLock, writeFileAtomic, appendJsonl, readConfig, wrapPlaneUrl } from "./home";
+import {
+  edenHome,
+  ensureHome,
+  safeRunId,
+  withFileLock,
+  writeFileAtomic,
+  appendJsonl,
+  readConfig,
+  wrapPlaneUrl,
+} from "./home";
 
 export type RemainderLocker = <T>(lockPath: string, fn: () => T) => T | Promise<T>;
 

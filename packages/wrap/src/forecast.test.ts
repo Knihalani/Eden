@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StretchProgram } from "@eden/ir";
-import {
-  actualSpend,
-  matchingRunPrograms,
-  remainingBudget,
-  forecastCopy,
-} from "./forecast";
+import { actualSpend, matchingRunPrograms, remainingBudget, forecastCopy } from "./forecast";
 import { decideGuard, killAfterWarningEnabled } from "./guard";
 import { createState, wrapTools } from "./wrap-tools";
 import { emptyRun, type EdenOpts } from "./types";
@@ -197,11 +192,15 @@ describe("predicted vs actual (llm / ms / cents)", () => {
     );
     expect(d).toMatchObject({ action: "halt", reason: "budget" });
     expect(d && "detail" in d ? d.detail : "").toBe("predicted llmCalls=2 actual=2");
-    expect(forecastCopy(remainingBudget({
-      predicted: p.budget!,
-      actual: { llmCalls: 2, ms: 1_000, cents: 0 },
-      remainingTimeoutMs: 59_000,
-    }))).toBe("predicted llmCalls=2 actual=2");
+    expect(
+      forecastCopy(
+        remainingBudget({
+          predicted: p.budget!,
+          actual: { llmCalls: 2, ms: 1_000, cents: 0 },
+          remainingTimeoutMs: 59_000,
+        }),
+      ),
+    ).toBe("predicted llmCalls=2 actual=2");
 
     const enforced = createState({ programs: [p], enforce: true, timeoutMs: 60_000 });
     expect(enforced.run.firstWarningAt).toBeUndefined();

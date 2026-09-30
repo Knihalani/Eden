@@ -75,10 +75,7 @@ describe("eden approve", () => {
     expect(posted).toBe(0);
   });
 
-  async function captureApprove(
-    args: string[],
-    fetchFn: typeof fetch,
-  ): Promise<{ code: number; out: string }> {
+  async function captureApprove(args: string[], fetchFn: typeof fetch): Promise<{ code: number; out: string }> {
     const logs: string[] = [];
     const orig = console.log;
     console.log = (m?: unknown) => {
@@ -93,8 +90,10 @@ describe("eden approve", () => {
   }
 
   test("no id: 0 of everything keeps a short letter plus eden explain", async () => {
-    const { code, out } = await captureApprove([], (async () =>
-      new Response(JSON.stringify({ candidates: [] }), { status: 200 })) as unknown as typeof fetch);
+    const { code, out } = await captureApprove(
+      [],
+      (async () => new Response(JSON.stringify({ candidates: [] }), { status: 200 })) as unknown as typeof fetch,
+    );
     expect(code).toBe(0);
     expect(out).toBe("approve: 0 PASS candidates\neden explain");
     expect(out).not.toMatch(/FAIL|INCONCLUSIVE/);
@@ -114,7 +113,10 @@ describe("eden approve", () => {
               id: "p_fail",
               verdict: "FAIL",
               program: { id: "p_fail", name: "lookupTicket_to_notify", sequence: ["lookupTicket"] },
-              refusal: { reason: "not measured — quality held but neither tokens nor time saved", sequence: ["lookupTicket"] },
+              refusal: {
+                reason: "not measured — quality held but neither tokens nor time saved",
+                sequence: ["lookupTicket"],
+              },
             },
           ],
         }),
@@ -130,26 +132,29 @@ describe("eden approve", () => {
   });
 
   test("no id: 0 PASS still prints INCONCLUSIVE rows (cannot ship)", async () => {
-    const { code, out } = await captureApprove([], (async () =>
-      new Response(
-        JSON.stringify({
-          candidates: [
-            {
-              id: "p_maybe",
-              verdict: "INCONCLUSIVE",
-              program: { id: "p_maybe", name: "maybe", sequence: ["x"] },
-              refusal: { reason: "only 1 of 3 held-out traces could validate this program", sequence: ["x"] },
-            },
-            {
-              id: "p_fail",
-              verdict: "FAIL",
-              program: { id: "p_fail", name: "bad", sequence: ["x"] },
-              refusal: { reason: "compiled output differs from the recorded trace", sequence: ["x"] },
-            },
-          ],
-        }),
-        { status: 200 },
-      )) as unknown as typeof fetch);
+    const { code, out } = await captureApprove(
+      [],
+      (async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                id: "p_maybe",
+                verdict: "INCONCLUSIVE",
+                program: { id: "p_maybe", name: "maybe", sequence: ["x"] },
+                refusal: { reason: "only 1 of 3 held-out traces could validate this program", sequence: ["x"] },
+              },
+              {
+                id: "p_fail",
+                verdict: "FAIL",
+                program: { id: "p_fail", name: "bad", sequence: ["x"] },
+                refusal: { reason: "compiled output differs from the recorded trace", sequence: ["x"] },
+              },
+            ],
+          }),
+          { status: 200 },
+        )) as unknown as typeof fetch,
+    );
     expect(code).toBe(0);
     expect(out).toMatch(/p_maybe  INCONCLUSIVE  only 1 of 3 held-out traces could validate this program/);
     expect(out).toMatch(/p_fail  FAIL  compiled output differs from the recorded trace/);
@@ -157,20 +162,23 @@ describe("eden approve", () => {
   });
 
   test("no id: 0 PASS still prints pending rows (cannot ship)", async () => {
-    const { code, out } = await captureApprove([], (async () =>
-      new Response(
-        JSON.stringify({
-          candidates: [
-            {
-              id: "p_wait",
-              verdict: "pending",
-              program: { id: "p_wait", name: "lookupTicket_to_notify", sequence: ["lookupTicket"] },
-              refusal: { reason: "uncovered: lookupTicket, writeRecord, notify", sequence: ["lookupTicket"] },
-            },
-          ],
-        }),
-        { status: 200 },
-      )) as unknown as typeof fetch);
+    const { code, out } = await captureApprove(
+      [],
+      (async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                id: "p_wait",
+                verdict: "pending",
+                program: { id: "p_wait", name: "lookupTicket_to_notify", sequence: ["lookupTicket"] },
+                refusal: { reason: "uncovered: lookupTicket, writeRecord, notify", sequence: ["lookupTicket"] },
+              },
+            ],
+          }),
+          { status: 200 },
+        )) as unknown as typeof fetch,
+    );
     expect(code).toBe(0);
     expect(out).toMatch(/0 PASS candidates/);
     expect(out).toMatch(/cannot ship/);

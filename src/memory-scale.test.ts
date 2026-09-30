@@ -46,7 +46,8 @@ function seedOperators(mem: ReturnType<typeof openMemory>, n = STORE_N) {
 function pct(sorted: number[], p: number): number {
   if (!sorted.length) return 0;
   const i = (p / 100) * (sorted.length - 1);
-  const lo = Math.floor(i), hi = Math.ceil(i);
+  const lo = Math.floor(i),
+    hi = Math.ceil(i);
   if (lo === hi) return sorted[lo]!;
   return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (i - lo);
 }

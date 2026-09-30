@@ -207,40 +207,44 @@ describe("M27.1 fail-open fuseArHits", () => {
 });
 
 describe("M27.1 fuseLane G>B lock — no skipSemantic, no max-norm semantic", () => {
-  test.failing("controller fuseLane stays a*(1+0.15*bRaw+0.2*cRaw) and fuseArHits does not require skipSemantic", () => {
-    const ctrl = readFileSync(join(import.meta.dir, "cls/controller.ts"), "utf8");
-    expect(ctrl).toContain("a * (1 + 0.15 * bRaw + 0.2 * cRaw)");
-    expect(ctrl).toMatch(/export function fuseArHits/);
-    const fuseAr = ctrl.slice(ctrl.indexOf("export function fuseArHits"));
-    expect(fuseAr).not.toMatch(/skipSemantic/);
-    expect(fuseAr).not.toMatch(/this\.norm\(/);
-    const retrieveSrc = readFileSync(join(import.meta.dir, "chunk-retrieve.ts"), "utf8");
-    expect(retrieveSrc).not.toMatch(/icl-index|retrieveIcl|\bIclIndex\b/);
-    expect(retrieveSrc).not.toMatch(/\bBrainMemory\b/);
+  test.failing(
+    "controller fuseLane stays a*(1+0.15*bRaw+0.2*cRaw) and fuseArHits does not require skipSemantic",
+    () => {
+      const ctrl = readFileSync(join(import.meta.dir, "cls/controller.ts"), "utf8");
+      expect(ctrl).toContain("a * (1 + 0.15 * bRaw + 0.2 * cRaw)");
+      expect(ctrl).toMatch(/export function fuseArHits/);
+      const fuseAr = ctrl.slice(ctrl.indexOf("export function fuseArHits"));
+      expect(fuseAr).not.toMatch(/skipSemantic/);
+      expect(fuseAr).not.toMatch(/this\.norm\(/);
+      const retrieveSrc = readFileSync(join(import.meta.dir, "chunk-retrieve.ts"), "utf8");
+      expect(retrieveSrc).not.toMatch(/icl-index|retrieveIcl|\bIclIndex\b/);
+      expect(retrieveSrc).not.toMatch(/\bBrainMemory\b/);
 
-    const many = Array.from({ length: 12 }, (_, i) => ({
-      text: `filler miller river valley chunk ${i}`,
-      score: 1 / (1 + i),
-      src: "s",
-      id: `chunk:s:${i}`,
-      i,
-    }));
-    many[3] = { text: NEEDLE, score: 0.2, src: "s", id: "chunk:s:3", i: 3 };
-    const fused = fuseArHits(QUERY, many, 3);
-    expect(fused.length).toBeLessThanOrEqual(3);
-    expect(fused.some((h) => h.text.includes(GOLD))).toBe(true);
-    expect(() => fuseArHits(QUERY, null as unknown as [], 10)).not.toThrow();
-    expect(fuseArHits(QUERY, many, 0)).toEqual([]);
-  });
+      const many = Array.from({ length: 12 }, (_, i) => ({
+        text: `filler miller river valley chunk ${i}`,
+        score: 1 / (1 + i),
+        src: "s",
+        id: `chunk:s:${i}`,
+        i,
+      }));
+      many[3] = { text: NEEDLE, score: 0.2, src: "s", id: "chunk:s:3", i: 3 };
+      const fused = fuseArHits(QUERY, many, 3);
+      expect(fused.length).toBeLessThanOrEqual(3);
+      expect(fused.some((h) => h.text.includes(GOLD))).toBe(true);
+      expect(() => fuseArHits(QUERY, null as unknown as [], 10)).not.toThrow();
+      expect(fuseArHits(QUERY, many, 0)).toEqual([]);
+    },
+  );
 });
 
 function anthMemoryText(body: { system?: unknown }): string {
   const sys = body.system;
-  const parts = typeof sys === "string"
-    ? [sys]
-    : Array.isArray(sys)
-      ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-      : [];
+  const parts =
+    typeof sys === "string"
+      ? [sys]
+      : Array.isArray(sys)
+        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+        : [];
   return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
 }
 
@@ -256,39 +260,43 @@ describe("M27 wrap OpenAI / Anthropic / hook zebra-quark + fail-open", () => {
     const mem = openMemory({ dir });
     const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
     try {
-      withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_CAP: "10" }, () => {
-        mem.observe([{ role: "user", content: ICL_SHOT }]);
-        for (let i = 0; i < 8; i++) mem.observe([{ role: "user", content: `The movie was great. Take ${i}. label: 28` }]);
-        mem.observe([{ role: "user", content: buriedStory() }]);
-        mem.observe([{ role: "user", content: "Auth is Clerk" }]);
+      withEnv(
+        { EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_CAP: "10" },
+        () => {
+          mem.observe([{ role: "user", content: ICL_SHOT }]);
+          for (let i = 0; i < 8; i++)
+            mem.observe([{ role: "user", content: `The movie was great. Take ${i}. label: 28` }]);
+          mem.observe([{ role: "user", content: buriedStory() }]);
+          mem.observe([{ role: "user", content: "Auth is Clerk" }]);
 
-        const openai = mem.injectBody({ messages: [{ role: "user", content: QUERY }] });
-        const oaiPkt = packetOf((openai.messages as unknown[]) ?? []);
-        expect(oaiPkt).toContain(MEMORY_MARK);
-        expect(oaiPkt).toContain(GOLD);
-        expect(oaiPkt).not.toMatch(/label:\s*28/);
+          const openai = mem.injectBody({ messages: [{ role: "user", content: QUERY }] });
+          const oaiPkt = packetOf((openai.messages as unknown[]) ?? []);
+          expect(oaiPkt).toContain(MEMORY_MARK);
+          expect(oaiPkt).toContain(GOLD);
+          expect(oaiPkt).not.toMatch(/label:\s*28/);
 
-        const helper = injectBodyThenObserveTools(mem, { messages: [{ role: "user", content: QUERY }] });
-        expect(packetOf((helper.messages as unknown[]) ?? [])).toContain(GOLD);
+          const helper = injectBodyThenObserveTools(mem, { messages: [{ role: "user", content: QUERY }] });
+          expect(packetOf((helper.messages as unknown[]) ?? [])).toContain(GOLD);
 
-        const wrap = withKnowFacts({ messages: [{ role: "user", content: QUERY }] });
-        expect(packetOf((wrap.messages as unknown[]) ?? [])).toContain(GOLD);
+          const wrap = withKnowFacts({ messages: [{ role: "user", content: QUERY }] });
+          expect(packetOf((wrap.messages as unknown[]) ?? [])).toContain(GOLD);
 
-        const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: QUERY }] });
-        const aPkt = anthMemoryText(anth);
-        expect(aPkt).toContain(GOLD);
-        expect(aPkt).not.toMatch(/label:\s*28/);
+          const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: QUERY }] });
+          const aPkt = anthMemoryText(anth);
+          expect(aPkt).toContain(GOLD);
+          expect(aPkt).not.toMatch(/label:\s*28/);
 
-        const hook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: QUERY });
-        const hk = hookMemoryText(hook);
-        expect(hk).toContain(GOLD);
-        expect(hk).not.toMatch(/label:\s*28/);
+          const hook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: QUERY });
+          const hk = hookMemoryText(hook);
+          expect(hk).toContain(GOLD);
+          expect(hk).not.toMatch(/label:\s*28/);
 
-        const clerkPkt = packetOf(mem.inject([{ role: "user", content: "What auth provider do we use for Clerk?" }]));
-        expect(clerkPkt).toMatch(/Clerk/);
-        expect(clerkPkt).not.toMatch(/48291/);
-        expect(clerkPkt).not.toMatch(/miller walked beside the river/);
-      });
+          const clerkPkt = packetOf(mem.inject([{ role: "user", content: "What auth provider do we use for Clerk?" }]));
+          expect(clerkPkt).toMatch(/Clerk/);
+          expect(clerkPkt).not.toMatch(/48291/);
+          expect(clerkPkt).not.toMatch(/miller walked beside the river/);
+        },
+      );
     } finally {
       procSpy.mockRestore();
       mem.close();
@@ -325,7 +333,13 @@ describe("M27 wrap OpenAI / Anthropic / hook zebra-quark + fail-open", () => {
 
 describe("M27.1 fuseArHits cue-gate leftover miller", () => {
   test.failing("Clerk cue does not keep stopword-only miller BM25 hits; k default 10", () => {
-    const miller = { text: "The miller walked beside the river that ran through the valley at dawn.", score: 0.9, src: "s", id: "chunk:s:0", i: 0 };
+    const miller = {
+      text: "The miller walked beside the river that ran through the valley at dawn.",
+      score: 0.9,
+      src: "s",
+      id: "chunk:s:0",
+      i: 0,
+    };
     const needle = { text: NEEDLE, score: 0.2, src: "s", id: "chunk:s:1", i: 1 };
     const clerkCue = "What auth provider do we use for Clerk?";
     expect(fuseArHits(clerkCue, [miller, needle], 10)).toEqual([]);

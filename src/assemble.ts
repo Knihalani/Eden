@@ -8,8 +8,25 @@ export type CandidateText = { text: string; t: number; id?: string; kind?: strin
 
 type NoteLike = { id?: string; text: string; at?: number; kind?: string; lane?: string };
 
-const STATUS_OBJECT = /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
-const SKIP_SUBJ = new Set(["it", "this", "that", "there", "here", "he", "she", "they", "we", "i", "you", "one", "what", "who", "which"]);
+const STATUS_OBJECT =
+  /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
+const SKIP_SUBJ = new Set([
+  "it",
+  "this",
+  "that",
+  "there",
+  "here",
+  "he",
+  "she",
+  "they",
+  "we",
+  "i",
+  "you",
+  "one",
+  "what",
+  "who",
+  "which",
+]);
 
 function asText(v: unknown): string {
   return v == null ? "" : String(v);
@@ -40,7 +57,9 @@ const PACKET_DECOR_BODY = String.raw`\[(?:rule|fact|episode|gist|procedure)(?:\s
 const PACKET_DECOR_RE = new RegExp(`^${PACKET_DECOR_BODY}`, "i");
 
 function stripPacketDecor(text: string): string {
-  let t = asText(text).trim().replace(/^[-*]\s+/, "");
+  let t = asText(text)
+    .trim()
+    .replace(/^[-*]\s+/, "");
   for (let i = 0; i < 8; i++) {
     const next = t.replace(PACKET_DECOR_RE, "").trim();
     if (next === t) break;
@@ -60,8 +79,16 @@ function blockedKindOrLane(item: { kind?: string; lane?: string } | null | undef
   if (!item || typeof item !== "object") return false;
   const kind = asText(item.kind).trim().toLowerCase();
   const lane = asText(item.lane).trim().toLowerCase();
-  return kind === "icl" || kind === "narrative" || kind === "trajectory" || kind === "recsys"
-    || lane === "icl" || lane === "narrative" || lane === "trajectory" || lane === "recsys";
+  return (
+    kind === "icl" ||
+    kind === "narrative" ||
+    kind === "trajectory" ||
+    kind === "recsys" ||
+    lane === "icl" ||
+    lane === "narrative" ||
+    lane === "trajectory" ||
+    lane === "recsys"
+  );
 }
 
 function candidateFromNote(n: NoteLike, text?: string): CandidateText {
@@ -115,7 +142,10 @@ function sentencePieces(text: string): string[] {
   const one = asText(text).trim();
   if (!one) return [];
   if (leadingSerial(one) != null) return [one];
-  const sents = one.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+  const sents = one
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   return sents.length ? sents : [one];
 }
 
@@ -123,7 +153,10 @@ function pieces(text: string): string[] {
   const t = asText(text).trim();
   if (!t) return [];
   const stripped = stripPacketDecor(t);
-  const pipes = stripped.split(/\s+\|\s+/).map((s) => stripPacketDecor(s)).filter(Boolean);
+  const pipes = stripped
+    .split(/\s+\|\s+/)
+    .map((s) => stripPacketDecor(s))
+    .filter(Boolean);
   const chunks = pipes.length ? pipes : [stripped];
   const out: string[] = [];
   for (const chunk of chunks) {
@@ -143,19 +176,33 @@ function becameAsserted(text: string): { s: string; p: string; o: string } | und
   raw = raw.replace(/^\d+[.)]\s+/, "").replace(/^[.\s]+|[.\s]+$/g, "");
   const m = raw.match(/^(?:the\s+)?(.{1,120}?)\s+(became|becomes)\s+(\S.*)$/i);
   if (!m) return undefined;
-  let s = m[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  let s = m[1]!
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
   while (/^(?:the\s+|a\s+|an\s+)/.test(s)) s = s.replace(/^(?:the\s+|a\s+|an\s+)/, "");
   if (!s || SKIP_SUBJ.has(s)) return undefined;
-  const o = m[3]!.replace(/\s+(?:instead of|rather than)\b.*$/i, "").replace(/[.,;:!?]+$/g, "").trim();
+  const o = m[3]!
+    .replace(/\s+(?:instead of|rather than)\b.*$/i, "")
+    .replace(/[.,;:!?]+$/g, "")
+    .trim();
   if (!o || STATUS_OBJECT.test(o)) return undefined;
   return { s, p: "is", o };
 }
 
-const DECIDED_RE = /\b(?:decided|chose|picked|went with|going with|settled on|opted for)\s+(?:to\s+)?(?:use|go with)?\s*(.{1,40}?)\s+for\s+(.{1,40}?)(?=\s+(?:because|since|as|so)\b|[.,;:!?]|$)/gi;
+const DECIDED_RE =
+  /\b(?:decided|chose|picked|went with|going with|settled on|opted for)\s+(?:to\s+)?(?:use|go with)?\s*(.{1,40}?)\s+for\s+(.{1,40}?)(?=\s+(?:because|since|as|so)\b|[.,;:!?]|$)/gi;
 
 function parseDecided(m: RegExpMatchArray): { s: string; p: string; o: string } | undefined {
-  const o = m[1]!.replace(/^(?:the|a|an)\s+/i, "").replace(/\s+(?:instead of|rather than)\b.*$/i, "").replace(/[.,;:!?]+$/g, "").trim();
-  let s = m[2]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const o = m[1]!
+    .replace(/^(?:the|a|an)\s+/i, "")
+    .replace(/\s+(?:instead of|rather than)\b.*$/i, "")
+    .replace(/[.,;:!?]+$/g, "")
+    .trim();
+  let s = m[2]!
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
   while (/^(?:the\s+|a\s+|an\s+)/.test(s)) s = s.replace(/^(?:the\s+|a\s+|an\s+)/, "");
   if (!s || !o || SKIP_SUBJ.has(s) || STATUS_OBJECT.test(o)) return undefined;
   return { s, p: "is", o };
@@ -236,8 +283,7 @@ export function extractCandidates(texts: CandidateText[]): Triple[] {
           const tr = tripleFromPiece(piece, fallback, id);
           if (tr) out.push(tr);
         }
-      } catch {
-      }
+      } catch {}
     }
   } catch {}
   return out;
@@ -351,9 +397,7 @@ function emitOne(store: SemanticStore, winner: Triple, losers: Triple[]): void {
   tWrite = Math.max(tWrite, assemblyTWrite(store.get(winner.s, winner.p)?.t, winner.t));
   const live = store.get(winner.s, winner.p);
   if (live && !oEq(live.o, winner.o)) {
-    const tombT = winSerial && live.t < WALL_CLOCK_T
-      ? Math.max(winner.t, live.t)
-      : Math.max(tWrite, live.t);
+    const tombT = winSerial && live.t < WALL_CLOCK_T ? Math.max(winner.t, live.t) : Math.max(tWrite, live.t);
     store.tombstone(winner.s, winner.p, tombT);
   }
   store.put(winner.s, winner.p, winner.o, winSerial ? winner.t : tWrite);
@@ -382,7 +426,9 @@ export function emitAssemblyTombstones(dir: string | undefined, triples: Triple[
         } catch {}
       }
     } finally {
-      try { store.endBatch(); } catch {}
+      try {
+        store.endBatch();
+      } catch {}
     }
   } catch {}
 }
@@ -407,7 +453,9 @@ function liveStoreRows(dir: string | undefined, keys: Set<string>, skip: Set<str
 }
 
 function packetLabelPrefix(text: string): string {
-  const m = asText(text).trim().match(new RegExp(`^(${PACKET_DECOR_BODY})`, "i"));
+  const m = asText(text)
+    .trim()
+    .match(new RegExp(`^(${PACKET_DECOR_BODY})`, "i"));
   return m ? m[1]! : "";
 }
 
@@ -507,8 +555,9 @@ export function assembleNotes<T extends NoteLike>(notes: T[], dir?: string): T[]
       for (const w of winners) {
         const present = out.some((n) => {
           try {
-            return extractCandidates([candidateFromNote(n)]).some((tr) =>
-              spKey(tr.s, tr.p) === spKey(w.s, w.p) && oEq(tr.o, w.o));
+            return extractCandidates([candidateFromNote(n)]).some(
+              (tr) => spKey(tr.s, tr.p) === spKey(w.s, w.p) && oEq(tr.o, w.o),
+            );
           } catch {
             return false;
           }

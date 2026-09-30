@@ -113,10 +113,7 @@ describe("P0 pack on inject", () => {
 
   test("packNotes skips an oversized later fact and keeps a shorter one", () => {
     const huge = "x".repeat(800);
-    const packed = packNotes([
-      { text: `Walked the widget catalog ${huge}` },
-      { text: "The needle is gold." },
-    ], 200, 8);
+    const packed = packNotes([{ text: `Walked the widget catalog ${huge}` }, { text: "The needle is gold." }], 200, 8);
     expect(packed.some((n) => /needle/.test(n.text))).toBe(true);
     expect(packed.some((n) => n.text.includes(huge))).toBe(false);
   });
@@ -317,7 +314,10 @@ describe("completeness without drowning", () => {
       const mem = openMemory({ dir });
       mem.remember("The session store is sqlite.", { kind: "fact", tags: ["sqlite", "session", "store"] });
       for (let i = 0; i < 20; i++) {
-        mem.remember(`We shipped sqlite banner slice ${i} in the checkout.`, { kind: "episode", tags: ["sqlite", "banner", "checkout"] });
+        mem.remember(`We shipped sqlite banner slice ${i} in the checkout.`, {
+          kind: "episode",
+          tags: ["sqlite", "banner", "checkout"],
+        });
       }
       const pkt = packetOf(mem.inject([{ role: "user", content: "what sqlite database do we use?" }]));
       expect(pkt).toContain(MEMORY_MARK);
@@ -345,4 +345,3 @@ describe("completeness without drowning", () => {
     }
   });
 });
-

@@ -160,7 +160,7 @@ export async function demoCli(args: string[], opts?: DemoCliOptions): Promise<nu
     console.error(`eden demo: unknown flag ${unknown}`);
     return 2;
   }
-  const script = opts && "scriptPath" in opts ? opts.scriptPath ?? null : resolveDemoScript();
+  const script = opts && "scriptPath" in opts ? (opts.scriptPath ?? null) : resolveDemoScript();
   if (!script || !existsSync(script)) {
     console.error(DEMO_MISSING);
     return 1;

@@ -1,4 +1,14 @@
-import type { EvidenceLedger, IslandCaller, OnlineWarning, SignalBudget, StretchProgram, StretchTrace, TokenClass, TokenClasses, TraceEvent } from "@eden/ir";
+import type {
+  EvidenceLedger,
+  IslandCaller,
+  OnlineWarning,
+  SignalBudget,
+  StretchProgram,
+  StretchTrace,
+  TokenClass,
+  TokenClasses,
+  TraceEvent,
+} from "@eden/ir";
 import type { ArmingStore } from "./arming";
 
 export type Receipt = {

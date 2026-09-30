@@ -261,7 +261,10 @@ describe("M41 place cues", () => {
       for (let i = 0; i < 8; i++) {
         mem.remember(`Kai timezone is Pacific office slot ${i} for standup hours.`);
       }
-      const list = [...pacificTurns(), { role: "user", content: "fix this", files: ["src/lib/auth.ts"], body: FILE_SECRET }];
+      const list = [
+        ...pacificTurns(),
+        { role: "user", content: "fix this", files: ["src/lib/auth.ts"], body: FILE_SECRET },
+      ];
       expect(cueFor(list)).toBe("fix this");
       expect(cueFor(list)).not.toMatch(/Pacific/i);
       const packet = memorySystemText(mem.inject(list));
@@ -342,8 +345,15 @@ describe("M41 place cues", () => {
       const trans = join(dir, "pacific.jsonl");
       const lines: string[] = [];
       for (let i = 0; i < 20; i++) {
-        lines.push(JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }));
-        lines.push(JSON.stringify({ type: "assistant", message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` } }));
+        lines.push(
+          JSON.stringify({ type: "user", message: { role: "user", content: `Kai timezone is Pacific note ${i}.` } }),
+        );
+        lines.push(
+          JSON.stringify({
+            type: "assistant",
+            message: { role: "assistant", content: `Noted Pacific timezone for slot ${i}.` },
+          }),
+        );
       }
       writeFileSync(trans, `${lines.join("\n")}\n`);
 
@@ -357,7 +367,9 @@ describe("M41 place cues", () => {
       const ctx = [
         raw?.additional_context,
         (raw?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
-      ].map((x) => String(x ?? "")).join("\n");
+      ]
+        .map((x) => String(x ?? ""))
+        .join("\n");
       expect(ctx).toContain(MEMORY_MARK);
       expect(ctx).toMatch(/auth\.ts/i);
       expect(ctx).toMatch(/never mock/i);

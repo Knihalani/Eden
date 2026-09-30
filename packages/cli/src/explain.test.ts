@@ -58,7 +58,10 @@ describe("eden explain", () => {
   });
 
   test("corrupt jsonl line is skipped; letter still prints", async () => {
-    writeFileSync(join(home, "runs", "s.jsonl"), "not-json\n{\"name\":\"lookup\",\"args\":{\"id\":1},\"ok\":true}\n{\"name\":\"reply\",\"args\":{},\"ok\":true}\n");
+    writeFileSync(
+      join(home, "runs", "s.jsonl"),
+      'not-json\n{"name":"lookup","args":{"id":1},"ok":true}\n{"name":"reply","args":{},"ok":true}\n',
+    );
     const { letter } = await collectExplain({
       fetch: (async () => new Response("no", { status: 503 })) as unknown as typeof fetch,
     });
@@ -67,7 +70,9 @@ describe("eden explain", () => {
   });
 
   test("unique-work traces print Unique work and the count", async () => {
-    const traces = Array.from({ length: 12 }, (_, i) => trace(`u${i}`, ["alpha", "beta", `uniq${i}`], { id: `id${i}` }));
+    const traces = Array.from({ length: 12 }, (_, i) =>
+      trace(`u${i}`, ["alpha", "beta", `uniq${i}`], { id: `id${i}` }),
+    );
     const { letter } = await collectExplain({ traces });
     expect(letter).toMatch(/Unique work · 12 distinct sequences in 12 stretches/);
     expect(letter).toMatch(/Nothing was lost/);
@@ -82,7 +87,9 @@ describe("eden explain", () => {
   });
 
   test("envelope-gap traces print novel ids and the need-3 count", async () => {
-    const traces = Array.from({ length: 4 }, (_, i) => trace(`h${i}`, ["lookup", "fetch", "reply"], { id: `novel-${i}` }));
+    const traces = Array.from({ length: 4 }, (_, i) =>
+      trace(`h${i}`, ["lookup", "fetch", "reply"], { id: `novel-${i}` }),
+    );
     const { letter } = await collectExplain({ traces });
     expect(letter).toMatch(/Envelope gap · 4 novel ids, 0 repeats \(need 3 of the same id\)/);
   });

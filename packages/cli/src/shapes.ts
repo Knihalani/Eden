@@ -88,7 +88,8 @@ export type ToolShape = {
 const Bash: ToolShape = {
   match(v) {
     if (!isRecord(v)) return false;
-    if (typeof v.stdout !== "string" || typeof v.stderr !== "string" || typeof v.interrupted !== "boolean") return false;
+    if (typeof v.stdout !== "string" || typeof v.stderr !== "string" || typeof v.interrupted !== "boolean")
+      return false;
     if (v.isImage !== undefined && typeof v.isImage !== "boolean") return false;
     return true;
   },
@@ -127,7 +128,9 @@ const Read: ToolShape = {
     );
   },
   merge(original, sentinel) {
-    const prior = this.match(original) ? (original as { file: Record<string, unknown> }).file : own(isRecord(original) && isRecord(original.file) ? original.file : original);
+    const prior = this.match(original)
+      ? (original as { file: Record<string, unknown> }).file
+      : own(isRecord(original) && isRecord(original.file) ? original.file : original);
     const filePath = asString(prior.filePath, asString(isRecord(original) ? original.filePath : undefined));
     const startLine = asNumber(prior.startLine, 1) || 1;
     const base = this.match(original) ? asString(prior.content) : originalText(original);
@@ -244,10 +247,7 @@ const Write: ToolShape = {
     if (!isRecord(v)) return false;
     if (v.type !== "create" && v.type !== "update") return false;
     return (
-      typeof v.filePath === "string" &&
-      typeof v.content === "string" &&
-      "structuredPatch" in v &&
-      "originalFile" in v
+      typeof v.filePath === "string" && typeof v.content === "string" && "structuredPatch" in v && "originalFile" in v
     );
   },
   merge(original, sentinel) {
@@ -329,7 +329,5 @@ export function mapHostToolName(name: string): string {
 
 export function isMcpShapedOutput(value: unknown): boolean {
   if (!isRecord(value) || !Array.isArray(value.content) || value.content.length === 0) return false;
-  return value.content.every(
-    (part) => isRecord(part) && typeof part.type === "string",
-  );
+  return value.content.every((part) => isRecord(part) && typeof part.type === "string");
 }

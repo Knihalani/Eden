@@ -84,7 +84,8 @@ function stringLand(mapped: string, original: unknown, hook: HookResponse | null
   const orig =
     typeof original === "string"
       ? original
-      : nativeTextOf(mapped, original) || (typeof unwrapOpenCodeOutput(original) === "string" ? (unwrapOpenCodeOutput(original) as string) : "");
+      : nativeTextOf(mapped, original) ||
+        (typeof unwrapOpenCodeOutput(original) === "string" ? (unwrapOpenCodeOutput(original) as string) : "");
   if (extra) return orig ? capMerged(orig, `\n${extra}`) : extra;
   return undefined;
 }

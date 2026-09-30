@@ -4,7 +4,7 @@ import {
   anthropicMessageToSse,
   handleAnthropicMessages,
   steerAnthropicToolUses,
-  applyCacheBreakpoints
+  applyCacheBreakpoints,
 } from "./anthropic";
 import { createState } from "./wrap-tools";
 
@@ -24,7 +24,15 @@ function liveProgram(): StretchProgram {
       allowExact: true,
       envelope: { inputs: { q: ["test", "other"] } },
     },
-    manifest: { name: "search_to_notify", llmReduction: 5, latencyReduction: 5, costReduction: 5, skipRateBefore: 0.2, skipRateAfter: 0, nShadow: 6 },
+    manifest: {
+      name: "search_to_notify",
+      llmReduction: 5,
+      latencyReduction: 5,
+      costReduction: 5,
+      skipRateBefore: 0.2,
+      skipRateAfter: 0,
+      nShadow: 6,
+    },
   } as unknown as StretchProgram;
 }
 
@@ -58,9 +66,7 @@ describe("anthropic steering (block-level)", () => {
   });
 
   test("no match leaves every block untouched", () => {
-    const content = [
-      { type: "tool_use", id: "tu_1", name: "search", input: { q: "out-of-envelope" } },
-    ];
+    const content = [{ type: "tool_use", id: "tu_1", name: "search", input: { q: "out-of-envelope" } }];
     const out = steerAnthropicToolUses(content, [liveProgram()]);
     expect(out[0]!.name).toBe("search");
   });
@@ -115,7 +121,12 @@ describe("anthropic handler", () => {
       new Request("http://local/v1/messages", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": "k" },
-        body: JSON.stringify({ model: "m", max_tokens: 10, messages: [], tools: [{ name: "search", input_schema: {} }] }),
+        body: JSON.stringify({
+          model: "m",
+          max_tokens: 10,
+          messages: [],
+          tools: [{ name: "search", input_schema: {} }],
+        }),
       }),
       {
         state,
@@ -140,7 +151,14 @@ describe("anthropic handler", () => {
     );
     expect(res.headers.get("content-type") || "").toContain("text/event-stream");
     const text = await res.text();
-    for (const event of ["message_start", "content_block_start", "content_block_delta", "content_block_stop", "message_delta", "message_stop"]) {
+    for (const event of [
+      "message_start",
+      "content_block_start",
+      "content_block_delta",
+      "content_block_stop",
+      "message_delta",
+      "message_stop",
+    ]) {
       expect(text).toContain(`event: ${event}`);
     }
     expect(text).toContain('"stop_reason":"tool_use"');
@@ -150,10 +168,7 @@ describe("anthropic handler", () => {
 
   test("upstream error bodies pass through VERBATIM with their status", async () => {
     const html = "<html>502 from provider</html>";
-    const res = await callHandler(
-      { model: "m", max_tokens: 10, messages: [] },
-      sseResponseHandler(html, 502),
-    );
+    const res = await callHandler({ model: "m", max_tokens: 10, messages: [] }, sseResponseHandler(html, 502));
     expect(res.status).toBe(502);
     expect(await res.text()).toBe(html);
   });
@@ -171,7 +186,12 @@ describe("anthropic handler", () => {
       new Request("http://local/v1/messages", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": "k" },
-        body: JSON.stringify({ model: "m", max_tokens: 10, messages: [], tools: [{ name: "search", input_schema: {} }] }),
+        body: JSON.stringify({
+          model: "m",
+          max_tokens: 10,
+          messages: [],
+          tools: [{ name: "search", input_schema: {} }],
+        }),
       }),
       { state, getPrograms: () => [liveProgram()], fetch: sseResponseHandler(toolUseMsg()) },
     );
@@ -195,7 +215,7 @@ describe("anthropic handler", () => {
     expect(sse).toContain("event: message_start");
     expect(sse).toContain('"text":"Hello."');
     expect(sse).toContain('"stop_reason":"end_turn"');
-    expect(sse.trim().endsWith("data: {\"type\":\"message_stop\"}")).toBe(true);
+    expect(sse.trim().endsWith('data: {"type":"message_stop"}')).toBe(true);
   });
 });
 
@@ -204,7 +224,10 @@ describe("prompt-cache breakpoints (W20)", () => {
     const body: any = {
       model: "claude",
       system: "be brief",
-      tools: [{ name: "a", input_schema: {} }, { name: "b", input_schema: {} }],
+      tools: [
+        { name: "a", input_schema: {} },
+        { name: "b", input_schema: {} },
+      ],
       messages: [
         { role: "user", content: "hi" },
         { role: "assistant", content: [{ type: "text", text: "hello" }] },
@@ -221,7 +244,10 @@ describe("prompt-cache breakpoints (W20)", () => {
 
   test("array system marks only the final block; string message content is upgraded safely", () => {
     const body: any = {
-      system: [{ type: "text", text: "a" }, { type: "text", text: "b" }],
+      system: [
+        { type: "text", text: "a" },
+        { type: "text", text: "b" },
+      ],
       messages: [{ role: "user", content: "one line" }],
     };
     applyCacheBreakpoints(body);

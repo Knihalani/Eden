@@ -36,9 +36,11 @@ describe("provider usage scrape", () => {
 
   test("parseCacheTokens reads OpenAI and Anthropic cache dialects", () => {
     expect(parseCacheTokens({ prompt_tokens_details: { cached_tokens: 40 } })).toEqual({ cached: 40 });
-    expect(
-      parseCacheTokens({ cache_read_input_tokens: 12, cache_creation_input_tokens: 3 }),
-    ).toEqual({ cached: 12, cacheWrite: 3, denom: 15 });
+    expect(parseCacheTokens({ cache_read_input_tokens: 12, cache_creation_input_tokens: 3 })).toEqual({
+      cached: 12,
+      cacheWrite: 3,
+      denom: 15,
+    });
     expect(parseCacheTokens({ cached_tokens: 7 })).toEqual({ cached: 7 });
     expect(parseCacheTokens({ prompt_tokens: 10, completion_tokens: 2 })).toBeNull();
     expect(
@@ -155,8 +157,8 @@ describe("provider usage scrape", () => {
     expect(run.cached_tokens).toBe(100000);
     expect(run.cache_write_tokens).toBe(0);
     expect(run.cache_input_tokens).toBe(100_050);
-    expect(providerCacheHitPct(run.cached_tokens, run.prompt_tokens, run.cache_write_tokens, run.cache_input_tokens)).toBe(
-      100_000 / 100_050,
-    );
+    expect(
+      providerCacheHitPct(run.cached_tokens, run.prompt_tokens, run.cache_write_tokens, run.cache_input_tokens),
+    ).toBe(100_000 / 100_050);
   });
 });

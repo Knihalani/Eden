@@ -1,7 +1,22 @@
 import { homedir, hostname } from "node:os";
 import { createHash, randomBytes } from "node:crypto";
 import { join, dirname } from "node:path";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, readdirSync, writeSync, fstatSync, renameSync, chmodSync } from "node:fs";
+import {
+  mkdirSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  appendFileSync,
+  openSync,
+  closeSync,
+  unlinkSync,
+  statSync,
+  readdirSync,
+  writeSync,
+  fstatSync,
+  renameSync,
+  chmodSync,
+} from "node:fs";
 
 export function edenHome(): string {
   return process.env.EDEN_HOME || join(homedir(), ".eden");
@@ -257,7 +272,9 @@ export function keyFingerprint(key: string): string {
 }
 
 export function wrapPlaneUrl(raw?: string | null): string {
-  const u = (raw || process.env.EDEN_WRAP_URL || process.env.EDEN_BASE_URL || "http://127.0.0.1:8788").replace(/\/$/, "").replace(/\/v1\/?$/, "");
+  const u = (raw || process.env.EDEN_WRAP_URL || process.env.EDEN_BASE_URL || "http://127.0.0.1:8788")
+    .replace(/\/$/, "")
+    .replace(/\/v1\/?$/, "");
   return /127\.0\.0\.1:8787|localhost:8787/.test(u) ? u.replace(":8787", ":8788") : u;
 }
 
@@ -266,7 +283,10 @@ export function wrapBase(cfg?: { base_url?: string } | null): string {
 }
 
 export function sitePlaneUrl(raw?: string | null): string {
-  const u = (raw || process.env.EDEN_SITE_URL || process.env.EDEN_BASE_URL || "http://127.0.0.1:8787").replace(/\/$/, "");
+  const u = (raw || process.env.EDEN_SITE_URL || process.env.EDEN_BASE_URL || "http://127.0.0.1:8787").replace(
+    /\/$/,
+    "",
+  );
   return /127\.0\.0\.1:8788|localhost:8788/.test(u) ? u.replace(":8788", ":8787") : u;
 }
 

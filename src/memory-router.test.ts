@@ -62,11 +62,13 @@ describe("M30.3 routeMemory — four routes", () => {
 
   test("DetQA MC (memorized context + Question: + A./B./C./D.) → gist-chunk", () => {
     expect(routeMemory(DETQA_MC)).toBe("gist-chunk");
-    expect(routeMemory(`Lichem Rocchi's method of death was certainly not ( )
+    expect(
+      routeMemory(`Lichem Rocchi's method of death was certainly not ( )
 A. Murder
 B. Sudden death
 C. Suicide
-D. Sudden illness`)).toBe("gist-chunk");
+D. Sudden illness`),
+    ).toBe("gist-chunk");
     expect(routeMemory(DETQA_LIVE_EXTRACT)).toBe("gist-chunk");
   });
 

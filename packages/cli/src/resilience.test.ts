@@ -1,5 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, openSync, closeSync, utimesSync, readdirSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  openSync,
+  closeSync,
+  utimesSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import { appendJsonl, ensureHome, eventsPath, safeRunId, withFileLock, writeConfig } from "./home";
@@ -130,7 +142,9 @@ describe("the hook never blocks the agent", () => {
 
   test("survives a corrupt live-tools.json", async () => {
     writeFileSync(join(home, "live-tools.json"), "{not json");
-    await expect(respondToHook({ hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "s1" })).resolves.toEqual({
+    await expect(
+      respondToHook({ hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "s1" }),
+    ).resolves.toEqual({
       ok: true,
     });
   });

@@ -122,12 +122,14 @@ function memoriesHay(root: string): string {
 }
 
 function storeHayExceptExperience(root: string): string {
-  return fileHay(walkFiles(root).filter((p) => {
-    if (p.endsWith(".lock")) return false;
-    const norm = p.replaceAll("\\", "/");
-    if (norm.includes(`/${EXPERIENCE_DIRNAME}/`) || norm.endsWith(`/${EXPERIENCE_DIRNAME}`)) return false;
-    return true;
-  }));
+  return fileHay(
+    walkFiles(root).filter((p) => {
+      if (p.endsWith(".lock")) return false;
+      const norm = p.replaceAll("\\", "/");
+      if (norm.includes(`/${EXPERIENCE_DIRNAME}/`) || norm.endsWith(`/${EXPERIENCE_DIRNAME}`)) return false;
+      return true;
+    }),
+  );
 }
 
 function longAx(marker: string): string {
@@ -135,7 +137,10 @@ function longAx(marker: string): string {
   try {
     live = process.cwd();
   } catch {}
-  return `RootWebArea [landmark] heading Change-request ${marker} button Submit contact ${EMAIL} session ${SESSION} cwd ${FAKE_CWD} live ${live} ` + "n".repeat(420);
+  return (
+    `RootWebArea [landmark] heading Change-request ${marker} button Submit contact ${EMAIL} session ${SESSION} cwd ${FAKE_CWD} live ${live} ` +
+    "n".repeat(420)
+  );
 }
 
 function experienceEmpty(root: string): boolean {
@@ -349,17 +354,24 @@ describe("M23.1 EDEN_EXPERIENCE_BYTES is not the JSONL cap", () => {
 });
 
 describe("M23.2 wrap + hook write AX to files, not extractDurable JSONL", () => {
-  test.failing("hook PostToolUse: AX on root experience jsonl, absent from memories.jsonl, identifiers scrubbed", async () => {
-    await withMem("eden-m232-hook-", (_mem, dir) => {
-      expect(() => {
-        memoryHookResponse(hookAxPayload());
-      }).not.toThrow();
-      expect(experienceHay(dir)).toContain("UNIQUE_AX_MARKER_M23");
-      assertIdentifiersScrubbed(dir);
-      expect(memoriesHay(dir)).not.toContain("UNIQUE_AX_MARKER_M23");
-      expect(existsSync(experienceDir(dir))).toBe(true);
-    }, SESSION);
-  });
+  test.failing(
+    "hook PostToolUse: AX on root experience jsonl, absent from memories.jsonl, identifiers scrubbed",
+    async () => {
+      await withMem(
+        "eden-m232-hook-",
+        (_mem, dir) => {
+          expect(() => {
+            memoryHookResponse(hookAxPayload());
+          }).not.toThrow();
+          expect(experienceHay(dir)).toContain("UNIQUE_AX_MARKER_M23");
+          assertIdentifiersScrubbed(dir);
+          expect(memoriesHay(dir)).not.toContain("UNIQUE_AX_MARKER_M23");
+          expect(existsSync(experienceDir(dir))).toBe(true);
+        },
+        SESSION,
+      );
+    },
+  );
 
   test("wrap observeToolTraces OpenAI tool window: AX on disk, absent from memories.jsonl", async () => {
     await withMem("eden-m232-wrap-", (mem, dir) => {
@@ -385,27 +397,37 @@ describe("M23.2 wrap + hook write AX to files, not extractDurable JSONL", () => 
   });
 
   test("long AX via injectBody is on experience files, not memories.jsonl / traces.jsonl", async () => {
-    await withMem("eden-m232-long-ax-", (mem, dir) => {
-      const marker = "UNIQUE_AX_WRAP_M23";
-      const tree = longAx(marker);
-      expect(tree.length).toBeGreaterThan(400);
-      injectBodyThenObserveTools(mem, { messages: openaiAxWindow(tree) });
-      assertAxOnDiskNotJsonl(dir, marker);
-      assertIdentifiersScrubbed(dir);
-    }, SESSION, FAKE_CWD);
+    await withMem(
+      "eden-m232-long-ax-",
+      (mem, dir) => {
+        const marker = "UNIQUE_AX_WRAP_M23";
+        const tree = longAx(marker);
+        expect(tree.length).toBeGreaterThan(400);
+        injectBodyThenObserveTools(mem, { messages: openaiAxWindow(tree) });
+        assertAxOnDiskNotJsonl(dir, marker);
+        assertIdentifiersScrubbed(dir);
+      },
+      SESSION,
+      FAKE_CWD,
+    );
   });
 
   test("Anthropic inject observe of tool_result does not store-all AX into chat JSONL", async () => {
-    await withMem("eden-m232-anth-inject-", (mem, dir) => {
-      const tree = longAx("UNIQUE_AX_ANTH_M23");
-      expect(() => {
-        mem.inject(anthropicAxWindow(tree) as unknown[]);
-      }).not.toThrow();
-      expect(memoriesHay(dir)).not.toContain("UNIQUE_AX_ANTH_M23");
-      observeToolTraces(mem, anthropicAxWindow(tree));
-      assertAxOnDiskNotJsonl(dir, "UNIQUE_AX_ANTH_M23");
-      assertIdentifiersScrubbed(dir);
-    }, SESSION, FAKE_CWD);
+    await withMem(
+      "eden-m232-anth-inject-",
+      (mem, dir) => {
+        const tree = longAx("UNIQUE_AX_ANTH_M23");
+        expect(() => {
+          mem.inject(anthropicAxWindow(tree) as unknown[]);
+        }).not.toThrow();
+        expect(memoriesHay(dir)).not.toContain("UNIQUE_AX_ANTH_M23");
+        observeToolTraces(mem, anthropicAxWindow(tree));
+        assertAxOnDiskNotJsonl(dir, "UNIQUE_AX_ANTH_M23");
+        assertIdentifiersScrubbed(dir);
+      },
+      SESSION,
+      FAKE_CWD,
+    );
   });
 
   test("withKnowFactsAnthropic calls observeToolTraces on the tool_result path", () => {
@@ -572,11 +594,16 @@ describe("M23.4 chat-only zero files; hosts write; consent off; no memory_search
   });
 
   test("identifiers in wrap experience files are scrubbed", async () => {
-    await withMem("eden-m234-ids-wrap-", (mem, dir) => {
-      observeToolTraces(mem, openaiAxWindow(longAx(AX_WRAP)));
-      expect(experienceHay(dir)).toContain("UNIQUE_AX_WRAP_M23");
-      assertIdentifiersScrubbed(dir);
-    }, SESSION, FAKE_CWD);
+    await withMem(
+      "eden-m234-ids-wrap-",
+      (mem, dir) => {
+        observeToolTraces(mem, openaiAxWindow(longAx(AX_WRAP)));
+        expect(experienceHay(dir)).toContain("UNIQUE_AX_WRAP_M23");
+        assertIdentifiersScrubbed(dir);
+      },
+      SESSION,
+      FAKE_CWD,
+    );
   });
 
   test("empty cue inject does not dump traj files into the packet", async () => {
@@ -597,11 +624,13 @@ describe("M23.4 chat-only zero files; hosts write; consent off; no memory_search
     const dir = tmpDir("eden-m234-conc-");
     try {
       const s = new ExperienceStore(dir);
-      await Promise.all(Array.from({ length: 32 }, (_, i) =>
-        Promise.resolve().then(() => {
-          s.append("shared", { url: `https://t.test/${i}`, action: `a${i}`, t: i });
-        }),
-      ));
+      await Promise.all(
+        Array.from({ length: 32 }, (_, i) =>
+          Promise.resolve().then(() => {
+            s.append("shared", { url: `https://t.test/${i}`, action: `a${i}`, t: i });
+          }),
+        ),
+      );
       const files = experienceFiles(dir);
       expect(files.length).toBeGreaterThan(0);
       for (const p of files) {

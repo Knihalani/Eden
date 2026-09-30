@@ -209,7 +209,7 @@ describe("hookd requires its key (#85)", () => {
     mkdirSync(other, { recursive: true });
     writeFileSync(join(other, "hookd.key"), `${HOOKD_KEY_HEADER}: ${"ab".repeat(32)}\n`, { mode: 0o600 });
     const fakeCli = join(home, "fake-cli.ts");
-    writeFileSync(fakeCli, 'console.log(JSON.stringify({ fallback: true }));\n');
+    writeFileSync(fakeCli, "console.log(JSON.stringify({ fallback: true }));\n");
     await withHookd(async (port, statuses) => {
       process.env.EDEN_HOME = other;
       const warm = hookCommand(fakeCli, port);
@@ -233,7 +233,10 @@ describe("hookd requires its key (#85)", () => {
     try {
       let up = false;
       for (let i = 0; i < 100 && !up; i++) {
-        up = await fetch(`http://127.0.0.1:${port}/health`).then((r) => r.ok, () => false);
+        up = await fetch(`http://127.0.0.1:${port}/health`).then(
+          (r) => r.ok,
+          () => false,
+        );
         if (!up) await Bun.sleep(30);
       }
       expect(up).toBe(true);

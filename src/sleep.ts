@@ -1,6 +1,13 @@
 import { chmodSync, existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { assemble, emitAssemblyTombstones, extractCandidates, losingTriples, type CandidateText, type Triple } from "./assemble";
+import {
+  assemble,
+  emitAssemblyTombstones,
+  extractCandidates,
+  losingTriples,
+  type CandidateText,
+  type Triple,
+} from "./assemble";
 import type { MemoryRecord } from "./index";
 import { ExperienceStore, promoteExperienceHowTo, type ExperienceState, type ExperienceTraj } from "./experience-store";
 import { GistStore, scrubTombstonedIdentity } from "./gist-store";
@@ -103,9 +110,13 @@ function retireLeftoverHowTo(path: string): void {
   try {
     unlinkSync(path);
   } catch {
-    try { writeFileSync(path, ""); } catch {}
+    try {
+      writeFileSync(path, "");
+    } catch {}
   }
-  try { unlinkSync(`${path}.lock`); } catch {}
+  try {
+    unlinkSync(`${path}.lock`);
+  } catch {}
 }
 
 /**
@@ -140,7 +151,11 @@ function isIcl(text: string): boolean {
 }
 
 function normObj(o: string): string {
-  return o.replace(/[.,;:!?]+$/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  return o
+    .replace(/[.,;:!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function identitySentence(s: string, p: string, o: string): string {
@@ -160,7 +175,14 @@ function recLane(r: { lane?: unknown }): string | undefined {
  * else wall-clock `at`. ICL / tool prose / narrative lanes yield nothing.
  * Fail-open: a bad episode returns [] so consolidate continues.
  */
-function extractIdentity(r: { id?: string; text?: string; at?: number; kind?: string; lane?: string; tags?: string[] }): Triple[] {
+function extractIdentity(r: {
+  id?: string;
+  text?: string;
+  at?: number;
+  kind?: string;
+  lane?: string;
+  tags?: string[];
+}): Triple[] {
   try {
     const text = String(r?.text ?? "");
     if (!text || isIcl(text) || isToolProse(text) || isRecsysShot(text)) return [];
@@ -181,7 +203,8 @@ const READ_TOOL = /^(read|grep|glob|ls|websearch|semanticsearch|cat|head|tail)$/
 const SHELL_TOOL = /^(bash|shell|terminal|zsh|sh)$/i;
 const MUTATE_TOOL = /^(write|edit|strreplace)$/i;
 const VERIFY_CMD = /\b(?:pytest|vitest|jest|mocha)\b|\b(?:bun|cargo|go)\s+test\b|\bnpm\s+(?:run\s+)?test\b/i;
-const READ_BASH = /^(?:git\s+(?:log|status|show|diff|blame|grep)|ls|cat|head|tail|grep|egrep|fgrep|rg|find|echo|pwd|which|type|wc|file|stat)\b/i;
+const READ_BASH =
+  /^(?:git\s+(?:log|status|show|diff|blame|grep)|ls|cat|head|tail|grep|egrep|fgrep|rg|find|echo|pwd|which|type|wc|file|stat)\b/i;
 
 function jsonHay(v: unknown): string {
   try {
@@ -214,7 +237,10 @@ function traceIsIcl(tr: ToolTrace): boolean {
 }
 
 function isReadOnlyCommand(cmd: string): boolean {
-  const parts = cmd.split(/(?:&&|\|\||[;\n|])/).map((p) => p.trim().replace(/^\(\s*/, "")).filter(Boolean);
+  const parts = cmd
+    .split(/(?:&&|\|\||[;\n|])/)
+    .map((p) => p.trim().replace(/^\(\s*/, ""))
+    .filter(Boolean);
   if (!parts.length) return true;
   return parts.every((p) => READ_BASH.test(p.replace(/^sudo\s+/i, "")));
 }
@@ -301,7 +327,9 @@ function blockingFailedVerify(traces: ToolTrace[]): boolean {
 function lastNonIclEpisode(recs: SleepRecord[]): string {
   for (let i = recs.length - 1; i >= 0; i--) {
     const r = recs[i]!;
-    const text = String(r.text || "").replace(/\s+/g, " ").trim();
+    const text = String(r.text || "")
+      .replace(/\s+/g, " ")
+      .trim();
     if (!text || r.kind === "constraint" || isIcl(text) || isToolProse(text)) continue;
     return text.slice(0, 400);
   }
@@ -361,12 +389,17 @@ function sleepSession(mem: SleepMem, opts?: { session?: string }): string | unde
  */
 function promoteHowTo(mem: SleepMem, recs: SleepRecord[], session?: string): void {
   try {
-    try { migrateSessionHowTo(mem); } catch {}
+    try {
+      migrateSessionHowTo(mem);
+    } catch {}
     const root = howtoRoot(mem);
     const loaded = loadHowToTraces(mem, session);
     if (!loaded.length) return;
     if (loaded.every(traceIsIcl)) return;
-    const traces = tracesAfterHowTo(loaded.filter((t) => !traceIsIcl(t)), mem);
+    const traces = tracesAfterHowTo(
+      loaded.filter((t) => !traceIsIcl(t)),
+      mem,
+    );
     if (!traces.length) return;
     if (traces.every(isReadOnlyTrace)) return;
     if (blockingFailedVerify(traces)) return;
@@ -383,13 +416,19 @@ function promoteHowTo(mem: SleepMem, recs: SleepRecord[], session?: string): voi
     for (let i = surviving.length - 1; i >= 0; i--) {
       if (surviving[i]!.exit !== 0 && surviving[i]!.exit !== undefined) continue;
       const cmd = verifyCommand(surviving[i]!);
-      if (cmd) { verify = cmd; break; }
+      if (cmd) {
+        verify = cmd;
+        break;
+      }
     }
     if (!verify) {
       for (let i = traces.length - 1; i >= 0; i--) {
         if (traces[i]!.exit !== 0) continue;
         const cmd = verifyCommand(traces[i]!);
-        if (cmd) { verify = cmd; break; }
+        if (cmd) {
+          verify = cmd;
+          break;
+        }
       }
     }
     const t = surviving.reduce((m, tr) => (tr.t > m ? tr.t : m), 0) || Date.now();
@@ -447,7 +486,7 @@ function fallbackGistParts(states: ExperienceState[]): string[] {
 function experienceGistText(traj: ExperienceTraj): { text: string; t: number } {
   const goal = lastExtra(traj, "goal");
   const outcome = lastExtra(traj, "outcome");
-  const parts = (goal || outcome) ? [goal, outcome].filter(Boolean) : fallbackGistParts(traj.states);
+  const parts = goal || outcome ? [goal, outcome].filter(Boolean) : fallbackGistParts(traj.states);
   let t = 0;
   for (const st of traj.states) {
     if (typeof st.t === "number" && Number.isFinite(st.t) && st.t > t) t = st.t;
@@ -485,11 +524,17 @@ function replayExperience(mem: SleepMem): void {
         if (!traj || !Array.isArray(traj.states) || !traj.states.length) continue;
         const built = experienceGistText(traj);
         let text = built.text;
-        try { text = scrubTombstonedIdentity(text, root); } catch {}
+        try {
+          text = scrubTombstonedIdentity(text, root);
+        } catch {}
         if (text) {
-          try { gists.put(text, experienceGistSession(id), built.t, "experience"); } catch {}
+          try {
+            gists.put(text, experienceGistSession(id), built.t, "experience");
+          } catch {}
         }
-        try { promoteExperienceHowToSafe(howto, traj); } catch {}
+        try {
+          promoteExperienceHowToSafe(howto, traj);
+        } catch {}
       } catch {
         // Fail-open: one corrupt traj must not abort the rest of the pass.
       }
@@ -537,18 +582,24 @@ function fastMemorize(mem: SleepMem, recs: SleepRecord[]): void {
         seen.add(r.id);
         const pin = r.kind === "constraint" || (r.tags ?? []).some((t) => String(t).toLowerCase() === "pin");
         let facts: Triple[] = [];
-        try { facts = extractIdentity(r); } catch { facts = []; }
+        try {
+          facts = extractIdentity(r);
+        } catch {
+          facts = [];
+        }
         if (!pin && !facts.length) continue;
         for (const fact of facts) {
           const live = store.get(fact.s, fact.p);
           if (live && oSame(live.o, fact.o)) continue;
-          const t = Number.isFinite(fact.t) && fact.t > 0 ? fact.t : (r.at || Date.now());
+          const t = Number.isFinite(fact.t) && fact.t > 0 ? fact.t : r.at || Date.now();
           if (live && !oSame(live.o, fact.o)) store.tombstone(fact.s, fact.p, t);
           store.put(fact.s, fact.p, fact.o, t);
         }
       }
     } finally {
-      try { store.endBatch(); } catch {}
+      try {
+        store.endBatch();
+      } catch {}
     }
   } catch {}
 }
@@ -577,7 +628,11 @@ function decayHeat(mem: SleepMem, recs: SleepRecord[]): void {
     for (const r of recs) {
       if (typeof r.invalidAt === "number") continue;
       let facts: Triple[] = [];
-      try { facts = extractIdentity(r); } catch { facts = []; }
+      try {
+        facts = extractIdentity(r);
+      } catch {
+        facts = [];
+      }
       for (const f of facts) {
         if (!live.some((l) => l.s === f.s && l.p === f.p && oSame(l.o, f.o))) continue;
         const k = `${f.s}\0${f.p}\0${normObj(f.o)}`;
@@ -587,7 +642,11 @@ function decayHeat(mem: SleepMem, recs: SleepRecord[]): void {
     mem.patchWhere((row) => {
       if (typeof row.invalidAt === "number") return;
       let facts: Triple[] = [];
-      try { facts = extractIdentity(row); } catch { facts = []; }
+      try {
+        facts = extractIdentity(row);
+      } catch {
+        facts = [];
+      }
       const sole = facts.some((f) => {
         const k = `${f.s}\0${f.p}\0${normObj(f.o)}`;
         return (prov.get(k) ?? 0) === 1 && live.some((l) => l.s === f.s && l.p === f.p && oSame(l.o, f.o));
@@ -596,7 +655,10 @@ function decayHeat(mem: SleepMem, recs: SleepRecord[]): void {
       const unusedEpisode = row.kind === "episode";
       const failedProc = row.kind === "procedure" && /\b(?:fail|exit\s+[1-9])\b/i.test(row.text);
       if (!unusedEpisode && !failedProc) return;
-      const heat = Math.max(0, (typeof row.heat === "number" ? row.heat : typeof row.sal === "number" ? row.sal : 1) * 0.5);
+      const heat = Math.max(
+        0,
+        (typeof row.heat === "number" ? row.heat : typeof row.sal === "number" ? row.sal : 1) * 0.5,
+      );
       if (row.heat === heat && row.sal === heat) return;
       return { ...row, heat, sal: heat };
     });
@@ -624,14 +686,16 @@ function writeSleepPostings(mem: SleepMem, recs: SleepRecord[]): void {
       for (const t of writeAliasTags(r.tags ?? [], r.text)) {
         if (t.length < 3) continue;
         let arr = map.get(t);
-        if (!arr) map.set(t, arr = []);
+        if (!arr) map.set(t, (arr = []));
         if (!arr.includes(r.id)) arr.push(r.id);
       }
     }
     if (!map.size) return;
     const path = join(dir, "sleep-postings.jsonl");
     writeFileSync(path, [...map.entries()].map(([t, ids]) => JSON.stringify({ t, ids })).join("\n") + "\n");
-    try { chmodSync(path, 0o600); } catch {}
+    try {
+      chmodSync(path, 0o600);
+    } catch {}
   } catch {}
 }
 
@@ -639,18 +703,33 @@ function writeMissTaxonomy(dir: string, recs: SleepRecord[]): void {
   try {
     if (!dir) return;
     let live: { s: string; p: string; o: string }[] = [];
-    try { live = new SemanticStore(dir).live(); } catch { live = []; }
+    try {
+      live = new SemanticStore(dir).live();
+    } catch {
+      live = [];
+    }
     const rows: { id: string; miss: MissClass }[] = [];
     for (const r of recs) {
       const text = String(r.text ?? "");
       if (!text) continue;
       let fact: ReturnType<typeof objectAsserted>;
-      try { fact = objectAsserted(text); } catch { fact = undefined; }
+      try {
+        fact = objectAsserted(text);
+      } catch {
+        fact = undefined;
+      }
       let extracted: Triple[] = [];
-      try { extracted = extractIdentity(r); } catch { extracted = []; }
+      try {
+        extracted = extractIdentity(r);
+      } catch {
+        extracted = [];
+      }
       if (/\b(?:is|are|uses)\b/i.test(text) && !fact && !extracted.length && !isIcl(text)) {
         rows.push({ id: r.id, miss: "Encode" });
-      } else if (extracted.length && extracted.every((f) => !live.some((l) => l.s === f.s && l.p === f.p && oSame(l.o, f.o)))) {
+      } else if (
+        extracted.length &&
+        extracted.every((f) => !live.some((l) => l.s === f.s && l.p === f.p && oSame(l.o, f.o)))
+      ) {
         rows.push({ id: r.id, miss: "Store" });
       } else if (typeof r.invalidAt === "number") {
         rows.push({ id: r.id, miss: "Maintain" });
@@ -661,7 +740,9 @@ function writeMissTaxonomy(dir: string, recs: SleepRecord[]): void {
     if (!rows.length) return;
     const path = join(dir, "miss.jsonl");
     writeFileSync(path, rows.map((x) => JSON.stringify(x)).join("\n") + "\n");
-    try { chmodSync(path, 0o600); } catch {}
+    try {
+      chmodSync(path, 0o600);
+    } catch {}
   } catch {}
 }
 
@@ -674,7 +755,9 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
     const rows: { id?: string; miss?: string }[] = [];
     for (const line of readFileSync(path, "utf8").split("\n")) {
       if (!line) continue;
-      try { rows.push(JSON.parse(line) as { id?: string; miss?: string }); } catch {}
+      try {
+        rows.push(JSON.parse(line) as { id?: string; miss?: string });
+      } catch {}
     }
     if (!rows.length) return;
     const byId = new Map(recs.map((r) => [r.id, r]));
@@ -686,19 +769,36 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
       if (!rec) continue;
       if (miss === "Store" || miss === "Encode") {
         let facts: Triple[] = [];
-        try { facts = extractIdentity(rec); } catch { facts = []; }
+        try {
+          facts = extractIdentity(rec);
+        } catch {
+          facts = [];
+        }
         if (!facts.length) {
           const text = String(rec.text ?? "");
           const use = text.match(/^(?:the\s+)?([A-Za-z][\w.-]{1,40})\s+uses\s+(\S.+)$/i);
           const cop = use ?? text.match(/^(?:the\s+)?(.{1,80}?)\s+(?:is|are)\s+(\S.+)$/i);
           if (cop) {
-            const s = cop[1]!.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+            const s = cop[1]!
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, " ")
+              .trim();
             const o = cop[2]!.replace(/[.,;:!?]+$/g, "").trim();
             const p = use ? "uses" : "is";
-            if (s && o && !/\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i.test(o) && !/\b(?:instead of|rather than)\b/i.test(o)) {
+            if (
+              s &&
+              o &&
+              !/\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i.test(
+                o,
+              ) &&
+              !/\b(?:instead of|rather than)\b/i.test(o)
+            ) {
               try {
                 const live = store.get(s, p);
-                if (!(live && live.o.trim().toLowerCase() !== o.trim().toLowerCase()) && !store.supersededObject(o, s, p)) {
+                if (
+                  !(live && live.o.trim().toLowerCase() !== o.trim().toLowerCase()) &&
+                  !store.supersededObject(o, s, p)
+                ) {
                   store.put(s, p, o, Number(rec.at) || Date.now());
                 }
               } catch {}
@@ -707,7 +807,12 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
         }
         for (const f of facts) {
           try {
-            if (/\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i.test(f.o)) continue;
+            if (
+              /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i.test(
+                f.o,
+              )
+            )
+              continue;
             if (/\b(?:instead of|rather than)\b/i.test(f.o)) continue;
             const live = store.get(f.s, f.p);
             if (live && live.o.trim().toLowerCase() !== f.o.trim().toLowerCase()) continue;
@@ -748,10 +853,19 @@ function incrementalExpired(opts?: ConsolidateOpts): boolean {
 }
 
 export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
-  try { if (memoryConsent() !== "on") return; } catch { return; }
+  try {
+    if (memoryConsent() !== "on") return;
+  } catch {
+    return;
+  }
   if (incrementalExpired(opts)) return;
-  try { migrateSessionHowTo(mem); } catch {}
-  const recs = mem.memories().slice().sort((a, b) => a.at - b.at);
+  try {
+    migrateSessionHowTo(mem);
+  } catch {}
+  const recs = mem
+    .memories()
+    .slice()
+    .sort((a, b) => a.at - b.at);
   const candidates: Triple[] = [];
   for (const r of recs) {
     try {
@@ -765,7 +879,9 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   // Incremental rest must not tombstone a fact the open goal still references.
   // Full replay (Stop / SessionEnd / idle > EDEN_SLEEP_IDLE) keeps today's drops.
   if (mode === "full") {
-    try { emitAssemblyTombstones(mem.dir, candidates); } catch {}
+    try {
+      emitAssemblyTombstones(mem.dir, candidates);
+    } catch {}
     const winByKey = new Map<string, Triple>();
     for (const w of winners) winByKey.set(liveKey(w.s, w.p), w);
     const live = new Map<string, string>();
@@ -808,7 +924,11 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
       for (const r of mem.memories()) {
         if (r.kind !== "constraint" || !r.text || !r.id) continue;
         let cleaned = "";
-        try { cleaned = scrubTombstonedIdentity(r.text, mem.dir); } catch { continue; }
+        try {
+          cleaned = scrubTombstonedIdentity(r.text, mem.dir);
+        } catch {
+          continue;
+        }
         const norm = r.text.replace(/\s+/g, " ").trim();
         if (!cleaned) dropIds.add(r.id);
         else if (cleaned !== norm) rewrites.set(r.id, cleaned);
@@ -817,20 +937,37 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
       if (rewrites.size && mem.rewriteWhere) mem.rewriteWhere((r) => rewrites.get(r.id));
     } catch {}
   }
-  try { fastMemorize(mem, mem.memories()); } catch {}
-  try { stampForesight(mem, mem.memories()); } catch {}
+  try {
+    fastMemorize(mem, mem.memories());
+  } catch {}
+  try {
+    stampForesight(mem, mem.memories());
+  } catch {}
   if (mode === "full") {
-    try { decayHeat(mem, mem.memories()); } catch {}
-    try { healWriteAliases(mem); } catch {}
+    try {
+      decayHeat(mem, mem.memories());
+    } catch {}
+    try {
+      healWriteAliases(mem);
+    } catch {}
   }
   if (incrementalExpired(opts)) return;
   const facts: string[] = [];
   for (const w of winners) {
     facts.push(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`);
   }
-  const pins = mem.memories().filter((r) => r.kind === "constraint" && !isIcl(r.text)).slice(-8).map((r) => r.text.replace(/\s+/g, " ").trim());
+  const pins = mem
+    .memories()
+    .filter((r) => r.kind === "constraint" && !isIcl(r.text))
+    .slice(-8)
+    .map((r) => r.text.replace(/\s+/g, " ").trim());
   const gist = [...facts, ...pins].join(". ").slice(0, 800);
-  if (gist) new GistStore(mem.dir).put(gist, (typeof opts?.session === "string" && opts.session.trim()) ? opts.session.trim() : "default", Date.now());
+  if (gist)
+    new GistStore(mem.dir).put(
+      gist,
+      typeof opts?.session === "string" && opts.session.trim() ? opts.session.trim() : "default",
+      Date.now(),
+    );
   if (incrementalExpired(opts)) return;
   try {
     promoteNarrativeGists(mem.dir);
@@ -857,14 +994,24 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
       const child = memIsChild(mem);
       new HowToStore(howtoRoot(mem)).pruneStale(child ? { child: true } : undefined);
     } catch {}
-    try { writeSleepPostings(mem, mem.memories()); } catch {}
-    try { writeMissTaxonomy(mem.dir, mem.memories()); } catch {}
-    try { applyMissTaxonomy(mem, mem.memories()); } catch {}
+    try {
+      writeSleepPostings(mem, mem.memories());
+    } catch {}
+    try {
+      writeMissTaxonomy(mem.dir, mem.memories());
+    } catch {}
+    try {
+      applyMissTaxonomy(mem, mem.memories());
+    } catch {}
   }
 }
 
 export async function sleep(opts?: { session?: string; dir?: string; mem?: SleepMem }): Promise<void> {
-  try { if (memoryConsent() !== "on") return; } catch { return; }
+  try {
+    if (memoryConsent() !== "on") return;
+  } catch {
+    return;
+  }
   try {
     let mem = opts?.mem;
     if (!mem) {
@@ -1013,7 +1160,9 @@ function persistClock(dir: string, clock: SleepClock): void {
     if (!dir) return;
     const path = clockPath(dir);
     writeFileSync(path, JSON.stringify(clockForDisk(clock)));
-    try { chmodSync(path, 0o600); } catch {}
+    try {
+      chmodSync(path, 0o600);
+    } catch {}
   } catch {}
 }
 
@@ -1106,7 +1255,11 @@ export function noteSleepActivity(
  * Resets counters after a pass. Consent off and disk faults return. Never throws into inject.
  */
 export function maybeIncrementalSleep(mem: SleepMem, opts?: { session?: string; goal?: string }): void {
-  try { if (memoryConsent() !== "on") return; } catch { return; }
+  try {
+    if (memoryConsent() !== "on") return;
+  } catch {
+    return;
+  }
   try {
     const dir = activityDir(mem);
     if (!dir) return;

@@ -210,7 +210,10 @@ async function bootWrap(home: string, args: string[] = [], env: Record<string, s
   };
   for (let i = 0; i < 300; i++) {
     if (proc.exitCode !== null) break;
-    const up = await fetch(`${url}/health`).then((r) => r.ok, () => false);
+    const up = await fetch(`${url}/health`).then(
+      (r) => r.ok,
+      () => false,
+    );
     if (up) return { url, stop };
     await Bun.sleep(50);
   }
@@ -289,7 +292,10 @@ describe("eden wrap on loopback with no key", () => {
   });
 
   test("--dev or a user-set EDEN_DEV=1 serves eden_dev quietly and writes no key", async () => {
-    for (const [args, env] of [[["--dev"], {}], [[], { EDEN_DEV: "1" }]] as const) {
+    for (const [args, env] of [
+      [["--dev"], {}],
+      [[], { EDEN_DEV: "1" }],
+    ] as const) {
       const home = tempHome();
       const wrap = await bootWrap(home, [...args], { ...env });
       try {

@@ -11,13 +11,7 @@ import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { HowToStore } from "./howto-store";
-import {
-  MEMORY_MARK,
-  memoryInjectSwallows,
-  openMemory,
-  sleep,
-  type AgentMemory,
-} from "./index";
+import { MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
 import * as edenMem from "./index";
 import { dropHarmed, harmedPath, loadHarmedIds, markHarmed } from "./memory-harmed";
 import * as harmedMod from "./memory-harmed";
@@ -74,7 +68,9 @@ async function withSession<T>(
       try {
         return await fn(mem, dir);
       } finally {
-        try { mem.close(); } catch {}
+        try {
+          mem.close();
+        } catch {}
         rmSync(dir, { recursive: true, force: true });
       }
     },
@@ -119,7 +115,14 @@ function assertNoChrome(hay: string): void {
 
 /** Every on-cue id whose text matches. Semantic and episodic rows are different ids. */
 function idsFor(mem: AgentMemory, cue: string, needle: RegExp): string[] {
-  const ids = [...new Set(mem.notesFor(cue).filter((r) => r.id && needle.test(r.text)).map((r) => r.id))];
+  const ids = [
+    ...new Set(
+      mem
+        .notesFor(cue)
+        .filter((r) => r.id && needle.test(r.text))
+        .map((r) => r.id),
+    ),
+  ];
   expect(ids.length, cue).toBeGreaterThan(0);
   return ids;
 }
@@ -221,7 +224,13 @@ describe("M47.4 harmed id absent next cue", () => {
       const before = harmedRaw(dir);
       for (const value of ["0", "readonly"]) {
         await withEnv(
-          { EDEN_MEMORY: value, EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_MIN: undefined },
+          {
+            EDEN_MEMORY: value,
+            EDEN_MEMORY_DIR: dir,
+            EDEN_HOME: undefined,
+            EDEN_KNOW: "0",
+            EDEN_MEMORY_MIN: undefined,
+          },
           () => {
             markHarmed(dir, [id]);
             const mem = openMemory({ dir, session: SESSION });
@@ -257,7 +266,9 @@ describe("M47.4 harmed id absent next cue", () => {
       const before = memoryInjectSwallows.n;
       try {
         let out: unknown;
-        expect(() => { out = mem.inject(list); }).not.toThrow();
+        expect(() => {
+          out = mem.inject(list);
+        }).not.toThrow();
         expect(out).toBe(list);
         expect(memoryInjectSwallows.n).toBe(before + 1);
         expect(JSON.stringify(out)).not.toMatch(/403/);
@@ -271,7 +282,9 @@ describe("M47.4 harmed id absent next cue", () => {
       });
       try {
         let out: unknown;
-        expect(() => { out = mem.inject(list); }).not.toThrow();
+        expect(() => {
+          out = mem.inject(list);
+        }).not.toThrow();
         expect(JSON.stringify(out)).not.toMatch(/403/);
       } finally {
         dropBoom.mockRestore();
@@ -287,7 +300,9 @@ describe("M47.4 harmed id absent next cue", () => {
       const tornBody = `${ids.map((id) => JSON.stringify({ id, at: 1 })).join("\n")}\n{torn\n`;
       writeFileSync(harmedPath(dir), tornBody);
       let torn: unknown;
-      expect(() => { torn = mem.inject(list); }).not.toThrow();
+      expect(() => {
+        torn = mem.inject(list);
+      }).not.toThrow();
       const tornPkt = packetOf(torn as unknown[]);
       expect(JSON.stringify(torn)).not.toMatch(/403/);
       for (const id of ids) expect(tornPkt).not.toContain(id);
@@ -295,7 +310,9 @@ describe("M47.4 harmed id absent next cue", () => {
 
       writeFileSync(harmedPath(dir), "{not-json");
       expect(() => mem.inject(list)).not.toThrow();
-      try { chmodSync(harmedPath(dir), 0o000); } catch {}
+      try {
+        chmodSync(harmedPath(dir), 0o000);
+      } catch {}
       expect(() => mem.inject(list)).not.toThrow();
       expect(JSON.stringify(mem.inject(list))).not.toMatch(/403/);
     });

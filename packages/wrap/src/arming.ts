@@ -91,7 +91,12 @@ export function mightClaim(armed: Armed, name: string, args: Record<string, unkn
 export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: number }): ArmingStore {
   const perSessionMax = armMaxPerSession(opts?.perSessionMax);
   const envGlobal = Number(process.env.EDEN_ARM_GLOBAL);
-  const globalRaw = opts?.globalMax && opts.globalMax > 0 ? opts.globalMax : Number.isFinite(envGlobal) && envGlobal > 0 ? envGlobal : 4_096;
+  const globalRaw =
+    opts?.globalMax && opts.globalMax > 0
+      ? opts.globalMax
+      : Number.isFinite(envGlobal) && envGlobal > 0
+        ? envGlobal
+        : 4_096;
   const globalMax = Math.min(1_000_000, Math.max(1, Math.floor(globalRaw)));
   const sessions = new Map<string, Bucket>();
   let global = 0;

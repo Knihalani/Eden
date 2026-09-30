@@ -28,7 +28,11 @@ export type NarrativeFallback = {
 
 /** Local copy of index `tokList` regex. No FOLD (hours→tz would poison novels). Do not change `queryHay`. */
 export function tokList(s: string): string[] {
-  return (String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []);
+  return (
+    String(s ?? "")
+      .toLowerCase()
+      .match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []
+  );
 }
 
 function asTexts(v: unknown): string[] {
@@ -85,7 +89,9 @@ function lazyChunk(text: string): string[] {
   return [t];
 }
 
-function fallbackDocs(rows: NarrativeFallback[] | undefined): { text: string; src?: string; t: number; id: string; i: number }[] {
+function fallbackDocs(
+  rows: NarrativeFallback[] | undefined,
+): { text: string; src?: string; t: number; id: string; i: number }[] {
   if (!Array.isArray(rows) || !rows.length) return [];
   const out: { text: string; src?: string; t: number; id: string; i: number }[] = [];
   for (const row of rows) {
@@ -169,7 +175,11 @@ export function retrieveNarrativeChunks(
     if (!docs.length) docs = fallbackDocs(opts?.fallback);
     if (!docs.length) return [];
     const poolK = Math.min(docs.length, Math.max(k, 40));
-    const ranked = bm25Rank(q, docs.map((d) => d.text), poolK);
+    const ranked = bm25Rank(
+      q,
+      docs.map((d) => d.text),
+      poolK,
+    );
     const hits: (NarrativeChunkHit & { i?: number })[] = [];
     for (const { i, s } of ranked) {
       const d = docs[i];

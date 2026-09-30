@@ -204,7 +204,13 @@ describe("transparent execution (surfacing without a surface)", () => {
     const u = (
       postToolUseReplacement("Write", ORIGINALS.Write, "facts", "pr_summary") as {
         hookSpecificOutput: {
-          updatedToolOutput: { type: string; filePath: string; content: string; structuredPatch: unknown; originalFile: unknown };
+          updatedToolOutput: {
+            type: string;
+            filePath: string;
+            content: string;
+            structuredPatch: unknown;
+            originalFile: unknown;
+          };
         };
       }
     ).hookSpecificOutput.updatedToolOutput;
@@ -245,7 +251,12 @@ describe("transparent execution (surfacing without a surface)", () => {
       expect(eligibleForTransparent({ ...writeTool, transparent_writes: true }, { issue: "101" })).toBe(false);
 
       const shaped = postToolUseReplacement("Write", ORIGINALS.Write, "facts", "patch_pr");
-      expect(matchesNativeShape("Write", (shaped as { hookSpecificOutput: { updatedToolOutput: unknown } }).hookSpecificOutput.updatedToolOutput)).toBe(true);
+      expect(
+        matchesNativeShape(
+          "Write",
+          (shaped as { hookSpecificOutput: { updatedToolOutput: unknown } }).hookSpecificOutput.updatedToolOutput,
+        ),
+      ).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.EDEN_TRANSPARENT_WRITES;
       else process.env.EDEN_TRANSPARENT_WRITES = prev;
@@ -263,7 +274,9 @@ describe("transparent execution (surfacing without a surface)", () => {
     const out = postToolUseReplacement("Read", ORIGINALS.Read, facts, "pr_summary");
     const json = JSON.stringify(out);
     expect(json).not.toContain('"polluted"');
-    const parsed = JSON.parse(json) as { hookSpecificOutput: { additionalContext: string; updatedToolOutput: { file: { content: string } } } };
+    const parsed = JSON.parse(json) as {
+      hookSpecificOutput: { additionalContext: string; updatedToolOutput: { file: { content: string } } };
+    };
     expect(Object.getPrototypeOf(parsed)).not.toHaveProperty("polluted");
     expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
     const ctx = parsed.hookSpecificOutput.additionalContext;

@@ -53,7 +53,7 @@ function wrapAtTokenCount(text: string, target: number): string[] {
     const words = s.split(/\s+/).filter(Boolean);
     if (words.length <= 1) return [s];
     const out: string[] = [];
-    for (let i = 0; i < words.length; ) {
+    for (let i = 0; i < words.length;) {
       const j = Math.min(i + target, words.length);
       out.push(words.slice(i, j).join(" "));
       i = j;
@@ -61,7 +61,7 @@ function wrapAtTokenCount(text: string, target: number): string[] {
     return out;
   }
   const out: string[] = [];
-  for (let i = 0; i < starts.length; ) {
+  for (let i = 0; i < starts.length;) {
     const j = Math.min(i + target, starts.length);
     const from = i === 0 ? 0 : starts[i]!;
     const to = j === starts.length ? s.length : ends[j - 1]!;
@@ -81,7 +81,10 @@ export function chunkText(text: string, targetTokens?: number): string[] {
   const target = targetCap(targetTokens);
   const raw = String(text ?? "").trim();
   if (!raw) return [];
-  const sentences = raw.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+  const sentences = raw
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const units: string[] = [];
   for (const s of sentences.length ? sentences : [raw]) {
     if (estimateTokens(s) > target) units.push(...wrapAtTokenCount(s, target));
@@ -159,7 +162,9 @@ function load(path: string): NarrativeChunk[] {
 function persist(path: string, rows: NarrativeChunk[]): void {
   const body = rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");
   writeFileAtomic(path, body);
-  try { chmodSync(path, 0o600); } catch {}
+  try {
+    chmodSync(path, 0o600);
+  } catch {}
 }
 
 function srcKey(c: NarrativeChunk): string {
@@ -200,7 +205,9 @@ export class ChunkStore {
     this.lockPath = `${this.path}.lock`;
     try {
       mkdirSync(dir, { recursive: true });
-      try { chmodSync(dir, 0o700); } catch {}
+      try {
+        chmodSync(dir, 0o700);
+      } catch {}
     } catch {}
   }
 
@@ -212,9 +219,7 @@ export class ChunkStore {
       const src = minted[0]!.src;
       try {
         withFileLock(this.lockPath, () => {
-          const rows = src
-            ? load(this.path).filter((c) => c.src !== src)
-            : load(this.path);
+          const rows = src ? load(this.path).filter((c) => c.src !== src) : load(this.path);
           rows.push(...minted);
           persist(this.path, rows);
         });
@@ -250,7 +255,9 @@ export class ChunkStore {
     try {
       const key = String(src ?? "").trim();
       if (!key) return [];
-      return load(this.path).filter((c) => c.src === key).sort((a, b) => a.i - b.i || a.t - b.t);
+      return load(this.path)
+        .filter((c) => c.src === key)
+        .sort((a, b) => a.i - b.i || a.t - b.t);
     } catch {
       return [];
     }

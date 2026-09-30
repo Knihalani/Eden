@@ -3,7 +3,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withKnowFacts, withKnowFactsAnthropic } from "./know-inject";
-import { injectBodyThenObserveTools, observeToolTraces, stripUpstreamPlaceFields, withOpenFileHeaders } from "./tool-observe";
+import {
+  injectBodyThenObserveTools,
+  observeToolTraces,
+  stripUpstreamPlaceFields,
+  withOpenFileHeaders,
+} from "./tool-observe";
 import { handleChatCompletions } from "./proxy";
 import { createState } from "./wrap-tools";
 import { KNOW_INJECT_MARK } from "../../know/src/inject";
@@ -15,7 +20,9 @@ import { HowToStore, howtoPath } from "../../../src/howto-store";
 
 function notes(body: Record<string, unknown>): string[] {
   const messages = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: string }[]) : [];
-  return messages.filter((m) => m.role === "system" && String(m.content || "").startsWith(KNOW_INJECT_MARK)).map((m) => String(m.content));
+  return messages
+    .filter((m) => m.role === "system" && String(m.content || "").startsWith(KNOW_INJECT_MARK))
+    .map((m) => String(m.content));
 }
 
 describe("withKnowFacts", () => {
@@ -36,7 +43,10 @@ describe("withKnowFacts", () => {
   test("already injected stays one card; fail-open on junk body", () => {
     const marked = {
       messages: [
-        { role: "system", content: `${KNOW_INJECT_MARK} RFC 3986 is Uniform Resource Identifier (URI): Generic Syntax.` },
+        {
+          role: "system",
+          content: `${KNOW_INJECT_MARK} RFC 3986 is Uniform Resource Identifier (URI): Generic Syntax.`,
+        },
         { role: "user", content: "Follow RFC 3986 and GET application/json." },
       ],
     };
@@ -65,7 +75,9 @@ describe("withKnowFacts", () => {
     const utf = withKnowFacts({ messages: [{ role: "user", content: "charset=utf8" }] });
     expect(notes(utf)).toHaveLength(0);
 
-    const rfc = withKnowFacts({ messages: [{ role: "user", content: "Follow RFC 3986 and send application/json with GET." }] });
+    const rfc = withKnowFacts({
+      messages: [{ role: "user", content: "Follow RFC 3986 and send application/json with GET." }],
+    });
     expect(notes(rfc)).toHaveLength(0);
 
     const quiet = { messages: [{ role: "user", content: "Please refactor the auth middleware and add a log line." }] };
@@ -109,18 +121,23 @@ describe("withKnowFacts", () => {
 
 function anthropicMemoryText(body: { system?: unknown }): string {
   const sys = body.system;
-  const parts = typeof sys === "string"
-    ? [sys]
-    : Array.isArray(sys)
-      ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-      : [];
+  const parts =
+    typeof sys === "string"
+      ? [sys]
+      : Array.isArray(sys)
+        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
+        : [];
   return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
 }
 
 function markCount(body: { system?: unknown }): number {
-  const raw = anthropicMemoryText(body) || (typeof body.system === "string" ? body.system : Array.isArray(body.system)
-    ? body.system.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
-    : "");
+  const raw =
+    anthropicMemoryText(body) ||
+    (typeof body.system === "string"
+      ? body.system
+      : Array.isArray(body.system)
+        ? body.system.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
+        : "");
   if (!raw.includes(MEMORY_MARK)) return 0;
   return raw.split(MEMORY_MARK).length - 1;
 }
@@ -186,7 +203,10 @@ describe("withKnowFactsAnthropic M3 order", () => {
     mem.remember("1. The chairperson of the committee is Alice.");
     mem.remember("8. The chairperson of the committee is Bob.");
     const real = AgentMemory.prototype.inject;
-    const inject = spyOn(AgentMemory.prototype, "inject").mockImplementation(function (this: AgentMemory, messages: unknown[]) {
+    const inject = spyOn(AgentMemory.prototype, "inject").mockImplementation(function (
+      this: AgentMemory,
+      messages: unknown[],
+    ) {
       return real.call(mem, messages);
     });
     try {
@@ -239,10 +259,16 @@ function openaiMemoryText(body: Record<string, unknown>): string {
 function redirectMemory(mem: AgentMemory): () => void {
   const realInject = AgentMemory.prototype.inject;
   const realBody = AgentMemory.prototype.injectBody;
-  const inject = spyOn(AgentMemory.prototype, "inject").mockImplementation(function (this: AgentMemory, messages: unknown[]) {
+  const inject = spyOn(AgentMemory.prototype, "inject").mockImplementation(function (
+    this: AgentMemory,
+    messages: unknown[],
+  ) {
     return realInject.call(mem, messages);
   });
-  const injectBody = spyOn(AgentMemory.prototype, "injectBody").mockImplementation(function (this: AgentMemory, body: Record<string, unknown>) {
+  const injectBody = spyOn(AgentMemory.prototype, "injectBody").mockImplementation(function (
+    this: AgentMemory,
+    body: Record<string, unknown>,
+  ) {
     return realBody.call(mem, body);
   });
   return () => {
@@ -507,40 +533,46 @@ describe("M38.2 wrap honors an omitted packet", () => {
     const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
     const log = join(dir, "inject.jsonl");
     try {
-      m13WithEnv({
-        EDEN_MEMORY: "on",
-        EDEN_MEMORY_DIR: dir,
-        EDEN_HOME: undefined,
-        EDEN_KNOW: "0",
-        EDEN_MEMORY_MIN: undefined,
-        EDEN_MEMORY_INJECT_LOG: log,
-      }, () => {
-        mem.remember("Use sqlite.");
-        const openaiBody = { messages: [{ role: "user", content: "what's 2+2?" }] };
-        const openai = withKnowFacts(openaiBody);
-        expect(openai).toBe(openaiBody);
-        expect(JSON.stringify(openai)).not.toContain(MEMORY_MARK);
-        expect(JSON.stringify(openai)).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
-        expect(JSON.stringify(openai)).not.toMatch(/sqlite/i);
+      m13WithEnv(
+        {
+          EDEN_MEMORY: "on",
+          EDEN_MEMORY_DIR: dir,
+          EDEN_HOME: undefined,
+          EDEN_KNOW: "0",
+          EDEN_MEMORY_MIN: undefined,
+          EDEN_MEMORY_INJECT_LOG: log,
+        },
+        () => {
+          mem.remember("Use sqlite.");
+          const openaiBody = { messages: [{ role: "user", content: "what's 2+2?" }] };
+          const openai = withKnowFacts(openaiBody);
+          expect(openai).toBe(openaiBody);
+          expect(JSON.stringify(openai)).not.toContain(MEMORY_MARK);
+          expect(JSON.stringify(openai)).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(JSON.stringify(openai)).not.toMatch(/sqlite/i);
 
-        const anthBody = { system: "be brief", messages: [{ role: "user", content: "what's 2+2?" }] };
-        const anth = withKnowFactsAnthropic(anthBody);
-        expect(anth).toBe(anthBody);
-        expect(anth.system).toBe("be brief");
-        expect(JSON.stringify(anth)).not.toContain(MEMORY_MARK);
-        expect(JSON.stringify(anth)).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
-        expect(JSON.stringify(anth)).not.toMatch(/sqlite/i);
+          const anthBody = { system: "be brief", messages: [{ role: "user", content: "what's 2+2?" }] };
+          const anth = withKnowFactsAnthropic(anthBody);
+          expect(anth).toBe(anthBody);
+          expect(anth.system).toBe("be brief");
+          expect(JSON.stringify(anth)).not.toContain(MEMORY_MARK);
+          expect(JSON.stringify(anth)).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(JSON.stringify(anth)).not.toMatch(/sqlite/i);
 
-        const directBody = { messages: [{ role: "user", content: "what's 2+2?" }] };
-        const direct = injectBodyThenObserveTools(mem, directBody);
-        expect(direct).toBe(directBody);
-        expect(JSON.stringify(direct)).not.toContain(MEMORY_MARK);
+          const directBody = { messages: [{ role: "user", content: "what's 2+2?" }] };
+          const direct = injectBodyThenObserveTools(mem, directBody);
+          expect(direct).toBe(directBody);
+          expect(JSON.stringify(direct)).not.toContain(MEMORY_MARK);
 
-        expect(existsSync(log)).toBe(true);
-        const rows = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { empty?: boolean });
-        expect(rows.length).toBeGreaterThan(0);
-        expect(rows.every((row) => row.empty === true)).toBe(true);
-      });
+          expect(existsSync(log)).toBe(true);
+          const rows = readFileSync(log, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line) as { empty?: boolean });
+          expect(rows.length).toBeGreaterThan(0);
+          expect(rows.every((row) => row.empty === true)).toBe(true);
+        },
+      );
     } finally {
       procSpy.mockRestore();
       mem.close();
@@ -550,7 +582,7 @@ describe("M38.2 wrap honors an omitted packet", () => {
 });
 
 const CI_Q = "What GitHub Actions CI do we use?";
-const AUTH_SOURCE = "export function login() {\n  return \"session-secret-body\";\n}\n";
+const AUTH_SOURCE = 'export function login() {\n  return "session-secret-body";\n}\n';
 
 function pacificTurns(): { role: string; content: string }[] {
   const out: { role: string; content: string }[] = [];
@@ -567,7 +599,12 @@ describe("M41 wrap place cues", () => {
     const mem = openMemory({ dir });
     const cues: string[] = [];
     const real = AgentMemory.prototype.notesFor;
-    const notesFor = spyOn(AgentMemory.prototype, "notesFor").mockImplementation(function (this: AgentMemory, text?: string, k?: number, opts?: { fuse?: boolean }) {
+    const notesFor = spyOn(AgentMemory.prototype, "notesFor").mockImplementation(function (
+      this: AgentMemory,
+      text?: string,
+      k?: number,
+      opts?: { fuse?: boolean },
+    ) {
       cues.push(String(text ?? ""));
       return real.call(this, text, k);
     });
@@ -597,7 +634,12 @@ describe("M41 wrap place cues", () => {
     const mem = openMemory({ dir });
     const cues: string[] = [];
     const real = AgentMemory.prototype.notesFor;
-    const notesFor = spyOn(AgentMemory.prototype, "notesFor").mockImplementation(function (this: AgentMemory, text?: string, k?: number, opts?: { fuse?: boolean }) {
+    const notesFor = spyOn(AgentMemory.prototype, "notesFor").mockImplementation(function (
+      this: AgentMemory,
+      text?: string,
+      k?: number,
+      opts?: { fuse?: boolean },
+    ) {
       cues.push(String(text ?? ""));
       return real.call(this, text, k);
     });
@@ -630,7 +672,9 @@ describe("M41 wrap place cues", () => {
 
         const anthLast = { role: "user", content: CI_Q };
         const anthMessages = [anthLast];
-        const anth = withKnowFactsAnthropic({ messages: anthMessages, open_files: ["src/lib/auth.ts"] } as { messages: unknown[] });
+        const anth = withKnowFactsAnthropic({ messages: anthMessages, open_files: ["src/lib/auth.ts"] } as {
+          messages: unknown[];
+        });
         expect(anthLast).toEqual({ role: "user", content: CI_Q });
         expect(anth).not.toHaveProperty("open_files");
         expect(cues.at(-1)).toMatch(/auth\.ts/);
@@ -648,10 +692,12 @@ describe("M41 wrap place cues", () => {
   test("chat completions copy path headers for inject and omit them upstream", async () => {
     let upstream = "";
     let seen: Record<string, unknown> | undefined;
-    const injectBody = spyOn(AgentMemory.prototype, "injectBody").mockImplementation((body: Record<string, unknown>) => {
-      seen = body;
-      return body;
-    });
+    const injectBody = spyOn(AgentMemory.prototype, "injectBody").mockImplementation(
+      (body: Record<string, unknown>) => {
+        seen = body;
+        return body;
+      },
+    );
     try {
       const state = createState({
         fetch: (async (_url: unknown, init?: { body?: string }) => {
@@ -699,11 +745,17 @@ describe("M41 wrap place cues", () => {
 
   test("upstream strip drops file bodies and keeps path names on the message", () => {
     const body = {
-      messages: [{
-        role: "user",
-        content: CI_Q,
-        files: ["src/lib/auth.ts", "function foo() { return bar/baz; }", { path: "src/lib/session.ts", content: AUTH_SOURCE }],
-      }],
+      messages: [
+        {
+          role: "user",
+          content: CI_Q,
+          files: [
+            "src/lib/auth.ts",
+            "function foo() { return bar/baz; }",
+            { path: "src/lib/session.ts", content: AUTH_SOURCE },
+          ],
+        },
+      ],
       recently_viewed_files: [AUTH_SOURCE],
     };
     const out = stripUpstreamPlaceFields(body);

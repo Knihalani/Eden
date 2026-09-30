@@ -248,9 +248,7 @@ const SH_RETRIEVE_FILES = [
   "assemble.ts",
   "cls/complete.ts",
 ] as const;
-const MH_HOP_FILES = [
-  "cls/complete.ts",
-] as const;
+const MH_HOP_FILES = ["cls/complete.ts"] as const;
 const ICL_GOLD = "The movie was great. label: 28";
 const ICL_NEAR = [
   "The film was excellent. label: 7",

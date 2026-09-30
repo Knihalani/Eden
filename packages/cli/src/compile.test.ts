@@ -2,18 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { StretchTrace } from "@eden/ir";
-import {
-  collectCompile,
-  compileCli,
-  compileHelp,
-  formatCompile,
-  formatCompileJson,
-} from "./compile";
+import { collectCompile, compileCli, compileHelp, formatCompile, formatCompileJson } from "./compile";
 import { edenHelp, edenHelpAdvanced } from "./cli";
 
 const dir = join(import.meta.dir, "../../.tmp-eden-compile-traces");
 
-function trace(id: string, names: string[], input: Record<string, unknown>, extra?: (i: number) => StretchTrace["events"][number]["args"]): StretchTrace {
+function trace(
+  id: string,
+  names: string[],
+  input: Record<string, unknown>,
+  extra?: (i: number) => StretchTrace["events"][number]["args"],
+): StretchTrace {
   return {
     id,
     llmCalls: names.length,
@@ -230,7 +229,13 @@ describe("eden compile", () => {
       expect(letter.code).toBe(0);
       expect(jsonRun.code).toBe(0);
       const body = JSON.parse(jsonRun.out) as {
-        programs: Array<{ name: string; sequence: string[]; naiveEvents: number; compiledTurns: number; turnsSaved: number }>;
+        programs: Array<{
+          name: string;
+          sequence: string[];
+          naiveEvents: number;
+          compiledTurns: number;
+          turnsSaved: number;
+        }>;
         refusals: unknown[];
         turnsSaved: number;
         uniqueWork: boolean;
@@ -461,7 +466,14 @@ describe("eden compile", () => {
     expect(letter).toMatch(/turns-saved estimate/);
     expect(letter).not.toMatch(/kind:\s*"loop"|LoopStep|"over":/);
     const body = JSON.parse(formatCompileJson(report)) as {
-      programs: Array<{ name: string; sequence: string[]; naiveEvents: number; compiledTurns: number; turnsSaved: number; shape: string[] }>;
+      programs: Array<{
+        name: string;
+        sequence: string[];
+        naiveEvents: number;
+        compiledTurns: number;
+        turnsSaved: number;
+        shape: string[];
+      }>;
       refusals: unknown[];
       turnsSaved: number;
       uniqueWork: boolean;
@@ -539,9 +551,24 @@ describe("eden compile", () => {
       complete: true,
       input: { batch: `C${i}` },
       events: [
-        { name: "listPage", args: { cursor: null, batch: `C${i}` }, result: { items: ["P-a", "P-b"], nextCursor: "1" }, ok: true },
-        { name: "listPage", args: { cursor: "1", batch: `C${i}` }, result: { items: ["P-c", "P-d"], nextCursor: "2" }, ok: true },
-        { name: "listPage", args: { cursor: "2", batch: `C${i}` }, result: { items: ["P-e", "P-f"], nextCursor: null }, ok: true },
+        {
+          name: "listPage",
+          args: { cursor: null, batch: `C${i}` },
+          result: { items: ["P-a", "P-b"], nextCursor: "1" },
+          ok: true,
+        },
+        {
+          name: "listPage",
+          args: { cursor: "1", batch: `C${i}` },
+          result: { items: ["P-c", "P-d"], nextCursor: "2" },
+          ok: true,
+        },
+        {
+          name: "listPage",
+          args: { cursor: "2", batch: `C${i}` },
+          result: { items: ["P-e", "P-f"], nextCursor: null },
+          ok: true,
+        },
         ...["P-a", "P-b", "P-c", "P-d", "P-e", "P-f"].flatMap((id) => [
           { name: "getItem", args: { id }, result: { id, ok: true }, ok: true },
           { name: "writeItem", args: { id }, result: { written: true, id }, ok: true },
@@ -567,9 +594,24 @@ describe("eden compile", () => {
       complete: true,
       input: { project: `gl-${i}` },
       events: [
-        { name: "listIssues", args: { project: `gl-${i}`, page: 1, limit: 2 }, result: { items: [{ iid: 1 }, { iid: 2 }], page: 1, limit: 2, totalPages: 3 }, ok: true },
-        { name: "listIssues", args: { project: `gl-${i}`, page: 2, limit: 2 }, result: { items: [{ iid: 3 }, { iid: 4 }], page: 2, limit: 2, totalPages: 3 }, ok: true },
-        { name: "listIssues", args: { project: `gl-${i}`, page: 3, limit: 2 }, result: { items: [{ iid: 5 }, { iid: 6 }], page: 3, limit: 2, totalPages: 3 }, ok: true },
+        {
+          name: "listIssues",
+          args: { project: `gl-${i}`, page: 1, limit: 2 },
+          result: { items: [{ iid: 1 }, { iid: 2 }], page: 1, limit: 2, totalPages: 3 },
+          ok: true,
+        },
+        {
+          name: "listIssues",
+          args: { project: `gl-${i}`, page: 2, limit: 2 },
+          result: { items: [{ iid: 3 }, { iid: 4 }], page: 2, limit: 2, totalPages: 3 },
+          ok: true,
+        },
+        {
+          name: "listIssues",
+          args: { project: `gl-${i}`, page: 3, limit: 2 },
+          result: { items: [{ iid: 5 }, { iid: 6 }], page: 3, limit: 2, totalPages: 3 },
+          ok: true,
+        },
         ...[1, 2, 3, 4, 5, 6].map((iid) => ({
           name: "commentIssue",
           args: { project: `gl-${i}`, iid },
@@ -625,7 +667,12 @@ describe("eden compile", () => {
     expect(repeating).not.toMatch(/Approve|certified/);
     const nextIdx = repeating.indexOf("Next:");
     expect(nextIdx).toBeGreaterThan(repeating.indexOf("Refusals:"));
-    expect(repeating.slice(nextIdx).split("\n").filter((l) => l.trim().startsWith("eden ")).length).toBeLessThanOrEqual(2);
+    expect(
+      repeating
+        .slice(nextIdx)
+        .split("\n")
+        .filter((l) => l.trim().startsWith("eden ")).length,
+    ).toBeLessThanOrEqual(2);
 
     const withSpec = formatCompile(collectCompile(repeatingTraces()), "examples/compile-traces/repeating");
     expect(withSpec).toMatch(/eden import --traces examples\/compile-traces\/repeating/);
@@ -646,14 +693,18 @@ describe("eden compile", () => {
     expect(unique).toMatch(/eden explain/);
     expect(unique).not.toMatch(/eden play/);
     expect(unique).not.toMatch(/certified|\blive\b/i);
-    expect(formatCompile(collectCompile(uniqueWorkTraces()), "examples/compile-traces/unique")).not.toMatch(/eden import|eden play/);
+    expect(formatCompile(collectCompile(uniqueWorkTraces()), "examples/compile-traces/unique")).not.toMatch(
+      /eden import|eden play/,
+    );
 
     const refuse = formatCompile(collectCompile(underdeterminedTraces()));
     expect(refuse).toMatch(/underdetermined_write/);
     expect(refuse).toMatch(/0 programs/);
     expect(refuse).toMatch(/eden explain/);
     expect(refuse).not.toMatch(/eden play/);
-    expect(formatCompile(collectCompile(underdeterminedTraces()), "examples/compile-traces/refuse")).not.toMatch(/eden import|eden play/);
+    expect(formatCompile(collectCompile(underdeterminedTraces()), "examples/compile-traces/refuse")).not.toMatch(
+      /eden import|eden play/,
+    );
 
     const json = formatCompileJson(collectCompile(repeatingTraces()));
     expect(json).not.toMatch(/Next:|eden play|eden approve|eden explain|eden import/);
@@ -689,10 +740,13 @@ describe("eden compile", () => {
     expect(text).toMatch(/--traces/);
     expect(text).toMatch(/Does not Approve/);
     expect(text).not.toMatch(/Quick start:/);
-    const letter = Bun.spawn(["bun", dist, "compile", "--traces", join(import.meta.dir, "../../../examples/compile-traces/repeating")], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const letter = Bun.spawn(
+      ["bun", dist, "compile", "--traces", join(import.meta.dir, "../../../examples/compile-traces/repeating")],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     const out = await new Response(letter.stdout).text();
     expect(await letter.exited).toBe(0);
     expect(out).toMatch(/lookupTicket → writeRecord → notify/);

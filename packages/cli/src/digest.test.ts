@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EMPTY_DIGEST, renderDigestText } from "@eden/measure";
-import { cacheHitPctFromReceipts, digestCli, digestFromInbox, digestHelp, digestOptedIn, type InboxSlice } from "./digest";
+import {
+  cacheHitPctFromReceipts,
+  digestCli,
+  digestFromInbox,
+  digestHelp,
+  digestOptedIn,
+  type InboxSlice,
+} from "./digest";
 import { writeConfig } from "./home";
 
 const EMPTY_TEXT = `Eden weekly
@@ -262,12 +269,12 @@ describe("eden digest", () => {
     expect(
       cacheHitPctFromReceipts([{ tool_id: "wf_1", prompt_tokens: 50, cached_tokens: 40, cache_write_tokens: 10 }]),
     ).not.toBe(80);
-    expect(cacheHitPctFromReceipts([{ tool_id: "wf_1", prompt_tokens: 50, cached_tokens: 100000, cache_write_tokens: 0 }])).toBe(
-      (100_000 / 100_050) * 100,
-    );
-    expect(cacheHitPctFromReceipts([{ tool_id: "wf_1", prompt_tokens: 50, cached_tokens: 100000, cache_write_tokens: 0 }])).not.toBe(
-      (100_000 / 50) * 100,
-    );
+    expect(
+      cacheHitPctFromReceipts([{ tool_id: "wf_1", prompt_tokens: 50, cached_tokens: 100000, cache_write_tokens: 0 }]),
+    ).toBe((100_000 / 100_050) * 100);
+    expect(
+      cacheHitPctFromReceipts([{ tool_id: "wf_1", prompt_tokens: 50, cached_tokens: 100000, cache_write_tokens: 0 }]),
+    ).not.toBe((100_000 / 50) * 100);
     expect(
       cacheHitPctFromReceipts([
         { tool_id: "wf_oai", prompt_tokens: 2006, cached_tokens: 1920 },
@@ -332,7 +339,13 @@ describe("eden digest", () => {
     expect(text).not.toMatch(/reads from cache/);
     const unmeasured = digestFromInbox(
       inbox,
-      [{ tool_id: "wf_1", created_at: now, tokenClasses: { compiled: 6, memoized: 0, transparent: 2, steeredSkip: 4, frontier: 8 } }],
+      [
+        {
+          tool_id: "wf_1",
+          created_at: now,
+          tokenClasses: { compiled: 6, memoized: 0, transparent: 2, steeredSkip: 4, frontier: 8 },
+        },
+      ],
       now,
     );
     expect(unmeasured.cacheHitPct).toBeNull();

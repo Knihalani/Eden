@@ -65,7 +65,9 @@ function parseLabel(text: string): string | undefined {
 }
 
 function labelKey(lab?: string): string {
-  return String(lab ?? "").trim().toLowerCase();
+  return String(lab ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function looksLikeExemplar(text: string): boolean {
@@ -107,7 +109,9 @@ function load(path: string): IclRecord[] {
 function persist(path: string, rows: IclRecord[]): void {
   const body = rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");
   writeFileAtomic(path, body);
-  try { chmodSync(path, 0o600); } catch {}
+  try {
+    chmodSync(path, 0o600);
+  } catch {}
 }
 
 function mint(text: string, opts?: { src?: string; t?: number }): IclRecord[] {
@@ -131,7 +135,11 @@ function takeK(requested?: number): number {
 
 /** Local copy of narrative `tokList`. No FOLD (hours→tz would poison shots). */
 function tokList(s: string): string[] {
-  return (String(s ?? "").toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []);
+  return (
+    String(s ?? "")
+      .toLowerCase()
+      .match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []
+  );
 }
 
 function stem(w: string): string {
@@ -283,7 +291,10 @@ function fallbackDocs(rows: IclFallback[] | undefined): IclRecord[] {
 
 function rankHits(rows: IclRecord[], cue: string, k: number): IclHit[] {
   if (!rows.length || !k) return [];
-  const scores = bm25All(cue, rows.map((r) => r.text));
+  const scores = bm25All(
+    cue,
+    rows.map((r) => r.text),
+  );
   const ranked: Scored[] = rows.map((rec, i) => ({
     rec,
     score: scores[i] ?? 0,
@@ -304,7 +315,9 @@ export class IclIndex {
     this.lockPath = `${this.path}.lock`;
     try {
       mkdirSync(this.dir, { recursive: true });
-      try { chmodSync(this.dir, 0o700); } catch {}
+      try {
+        chmodSync(this.dir, 0o700);
+      } catch {}
     } catch {}
   }
 
@@ -316,9 +329,7 @@ export class IclIndex {
       const src = minted[0]!.src;
       try {
         withFileLock(this.lockPath, () => {
-          const rows = src
-            ? load(this.path).filter((c) => c.src !== src)
-            : load(this.path);
+          const rows = src ? load(this.path).filter((c) => c.src !== src) : load(this.path);
           rows.push(...minted);
           persist(this.path, rows);
         });
@@ -345,11 +356,7 @@ export class IclIndex {
  * BM25 + label diversity over persisted exemplars, else in-memory fallback.
  * Empty cue → no dump. k = min(10, requested). Never throws.
  */
-export function retrieveIcl(
-  dir: string,
-  cue: string,
-  opts?: { k?: number; fallback?: IclFallback[] },
-): IclHit[] {
+export function retrieveIcl(dir: string, cue: string, opts?: { k?: number; fallback?: IclFallback[] }): IclHit[] {
   try {
     const q = String(cue ?? "").trim();
     if (!q) return [];

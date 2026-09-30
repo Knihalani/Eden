@@ -131,7 +131,10 @@ function isPollLoop(s: Step): boolean {
 
 function leafPath(b: Binding): string | undefined {
   if (b.kind === "from" || b.kind === "input") {
-    const segs = (b.path ?? "").split(".").map((x) => x.trim()).filter(Boolean);
+    const segs = (b.path ?? "")
+      .split(".")
+      .map((x) => x.trim())
+      .filter(Boolean);
     return segs.at(-1);
   }
   if (b.kind === "transform") return leafPath(b.of);

@@ -30,7 +30,10 @@ export function funnelSnapshot(checks: DoctorCheck[]): Array<{ name: FunnelStage
   });
 }
 
-export function doctorPayload(checks: DoctorCheck[]): { checks: DoctorCheck[]; funnel: Array<{ name: FunnelStage; count: number | null }> } {
+export function doctorPayload(checks: DoctorCheck[]): {
+  checks: DoctorCheck[];
+  funnel: Array<{ name: FunnelStage; count: number | null }>;
+} {
   return { checks, funnel: funnelSnapshot(checks) };
 }
 
@@ -81,7 +84,9 @@ export async function probeJson(
   }
 }
 
-export function surfaceModeOf(raw: string | undefined = process.env.EDEN_SURFACE): "all" | "none" | "jit" | "jit-shadow" {
+export function surfaceModeOf(
+  raw: string | undefined = process.env.EDEN_SURFACE,
+): "all" | "none" | "jit" | "jit-shadow" {
   const v = String(raw ?? "")
     .trim()
     .toLowerCase();
@@ -254,10 +259,7 @@ function readClaudeSettingsFile(): unknown {
  * Pure memory-hook health check. Pass Claude settings `{ hooks?: Record<string, unknown> }`.
  * `pluginEvents` documents double-inject when the plugin is detected; omit when unknown.
  */
-export function memoryHooksCheck(
-  settings: unknown,
-  opts?: { pluginEvents?: string[]; env?: string },
-): DoctorCheck {
+export function memoryHooksCheck(settings: unknown, opts?: { pluginEvents?: string[]; env?: string }): DoctorCheck {
   const hooks = hooksMapOf(settings);
   const settingsPresent = new Set<MemoryHookEvent>();
   let settingsSetupSubmit = false;
@@ -278,9 +280,11 @@ export function memoryHooksCheck(
 
   const listed = MEMORY_HOOK_EVENTS.filter((e) => present.has(e));
   const missing = MEMORY_HOOK_EVENTS.filter((e) => !present.has(e));
-  const encodeGap = settingsPresent.has("UserPromptSubmit") && settingsPresent.has("SessionStart") && !settingsPresent.has("PostToolUse");
-  const doubleInject =
-    (pluginSubmit && settingsSetupSubmit) || (settingsSetupSubmit && settingsPluginSubmit);
+  const encodeGap =
+    settingsPresent.has("UserPromptSubmit") &&
+    settingsPresent.has("SessionStart") &&
+    !settingsPresent.has("PostToolUse");
+  const doubleInject = (pluginSubmit && settingsSetupSubmit) || (settingsSetupSubmit && settingsPluginSubmit);
   const rawEnv = opts && Object.prototype.hasOwnProperty.call(opts, "env") ? opts.env : process.env.EDEN_MEMORY;
   const consent = memoryConsent(rawEnv);
   const consentBit = `EDEN_MEMORY ${consent}`;
@@ -598,13 +602,16 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   let wrapLive: number | undefined;
   const wrap = await probeJson(`${base}/health`, fetchFn);
   if (wrap) {
-    const j = wrap.body && typeof wrap.body === "object" ? (wrap.body as {
-      traces?: number;
-      live?: number;
-      candidates?: number;
-      registry?: boolean;
-      island?: boolean;
-    }) : null;
+    const j =
+      wrap.body && typeof wrap.body === "object"
+        ? (wrap.body as {
+            traces?: number;
+            live?: number;
+            candidates?: number;
+            registry?: boolean;
+            island?: boolean;
+          })
+        : null;
     wrapUp = wrap.ok;
     if (wrap.ok && typeof j?.traces === "number") tracesKnown = j.traces;
     if (wrap.ok && typeof j?.candidates === "number") wrapCandidates = j.candidates;
@@ -677,9 +684,7 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
       mined = cands.length;
       waiting = waitingCount(cands);
       served = servedCount(box.live ?? []);
-      stuck = cands.filter(
-        (c) => c.verdict === "pending" || c.refusal?.reason?.startsWith("uncovered"),
-      ).length;
+      stuck = cands.filter((c) => c.verdict === "pending" || c.refusal?.reason?.startsWith("uncovered")).length;
     } else if (inbox?.status === 401 && typeof wrapCandidates === "number") {
       mined = wrapCandidates;
     }
@@ -796,8 +801,8 @@ function lineOf(c: DoctorCheck): string {
 export function formatDoctor(checks: DoctorCheck[]): string {
   const names = new Set<string>(FUNNEL_STAGES);
   const health = checks.filter((c) => !names.has(c.name));
-  const funnel = FUNNEL_STAGES.map((name) => checks.find((c) => c.name === name)).filter(
-    (c): c is DoctorCheck => Boolean(c),
+  const funnel = FUNNEL_STAGES.map((name) => checks.find((c) => c.name === name)).filter((c): c is DoctorCheck =>
+    Boolean(c),
   );
   return [...health.map(lineOf), "", ...funnel.map(lineOf)].join("\n");
 }
