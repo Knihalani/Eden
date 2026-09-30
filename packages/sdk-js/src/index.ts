@@ -18,19 +18,36 @@ function cfg(opts?: Opts) {
     // The wrap plane (`eden wrap`) defaults to 8788. 8787 is the dashboard —
     // pointing here sent SDK traffic at a UI server.
     base,
-    key: opts?.apiKey || process.env.EDEN_API_KEY || (hosted ? "" : localKey()),
+    key: opts?.apiKey || process.env.EDEN_API_KEY || (hosted ? "" : localKey(base)),
   };
 }
 
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/** The port of a loopback URL, else null. Parsed, so http://localhost:1@evil.example is not loopback. */
+function loopbackPort(url: string): string | null {
+  try {
+    const u = new URL(url);
+    return LOOPBACK.has(u.hostname) ? u.port || (u.protocol === "https:" ? "443" : "80") : null;
+  } catch {
+    return null;
+  }
+}
+
+type SavedConfig = { api_key?: unknown; base_url?: unknown };
+
 /**
- * Loopback only: the key `eden wrap` or `eden login` stored in $EDEN_HOME/config.json (default
- * ~/.eden), else the public eden_dev, which only a `--dev` wrap or `eden demo` accepts.
+ * The key `eden wrap` or `eden login` saved in $EDEN_HOME/config.json (default ~/.eden), sent only
+ * to the loopback port it was saved for. Otherwise the public eden_dev, which only a `--dev` wrap
+ * or `eden demo` accepts.
  */
-function localKey(): string {
+function localKey(base: string): string {
   try {
     const home = process.env.EDEN_HOME || join(homedir(), ".eden");
-    const { api_key } = JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as { api_key?: unknown };
-    if (typeof api_key === "string" && api_key) return api_key;
+    const saved = JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as SavedConfig;
+    const port = loopbackPort(base);
+    const samePort = port !== null && typeof saved.base_url === "string" && loopbackPort(saved.base_url) === port;
+    if (samePort && typeof saved.api_key === "string" && saved.api_key) return saved.api_key;
   } catch {}
   return "eden_dev";
 }
