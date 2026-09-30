@@ -14,7 +14,7 @@ alias eden='bun packages/cli/src/cli.ts'   # or: bun run cli -- <command>
 eden init
 ```
 
-The first `eden wrap` writes a per-install key to `~/.eden/config.json` (mode 0600). Every `eden` command and both SDKs read it from there; run `eden init` again after that first start to wire MCP with it. `--dev` (or `EDEN_DEV=1`) uses the public `eden_dev` key instead: tests and throwaway sittings only.
+The first `eden wrap` writes a per-install key to `~/.eden/config.json` (mode 0600), replacing an `eden_dev` that an older `eden init --dev` saved there. Every `eden` command and both SDKs read it from there; run `eden init` again after that first start to wire MCP with it. `--dev` (or `EDEN_DEV=1`) uses the public `eden_dev` key instead: tests and throwaway sittings only.
 
 Hosted wrap (no local process): [https://useeden.vercel.app](https://useeden.vercel.app) — `POST /v1/signup`, then `eden login --url https://useeden.vercel.app --key <key>` and `OPENAI_BASE_URL=https://useeden.vercel.app/v1`. An Eden key is wrap auth, not OpenAI.
 
