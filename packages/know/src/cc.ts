@@ -264,7 +264,7 @@ class StreamInflate {
   private mode: "unknown" | "gzip" | "raw" = "unknown";
   private gunzip: ReturnType<typeof createGunzip> | undefined;
   private pending: Uint8Array[] = [];
-  private head = new Uint8Array(0);
+  private head: Uint8Array = new Uint8Array(0);
   private dead = false;
 
   private startGzip() {
@@ -415,7 +415,7 @@ async function scanWetBody(
   const reader = body.getReader();
   const feed = 1_024;
   try {
-    let leftover = new Uint8Array(0);
+    let leftover: Uint8Array = new Uint8Array(0);
     const full = () => gzipFetchedBytes >= byteCap || stats.scanned >= scanCap || pool.length >= poolCap;
     const eat = async (buf: Uint8Array) => {
       let rest = buf;

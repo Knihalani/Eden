@@ -9,7 +9,8 @@ export function emptyWarcStats(): WarcStats {
   return { scanned: 0, decoded: 0, skippedBodies: 0, decodedBytes: 0 };
 }
 
-const latin1 = new TextDecoder("latin1");
+// WHATWG maps the "latin1" label to windows-1252: the same decoder, under the label the types accept.
+const latin1 = new TextDecoder("windows-1252");
 const utf8 = new TextDecoder("utf-8", { fatal: false });
 
 /** WARC/1.0 or WARC/1.1 — one pass over the view length only (not the backing allocation). */

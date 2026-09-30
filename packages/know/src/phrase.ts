@@ -249,7 +249,7 @@ function compile() {
       }
       s = nx;
     }
-    if (OUT[s] < 0) OUT[s] = p;
+    if (OUT[s]! < 0) OUT[s] = p;
   }
   const q: number[] = [];
   for (let a = 0; a < SIG; a++) {

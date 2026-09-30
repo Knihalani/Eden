@@ -105,7 +105,7 @@ const ZSTD_SMALL_LEVEL = 3;
 const BROTLI_MIN = 96;
 /** q11 + size hint + 16 MiB window — joint inner graph, not nested RT11. */
 const BROTLI_QUALITY = 11;
-const EMPTY_U8 = new Uint8Array(0);
+const EMPTY_U8: Uint8Array = new Uint8Array(0);
 const SCHEME_TAB = new Set(schemeNames());
 const EMPTY_LOC = new Map<string, number>();
 const POP8 = (() => {
@@ -571,7 +571,7 @@ function implicitRfcUniverse(): { bits: Uint8Array; max: number; count: number; 
   for (let n = 0; n <= 12000; n++) if (rfcTitleOf(n)) nums.push(n);
   const max = nums.length ? nums[nums.length - 1]! : 0;
   const bits = new Uint8Array((max + 8) >> 3);
-  for (const n of nums) bits[n >> 3] |= 1 << (n & 7);
+  for (const n of nums) bits[n >> 3]! |= 1 << (n & 7);
   implicitU = { bits, max, count: nums.length, nums: Uint32Array.from(nums) };
   return implicitU;
 }
@@ -1401,7 +1401,7 @@ function bloomAddTitle(b: Uint8Array, title: string) {
 function bloomAdd(b: Uint8Array, t: string) {
   let h = hashTok(t);
   for (let i = 0; i < 3; i++) {
-    b[(h >>> 3) % b.length] |= 1 << (h & 7);
+    b[(h >>> 3) % b.length]! |= 1 << (h & 7);
     h = Math.imul(h, 0x9e3779b1) >>> 0;
   }
 }
@@ -3054,7 +3054,7 @@ function decodeFor(buf: Uint8Array): number[] {
 
 function encodeBitset(ids: number[], nTriples: number): Uint8Array {
   const bytes = new Uint8Array((nTriples + 7) >> 3);
-  for (const id of ids) bytes[id >> 3] |= 1 << (id & 7);
+  for (const id of ids) bytes[id >> 3]! |= 1 << (id & 7);
   const w = new Writer();
   w.u32(nTriples);
   w.bytes(bytes);
@@ -4517,9 +4517,9 @@ function decodeRfcBitset(r: Reader, buf: Uint8Array): { max: number; bits: Uint8
   const last = max >> 3;
   const lim = Math.min(last, bits.length - 1);
   if (lim < 0) return { max, bits, count: 0 };
-  for (let i = 0; i < lim; i++) count += POP8[bits[i]!];
+  for (let i = 0; i < lim; i++) count += POP8[bits[i]!]!;
   const mask = (1 << ((max & 7) + 1)) - 1;
-  count += POP8[bits[lim]! & mask];
+  count += POP8[bits[lim]! & mask]!;
   return { max, bits, count };
 }
 
@@ -4533,7 +4533,7 @@ function bitsToNums(bits: Uint8Array, max: number, count: number): Uint32Array {
 function encodeRfcBitset(nums: number[]): Uint8Array {
   const max = nums.length ? nums[nums.length - 1]! : 0;
   const bytes = new Uint8Array((max + 8) >> 3);
-  for (const n of nums) bytes[n >> 3] |= 1 << (n & 7);
+  for (const n of nums) bytes[n >> 3]! |= 1 << (n & 7);
   const w = new Writer();
   w.u16(max);
   w.u16(bytes.length);
@@ -4634,11 +4634,11 @@ function suffixArray(s: Uint8Array): Int32Array {
   rnk[n] = 0;
   const sortKey = (getKey: (idx: number) => number, buckets: number) => {
     cnt.fill(0, 0, buckets);
-    for (let i = 0; i < m; i++) cnt[getKey(sa[i]!)]++;
-    for (let i = 1; i < buckets; i++) cnt[i] += cnt[i - 1]!;
+    for (let i = 0; i < m; i++) cnt[getKey(sa[i]!)]!++;
+    for (let i = 1; i < buckets; i++) cnt[i]! += cnt[i - 1]!;
     for (let i = m - 1; i >= 0; i--) {
       const v = sa[i]!;
-      tmp[--cnt[getKey(v)]] = v;
+      tmp[--cnt[getKey(v)]!] = v;
     }
     sa.set(tmp);
   };
@@ -4772,7 +4772,7 @@ function inverseBwt(stored: Uint8Array, primary: number): Uint8Array {
   L[primary] = 0;
   for (let i = primary + 1; i < m; i++) L[i] = stored[i - 1]! + 1;
   const C = new Int32Array(257);
-  for (let i = 0; i < m; i++) C[L[i]!]++;
+  for (let i = 0; i < m; i++) C[L[i]!]!++;
   let sum = 0;
   for (let c = 0; c < 257; c++) {
     const t = C[c]!;
@@ -4780,7 +4780,7 @@ function inverseBwt(stored: Uint8Array, primary: number): Uint8Array {
     sum += t;
   }
   const LF = new Int32Array(m);
-  for (let i = 0; i < m; i++) LF[i] = C[L[i]!]++;
+  for (let i = 0; i < m; i++) LF[i] = C[L[i]!]!++;
   const out = new Uint8Array(n);
   let i = primary;
   for (let p = n - 1; p >= 0; p--) {
@@ -5215,7 +5215,7 @@ function prepareAcrTitles(titles: string[]): { stripped: string[]; bits: Uint8Ar
     if (s === t) continue;
     if (restoreTitleAcronyms(s) !== t) continue;
     stripped[i] = s;
-    bits[i >> 3] |= 1 << (i & 7);
+    bits[i >> 3]! |= 1 << (i & 7);
     nStrip++;
   }
   if (!nStrip) return;
@@ -6001,7 +6001,7 @@ function encodeTitleRepair(titles: string[]): Uint8Array {
       dense.fill(0);
       for (let i = 0; i < seq.length - 1; i++) {
         const k = (seq[i]! << 8) | seq[i + 1]!;
-        const n = ++dense[k];
+        const n = ++dense[k]!;
         if (n > bestN) {
           bestN = n;
           bestK = k;
@@ -7394,7 +7394,7 @@ function decodeRfcNumsCompact(buf: Uint8Array): { max: number; bits: Uint8Array;
   if (nums) {
     const max = nums.length ? nums[nums.length - 1]! : 0;
     const bits = new Uint8Array((max + 8) >> 3);
-    for (const n of nums) bits[n >> 3] |= 1 << (n & 7);
+    for (const n of nums) bits[n >> 3]! |= 1 << (n & 7);
     return { max, bits, count: nums.length };
   }
   const r = new Reader(new DataView(buf.buffer, buf.byteOffset, buf.byteLength), 0, buf.byteLength);
@@ -7770,7 +7770,7 @@ function decodeAreaSparse(buf: Uint8Array): number[] | undefined {
   const bits = buf.subarray(r.off, r.off + blen);
   r.off += blen;
   let rareN = 0;
-  for (let i = 0; i < blen; i++) rareN += POP8[bits[i]!];
+  for (let i = 0; i < blen; i++) rareN += POP8[bits[i]!]!;
   const nlen = r.vbyte();
   if (r.off + nlen > r.end) return;
   const rare = decodeNibbleCol(buf.subarray(r.off, r.off + nlen), rareN);
@@ -8419,7 +8419,7 @@ const KG17_SDR = 2;
 const KG17_DELTA = 3;
 const KG17_DUMP = 8;
 
-function fillColdFromArea(overlay: Map<number, string>, nums: number[], areaBuf: Uint8Array): boolean {
+function fillColdFromArea(overlay: Map<number, string>, nums: ArrayLike<number>, areaBuf: Uint8Array): boolean {
   if (!areaBuf.byteLength) {
     for (let i = 0; i < nums.length; i++) {
       const n = nums[i]!;
@@ -9545,7 +9545,7 @@ function decodeRfcColumn(buf: Uint8Array): RfcCol {
   const nums = Uint32Array.from(numsArr);
   const max = numsArr.length ? numsArr[numsArr.length - 1]! : 0;
   const bits = new Uint8Array((max + 8) >> 3);
-  for (const num of numsArr) bits[num >> 3] |= 1 << (num & 7);
+  for (const num of numsArr) bits[num >> 3]! |= 1 << (num & 7);
   return { bits, max, count: numsArr.length, overlay: overlayFromTitles(nums, titles), obs: [], upd: [] };
 }
 
@@ -10351,7 +10351,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
     }
     const proto = ianaProtocol(f.s);
     if (proto !== undefined) {
-      protoBits[proto >> 3] |= 1 << (proto & 7);
+      protoBits[proto >> 3]! |= 1 << (proto & 7);
       hasProto = true;
       noteOver(f.s, f.o);
       continue;
@@ -10359,7 +10359,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
     const http = ianaHttp(f.s);
     if (http !== undefined) {
       if (http < 1024) {
-        httpBits[http >> 3] |= 1 << (http & 7);
+        httpBits[http >> 3]! |= 1 << (http & 7);
         hasHttp = true;
         noteOver(f.s, f.o);
         continue;
@@ -10683,11 +10683,11 @@ export function encodePack(facts: PackFact[]): Uint8Array {
   if (hasHttp && bitsEq(httpBits, closed.httpBits)) closedBits |= 1 << 13;
 
   const mediaStore =
-    mediaMode === "exact" || mediaMode === "subset" ? [] : mediaMode === "extra" ? extrasOf(mediaList, closed.media) : mediaList;
+    mediaMode === "subset" ? [] : mediaMode === "extra" ? extrasOf(mediaList, closed.media) : mediaList;
   const spdxStore =
-    spdxMode === "exact" || spdxMode === "subset" ? [] : spdxMode === "extra" ? extrasOf(spdxList, closed.spdx) : spdxList;
+    spdxMode === "subset" ? [] : spdxMode === "extra" ? extrasOf(spdxList, closed.spdx) : spdxList;
   const schemeStore =
-    schemeMode === "exact" || schemeMode === "subset" ? [] : schemeMode === "extra" ? extrasOf(schemeList, closed.scheme) : schemeList;
+    schemeMode === "subset" ? [] : schemeMode === "extra" ? extrasOf(schemeList, closed.scheme) : schemeList;
   const slugStore =
     slugMode === "exact" || slugMode === "subset" || slugMode === "mixed"
       ? []
@@ -10874,7 +10874,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
         const p = decodePack(pack);
         if (p.nTriples !== wantN || !packCarriesHotTitles(pack, hot)) return;
         bake[name.replace(/\+/g, "_").toLowerCase()] = pack.byteLength;
-        if (!best.pack.byteLength || pack.byteLength < best.pack.byteLength) {
+        if (!best!.pack.byteLength || pack.byteLength < best!.pack.byteLength) {
           best = { name, pack };
           bake.got_n = wantN;
         }
@@ -10970,7 +10970,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
         if (dec.nTriples !== wantN || !packCarriesHotTitles(pack, hot)) return;
         bake.split_ct01 = pack.byteLength;
         bake[name.replace(/\+/g, "_").toLowerCase()] = pack.byteLength;
-        if (!best.pack.byteLength || pack.byteLength < best.pack.byteLength) {
+        if (!best!.pack.byteLength || pack.byteLength < best!.pack.byteLength) {
           best = { name, pack };
           bake.got_n = wantN;
         }
@@ -11038,7 +11038,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
         if (p.nTriples !== wantN || !packCarriesHotTitles(pack, hot)) return;
         bake.kg17 = pack.byteLength;
         bake.kg17_mode = mode;
-        if (!best.pack.byteLength || pack.byteLength < best.pack.byteLength) {
+        if (!best!.pack.byteLength || pack.byteLength < best!.pack.byteLength) {
           best = { name, pack };
           bake.got_n = wantN;
         }
