@@ -134,6 +134,10 @@ describe("the per-install wrap key", () => {
     expect(out).toBe("eden play lookup --key [REDACTED] --input {}");
     expect(containsSecret(`echo ${key} | pbcopy`)).toBe(true);
     expect(containsSecret({ args: [key] })).toBe(true);
+    for (const glued of [`/cb?token%3D${key}`, `Bearer%20${key}`, `x_${key}`]) {
+      expect(containsSecret(glued)).toBe(true);
+      expect(redactString(glued)).not.toContain(key.slice(11));
+    }
   });
 
   test("the public eden_dev key and the bare prefix are not secrets", () => {

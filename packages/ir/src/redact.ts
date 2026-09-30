@@ -79,8 +79,9 @@ const SECRET_TOKEN_PATTERNS = [
   String.raw`\bgho_[A-Za-z0-9]{8,}`,
   String.raw`\bgithub_pat_[A-Za-z0-9_]{8,}`,
   String.raw`\bxox[baprs]-[A-Za-z0-9-]{10,}`,
-  // The per-install key a loopback `eden wrap` writes to config.json (packages/cli home.ts).
-  String.raw`\beden_local_[0-9a-f]{8,}`,
+  // The per-install key a loopback `eden wrap` writes to config.json (packages/cli home.ts). No \b:
+  // it is still a key after a word character, as in token%3Deden_local_… or x_eden_local_….
+  String.raw`eden_local_[0-9a-f]{8,}`,
   String.raw`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`,
   // The whole block, banner to END line. Matching only the banner left the
   // base64 body sitting in the clear right under a "[REDACTED]" hat.
