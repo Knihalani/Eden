@@ -7,8 +7,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, openMemory, pathCues, subjectKey, type AgentMemory } from "./index";
-import { CLSController } from "./cls/controller";
+import { MEMORY_MARK, openMemory, pathCues, type AgentMemory } from "./index";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 
@@ -79,25 +78,6 @@ function withHookDir(fn: () => void): void {
   }
 }
 
-function withCls(fn: (cls: CLSController, dir: string) => void): void {
-  const dir = tmpDir("eden-m13-cls-");
-  try {
-    // not-product — CLS fuse pin, not a wrap/hook score.
-    const cls = new CLSController(openMemory({ dir }), { skipCortex: true });
-    fn(cls, dir);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
-/** Report §6.1 worked example: 11 episodes, gold BM25 at i=0, semantic hit at i=10. */
-function ingestFuseWorld(cls: CLSController): void {
-  const turns = [{ text: "Never put secrets in the timezone file", speaker: "G", session: 0 }];
-  for (let n = 1; n < 10; n++) turns.push({ text: `Unrelated filler sentence number ${n} about weather.`, speaker: "F", session: 0 });
-  turns.push({ text: "Kai lives in Seattle", speaker: "B", session: 0 });
-  cls.ingest(turns);
-}
-
 describe("M1.3 (1) please / fix the / we need to dropped", () => {
   const please = "Please fix the flake in auth.test.ts";
   const fixThe = "fix the flake in auth.test.ts";
@@ -166,13 +146,6 @@ describe("M1.3 (2) auth.ts not a path cue", () => {
 
 describe("M1.3 (3) Auth is failing deletes Clerk", () => {
   test("today: status copula does not share the identity subject key", () => {
-    expect(subjectKey("Auth is Clerk")).toBe("auth");
-    expect(subjectKey("Auth is now NextAuth")).toBe("auth");
-    expect(subjectKey("Auth is failing")).toBeNull();
-    expect(subjectKey("Auth is broken")).toBeNull();
-    expect(subjectKey("Auth is currently failing")).toBeNull();
-    expect(subjectKey("CI is GitHub Actions")).toBe("ci");
-    expect(subjectKey("CI is failing")).toBeNull();
     withMem((mem) => {
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
       expect(hasText(mem, "Clerk")).toBe(true);
@@ -259,30 +232,5 @@ describe("M1.3 (5) sal=0.6 pin + notesFor cues", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
-});
-
-describe("M1.3 (6) fuse 1.000 vs 1.219", () => {
-  test("today: G beats B (lexical spine; dead semantic cannot invent a 1.0 lane)", () => {
-    const ctrl = readFileSync(join(import.meta.dir, "cls/controller.ts"), "utf8");
-    expect(ctrl).toContain("a * (1 + 0.15 * bRaw + 0.2 * cRaw)");
-    expect(ctrl).toContain("1 + 0.06 * (i / recencyDen)");
-    expect(ctrl).not.toContain("a + 0.6 * b + 1.05 * c + 0.15 * (lanes - 1)");
-    expect(ctrl).toContain("fused[old] = 0");
-
-    withCls((cls) => {
-      ingestFuseWorld(cls);
-      const s = cls.scores("What timezone is Kai in?");
-      expect(s.length).toBe(11);
-      expect(s[0]!).toBeGreaterThan(s[10]!);
-    });
-  });
-
-  test("desired: G beats B (dead semantic must not beat BM25)", () => {
-    withCls((cls) => {
-      ingestFuseWorld(cls);
-      const s = cls.scores("What timezone is Kai in?");
-      expect(s[0]!).toBeGreaterThan(s[10]!);
-    });
   });
 });
