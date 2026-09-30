@@ -22,7 +22,7 @@ function prog(): StretchProgram {
   }) as StretchProgram;
 }
 
-async function usPerCall(fn: () => Promise<unknown>, n = 8_000): Promise<number> {
+async function usPerCall(fn: () => Promise<unknown> | unknown, n = 8_000): Promise<number> {
   for (let i = 0; i < 800; i++) await fn();
   const t0 = performance.now();
   for (let i = 0; i < n; i++) await fn();

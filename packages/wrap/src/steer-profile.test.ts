@@ -24,11 +24,11 @@ function prog(): StretchProgram {
 
 async function arm(w: number) {
   const p = prog();
-  const t: Record<string, ToolDef> = {
+  const t = {
     ping: { execute: async () => ({ pong: true }) },
     lookup: { execute: async (a) => ({ id: a.id }) },
     write: { execute: async (a) => ({ id: a.id }) },
-  };
+  } satisfies Record<string, ToolDef>;
   const store = createArmingStore();
   const wraps = [];
   for (let i = 0; i < w; i++) {
@@ -39,7 +39,7 @@ async function arm(w: number) {
   return wraps[0]!;
 }
 
-async function p50(fn: () => Promise<unknown>, n = 4000): Promise<number> {
+async function p50(fn: () => Promise<unknown> | unknown, n = 4000): Promise<number> {
   for (let i = 0; i < 400; i++) await fn();
   const xs: number[] = [];
   for (let i = 0; i < n; i++) {

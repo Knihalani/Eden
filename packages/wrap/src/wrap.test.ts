@@ -718,7 +718,7 @@ describe("openai proxy", () => {
   });
 
   test("uses upstreamKey when the request is wrap auth", async () => {
-    const seen: string[] = [];
+    const seen: (string | undefined)[] = [];
     const state = createState({
       fetch: (async (_url: string, init?: RequestInit) => {
         const h = init?.headers as Record<string, string>;
@@ -865,7 +865,7 @@ describe("control outbox", () => {
     await tools.notify.execute({ id: "T-100" });
     for (let i = 0; i < 200 && n < 2; i++) {
       await flushOutbox(state);
-      else await tick();
+      await tick();
     }
     expect(n).toBeGreaterThanOrEqual(2);
   });
@@ -880,7 +880,7 @@ describe("control outbox", () => {
     for (let i = 0; i < 80; i++) await tools.notify.execute({ i });
     for (let i = 0; i < 500 && state.droppedPosts === 0; i++) {
       await flushOutbox(state);
-      else await tick();
+      await tick();
     }
     for (let i = 0; i < 12; i++) await flushOutbox(state);
     expect(state.droppedPosts).toBeGreaterThan(0);
