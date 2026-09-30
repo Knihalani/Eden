@@ -26,6 +26,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync
 import { join } from "node:path";
 import { spawn, spawnSync, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { createServer } from "node:net";
+import { randomBytes } from "node:crypto";
 // --- M32.3 remain-silent measure (count only; omit gate is M38) ---
 import { silenceNotes } from "./silence.ts";
 
@@ -50,7 +51,9 @@ let wrapPort = DEFAULT_WRAP_PORT;
 function wrapOrigin(): string {
   return `http://127.0.0.1:${wrapPort}`;
 }
-const HARBOR_WRAP_KEY = "sk-eden-tb-wrap-only";
+// Harbor's OPENAI_API_KEY is this wrap's own key, so wrap pays upstream with the NVIDIA key it holds.
+// A stand-in `sk-` key no longer works: wrap forwards a provider key as the caller's own (#84).
+const HARBOR_WRAP_KEY = `eden_tb_${randomBytes(16).toString("hex")}`;
 const DATASET_GIT = "https://github.com/harbor-framework/terminal-bench-2-1.git";
 const DATASET_HUB = "terminal-bench/terminal-bench-2-1";
 
@@ -508,6 +511,7 @@ function startWrap(arm: Arm): { child: ChildProcess; log: string; port: number }
     ...process.env,
     OPENAI_API_KEY: nvidiaKey(),
     OPENAI_API_BASE: nimBase(),
+    EDEN_API_KEY: HARBOR_WRAP_KEY,
     EDEN_DEV: "1",
     EDEN_HOME: home,
     EDEN_MEMORY_DIR: mem,
@@ -981,7 +985,7 @@ export function accuracyVerdict(pp: number | null): string | null {
 const LOCKED_NOTES = [
   "Locked subset, k=5, both arms through wrap. Full 89×5×2 was not run.",
   "Wrap `--no-coding` so the Δ is memory inject, not stretch compile.",
-  "Harbor OPENAI_API_KEY is a local wrap stand-in (`sk-eden-tb-wrap-only`); upstream NVIDIA key stays in the wrap process.",
+  "Harbor OPENAI_API_KEY is the local wrap's own key (`eden_tb_…`); upstream NVIDIA key stays in the wrap process.",
 ] as const;
 
 /** Dated M32 schema with no Harbor numbers. Orchestrator re-run fills Δ. Does not invent remain-silent counts. */
