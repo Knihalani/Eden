@@ -1,5 +1,5 @@
 import { homedir, hostname } from "node:os";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { join, dirname } from "node:path";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, readdirSync, writeSync, fstatSync, renameSync, chmodSync } from "node:fs";
 
@@ -261,7 +261,7 @@ export function sitePlaneUrl(raw?: string | null): string {
   return /127\.0\.0\.1:8788|localhost:8788/.test(u) ? u.replace(":8788", ":8787") : u;
 }
 
-export function resolveApiKey(args: string[] = []): string {
+function configuredApiKey(args: string[]): string | undefined {
   const i = args.indexOf("--key");
   const flagged = i >= 0 ? args[i + 1] : undefined;
   const explicit = flagged || process.env.EDEN_API_KEY;
@@ -269,7 +269,36 @@ export function resolveApiKey(args: string[] = []): string {
   const cfg = readConfig();
   if (cfg?.api_key) return cfg.api_key;
   if (args.includes("--dev") || process.env.EDEN_DEV === "1") return "eden_dev";
-  throw new Error("eden needs --key, EDEN_API_KEY, eden login, or --dev");
+  return undefined;
+}
+
+export function resolveApiKey(args: string[] = []): string {
+  const key = configuredApiKey(args);
+  if (key) return key;
+  throw new Error("eden needs a key: start eden wrap (it writes one), or --key, EDEN_API_KEY, eden login, or --dev");
+}
+
+/**
+ * Prefix of the per-install key. It starts with `eden_`, so wrap never forwards it upstream as a
+ * model key, and "local" is not hex, so it cannot collide with a hosted `eden_<hex>` key.
+ */
+export const LOCAL_KEY_PREFIX = "eden_local_";
+
+/**
+ * The key a loopback `eden wrap` guards /v1 with. It resolves like every client's key. Where a
+ * client would find none, it creates a random per-install key in config.json (mode 0600) instead
+ * of falling back to the public eden_dev, and later runs reuse it (#75).
+ */
+export function resolveWrapKey(args: string[] = []): { key: string; created: boolean } {
+  const key = configuredApiKey(args);
+  if (key) return { key, created: false };
+  return withFileLock(`${configPath()}.lock`, () => {
+    const cfg = readConfig();
+    if (cfg?.api_key) return { key: cfg.api_key, created: false };
+    const fresh = `${LOCAL_KEY_PREFIX}${randomBytes(32).toString("hex")}`;
+    writeConfig({ ...cfg, api_key: fresh, base_url: cfg?.base_url || wrapPlaneUrl() });
+    return { key: fresh, created: true };
+  });
 }
 
 export function readJson<T>(path: string, fallback: T): T {
