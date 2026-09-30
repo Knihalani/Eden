@@ -57,8 +57,8 @@ State on 2026-09-29, after the merge to `main` on `Knihalani/Eden`:
   - the `session → cwd` snapshot is taken.
 - **Open, user:**
   - rotate the leaked token;
-  - protect `main` on GitHub once CI is green;
-  - consider making `main` the default branch (today `feat/compiled-tools-horizon`);
+  - protect `main` on GitHub: CI is green since P0.−1, but a required check on a private repo needs GitHub Pro (the API answers 403);
+  - ~~make `main` the default branch~~ (done 2026-09-30);
   - opt in to real-negative collection.
 - **Open, agent** (run `/next`):
   - P0.−1 (below);
