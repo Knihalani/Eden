@@ -206,7 +206,7 @@ async function bootWrap(home: string, args: string[] = [], env: Record<string, s
   const stop = async () => {
     proc.kill();
     await proc.exited;
-    return new Response(proc.stdout).text();
+    return `${await new Response(proc.stdout).text()}${await new Response(proc.stderr).text()}`;
   };
   for (let i = 0; i < 300; i++) {
     if (proc.exitCode !== null) break;
@@ -214,8 +214,7 @@ async function bootWrap(home: string, args: string[] = [], env: Record<string, s
     if (up) return { url, stop };
     await Bun.sleep(50);
   }
-  const err = await stop().then(() => new Response(proc.stderr).text());
-  throw new Error(`eden wrap did not come up: ${err}`);
+  throw new Error(`eden wrap did not come up: ${await stop()}`);
 }
 
 async function inboxStatus(url: string, auth?: string): Promise<number> {
@@ -289,17 +288,28 @@ describe("eden wrap on loopback with no key", () => {
     }
   });
 
-  test("--dev or a user-set EDEN_DEV=1 serves eden_dev and writes no key", async () => {
+  test("--dev or a user-set EDEN_DEV=1 serves eden_dev quietly and writes no key", async () => {
     for (const [args, env] of [[["--dev"], {}], [[], { EDEN_DEV: "1" }]] as const) {
       const home = tempHome();
       const wrap = await bootWrap(home, [...args], { ...env });
       try {
         expect(await inboxStatus(wrap.url, "Bearer eden_dev")).toBe(200);
       } finally {
-        await wrap.stop();
+        expect(await wrap.stop()).not.toContain("accepts the public eden_dev");
       }
       expect(existsSync(configAt(home))).toBe(false);
     }
+  });
+
+  test("an EDEN_API_KEY=eden_dev left in the environment (an old .env) is served with a warning", async () => {
+    const home = tempHome();
+    const wrap = await bootWrap(home, [], { EDEN_API_KEY: "eden_dev" });
+    try {
+      expect(await inboxStatus(wrap.url, "Bearer eden_dev")).toBe(200);
+    } finally {
+      expect(await wrap.stop()).toContain("eden wrap: /v1 accepts the public eden_dev key");
+    }
+    expect(existsSync(configAt(home))).toBe(false);
   });
 
   test("a non-loopback host still needs a key and writes none", async () => {

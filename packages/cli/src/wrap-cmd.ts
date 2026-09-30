@@ -82,6 +82,13 @@ export async function wrapCmd(args: string[]): Promise<void> {
   const local = isLoopbackHost(hostname) && !process.env.VERCEL;
   const wrapKey: WrapKey = local ? resolveWrapKey(args) : { key: resolveApiKey(args) };
   const token = wrapKey.key;
+  if (token === "eden_dev" && !args.includes("--dev") && process.env.EDEN_DEV !== "1") {
+    // Most often an old repo-root .env (Bun loads it) that still says EDEN_API_KEY=eden_dev.
+    console.error(
+      "eden wrap: /v1 accepts the public eden_dev key (from --key, EDEN_API_KEY, .env or config.json). " +
+        "Unset it for a per-install key, or pass --dev if this is deliberate.",
+    );
+  }
   // A laptop often has DATABASE_URL set for the hosted site, which reads as a managed install.
   // Loopback wrap is a local install. This runs after the key is chosen, so it never picks eden_dev.
   if (local && process.env.EDEN_DEV !== "0") {
