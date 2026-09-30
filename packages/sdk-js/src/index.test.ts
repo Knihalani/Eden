@@ -111,27 +111,40 @@ describe("sdk-js", () => {
     }
   });
 
-  test("loopback sends the key eden wrap stored in config.json, never to a hosted origin", async () => {
+  test("loopback sends the key eden wrap saved, only to the port it was saved for", async () => {
     delete process.env.EDEN_API_KEY;
     const key = `eden_local_${"ab".repeat(32)}`;
-    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: key, base_url: "http://127.0.0.1:8788" }));
     const loop = mockWrap({ wrap: { action: "original" } });
+    const save = (base_url: string) =>
+      writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: key, base_url }));
     try {
+      save(loop.url);
       await runTool("search", { q: "x" }, async () => "raw", { baseUrl: loop.url });
       expect(loop.hits.map((h) => h.auth)).toEqual([`Bearer ${key}`, `Bearer ${key}`]);
+      // Saved for another port (or for a hosted origin): the demo's eden_dev, never the key.
+      for (const other of ["http://127.0.0.1:1", "https://useeden.vercel.app"]) {
+        save(other);
+        loop.hits.length = 0;
+        await runTool("search", { q: "x" }, async () => "raw", { baseUrl: loop.url });
+        expect(loop.hits[0]?.auth).toBe("Bearer eden_dev");
+      }
     } finally {
       loop.stop();
     }
 
     const orig = globalThis.fetch;
-    let hostedAuth = "";
+    const sent: string[] = [];
     globalThis.fetch = (async (_input, init) => {
-      hostedAuth = new Headers(init?.headers).get("authorization") ?? "";
+      sent.push(new Headers(init?.headers).get("authorization") ?? "");
       return new Response(JSON.stringify({ action: "play", facts: { ok: true } }), { status: 200 });
     }) as typeof fetch;
     try {
-      await runTool("search", { q: "x" }, async () => "raw", { baseUrl: "https://useeden.vercel.app" });
-      expect(hostedAuth).not.toContain(key);
+      save("http://127.0.0.1:8788");
+      for (const baseUrl of ["https://useeden.vercel.app", "http://localhost:8788@evil.example"]) {
+        await runTool("search", { q: "x" }, async () => "raw", { baseUrl });
+      }
+      expect(sent.length).toBe(2);
+      for (const auth of sent) expect(auth).not.toContain(key);
     } finally {
       globalThis.fetch = orig;
     }
