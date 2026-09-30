@@ -105,12 +105,19 @@ function isProviderKey(key: string): boolean {
   return key.startsWith("sk-") && key.length >= 12;
 }
 
-function chatAuthorized(req: Request, token?: string): boolean {
-  if (authorized(req, token)) return true;
+/**
+ * Who may call the chat routes, and whose model key pays (#84). Null: nobody we know.
+ * - The wrap token: the operator, who can read the local key. Wrap's own model key pays.
+ * - A provider key (the two-line enable): the caller's own key is the upstream key. Wrap's
+ *   OPENAI_API_KEY / ANTHROPIC_API_KEY would let any local account spend the operator's key
+ *   with a made-up `Bearer sk-…`.
+ */
+function chatCaller(req: Request, token?: string): { ownKey?: string } | null {
+  if (authorized(req, token)) return {};
   const allowProvider = isManagedDeployment() ? process.env.EDEN_DEV === "1" : process.env.EDEN_DEV !== "0";
-  if (!allowProvider) return false;
+  if (!allowProvider) return null;
   const got = bearerToken(req);
-  return Boolean(got && isProviderKey(got));
+  return got && isProviderKey(got) ? { ownKey: got } : null;
 }
 
 export function createHandler(opts: ServerOpts) {
@@ -200,25 +207,29 @@ export function createHandler(opts: ServerOpts) {
       // where the /v1/ gate lives. Unauthenticated, it was free inference on
       // the operator's upstream key for anyone who could reach the port — and
       // a text/plain POST is CORS-simple, so it needed no preflight to allow.
-      if (!chatAuthorized(req, token)) {
+      const caller = chatCaller(req, token);
+      if (!caller) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401, headers: corsHeaders(req) });
       }
       return handleChatCompletions(req, {
         state: wrapState,
         upstream: opts.upstream,
-        upstreamKey: opts.upstreamKey,
+        // Non-empty for a provider key, so the OPENAI_API_KEY fallback is never reached.
+        upstreamKey: caller.ownKey ?? opts.upstreamKey,
         getPrograms: () => opts.store.livePrograms(),
         play: (name, args) => playCompiled(ctx, name, args),
       });
     }
     if (url.pathname === "/v1/messages" && req.method === "POST") {
       // Anthropic Messages API dialect (G7): same auth gate as chat/completions.
-      if (!chatAuthorized(req, token)) {
+      const caller = chatCaller(req, token);
+      if (!caller) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401 });
       }
       return handleAnthropicMessages(req, {
         state: wrapState,
         getPrograms: () => opts.store.livePrograms(),
+        upstreamKey: caller.ownKey,
       });
     }
     const api = await handleApi(req, url, ctx);

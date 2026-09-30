@@ -12,6 +12,8 @@ export interface AnthropicProxyOpts {
   state: WrapState;
   getPrograms?: () => StretchProgram[];
   fetch?: typeof fetch;
+  /** Model key for a request without x-api-key. Unset: ANTHROPIC_API_KEY. */
+  upstreamKey?: string;
 }
 
 interface AnthropicContentBlock {
@@ -221,7 +223,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   body = withKnowFactsAnthropic(body) as AnthropicRequest;
 
   const fn = opts.fetch ?? fetch;
-  const anthropicKey = req.headers.get("x-api-key") || process.env.ANTHROPIC_API_KEY || "";
+  const anthropicKey = req.headers.get("x-api-key") || opts.upstreamKey || process.env.ANTHROPIC_API_KEY || "";
   const anthropicBase = (process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/$/, "");
   const version = req.headers.get("anthropic-version") || "2023-06-01";
   let upstreamRes: Response | undefined;
