@@ -98,8 +98,17 @@ export function readConfig(): Config | null {
 export function writeConfig(c: Config): void {
   ensureHome();
   const p = configPath();
-  writeFileSync(p, JSON.stringify(c, null, 2), { mode: 0o600 });
-  chmodQuietly(p, 0o600);
+  // A new 0600 file renamed over the old one: the key never lands in an older, looser inode, and
+  // a reader never sees half a file.
+  const tmp = `${p}.${process.pid}.tmp`;
+  rmQuietly(tmp);
+  try {
+    writeFileSync(tmp, JSON.stringify(c, null, 2), { mode: 0o600, flag: "wx" });
+    renameSync(tmp, p);
+  } catch (err) {
+    rmQuietly(tmp);
+    throw err;
+  }
 }
 
 export function writeFileAtomic(path: string, body: string): void {
