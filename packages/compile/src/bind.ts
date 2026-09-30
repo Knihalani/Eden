@@ -521,6 +521,9 @@ export function bindSlot(
   // lookup per surviving candidate, and the candidate set collapses within the
   // first couple of witnesses. This was the compiler's hottest loop.
   let candidates = producersFor(values[0], inputFlats[0]!, priors[0]!);
+  // A shell command taken whole from an earlier step's result would run whatever
+  // that step returns (isSafeShellCommand): a constant one binds as a literal.
+  if (opts.shell) candidates = candidates.filter((p) => p.kind === "input");
   for (let i = 1; i < values.length && candidates.length; i++) {
     const flat = inputFlats[i]!;
     const prior = priors[i]!;
