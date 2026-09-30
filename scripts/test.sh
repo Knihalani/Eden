@@ -18,6 +18,9 @@ src_tests=$(
   find src -maxdepth 1 \( -name '*.test.ts' -o -name '*.test.tsx' \) -print 2>/dev/null \
     | sort
 )
+# Tests of the repo's own tooling (scripts/*.test.ts), passed as files for the
+# same reason: a bare `scripts` argument would match any path containing it.
+script_tests=$(find scripts -maxdepth 1 -name '*.test.ts' -print | sort)
 dirs=$(
   find packages apps benchmarks \( -name '*.test.ts' -o -name '*.test.tsx' \) -print \
     | grep -v '/node_modules/' \
@@ -32,6 +35,7 @@ fi
 
 echo "test dirs:" $dirs
 echo "src tests:" $src_tests
+echo "script tests:" $script_tests
 
 # Quarantined test files are skipped, not deleted: each one has a tracking
 # issue in scripts/test-quarantine.txt, and un-quarantining is deleting its
@@ -73,4 +77,4 @@ fi
 # Not exec: the EXIT trap has to run to remove the throwaway HOME. set -e still
 # makes bun's exit status the script's.
 # shellcheck disable=SC2086 # word splitting is intended: one argument per dir/file
-bun test "$@" $ignore $dirs $src_tests
+bun test "$@" $ignore $dirs $src_tests $script_tests
