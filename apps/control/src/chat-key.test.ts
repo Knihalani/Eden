@@ -68,12 +68,12 @@ const handler = createHandler({
   upstreamKey: OPERATOR_OPENAI,
 });
 
-function chat(bearer: string): Promise<Response> {
+function chat(bearer: string, stream = false): Promise<Response> {
   return handler(
     new Request("http://127.0.0.1:8788/v1/chat/completions", {
       method: "POST",
       headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: "Reply with pong." }] }),
+      body: JSON.stringify({ model: "gpt-4o", stream, messages: [{ role: "user", content: "Reply with pong." }] }),
     }),
   );
 }
@@ -98,11 +98,10 @@ function billedToOperator(): boolean {
 
 describe("chat routes never spend the operator's model key for another caller (#84)", () => {
   test("/v1/chat/completions forwards an arbitrary sk- bearer as the caller's own key", async () => {
-    const res = await chat("sk-other-account-key");
-    await res.text();
-    expect(seen).toEqual([
-      { path: "/v1/chat/completions", authorization: "Bearer sk-other-account-key", apiKey: null },
-    ]);
+    await (await chat("sk-other-account-key")).text();
+    await (await chat("sk-other-account-key", true)).text();
+    const call = { path: "/v1/chat/completions", authorization: "Bearer sk-other-account-key", apiKey: null };
+    expect(seen).toEqual([call, call]);
     expect(billedToOperator()).toBe(false);
   });
 
