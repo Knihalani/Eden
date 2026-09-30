@@ -101,6 +101,44 @@ function confined(cwd: string, p: string, hops = 0): string {
   return existsSync(target) ? checked : target;
 }
 
+/** Process groups of Bash commands still running. The shell's pid is its group id. */
+const runningGroups = new Set<number>();
+let hostExitHooked = false;
+
+/**
+ * SIGKILL the process group of every Bash command still running. Each group is
+ * detached from the host's, so without this a command would outlive the host
+ * (`eden wrap`, the runner) on Ctrl+C, SIGTERM or exit.
+ */
+export function killRunningCommands(): void {
+  for (const pid of runningGroups) {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // The group has already exited.
+    }
+  }
+  runningGroups.clear();
+}
+
+function onHostSignal(signal: NodeJS.Signals): void {
+  killRunningCommands();
+  // Listening replaced the default action. When no other listener is left to
+  // decide, restore it and re-raise, so the host dies by this signal as before.
+  if (process.listenerCount(signal) === 1) {
+    process.removeListener(signal, onHostSignal);
+    process.kill(process.pid, signal);
+  }
+}
+
+function hookHostExit(): void {
+  if (hostExitHooked) return;
+  hostExitHooked = true;
+  process.on("exit", killRunningCommands);
+  process.on("SIGINT", onHostSignal);
+  process.on("SIGTERM", onHostSignal);
+}
+
 export function codingRegistry(cwd = process.cwd()): ToolRegistry {
   const names = new Set([
     "Bash",
@@ -144,6 +182,12 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         // forked rather than exec'd into (a subshell, the `a` of `a; b`) running and
         // holding the pipes, so the call waited for that child to finish.
         const proc = spawn(cmd, { cwd, shell: true, env, detached: true });
+        const group = proc.pid;
+        if (group !== undefined) {
+          hookHostExit();
+          runningGroups.add(group);
+          proc.on("close", () => runningGroups.delete(group));
+        }
         const killTree = () => {
           if (proc.pid === undefined) return;
           try {
