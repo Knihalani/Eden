@@ -26,7 +26,7 @@ import {
   zstdDecompressSync,
   constants as zlibConstants,
 } from "node:zlib";
-import { factIndexTokens, indexTokens, noisyPostTerm, postTokens, queryTokens, STOP_POST } from "./tokens";
+import { factIndexTokens, indexTokens, noisyPostTerm, postTokens, queryTokens } from "./tokens";
 import {
   bareMediaType,
   ianaHttp,
@@ -1371,39 +1371,6 @@ function hashTok(t: string): number {
   let h = 2166136261;
   for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619);
   return h >>> 0;
-}
-
-const BLOOM_SMALL = 256;
-const BLOOM_LARGE = 256;
-
-function bloomAddTitle(b: Uint8Array, title: string) {
-  const s = title.toLowerCase();
-  let i = 0;
-  while (i < s.length) {
-    const c0 = s.charCodeAt(i);
-    if ((c0 < 97 || c0 > 122) && (c0 < 48 || c0 > 57)) {
-      i++;
-      continue;
-    }
-    const a = i++;
-    while (i < s.length) {
-      const c = s.charCodeAt(i);
-      if ((c >= 97 && c <= 122) || (c >= 48 && c <= 57)) i++;
-      else break;
-    }
-    if (i - a > 2) {
-      const w = s.slice(a, i);
-      if (!STOP_POST.has(w) && !TITLE_ALIAS_POISON.has(w)) bloomAdd(b, w);
-    }
-  }
-}
-
-function bloomAdd(b: Uint8Array, t: string) {
-  let h = hashTok(t);
-  for (let i = 0; i < 3; i++) {
-    b[(h >>> 3) % b.length]! |= 1 << (h & 7);
-    h = Math.imul(h, 0x9e3779b1) >>> 0;
-  }
 }
 
 function bloomHas(b: Uint8Array, t: string): boolean {
