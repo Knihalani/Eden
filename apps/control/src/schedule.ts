@@ -186,7 +186,7 @@ export async function executeLiveRun(opts: {
   registry: ToolRegistry;
   island?: IslandCaller;
   timeoutMs: number;
-  source?: "schedule";
+  source?: "schedule" | "runner";
 }): Promise<LiveRunResult> {
   const live = opts.tool;
   try {
