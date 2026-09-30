@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import { LOCAL_KEY_PREFIX, resolveApiKey, resolveWrapKey } from "./home";
+import { LOCAL_KEY_PREFIX, resolveApiKey, resolveWrapKey, writeConfig } from "./home";
 import { playCli } from "./play";
 import { collectDoctor } from "./doctor";
 import { respondToHook } from "./hook";
@@ -96,6 +96,17 @@ describe("resolveWrapKey", () => {
     mkdirSync(join(home, ".eden"), { recursive: true });
     writeFileSync(configAt(home), JSON.stringify({ api_key: "eden_login", base_url: "http://127.0.0.1:8788" }));
     expect(resolveWrapKey(["--dev"])).toEqual({ key: "eden_login", created: false });
+    expect(readKey(home)).toBe("eden_login");
+  });
+
+  test("writeConfig replaces a looser config.json with a new 0600 file", () => {
+    mkdirSync(join(home, ".eden"), { recursive: true });
+    writeFileSync(configAt(home), JSON.stringify({ base_url: "http://127.0.0.1:8788" }));
+    chmodSync(configAt(home), 0o644);
+    const before = statSync(configAt(home)).ino;
+    writeConfig({ api_key: "eden_login", base_url: "http://127.0.0.1:8788" });
+    expect(statSync(configAt(home)).mode & 0o777).toBe(0o600);
+    expect(statSync(configAt(home)).ino).not.toBe(before);
     expect(readKey(home)).toBe("eden_login");
   });
 
