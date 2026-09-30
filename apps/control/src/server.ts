@@ -1,7 +1,16 @@
 import { timingSafeEqual } from "node:crypto";
 import { handleChatCompletions, createState } from "@eden/wrap";
 import { handleAnthropicMessages } from "@eden/wrap";
-import { minLlmReductionOf, protocolCheck, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER } from "@eden/ir";
+import {
+  minLlmReductionOf,
+  protocolCheck,
+  EDEN_PROTOCOL_VERSION,
+  PROTOCOL_HEADER,
+  isLoopbackHost,
+  isLoopbackName,
+  isLoopbackOrigin,
+  looksBrowserDriven,
+} from "@eden/ir";
 import { handleApi, isManagedDeployment, playCompiled, type ApiCtx } from "./api";
 import { scheduleClockEnabled, startScheduleClock } from "./schedule-clock";
 import type { Store } from "./store";
@@ -48,7 +57,7 @@ function withCors(res: Response, req: Request): Response {
 
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
-  if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return { vary: "origin" };
+  if (!isLoopbackOrigin(origin)) return { vary: "origin" };
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-headers": "authorization, content-type",
@@ -56,6 +65,25 @@ function corsHeaders(req: Request): Record<string, string> {
     "cache-control": "private, no-store",
     vary: "origin",
   };
+}
+
+/**
+ * CORS only stops a foreign page from reading replies. On a loopback bind the
+ * page can still send: a CORS-simple POST, or anything at all once DNS
+ * rebinding has made the port look same-origin. With the public `eden_dev`
+ * key that reaches /v1/wrap-run and, through the coding registry, Bash. So a
+ * loopback server refuses both before routing, as hookd does:
+ * - a Host that is not a loopback name (rebinding; a browser always sends Host);
+ * - a browser request whose Origin is not a page on this machine.
+ * Non-browser clients (CLI, SDKs, curl) send no Origin and are unaffected.
+ * A server bound elsewhere (a hosted deployment, a LAN bind) skips this check.
+ */
+function loopbackRefusal(req: Request, boundTo: string | undefined): Response | null {
+  if (!isLoopbackName(boundTo)) return null;
+  const host = req.headers.get("host");
+  const foreignPage = looksBrowserDriven(req) && !isLoopbackOrigin(req.headers.get("origin") || "");
+  if (host && isLoopbackHost(host) && !foreignPage) return null;
+  return Response.json({ error: "forbidden: not a request from this machine" }, { status: 403 });
 }
 
 function bearerToken(req: Request): string | null {
@@ -126,7 +154,10 @@ export function createHandler(opts: ServerOpts) {
     startScheduleClock(ctx, intervalMs != null ? { intervalMs } : undefined);
   }
 
-  return async (req: Request): Promise<Response> => {
+  // Bun.serve passes the server as the second argument; in-process callers pass nothing.
+  return async (req: Request, server?: { hostname?: string | undefined }): Promise<Response> => {
+    const refused = loopbackRefusal(req, server?.hostname);
+    if (refused) return refused;
     const url = new URL(req.url);
     opts.store.heartbeat();
     wrapState.programs = opts.store.livePrograms();
