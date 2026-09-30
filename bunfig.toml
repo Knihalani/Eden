@@ -1,0 +1,4 @@
+[test]
+# Throwaway HOME and EDEN_HOME, inherited EDEN_* cleared (issue #67). Applies to `bun test`
+# started from the repo root only: Bun reads bunfig.toml from the working directory.
+preload = ["./scripts/test-preload.ts"]
