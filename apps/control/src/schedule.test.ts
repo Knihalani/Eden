@@ -3,7 +3,10 @@ import type { StretchProgram } from "@eden/ir";
 import { registryFrom } from "@eden/runtime";
 import { cronMatches, parseCron, tickWindow, toolMayFire } from "./schedule";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { Store } from "./store";
+
+useTempEdenHome();
 
 const PREV_DEV = process.env.EDEN_DEV;
 process.env.EDEN_DEV = "1";

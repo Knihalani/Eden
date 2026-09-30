@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Store } from "./store";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import type { StretchProgram } from "@eden/ir";
 
 /**
@@ -9,6 +10,8 @@ import type { StretchProgram } from "@eden/ir";
  * caller's Clerk org id as x-eden-org and refuse anything the workspace is not
  * bound to. Read-only routes stay key-gated.
  */
+
+useTempEdenHome();
 
 const TOKEN = "test_key";
 

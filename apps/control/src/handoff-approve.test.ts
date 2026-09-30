@@ -1,7 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { compileTraces, intakeBillingHandoffTraces, assertHandoffNotLive } from "@eden/compile";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { Store } from "./store";
+
+useTempEdenHome();
 
 const PREV_DEV = process.env.EDEN_DEV;
 process.env.EDEN_DEV = "1";
