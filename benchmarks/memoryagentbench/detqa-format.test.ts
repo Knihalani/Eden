@@ -7,6 +7,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/10
+
 const HERE = import.meta.dir;
 const ROOT = join(HERE, "..", "..");
 const AGENT = join(HERE, "inject-agent.py");
@@ -47,8 +49,6 @@ agent = SimpleNamespace(sub_dataset="detective_qa")
 out = mod.retrieval_query(agent, payload["text"])
 sys.stdout.write(out)
 `;
-
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/10
   const r = spawnSync(py, ["-c", script], {
     encoding: "utf8",
     input: JSON.stringify({ text: message }),
