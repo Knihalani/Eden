@@ -17,9 +17,6 @@
     "**/node_modules",
     "**/.next",
     "**/dist",
-    "apps/site/src/app",
-    // Quarantined test files that import deleted code (scripts/test-quarantine.txt).
-    "packages/wrap/src/speculate.test.ts",
-    "packages/wrap/src/warm.test.ts"
+    "apps/site/src/app"
   ]
 }
