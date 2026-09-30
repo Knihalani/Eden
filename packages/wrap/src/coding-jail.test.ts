@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { codingRegistry } from "./coding";
+import { codingRegistry, killRunningCommands } from "./coding";
 
 const CWD = mkdtempSync(join(tmpdir(), "eden-jail-"));
 afterAll(() => rmSync(CWD, { recursive: true, force: true }));
@@ -143,5 +143,54 @@ describe("bash timeout_ms coercion", () => {
     expect(performance.now() - t0).toBeLessThan(900);
     await Bun.sleep(1300);
     expect(existsSync(join(CWD, "late-abort.txt"))).toBe(false);
+  });
+});
+
+describe("running commands die with the host", () => {
+  const registry = codingRegistry(CWD);
+
+  test("killRunningCommands kills every running command's whole process group", async () => {
+    const run = registry.execute(
+      "Bash",
+      { command: "(sleep 1; touch late-host.txt); sleep 5" },
+      { signal: new AbortController().signal },
+    ) as Promise<{ code: number }>;
+    await Bun.sleep(200);
+    const t0 = performance.now();
+    killRunningCommands();
+    expect((await run).code).not.toBe(0);
+    expect(performance.now() - t0).toBeLessThan(700);
+    await Bun.sleep(1300);
+    expect(existsSync(join(CWD, "late-host.txt"))).toBe(false);
+  });
+
+  test("SIGINT, SIGTERM and exit kill running commands; the host still exits as it did", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-host-"));
+    try {
+      // A host process that starts a Bash command, then is interrupted, terminated or exits.
+      const host = join(dir, "host.ts");
+      writeFileSync(
+        host,
+        [
+          `import { codingRegistry } from ${JSON.stringify(join(import.meta.dir, "coding.ts"))};`,
+          "const [mode, file] = process.argv.slice(2);",
+          `const command = "(sleep 1; touch " + file + "); sleep 5";`,
+          `void codingRegistry(${JSON.stringify(dir)}).execute("Bash", { command });`,
+          `setTimeout(() => (mode === "exit" ? process.exit(0) : process.kill(process.pid, mode)), 300);`,
+        ].join("\n"),
+      );
+      const modes = ["SIGINT", "SIGTERM", "exit"];
+      const hosts = modes.map((mode) =>
+        Bun.spawn([process.execPath, host, mode, `late-${mode}.txt`], { stdout: "ignore", stderr: "ignore" }),
+      );
+      await Promise.all(hosts.map((h) => h.exited));
+      // Same ends as a host with no handlers: killed by the signal, or its own exit code.
+      expect(hosts.map((h) => h.signalCode)).toEqual(["SIGINT", "SIGTERM", null]);
+      expect(hosts[2]!.exitCode).toBe(0);
+      await Bun.sleep(1300);
+      for (const mode of modes) expect(existsSync(join(dir, `late-${mode}.txt`))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
