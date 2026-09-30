@@ -39,6 +39,8 @@
     "bench:jit-cli-soak": "bun run benchmarks/campaign/jit-cli-soak.ts",
     "bench:jit-url-soak": "bun run benchmarks/campaign/jit-url-soak.ts",
     "bench:jit-intent-soak": "bun run benchmarks/campaign/jit-intent-soak.ts",
+    "bench:memory-locked": "bun run benchmarks/memory-scale/locked-2k.ts",
+    "bench:memory-hard": "bun run benchmarks/memory-scale/hard.ts",
     "test:corpus": "bun test packages/compile/src/corpus",
     "test:compile": "bun test packages/compile",
     "test:flake": "./scripts/flake-audit.sh"

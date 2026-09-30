@@ -11,7 +11,8 @@
     "packages/cli/src",
     "packages/sdk-js/src",
     "apps/control/src",
-    "apps/site/src"
+    "apps/site/src",
+    "benchmarks/memory-scale"
   ],
   "exclude": [
     "**/node_modules",
