@@ -57,7 +57,10 @@ B. Sudden death
 C. Suicide
 D. Sudden illness`;
 
-/** Live detective_qa extract: first `_QUERY_PATTERNS` hit is `Now Answer the Question:` (not `Question:`). Trailing `Output:` is the fill-in suffix — must not steal the ICL lane. */
+/**
+ * Live detective_qa extract: first `_QUERY_PATTERNS` hit is `Now Answer the Question:` (not `Question:`).
+ * Trailing `Output:` is the fill-in suffix — must not steal the ICL lane.
+ */
 const DETQA_LIVE_EXTRACT = `Which character is related to the death of the deceased?
 A. Mrs. Hemm
 B. Mr. and Mrs. MacNamara
