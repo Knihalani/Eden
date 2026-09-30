@@ -21,6 +21,7 @@ This is the single source of truth for what is done and what is next. `/next` re
 | R-2 | Park the `whatever` loop (`.whatever/STOP`) | — | S | done | — | EXECUTION §1 |
 | R-6 | Agent permissions (full autonomy; see EXECUTION §1) | — | S | done | #1 | — |
 | R-7 | Snapshot `session_id → cwd` to `~/.eden/migrate/session-map.json` | — | S | done | — | EXECUTION §1 |
+| R-6b | Default branch `main`; require the `test` check on `main` | P0.−1 | S | blocked (GitHub plan: default branch done; required check needs Pro) | — | [reports/P0.-1.md](reports/P0.-1.md) |
 | R-1 | Rotate the leaked `cfat_…` token | — | — | **user** | — | — |
 
 ## Slices
