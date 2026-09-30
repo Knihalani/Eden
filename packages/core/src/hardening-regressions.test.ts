@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { CompiledStep } from "./types";
 import { buildDag, layers } from "./dag";
 import { extractNamedCliCalls, hasUnsafeGhVerb, isMutatingGh } from "./named-cli";
@@ -168,6 +171,19 @@ describe("modelFacing truncation is structural, not a size guess", () => {
 });
 
 describe("compactStdout -q scoping", () => {
+  // Output over the byte budget is vaulted under EDEN_HOME; unset, that is the real ~/.eden (#67).
+  const prevHome = process.env.EDEN_HOME;
+  let home = "";
+  beforeAll(() => {
+    home = mkdtempSync(join(tmpdir(), "eden-core-vault-"));
+    process.env.EDEN_HOME = home;
+  });
+  afterAll(() => {
+    if (prevHome === undefined) delete process.env.EDEN_HOME;
+    else process.env.EDEN_HOME = prevHome;
+    rmSync(home, { recursive: true, force: true });
+  });
+
   test("a non-gh command with -q still gets compacted", () => {
     // `pytest -q` matched /\s-q\b/, which early-returned and disabled ALL
     // compaction for any quiet-flagged tool.
