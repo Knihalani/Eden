@@ -137,7 +137,7 @@ class WrapToolsTests(StubTestCase):
             else:
                 os.environ["EDEN_HOME"] = old_home
 
-    def test_loopback_uses_the_key_eden_wrap_saved_for_its_port(self) -> None:
+    def test_loopback_uses_the_key_eden_wrap_saved_for_its_origin(self) -> None:
         import json
         import os
         import tempfile
@@ -152,11 +152,12 @@ class WrapToolsTests(StubTestCase):
                 with open(os.path.join(home, "config.json"), "w", encoding="utf-8") as f:
                     json.dump({"api_key": key, "base_url": "http://127.0.0.1:8788"}, f)
                 self.assertEqual(_resolve("http://127.0.0.1:8788", None)[1], key)
-                self.assertEqual(_resolve("http://localhost:8788/", None)[1], key)
+                self.assertEqual(_resolve("http://127.0.0.1:8788/", None)[1], key)
                 self.assertEqual(_resolve("https://useeden.vercel.app", None)[1], "")
                 self.assertEqual(_resolve("http://127.0.0.1:8788", "explicit")[1], "explicit")
-                # Only the loopback port it was saved for gets the key.
+                # Only the loopback host and port it was saved for get the key.
                 self.assertEqual(_resolve("http://127.0.0.1:8799", None)[1], "eden_dev")
+                self.assertEqual(_resolve("http://localhost:8788", None)[1], "eden_dev")
                 self.assertNotEqual(_resolve("http://localhost:8788@evil.example", None)[1], key)
                 with open(os.path.join(home, "config.json"), "w", encoding="utf-8") as f:
                     json.dump({"api_key": key, "base_url": "https://useeden.vercel.app"}, f)

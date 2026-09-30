@@ -111,7 +111,7 @@ describe("sdk-js", () => {
     }
   });
 
-  test("loopback sends the key eden wrap saved, only to the port it was saved for", async () => {
+  test("loopback sends the key eden wrap saved, only to the host and port it was saved for", async () => {
     delete process.env.EDEN_API_KEY;
     const key = `eden_local_${"ab".repeat(32)}`;
     const loop = mockWrap({ wrap: { action: "original" } });
@@ -121,8 +121,9 @@ describe("sdk-js", () => {
       save(loop.url);
       await runTool("search", { q: "x" }, async () => "raw", { baseUrl: loop.url });
       expect(loop.hits.map((h) => h.auth)).toEqual([`Bearer ${key}`, `Bearer ${key}`]);
-      // Saved for another port (or for a hosted origin): the demo's eden_dev, never the key.
-      for (const other of ["http://127.0.0.1:1", "https://useeden.vercel.app"]) {
+      // Saved for another port, host or a hosted origin: the demo's eden_dev, never the key.
+      const port = new URL(loop.url).port;
+      for (const other of ["http://127.0.0.1:1", `http://localhost:${port}`, "https://useeden.vercel.app"]) {
         save(other);
         loop.hits.length = 0;
         await runTool("search", { q: "x" }, async () => "raw", { baseUrl: loop.url });
