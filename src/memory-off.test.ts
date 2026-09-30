@@ -8,8 +8,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MEMORY_MARK, openMemory } from "./index";
 
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/55
-
 const SESSION = "sess-m132-abc";
 const CWD = "/tmp/eden-m132-cwd";
 const EMAIL = "kai@example.com";
@@ -160,7 +158,7 @@ describe("M13 AgentMemory off / readonly / on", () => {
     }
   });
 
-  test.failing("observe scrub: session_id, cwd, email absent from jsonl; secrets still redacted", () => {
+  test("observe scrub: session_id, cwd, email absent from jsonl; secrets still redacted", () => {
     const dir = tmpDir("eden-m13-scrub-");
     try {
       withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, () => {
