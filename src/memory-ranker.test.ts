@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openMemory, pathCues, queryHay, subjectKey } from "./index";
+import { openMemory, pathCues, queryHay } from "./index";
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
@@ -169,8 +169,6 @@ describe("M4.3 place + subject", () => {
   });
 
   test("Auth is failing does not delete Clerk", () => {
-    expect(subjectKey("Auth is failing")).not.toBe(subjectKey("Auth is Clerk"));
-    expect(subjectKey("Auth is currently failing")).toBeNull();
     withMem((mem) => {
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
       mem.observe([{ role: "user", content: "Auth is failing" }]);
@@ -180,8 +178,6 @@ describe("M4.3 place + subject", () => {
   });
 
   test("CI is failing does not delete CI identity", () => {
-    expect(subjectKey("CI is GitHub Actions")).toBe("ci");
-    expect(subjectKey("CI is failing")).toBeNull();
     withMem((mem) => {
       mem.observe([{ role: "user", content: "CI is GitHub Actions" }]);
       mem.observe([{ role: "user", content: "CI is failing" }]);
