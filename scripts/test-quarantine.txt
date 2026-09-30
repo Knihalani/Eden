@@ -4,9 +4,6 @@
 # Tests quarantined one at a time stay in their files: they are marked test.failing, or skip
 # when gitignored data is absent. Both carry a comment that links their issue.
 
-# Cannot load: they import code the whatever loop deleted.
-benchmarks/memoryagentbench/memory-fixes.test.ts   https://github.com/Knihalani/Eden/issues/13
-
 # Every test in the file fails for one code change, so skipping the file loses no passing test.
 packages/measure/src/board.test.ts      https://github.com/Knihalani/Eden/issues/27
 packages/wrap/src/coding-jail.test.ts   https://github.com/Knihalani/Eden/issues/29
