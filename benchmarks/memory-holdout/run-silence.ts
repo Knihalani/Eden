@@ -4,7 +4,9 @@
  *   bun benchmarks/memory-holdout/run-silence.ts
  *
  * Pre-registered expects live in silence-fixture.json (ROADMAP §4.9).
- * This file measures openMemory.inject / injectBody and writes SILENCE.md.
+ * This file measures openMemory.inject / injectBody. Run as above, it rewrites the
+ * tracked SILENCE.md; runSilence() itself writes a report only to the `out` it is
+ * given, so the tests render into a temp dir and leave the tree clean.
  * It does not edit the fixture, NEGATIVE.md, the ranker, wrap, or hook.
  *
  * Scored API: openMemory.inject. injectBody is the same AgentMemory path, checked
@@ -394,7 +396,7 @@ function judge(row: Omit<SilenceRow, "verdict" | "note" | "omitted_on"> & { seed
   return { verdict: "LOSS", note: notes.join("; "), omitted_on };
 }
 
-export function runSilence(opts: { write?: boolean } = {}): SilenceRun {
+export function runSilence(opts: { out?: string } = {}): SilenceRun {
   const fix = loadSilenceFixture();
   const issues = silenceFixtureIssues(fix);
   if (issues.length) throw new Error("silence fixture:\n" + issues.map((i) => `- ${i}`).join("\n"));
@@ -471,7 +473,7 @@ export function runSilence(opts: { write?: boolean } = {}): SilenceRun {
     bugs,
     seed_liveness: seedLiveness,
   };
-  if (opts.write !== false) writeFileSync(SILENCE_PATH, formatSilence(run));
+  if (opts.out) writeFileSync(opts.out, formatSilence(run));
   return run;
 }
 
@@ -615,7 +617,7 @@ export function formatSilence(run: SilenceRun): string {
 }
 
 if (import.meta.main) {
-  const run = runSilence();
+  const run = runSilence({ out: SILENCE_PATH });
   process.stdout.write(formatSilence(run));
   const summary = run.rows.map((r) => `${r.id}\t${r.verdict}\tΔ${r.delta_bytes}\tomitted=${r.omitted_on === null ? "n/a" : r.omitted_on ? "yes" : "no"}`).join("\n");
   console.error(`\n${summary}`);
