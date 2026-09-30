@@ -773,12 +773,12 @@ export function closedCatalog(): ClosedCat {
   const protoBits = new Uint8Array(32);
   for (const k of Object.keys(PROTO_NAME)) {
     const n = Number(k);
-    protoBits[n >> 3] |= 1 << (n & 7);
+    protoBits[n >> 3]! |= 1 << (n & 7);
   }
   const httpBits = new Uint8Array(128);
   for (const k of Object.keys(HTTP_REASON)) {
     const n = Number(k);
-    if (n >= 0 && n < 1024) httpBits[n >> 3] |= 1 << (n & 7);
+    if (n >= 0 && n < 1024) httpBits[n >> 3]! |= 1 << (n & 7);
   }
   _closed = {
     headers: httpFieldNames(),
