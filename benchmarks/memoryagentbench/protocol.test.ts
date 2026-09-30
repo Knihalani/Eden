@@ -672,7 +672,7 @@ describe("M16.1 Table 3 overall requires four competency avgs", () => {
     const sh = readFileSync(join(root, "scripts", "test.sh"), "utf8");
     expect(sh).toMatch(/find src -maxdepth 1/);
     expect(sh).toMatch(/src_tests/);
-    expect(sh).toMatch(/exec bun test "\$@" \$ignore \$dirs \$src_tests/);
+    expect(sh).toMatch(/^bun test "\$@" \$ignore \$dirs \$src_tests$/m);
     expect(sh).not.toMatch(/find src packages apps benchmarks/);
     const names = readdirSync(join(root, "src")).filter((n) => n.endsWith(".test.ts"));
     expect(names).toContain("memory-lanes.test.ts");
