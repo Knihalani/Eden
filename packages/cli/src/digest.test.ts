@@ -70,9 +70,9 @@ describe("eden digest", () => {
     try {
       expect(
         await digestCli([], {
-          fetch: async () => {
+          fetch: (async () => {
             throw new Error("plane down");
-          },
+          }) as unknown as typeof fetch,
         }),
       ).toBe(0);
     } finally {
@@ -116,7 +116,7 @@ describe("eden digest", () => {
         { id: "wf_1", name: "notify", state: "live", stats: { n: 4, fail: 0 }, updated_at: 30 },
         { id: "wf_paused", name: "paused", state: "paused", stats: { n: 2, fail: 1 }, updated_at: 31 },
       ],
-      savings: { tokensSavedMean: 12.4, runs: 100, live: 2 },
+      savings: { tokensSavedMean: 12.4, runs: 100, live: 2 } as InboxSlice["savings"],
     };
     const receipts = [
       {
@@ -202,9 +202,9 @@ describe("eden digest", () => {
     const out = join(home, "letter.html");
     expect(
       await digestCli(["--html", "--out", out], {
-        fetch: async () => {
+        fetch: (async () => {
           throw new Error("down");
-        },
+        }) as unknown as typeof fetch,
       }),
     ).toBe(0);
     const html = readFileSync(out, "utf8");
@@ -219,7 +219,7 @@ describe("eden digest", () => {
     const now = Date.UTC(2026, 7, 27, 12);
     const inbox: InboxSlice = {
       live: [{ id: "wf_1", name: "notify", state: "live", stats: { n: 4, fail: 0 }, updated_at: 30 }],
-      savings: { tokensSavedMean: 12, runs: 4, live: 1 },
+      savings: { tokensSavedMean: 12, runs: 4, live: 1 } as InboxSlice["savings"],
     };
     const classes = { compiled: 6, memoized: 0, transparent: 2, steeredSkip: 4, frontier: 8, providerCache: 800 };
     const withoutCache = digestFromInbox(

@@ -367,7 +367,7 @@ describe("eden audit CLI", () => {
     process.env.EDEN_HOME = dir;
     writeFileSync(join(dir, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
     seedStore(join(dir, "control.sqlite"));
-    globalThis.fetch = (async () => new Response("no", { status: 403 })) as typeof fetch;
+    globalThis.fetch = (async () => new Response("no", { status: 403 })) as unknown as typeof fetch;
     try {
       await expect(runReview(["--url", "http://127.0.0.1:9"])).rejects.toThrow(/HTTP 403/);
     } finally {

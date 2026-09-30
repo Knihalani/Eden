@@ -318,7 +318,9 @@ function isEdenHarnessCommand(command: string): boolean {
   return isEdenMemoryCommand(command) || EDEN_HARNESS_CMD.test(command);
 }
 
-function readTextFile(path: string): { ok: true; text: string } | { ok: false; reason: "missing" | "unreadable" } {
+function readTextFile(
+  path: string,
+): { ok: true; text: string; reason?: undefined } | { ok: false; reason: "missing" | "unreadable" } {
   try {
     if (!existsSync(path)) return { ok: false, reason: "missing" };
     return { ok: true, text: readFileSync(path, "utf8") };
