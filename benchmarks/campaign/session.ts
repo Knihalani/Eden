@@ -55,6 +55,12 @@ export type SessionOpts = {
    * not wrapped with scraped usage — an unscrapable host. Default true.
    */
   scrapeUsage?: boolean;
+  /**
+   * Simulated think time before each agent call, in ms. Default THINK_MS, which
+   * is read from CAMPAIGN_THINK_MS once, when this module loads: a caller that
+   * sets the variable after importing this module does not change it.
+   */
+  thinkMs?: number;
 };
 
 export type WorldFactory = () => World;
@@ -211,11 +217,13 @@ export class Session {
   private slots = new Map<string, WorldSlot>();
   private aware: boolean;
   private scrapeUsage: boolean;
+  private thinkMs: number;
   total: SessionStats = emptyStats();
 
   constructor(factories: Array<[string, WorldFactory]>, useEden: boolean, opts: SessionOpts = {}) {
     this.aware = opts.aware ?? true;
     this.scrapeUsage = opts.scrapeUsage !== false;
+    this.thinkMs = opts.thinkMs ?? THINK_MS;
     for (const [name, factory] of factories) {
       const world = factory();
       // Counting proxy UNDER the wrap, so both arms count identically and a
@@ -295,7 +303,7 @@ export class Session {
       const { tool, args } = next.value;
       // Every call the agent DECIDES to make is an LLM turn — including calls
       // Eden will answer from its arming without executing anything.
-      await Bun.sleep(THINK_MS);
+      await Bun.sleep(this.thinkMs);
       turns++;
       const c0 = performance.now();
       let out: CallResult;
