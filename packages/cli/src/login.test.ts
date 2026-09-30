@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { mkdirSync, rmSync, readFileSync } from "node:fs";
 import { login, formatStatus } from "./login";
@@ -6,6 +6,12 @@ import { wrapCmd, wrapHelp, wrapBootLetter, wrapRegistry, wrapListen } from "./w
 import { resolveApiKey } from "./home";
 
 describe("login", () => {
+  const prevHome = process.env.EDEN_HOME;
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.EDEN_HOME;
+    else process.env.EDEN_HOME = prevHome;
+  });
+
   test("writes config", async () => {
     const home = join(import.meta.dir, "../../.tmp-eden-login");
     mkdirSync(home, { recursive: true });

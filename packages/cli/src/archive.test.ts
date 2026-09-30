@@ -12,8 +12,10 @@ import {
 
 describe("archival tiers", () => {
   let home: string;
+  let prevHome: string | undefined;
 
   beforeEach(() => {
+    prevHome = process.env.EDEN_HOME;
     home = join(import.meta.dir, "../../.tmp-eden-archive");
     rmSync(home, { recursive: true, force: true });
     mkdirSync(join(home, "runs"), { recursive: true });
@@ -24,7 +26,8 @@ describe("archival tiers", () => {
   });
 
   afterEach(() => {
-    delete process.env.EDEN_HOME;
+    if (prevHome === undefined) delete process.env.EDEN_HOME;
+    else process.env.EDEN_HOME = prevHome;
     delete process.env.EDEN_RETAIN_DAYS;
     delete process.env.EDEN_WARM_DAYS;
     delete process.env.EDEN_COLD_MONTHS;
