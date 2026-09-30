@@ -240,7 +240,7 @@ describe("M43 forget and pin in language", () => {
     }
   });
 
-  test.failing("forget password is hunter2 does not persist the secret", async () => {
+  test("forget password is hunter2 does not persist the secret", async () => {
     await withMem(async (mem, dir) => {
       mem.observe([{ role: "user", content: `forget password is ${SECRET}` }]);
       mem.close();
