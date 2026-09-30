@@ -3090,7 +3090,7 @@ export function openStore(dir = knowDir()) {
   };
 
   const packPath = join(dir, PACK_FILE);
-  let pack: KnowPack | null | undefined = null;
+  let pack: KnowPack | null = null;
   try {
     pack = decodePack(readFileSync(packPath));
   } catch {
@@ -3485,7 +3485,7 @@ export function openStore(dir = knowDir()) {
           } catch {
             /* already gone */
           }
-          pack = undefined;
+          pack = null;
         }
         clearOverlay();
         crawl.mh.clear();
