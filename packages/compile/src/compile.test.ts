@@ -56,7 +56,7 @@ describe("compile", () => {
       islandWhenToUse("draftReply", (p.sequence ?? []).slice(0, (p.sequence ?? []).indexOf("draftReply"))),
     );
     expect(p.when_to_use).toBe(draft && draft.kind === "island" ? draft.when_to_use : undefined);
-    expect(whenToUseOf(p)).toBe(p.when_to_use);
+    expect<string | undefined>(whenToUseOf(p)).toBe(p.when_to_use);
     expect(p.when_to_use).not.toMatch(/Run the repeating stretch as one tool/);
     expect(p.description).toMatch(/Run the repeating stretch as one tool/);
     expect(p.contract.envelope?.inputs.id?.sort()).toEqual([...WITNESS_IDS].sort());

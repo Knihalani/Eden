@@ -114,6 +114,7 @@ describe("control-plane drift refresh", () => {
         steps: [],
         returns: { kind: "literal", value: null },
         contract: { witnesses: 0, minLlmReduction: 2, allowExact: false },
+        manifest: null,
         sequence: ["lookup"],
       },
       state: "live",

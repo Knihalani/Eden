@@ -33,7 +33,8 @@ export function canvasOrigin(originRec: Record<string, unknown> | null): { mode:
 }
 
 function newestRow(receipts: unknown[]): Record<string, unknown> | null {
-  let best: { t: number; order: number; row: Record<string, unknown> } | null = null;
+  // Assigned only inside the forEach callback, so keep TS from narrowing it to `null` here.
+  let best = null as { t: number; order: number; row: Record<string, unknown> } | null;
   receipts.forEach((raw, order) => {
     const row = asRecord(raw);
     if (!row) return;
@@ -201,7 +202,6 @@ export async function loadCanvas(mode: "request" | "live", id: string): Promise<
     const diagnosis =
       refusal && reason
         ? refusalCopy({
-            sequence: Array.isArray(hit.sequence) ? (hit.sequence as string[]) : [],
             reason,
             code: typeof refusal.code === "string" ? (refusal.code as RefusalCode) : undefined,
             readSet: Number.isFinite(Number(refusal.readSet)) ? Number(refusal.readSet) : undefined,
@@ -230,8 +230,9 @@ export async function loadCanvas(mode: "request" | "live", id: string): Promise<
             verdict,
             reason: typeof r?.reason === "string" ? r.reason : undefined,
             code: typeof r?.code === "string" ? r.code : undefined,
-            readSet: Number.isFinite(Number(r?.readSet)) ? Number(r.readSet) : undefined,
-            repeats: Number.isFinite(Number(r?.repeats)) ? Number(r.repeats) : undefined,
+            // Number(undefined) is NaN, so a finite count means `r` is non-null.
+            readSet: Number.isFinite(Number(r?.readSet)) ? Number(r!.readSet) : undefined,
+            repeats: Number.isFinite(Number(r?.repeats)) ? Number(r!.repeats) : undefined,
           }),
         };
       });

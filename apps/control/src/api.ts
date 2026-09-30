@@ -369,7 +369,7 @@ async function shipCandidate(
     dropValues?: DropValue[];
     pinIslands?: boolean;
     /** Org id from x-eden-org, or omitted → "operator". Never a person name. */
-    approvedBy?: string;
+    approvedBy?: string | null;
   },
 ): Promise<{ ok: true; program: StretchProgram } | { ok: false; status: number; error: string; extra?: Record<string, unknown> }> {
   if (!c.program) return { ok: false, status: 409, error: c.refusal?.reason || "refused" };

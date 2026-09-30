@@ -87,7 +87,7 @@ describe("cache red-team", () => {
       await writeResult(d, `rc:tenant-a-${i}`, { i }, 60_000, undefined, { method: "GET", workspaceId: "ws-a" });
     }
     await writeResult(d, "rc:tenant-b-first", { ok: 1 }, 60_000, undefined, { method: "GET", workspaceId: "ws-b" });
-    expect(await readResult(d, "rc:tenant-b-first")).toEqual({ ok: 1 });
+    expect(await readResult<{ ok: number }>(d, "rc:tenant-b-first")).toEqual({ ok: 1 });
   });
 
   test("writeResult never throws on a broken db handle (fail open)", async () => {
@@ -117,7 +117,7 @@ describe("cache red-team", () => {
     await writeResult(d, hot, { n: 1 }, 60_000); // first sight, window full → reject
     expect(await readResult(d, hot)).toBeUndefined();
     await writeResult(d, hot, { n: 2 }, 60_000); // sketch predicts a repeat → admit
-    expect(await readResult(d, hot)).toEqual({ n: 2 });
+    expect(await readResult<{ n: number }>(d, hot)).toEqual({ n: 2 });
   });
 
   test("pack/unpack of a gzipped body is lossless", () => {

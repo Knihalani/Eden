@@ -121,7 +121,7 @@ describe("wave 12.3 waste compile", () => {
     const program = deskOut.programs[0]!;
     expect(program.sequence?.length).toBe(6);
     expect(program.wastedTokens).toBe(4 * (800 + 200));
-    expect(wasteOf(desk)).toBe(program.wastedTokens);
+    expect<number | undefined>(wasteOf(desk)).toBe(program.wastedTokens);
 
     const uniqueInbox = activityFromInbox({ candidates: [] });
     expect(inboxItems(uniqueInbox)).toEqual([]);

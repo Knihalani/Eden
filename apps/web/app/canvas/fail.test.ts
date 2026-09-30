@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { classifyFail, emptyPanelCopy, failLabel, handoffContractLine, originLine, receiptPostmortem, REFRESH_WAITING_COPY, siblingStatus } from "./fail";
 import { refusalCopy } from "@eden/ir";
+import type { CanvasReceipt } from "./model";
 
 describe("canvas fail language", () => {
   test("missing path is blocked, not invented", () => {
@@ -104,7 +105,6 @@ describe("canvas fail language", () => {
 
   test("canvas empty graph uses named class, counts, and what to change", () => {
     const copy = refusalCopy({
-      sequence: ["grepCode", "readFile"],
       reason: "readFile repeats 6x without a bindable foreach",
       code: "read_set_mismatch",
       readSet: 12,
@@ -134,7 +134,6 @@ describe("canvas fail language", () => {
 
   test("refused empty graph puts the same diagnosis in the side panel", () => {
     const copy = refusalCopy({
-      sequence: ["grepCode", "readFile"],
       reason: "readFile repeats 6x without a bindable foreach",
       code: "read_set_mismatch",
       readSet: 12,
@@ -226,10 +225,8 @@ describe("canvas fail language", () => {
 
   test("postmortem names the whole stretch so a drop is not hidden behind a later skip", () => {
     const words = ["Served", "Skipped", "Degraded"] as const;
-    const line = receiptPostmortem(
-      { outcome: "ok", tokenClass: "steered-skip", skipped: ["Grep"], ms: 4 },
-      { stretchWords: [...words] },
-    );
+    const rec: CanvasReceipt = { outcome: "ok", tokenClass: "steered-skip", skipped: ["Grep"], ms: 4 };
+    const line = receiptPostmortem(rec, { stretchWords: [...words] });
     expect(line).toMatch(/dropped the rewrite/i);
     expect(line).toMatch(/tails skipped/i);
     expect(line).not.toBe("Ok · skipped Grep · 4ms this run");

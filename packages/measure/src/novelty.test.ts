@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rankByWaste } from "./novelty";
+import { rankByWaste, type WasteRankable } from "./novelty";
 
 describe("rankByWaste", () => {
   test("empty input stays empty — ranking does not invent rows", () => {
@@ -50,7 +50,7 @@ describe("rankByWaste", () => {
   });
 
   test("Replacement waiting is a named miss; unmeasured waste is 0 not invented", () => {
-    const ranked = rankByWaste([
+    const ranked = rankByWaste<WasteRankable & { id: string }>([
       { id: "pend", status: "Pending", at: 10 },
       { id: "rc", status: "Replacement waiting", at: 20 },
     ]);

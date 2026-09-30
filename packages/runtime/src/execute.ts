@@ -280,8 +280,9 @@ export async function runProgram(
       const prompt = usage?.prompt_tokens;
       const completion = usage?.completion_tokens;
       if (usage && Number.isFinite(prompt) && Number.isFinite(completion)) {
-        stats.islandPromptTokens += prompt;
-        stats.islandCompletionTokens += completion;
+        // Number.isFinite is true only for finite numbers, so neither is undefined here.
+        stats.islandPromptTokens += prompt!;
+        stats.islandCompletionTokens += completion!;
         stats.islandCachedTokens += usage.cached_tokens ?? 0;
         stats.islandCacheWriteTokens += usage.cache_write_tokens ?? 0;
         stats.islandCacheInputTokens += usage.cache_input_tokens ?? 0;

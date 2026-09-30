@@ -29,7 +29,7 @@ test("published limits name every PUBLIC_CLAIMS limit, plus analogue and retired
   for (const row of LIMIT_CLAIMS) {
     expect(row.claim.endsWith(".")).toBe(true);
     expect(existsSync(join(ROOT, row.test)), row.test).toBe(true);
-    expect(row.test).toBe(claimById(row.id)?.file);
+    expect<string | undefined>(row.test).toBe(claimById(row.id)?.file);
   }
   expect(LIMIT_CLAIMS[0]?.claim).toMatch(/\+2\.8% cents and \+3\.2% wall/);
   expect(LIMIT_CLAIMS[0]?.kind).toBe("limit");
