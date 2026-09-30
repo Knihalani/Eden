@@ -1,6 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { pushPrev, Store } from "./store";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
+
+useTempEdenHome();
 
 // Org binding: a DATABASE_URL in .env makes the control plane treat itself as
 // managed, where the permissive legacy fallback requires explicit opt-in.

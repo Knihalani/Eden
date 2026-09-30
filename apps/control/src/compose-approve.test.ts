@@ -2,7 +2,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { compileTraces, assertComposeNotLive } from "@eden/compile";
 import type { StretchTrace } from "@eden/ir";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { Store } from "./store";
+
+useTempEdenHome();
 
 const PREV_DEV = process.env.EDEN_DEV;
 process.env.EDEN_DEV = "1";

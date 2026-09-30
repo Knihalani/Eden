@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import type { StretchProgram } from "@eden/ir";
 import { createHandler } from "./server";
+import { useTempEdenHome } from "./test-home";
 import { handleApi } from "./api";
 import { Store, toolFlagsJson } from "./store";
 import {
@@ -20,6 +21,8 @@ import {
   serializeAccessReview,
   verifyAccessReview,
 } from "./access-review";
+
+useTempEdenHome();
 
 const PREV_DEV = process.env.EDEN_DEV;
 process.env.EDEN_DEV = "1";
