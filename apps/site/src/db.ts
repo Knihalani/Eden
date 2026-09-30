@@ -421,9 +421,17 @@ async function hashLegacyKeys(db: EdenDb) {
   }
 }
 
+/**
+ * Whether a caller with no key, or an unknown `eden_` key, is let into ws_local: on a laptop
+ * unless EDEN_DEV=0, on a managed deployment only with EDEN_DEV=1.
+ */
+export function devFallbackEnabled(): boolean {
+  return isManagedDeployment() ? process.env.EDEN_DEV === "1" : process.env.EDEN_DEV !== "0";
+}
+
 export async function workspaceForKey(db: EdenDb, auth: string | null): Promise<string | null> {
   const token = auth?.replace(/^Bearer\s+/i, "") || "";
-  const devFallback = isManagedDeployment() ? process.env.EDEN_DEV === "1" : process.env.EDEN_DEV !== "0";
+  const devFallback = devFallbackEnabled();
   if (!token) return devFallback ? "ws_local" : null;
   // Authenticate on the secret alone. `prefix` is a non-secret row identifier —
   // matching on it let anyone who had merely seen a key's label present that
