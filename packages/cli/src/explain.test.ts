@@ -40,12 +40,14 @@ describe("eden explain", () => {
 
   test("empty home prints 0 stretches and exits 0", async () => {
     const { letter, findings } = await collectExplain({
-      fetch: (async () => new Response("no", { status: 503 })) as typeof fetch,
+      fetch: (async () => new Response("no", { status: 503 })) as unknown as typeof fetch,
     });
     expect(findings[0]!.code).toBe("nothing_recorded");
     expect(letter).toMatch(/Nothing recorded/);
     expect(letter).toMatch(/0 stretches/);
-    expect(await explainCli([], { fetch: (async () => new Response("no", { status: 503 })) as typeof fetch })).toBe(0);
+    expect(
+      await explainCli([], { fetch: (async () => new Response("no", { status: 503 })) as unknown as typeof fetch }),
+    ).toBe(0);
   });
 
   test("micro traces print Too short · 16 stretches of 2 calls (need 3)", async () => {
@@ -58,7 +60,7 @@ describe("eden explain", () => {
   test("corrupt jsonl line is skipped; letter still prints", async () => {
     writeFileSync(join(home, "runs", "s.jsonl"), "not-json\n{\"name\":\"lookup\",\"args\":{\"id\":1},\"ok\":true}\n{\"name\":\"reply\",\"args\":{},\"ok\":true}\n");
     const { letter } = await collectExplain({
-      fetch: (async () => new Response("no", { status: 503 })) as typeof fetch,
+      fetch: (async () => new Response("no", { status: 503 })) as unknown as typeof fetch,
     });
     expect(letter.length).toBeGreaterThan(10);
     expect(diagnoseHonesty).toBeTypeOf("function");
@@ -88,7 +90,7 @@ describe("eden explain", () => {
   test("knock.json is named without inventing a compile", async () => {
     writeFileSync(join(home, "knock.json"), JSON.stringify({ tool_id: "desk_close" }));
     const { letter } = await collectExplain({
-      fetch: (async () => new Response("no", { status: 503 })) as typeof fetch,
+      fetch: (async () => new Response("no", { status: 503 })) as unknown as typeof fetch,
     });
     expect(letter).toMatch(/Nothing recorded/);
     expect(letter).toMatch(/knock waiting · eden open or eden approve/);

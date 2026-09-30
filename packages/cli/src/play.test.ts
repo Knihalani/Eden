@@ -80,7 +80,7 @@ describe("eden play", () => {
       playCli(["desk", "--input", "{}"], {
         fetch: (async () => {
           throw new Error("connect ECONNREFUSED");
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       }),
     );
     expect(code).toBe(1);
@@ -168,7 +168,8 @@ describe("eden play", () => {
   test("not live: one stderr sentence naming Approve as the On switch, not a JSON dump", async () => {
     const { code, out, err } = await capture(() =>
       playCli(["lookupTicket_to_notify", "--input", '{"id":"T-1"}'], {
-        fetch: (async () => new Response(JSON.stringify({ error: "not live" }), { status: 404 })) as typeof fetch,
+        fetch: (async () =>
+          new Response(JSON.stringify({ error: "not live" }), { status: 404 })) as unknown as typeof fetch,
       }),
     );
     expect(code).toBe(1);
@@ -184,7 +185,10 @@ describe("eden play", () => {
     const { code, out, err } = await capture(() =>
       playCli(["desk", "--input", "{}"], {
         fetch: (async () =>
-          new Response(JSON.stringify({ error: "paused", program: "desk" }), { status: 409 })) as typeof fetch,
+          new Response(
+            JSON.stringify({ error: "paused", program: "desk" }),
+            { status: 409 },
+          )) as unknown as typeof fetch,
       }),
     );
     expect(code).toBe(1);
@@ -197,7 +201,8 @@ describe("eden play", () => {
   test("no registry: one stderr sentence, not a JSON dump", async () => {
     const { code, out, err } = await capture(() =>
       playCli(["desk", "--input", "{}"], {
-        fetch: (async () => new Response(JSON.stringify({ error: "no registry" }), { status: 409 })) as typeof fetch,
+        fetch: (async () =>
+          new Response(JSON.stringify({ error: "no registry" }), { status: 409 })) as unknown as typeof fetch,
       }),
     );
     expect(code).toBe(1);

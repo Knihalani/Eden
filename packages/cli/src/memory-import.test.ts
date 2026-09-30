@@ -173,9 +173,9 @@ function packet(messages: unknown[]): string {
 beforeEach(async () => {
   envPrev = {};
   for (const k of ENV_KEYS) envPrev[k] = process.env[k];
-  fetchSpy = spyOn(globalThis, "fetch").mockImplementation(() => {
+  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((() => {
     throw new Error("M46 import must not call fetch");
-  });
+  }) as unknown as typeof fetch);
   try {
     const m = (await import("./memory-import")) as Partial<ImportMod>;
     if (typeof m.memoryCli !== "function" || typeof m.memoryImportHelp !== "function" || typeof m.importMemoryPath !== "function") {

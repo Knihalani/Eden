@@ -123,7 +123,7 @@ describe("eden import", () => {
       importTraces(["--traces", join(examples, "repeating")], {
         fetch: (async () => {
           throw new Error("connect ECONNREFUSED");
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       }),
     );
     expect(code).toBe(1);

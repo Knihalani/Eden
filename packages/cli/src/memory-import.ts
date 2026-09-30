@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync, type Dirent } from "node:fs";
 import { homedir } from "node:os";
 import { extname, join } from "node:path";
 import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
@@ -233,7 +233,7 @@ function listFiles(path: string): string[] {
   }
   const out: string[] = [];
   const walk = (dir: string) => {
-    let ents: ReturnType<typeof readdirSync> = [];
+    let ents: Dirent[] = [];
     try { ents = readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const ent of ents) {
       if (ent.name === "node_modules" || ent.name === ".git") continue;

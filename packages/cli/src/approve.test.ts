@@ -38,7 +38,7 @@ describe("eden approve", () => {
       const code = await approveCli(["desk"], {
         fetch: (async () => {
           throw new Error("down");
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       });
       expect(code).toBe(0);
       expect(logs.join("\n")).toMatch(/wrap is down/);
@@ -94,7 +94,7 @@ describe("eden approve", () => {
 
   test("no id: 0 of everything keeps a short letter plus eden explain", async () => {
     const { code, out } = await captureApprove([], (async () =>
-      new Response(JSON.stringify({ candidates: [] }), { status: 200 })) as typeof fetch);
+      new Response(JSON.stringify({ candidates: [] }), { status: 200 })) as unknown as typeof fetch);
     expect(code).toBe(0);
     expect(out).toBe("approve: 0 PASS candidates\neden explain");
     expect(out).not.toMatch(/FAIL|INCONCLUSIVE/);
@@ -149,7 +149,7 @@ describe("eden approve", () => {
           ],
         }),
         { status: 200 },
-      )) as typeof fetch);
+      )) as unknown as typeof fetch);
     expect(code).toBe(0);
     expect(out).toMatch(/p_maybe  INCONCLUSIVE  only 1 of 3 held-out traces could validate this program/);
     expect(out).toMatch(/p_fail  FAIL  compiled output differs from the recorded trace/);
@@ -170,7 +170,7 @@ describe("eden approve", () => {
           ],
         }),
         { status: 200 },
-      )) as typeof fetch);
+      )) as unknown as typeof fetch);
     expect(code).toBe(0);
     expect(out).toMatch(/0 PASS candidates/);
     expect(out).toMatch(/cannot ship/);
@@ -297,7 +297,7 @@ describe("eden approve", () => {
               },
             }),
             { status: 200 },
-          )) as typeof fetch,
+          )) as unknown as typeof fetch,
       });
     } finally {
       console.log = orig;
