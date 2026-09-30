@@ -1,5 +1,15 @@
 import type { Binding } from "@eden/ir";
-import { asArray, canonicalize, cloneJson, eq, getPath, interpolateSlots, setKey } from "@eden/ir";
+import {
+  asArray,
+  canonicalize,
+  cloneJson,
+  eq,
+  getPath,
+  interpolateShell,
+  interpolateSlots,
+  isShellCommand,
+  setKey,
+} from "@eden/ir";
 import { evalAssert } from "./assert";
 import { DeoptError } from "./deopt";
 
@@ -64,7 +74,12 @@ export class ChildScope implements ResultScope {
   }
 }
 
-export function evalBinding(binding: Binding, scope: BindScope): unknown {
+/**
+ * `shell` marks a shell tool's command line: a template then splices each slot
+ * value as data (interpolateShell), and a value it cannot keep as data stops
+ * the run instead of reaching the shell.
+ */
+export function evalBinding(binding: Binding, scope: BindScope, shell = false): unknown {
   switch (binding.kind) {
     case "literal":
       // A compiled program is a long-lived artifact executed many times. Handing
@@ -177,7 +192,9 @@ export function evalBinding(binding: Binding, scope: BindScope): unknown {
       // (JSON, shell expansions) while still resolving named slots.
       // Mixed JSON templates compile against input ∪ one prior; prior keys
       // win on collision so getOrg.orgId is not shadowed by leftover input.
-      const rendered = interpolateSlots(binding.expr, templateRecord(inner, scope.input));
+      const record = templateRecord(inner, scope.input);
+      const rendered = shell ? interpolateShell(binding.expr, record) : interpolateSlots(binding.expr, record);
+      if (rendered === null) throw new DeoptError("a slot value cannot be quoted as data in this shell command");
       const trimmed = binding.expr.trim();
       if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
         try {
@@ -293,11 +310,12 @@ function reduceOf(arr: unknown[], expr: string): unknown {
   throw new Error(`reduce expr must be sum:field or concat:field, got ${JSON.stringify(expr)}`);
 }
 
-export function evalArgs(args: Record<string, Binding>, scope: BindScope): Record<string, unknown> {
+/** `tool` is the step's tool, so a shell tool's command line is bound as one (see evalBinding). */
+export function evalArgs(args: Record<string, Binding>, scope: BindScope, tool = ""): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   // setKey rather than `out[k] =`: a step whose args carry a "__proto__" key
   // would otherwise run the inherited setter, losing the argument and
   // installing it as the prototype of the object handed to the tool.
-  for (const [k, b] of Object.entries(args)) setKey(out, k, evalBinding(b, scope));
+  for (const [k, b] of Object.entries(args)) setKey(out, k, evalBinding(b, scope, isShellCommand(tool, k)));
   return out;
 }

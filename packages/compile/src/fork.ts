@@ -1,5 +1,5 @@
 import type { Binding, StretchProgram, Step, StretchTrace } from "@eden/ir";
-import { isMutating } from "@eden/ir";
+import { isMutating, isShellCommand } from "@eden/ir";
 import { argKeys, bindSlotWitnesses, remapBinding } from "./bind";
 
 /**
@@ -332,6 +332,7 @@ export function assembleForkProgram(
         const bound = bindSlotWitnesses(vals, traces, priorIds, {
           mutating: isMutating(realTool),
           allowExact: false,
+          shell: isShellCommand(realTool, key),
         });
         if (!bound.ok) {
           failKey = key;
