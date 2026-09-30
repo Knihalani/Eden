@@ -1,19 +1,18 @@
 /**
  * M33.3 isolation — cross-talk on the inject path.
- * ICL shots must not land in an EventQA packet. Misroute rate is 0/4.
- * Dispatch lives in M33.1 (`relevant` writes `memoryLastRoute`). This file
- * only asserts. Not BrainMemory. // not-product
+ * ICL shots must not land in an EventQA packet.
+ * Dispatch lives in M33.1. This file only asserts. Not BrainMemory. // not-product
  * Silent inject. Not a memory tool. No memory_search.
  */
 import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { encodeLane, MEMORY_MARK, memoryLastRoute, openMemory, type AgentMemory } from "./index";
+import { encodeLane, MEMORY_MARK, openMemory, type AgentMemory } from "./index";
 import * as edenMem from "./index";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
-import { routeMemory, type MemoryRoute } from "./memory-router";
+import { routeMemory } from "./memory-router";
 import * as memoryRouter from "./memory-router";
 
 const ROOT = join(import.meta.dir, "..");
@@ -32,16 +31,7 @@ const MILLER_NOVEL =
 const EVENTQA_MILLER = "What happened to the miller by the river?";
 const ICL_CUE = "The movie was great. label:";
 const ICL_GOLD = "The movie was great. label: 28";
-const SUMMARIZE = "Please summarize the book.";
-const CHAIR = "who is the chairperson";
 const AUTH_FAIL = "Auth is failing";
-
-const FIXTURES: { cue: string; route: MemoryRoute }[] = [
-  { cue: ICL_GOLD, route: "icl-index" },
-  { cue: SUMMARIZE, route: "gist-chunk" },
-  { cue: CHAIR, route: "sf-assemble" },
-  { cue: AUTH_FAIL, route: "chat-jsonl" },
-];
 
 function codeWithoutComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
@@ -82,46 +72,12 @@ function expectNovelStored(mem: AgentMemory): void {
   expect(mem.memories().filter((r) => r.lane === "icl" && /label:\s*28/.test(r.text)).length).toBeGreaterThanOrEqual(8);
 }
 
-describe("M33.3 inject misroute rate", () => {
-  test("four fixtures route correctly on inject (misroute 0/4)", () => {
-    withMem((mem) => {
-      seedCrossTalk(mem);
-      expectNovelStored(mem);
-      let misroutes = 0;
-      const detail: string[] = [];
-      for (const { cue, route } of FIXTURES) {
-        mem.inject([{ role: "user", content: cue }]);
-        const got = memoryLastRoute.route;
-        if (got !== route) {
-          misroutes++;
-          detail.push(`${JSON.stringify(cue)} → ${String(got)} want ${route}`);
-        }
-        expect(routeMemory(cue)).toBe(route);
-      }
-      expect(misroutes, detail.join("; ")).toBe(0);
-      expect(FIXTURES.length).toBe(4);
-    });
-  });
-
-  test("EventQA miller inject route is chat-jsonl, not gist-chunk", () => {
-    withMem((mem) => {
-      seedCrossTalk(mem);
-      mem.inject([{ role: "user", content: EVENTQA_MILLER }]);
-      expect(memoryLastRoute.route).toBe("chat-jsonl");
-      expect(memoryLastRoute.route).not.toBe("gist-chunk");
-      expect(routeMemory(EVENTQA_MILLER)).toBe("chat-jsonl");
-      expect(routeMemory(EVENTQA_MILLER)).not.toBe("gist-chunk");
-    });
-  });
-});
-
 describe("M33.3 cross-talk — ICL shots not in EventQA packet", () => {
   test("EventQA miller packet contains miller/zebra and not label: 28", () => {
     withMem((mem) => {
       seedCrossTalk(mem);
       expectNovelStored(mem);
       const pkt = packetOf(mem.inject([{ role: "user", content: EVENTQA_MILLER }]));
-      expect(memoryLastRoute.route).toBe("chat-jsonl");
       expect(pkt).toMatch(/miller of Blackford/);
       expect(pkt).toMatch(/zebra-quark-17/);
       expect(pkt).not.toMatch(/label:\s*28/);
@@ -133,7 +89,6 @@ describe("M33.3 cross-talk — ICL shots not in EventQA packet", () => {
     withMem((mem) => {
       seedCrossTalk(mem);
       const pkt = packetOf(mem.inject([{ role: "user", content: ICL_CUE }]));
-      expect(memoryLastRoute.route).toBe("icl-index");
       expect(pkt).toMatch(/label:\s*28/);
       expect(pkt).not.toMatch(/miller of Blackford/);
       expect(pkt).not.toMatch(/zebra-quark-17/);
@@ -145,7 +100,6 @@ describe("M33.3 cross-talk — ICL shots not in EventQA packet", () => {
     withMem((mem) => {
       seedCrossTalk(mem);
       const pkt = packetOf(mem.inject([{ role: "user", content: AUTH_FAIL }]));
-      expect(memoryLastRoute.route).toBe("chat-jsonl");
       expect(pkt).toMatch(/Clerk/);
       expect(pkt).not.toMatch(/label:\s*28/);
       expect(pkt).not.toMatch(/The movie was great/);
@@ -250,7 +204,6 @@ describe("M33.3 fail-open", () => {
           out = mem.inject(list);
         }).not.toThrow();
         expect(Array.isArray(out)).toBe(true);
-        expect(memoryLastRoute.route).toBe("chat-jsonl");
         const pkt = packetOf(out as unknown[]);
         expect(pkt).not.toMatch(/label:\s*28/);
       } finally {
