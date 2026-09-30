@@ -2,13 +2,12 @@
  * Wave 4.4 CI pin: timeout sweep keeps exactly-once; default is the justified 60s.
  */
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_WRAP_TIMEOUT_MS, wrapTimeoutMs } from "@eden/wrap";
+import { wrapTimeoutMs } from "@eden/wrap";
 import { createState, wrapTools, type ToolDef } from "@eden/wrap";
 import { linearProgram } from "./struggle-harness";
 
 describe("timeout regime (Wave 4.4)", () => {
   test("default is 60s and honors EDEN_TIMEOUT_MS", () => {
-    expect(DEFAULT_WRAP_TIMEOUT_MS).toBe(60_000);
     const prev = process.env.EDEN_TIMEOUT_MS;
     delete process.env.EDEN_TIMEOUT_MS;
     expect(wrapTimeoutMs()).toBe(60_000);
