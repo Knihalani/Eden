@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { HowToStore } from "./howto-store";
-import { childSessionName, isChildSession, MEMORY_MARK, memoryInjectSwallows, openMemory } from "./index";
+import { childSessionName, MEMORY_MARK, memoryInjectSwallows, openMemory } from "./index";
 import { SemanticStore } from "./semantic-store";
 
 const INDEX = join(import.meta.dir, "index.ts");
@@ -114,12 +114,9 @@ function liveObjects(dir: string): string[] {
 }
 
 describe("M45 subagent share", () => {
-  test("childSessionName suffixes with -- and isChildSession matches", () => {
+  test("childSessionName suffixes with --", () => {
     expect(childSessionName(PARENT, AGENT)).toBe(CHILD);
     expect(childSessionName("s-parent")).toBe("s-parent");
-    expect(isChildSession(CHILD)).toBe(true);
-    expect(isChildSession(PARENT)).toBe(false);
-    expect(isChildSession("s-parent--sub")).toBe(true);
   });
 
   test("parent Stop sqlite+Clerk: child injects sqlite [fact]/[gist]; episodes stay on parent--agent-1", async () => {
@@ -374,7 +371,6 @@ describe("M45 subagent share", () => {
   test("parent session foo--bar forgets sqlite; child:true on that name does not tombstone root", async () => {
     const dir = tmpDir();
     try {
-      expect(isChildSession("foo--bar")).toBe(true);
       const parent = openMemory({ dir, session: "foo--bar" });
       expect(parent.child).toBe(false);
       parent.observe([{ role: "user", content: SQLITE }]);
