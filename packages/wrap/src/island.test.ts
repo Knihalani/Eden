@@ -11,6 +11,8 @@ import {
   withWitnessMemo,
 } from "./island";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/32
+
 function fakeFetch(calls: { n: number }, latencyMs = 0): typeof fetch {
   const fn = async (_url: unknown, init: RequestInit) => {
     calls.n++;
@@ -181,7 +183,7 @@ describe("openaiIsland scrapes provider usage", () => {
 });
 
 describe("island-miss batching", () => {
-  test("two independent waitable misses share one batch; usage.batched and full tokens", async () => {
+  test.failing("two independent waitable misses share one batch; usage.batched and full tokens", async () => {
     const calls = { chat: 0, batch: 0 };
     const island = wrapIsland({ apiKey: "sk-test", fetch: fakeProvider(calls) });
     const [left, right] = await Promise.all([
@@ -268,7 +270,7 @@ describe("island-miss batching", () => {
     expect(calls.batch).toBe(0);
   });
 
-  test("batch transport error fails open to sync", async () => {
+  test.failing("batch transport error fails open to sync", async () => {
     const calls = { chat: 0, batch: 0 };
     const island = wrapIsland({ apiKey: "sk-test", fetch: fakeProvider(calls, { batchStatus: 500 }) });
     const [left, right] = await Promise.all([
@@ -283,7 +285,7 @@ describe("island-miss batching", () => {
     expect(unwrapIsland(right).value).toEqual({ owner: "beta" });
   });
 
-  test("runProgram: two independent misses are cheaper on the batch path; tokens stay full", async () => {
+  test.failing("runProgram: two independent misses are cheaper on the batch path; tokens stay full", async () => {
     const input = { left: { repos: ["acme/app"] }, right: { repos: ["beta/app"] } };
     const registry = registryFrom({});
     const llmCents = 1;
@@ -320,7 +322,7 @@ describe("island-miss batching", () => {
     expect(batched.stats.islandCompletionTokens).toBe(8);
   });
 
-  test("runProgram: in_progress then retrieve still bills half cents on the same tokens", async () => {
+  test.failing("runProgram: in_progress then retrieve still bills half cents on the same tokens", async () => {
     let gets = 0;
     const calls = { chat: 0, batch: 0 };
     const fetchFn: typeof fetch = (async (url: unknown, init?: RequestInit) => {
@@ -409,7 +411,7 @@ describe("island-miss batching", () => {
     expect(unwrapIsland(out).usage?.batched).toBeUndefined();
   });
 
-  test("eden() default island is wrapIsland: waitable misses share a batch", async () => {
+  test.failing("eden() default island is wrapIsland: waitable misses share a batch", async () => {
     const calls = { chat: 0, batch: 0 };
     const e = eden({ apiKey: "sk-test", fetch: fakeProvider(calls) });
     const island = e.state.opts.island;

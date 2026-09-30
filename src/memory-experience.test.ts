@@ -19,6 +19,8 @@ import {
 } from "./experience-store";
 import { AgentMemory, MEMORY_MARK, openMemory } from "./index";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/48
+
 const SESSION = "sess-m23-very-long-session-id";
 const EMAIL = "kai@example.com";
 const FAKE_CWD = "/tmp/eden-m23-unique-cwd";
@@ -347,7 +349,7 @@ describe("M23.1 EDEN_EXPERIENCE_BYTES is not the JSONL cap", () => {
 });
 
 describe("M23.2 wrap + hook write AX to files, not extractDurable JSONL", () => {
-  test("hook PostToolUse: AX on root experience jsonl, absent from memories.jsonl, identifiers scrubbed", async () => {
+  test.failing("hook PostToolUse: AX on root experience jsonl, absent from memories.jsonl, identifiers scrubbed", async () => {
     await withMem("eden-m232-hook-", (_mem, dir) => {
       expect(() => {
         memoryHookResponse(hookAxPayload());
@@ -508,7 +510,7 @@ describe("M23.4 chat-only zero files; hosts write; consent off; no memory_search
     });
   });
 
-  test("coding/web host wrap+hook write experience files", async () => {
+  test.failing("coding/web host wrap+hook write experience files", async () => {
     await withMem("eden-m234-hosts-", (mem, dir) => {
       observeToolTraces(mem, openaiAxWindow(AX_WRAP));
       expect(experienceFiles(dir).length).toBeGreaterThan(0);

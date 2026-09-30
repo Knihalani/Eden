@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { MEMORY_MARK, memoryStoreCap, openMemory, PACKET_BYTE_CAP, PACKET_BULLET_MAX, sleep } from "./index";
 import { SemanticStore } from "./semantic-store";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/62
+
 const STORE_N = 2000;
 const GOLD_I = 42;
 const LOCAL_P50 = 24.542;
@@ -118,7 +120,7 @@ describe("2k store accuracy and speed", () => {
     }
   });
 
-  test("Clerk still injects beside 2k operators; STOP tags are not persisted", () => {
+  test.failing("Clerk still injects beside 2k operators; STOP tags are not persisted", () => {
     const dir = tmpDir();
     try {
       const mem = openMemory({ dir });

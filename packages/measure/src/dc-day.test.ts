@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { billedTokens, emptyTokenClasses } from "@eden/ir";
 import { dcShare } from "./dc";
@@ -18,6 +19,9 @@ import {
 const ROOT = join(import.meta.dir, "../../..");
 const JSONL = join(ROOT, ".gauntlet/refs/07-dc-repro.jsonl");
 const SCRIPT = join(ROOT, "scripts/dc-from-runs.ts");
+// .gauntlet/ is gitignored, so CI and fresh clones have no repro run and the test that reads it
+// skips there (quarantined in P0.-1: https://github.com/Knihalani/Eden/issues/28).
+const HAS_DC_REPRO = existsSync(JSONL);
 
 describe("aggregateDc", () => {
   test("empty input is empty, not NaN", () => {
@@ -156,7 +160,7 @@ describe("utc day keys", () => {
 });
 
 describe("independent script matches aggregateDc", () => {
-  test("07-dc-repro.jsonl: aggregateDc === script stdout JSON", async () => {
+  test.skipIf(!HAS_DC_REPRO)("07-dc-repro.jsonl: aggregateDc === script stdout JSON", async () => {
     const text = await Bun.file(JSONL).text();
     const expected = aggregateDc(parseDcJsonl(text));
     expect(expected.length).toBeGreaterThan(0);
