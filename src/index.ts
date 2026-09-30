@@ -224,7 +224,23 @@ export class AgentMemory {
   memories(): MemoryRecord[] { return this.compiled.map((c) => c.rec); }
 
   private persistText(text: string): string {
-    let t = String(text ?? ""); try { const redacted = redact(t); if (typeof redacted === "string") t = redacted; } catch {}
+    let t = String(text ?? "");
+    // IR redact misses short tokens and `sk-ant-…` keys (`\bsk-[A-Za-z0-9]{8,}`); every stored row passes here.
+    try {
+      t = t.replace(SECRET_INLINE, "[REDACTED]");
+    } catch {}
+    try {
+      const redacted = redact(t);
+      if (typeof redacted === "string") t = redacted;
+    } catch {}
+    try {
+      // IR redact is key=value only — "password is hunter2" would otherwise persist.
+      // Do not use "auth is" / "token is": those eat Clerk facts and ordinary speech.
+      t = t.replace(
+        /\b((?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+)[^\s,.;]+/gi,
+        "$1[REDACTED]",
+      );
+    } catch {}
     try { t = scrubMemoryText(t, { session: this.scrubSession, cwd: this.scrubCwd }); } catch {}
     return t;
   }

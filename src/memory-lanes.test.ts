@@ -226,7 +226,7 @@ D. Sudden illness`;
     });
   });
 
-  test.failing("secrets still redacted on ICL and narrative store-all", () => {
+  test("secrets still redacted on ICL and narrative store-all", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: "The movie was great. label: 28 token sk-abc123XYZ999" }]);
       mem.observe([{ role: "user", content: `${NOVEL_PARA} The github token is ghp_abc123XYZ999.` }]);
