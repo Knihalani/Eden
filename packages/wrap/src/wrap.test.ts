@@ -1199,6 +1199,19 @@ describe("online signal bus", () => {
     expect(input.db?.user).toBe("deploy");
   });
 
+  test("a command template recovers input only for the command the program would run (#74)", async () => {
+    const { recoverShellInput } = await import("./steer");
+    const command = { kind: "transform", fn: "template", expr: "cat {path}", of: { kind: "input", path: "" } };
+    const program = {
+      steps: [{ id: "s0", kind: "tool", tool: "Bash", args: { command } }],
+      contract: { envelope: { inputs: { path: ["notes", "a;b"] } } },
+    } as unknown as StretchProgram;
+    expect(recoverShellInput(program, { command: "cat notes" })).toEqual({ path: "notes" });
+    expect(recoverShellInput(program, { command: "cat 'a;b'" })).toEqual({ path: "a;b" });
+    // The program quotes the value, so it would never run this two-command line.
+    expect(recoverShellInput(program, { command: "cat a;b" })).toBeNull();
+  });
+
   test("two Bash programs steer by command template, not list order", () => {
     const psql = {
       ...shapeProgram("unused"),
