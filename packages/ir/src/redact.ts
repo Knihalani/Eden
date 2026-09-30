@@ -70,11 +70,14 @@ const SECRET_KEY_SUFFIX = new RegExp(`(?:${SECRET_NOUNS.join("|")})s?[0-9]?$`, "
  */
 const SECRET_TOKEN_PATTERNS = [
   String.raw`\bBearer\s+[A-Za-z0-9._\-+=/]+`,
+  // Dashed sk- keys (sk-ant-api03-…, sk-proj-…) are SK_DASHED below.
   String.raw`\bsk-[A-Za-z0-9]{8,}`,
   String.raw`\b[sr]k_(?:live|test)_[A-Za-z0-9]{8,}`,
-  String.raw`\bghp_[A-Za-z0-9]{20,}`,
-  String.raw`\bgho_[A-Za-z0-9]{20,}`,
-  String.raw`\bgithub_pat_[A-Za-z0-9_]{20,}`,
+  // Tokens shorter than GitHub's 36 characters are still tokens; 8 is the
+  // floor sk- already had. Memory's SECRET_INLINE (src/index.ts) is the ceiling.
+  String.raw`\bghp_[A-Za-z0-9]{8,}`,
+  String.raw`\bgho_[A-Za-z0-9]{8,}`,
+  String.raw`\bgithub_pat_[A-Za-z0-9_]{8,}`,
   String.raw`\bxox[baprs]-[A-Za-z0-9-]{10,}`,
   String.raw`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`,
   // The whole block, banner to END line. Matching only the banner left the
@@ -87,6 +90,33 @@ const SECRET_TOKEN_PATTERNS = [
 const SECRET_INLINE = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "gi");
 /** Non-global, so `.test()` carries no lastIndex between calls. */
 const SECRET_ANY = new RegExp(SECRET_TOKEN_PATTERNS.join("|"), "i");
+
+/**
+ * sk- keys with dashes: sk-ant-api03-…, sk-proj-…. The alphanumeric sk- shape
+ * above stops at the first dash, so every one of these went through.
+ *
+ * A dashed body is a key only if it holds a digit. "sk-fix-login" and
+ * "sk-canvas-node" are words, and shadow compares tool args after redact(), so
+ * redacting them made two different branch pushes compare equal.
+ *
+ * This is a pass of its own, not one more alternative in SECRET_INLINE. Inside
+ * one regex, "holds a digit" needs a lookahead: without a lookbehind it goes
+ * quadratic on "sk-sk-sk-…", and with one the whole alternation ran about ten
+ * times slower on ordinary logs. Here each match takes its whole run of key
+ * characters once, and the digit test runs on the match.
+ */
+const SK_DASHED = /\bsk-[A-Za-z0-9_-]{8,}/gi;
+const DIGIT = /[0-9]/;
+
+function redactDashedSk(s: string): string {
+  SK_DASHED.lastIndex = 0;
+  return s.replace(SK_DASHED, (m) => (DIGIT.test(m) ? REDACTED : m));
+}
+
+function hasDashedSk(s: string): boolean {
+  for (const m of s.matchAll(SK_DASHED)) if (DIGIT.test(m[0])) return true;
+  return false;
+}
 
 /** Longest key we will look back over from a separator. */
 const MAX_KEY_LEN = 128;
@@ -232,7 +262,7 @@ export function redactString(s: string): string {
   // second time — and a hand-written gate is exactly what drifted out of step
   // with the replacer.
   SECRET_INLINE.lastIndex = 0;
-  const t = s.replace(SECRET_INLINE, REDACTED);
+  const t = redactDashedSk(s).replace(SECRET_INLINE, REDACTED);
 
   let out = "";
   let cursor = 0;
@@ -251,7 +281,7 @@ function stringHasSecret(s: string): boolean {
   // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
   // Plain short strings (synth ids, tags) cannot match either.
   if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
-  return SECRET_ANY.test(s) || scanAssignments(s, null);
+  return SECRET_ANY.test(s) || hasDashedSk(s) || scanAssignments(s, null);
 }
 
 /**

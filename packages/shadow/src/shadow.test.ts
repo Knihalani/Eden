@@ -347,6 +347,27 @@ describe("replayRegistry", () => {
     await expect(reg.execute("writeRecord", { ...rec.args, extra: "drifted" })).resolves.toEqual(rec.result);
     expect(reg.misses.some((m) => m.reason === "different-args")).toBe(true);
   });
+
+  test("branch names that start with sk- are compared, not redacted to the same value", async () => {
+    // Args are compared after redact(). A secret pattern that ate hyphenated
+    // words made these two pushes equal, and a program pushing the wrong
+    // branch replayed clean.
+    const trace: StretchTrace = {
+      id: "sk-branches",
+      llmCalls: 0,
+      duration_ms: 0,
+      cost_cents: 0,
+      events: [
+        { name: "bash", args: { command: "git push origin sk-fix-login" }, result: "ok", ok: true },
+        { name: "bash", args: { command: "git push origin sk-fix-login" }, result: "ok", ok: true },
+      ],
+    };
+    const reg = replayRegistry(undefined, trace);
+    await reg.execute("bash", { command: "git push origin sk-fix-login" });
+    expect(reg.misses).toEqual([]);
+    await reg.execute("bash", { command: "git push origin sk-fix-logout" });
+    expect(reg.misses.map((m) => m.reason)).toEqual(["different-args"]);
+  });
 });
 
 describe("a program that checks more than the agent did is credited, not failed", () => {
