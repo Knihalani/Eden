@@ -83,7 +83,7 @@ describe("webhook invalidation", () => {
     const id = identity("ws_hook");
     const key = resultCacheKey(id);
     await writeResult(db, key, { title: "cached" }, 60_000, undefined, { method: "GET", force: true });
-    expect(await readResult(db, key)).toEqual({ title: "cached" }); // hit 1
+    expect(await readResult<{ title: string }>(db, key)).toEqual({ title: "cached" }); // hit 1
 
     const res = await handleWebhook(
       db,
@@ -165,7 +165,7 @@ describe("webhook invalidation", () => {
     expect(empty.dropped).toEqual([]);
     expect(empty.message).toBe(WEBHOOK_NOOP_COPY);
     expect(empty.message).not.toMatch(/replacement is waiting/);
-    expect(await readResult(db, key)).toEqual({ v: 1 });
+    expect(await readResult<{ v: number }>(db, key)).toEqual({ v: 1 });
     expect(await db.all(`SELECT id FROM tool WHERE workspace_id = ? AND id != ?`, ["ws_empty_knock", toolId])).toEqual([]);
     expect(await db.all(`SELECT id FROM knock WHERE workspace_id = ?`, ["ws_empty_knock"])).toEqual([]);
     const live = await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = ?`, [toolId]);
@@ -209,7 +209,7 @@ describe("webhook invalidation", () => {
       webhookReq({ secret: "wrong-secret", body: { keys: [key], toolId, workspaceId: "ws_403" } }),
     );
     expect(res.status).toBe(403);
-    expect(await readResult(db, key)).toEqual({ stay: true });
+    expect(await readResult<{ stay: boolean }>(db, key)).toEqual({ stay: true });
     expect(await db.all(`SELECT id FROM knock WHERE workspace_id = ?`, ["ws_403"])).toEqual([]);
     expect(await db.all(`SELECT id FROM tool WHERE workspace_id = ? AND id != ?`, ["ws_403", toolId])).toEqual([]);
   });
@@ -218,15 +218,15 @@ describe("webhook invalidation", () => {
     const db = await dbP;
     const key = resultCacheKey(identity("ws_hook_auth"));
     await writeResult(db, key, { stay: true }, 60_000, undefined, { method: "GET", force: true });
-    expect(await readResult(db, key)).toEqual({ stay: true });
+    expect(await readResult<{ stay: boolean }>(db, key)).toEqual({ stay: true });
 
     const res = await handleWebhook(db, webhookReq({ secret: "wrong-secret", body: { keys: [key] } }));
     expect(res.status).toBe(403);
-    expect(await readResult(db, key)).toEqual({ stay: true });
+    expect(await readResult<{ stay: boolean }>(db, key)).toEqual({ stay: true });
 
     const missing = await handleWebhook(db, webhookReq({ header: "none", body: { keys: [key] } }));
     expect(missing.status).toBe(401);
-    expect(await readResult(db, key)).toEqual({ stay: true });
+    expect(await readResult<{ stay: boolean }>(db, key)).toEqual({ stay: true });
   });
 
   test("unrelated key is not dropped", async () => {
@@ -239,7 +239,7 @@ describe("webhook invalidation", () => {
     const out = await invalidateFromWebhook(db, { keys: [drop] });
     expect(out.dropped).toEqual([drop]);
     expect(await readResult(db, drop)).toBeUndefined();
-    expect(await readResult(db, keep)).toEqual({ keep: 1 });
+    expect(await readResult<{ keep: number }>(db, keep)).toEqual({ keep: 1 });
   });
 
   test("empty keys is a no-op, not a wipe of the whole cache", async () => {
@@ -255,7 +255,7 @@ describe("webhook invalidation", () => {
     const j = (await empty.json()) as { dropped: string[]; message: string };
     expect(j.dropped).toEqual([]);
     expect(j.message).toBe(WEBHOOK_NOOP_COPY);
-    expect(await readResult(db, key)).toEqual({ v: 1 });
+    expect(await readResult<{ v: number }>(db, key)).toEqual({ v: 1 });
     const after = await db.get<{ c: number }>(`SELECT COUNT(*) as c FROM result_cache`);
     expect(after?.c ?? 0).toBe(before?.c ?? 0);
   });
@@ -280,7 +280,7 @@ describe("webhook invalidation", () => {
     expect(out.dropped.sort()).toEqual([keyA, pub].sort());
     expect(await readResult(db, keyA)).toBeUndefined();
     expect(await readResult(db, pub)).toBeUndefined();
-    expect(await readResult(db, keyB)).toEqual({ b: 1 });
+    expect(await readResult<{ b: number }>(db, keyB)).toEqual({ b: 1 });
   });
 
   test("mutating method identity does not invent a POST cache or wipe GETs", async () => {
@@ -295,7 +295,7 @@ describe("webhook invalidation", () => {
       step: { ...STEP, method: "POST" },
     });
     expect(out.dropped).toEqual([]);
-    expect(await readResult(db, getKey)).toEqual({ get: 1 });
+    expect(await readResult<{ get: number }>(db, getKey)).toEqual({ get: 1 });
     expect(await dropResult(db, "rc:post-never")).toBe(false);
   });
 
@@ -395,7 +395,7 @@ describe("webhook invalidation", () => {
       webhookReq({ header: "hmac", secret: "wrong-secret", body: { keys: [key] } }),
     );
     expect(wrong.status).toBe(403);
-    expect(await readResult(db, key)).toEqual({ v: 3 });
+    expect(await readResult<{ v: number }>(db, key)).toEqual({ v: 3 });
   });
 
   test("unconfigured secret refuses every drop (fail closed)", async () => {
@@ -414,7 +414,7 @@ describe("webhook invalidation", () => {
     try {
       const res = await handleWebhook(db, webhookReq({ secret: SECRET, body: { keys: [key] } }));
       expect(res.status).toBe(401);
-      expect(await readResult(db, key)).toEqual({ stay: 1 });
+      expect(await readResult<{ stay: number }>(db, key)).toEqual({ stay: 1 });
     } finally {
       process.env[WEBHOOK_SECRET_ENV] = prev ?? SECRET;
     }

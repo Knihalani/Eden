@@ -19,8 +19,8 @@ describe("refusal copy", () => {
   });
 
   test("a reason-only row stays Refused — no invented class", () => {
-    expect(refusalStatus({ reason: "weak", sequence: ["search"] })).toBe("Refused");
-    expect(refusalCodeOf({ reason: "writeRecord arguments are under-determined", sequence: [] })).toBe(
+    expect(refusalStatus({ reason: "weak" })).toBe("Refused");
+    expect(refusalCodeOf({ reason: "writeRecord arguments are under-determined" })).toBe(
       "underdetermined_write",
     );
   });

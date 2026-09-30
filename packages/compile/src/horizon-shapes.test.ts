@@ -478,7 +478,7 @@ describe("horizon shapes", () => {
     });
     const { programs, refusals } = compileTraces(traces);
     expect(refusals.filter((r) => r.code === "underdetermined_write")).toEqual([]);
-    const p = programs.find((q) => q.sequence.length >= 4);
+    const p = programs.find((q) => q.sequence!.length >= 4);
     expect(p).toBeDefined();
     expect(Object.keys(p!.contract.envelope?.inputs ?? {}).sort()).toEqual(["email", "orgId"]);
     const create = p!.steps.find((s) => s.kind === "tool" && s.tool === "createUser");

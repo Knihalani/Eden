@@ -8,7 +8,7 @@ const FILES: Record<string, { file: string; type: string }> = {
   "/apple-touch-icon.png": { file: "apple-touch-icon.png", type: "image/png" },
 };
 
-const cache = new Map<string, Buffer>();
+const cache = new Map<string, Buffer<ArrayBuffer>>();
 
 function dirs(): string[] {
   const here = dirname(fileURLToPath(import.meta.url));

@@ -8,13 +8,14 @@
  *
  * Control/site can call rollEnvelope without this package owning their store.
  */
-import type { StretchProgram, StretchTrace } from "@eden/ir";
+import type { StretchProgram, StretchTrace, TraceEvent } from "@eden/ir";
 import { eq, inDistribution, inheritEnvelopeValues, withVersion } from "@eden/ir";
 
 export type LiveReceipt = {
   ok: boolean;
   input?: Record<string, unknown>;
-  events?: StretchTrace["events"];
+  /** Stored receipt payloads may omit args/ok; rollHoldout defaults both. */
+  events?: Array<Omit<TraceEvent, "args" | "ok"> & Partial<Pick<TraceEvent, "args" | "ok">>>;
 };
 
 function isCleanInDistribution(program: StretchProgram, receipt: LiveReceipt): receipt is LiveReceipt & {
