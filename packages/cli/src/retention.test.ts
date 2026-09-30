@@ -5,8 +5,10 @@ import { ensureHome } from "./home";
 
 describe("runs retention sweep", () => {
   let home: string;
+  let prevHome: string | undefined;
 
   beforeEach(() => {
+    prevHome = process.env.EDEN_HOME;
     home = join(import.meta.dir, "../../.tmp-eden-retention");
     rmSync(home, { recursive: true, force: true });
     mkdirSync(join(home, "runs"), { recursive: true });
@@ -14,7 +16,8 @@ describe("runs retention sweep", () => {
   });
 
   afterEach(() => {
-    delete process.env.EDEN_HOME;
+    if (prevHome === undefined) delete process.env.EDEN_HOME;
+    else process.env.EDEN_HOME = prevHome;
     delete process.env.EDEN_RETAIN_DAYS;
     rmSync(home, { recursive: true, force: true });
   });
