@@ -1,4 +1,4 @@
-import { readConfig, sitePlaneUrl, resolveApiKey, type Config } from "./home";
+import { configPath, readConfig, sitePlaneUrl, resolveApiKey, type Config } from "./home";
 import { inCanary, inDistribution } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
 import {
@@ -69,13 +69,15 @@ export function eligibleForTransparent(entry: LiveTool, input: Record<string, un
   return true;
 }
 
-let cfgCache: { at: number; cfg: Config | null } | null = null;
+// Keyed on the config path, so a cached read never answers for another EDEN_HOME.
+let cfgCache: { at: number; path: string; cfg: Config | null } | null = null;
 function readConfigSafely(): Config | null {
-  if (cfgCache && Date.now() - cfgCache.at < 2_000) return cfgCache.cfg;
+  const path = configPath();
+  if (cfgCache && cfgCache.path === path && Date.now() - cfgCache.at < 2_000) return cfgCache.cfg;
   try {
-    cfgCache = { at: Date.now(), cfg: readConfig() };
+    cfgCache = { at: Date.now(), path, cfg: readConfig() };
   } catch {
-    cfgCache = { at: Date.now(), cfg: null };
+    cfgCache = { at: Date.now(), path, cfg: null };
   }
   return cfgCache.cfg;
 }
