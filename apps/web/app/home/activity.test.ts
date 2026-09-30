@@ -430,14 +430,16 @@ test("dcPct is null until a receipt carries tokenClasses — never a fake 40%", 
 });
 
 test("last receipt remainder skip / host-drop use failLabel words; Live/Paused stay", () => {
-  expect(lastReceiptKind({ ok: 1, tokenClass: "steered-skip", skipped: ["Grep"] })).toBe(failLabel("skipped"));
-  expect(lastReceiptKind({ ok: 1, skipped: ["Bash"] })).toBe(failLabel("skipped"));
-  expect(
+  expect<string | null>(
+    lastReceiptKind({ ok: 1, tokenClass: "steered-skip", skipped: ["Grep"] }),
+  ).toBe(failLabel("skipped"));
+  expect<string | null>(lastReceiptKind({ ok: 1, skipped: ["Bash"] })).toBe(failLabel("skipped"));
+  expect<string | null>(
     lastReceiptKind({
       reason: "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the last tool output.",
     }),
   ).toBe(failLabel("skipped"));
-  expect(
+  expect<string | null>(
     lastReceiptKind({
       ok: 1,
       skipped: ["Read"],

@@ -12,7 +12,14 @@ const program = {
   returns: { kind: "literal", value: null },
   contract: { witnesses: 0, minLlmReduction: 2, allowExact: false },
   sequence: ["Read", "Grep", "Bash"],
-  manifest: { skipRateAfter: 0 },
+  manifest: {
+    llmReduction: 0,
+    latencyReduction: null,
+    costReduction: 0,
+    skipRateBefore: 0,
+    skipRateAfter: 0,
+    nShadow: 0,
+  },
 } as StretchProgram;
 
 describe("live canvas load forwards remainder onto classifyFail", () => {

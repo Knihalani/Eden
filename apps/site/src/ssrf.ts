@@ -306,7 +306,7 @@ class PinnedHttpAgent extends http.Agent {
   ) {
     super(opts);
   }
-  getName(options: http.ClientRequestArgs = {}): string {
+  override getName(options: http.ClientRequestArgs = {}): string {
     return `${super.getName(options)}:pin=${this.pin}`;
   }
 }
@@ -318,7 +318,7 @@ class PinnedHttpsAgent extends https.Agent {
   ) {
     super(opts);
   }
-  getName(options: http.ClientRequestArgs = {}): string {
+  override getName(options: http.ClientRequestArgs = {}): string {
     return `${super.getName(options)}:pin=${this.pin}`;
   }
 }

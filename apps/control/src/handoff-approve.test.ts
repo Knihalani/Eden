@@ -37,7 +37,7 @@ describe("composed handoff approve gate", () => {
     store.putCandidate({
       id: program!.id,
       sequence: program!.sequence ?? [],
-      program,
+      program: program!,
       refusal: null,
       verdict: "PASS",
       manifest: passManifest,

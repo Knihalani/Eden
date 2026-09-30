@@ -80,10 +80,10 @@ describe("sdk-js", () => {
 
     const orig = globalThis.fetch;
     let hostedAuth = "";
-    globalThis.fetch = async (_input, init) => {
+    globalThis.fetch = (async (_input, init) => {
       hostedAuth = new Headers(init?.headers).get("authorization") ?? "";
       return new Response(JSON.stringify({ action: "play", facts: { ok: true } }), { status: 200 });
-    };
+    }) as typeof fetch;
     try {
       const out = await runTool("search", { q: "x" }, async () => "raw", {
         baseUrl: "https://useeden.vercel.app",

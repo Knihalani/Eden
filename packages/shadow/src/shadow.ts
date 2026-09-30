@@ -97,9 +97,10 @@ function islandUsageFromStats(stats: {
   const p = stats.islandPromptTokens;
   const c = stats.islandCompletionTokens;
   if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
+  // Number.isFinite is true only for finite numbers, so neither is undefined here.
   return {
-    prompt_tokens: p,
-    completion_tokens: c,
+    prompt_tokens: p!,
+    completion_tokens: c!,
     cached_tokens: stats.islandCachedTokens,
     ...(stats.islandCacheWriteTokens != null ? { cache_write_tokens: stats.islandCacheWriteTokens } : {}),
     ...(stats.islandCacheInputTokens != null ? { cache_input_tokens: stats.islandCacheInputTokens } : {}),

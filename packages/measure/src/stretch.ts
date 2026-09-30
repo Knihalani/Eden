@@ -92,7 +92,7 @@ export function stretchWords(receipts: unknown[]): StretchWord[] {
 }
 
 /** Paused wins. Canary serving is Canary, not Live. */
-export function stretchHead(state: string, rollout?: string | null): "paused" | "canary" | "live" {
+export function stretchHead(state: string | undefined, rollout?: string | null): "paused" | "canary" | "live" {
   if (state === "paused") return "paused";
   if (rollout === "canary") return "canary";
   return "live";

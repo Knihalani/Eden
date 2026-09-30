@@ -319,7 +319,7 @@ describe("envelope v3: etag + gzip, legacy v2 still unpacks", () => {
     expect(row!.body.length).toBeLessThan(raw.length * 0.7);
     // Drop the decoded hot set so this read is forced through SQL + gunzip.
     resetCacheAdmission();
-    expect(await readResult(d, "k-gz")).toEqual(value);
+    expect(await readResult<unknown>(d, "k-gz")).toEqual(value);
     const stale = await readStaleEntry(d, "k-gz");
     expect(stale?.etag).toBe('"etag-gz"');
     expect(stale?.value).toEqual(value);
@@ -350,7 +350,7 @@ describe("envelope v3: etag + gzip, legacy v2 still unpacks", () => {
     const entry = await readStaleEntry(d, "k-v2");
     expect(entry?.etag).toBe('"old"');
     expect(entry?.value).toEqual({ legacy: true, n: 2 });
-    expect(await readResult(d, "k-v2")).toEqual({ legacy: true, n: 2 });
+    expect(await readResult<{ legacy: boolean; n: number }>(d, "k-v2")).toEqual({ legacy: true, n: 2 });
     // pack/unpack helpers agree with the live path.
     expect(unpackCacheBody(v2)).toEqual({ value: { legacy: true, n: 2 }, etag: '"old"' });
   });
@@ -435,7 +435,7 @@ describe("dropResult: webhook invalidation", () => {
     await writeResult(d, other, { keep: true }, 60_000, undefined, { method: "GET", force: true });
     expect(await dropResult(d, "rc:never-existed")).toBe(false);
     expect(await dropResult(d, "")).toBe(false);
-    expect(await readResult(d, other)).toEqual({ keep: true });
+    expect(await readResult<{ keep: boolean }>(d, other)).toEqual({ keep: true });
   });
 
   test("unrelated key is not dropped; public rcp: is a separate identity", async () => {
@@ -455,11 +455,11 @@ describe("dropResult: webhook invalidation", () => {
 
     expect(await dropResult(d, tenant)).toBe(true);
     expect(await readResult(d, tenant)).toBeUndefined();
-    expect(await readResult(d, pub)).toEqual({ pub: 1 });
-    expect(await readResult(d, otherWs)).toEqual({ other: 1 });
+    expect(await readResult<{ pub: number }>(d, pub)).toEqual({ pub: 1 });
+    expect(await readResult<{ other: number }>(d, otherWs)).toEqual({ other: 1 });
 
     expect(await dropResult(d, pub)).toBe(true);
     expect(await readResult(d, pub)).toBeUndefined();
-    expect(await readResult(d, otherWs)).toEqual({ other: 1 });
+    expect(await readResult<{ other: number }>(d, otherWs)).toEqual({ other: 1 });
   });
 });
