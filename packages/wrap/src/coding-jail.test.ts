@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codingRegistry } from "./coding";
 
 const CWD = mkdtempSync(join(tmpdir(), "eden-jail-"));
+afterAll(() => rmSync(CWD, { recursive: true, force: true }));
 
 describe("bash jail", () => {
   const registry = codingRegistry(CWD);
@@ -110,5 +111,37 @@ describe("bash timeout_ms coercion", () => {
       { signal: new AbortController().signal },
     )) as { code: number };
     expect(r.code).not.toBe(0);
+  });
+
+  // The subshell is a child the shell forks rather than execs into. Killing only the
+  // shell left it running and holding the pipes, so the call waited for it.
+  const lateCommand = (file: string) => `(sleep 1; touch ${file}); true`;
+
+  test("a timeout kills the whole command tree, not just the shell", async () => {
+    const t0 = performance.now();
+    const r = (await registry.execute(
+      "Bash",
+      { command: lateCommand("late-timeout.txt"), timeout_ms: 200 },
+      { signal: new AbortController().signal },
+    )) as { code: number };
+    expect(r.code).not.toBe(0);
+    expect(performance.now() - t0).toBeLessThan(900);
+    await Bun.sleep(1300);
+    expect(existsSync(join(CWD, "late-timeout.txt"))).toBe(false);
+  });
+
+  test("an abort kills the whole command tree too", async () => {
+    const ac = new AbortController();
+    const t0 = performance.now();
+    setTimeout(() => ac.abort(), 200);
+    const r = (await registry.execute(
+      "Bash",
+      { command: lateCommand("late-abort.txt") },
+      { signal: ac.signal },
+    )) as { code: number };
+    expect(r.code).not.toBe(0);
+    expect(performance.now() - t0).toBeLessThan(900);
+    await Bun.sleep(1300);
+    expect(existsSync(join(CWD, "late-abort.txt"))).toBe(false);
   });
 });
