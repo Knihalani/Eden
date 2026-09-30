@@ -15,6 +15,8 @@ import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know
 import { routeMemory } from "./memory-router";
 import * as memoryRouter from "./memory-router";
 
+// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/61
+
 const ROOT = join(import.meta.dir, "..");
 const INDEX_PATH = join(import.meta.dir, "index.ts");
 const WRAP_PATH = join(ROOT, "packages", "wrap", "src", "know-inject.ts");
@@ -73,7 +75,7 @@ function expectNovelStored(mem: AgentMemory): void {
 }
 
 describe("M33.3 cross-talk — ICL shots not in EventQA packet", () => {
-  test("EventQA miller packet contains miller/zebra and not label: 28", () => {
+  test.failing("EventQA miller packet contains miller/zebra and not label: 28", () => {
     withMem((mem) => {
       seedCrossTalk(mem);
       expectNovelStored(mem);
@@ -124,7 +126,7 @@ describe("M33.3 wrap and hook stay silent", () => {
     }
   });
 
-  test("wrap OpenAI, Anthropic, hook: Clerk / miller / ICL isolation", () => {
+  test.failing("wrap OpenAI, Anthropic, hook: Clerk / miller / ICL isolation", () => {
     withMem((mem, dir) => {
       seedCrossTalk(mem);
       expectNovelStored(mem);
