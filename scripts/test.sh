@@ -44,6 +44,13 @@ for f in $quarantined; do
 done
 echo "quarantined files:" $quarantined
 
+# Tests must never touch the real ~/.eden. Many test files restore EDEN_HOME by
+# deleting it, after which edenHome() falls back to $HOME/.eden, so the whole
+# run gets a throwaway HOME. It also matches CI, whose HOME has no ~/.eden.
+HOME=$(mktemp -d "${TMPDIR:-/tmp}/eden-test-home.XXXXXX")
+export HOME
+echo "test HOME: $HOME"
+
 # Python SDK tests live under packages/sdk-py. bun's discovery only finds
 # *.test.ts, so run them here when python3 exists; environments without
 # python3 skip quietly and stay green.
