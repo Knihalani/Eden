@@ -14,9 +14,7 @@ benchmarks/memoryagentbench/memory-fixes.test.ts   https://github.com/Knihalani/
 benchmarks/memoryagentbench/memory-ranker.test.ts  https://github.com/Knihalani/Eden/issues/59
 src/memory-ambitious.test.ts                       https://github.com/Knihalani/Eden/issues/37
 src/memory-char.test.ts                            https://github.com/Knihalani/Eden/issues/39
-src/memory-lanes.test.ts                           https://github.com/Knihalani/Eden/issues/54
 src/memory-ranker.test.ts                          https://github.com/Knihalani/Eden/issues/59
-src/memory-recsys.test.ts                          https://github.com/Knihalani/Eden/issues/60
 src/memory-router-inject.test.ts                   https://github.com/Knihalani/Eden/issues/61
 src/memory-subagent.test.ts                        https://github.com/Knihalani/Eden/issues/64
 
