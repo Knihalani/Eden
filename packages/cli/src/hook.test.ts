@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { respondToHook, applyFlushTruncate, hookTraceBody } from "./hook";
 import { handleHookd, hookdTimeoutMs } from "./hookd";
 import { handleMcp, McpAuthError, mcpHelp, runMcp } from "./mcp";
@@ -6,6 +6,13 @@ import { join } from "node:path";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 
 describe("hook", () => {
+  // Most tests below point EDEN_HOME at their own dir and do not restore it.
+  const prevHome = process.env.EDEN_HOME;
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.EDEN_HOME;
+    else process.env.EDEN_HOME = prevHome;
+  });
+
   test("hook flush payload does not invent llmCalls from the event count", () => {
     const body = hookTraceBody([
       { name: "lookupTicket", args: { id: "T-100" }, ok: true, result: { id: "T-100" }, ts: 1 },

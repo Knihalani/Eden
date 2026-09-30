@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +10,16 @@ import { HowToStore, howtoPath } from "../../../src/howto-store";
 import { observeToolTraces } from "../../wrap/src/tool-observe";
 
 describe("passive memory hooks", () => {
+  // Most tests below point EDEN_HOME / EDEN_MEMORY_DIR at their own dirs and do not restore them.
+  const prevHome = process.env.EDEN_HOME;
+  const prevMemoryDir = process.env.EDEN_MEMORY_DIR;
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.EDEN_HOME;
+    else process.env.EDEN_HOME = prevHome;
+    if (prevMemoryDir === undefined) delete process.env.EDEN_MEMORY_DIR;
+    else process.env.EDEN_MEMORY_DIR = prevMemoryDir;
+  });
+
   test("UserPromptSubmit stores a durable fact and later injects it", async () => {
     const home = join(import.meta.dir, "../../.tmp-eden-mem-hook");
     const memDir = join(home, "memory");
