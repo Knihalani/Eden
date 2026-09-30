@@ -20,6 +20,7 @@ import os
 import urllib.error
 import urllib.request
 from typing import Any
+from urllib.parse import urlsplit
 
 # The wrap plane (`eden wrap`) defaults to 8788; 8787 is the dashboard.
 DEFAULT_BASE_URL = "http://127.0.0.1:8788"
@@ -57,23 +58,37 @@ def _resolve(base_url: str | None, api_key: str | None) -> tuple[str, str]:
     )
     key = api_key or os.environ.get("EDEN_API_KEY")
     if not key:
-        key = _local_key() if _is_loopback(base) else ""
+        key = _local_key(base) if _is_loopback(base) else ""
     return base.rstrip("/"), key
 
 
-def _local_key() -> str:
-    """The key ``eden wrap`` or ``eden login`` stored in $EDEN_HOME/config.json.
+def _loopback_port(url: str) -> int | None:
+    """The port of a loopback URL, else None (http://localhost:1@evil.example is not loopback)."""
+    try:
+        parts = urlsplit(url)
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        return None
+    return port if parts.hostname in {"127.0.0.1", "localhost", "::1"} else None
 
-    Defaults to ~/.eden. Without one, the public ``eden_dev``, which only a
-    ``--dev`` wrap or ``eden demo`` accepts.
+
+def _local_key(base: str) -> str:
+    """The key ``eden wrap`` or ``eden login`` saved in $EDEN_HOME/config.json.
+
+    Defaults to ~/.eden, and is sent only to the loopback port it was saved
+    for. Otherwise the public ``eden_dev``, which only a ``--dev`` wrap or
+    ``eden demo`` accepts.
     """
     home = os.environ.get("EDEN_HOME") or os.path.join(os.path.expanduser("~"), ".eden")
     try:
         with open(os.path.join(home, "config.json"), encoding="utf-8") as f:
-            key = json.load(f).get("api_key")
+            saved = json.load(f)
+        key, saved_base = saved.get("api_key"), saved.get("base_url")
     except (OSError, ValueError, AttributeError):
         return DEFAULT_API_KEY
-    return key if isinstance(key, str) and key else DEFAULT_API_KEY
+    port = _loopback_port(base)
+    same_port = port is not None and isinstance(saved_base, str) and _loopback_port(saved_base) == port
+    return key if same_port and isinstance(key, str) and key else DEFAULT_API_KEY
 
 
 class EdenClient:
