@@ -1,9 +1,10 @@
 # Eden — agent instructions
 
-Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `main`. CI (`.github/workflows/test.yml`) runs three steps, in this order:
-1. `bun run typecheck`
-2. `bun run test` (`scripts/test.sh`)
-3. `bash scripts/build-cli.sh`
+Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `main`. CI (`.github/workflows/test.yml`) runs four steps, in this order:
+1. `bun run format:check` (`scripts/format.sh`; `bun run format` fixes all but long comments)
+2. `bun run typecheck`
+3. `bun run test` (`scripts/test.sh`)
+4. `bash scripts/build-cli.sh`
 
 ## The memory program (most work here)
 
@@ -37,7 +38,7 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
 3. **Red first** (second commit): add the slice's arms to `benchmarks/memory-long-horizon/arms.json` as `red`, each with the failure `reason` asserted. A test that fails for the wrong reason is a broken test.
 4. **Implement** to the spec. Where the spec is ambiguous, pick the reading most consistent with DECISIONS and record it under "Decisions made" in the report. Fixture or oracle edits go in separate commits prefixed `fixture:`.
 5. **Verify.**
-   - Run CI's three steps locally, all green.
+   - Run CI's four steps locally, all green.
    - Run the slice's arms twice in fresh processes; results must match.
    - Run both flag states (`off` = identity, `shadow` = shadow ledger only).
    - Run the end-to-end scenario in a **real Claude Code session** with the plugin built from this worktree. Run it headless: `claude -p … --plugin-dir ./plugins/eden-memory`, with a temp `EDEN_MEMORY_DIR` (details in `.claude/commands/slice.md`).
@@ -62,7 +63,7 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
 - **Isolated tests.** Tests and benches set `EDEN_MEMORY_DIR` / `EDEN_HOME` to a temp dir. Never read or write `~/.eden` from a test.
 - **No models on hook hot paths.** No LLM or embedding calls in any hook. Offline models use NVIDIA NIM (`NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NIM_MODEL` in `.env`), only in sleep or evals, only on sanitized rows. Never print or commit the key.
 - **Secrets.** Run the secret scan before every commit that adds data files. Never commit `.env`, transcripts, `~/.eden` contents or the private real-negative set.
-- **Readable code.** No line over the formatter's max length. Do not join lines to shrink line counts: lines of code are never a metric.
+- **Readable code.** No line over the formatter's max length (120). Only literal text may run past it: a string, a regex, or a template's text (not the code in its `${…}`). Do not join lines to shrink line counts: lines of code are never a metric.
 - **Holdout.** Never read the private holdout (`~/.eden/eval/real-negatives*.jsonl`). Use aggregate numbers and the ids of false fires only.
 - **Autonomous loops.** Do not start the `whatever` loop. `.whatever/STOP` exists on purpose (EXECUTION X9).
 - **Scope.** Stay inside the slice. File anything else as a follow-up in the report.
