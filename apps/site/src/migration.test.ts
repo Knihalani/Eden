@@ -12,6 +12,7 @@ import { join } from "node:path";
 describe("legacy database migration", () => {
   test("a pre-created_at tool_run table boots and gains the column", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-mig-"));
+    const prevDb = process.env.EDEN_DB;
     try {
       // Shape the table as an OLD install had it: no created_at anywhere.
       const seed = [
@@ -34,13 +35,15 @@ describe("legacy database migration", () => {
       expect(row).toBeDefined();
       expect(row!.created_at).toBe(0); // legacy rows stay lifetime-history
     } finally {
-      delete process.env.EDEN_DB;
+      if (prevDb === undefined) delete process.env.EDEN_DB;
+      else process.env.EDEN_DB = prevDb;
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
   test("a fresh directory boots cleanly too", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-mig-fresh-"));
+    const prevDb = process.env.EDEN_DB;
     try {
       process.env.EDEN_DB = join(dir, "new.db");
       const { openDb } = await import("./db");
@@ -48,7 +51,8 @@ describe("legacy database migration", () => {
       const one = await db.get<{ one: number }>(`SELECT 1 as one`);
       expect(one).toEqual({ one: 1 });
     } finally {
-      delete process.env.EDEN_DB;
+      if (prevDb === undefined) delete process.env.EDEN_DB;
+      else process.env.EDEN_DB = prevDb;
       rmSync(dir, { recursive: true, force: true });
     }
   });

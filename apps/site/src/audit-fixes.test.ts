@@ -24,7 +24,7 @@ describe("approve of an unknown or foreign tool is a 404", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
-    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
       saved[k] = process.env[k];
       delete process.env[k];
     }
@@ -307,7 +307,7 @@ describe("approving persists the candidate's shadow manifest", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeEach(async () => {
-    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
       saved[k] = process.env[k];
       delete process.env[k];
     }
