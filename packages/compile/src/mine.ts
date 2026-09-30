@@ -1,18 +1,7 @@
 import type { StretchTrace } from "@eden/ir";
-import { CHECK_MIN_SUPPORT, isCheckName } from "@eden/ir";
+import { CHECK_MIN_SUPPORT, SHELL_TOOLS, isCheckName } from "@eden/ir";
 import { commandShapeCached, abstractShellGroup } from "../../core/src/shapes";
 import { witnessHadFailedAttempt } from "./normalize";
-
-/**
- * The identity an event contributes to a mined sequence.
- *
- * Shell events all record as "Bash", so clustering on raw names made every
- * CLI stretch invisible to the compiler — three kubectl calls and three
- * unrelated greps looked identical. Shape-derived names (`Bash:kubectl.get.pods`)
- * give repetition a domain-general vocabulary: the binary's own words, no
- * vendor table. Non-shell events keep their name untouched.
- */
-const SHELL_TOOLS = new Set(["Bash", "bash", "shell", "Shell"]);
 
 /**
  * Variation-aware shell identities for the compile currently running.
@@ -29,6 +18,15 @@ export function setActiveShellNames(m?: Map<string, string>): void {
   activeShellNames = m;
 }
 
+/**
+ * The identity an event contributes to a mined sequence.
+ *
+ * Shell events all record as "Bash", so clustering on raw names made every
+ * CLI stretch invisible to the compiler — three kubectl calls and three
+ * unrelated greps looked identical. Shape-derived names (`Bash:kubectl.get.pods`)
+ * give repetition a domain-general vocabulary: the binary's own words, no
+ * vendor table. Non-shell events keep their name untouched.
+ */
 export function effectiveEventName(
   e: { name: string; args?: Record<string, unknown>; command?: string },
   shellNames?: Map<string, string>,

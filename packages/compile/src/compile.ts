@@ -1,5 +1,6 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
 import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf, failureModeOf, isUsableOutput, isWeakValue, whenToUseOf } from "@eden/ir";
+import { isShellCommand } from "@eden/ir";
 import { argKeys, bindSlotWitnesses, inferSchema, isCheckName, isIslandName, isMutating, isReadName, keyJaccard, remapBinding } from "./bind";
 import { clusterFailureTraces, clusterTraces, effectiveEventName, buildShellNames, setActiveShellNames, autoMaxGram, envelopeTraces } from "./mine";
 import { findForkedGroups, assembleForkProgram, forkWitnessTraces } from "./fork";
@@ -1486,6 +1487,7 @@ function loopItemArgs(
     const bound = bindSlotWitnesses(vals, traces, priorIds, {
       mutating: opts?.mutating ?? false,
       allowExact: opts?.allowExact ?? false,
+      shell: isShellCommand(tool, k),
     });
     if (!bound.ok) continue;
     keyHits.set(k, bound.binding);
@@ -2037,7 +2039,7 @@ function compileAll(
               pair.events.map((e) => e.args[key]),
               pair.traces,
               priorIds,
-              { mutating: isMutating(tool), allowExact },
+              { mutating: isMutating(tool), allowExact, shell: isShellCommand(tool, key) },
             );
             if (!bound.ok) {
               if (isMutating(tool) || bound.trap92) {
@@ -2098,7 +2100,7 @@ function compileAll(
               pair.events.map((e) => e.args[key]),
               pair.traces,
               priorIds,
-              { mutating: isMutating(tool), allowExact },
+              { mutating: isMutating(tool), allowExact, shell: isShellCommand(tool, key) },
             );
             if (!bound.ok) {
               if (isMutating(tool) || bound.trap92) {
@@ -2163,7 +2165,7 @@ function compileAll(
               pair.events.map((e) => e.args[key]),
               pair.traces,
               priorIds,
-              { mutating: isMutating(tool), allowExact },
+              { mutating: isMutating(tool), allowExact, shell: isShellCommand(tool, key) },
             );
             if (!bound.ok) {
               if (isMutating(tool) || bound.trap92) {
@@ -2227,7 +2229,11 @@ function compileAll(
       const realTool = evs[0]?.name ?? tool;
       if (realTool !== tool) {
         const cmds = evs.map((e) => String((e.args as Record<string, unknown> | undefined)?.command ?? ""));
-        const bound = bindSlotWitnesses(cmds, alignedTraces, priorIds, { mutating: false, allowExact });
+        const bound = bindSlotWitnesses(cmds, alignedTraces, priorIds, {
+          mutating: false,
+          allowExact,
+          shell: isShellCommand(realTool, "command"),
+        });
         if (!bound.ok) {
           refused = {
             sequence,
@@ -2281,7 +2287,7 @@ function compileAll(
             evs.map((e) => e.args[key]),
             alignedTraces,
             priorIds,
-            { mutating: isMutating(tool), allowExact },
+            { mutating: isMutating(tool), allowExact, shell: isShellCommand(tool, key) },
           );
           if (!bound.ok) {
             if (isMutating(tool) || bound.trap92) {
@@ -2338,7 +2344,7 @@ function compileAll(
           evs.map((e) => e.args[key]),
           alignedTraces,
           priorIds,
-          { mutating: isMutating(tool), allowExact },
+          { mutating: isMutating(tool), allowExact, shell: isShellCommand(tool, key) },
         );
         if (!bound.ok) {
           const fromLoop = bindFromLoopCollected(
