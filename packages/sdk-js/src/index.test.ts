@@ -1,4 +1,7 @@
-import { describe, expect, test, afterEach } from "bun:test";
+import { describe, expect, test, afterAll, afterEach, beforeAll } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runTool, endStretch, Eden, EDEN_PROTOCOL_VERSION } from "./index";
 
 /**
@@ -49,11 +52,23 @@ function mockWrap(replies: {
 describe("sdk-js", () => {
   const saved = process.env.EDEN_BASE_URL;
   const savedKey = process.env.EDEN_API_KEY;
+  const savedHome = process.env.EDEN_HOME;
+  // Never the real ~/.eden: the loopback default reads config.json from EDEN_HOME.
+  const home = mkdtempSync(join(tmpdir(), "eden-sdk-js-"));
+  beforeAll(() => {
+    process.env.EDEN_HOME = home;
+  });
   afterEach(() => {
     if (saved !== undefined) process.env.EDEN_BASE_URL = saved;
     else delete process.env.EDEN_BASE_URL;
     if (savedKey !== undefined) process.env.EDEN_API_KEY = savedKey;
     else delete process.env.EDEN_API_KEY;
+    rmSync(join(home, "config.json"), { force: true });
+  });
+  afterAll(() => {
+    if (savedHome !== undefined) process.env.EDEN_HOME = savedHome;
+    else delete process.env.EDEN_HOME;
+    rmSync(home, { recursive: true, force: true });
   });
 
   test("package.json has no workspace Know dependency", async () => {
@@ -91,6 +106,32 @@ describe("sdk-js", () => {
       expect(out).toEqual({ ok: true });
       expect(hostedAuth.toLowerCase().startsWith("bearer")).toBe(true);
       expect(hostedAuth).not.toContain("eden_dev");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  test("loopback sends the key eden wrap stored in config.json, never to a hosted origin", async () => {
+    delete process.env.EDEN_API_KEY;
+    const key = `eden_local_${"ab".repeat(32)}`;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: key, base_url: "http://127.0.0.1:8788" }));
+    const loop = mockWrap({ wrap: { action: "original" } });
+    try {
+      await runTool("search", { q: "x" }, async () => "raw", { baseUrl: loop.url });
+      expect(loop.hits.map((h) => h.auth)).toEqual([`Bearer ${key}`, `Bearer ${key}`]);
+    } finally {
+      loop.stop();
+    }
+
+    const orig = globalThis.fetch;
+    let hostedAuth = "";
+    globalThis.fetch = (async (_input, init) => {
+      hostedAuth = new Headers(init?.headers).get("authorization") ?? "";
+      return new Response(JSON.stringify({ action: "play", facts: { ok: true } }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await runTool("search", { q: "x" }, async () => "raw", { baseUrl: "https://useeden.vercel.app" });
+      expect(hostedAuth).not.toContain(key);
     } finally {
       globalThis.fetch = orig;
     }
