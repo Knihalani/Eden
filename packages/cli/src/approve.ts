@@ -80,7 +80,7 @@ export async function approveCli(
   }
   const cfg = readConfig();
   if (!cfg) {
-    console.log("approve: no config · run eden login --dev");
+    console.log("approve: no config · start eden wrap or run eden login");
     return 1;
   }
   const base = wrapBase(cfg);
@@ -170,7 +170,7 @@ export async function promoteCli(
   }
   const cfg = readConfig();
   if (!cfg) {
-    console.log("promote: no config · run eden login --dev");
+    console.log("promote: no config · start eden wrap or run eden login");
     return 1;
   }
   const id = idOf(args);

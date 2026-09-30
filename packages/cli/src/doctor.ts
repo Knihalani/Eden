@@ -575,7 +575,7 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   const fetchFn = opts?.fetch ?? fetch;
   const health: DoctorCheck[] = [];
   const cfg = readConfig();
-  if (!cfg) health.push({ name: "config", ok: false, detail: "missing · run eden login --dev" });
+  if (!cfg) health.push({ name: "config", ok: false, detail: "missing · start eden wrap or run eden login" });
   else health.push({ name: "config", ok: true, detail: `${cfg.base_url} · key ${keyFingerprint(cfg.api_key)}` });
   health.push(netAllowCheck());
   health.push(surfaceCheck());

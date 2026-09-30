@@ -11,8 +11,10 @@ Needs [Bun](https://bun.sh). The CLI package is **`@kaiavn/eden`** (`eden` on np
 ```bash
 bun install
 alias eden='bun packages/cli/src/cli.ts'   # or: bun run cli -- <command>
-eden init --dev
+eden init
 ```
+
+The first `eden wrap` writes a per-install key to `~/.eden/config.json` (mode 0600). Every `eden` command and both SDKs read it from there; run `eden init` again after that first start to wire MCP with it. `--dev` (or `EDEN_DEV=1`) uses the public `eden_dev` key instead: tests and throwaway sittings only.
 
 Hosted wrap (no local process): [https://useeden.vercel.app](https://useeden.vercel.app) — `POST /v1/signup`, then `eden login --url https://useeden.vercel.app --key <key>` and `OPENAI_BASE_URL=https://useeden.vercel.app/v1`. An Eden key is wrap auth, not OpenAI.
 
@@ -43,12 +45,12 @@ eden approve                    # FAIL / INCONCLUSIVE / pending until shadow cer
 
 ## Play a compiled tool in one sitting
 
-`eden demo` (same as `bun run demo`) is TicketShip: it compiles, Approves inside the demo, and plays **T-100**. Quote that demo. Do not fake metrics. From a clone it uses the local `eden_dev` key unless `EDEN_API_KEY` is already set.
+`eden demo` (same as `bun run demo`) is TicketShip: it compiles, Approves inside the demo, and plays **T-100**. Quote that demo. Do not fake metrics. It uses the public `eden_dev` key unless `EDEN_API_KEY` is already set, so play against it with `--key eden_dev`.
 
 ```bash
 eden demo
 # then, if that wrap is still up:
-eden play <name> --input '{"id":"T-100"}'
+eden play <name> --key eden_dev --input '{"id":"T-100"}'
 ```
 
 ## Your own agent
