@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { isLoopbackHost, looksBrowserDriven } from "@eden/ir";
 import { respondToHook, type HookIn } from "./hook";
 import { edenHome, ensureHome, withFileLockAsync } from "./home";
-import { HOOKD_KEY_HEADER, ensureHookdKey, hookdKeyMatches } from "./hookd-key";
+import { HOOKD_KEY_HEADER, hookdKeyMatches, rotateHookdKey } from "./hookd-key";
 
 export function hookdPidPath(): string {
   return join(edenHome(), "hookd.pid");
@@ -206,8 +206,6 @@ export async function runHookd(args: string[] = []): Promise<void> {
   const hostname = process.env.EDEN_HOOKD_HOST || "127.0.0.1";
   let server: ReturnType<typeof Bun.serve>;
   try {
-    // Before the port opens: a client that sees /health answer can read the key.
-    ensureHookdKey();
     server = Bun.serve({
       port,
       hostname,
@@ -215,6 +213,15 @@ export async function runHookd(args: string[] = []): Promise<void> {
     });
   } catch (err) {
     process.stderr.write(`eden hookd: ${(err as Error)?.message ?? String(err)}\n`);
+    process.exit(1);
+  }
+  try {
+    // Only once this process holds the port, so a start that loses the bind keeps the live key.
+    // It runs before the event loop answers anything, so /health never comes up ahead of the key.
+    rotateHookdKey();
+  } catch (err) {
+    process.stderr.write(`eden hookd: ${(err as Error)?.message ?? String(err)}\n`);
+    server.stop(true);
     process.exit(1);
   }
   writeHookdPid();

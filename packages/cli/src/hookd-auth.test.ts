@@ -3,7 +3,14 @@ import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { handleHookd } from "./hookd";
-import { HOOKD_KEY_HEADER, ensureHookdKey, hookdKeyMatches, hookdKeyPath, readHookdKey } from "./hookd-key";
+import {
+  HOOKD_KEY_HEADER,
+  ensureHookdKey,
+  hookdKeyMatches,
+  hookdKeyPath,
+  readHookdKey,
+  rotateHookdKey,
+} from "./hookd-key";
 import { hookCommand, opencodePluginSource, preHookCommand } from "./setup";
 
 let home: string;
@@ -55,6 +62,18 @@ describe("hookd key file (#85)", () => {
     expect(hookdKeyMatches(`${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}`)).toBe(false);
     rmSync(hookdKeyPath());
     expect(hookdKeyMatches(key)).toBe(false);
+  });
+
+  test("rotation replaces the key, and a loosened key file, with a new 0600 key", () => {
+    const first = ensureHookdKey();
+    const second = rotateHookdKey();
+    expect(second).not.toBe(first);
+    expect(hookdKeyMatches(first)).toBe(false);
+    expect(hookdKeyMatches(second)).toBe(true);
+    chmodSync(hookdKeyPath(), 0o644);
+    const third = rotateHookdKey();
+    expect(statSync(hookdKeyPath()).mode & 0o777).toBe(0o600);
+    expect(readHookdKey()).toBe(third);
   });
 });
 
@@ -182,6 +201,57 @@ describe("hookd requires its key (#85)", () => {
       expect(await run(["sh", "-c", pre], clientEnv(home, port), PRE_TOOL)).toEqual({ stdout: "{}", code: 0 });
       expect(statuses).toEqual([200, 200]);
     });
+  });
+
+  test("a refused installed hook falls through to the in-process hook", async () => {
+    ensureHookdKey();
+    const other = join(home, "other-home");
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "hookd.key"), `${HOOKD_KEY_HEADER}: ${"ab".repeat(32)}\n`, { mode: 0o600 });
+    const fakeCli = join(home, "fake-cli.ts");
+    writeFileSync(fakeCli, 'console.log(JSON.stringify({ fallback: true }));\n');
+    await withHookd(async (port, statuses) => {
+      process.env.EDEN_HOME = other;
+      const warm = hookCommand(fakeCli, port);
+      process.env.EDEN_HOME = home;
+      const out = await run(["sh", "-c", warm], clientEnv(other, port), PRE_TOOL);
+      expect(out).toEqual({ stdout: JSON.stringify({ fallback: true }), code: 0 });
+      expect(statuses).toEqual([401]);
+    });
+  });
+
+  test("a hookd start writes a new key; the old one is refused", async () => {
+    const old = ensureHookdKey();
+    const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
+    const port = probe.port!;
+    probe.stop(true);
+    const hookd = Bun.spawn([process.execPath, join(import.meta.dir, "hookd.ts")], {
+      env: { ...process.env, EDEN_HOME: home, EDEN_HOOKD_PORT: String(port) },
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    try {
+      let up = false;
+      for (let i = 0; i < 100 && !up; i++) {
+        up = await fetch(`http://127.0.0.1:${port}/health`).then((r) => r.ok, () => false);
+        if (!up) await Bun.sleep(30);
+      }
+      expect(up).toBe(true);
+      const current = readHookdKey();
+      expect(current).toMatch(/^[0-9a-f]{64}$/);
+      expect(current).not.toBe(old);
+      const hook = (key: string) =>
+        fetch(`http://127.0.0.1:${port}/hook`, {
+          method: "POST",
+          headers: { "content-type": "application/json", [HOOKD_KEY_HEADER]: key },
+          body: JSON.stringify(PRE_TOOL),
+        }).then((r) => r.status);
+      expect(await hook(old)).toBe(401);
+      expect(await hook(current!)).toBe(200);
+    } finally {
+      hookd.kill();
+      await hookd.exited;
+    }
   });
 
   test("the OpenCode plugin authenticates", async () => {

@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { closeSync, fstatSync, linkSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, linkSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { edenHome, ensureHome } from "./home";
 
@@ -34,28 +34,46 @@ export function readHookdKey(): string | null {
 }
 
 /**
- * Returns the key, creating it (0600) when there is none. An existing file is never replaced, so
- * two hookd starts agree on one key. Throws when the file exists but readHookdKey refuses it.
+ * Returns the key, creating it (0600) when there is none. An existing file is not replaced, so two
+ * callers agree on one key. Throws when the file exists but readHookdKey refuses it.
  */
 export function ensureHookdKey(): string {
-  const existing = readHookdKey();
-  if (existing) return existing;
+  return readHookdKey() ?? placeNewKey(linkUnlessTaken);
+}
+
+/**
+ * Replaces the key with a new 0600 one. hookd does this each time it starts, once it holds its port:
+ * a key that another account read by squatting the port while hookd was down stops working, and a
+ * damaged or loosened key file is replaced.
+ */
+export function rotateHookdKey(): string {
+  return placeNewKey(renameSync);
+}
+
+/** Writes a new key to a private temp file, then puts it in place with `place`. */
+function placeNewKey(place: (tmp: string, path: string) => void): string {
   ensureHome();
   const path = hookdKeyPath();
   const tmp = `${path}.${process.pid}.tmp`;
   try {
     rmQuietly(tmp);
     writeFileSync(tmp, `${HOOKD_KEY_HEADER}: ${randomBytes(32).toString("hex")}\n`, { mode: 0o600, flag: "wx" });
-    linkSync(tmp, path);
-  } catch (err) {
-    // EEXIST: another start linked its key first. Its key stands.
-    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    place(tmp, path);
   } finally {
     rmQuietly(tmp);
   }
   const key = readHookdKey();
   if (!key) throw new Error(`${path} is not a 0600 hookd key owned by this user`);
   return key;
+}
+
+function linkUnlessTaken(tmp: string, path: string): void {
+  try {
+    linkSync(tmp, path);
+  } catch (err) {
+    // EEXIST: another caller made the key first. Its key stands.
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+  }
 }
 
 /** Whether a request's header carries the current key. */
