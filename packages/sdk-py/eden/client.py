@@ -57,8 +57,23 @@ def _resolve(base_url: str | None, api_key: str | None) -> tuple[str, str]:
     )
     key = api_key or os.environ.get("EDEN_API_KEY")
     if not key:
-        key = DEFAULT_API_KEY if _is_loopback(base) else ""
+        key = _local_key() if _is_loopback(base) else ""
     return base.rstrip("/"), key
+
+
+def _local_key() -> str:
+    """The key ``eden wrap`` or ``eden login`` stored in $EDEN_HOME/config.json.
+
+    Defaults to ~/.eden. Without one, the public ``eden_dev``, which only a
+    ``--dev`` wrap or ``eden demo`` accepts.
+    """
+    home = os.environ.get("EDEN_HOME") or os.path.join(os.path.expanduser("~"), ".eden")
+    try:
+        with open(os.path.join(home, "config.json"), encoding="utf-8") as f:
+            key = json.load(f).get("api_key")
+    except (OSError, ValueError, AttributeError):
+        return DEFAULT_API_KEY
+    return key if isinstance(key, str) and key else DEFAULT_API_KEY
 
 
 class EdenClient:

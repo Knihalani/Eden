@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 export type Original = (name: string, args: Record<string, unknown>) => Promise<unknown> | unknown;
 
 export type WrapResponse = { action: "play"; facts?: unknown; text?: string } | { action: "original" };
@@ -14,8 +18,21 @@ function cfg(opts?: Opts) {
     // The wrap plane (`eden wrap`) defaults to 8788. 8787 is the dashboard —
     // pointing here sent SDK traffic at a UI server.
     base,
-    key: opts?.apiKey || process.env.EDEN_API_KEY || (hosted ? "" : "eden_dev"),
+    key: opts?.apiKey || process.env.EDEN_API_KEY || (hosted ? "" : localKey()),
   };
+}
+
+/**
+ * Loopback only: the key `eden wrap` or `eden login` stored in $EDEN_HOME/config.json (default
+ * ~/.eden), else the public eden_dev, which only a `--dev` wrap or `eden demo` accepts.
+ */
+function localKey(): string {
+  try {
+    const home = process.env.EDEN_HOME || join(homedir(), ".eden");
+    const { api_key } = JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as { api_key?: unknown };
+    if (typeof api_key === "string" && api_key) return api_key;
+  } catch {}
+  return "eden_dev";
 }
 
 const seqByRun = new Map<string, number>();

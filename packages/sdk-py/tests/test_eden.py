@@ -116,17 +116,51 @@ class WrapToolsTests(StubTestCase):
 
     def test_hosted_origin_does_not_default_eden_dev(self) -> None:
         import os
+        import tempfile
         from eden.client import _resolve
 
         old_key = os.environ.pop("EDEN_API_KEY", None)
+        old_home = os.environ.get("EDEN_HOME")
         try:
-            _, loop_key = _resolve("http://127.0.0.1:8788", None)
-            self.assertEqual(loop_key, "eden_dev")
-            _, hosted_key = _resolve("https://useeden.vercel.app", None)
-            self.assertEqual(hosted_key, "")
+            # Never the real ~/.eden: the loopback default reads config.json from EDEN_HOME.
+            with tempfile.TemporaryDirectory() as home:
+                os.environ["EDEN_HOME"] = home
+                _, loop_key = _resolve("http://127.0.0.1:8788", None)
+                self.assertEqual(loop_key, "eden_dev")
+                _, hosted_key = _resolve("https://useeden.vercel.app", None)
+                self.assertEqual(hosted_key, "")
         finally:
             if old_key is not None:
                 os.environ["EDEN_API_KEY"] = old_key
+            if old_home is None:
+                os.environ.pop("EDEN_HOME", None)
+            else:
+                os.environ["EDEN_HOME"] = old_home
+
+    def test_loopback_uses_the_key_eden_wrap_stored(self) -> None:
+        import json
+        import os
+        import tempfile
+        from eden.client import _resolve
+
+        key = "eden_local_" + "ab" * 32
+        old_key = os.environ.pop("EDEN_API_KEY", None)
+        old_home = os.environ.get("EDEN_HOME")
+        try:
+            with tempfile.TemporaryDirectory() as home:
+                os.environ["EDEN_HOME"] = home
+                with open(os.path.join(home, "config.json"), "w", encoding="utf-8") as f:
+                    json.dump({"api_key": key, "base_url": "http://127.0.0.1:8788"}, f)
+                self.assertEqual(_resolve("http://127.0.0.1:8788", None)[1], key)
+                self.assertEqual(_resolve("https://useeden.vercel.app", None)[1], "")
+                self.assertEqual(_resolve("http://127.0.0.1:8788", "explicit")[1], "explicit")
+        finally:
+            if old_key is not None:
+                os.environ["EDEN_API_KEY"] = old_key
+            if old_home is None:
+                os.environ.pop("EDEN_HOME", None)
+            else:
+                os.environ["EDEN_HOME"] = old_home
 
     def test_action_original_runs_the_real_callable(self) -> None:
         routes = {
