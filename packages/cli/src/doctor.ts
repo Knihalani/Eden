@@ -293,8 +293,8 @@ export function memoryHooksCheck(settings: unknown, opts?: { pluginEvents?: stri
   let detail: string;
   if (listed.length === 0) {
     ok = false;
-    detail =
-      `memory hooks: none · run eden setup · eden memory import · ${MEMORY_HOOK_EVENTS.join(" ")} · ` + `${consentBit}`;
+    const events = MEMORY_HOOK_EVENTS.join(" ");
+    detail = `memory hooks: none · run eden setup · eden memory import · ${events} · ${consentBit}`;
   } else {
     detail = `memory hooks: ${listed.join(" ")}`;
     if (missing.length) detail += ` · missing ${missing.join(" ")}`;
