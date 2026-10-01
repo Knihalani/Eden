@@ -1,10 +1,12 @@
 # Eden — agent instructions
 
-Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `main`. CI (`.github/workflows/test.yml`) runs four steps, in this order:
+Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `main`. CI (`.github/workflows/test.yml`) runs four steps:
 1. `bun run format:check` (`scripts/format.sh`; `bun run format` fixes all but long comments)
 2. `bun run typecheck`
 3. `bun run test` (`scripts/test.sh`)
-4. `bash scripts/build-cli.sh`
+4. `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh`. Without the variable, build-cli runs typecheck and the whole suite again first.
+
+In CI, steps 1, 2 and 4 run in one job, and step 3 runs in six parallel shards (`EDEN_TEST_SHARD=k/6`). A run takes about as long as its slowest test file.
 
 ## The memory program (most work here)
 
@@ -38,7 +40,7 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
 3. **Red first** (second commit): add the slice's arms to `benchmarks/memory-long-horizon/arms.json` as `red`, each with the failure `reason` asserted. A test that fails for the wrong reason is a broken test.
 4. **Implement** to the spec. Where the spec is ambiguous, pick the reading most consistent with DECISIONS and record it under "Decisions made" in the report. Fixture or oracle edits go in separate commits prefixed `fixture:`.
 5. **Verify.**
-   - Run CI's four steps locally, all green.
+   - While iterating, run only the affected test files. Run CI's four steps locally once, on the final tree, all green. The full suite takes about 12 minutes, so don't repeat it for each small fix: re-run the affected files, and let GitHub CI cover the final push.
    - Run the slice's arms twice in fresh processes; results must match.
    - Run both flag states (`off` = identity, `shadow` = shadow ledger only).
    - Run the end-to-end scenario in a **real Claude Code session** with the plugin built from this worktree. Run it headless: `claude -p … --plugin-dir ./plugins/eden-memory`, with a temp `EDEN_MEMORY_DIR` (details in `.claude/commands/slice.md`).
@@ -48,7 +50,7 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
    - Fix every correctness, spec or test-honesty finding and re-run it. Stop after 3 rounds and mark the slice `blocked`.
    - Also run `/security-review` for P0.4, P0.5, P2.3, any migration, and anything touching secrets or permissions.
 7. **Merge.**
-   - Rebase on `origin/main`, push, open the PR with the report as its body.
+   - Rebase on `origin/main`, push, open the PR with the report as its body. Put related fixes in one PR, so CI runs once rather than once per PR.
    - Wait for CI (`gh pr checks --watch`); it must be green. Until P0.−1 lands, CI is red on `main`; then require "no new failures versus `main`" instead.
    - `gh pr merge --rebase --delete-branch`.
    - Never force-push `main`. Never rewrite published history.

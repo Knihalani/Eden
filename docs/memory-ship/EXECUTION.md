@@ -92,7 +92,7 @@ Each slice runs these steps in order. **The PR is opened only after step 9.**
 | 1 | **Pre-register** (first commit): target metric, baseline, delta, arms, tolerance table, counter-metric, `harness_sha`, analysis for sampled metrics. ≤ 15 lines. It is committed before any code; the reviewer checks it was not edited after results | `docs/memory-ship/prereg/<slice>.md` |
 | 2 | **Red arms** (their own commit): the slice's A5 arms, each with `reason` asserted in `benchmarks/memory-long-horizon/arms.json`. CI fails if a red arm fails for a different reason | `arms.json` diff |
 | 3 | **Implement.** Fixture or oracle edits go in separate `fixture:` commits with the reason; reviewers read those first | code |
-| 4 | **Local CI**: `bun run format:check`, `bun run typecheck`, `bun run test`, `bash scripts/build-cli.sh` (the CI workflow's steps) | green |
+| 4 | **Local CI**, once, on the final tree: `bun run format:check`, `bun run typecheck`, `bun run test`, `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh` (the CI workflow's steps; CI runs the tests in six parallel shards) | green |
 | 5 | **A5 table**: target before/after (Wilson CI where sampled); every guard's delta vs tolerance; locked 2k bench still 0 misses | PR body |
 | 6 | **Both flag states**: `off` asserts identity (no stdout, exit 0, no ledger write); `shadow` writes only the shadow ledger; `on` delivers | tests |
 | 7 | **End to end in real Claude Code**: build and install the plugin on this machine; run the slice scenario by hand; attach `hook.log` wide events (ids only) and the transcript excerpt of the packet or ask | PR body |
