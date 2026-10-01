@@ -450,7 +450,7 @@ describe("horizon worlds: check() catches duplicated mutation", () => {
 });
 
 describe("horizon worlds: compileTraces → shadow goLive", () => {
-  test("graphql / sso / sql / blob / inbox / webhook goLive PASS with a certified program; wrap serve turns===1", async () => {
+  test("graphql/sso/sql/blob/inbox/webhook goLive PASS with a certified program; wrap serve turns===1", async () => {
     const cases: Array<{
       name: string;
       factory: () => World;

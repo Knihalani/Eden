@@ -117,7 +117,7 @@ describe("canvas layout", () => {
     expect(node.tokenClass).toBe("compiled");
   });
 
-  test("token classes: island compiled, skipped steered-skip, live tools compiled, else frontier, assert unlabeled", () => {
+  test("token classes: island and live tools compiled, skipped steered-skip, else frontier; assert unlabeled", () => {
     expect(tokenClassForNode({ id: "think", kind: "island" })).toBe("compiled");
     expect(tokenClassForNode({ id: "think", kind: "island" }, { memoized: true })).toBe("memoized");
     expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" }, { skipped: ["lookupTicket"] })).toBe(

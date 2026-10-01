@@ -105,7 +105,7 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
     expect(src).not.toMatch(/\*\*acc\*\*[^\n]*74\.9/);
   });
 
-  test("gold_in_packet denominator is phrase-match of n, not a sample; empty packets honest; screenshots skipped named", () => {
+  test("gold_in_packet denom: phrase-match of n, not a sample; empty packets honest; skipped screenshots named", () => {
     const src = readFileSync(RESULTS, "utf8");
     expect(src).toMatch(/gold_in_packet hit \/ phrase-match denom/);
     expect(src).toMatch(/not a sample/);
@@ -154,7 +154,7 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
     expect(src).not.toMatch(/gpt-4o-mini/);
   });
 
-  test("formatResults schema: ISO date, n/correct/acc, gold denom, empty honest, vs M15 2.7% @451 and ~3.5% @200 — acc cell is this run", () => {
+  test("formatResults: ISO date, n/correct/acc, gold denom, empty honest, M15 2.7%@451/~3.5%@200, acc=this run", () => {
     const md = formatResults({
       date: "2026-09-20",
       bun: "1.3.13",
