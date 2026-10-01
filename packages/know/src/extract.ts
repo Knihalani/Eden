@@ -1913,12 +1913,16 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       if (side) out.push({ s: name, p: "id", o: side, e: `${name} drives on the ${side}`.slice(0, 280) });
     } else if (isHeadLabel(label)) {
       const person = namedEntities(data)[0];
-      if (person)
-        pushIs(
-          out,
-          person,
-          `${/prime minister/i.test(label) ? "the prime minister of" : /head of government/i.test(label) ? "the head of government of" : /president/i.test(label) ? "the president of" : "the head of state of"} ${name}`,
-        );
+      if (person) {
+        const role = /prime minister/i.test(label)
+          ? "the prime minister of"
+          : /head of government/i.test(label)
+            ? "the head of government of"
+            : /president/i.test(label)
+              ? "the president of"
+              : "the head of state of";
+        pushIs(out, person, `${role} ${name}`);
+      }
     } else if (isAnthemLabel(label)) {
       const anthem = namedEntities(data)[0];
       if (anthem) pushIs(out, anthem, `the anthem of ${name}`);
