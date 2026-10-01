@@ -524,7 +524,11 @@ export function formatNegative(run: NegativeRun): string {
   const rows = run.rows
     .map(
       (r) =>
-        `| ${r.id} | ${r.expect} | ${r.baseline.arm} | ${r.probe.arm} | ${r.store_n} | ${r.baseline.packet_bytes} | ${r.probe.packet_bytes} | ${r.delta_bytes} | ${r.band_bytes} | ${yn(r.delta_approx_0)} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} | ${yn(r.baseline.identity)}/${yn(r.probe.identity)} | ${r.baseline.body_packet_bytes} | ${r.probe.body_packet_bytes} | ${r.verdict} |`,
+        `| ${r.id} | ${r.expect} | ${r.baseline.arm} | ${r.probe.arm} | ${r.store_n} ` +
+        `| ${r.baseline.packet_bytes} | ${r.probe.packet_bytes} | ${r.delta_bytes} | ${r.band_bytes} ` +
+        `| ${yn(r.delta_approx_0)} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} ` +
+        `| ${yn(r.baseline.identity)}/${yn(r.probe.identity)} | ${r.baseline.body_packet_bytes} ` +
+        `| ${r.probe.body_packet_bytes} | ${r.verdict} |`,
     )
     .join("\n");
   const notes = run.rows

@@ -227,7 +227,9 @@ try {
       `| JSONL n | ${M64.jsonlN} | ${jsonlN} | ${deltaInt(jsonlN - M64.jsonlN)} |`,
       `| swallows (happy path) | ${M64.happy} | ${happySwallows} | ${deltaInt(happySwallows - M64.happy)} |`,
       `| swallows (forced throw) | ${M64.forced} | ${forced} | ${deltaInt(forced - M64.forced)} |`,
-      `| min / max (ms) | ${ms(M64.min)} / ${ms(M64.max)} | ${ms(times[0]!)} / ${ms(times[times.length - 1]!)} | ${deltaMs(times[0]! - M64.min)} / ${deltaMs(times[times.length - 1]! - M64.max)} |`,
+      `| min / max (ms) | ${ms(M64.min)} / ${ms(M64.max)} | ${ms(times[0]!)} ` +
+        `/ ${ms(times[times.length - 1]!)} | ${deltaMs(times[0]! - M64.min)} ` +
+        `/ ${deltaMs(times[times.length - 1]! - M64.max)} |`,
     ].join("\n");
 
     console.log(`# AgentMemory inject baseline (M34 remeasure)`);
@@ -242,7 +244,10 @@ try {
     console.log(`wal bytes: ${walBytes}`);
     console.log(`query turn stored: ${queryStored ? "yes" : "NO"} (JSONL n=${jsonlN}; M6.4 store-all n=${M64.jsonlN})`);
     console.log(
-      `packet budget: M34.3 src/index.ts PACKET_CHAT_K_MIN=${PACKET_CHAT_K_MIN} PACKET_CHAT_K_MAX=${PACKET_CHAT_K_MAX} PACKET_CHAT_K_DEFAULT=${PACKET_CHAT_K_DEFAULT} (EDEN_MEMORY_CAP unset → ${PACKET_CHAT_K_DEFAULT}). PROCEDURE_TOKEN_CAP=${PROCEDURE_TOKEN_CAP}. EXPERIENCE_SLICE_TOKEN_CAP=${EXPERIENCE_SLICE_TOKEN_CAP} (re-export of src/experience-retrieve.ts).`,
+      `packet budget: M34.3 src/index.ts PACKET_CHAT_K_MIN=${PACKET_CHAT_K_MIN} ` +
+        `PACKET_CHAT_K_MAX=${PACKET_CHAT_K_MAX} PACKET_CHAT_K_DEFAULT=${PACKET_CHAT_K_DEFAULT} ` +
+        `(EDEN_MEMORY_CAP unset → ${PACKET_CHAT_K_DEFAULT}). PROCEDURE_TOKEN_CAP=${PROCEDURE_TOKEN_CAP}. ` +
+        `EXPERIENCE_SLICE_TOKEN_CAP=${EXPERIENCE_SLICE_TOKEN_CAP} (re-export of src/experience-retrieve.ts).`,
     );
     console.log(
       `pre-close: jsonl ${pre.jsonlBytes}B n=${pre.jsonlN}; wal ${pre.walBytes}B n=${pre.walN}; query=${pre.query ? "yes" : "NO"}`,

@@ -238,7 +238,8 @@ async function main() {
   console.error("\nLeaderboard retrieve@5:");
   for (const r of rows) {
     console.error(
-      `${r.id.padEnd(14)}  @5 ${String(r.rec5_pct).padStart(5)}%  @20 ${String(r.rec20_pct).padStart(5)}%  cat2 ${String(r.cat2_pct).padStart(5)}%  cat4 ${String(r.cat4_pct).padStart(5)}%` +
+      `${r.id.padEnd(14)}  @5 ${String(r.rec5_pct).padStart(5)}%  @20 ${String(r.rec20_pct).padStart(5)}% ` +
+        ` cat2 ${String(r.cat2_pct).padStart(5)}%  cat4 ${String(r.cat4_pct).padStart(5)}%` +
         (r.answer_pct != null ? `  ans ${r.answer_pct}%` : ""),
     );
   }

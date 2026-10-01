@@ -23,7 +23,8 @@ import { hookCommand, preHookCommand } from "../../packages/cli/src/setup";
 
 /**
  * Pre-registered Wave 17 rotation verdict. Recorded before the run.
- * expect: cwd-hop relative ./a.ts arms; abs claims; disagreeing id refuses; mixed-file takes head; ../other does not; not post-batch.
+ * expect: cwd-hop relative ./a.ts arms; abs claims; disagreeing id refuses; mixed-file takes head;
+ * ../other does not; not post-batch.
  */
 export const EXPECT =
   "cwd-hop: relative ./a.ts arms; abs /Users/me/repo/a.ts claims; disagreeing id refuses; mixed-file takes head; ../other does not claim; not post-batch";

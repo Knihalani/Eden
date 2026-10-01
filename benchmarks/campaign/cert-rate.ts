@@ -50,7 +50,9 @@ async function main() {
     const r = await s.goLive(worldName, { compile: 9, holdout: 3, sandbox: factory, maxGram: 26 });
     const ok = r.verdict === "PASS" && r.program != null && r.uncertified !== true;
     if (ok) pass++;
-    const line = `${worldName}: ${r.verdict}${r.uncertified ? " UNCERTIFIED" : ""} program=${r.program ? r.program.sequence.join("→") : "null"} ${r.reasons.slice(0, 2).join("; ")}`;
+    const line =
+      `${worldName}: ${r.verdict}${r.uncertified ? " UNCERTIFIED" : ""} ` +
+      `program=${r.program ? r.program.sequence.join("→") : "null"} ${r.reasons.slice(0, 2).join("; ")}`;
     lines.push(line);
     process.stdout.write(`  ${line}\n`);
   }

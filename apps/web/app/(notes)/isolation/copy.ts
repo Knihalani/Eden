@@ -133,7 +133,10 @@ export type LimitClaim = {
   name: string;
 };
 
-/** Published limits. Same honesty as /proof. Isolation copy must name oblivious-long. Paths match PUBLIC_CLAIMS.file. */
+/**
+ * Published limits. Same honesty as /proof. Isolation copy must name oblivious-long.
+ * Paths match PUBLIC_CLAIMS.file.
+ */
 /** Isolation pins. Same statement as PUBLIC_CLAIMS so /isolation, /proof, and eden claims agree. */
 function limitPin(id: string): LimitClaim {
   const row = claimById(id);

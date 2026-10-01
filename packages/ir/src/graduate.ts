@@ -168,7 +168,10 @@ export function toolsInventoryLine(p: { n: number; canary: number; live: number 
   return [`${p.n} programs`, ...canaryLiveParts(p)].join(" · ");
 }
 
-/** Home/nav/canvas list title. A canary-only fleet is Canary, not Live tools. Empty is `0 programs`, same as doctor/digest. */
+/**
+ * Home/nav/canvas list title. A canary-only fleet is Canary, not Live tools.
+ * Empty is `0 programs`, same as doctor/digest.
+ */
 export function toolsListTitle(p: { canary: number; live: number }): string {
   if (!p.canary && !p.live) return "0 programs";
   if (p.canary && !p.live) return "Canary";

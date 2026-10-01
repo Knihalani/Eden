@@ -274,10 +274,12 @@ describe("horizon worlds: compileTraces", () => {
       expect(traces[0]!.events.map((e) => e.name)).toEqual(["getOrg", "createUser", "grantRole", "sendInvite"]);
       const r = compileTraces(traces);
       console.log(
-        `horizon compile sso: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals
-          .map((x) => x.code ?? x.reason)
-          .slice(0, 4)
-          .join("; ")}`,
+        `horizon compile sso: programs=${r.programs.length} ` +
+          `seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} ` +
+          `env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals
+            .map((x) => x.code ?? x.reason)
+            .slice(0, 4)
+            .join("; ")}`,
       );
       expect(r.programs.length, "sso should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(r.programs[0]!.sequence.length).toBeGreaterThanOrEqual(4);
