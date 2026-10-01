@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FIXTURE_PATH, RESULTS_PATH, REQUIRED_CASE_IDS, fixtureIssues, loadFixture } from "./run-tools.ts";
+import { foldImports } from "../memoryagentbench/inject-gate";
 
 const HOLD = import.meta.dir;
 const TOOLS_MD = join(HOLD, "tools.md");
@@ -67,7 +68,7 @@ describe("M2.4 tool-trace holdout fixture", () => {
     const offenders: string[] = [];
     for (const file of walkSource(HOLD)) {
       const src = readFileSync(file, "utf8");
-      for (const line of src.split("\n")) {
+      for (const line of foldImports(src).split("\n")) {
         const t = line.trim();
         if (!t || t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("|")) continue;
         const js = /import\s*(?:type\s+)?(?:\{[^}]*\bBrainMemory\b[^}]*\}|\bBrainMemory\b)\s*from/.test(line);

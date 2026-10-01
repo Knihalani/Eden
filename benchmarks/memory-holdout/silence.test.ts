@@ -119,6 +119,6 @@ describe("M38.3 silence holdout", () => {
     expect(src).not.toMatch(/import\s*(?:type\s+)?(?:\{[^}]*\bBrainMemory\b[^}]*\}|\bBrainMemory\b)\s*from/);
     expect(src).not.toMatch(/EDEN_MEMORY_CAP\s*[:=]\s*["']?40/);
     expect(src).toContain("SILENCE_PATH");
-    expect(src).not.toContain("writeFileSync(NEGATIVE_PATH");
+    expect(src).not.toMatch(/writeFileSync\(\s*NEGATIVE_PATH\b/);
   });
 });

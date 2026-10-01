@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { isBrainMemoryConstruct, isBrainMemoryImport, NOT_PRODUCT_LINE } from "./inject-gate";
+import { foldImports, isBrainMemoryConstruct, isBrainMemoryImport, NOT_PRODUCT_LINE } from "./inject-gate";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/11
 
@@ -108,7 +108,7 @@ describe("M6.2 dual-API CI gate", () => {
     const offenders: string[] = [];
     for (const file of walkSource(MAB)) {
       if (GATE_TESTS.has(file.split("/").pop() ?? "")) continue;
-      const lines = readFileSync(file, "utf8").split("\n");
+      const lines = foldImports(readFileSync(file, "utf8")).split("\n");
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]!;
         if (!isBrainMemoryImport(line)) continue;
