@@ -29,6 +29,17 @@ function isCodeLine(line: string): boolean {
   return Boolean(t) && !t.startsWith("//") && !t.startsWith("#") && !t.startsWith("*");
 }
 
+/**
+ * Source with each multi-line `import { … } from "…"` folded onto one line. Prettier breaks long
+ * imports over several lines, and the import checks below read one line at a time.
+ */
+export function foldImports(src: string): string {
+  return src.replace(
+    /^([ \t]*import\s*(?:type\s+)?\{)([^}]*)(\})/gm,
+    (_m, head: string, names: string, close: string) => head + names.replace(/\s+/g, " ") + close,
+  );
+}
+
 /** Import of BrainMemory / brain-memory module (JS + Python). */
 export function isBrainMemoryImport(line: string): boolean {
   if (!isCodeLine(line)) return false;

@@ -220,7 +220,7 @@ test("landing and /proof never mention SOC 2", () => {
   for (const dir of roots) {
     for (const file of filesUnder(dir)) {
       const text = readFileSync(file, "utf8");
-      if (/SOC ?2/i.test(text)) hits.push(file);
+      if (/SOC\s*2/i.test(text)) hits.push(file);
     }
   }
   expect(hits).toEqual([]);

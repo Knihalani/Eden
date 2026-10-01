@@ -32,6 +32,22 @@ function filesUnder(dir: string): string[] {
   return out;
 }
 
+/**
+ * Billed-invoice quotes in a file. The phrase is matched across line breaks (Prettier may wrap a JSX
+ * phrase over two lines); the exemption is judged on the source lines the hit spans, as it always was.
+ */
+function invoiceQuotes(text: string): string[] {
+  const quotes: string[] = [];
+  for (const m of text.matchAll(/billed\s+S1b|Claude\s+Code\s+invoice/gi)) {
+    const at = m.index ?? 0;
+    const start = text.lastIndexOf("\n", at) + 1;
+    const end = text.indexOf("\n", at + m[0].length);
+    const span = text.slice(start, end < 0 ? text.length : end).replace(/\s+/g, " ").trim();
+    if (!/not a live|retired|no live Claude Code invoice/i.test(span)) quotes.push(span);
+  }
+  return quotes;
+}
+
 function read(rel: string): string {
   return readFileSync(join(ROOT, rel), "utf8");
 }
@@ -51,12 +67,7 @@ describe("Wave 19.1 live-invoice cell", () => {
       const files = existsSync(root) && !root.endsWith(".ts") && !root.endsWith(".md") ? filesUnder(root) : [root];
       for (const file of files) {
         if (!existsSync(file) || file.endsWith(".test.ts")) continue;
-        const text = readFileSync(file, "utf8");
-        for (const line of text.split("\n")) {
-          if (/(billed S1b|Claude Code invoice)/i.test(line) && !/not a live|retired|no live Claude Code invoice/i.test(line)) {
-            hits.push(`${file}: ${line.trim()}`);
-          }
-        }
+        for (const quote of invoiceQuotes(readFileSync(file, "utf8"))) hits.push(`${file}: ${quote}`);
       }
     }
     expect(hits).toEqual([]);

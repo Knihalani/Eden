@@ -3,6 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { openMemory } from "../../src/index.ts";
+import { foldImports } from "./inject-gate";
 
 const ROOT = join(import.meta.dir, "../..");
 const BENCH = join(ROOT, "benchmarks");
@@ -32,7 +33,7 @@ function walkMarkdown(dir: string): string[] {
 }
 
 function brainMemoryImportLines(src: string): string[] {
-  return src.split("\n").filter((line) => {
+  return foldImports(src).split("\n").filter((line) => {
     const t = line.trim();
     if (!t || t.startsWith("//") || t.startsWith("#") || t.startsWith("*")) return false;
     const js = /import\s*(?:type\s+)?(?:\{[^}]*\bBrainMemory\b[^}]*\}|\bBrainMemory\b)\s*from\s*['"][^'"]*brain-memory/.test(line);
@@ -100,7 +101,7 @@ describe("M1.1 inject API freeze", () => {
         if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*")) return;
         // The marker sits on the line itself or, like eslint-disable-next-line, in a comment just above.
         const above = lines[i - 1]?.trim() ?? "";
-        const marked = line.includes("not-product") || (above.startsWith("//") && above.includes("not-product"));
+        const marked = line.includes("not-product") || /^\/\/\s*not-product\b/.test(above);
         if (!marked) offenders.push(`${relative(ROOT, file)}: ${t}`);
       });
     }
