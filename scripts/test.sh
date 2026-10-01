@@ -94,5 +94,8 @@ fi
 
 # Not exec: the EXIT trap has to run to remove the throwaway HOME. set -e still
 # makes bun's exit status the script's.
+# The shard flag joins the caller's arguments, so the bun test line stays the one
+# benchmarks/memoryagentbench/protocol.test.ts pins.
+if [ -n "$shard" ]; then set -- "$@" "$shard"; fi
 # shellcheck disable=SC2086 # word splitting is intended: one argument per dir/file
-bun test "$@" $shard $ignore $dirs $src_tests $script_tests
+bun test "$@" $ignore $dirs $src_tests $script_tests
