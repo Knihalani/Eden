@@ -343,7 +343,10 @@ export function formatHelpTokens(run: Run): string {
   const table = run.rows
     .map((r) => {
       const acc = r.accuracy_delta > 0 ? `+${r.accuracy_delta}` : String(r.accuracy_delta);
-      return `| ${r.id} | ${r.off.tokens} | ${r.on.tokens} | ${r.off.bytes} | ${r.on.bytes} | ${r.delta_bytes} | ${acc} | ${yn(r.silent)} | ${r.verdict} |`;
+      return (
+        `| ${r.id} | ${r.off.tokens} | ${r.on.tokens} | ${r.off.bytes} | ${r.on.bytes} | ${r.delta_bytes} | ` +
+        `${acc} | ${yn(r.silent)} | ${r.verdict} |`
+      );
     })
     .join("\n");
   const flagged = run.rows.filter((r) => r.must_be_silent);
@@ -351,7 +354,8 @@ export function formatHelpTokens(run: Run): string {
     ? flagged
         .map(
           (r) =>
-            `- **${r.id}:** tokens ${r.off.tokens} → ${r.on.tokens}, accuracy Δ ${r.accuracy_delta}, bytes Δ ${r.delta_bytes}. This cue class is silent (M38). Ranker was not retuned.`,
+            `- **${r.id}:** tokens ${r.off.tokens} → ${r.on.tokens}, accuracy Δ ${r.accuracy_delta}, bytes Δ ` +
+            `${r.delta_bytes}. This cue class is silent (M38). Ranker was not retuned.`,
         )
         .join("\n")
     : "- None. No cue class had tokens up and accuracy Δ≤0.";
@@ -381,13 +385,19 @@ export function formatHelpTokens(run: Run): string {
     `**k:** default (EDEN_MEMORY_CAP unset → ${run.k}). No k=40. No hay. No LoCoMo 92.`,
     `**Bun:** ${run.bun}`,
     "",
-    "This file is wrap inject packet tokens only. LIVE session classification is HELP.md (M47.1). Harbor/TB totals are not this number.",
+    "This file is wrap inject packet tokens only. LIVE session classification is HELP.md (M47.1). " +
+      "Harbor/TB totals are not this number.",
     "",
-    "Approx tokens are `ceil(chars/4)` of the system content that contains `Eden Memory:`. Bytes are the UTF-8 length of that packet. Off is 0 bytes when identity. Accuracy Δ is gold needles present on the on-arm minus gold needles on the off-arm. Gold on-arm only and off empty is Δ>0 (helped). Both empty of gold is Δ=0. On-arm leftover junk on math with tokens up is Δ≤0 and that class is silent (M38).",
+    "Approx tokens are `ceil(chars/4)` of the system content that contains `Eden Memory:`. Bytes are " +
+      "the UTF-8 length of that packet. Off is 0 bytes when identity. Accuracy Δ is gold needles present " +
+      "on the on-arm minus gold needles on the off-arm. Gold on-arm only and off empty is Δ>0 (helped). " +
+      "Both empty of gold is Δ=0. On-arm leftover junk on math with tokens up is Δ≤0 and that class is " +
+      "silent (M38).",
     "",
     "## Table",
     "",
-    "| case | tokens_off (approx) | tokens_on | bytes_off | bytes_on | Δ bytes | accuracy Δ (needles) | silent? | verdict |",
+    "| case | tokens_off (approx) | tokens_on | bytes_off | bytes_on | Δ bytes | accuracy Δ (needles) | " +
+      "silent? | verdict |",
     "|---|---|---|---|---|---|---|---|---|",
     table,
     "",
@@ -402,7 +412,8 @@ export function formatHelpTokens(run: Run): string {
     "",
     "## Anthropic-shaped check",
     "",
-    "`inject` via the same user messages is the packet source Anthropic wrap copies into `system`. It is not a second scored API. `injectBody` is the wrap OpenAI path and the filed number.",
+    "`inject` via the same user messages is the packet source Anthropic wrap copies into `system`. It " +
+      "is not a second scored API. `injectBody` is the wrap OpenAI path and the filed number.",
     "",
     anthAll
       ? "- inject() packet bytes matched injectBody on every class."
@@ -429,7 +440,8 @@ if (import.meta.main) {
   const summary = run.rows
     .map(
       (r) =>
-        `${r.id}\t${r.verdict}\toff ${r.off.tokens}/${r.off.bytes}B\ton ${r.on.tokens}/${r.on.bytes}B\tΔB ${r.delta_bytes}\tacc ${r.accuracy_delta}\tsilent ${r.silent ? "yes" : "no"}`,
+        `${r.id}\t${r.verdict}\toff ${r.off.tokens}/${r.off.bytes}B\ton ${r.on.tokens}/${r.on.bytes}B\tΔB ` +
+        `${r.delta_bytes}\tacc ${r.accuracy_delta}\tsilent ${r.silent ? "yes" : "no"}`,
     )
     .join("\n");
   console.error(

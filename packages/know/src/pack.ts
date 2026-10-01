@@ -299,8 +299,11 @@ export function cleanRfcTitle(o: string): string {
     .trim();
 }
 
-const RFC_BOILERPLATE_TITLE =
-  /when a server|table of contents|january 20|february 20|status of this memo|copyright notice|network working group/i;
+const RFC_BOILERPLATE_TITLE = new RegExp(
+  String.raw`when a server|table of contents|january 20|february 20|status of this memo|copyright notice|` +
+    String.raw`network working group`,
+  "i",
+);
 
 export function junkRfcTitle(o: string): boolean {
   const t = o.trim();
@@ -7723,7 +7726,10 @@ const AREA_RULES: [number, RegExp][] = [
   [8, /\buri\b|\burl\b|\burn\b|\biri\b|uniform resource/],
   [
     4,
-    /\btls\b|\bssl\b|\bipsec\b|\bdtls\b|\bssh\b|\boauth\b|\bjose\b|\bpkix\b|certificat|\bauth|\bcrypt|\bhmac\b|\bsecurity\b|x\.?509/,
+    new RegExp(
+      String.raw`\btls\b|\bssl\b|\bipsec\b|\bdtls\b|\bssh\b|\boauth\b|\bjose\b|\bpkix\b|certificat|\bauth|` +
+        String.raw`\bcrypt|\bhmac\b|\bsecurity\b|x\.?509`,
+    ),
   ],
   [9, /\brtp\b|\bsip\b|\bwebrtc\b|real[- ]?time|\brtsp\b|\bsdp\b/],
   [6, /\btcp\b|\budp\b|\bsctp\b|\btransport\b|congestion/],

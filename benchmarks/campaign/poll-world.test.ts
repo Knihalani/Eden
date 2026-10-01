@@ -49,7 +49,8 @@ describe("rotation: poll-world negative-space (Wave 14.3)", () => {
     expect(unique.refusals).toEqual([]);
 
     console.log(
-      `poll-world: raw_polls=${raw} compiled_polls=${compiled} seq=${(program.sequence ?? []).join("→")} unique_work_programs=${unique.programs.length} replay_get_status=${counts.get_status}`,
+      `poll-world: raw_polls=${raw} compiled_polls=${compiled} seq=${(program.sequence ?? []).join("→")} ` +
+        `unique_work_programs=${unique.programs.length} replay_get_status=${counts.get_status}`,
     );
   });
 });

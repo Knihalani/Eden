@@ -234,7 +234,8 @@ export async function shadowProgram(
       verdict: "INCONCLUSIVE",
       manifest: null,
       reasons: [
-        `shadowing would perform ${writes.join(", ")} for real, once per held-out trace — supply a sandbox registry (registryFor) and set allowSideEffects`,
+        `shadowing would perform ${writes.join(", ")} for real, once per held-out trace — supply a sandbox ` +
+          `registry (registryFor) and set allowSideEffects`,
       ],
       n: held.length,
       minLlmReduction: minLlmReductionOf(program.contract.minLlmReduction),
@@ -437,7 +438,8 @@ export async function shadowProgram(
       manifest: null,
       reasons: [
         ...reasons,
-        `only ${validated} of ${n} held-out traces could validate this program (${unvalidatable} made calls the recording does not contain)`,
+        `only ${validated} of ${n} held-out traces could validate this program (${unvalidatable} made calls ` +
+          `the recording does not contain)`,
       ],
       n,
       minLlmReduction: minLlmReductionOf(program.contract.minLlmReduction),
@@ -495,7 +497,8 @@ export async function shadowProgram(
   if (!tokensOk && !timeOk) {
     reasons.push(
       tokensEstimated
-        ? "token savings are extrapolated from remaining LLM calls across the island step, not measured — supply measured time or provider-reported usage"
+        ? "token savings are extrapolated from remaining LLM calls across the island step, not measured — " +
+            "supply measured time or provider-reported usage"
         : "not measured — quality held but neither tokens nor time saved",
     );
     return { verdict: "INCONCLUSIVE", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };

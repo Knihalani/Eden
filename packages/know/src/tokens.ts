@@ -29,9 +29,12 @@ export function tokens(s: string): string[] {
 }
 
 export const STOP_POST = new Set(
-  "the and for that this with from are was were been have has had but not you all can her his they them than then into more some such only other after first also just like well even most many those come made find long down did get own see way may say she use two how its our out about would could should which there their being under over".split(
-    " ",
-  ),
+  (
+    "the and for that this with from are was were been have has had but not you all can her his they " +
+    "them than then into more some such only other after first also just like well even most many those " +
+    "come made find long down did get own see way may say she use two how its our out about would could " +
+    "should which there their being under over"
+  ).split(" "),
 );
 
 export function postTokens(s: string): string[] {

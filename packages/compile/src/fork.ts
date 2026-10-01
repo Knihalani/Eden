@@ -240,7 +240,8 @@ function unboundBranchRefuse(slot?: string): ForkRefuse {
   return {
     code: "unbound_branch",
     reason:
-      "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
+      "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. " +
+      "Eden refuses to guess.",
     hint: "Bind every branch arm from recorded witnesses. Eden will not guess.",
     slot,
   };

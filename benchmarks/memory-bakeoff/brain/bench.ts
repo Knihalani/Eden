@@ -100,7 +100,9 @@ class BrainProduct implements MemSys {
 }
 
 async function ollamaAnswer(question: string, notes: string[]): Promise<string> {
-  const prompt = `Answer the question using ONLY the memories. Be concise (short phrase or date).\n\nMemories:\n${notes.map((n, i) => `${i + 1}. ${n}`).join("\n")}\n\nQuestion: ${question}\nAnswer:`;
+  const prompt =
+    `Answer the question using ONLY the memories. Be concise (short phrase or date).\n\nMemories:\n` +
+    `${notes.map((n, i) => `${i + 1}. ${n}`).join("\n")}\n\nQuestion: ${question}\nAnswer:`;
   try {
     const res = await fetch(`${OLLAMA}/api/generate`, {
       method: "POST",

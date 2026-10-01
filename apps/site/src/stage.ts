@@ -32,7 +32,8 @@ function pose(b){
     if(quiet())deck.style.transform='none';
     return;
   }
-  deck.style.transform='rotateX('+(-12+b*3).toFixed(2)+'deg) rotateY('+(-8+b*2).toFixed(2)+'deg) rotateZ('+(2-b).toFixed(2)+'deg) scale(0.92)';
+  deck.style.transform='rotateX('+(-12+b*3).toFixed(2)+'deg) rotateY('+(-8+b*2).toFixed(2)+'deg) \
+rotateZ('+(2-b).toFixed(2)+'deg) scale(0.92)';
 }
 function apply(b){
   hero.style.setProperty('--bind',b.toFixed(3));
@@ -57,7 +58,8 @@ function paintMove(){
   var y=(my-r.top)/Math.max(r.height,1)-0.5;
   var k=press?1.05:0.45;
   var b=bindOf();
-  deck.style.transform='rotateX('+(-12+b*3-y*12*k).toFixed(2)+'deg) rotateY('+(-8+b*2+x*12*k).toFixed(2)+'deg) rotateZ('+(2-b+x*2*k).toFixed(2)+'deg) scale(0.92)';
+  deck.style.transform='rotateX('+(-12+b*3-y*12*k).toFixed(2)+'deg) \
+rotateY('+(-8+b*2+x*12*k).toFixed(2)+'deg) rotateZ('+(2-b+x*2*k).toFixed(2)+'deg) scale(0.92)';
 }
 function onMove(e){
   if(!deck||quiet())return;

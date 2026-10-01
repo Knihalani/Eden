@@ -114,7 +114,8 @@ async function main() {
     const g = ab.guarded!.filter((s) => s.task === t.id);
     const mean = (xs: Sample[]) => xs.reduce((a, b) => a + b.value, 0) / xs.length;
     console.log(
-      `  ${t.id.padEnd(12)} naive ${mean(nav).toFixed(0).padStart(6)}   guarded ${mean(g).toFixed(0).padStart(6)}   ${(mean(nav) / mean(g)).toFixed(1)}x less spend`,
+      `  ${t.id.padEnd(12)} naive ${mean(nav).toFixed(0).padStart(6)}   guarded ` +
+        `${mean(g).toFixed(0).padStart(6)}   ${(mean(nav) / mean(g)).toFixed(1)}x less spend`,
     );
   }
   if (decision.verdict !== "WIN") {

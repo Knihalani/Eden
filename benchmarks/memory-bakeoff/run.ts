@@ -41,9 +41,10 @@ type Sys = {
 };
 
 const STOP = new Set(
-  "the of is a an on to and in for this that with from into about these then still has out how what why was are you your its our not or no".split(
-    " ",
-  ),
+  (
+    "the of is a an on to and in for this that with from into about these then still has out how what " +
+    "why was are you your its our not or no"
+  ).split(" "),
 );
 
 function toks(s: string): string[] {
@@ -222,7 +223,8 @@ async function llmFacts(text: string): Promise<string[]> {
         {
           role: "system",
           content:
-            'Extract durable facts from the user message. Return JSON {"facts":["..."]}. Skip chit-chat, questions, code, URLs, and secrets. Empty facts if nothing durable.',
+            'Extract durable facts from the user message. Return JSON {"facts":["..."]}. Skip chit-chat, ' +
+            "questions, code, URLs, and secrets. Empty facts if nothing durable.",
         },
         { role: "user", content: text },
       ],
@@ -478,10 +480,13 @@ const report = {
     locomoCats: "1-4 (skip adversarial 5)",
     locomoMetric: "retrieval hit@5, no LLM judge",
     llm: SKIP_LLM ? "skipped (no live vendor key)" : LLM_MODEL,
-    note: "Vendor LoCoMo/LongMemEval scores use an answerer+judge LLM. This run measures whether gold is in retrieved notes.",
+    note:
+      "Vendor LoCoMo/LongMemEval scores use an answerer+judge LLM. This run measures whether gold is in " +
+      "retrieved notes.",
   },
   verdictHint:
-    "Eden is a local heuristic memory for engineering chat + a packed knowledge graph. It is not a Mem0/Zep/Letta replacement.",
+    "Eden is a local heuristic memory for engineering chat + a packed knowledge graph. It is not a " +
+    "Mem0/Zep/Letta replacement.",
   passive,
   locomo,
   knowInject: know,

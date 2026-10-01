@@ -271,7 +271,9 @@ export function ticketShipProgram(): StretchProgram {
     id: "ticketship",
     name: "resolve_ticket",
     description:
-      "Resolve a support ticket: look up, fetch details, parse and validate fields, draft a reply, write the record, verify the write, and notify. Use this instead of calling lookupTicket, fetchDetails, parseFields, validate, draftReply, writeRecord, verifyWrite, and notify in sequence.",
+      "Resolve a support ticket: look up, fetch details, parse and validate fields, draft a reply, write " +
+      "the record, verify the write, and notify. Use this instead of calling lookupTicket, fetchDetails, " +
+      "parseFields, validate, draftReply, writeRecord, verifyWrite, and notify in sequence.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string", description: "Ticket id" } },

@@ -111,7 +111,8 @@ describe("webhook invalidation", () => {
     const db = await dbP;
     const toolId = "t_live_hook";
     await db.run(
-      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
+      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?,` +
+        ` ?, '', 'on', ?, '[]')`,
       [
         toolId,
         "ws_hook",
@@ -140,7 +141,8 @@ describe("webhook invalidation", () => {
       { id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL },
     ]);
     await db.run(
-      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint) VALUES (?, ?, ?, '', 'on', ?, '[]', ?)`,
+      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint) ` +
+        `VALUES (?, ?, ?, '', 'on', ?, '[]', ?)`,
       [toolId, "ws_mined", "get_issue", liveSteps, "fp/mined/get"],
     );
     const key = resultCacheKey(identity("ws_mined", toolId));
@@ -169,7 +171,8 @@ describe("webhook invalidation", () => {
     const db = await dbP;
     const toolId = "t_empty_knock";
     await db.run(
-      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
+      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?,` +
+        ` ?, '', 'on', ?, '[]')`,
       [
         toolId,
         "ws_empty_knock",
@@ -197,7 +200,8 @@ describe("webhook invalidation", () => {
     const db = await dbP;
     const toolId = "t_dampen";
     await db.run(
-      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint) VALUES (?, ?, ?, '', 'on', ?, '[]', ?)`,
+      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint) ` +
+        `VALUES (?, ?, ?, '', 'on', ?, '[]', ?)`,
       [
         toolId,
         "ws_dampen",
@@ -227,7 +231,8 @@ describe("webhook invalidation", () => {
     const db = await dbP;
     const toolId = "t_403_knock";
     await db.run(
-      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
+      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?,` +
+        ` ?, '', 'on', ?, '[]')`,
       [
         toolId,
         "ws_403",

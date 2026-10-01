@@ -14,7 +14,8 @@ import { implicitTechniqueTask, techniqueNeedleFromText } from "./needles";
 import { wetTalkBearing } from "./gate";
 
 const LONG =
-  "this is a long enough english page about how to filter json on the command line with enough stop words for the gopher checks to pass here. ";
+  "this is a long enough english page about how to filter json on the command line with enough stop " +
+  "words for the gopher checks to pass here. ";
 
 describe("frozen encyclopedia stays off the graph", () => {
   test("capitals, RFC titles, IANA tautologies, country ISO are frozen", () => {

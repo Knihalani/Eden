@@ -221,7 +221,10 @@ describe("M32.4 Terminal-Bench honesty — no public-board 89-task claim", () =>
     expect(src).toMatch(/^# M32 Terminal-Bench 2\.1 Δ RESULTS/m);
     expect(src).toMatch(/\| wave \| M32 \|/);
     expect(src).toMatch(
-      /\*\*M37\.3 recert:\*\* \d{4}-\d{2}-\d{2} — after M16–M36; locked subset k=5; not 89-task; backbone `google\/gemma-4-31b-it`\./,
+      new RegExp(
+        "\\*\\*M37\\.3 recert:\\*\\* \\d{4}-\\d{2}-\\d{2} — after M16–M36; locked subset k=5; " +
+          "not 89-task; backbone `google\\/gemma-4-31b-it`\\.",
+      ),
     );
     const md = renderResults(pendingResultsReport("2026-09-21"));
     expect(md).toMatch(/^# M32 Terminal-Bench 2\.1 Δ RESULTS/m);

@@ -18,7 +18,8 @@ Write exactly one line to /tmp/eden-bench-without/summary.txt:
 issue_title | comment_count | pr_title | review_count | commit_state | latest_run_conclusion
 Then stop.`;
 
-const withPrompt = `You have MCP tool mcp__eden__fetch_issue_bundle. You MUST call it once with issue "12". Do not curl the forge URLs. Do not call gh.
+const withPrompt = `You have MCP tool mcp__eden__fetch_issue_bundle. You MUST call it once with issue "12". Do not \
+curl the forge URLs. Do not call gh.
 From the tool result, write exactly one line to /tmp/eden-bench-with/summary.txt:
 issue_title | comment_count | pr_title | review_count | commit_state | latest_run_conclusion
 Then stop.`;

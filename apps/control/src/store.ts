@@ -295,7 +295,8 @@ export class Store {
 
   putCandidate(c: Candidate): void {
     this.db.run(
-      `INSERT OR REPLACE INTO candidates (id, sequence, program, refusal, verdict, manifest, created_at) VALUES (?,?,?,?,?,?,?)`,
+      `INSERT OR REPLACE INTO candidates (id, sequence, program, refusal, verdict, manifest, created_at) ` +
+        `VALUES (?,?,?,?,?,?,?)`,
       [
         c.id,
         JSON.stringify(c.sequence),
@@ -333,7 +334,8 @@ export class Store {
       this.recordProgramVersion(t.id, existing.version, existing.program, Number(existing.updated_at));
     }
     this.db.run(
-      `INSERT OR REPLACE INTO tools (id, name, version, program, state, prev, created_at, updated_at, flags) VALUES (?,?,?,?,?,?,?,?,?)`,
+      `INSERT OR REPLACE INTO tools (id, name, version, program, state, prev, created_at, updated_at, ` +
+        `flags) VALUES (?,?,?,?,?,?,?,?,?)`,
       [
         t.id,
         t.name,
@@ -434,7 +436,8 @@ export class Store {
     const created =
       Number.isFinite(r.created_at) && (r.created_at as number) > 0 ? Math.round(r.created_at as number) : Date.now();
     this.db.run(
-      `INSERT INTO receipts (id, tool_id, version, ms, llm_calls, cents, ok, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO receipts (id, tool_id, version, ms, llm_calls, cents, ok, created_at, payload) VALUES ` +
+        `(?,?,?,?,?,?,?,?,?)`,
       [r.id ?? crypto.randomUUID(), r.tool_id, r.version, r.ms, r.llm_calls, r.cents, r.ok, created, r.payload ?? null],
     );
     const n = (this.db.query(`SELECT COUNT(*) as n FROM receipts`).get() as { n: number }).n;
@@ -508,7 +511,9 @@ export class Store {
   receiptStats(toolId: string): { n: number; ms: number; llm: number; cents: number; fail: number } {
     const row = this.db
       .query(
-        `SELECT COUNT(*) as n, COALESCE(SUM(ms),0) as ms, COALESCE(SUM(llm_calls),0) as llm, COALESCE(SUM(cents),0) as cents, COALESCE(SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END),0) as fail FROM receipts WHERE tool_id = ?`,
+        `SELECT COUNT(*) as n, COALESCE(SUM(ms),0) as ms, COALESCE(SUM(llm_calls),0) as llm, ` +
+          `COALESCE(SUM(cents),0) as cents, COALESCE(SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END),0) as fail FROM ` +
+          `receipts WHERE tool_id = ?`,
       )
       .get(toolId) as { n: number; ms: number; llm: number; cents: number; fail: number } | null;
     return row ?? { n: 0, ms: 0, llm: 0, cents: 0, fail: 0 };

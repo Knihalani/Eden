@@ -58,14 +58,16 @@ h1.display{
   font-weight:400;letter-spacing:-0.035em;line-height:1.12;
   max-width:20ch;margin:0;
 }
-h2{font-size:0.8rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:0.55rem}
+h2{font-size:0.8rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;\
+color:var(--muted);margin-bottom:0.55rem}
 .sub,.lede{color:var(--muted);text-wrap:pretty}
 .sub{font-size:1rem;margin-bottom:1.75rem;max-width:36ch;line-height:1.45}
 .lede{font-size:1.125rem;margin:1.35rem 0 1.9rem;max-width:32ch;line-height:1.45}
 .hero{min-height:calc(100svh - 7.5rem);display:flex;flex-direction:column;justify-content:center;padding-bottom:3rem}
 .path{list-style:none;margin:0;padding:2.5rem 0 0;display:grid;gap:1.35rem;max-width:34ch;counter-reset:step}
 .path li{padding-left:1.75rem;position:relative;color:var(--muted);font-size:0.98rem;line-height:1.45}
-.path li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:0.05em;color:var(--fg);font-variant-numeric:tabular-nums;font-size:0.8rem}
+.path li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:0.05em;\
+color:var(--fg);font-variant-numeric:tabular-nums;font-size:0.8rem}
 .path strong{display:block;color:var(--fg);font-weight:600;margin-bottom:0.15rem}
 pre{
   background:var(--well);border:1px solid var(--line);border-radius:8px;
@@ -73,7 +75,8 @@ pre{
   overflow-x:auto;margin:1rem 0;position:relative;
 }
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.84em}
-pre code{background:none;padding:0;color:color-mix(in oklch,var(--fg) 82%, var(--muted));white-space:pre-wrap;word-break:break-word}
+pre code{background:none;padding:0;color:color-mix(in oklch,var(--fg) 82%, var(--muted));\
+white-space:pre-wrap;word-break:break-word}
 .copy{
   position:absolute;top:0.55rem;right:0.55rem;min-height:32px;min-width:44px;
   background:transparent;border:1px solid var(--line);color:var(--muted);
@@ -99,14 +102,17 @@ textarea,input[type=text],input[type=password]{
   width:100%;background:transparent;border:0;border-bottom:1px solid var(--line);
   border-radius:0;color:var(--fg);font:inherit;padding:0.7rem 0;caret-color:var(--fg);
 }
-textarea{min-height:12rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.85rem;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:0.85rem 1rem;background:var(--well)}
+textarea{min-height:12rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.85rem;\
+resize:vertical;border:1px solid var(--line);border-radius:8px;padding:0.85rem 1rem;background:var(--well)}
 input:focus,textarea:focus{outline:none}
 input[type=text]:focus,input[type=password]:focus{border-bottom-color:var(--fg)}
 textarea:focus{border-color:var(--fg)}
-label{display:block;font-size:0.8rem;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:0.35rem;font-weight:600}
+label{display:block;font-size:0.8rem;letter-spacing:0.04em;text-transform:uppercase;\
+color:var(--muted);margin-bottom:0.35rem;font-weight:600}
 .field{margin-bottom:1.5rem;max-width:24rem}
 .muted{color:var(--muted);font-size:0.9rem}
-.figures{display:grid;gap:1rem 2rem;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));margin:1.75rem 0 2rem;padding:1.15rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.figures{display:grid;gap:1rem 2rem;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));\
+margin:1.75rem 0 2rem;padding:1.15rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .figures div{min-width:0}
 .figures dt{font-size:0.75rem;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:0.2rem}
 .figures dd{font-size:1.05rem;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
@@ -122,7 +128,8 @@ label{display:block;font-size:0.8rem;letter-spacing:0.04em;text-transform:upperc
 .tool-list .state{margin-left:auto;font-size:0.75rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
 .success{color:var(--fg)}
 .error-text{color:oklch(0.78 0.12 25);min-height:1.2em;font-size:0.9rem}
-footer.page{max-width:40rem;margin:0 auto;padding:0 1.35rem 2.4rem;color:var(--muted);font-size:0.78rem;line-height:1.45}
+footer.page{max-width:40rem;margin:0 auto;padding:0 1.35rem 2.4rem;color:var(--muted);\
+font-size:0.78rem;line-height:1.45}
 .hidden{display:none !important}
 .empty{padding:0.25rem 0}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:0.85rem 1.1rem;margin-top:1.6rem}
@@ -134,7 +141,8 @@ details.more{margin-top:2rem;color:var(--muted);font-size:0.9rem}
 details.more summary{cursor:pointer;color:var(--fg);font-weight:600;margin-bottom:0.5rem;list-style:none}
 details.more summary::-webkit-details-marker{display:none}
 .secret-note{margin-top:0.6rem;font-size:0.8rem;color:var(--muted)}
-.check{display:flex;gap:0.6rem;align-items:center;margin-top:0.85rem;font-size:0.9rem;color:var(--muted);font-weight:500}
+.check{display:flex;gap:0.6rem;align-items:center;margin-top:0.85rem;font-size:0.9rem;\
+color:var(--muted);font-weight:500}
 .check input{width:auto}
 :focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 @media (max-width:560px){
@@ -255,7 +263,8 @@ body.market .hold .go{
   font-size:clamp(1.8rem,5.5vw,3.6rem);letter-spacing:-0.05em;
   background:var(--cream);box-shadow:0 1.2rem 2.4rem oklch(0.4 0.03 260 / 0.18);
 }
-body.market .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+body.market .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;\
+clip:rect(0,0,0,0);border:0}
 @media (max-width:820px){
   body.market .hero{height:100svh;min-height:100svh;overflow:hidden}
   body.market .hero .brand-name{display:none}
@@ -269,7 +278,8 @@ body.market .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;ove
   body.market .stage-slot{width:100%;min-width:0;min-height:0;flex:0 0 auto;height:auto}
   body.market .stage-hit{height:auto}
   body.market .deck{position:relative;inset:auto;transform:none !important;display:block}
-  body.market .till{position:relative;height:calc(100svh - 14.5rem);min-height:0;max-height:calc(100svh - 14.5rem);overflow:hidden}
+  body.market .till{position:relative;height:calc(100svh - 14.5rem);min-height:0;\
+max-height:calc(100svh - 14.5rem);overflow:hidden}
   body.market .hold .go{width:calc(100% - 2rem);min-width:0;min-height:16svh;font-size:clamp(1.7rem,11vw,2.8rem)}
 }
 @media (prefers-reduced-motion:reduce){
@@ -278,7 +288,11 @@ body.market .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;ove
   body.market .deck{transform:none !important}
 }
 `;
-const COPY_SCRIPT = `async function copyText(el){var b=el.parentElement&&el.parentElement.querySelector('.copy');try{await navigator.clipboard.writeText((el.textContent||'').trim());if(b){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1200);}}catch(e){if(b){b.textContent='Copy failed';setTimeout(function(){b.textContent='Copy'},1600);}}}`;
+const COPY_SCRIPT =
+  `async function copyText(el){var b=el.parentElement&&el.parentElement.querySelector('.copy');` +
+  `try{await navigator.clipboard.writeText((el.textContent||'').trim());if(b){b.textContent='Copied';` +
+  `setTimeout(function(){b.textContent='Copy'},1200);}}catch(e){if(b){b.textContent='Copy failed';` +
+  `setTimeout(function(){b.textContent='Copy'},1600);}}}`;
 
 export function layout(title: string, body: string): string {
   return `<!doctype html>
@@ -291,7 +305,8 @@ export function layout(title: string, body: string): string {
 <link rel="icon" type="image/png" href="/favicon.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.bunny.net"/>
-<link rel="stylesheet" href="https://fonts.bunny.net/css?family=bricolage-grotesque:500,600,700|source-serif-4:400,600&amp;display=swap"/>
+<link rel="stylesheet" href="https://fonts.bunny.net/css?family=bricolage-grotesque:500,600,700|\
+source-serif-4:400,600&amp;display=swap"/>
 <style>${BASE_CSS}</style>
 </head>
 <body>
@@ -316,7 +331,8 @@ export function landingLayout(title: string, body: string): string {
 <link rel="icon" type="image/png" href="/favicon.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.bunny.net"/>
-<link rel="stylesheet" href="https://fonts.bunny.net/css?family=bricolage-grotesque:500,600,700|source-serif-4:400,600&amp;display=swap"/>
+<link rel="stylesheet" href="https://fonts.bunny.net/css?family=bricolage-grotesque:500,600,700|\
+source-serif-4:400,600&amp;display=swap"/>
 <style>${BASE_CSS}${MARKET_CSS}</style>
 </head>
 <body class="market">
@@ -335,7 +351,10 @@ function footer(): string {
 }
 
 export function brandLink(href: string): string {
-  return `<a class="brand" href="${href}" aria-label="Eden"><img class="brand-mark" src="/logo.webp" alt="" width="40" height="38" decoding="async"/><span class="brand-name">Eden</span></a>`;
+  return (
+    `<a class="brand" href="${href}" aria-label="Eden"><img class="brand-mark" src="/logo.webp" alt="" ` +
+    `width="40" height="38" decoding="async"/><span class="brand-name">Eden</span></a>`
+  );
 }
 
 /** Copy button bound to a sibling <code> block via copyText(). */
@@ -366,7 +385,8 @@ export function nav(active: string, signedIn: boolean): string {
     })
     .join("");
   const signOut = signedIn
-    ? `<form method="post" action="/v1/logout" style="display:inline;margin:0"><button type="submit" class="link">Sign out</button></form>`
+    ? `<form method="post" action="/v1/logout" style="display:inline;margin:0"><button type="submit" ` +
+      `class="link">Sign out</button></form>`
     : "";
   return `<header class="top">${brandLink(brandHref)}<nav class="nav">${links}${signOut}</nav></header>`;
 }

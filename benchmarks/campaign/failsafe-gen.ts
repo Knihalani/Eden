@@ -359,7 +359,8 @@ export function assertEdenAbsentEquivalent(spec: FuzzCase, raw: MutationMap, wra
     const programmed = spec.sequence.filter((t) => t === tool).length;
     if (w > programmed) {
       throw new Error(
-        `divergence wrapped>programmed ${key} wrapped=${w} programmed=${programmed} | ${formatCase(spec, raw, wrapped)}`,
+        `divergence wrapped>programmed ${key} wrapped=${w} programmed=${programmed} | ` +
+          `${formatCase(spec, raw, wrapped)}`,
       );
     }
   }

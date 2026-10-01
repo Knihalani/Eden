@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { atomize, splitFacts, splitIcl } from "./atoms.ts";
 
 describe("atomize ICL", () => {
-  const blob = `I've already tried 5 times to complete a transfer that's just standard. What's the deal? Is your system down at this time?
+  const blob = `I've already tried 5 times to complete a transfer that's just standard. What's the deal? Is your \
+system down at this time?
 label: 73
 
 I would like some more physical cards, what is my limit?
@@ -90,7 +91,8 @@ System: Try The Hangover (2009)
 8. The chairperson of Fatah is Alice Example.
 `;
     expect(atomize(chairs).kind).toBe("facts");
-    const icl = `I've already tried 5 times to complete a transfer that's just standard. What's the deal? Is your system down at this time?
+    const icl = `I've already tried 5 times to complete a transfer that's just standard. What's the deal? Is your \
+system down at this time?
 label: 73
 
 I would like some more physical cards, what is my limit?

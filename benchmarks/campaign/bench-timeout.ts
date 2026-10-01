@@ -99,7 +99,8 @@ async function main() {
     rows.push(r);
     const mark = r.violations.length ? "FAIL" : r.deopt ? "DEOPT-CLAIM" : "COMPLETE";
     console.log(
-      `  timeout=${timeoutMs} slow=${slow} → ${mark} writes=${r.writes} notified=${r.notified} wall=${r.wallMs.toFixed(0)}ms`,
+      `  timeout=${timeoutMs} slow=${slow} → ${mark} writes=${r.writes} notified=${r.notified} ` +
+        `wall=${r.wallMs.toFixed(0)}ms`,
     );
     if (r.violations.length) {
       console.error("exactly-once violated", r.violations);
@@ -121,7 +122,8 @@ async function main() {
   const tableRows = rows
     .map(
       (r) =>
-        `| ${r.timeoutMs} | ${r.writes} | ${r.notified} | ${r.deopt ? "deopt-claim" : "complete"} | ${r.wallMs.toFixed(0)} |`,
+        `| ${r.timeoutMs} | ${r.writes} | ${r.notified} | ${r.deopt ? "deopt-claim" : "complete"} | ` +
+        `${r.wallMs.toFixed(0)} |`,
     )
     .join("\n");
   const md = `# Timeout default (Wave 4.4)
@@ -132,7 +134,8 @@ Measured ${new Date().toISOString()} on this machine. Gated: exactly-once on eve
 
 Campaign-class tools sleep ~8ms. Measured p50 **${dist.p50.toFixed(2)} ms**, p99 **${dist.p99.toFixed(2)} ms**.
 
-A compiled stretch of 4 such tools is ~${(dist.p99 * 4).toFixed(0)} ms p99. The wrap ceiling must sit **above** that, or healthy stretches deopt after a write (P3 class).
+A compiled stretch of 4 such tools is ~${(dist.p99 * 4).toFixed(0)} ms p99. The wrap ceiling must \
+sit **above** that, or healthy stretches deopt after a write (P3 class).
 
 ## Sweep (slowJudge = ${slow} ms)
 
@@ -140,18 +143,23 @@ A compiled stretch of 4 such tools is ~${(dist.p99 * 4).toFixed(0)} ms p99. The 
 |---|---|---|---|---|
 ${tableRows}
 
-Deopt-claim (timeout < slow) is **correctness-WIN**: applyCredit once, email not guessed. Completing (timeout > slow) is **turns-WIN**: the compiled run finishes.
+Deopt-claim (timeout < slow) is **correctness-WIN**: applyCredit once, email not guessed. \
+Completing (timeout > slow) is **turns-WIN**: the compiled run finishes.
 
 ## Justified default
 
 \`DEFAULT_WRAP_TIMEOUT_MS = ${DEFAULT_WRAP_TIMEOUT_MS}\` (${DEFAULT_WRAP_TIMEOUT_MS / 1000}s).
 
-- Must exceed p99 of a healthy compiled stretch. Campaign p99×4 ≈ ${(dist.p99 * 4).toFixed(0)} ms; production HTTP p99 is seconds.
+- Must exceed p99 of a healthy compiled stretch. Campaign p99×4 ≈ ${(dist.p99 * 4).toFixed(0)} ms; \
+production HTTP p99 is seconds.
 - 8s is the hook self-cap (R5), a different path.
 - 60s matches \`ARM_TTL_MS\` so a settled arming and the run share a clock; the 300s cap remains the hard ceiling.
-- Test/campaign probe is \`CAMPAIGN_WRAP_TIMEOUT_MS\` (default ${probe} ms) — **not** the product default. Short timeouts exist to pin P3, not to ship.
+- Test/campaign probe is \`CAMPAIGN_WRAP_TIMEOUT_MS\` (default ${probe} ms) — **not** the product \
+default. Short timeouts exist to pin P3, not to ship.
 
-Lowering the default to the probe (120 ms) would deopt every compiled stretch whose tools sum past 120 ms. That cell is a LOSS on wall and a correctness-only WIN. The product default stays 60s because the complete-cell at 8s/60s is the gated benefit of waiting for a healthy run.
+Lowering the default to the probe (120 ms) would deopt every compiled stretch whose tools sum past \
+120 ms. That cell is a LOSS on wall and a correctness-only WIN. The product default stays 60s \
+because the complete-cell at 8s/60s is the gated benefit of waiting for a healthy run.
 `;
   const out = resolve(import.meta.dir, "TIMEOUT.md");
   writeFileSync(out, md);

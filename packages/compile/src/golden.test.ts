@@ -61,7 +61,10 @@ function shape(step: Step): string {
   if (step.kind === "loop") return `loop ${step.id} over ${bindingKind(step.over)} body=${step.body.join("+")}`;
   if (step.kind === "branch") {
     const cases = (step.cases ?? []).map((c) => `${c.expr}->${c.steps.join("+")}`).join(";");
-    return `branch ${step.expr} then=${step.then.join("+")} else=${(step.else ?? []).join("+")}${cases ? ` cases=${cases}` : ""}`;
+    return (
+      `branch ${step.expr} then=${step.then.join("+")} ` +
+      `else=${(step.else ?? []).join("+")}${cases ? ` cases=${cases}` : ""}`
+    );
   }
   return `assert ${step.expr} onFail=${step.onFail}`;
 }

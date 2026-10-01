@@ -122,7 +122,8 @@ export function toolRowToProgram(row: ToolRow): StretchProgram {
 export async function liveTools(db: EdenDb, workspaceId: string): Promise<ToolRow[]> {
   return db.all<ToolRow>(
     listPublishedOnly()
-      ? `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on' AND published = 1`
+      ? `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on' ` +
+          `AND published = 1`
       : `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on'`,
     [workspaceId],
   );

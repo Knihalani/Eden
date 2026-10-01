@@ -118,17 +118,24 @@ function extractBashEvents(text: string): ToolEvent[] {
 }
 
 function taskPrompts(work: string) {
-  const t1 = `You are a product analyst. Work only in ${work}. Do not modify any other repo. Do not read .env or secrets. Do not write code or tests.
+  const t1 = `You are a product analyst. Work only in ${work}. Do not modify any other repo. Do not read .env or \
+secrets. Do not write code or tests.
 
-For EACH of these GitHub PRs in ${REPO}, fetch with separate \`gh api\` REST calls (pull JSON, reviews list, combined commit status). PRs: ${PRS_LEARN.join(", ")}.
-Write decisions/prs.json as an array of {number, title, reviews, status} where reviews is an integer count and status is the combined CI state string (success|failure|pending|error), not a nested object.
+For EACH of these GitHub PRs in ${REPO}, fetch with separate \`gh api\` REST calls (pull JSON, \
+reviews list, combined commit status). PRs: ${PRS_LEARN.join(", ")}.
+Write decisions/prs.json as an array of {number, title, reviews, status} where reviews is an \
+integer count and status is the combined CI state string (success|failure|pending|error), not a \
+nested object.
 Write memo.md summarizing what you found. Then stop.`;
 
   const t2 = `Continue the analysis in ${work}. Do not modify any other repo. Do not write a coding CLI.
 
-Fetch PRs ${PRS_MORE.join(", ")} the same way (pull + reviews + status) AND also \`gh api repos/${REPO}/pulls/{n}/files\` for every PR in ${PRS_ALL.join(", ")} (re-fetch the earlier ones too).
-decisions/prs.json becomes {number, title, reviews, status, files} with reviews and files as integers and status as the combined CI state string.
-Write rank.md ranking those PRs. If Eden MCP offers github_pr_bundle or similar, use it instead of repeating gh api for title/reviews/status. Then stop.`;
+Fetch PRs ${PRS_MORE.join(", ")} the same way (pull + reviews + status) AND also \`gh api \
+repos/${REPO}/pulls/{n}/files\` for every PR in ${PRS_ALL.join(", ")} (re-fetch the earlier ones too).
+decisions/prs.json becomes {number, title, reviews, status, files} with reviews and files as \
+integers and status as the combined CI state string.
+Write rank.md ranking those PRs. If Eden MCP offers github_pr_bundle or similar, use it instead of \
+repeating gh api for title/reviews/status. Then stop.`;
 
   const t3 = `Finish the analysis in ${work}. Do not modify any other repo.
 

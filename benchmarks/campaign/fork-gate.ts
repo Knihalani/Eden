@@ -18,7 +18,8 @@ import { compileTraces, type CompileResult } from "@eden/compile";
  * MAX_PROGRAMS overflow are named refusals. Not thrash-enforce.
  */
 export const EXPECT =
-  "CI-gate mines 1 branched program; min-3 per arm, empty output, unbound mutating write (underdetermined_write), and 25th program is max_programs — not a silent drop.";
+  "CI-gate mines 1 branched program; min-3 per arm, empty output, unbound mutating write " +
+  "(underdetermined_write), and 25th program is max_programs — not a silent drop.";
 
 export const MAX_PROGRAMS = 24;
 

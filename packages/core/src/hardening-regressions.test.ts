@@ -42,7 +42,8 @@ describe("named cli dedupe respects mutation", () => {
     // reconstruction `curl ${url}` still loses the flags; the point here is
     // that mutating segments are never collapsed.)
     const calls = extractNamedCliCalls(
-      "curl -X POST https://api.acme.com/v1/orders -d amount=1 ; curl -X POST https://api.acme.com/v1/orders -d amount=2",
+      "curl -X POST https://api.acme.com/v1/orders -d amount=1 ; curl -X POST " +
+        "https://api.acme.com/v1/orders -d amount=2",
     );
     expect(calls.length).toBe(2);
   });
@@ -54,7 +55,8 @@ describe("named cli dedupe respects mutation", () => {
 
   test("a mutating curl in one segment does not un-dedupe reads in another", () => {
     const calls = extractNamedCliCalls(
-      "curl -X POST https://api.acme.com/v1/orders ; curl https://api.acme.com/v1/orders/1 ; curl https://api.acme.com/v1/orders/1",
+      "curl -X POST https://api.acme.com/v1/orders ; curl https://api.acme.com/v1/orders/1 ; curl " +
+        "https://api.acme.com/v1/orders/1",
     );
     // The POST plus exactly one copy of the repeated GET.
     expect(calls.length).toBe(2);

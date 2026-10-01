@@ -27,7 +27,9 @@ const ROOT = join(import.meta.dir, "../..");
 const ON_JOB = join(import.meta.dir, "jobs/eden-m153-on-google-gemma-4-31b-it");
 const HAS_JOBS = existsSync(ON_JOB);
 const OPENSSL_CUE = "Create a self-signed TLS certificate using OpenSSL. Save the SHA-256 fingerprint.";
-const SQLITE_PACKET = `${MEMORY_MARK}\n- sqlite is the database.\n- Auth is Clerk.\n- CI is CircleCI.\n- postgres is the session store.\n- Kai is on a peanut diet.`;
+const SQLITE_PACKET =
+  `${MEMORY_MARK}\n- sqlite is the database.\n- Auth is Clerk.\n- CI is CircleCI.\n- postgres is the ` +
+  `session store.\n- Kai is on a peanut diet.`;
 const OPENSSL_PACKET = `${MEMORY_MARK}\n- Use openssl req to mint a TLS cert.\n- Record the SHA-256 fingerprint.`;
 const REGEX_PACKET = `${MEMORY_MARK}\n- Parse the log with a regex capture.`;
 

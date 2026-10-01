@@ -34,8 +34,11 @@ export const PUBLIC_COPY_PATHS = [
 
 const WIN_IDS = new Set(PUBLIC_CLAIMS.filter((c) => c.kind === "win").map((c) => c.id));
 
-const INVOICE_DISCLAIMER =
-  /not a live|retired|no live Claude Code invoice|this quote is retired|missing invoice|^\s*name:|id:\s*"s1b-live-invoice"/i;
+const INVOICE_DISCLAIMER = new RegExp(
+  String.raw`not a live|retired|no live Claude Code invoice|this quote is retired|missing invoice|` +
+    String.raw`^\s*name:|id:\s*"s1b-live-invoice"`,
+  "i",
+);
 
 export function scanPublicText(file: string, text: string): PublishFinding[] {
   const findings: PublishFinding[] = [];

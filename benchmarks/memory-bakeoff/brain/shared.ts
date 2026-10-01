@@ -8,9 +8,10 @@ export const LOCOMO = process.env.LOCOMO_PATH || "/tmp/eden-mem-bakeoff/locomo10
 export const LOCOMO_URL = "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json";
 
 export const STOP = new Set(
-  "the of is a an on to and in for this that with from into about these then still has out how what why was are you your its our not or no hey hi hello yeah yes ok okay thanks thank".split(
-    " ",
-  ),
+  (
+    "the of is a an on to and in for this that with from into about these then still has out how what " +
+    "why was are you your its our not or no hey hi hello yeah yes ok okay thanks thank"
+  ).split(" "),
 );
 
 export type Turn = { text: string; speaker: string; session: number; date: string; at: number };

@@ -1082,7 +1082,9 @@ function diagnoseUnboundForeach(
       slot: tool,
       code: "unbound_foreach",
       repeats: times,
-      hint: `${tool} repeated ${times} times with no prior read to bind as the loop source. Return one array of the items the loop will walk.`,
+      hint:
+        `${tool} repeated ${times} times with no prior read to bind as the loop source. Return one array of ` +
+        `the items the loop will walk.`,
     };
   }
   for (const t of traces) {
@@ -1098,7 +1100,9 @@ function diagnoseUnboundForeach(
         code: "read_set_mismatch",
         readSet,
         repeats,
-        hint: `${priorTool} returned ${readSet}; ${tool} ran ${repeats} times. Expose the full array the loop iterates, or iterate once per item.`,
+        hint:
+          `${priorTool} returned ${readSet}; ${tool} ran ${repeats} times. Expose the full array the loop ` +
+          `iterates, or iterate once per item.`,
       };
     }
     const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
@@ -1112,7 +1116,9 @@ function diagnoseUnboundForeach(
         code: "read_set_mismatch",
         readSet: other.arr.length,
         repeats: need,
-        hint: `${priorTool} returned ${other.arr.length}; ${tool} ran ${need} times. Expose the full array the loop iterates, or iterate once per item.`,
+        hint:
+          `${priorTool} returned ${other.arr.length}; ${tool} ran ${need} times. Expose the full array the ` +
+          `loop iterates, or iterate once per item.`,
       };
     }
   }
@@ -1122,7 +1128,9 @@ function diagnoseUnboundForeach(
     slot: tool,
     code: "unbound_foreach",
     repeats: times,
-    hint: `${tool} repeated ${times} times but no prior step returned an array of that length. Return one array of the items the loop will walk.`,
+    hint:
+      `${tool} repeated ${times} times but no prior step returned an array of that length. Return one ` +
+      `array of the items the loop will walk.`,
   };
 }
 
@@ -1869,7 +1877,10 @@ type RemineSlot = {
 const remineLru: RemineSlot[] = [];
 
 function compileOptsKey(opts: CompileOpts): string {
-  return `${opts.minSupport ?? ""}|${opts.allowExact === true ? 1 : 0}|${opts.minLlmReduction ?? ""}|${opts.maxGram ?? ""}`;
+  return (
+    `${opts.minSupport ?? ""}|${opts.allowExact === true ? 1 : 0}|${opts.minLlmReduction ?? ""}|` +
+    `${opts.maxGram ?? ""}`
+  );
 }
 
 function remineSnapshot(raw: StretchTrace[]): Pick<RemineSlot, "refs" | "eventRefs" | "inputRefs"> {
@@ -2117,7 +2128,9 @@ function compileAll(
                   reason: `${tool}.${key}: ${bound.reason}`,
                   slot: `${tool}.${key}`,
                   code: "underdetermined_write",
-                  hint: `${tool}.${key} could not be bound (${bound.reason}). Name the path from input or a prior step.`,
+                  hint:
+                    `${tool}.${key} could not be bound (${bound.reason}). Name the path from input or a prior ` +
+                    `step.`,
                 };
                 break;
               }
@@ -2178,7 +2191,9 @@ function compileAll(
                   reason: `${tool}.${key}: ${bound.reason}`,
                   slot: `${tool}.${key}`,
                   code: "underdetermined_write",
-                  hint: `${tool}.${key} could not be bound (${bound.reason}). Name the path from input or a prior step.`,
+                  hint:
+                    `${tool}.${key} could not be bound (${bound.reason}). Name the path from input or a prior ` +
+                    `step.`,
                 };
                 break;
               }
@@ -2243,7 +2258,9 @@ function compileAll(
                   reason: `${tool}.${key}: ${bound.reason}`,
                   slot: `${tool}.${key}`,
                   code: "underdetermined_write",
-                  hint: `${tool}.${key} could not be bound (${bound.reason}). Name the path from input or a prior step.`,
+                  hint:
+                    `${tool}.${key} could not be bound (${bound.reason}). Name the path from input or a prior ` +
+                    `step.`,
                 };
                 break;
               }
@@ -2309,7 +2326,9 @@ function compileAll(
             reason: `${tool} commands are under-determined`,
             slot: tool,
             code: "underdetermined_command",
-            hint: `${tool} command strings could not be bound from witnessed inputs. Eden will not guess a shell command.`,
+            hint:
+              `${tool} command strings could not be bound from witnessed inputs. Eden will not guess a shell ` +
+              `command.`,
           };
           break;
         }
@@ -2402,7 +2421,9 @@ function compileAll(
           reason: `${tool} arguments are under-determined`,
           slot: tool,
           code: "underdetermined_write",
-          hint: `${tool} arguments could not be bound from input or a prior step. Pass the write arguments explicitly — Eden will not guess.`,
+          hint:
+            `${tool} arguments could not be bound from input or a prior step. Pass the write arguments ` +
+            `explicitly — Eden will not guess.`,
         };
         break;
       }
@@ -2484,7 +2505,8 @@ function compileAll(
           {
             sequence,
             reason:
-              "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding.",
+              "All witnesses produced empty or identical output. Eden compiles stretches that produce useful " +
+              "results — check that your agent's tool calls are succeeding.",
             code: "empty_output",
             hint: "Check that the agent's tool calls succeed and return a useful result.",
           },
@@ -2499,7 +2521,8 @@ function compileAll(
           {
             sequence,
             reason:
-              "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
+              "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single " +
+              "calls — single tool calls don't benefit from compilation.",
             code: "too_short",
             hint: "Wrap a stretch of at least three steps.",
           },
@@ -2517,7 +2540,9 @@ function compileAll(
           {
             sequence,
             reason:
-              "No witnessed input values found. Eden needs at least one recorded input parameter across your traces to know what values are valid. Make sure your agent passes arguments (IDs, paths, queries) rather than calling tools with no arguments.",
+              "No witnessed input values found. Eden needs at least one recorded input parameter across your " +
+              "traces to know what values are valid. Make sure your agent passes arguments (IDs, paths, " +
+              "queries) rather than calling tools with no arguments.",
             code: "no_envelope",
             hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
           },
@@ -2551,7 +2576,9 @@ function compileAll(
         return [k, { type: t }];
       }),
     );
-    const description = `Run the repeating stretch as one tool: ${sequence.join(" → ")}. Prefer this over calling those tools one at a time.`;
+    const description =
+      `Run the repeating stretch as one tool: ${sequence.join(" → ")}. Prefer this over calling those ` +
+      `tools one at a time.`;
     const drafted = withVersion({
       id: `cand_${programs.length + refusals.length + 1}`,
       name: label,
@@ -2613,7 +2640,8 @@ function compileAll(
               sequence,
               reason:
                 refuse?.reason ??
-                "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
+                "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. " +
+                  "Eden refuses to guess.",
               code: refuse?.code ?? "unbound_branch",
               hint: refuse?.hint ?? "Bind every branch arm from recorded witnesses. Eden will not guess.",
               slot: refuse?.slot,
@@ -2630,7 +2658,8 @@ function compileAll(
             {
               sequence,
               reason:
-                "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
+                "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single " +
+                "calls — single tool calls don't benefit from compilation.",
               code: "too_short",
               hint: "Wrap a stretch of at least three steps.",
             },
@@ -2648,7 +2677,8 @@ function compileAll(
             {
               sequence,
               reason:
-                "No witnessed input values found across the branched traces. Eden needs at least one recorded input parameter to know what values are valid.",
+                "No witnessed input values found across the branched traces. Eden needs at least one recorded input " +
+                "parameter to know what values are valid.",
               code: "no_envelope",
               hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
             },
@@ -2664,7 +2694,8 @@ function compileAll(
             {
               sequence,
               reason:
-                "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results.",
+                "All witnesses produced empty or identical output. Eden compiles stretches that produce useful " +
+                "results.",
               code: "empty_output",
               hint: "Check that the agent's tool calls succeed and return a useful result.",
             },
@@ -2738,7 +2769,9 @@ function compileAll(
                 sequence,
                 reason: `Agent ${agent} stretch did not compile. Eden will not guess a composed handoff.`,
                 code: "invalid_program",
-                hint: `Compile the ${agent} stretch on its own witnesses first. A mutating step that cannot bind will refuse rather than compose.`,
+                hint:
+                  `Compile the ${agent} stretch on its own witnesses first. A mutating step that cannot bind will ` +
+                  `refuse rather than compose.`,
               };
           break;
         }
@@ -2758,7 +2791,8 @@ function compileAll(
             {
               sequence,
               reason:
-                "This handoff's child programs need inputs that were not witnessed on the orchestrator run. Eden will not guess.",
+                "This handoff's child programs need inputs that were not witnessed on the orchestrator run. Eden " +
+                "will not guess.",
               code: "no_envelope",
               hint: "Pass the child programs' arguments on the parent/intake input.",
             },
@@ -2885,11 +2919,13 @@ function compileAll(
   if (process.env.EDEN_DEBUG_FORK === "1") {
     const forks = findForkedGroups(traces, opts.minSupport);
     console.error(
-      `[fork-debug] traces=${traces.length} minSupport=${opts.minSupport} forks=${forks.length} programs=${programs.length}`,
+      `[fork-debug] traces=${traces.length} minSupport=${opts.minSupport} forks=${forks.length} ` +
+        `programs=${programs.length}`,
     );
     for (const f of forks) {
       console.error(
-        `  fork: prefix=[${f.prefixNames}] field=${f.field} thenVal=${f.thenValue} nA=${f.thenTraces.length} nB=${f.elseTraces.length}`,
+        `  fork: prefix=[${f.prefixNames}] field=${f.field} thenVal=${f.thenValue} ` +
+          `nA=${f.thenTraces.length} nB=${f.elseTraces.length}`,
       );
     }
   }

@@ -365,7 +365,8 @@ function renderMarkdown(
     : "full (modest stretch counts)";
   lines.push(`Mode: ${mode}`);
   lines.push(
-    `Design: ${meta.repeats} A/A pairs × ${meta.stretches} stretches/session (scenario-specific; see runner), \`CAMPAIGN_THINK_MS=${process.env.CAMPAIGN_THINK_MS}\`.`,
+    `Design: ${meta.repeats} A/A pairs × ${meta.stretches} stretches/session (scenario-specific; see ` +
+      `runner), \`CAMPAIGN_THINK_MS=${process.env.CAMPAIGN_THINK_MS}\`.`,
   );
   lines.push("");
   lines.push("## Frozen formulas");
@@ -383,7 +384,8 @@ function renderMarkdown(
   lines.push("## Per-scenario MDE (wall_ms)");
   lines.push("");
   lines.push(
-    "| scenario | kind | n pairs | stability | relSd | MDE@8 abs / rel | MDE@12 abs / rel | MDE@16 abs / rel | P(sign-flip)\\|0.1% @8 | P(LOSS)\\|0.1% @8 |",
+    "| scenario | kind | n pairs | stability | relSd | MDE@8 abs / rel | MDE@12 abs / rel | MDE@16 abs " +
+      "/ rel | P(sign-flip)\\|0.1% @8 | P(LOSS)\\|0.1% @8 |",
   );
   lines.push("|---|---|---:|---:|---:|---|---|---|---:|---:|");
   for (const r of rows) {
@@ -419,7 +421,8 @@ function renderMarkdown(
     for (const r of noisy) {
       const m8 = r.cal.mde.find((m) => m.n === 8)!;
       lines.push(
-        `| ${r.name} | ${r.cal.stability.toFixed(3)} | ${fmtPct(r.cal.relativeSd)} | ${fmtPct(m8.relative)} | correctness / compile outcome; not wall_ms |`,
+        `| ${r.name} | ${r.cal.stability.toFixed(3)} | ${fmtPct(r.cal.relativeSd)} | ${fmtPct(m8.relative)} ` +
+          `| correctness / compile outcome; not wall_ms |`,
       );
     }
   }
@@ -433,7 +436,8 @@ function renderMarkdown(
 function printTable(rows: Row[]): void {
   console.log("\n==================== NOISE FLOOR ====================");
   console.log(
-    `${"scenario".padEnd(22)} ${"stab".padStart(5)} ${"relSd".padStart(8)} ${"MDE@8".padStart(14)} ${"MDE@12".padStart(14)} ${"MDE@16".padStart(14)} ${"flip@8".padStart(8)} ${"LOSS@8".padStart(8)}`,
+    `${"scenario".padEnd(22)} ${"stab".padStart(5)} ${"relSd".padStart(8)} ${"MDE@8".padStart(14)} ` +
+      `${"MDE@12".padStart(14)} ${"MDE@16".padStart(14)} ${"flip@8".padStart(8)} ${"LOSS@8".padStart(8)}`,
   );
   for (const r of rows) {
     const m8 = r.cal.mde.find((m) => m.n === 8)!;
@@ -457,7 +461,8 @@ function printTable(rows: Row[]): void {
 
 async function main() {
   console.log(
-    `Noise-floor calibration — fast=${FAST} think_ms=${process.env.CAMPAIGN_THINK_MS} repeats=${REPEATS} stretches≈${STRETCHES}`,
+    `Noise-floor calibration — fast=${FAST} think_ms=${process.env.CAMPAIGN_THINK_MS} ` +
+      `repeats=${REPEATS} stretches≈${STRETCHES}`,
   );
   const specs = buildSpecs();
   const rows: Row[] = [];

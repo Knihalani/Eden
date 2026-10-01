@@ -162,7 +162,8 @@ export async function runAmbitiousCases(): Promise<CaseRow[]> {
         (mem) => {
           mem.observe([{ role: "user", content: "Auth is Clerk." }]);
         },
-        "please look at the middleware and the session helper and tell me if auth is wired the way we wanted for the new dashboard rewrite",
+        "please look at the middleware and the session helper and tell me if auth is wired the way we " +
+          "wanted for the new dashboard rewrite",
         ["Clerk"],
       ),
   );
@@ -383,7 +384,8 @@ export function renderAmbitiousResults(rows: CaseRow[]): string {
     const dHit = r.wantSilent ? (r.defaultSilent ? "omit" : "LEAK") : r.defaultHit ? "yes" : "MISS";
     const aHit = r.wantSilent ? (r.auroraSilent ? "omit" : "LEAK") : r.auroraHit ? "yes" : "MISS";
     lines.push(
-      `| ${r.id} | ${r.gold.join(", ") || "—"} | ${dHit} | ${aHit} | ${r.defaultSilent} | ${r.auroraSilent} | ${r.auroraBytes - r.defaultBytes} |`,
+      `| ${r.id} | ${r.gold.join(", ") || "—"} | ${dHit} | ${aHit} | ${r.defaultSilent} | ` +
+        `${r.auroraSilent} | ${r.auroraBytes - r.defaultBytes} |`,
     );
   }
   const need = rows.filter((r) => !r.wantSilent);

@@ -133,7 +133,8 @@ export function createHandler(opts: ServerOpts) {
   const refusedDevFallback = token === "eden_dev" && isManagedDeployment() && process.env.EDEN_DEV !== "1";
   if (refusedDevFallback) {
     console.error(
-      "[eden] EDEN_API_KEY is not set on a managed install; refusing the public dev credential — set EDEN_API_KEY (or EDEN_DEV=1 for a deliberate dev install)",
+      "[eden] EDEN_API_KEY is not set on a managed install; refusing the public dev credential — set " +
+        "EDEN_API_KEY (or EDEN_DEV=1 for a deliberate dev install)",
     );
     token = undefined;
   }

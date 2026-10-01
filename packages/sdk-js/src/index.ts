@@ -64,13 +64,22 @@ const seqByRun = new Map<string, number>();
  * cross-checked matchers). Covers the high-frequency families: secret-named
  * keys and bearer/api-key shaped values.
  */
-const SECRET_KEY =
-  /(pass(word|wd|phrase)?|secret|api[-_]?key|access[-_]?key|token|auth(orization)?|credential|cookie|jwt|bearer|private[-_]?key|session)/i;
-const SECRET_VALUE =
-  /(\bsk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{8,}|\bAKIA[0-9A-Z]{12,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{30,})/g;
+const SECRET_KEY = new RegExp(
+  String.raw`(pass(word|wd|phrase)?|secret|api[-_]?key|access[-_]?key|token|auth(orization)?|credential|` +
+    String.raw`cookie|jwt|bearer|private[-_]?key|session)`,
+  "i",
+);
+const SECRET_VALUE = new RegExp(
+  String.raw`(\bsk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{8,}|\bAKIA[0-9A-Z]{12,}|` +
+    String.raw`\bxox[baprs]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{30,})`,
+  "g",
+);
 
-const SECRET_ASSIGNMENT =
-  /([\w.-]*(?:password|passwd|secret|api[_-]?key|token|authorization|credential)[\w.-]*)\s*[:=]\s*("?)[^\s",]+/gi;
+const SECRET_ASSIGNMENT = new RegExp(
+  String.raw`([\w.-]*(?:password|passwd|secret|api[_-]?key|token|authorization|` +
+    String.raw`credential)[\w.-]*)\s*[:=]\s*("?)[^\s",]+`,
+  "gi",
+);
 
 function scrub(value: unknown, depth = 0): unknown {
   if (depth > 6) return value; // bounded: hostile graphs cannot recurse forever

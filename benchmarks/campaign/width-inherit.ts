@@ -23,7 +23,8 @@ import { compileTraces, inheritWidth, type WidthInheritReceipt } from "@eden/com
  * bad receipt does not inherit
  */
 export const EXPECT =
-  "mined at width 10; 2 clean width-7 receipts stay OOD; 3rd inherits; 4th width-7 stretch inDistribution; bad receipt does not inherit";
+  "mined at width 10; 2 clean width-7 receipts stay OOD; 3rd inherits; 4th width-7 stretch " +
+  "inDistribution; bad receipt does not inherit";
 
 export const MINED_WIDTH = 10;
 export const SIBLING_WIDTH = 7;

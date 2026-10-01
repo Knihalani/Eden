@@ -50,7 +50,11 @@ function withoutControlDenials(src: string): string {
     .replace(/\bnot\s+(?:an?\s+)?EDEN_MEMORY\s*=\s*["']?0\b/gi, " ")
     .replace(/\b(?:never|without|absent|missing)\s+(?:an?\s+)?EDEN_MEMORY\s*=\s*["']?0\b/gi, " ")
     .replace(
-      /\b(?:did|does|do|has|have|had)\s+not\s+(?:run|include|have|use|name|record)\b[^.\n]{0,24}?\bEDEN_MEMORY\s*=\s*["']?0\b/gi,
+      new RegExp(
+        String.raw`\b(?:did|does|do|has|have|had)\s+not\s+` +
+          String.raw`(?:run|include|have|use|name|record)\b[^.\n]{0,24}?\bEDEN_MEMORY\s*=\s*["']?0\b`,
+        "gi",
+      ),
       " ",
     )
     .replace(/\bwithout\s+(?:an?\s+)?(?:EDEN_MEMORY\s*=\s*["']?0|off(?:\s+arm)?|no-memory(?:\s+control)?)\b/gi, " ")

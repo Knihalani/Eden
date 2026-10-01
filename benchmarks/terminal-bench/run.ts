@@ -946,7 +946,8 @@ function namedErrors(arm: ArmResult, pred: (t: TrialRow) => boolean): string {
 export function memoryDeltaNotes(off: ArmResult, on: ArmResult): string[] {
   const notes: string[] = [];
   notes.push(
-    "Accuracy is Harbor's own mean over n_total_trials (errored trials counted as 0 in that mean). n_resolved/n_trials is also published. Errored trials are named exceptions, not silent reward 0.0.",
+    "Accuracy is Harbor's own mean over n_total_trials (errored trials counted as 0 in that mean). " +
+      "n_resolved/n_trials is also published. Errored trials are named exceptions, not silent reward 0.0.",
   );
   const regexOff = namedErrors(off, (t) => t.trial.startsWith("regex-log") && Boolean(t.error));
   const regexOn = namedErrors(on, (t) => t.trial.startsWith("regex-log") && Boolean(t.error));
@@ -962,7 +963,9 @@ export function memoryDeltaNotes(off: ArmResult, on: ArmResult): string[] {
   const onRt = namedErrors(on, (t) => t.error === "RuntimeError" && !t.trial.startsWith("regex-log"));
   if (on.n_errored > off.n_errored) {
     notes.push(
-      `On-arm had more errors (${on.n_errored} vs off ${off.n_errored}): RuntimeError tmux also hit openssl (${onRt || "none"})${onBg ? `; BadGatewayError on ${onBg}` : ""}. Δ is not a clean memory effect.`,
+      `On-arm had more errors (${on.n_errored} vs off ${off.n_errored}): RuntimeError tmux also hit ` +
+        `openssl (${onRt || "none"})${onBg ? `; BadGatewayError on ${onBg}` : ""}. Δ is not a clean memory ` +
+        `effect.`,
     );
   }
   notes.push("NVIDIA hosted trial list price is $0/MTok; token counts are reported, $ Δ is $0.0000.");
@@ -1028,7 +1031,8 @@ export function pendingResultsReport(date = new Date().toISOString().slice(0, 10
     blockers: [],
     notes: [
       ...LOCKED_NOTES,
-      "M32 Harbor fill pending — orchestrator will re-run. Frozen M15 Δ is in benchmarks/memoryagentbench/M15-EVIDENCE.md.",
+      "M32 Harbor fill pending — orchestrator will re-run. Frozen M15 Δ is in " +
+        "benchmarks/memoryagentbench/M15-EVIDENCE.md.",
     ],
   };
 }
@@ -1044,7 +1048,8 @@ export function renderResults(r: RunReport): string {
     lines.push("");
   }
   lines.push(
-    "Own schema (not MAB Table 3 / not LME-V2). Absolute % is the **agent** (**terminus-2**), not Eden. Memory claim is **Δ** vs the same locked harness (Plan §9.2 CLI SOTA: k=5, wrap ± inject).",
+    "Own schema (not MAB Table 3 / not LME-V2). Absolute % is the **agent** (**terminus-2**), not Eden. " +
+      "Memory claim is **Δ** vs the same locked harness (Plan §9.2 CLI SOTA: k=5, wrap ± inject).",
   );
   lines.push("");
   lines.push("| field | value |");
@@ -1065,13 +1070,15 @@ export function renderResults(r: RunReport): string {
   lines.push(`| wrap | ${r.wrap} |`);
   if (r.inject) {
     lines.push(
-      `| inject check | off identity=${r.inject.off_identity}; on mark=${r.inject.on_has_mark}; on fact=${r.inject.on_has_fact} |`,
+      `| inject check | off identity=${r.inject.off_identity}; on mark=${r.inject.on_has_mark}; on ` +
+        `fact=${r.inject.on_has_fact} |`,
     );
   }
   lines.push(`| NIM base | ${r.nim_base} |`);
   lines.push(`| reasoning_effort | ${r.reasoning_effort} (both arms) |`);
   lines.push(
-    `| NVIDIA trial $/MTok | input ${r.nvidia_trial_usd_per_mtok.input} / output ${r.nvidia_trial_usd_per_mtok.output} |`,
+    `| NVIDIA trial $/MTok | input ${r.nvidia_trial_usd_per_mtok.input} / output ` +
+      `${r.nvidia_trial_usd_per_mtok.output} |`,
   );
   lines.push(`| tasks | ${r.tasks.map((t) => "`" + t + "`").join(", ")} |`);
   lines.push("");
@@ -1095,7 +1102,8 @@ export function renderResults(r: RunReport): string {
       `| ${tokOff && tokOn ? fmtN(r.on.tokens.completion - r.off.tokens.completion) : "n/a"} |`,
   );
   lines.push(
-    `| tokens total | ${tokOff ? fmtN(r.off.tokens.total) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.total) : "n/a"} | ${fmtN(r.delta.tokens_total)} |`,
+    `| tokens total | ${tokOff ? fmtN(r.off.tokens.total) : "n/a"} | ` +
+      `${tokOn ? fmtN(r.on.tokens.total) : "n/a"} | ${fmtN(r.delta.tokens_total)} |`,
   );
   const dollarOff = r.harbor_ran ? `$${r.off.dollars.toFixed(4)}` : "n/a";
   const dollarOn = r.harbor_ran ? `$${r.on.dollars.toFixed(4)}` : "n/a";
@@ -1104,17 +1112,23 @@ export function renderResults(r: RunReport): string {
   lines.push(`| n_trials | ${r.off.n_trials} | ${r.on.n_trials} | |`);
   lines.push(`| n_resolved (reward=1.0) | ${r.off.n_resolved} | ${r.on.n_resolved} | |`);
   lines.push(
-    `| n_resolved / n_trials | ${r.off.n_trials ? `${r.off.n_resolved}/${r.off.n_trials}` : "n/a"} | ${r.on.n_trials ? `${r.on.n_resolved}/${r.on.n_trials}` : "n/a"} | |`,
+    `| n_resolved / n_trials | ${r.off.n_trials ? `${r.off.n_resolved}/${r.off.n_trials}` : "n/a"} | ` +
+      `${r.on.n_trials ? `${r.on.n_resolved}/${r.on.n_trials}` : "n/a"} | |`,
   );
   lines.push(`| n_errored | ${r.off.n_errored} | ${r.on.n_errored} | |`);
   lines.push("");
   lines.push(
-    "**Accuracy definition:** Harbor job mean (`stats.evals.*.metrics[].mean`) over `n_total_trials`. Errored trials count as **0 reward in that mean**, but they are **not** listed as reward 0.0 in the trial table — they are named exceptions. Also published: n_resolved/n_trials (reward 1.0 only). Absolute % is the **agent** (**terminus-2** + NVIDIA NIM `google/gemma-4-31b-it`), not Eden. Δ = on − off.",
+    "**Accuracy definition:** Harbor job mean (`stats.evals.*.metrics[].mean`) over `n_total_trials`. " +
+      "Errored trials count as **0 reward in that mean**, but they are **not** listed as reward 0.0 in the " +
+      "trial table — they are named exceptions. Also published: n_resolved/n_trials (reward 1.0 only). " +
+      "Absolute % is the **agent** (**terminus-2** + NVIDIA NIM `google/gemma-4-31b-it`), not Eden. Δ = on " +
+      "− off.",
   );
   const verdict = accuracyVerdict(r.delta.accuracy_pp);
   if (verdict) lines.push(verdict);
   lines.push(
-    "Cost is NVIDIA hosted trial list ($0/MTok). Token counts are still reported. Not Friendli / third-party list price.",
+    "Cost is NVIDIA hosted trial list ($0/MTok). Token counts are still reported. Not Friendli / " +
+      "third-party list price.",
   );
   lines.push("No BrainMemory column. No cortex-off. Not the 89-task tbench.ai board.");
   lines.push("");
@@ -1173,7 +1187,8 @@ export function renderResults(r: RunReport): string {
     lines.push("");
   }
   lines.push(
-    "Cite: Terminal-Bench [arxiv:2601.11868]; memory exam slot [arxiv:2607.08716] via Plan §11.1. Harbor dataset: https://github.com/harbor-framework/terminal-bench-2-1",
+    "Cite: Terminal-Bench [arxiv:2601.11868]; memory exam slot [arxiv:2607.08716] via Plan §11.1. " +
+      "Harbor dataset: https://github.com/harbor-framework/terminal-bench-2-1",
   );
   lines.push("");
   return lines.join("\n");
@@ -1295,7 +1310,8 @@ export async function main(): Promise<RunReport> {
     if (nim.error) {
       const gw = /504|BadGateway|Bad Gateway|Gateway Timeout/i.test(nim.error);
       notes.push(
-        `NVIDIA NIM preflight: ${nim.error}${gw ? " (504/BadGateway is not a skip)" : ""} (Harbor still launched; wrap probe retries)`,
+        `NVIDIA NIM preflight: ${nim.error}${gw ? " (504/BadGateway is not a skip)" : ""} ` +
+          `(Harbor still launched; wrap probe retries)`,
       );
     }
   } catch (e) {
@@ -1305,7 +1321,8 @@ export async function main(): Promise<RunReport> {
   try {
     report.inject = await injectSelfCheck();
     notes.push(
-      `Wrap injectBodyThenObserveTools: EDEN_MEMORY=0 identity=${report.inject.off_identity}; on mark=${report.inject.on_has_mark} fact=${report.inject.on_has_fact}.`,
+      `Wrap injectBodyThenObserveTools: EDEN_MEMORY=0 identity=${report.inject.off_identity}; on ` +
+        `mark=${report.inject.on_has_mark} fact=${report.inject.on_has_fact}.`,
     );
   } catch (e) {
     blockers.push(`inject self-check: ${String(e)}`);
@@ -1399,7 +1416,8 @@ export function reparseExisting(): RunReport {
   const notes: string[] = [...LOCKED_NOTES];
   if (prev.inject) {
     notes.push(
-      `Wrap injectBodyThenObserveTools: EDEN_MEMORY=0 identity=${prev.inject.off_identity}; on mark=${prev.inject.on_has_mark} fact=${prev.inject.on_has_fact}.`,
+      `Wrap injectBodyThenObserveTools: EDEN_MEMORY=0 identity=${prev.inject.off_identity}; on ` +
+        `mark=${prev.inject.on_has_mark} fact=${prev.inject.on_has_fact}.`,
     );
   }
   notes.push("Re-rendered from existing Harbor job json. Harbor was not re-run.");

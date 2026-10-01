@@ -480,7 +480,8 @@ document.getElementById("signInForm").addEventListener("submit", async (e) => {
   btn.disabled = true;
   const raw = document.getElementById("apiKey").value.trim().replace(/^EDEN_API_KEY=/, "");
   try {
-    const res = await fetch("/v1/session", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ api_key: raw }) });
+    const res = await fetch("/v1/session", { method: "POST", headers: \
+{"content-type":"application/json"}, body: JSON.stringify({ api_key: raw }) });
     if (!res.ok) { err.textContent = "That key did not authenticate."; btn.disabled = false; return; }
     const next = new URLSearchParams(location.search).get("next") || "/dashboard";
     location.href = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
@@ -520,12 +521,15 @@ document.getElementById("signInForm").addEventListener("submit", async (e) => {
     ].join("\n");
     const status =
       live > 0
-        ? `<p class="status">A compiled tool is live. Matching calls use it. <a class="inline" href="/workshop">Review</a></p>`
+        ? `<p class="status">A compiled tool is live. Matching calls use it. <a class="inline" ` +
+          `href="/workshop">Review</a></p>`
         : cc > 0
-          ? `<p class="status">${cc} draft${cc === 1 ? "" : "s"} waiting. Nothing is live until you Approve. <a class="inline" href="/workshop">Open Approve</a></p>`
+          ? `<p class="status">${cc} draft${cc === 1 ? "" : "s"} waiting. Nothing is live until you Approve. <a ` +
+            `class="inline" href="/workshop">Open Approve</a></p>`
           : tc > 0
             ? `<p class="status">${tc} run${tc === 1 ? "" : "s"} recorded. Repeats become drafts.</p>`
-            : `<p class="status">Waiting for the first run. <a class="inline" href="/import">Import traces</a> if you already have them.</p>`;
+            : `<p class="status">Waiting for the first run. <a class="inline" href="/import">Import traces</a> if ` +
+              `you already have them.</p>`;
     return html(
       "Eden — Setup",
       nav("Setup", true) +
@@ -536,7 +540,8 @@ document.getElementById("signInForm").addEventListener("submit", async (e) => {
 ${status}
 <details class="more">
 <summary>What this will not do</summary>
-<p>A key never flips a tool On. Out-of-range inputs fall back to the old path. If Eden breaks, traffic still goes through.</p>
+<p>A key never flips a tool On. Out-of-range inputs fall back to the old path. If Eden breaks, \
+traffic still goes through.</p>
 </details>`,
     );
   }
@@ -600,7 +605,8 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
       mark(status, "Import failed", "error-text");
       const p = document.createElement("p");
       p.className = "status";
-      p.textContent = typeof j.error === "string" && j.error ? j.error : "Could not read that data. Try JSONL — one run per line.";
+      p.textContent = typeof j.error === "string" && j.error ? j.error : "Could not read that data. \
+Try JSONL — one run per line.";
       results.appendChild(p);
     }
   } catch (err) {
@@ -614,13 +620,16 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
 
   // The public front door: a proper landing for visitors, dashboard for users.
   if (url.pathname === "/" && !wsId) {
-    const till = `<span class="till"><span class="slab"><span class="work" aria-hidden="true"></span><span class="go">Approve</span></span></span>`;
+    const till =
+      `<span class="till"><span class="slab"><span class="work" aria-hidden="true"></span><span ` +
+      `class="go">Approve</span></span></span>`;
     const body = `
 <main id="content">
   <div class="reel">
     <section class="hero">
       <header class="hero-header">
-        <a class="brand" href="/" aria-label="Eden"><img class="brand-mark" src="/logo.webp" alt="" width="40" height="38" decoding="sync" fetchpriority="high"/><span class="brand-name">Eden</span></a>
+        <a class="brand" href="/" aria-label="Eden"><img class="brand-mark" src="/logo.webp" alt="" \
+width="40" height="38" decoding="sync" fetchpriority="high"/><span class="brand-name">Eden</span></a>
         <a class="signin" href="/onboarding">Sign in</a>
       </header>
       <div class="hero-stage">
@@ -629,7 +638,8 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
           <a class="btn ship" href="/signup">Sign up</a>
         </div>
         <div class="stage-slot">
-          <button class="stage-hit" type="button" aria-pressed="false" aria-label="Repeated work. Move to turn. Scroll to keep one.">
+          <button class="stage-hit" type="button" aria-pressed="false" aria-label="Repeated work. \
+Move to turn. Scroll to keep one.">
             <canvas class="stage" aria-hidden="true"></canvas>
             <span class="deck" aria-hidden="true">${till}</span>
           </button>
@@ -739,7 +749,8 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
          <table class="activity">${recent
            .map(
              (r) =>
-               `<tr><td>${escapeHtml(r.name)}</td><td>${r.steps_ok}/${r.steps_attempted}</td><td class="num-cell">${fmtWhen(Number(r.created_at))}</td></tr>`,
+               `<tr><td>${escapeHtml(r.name)}</td><td>${r.steps_ok}/${r.steps_attempted}</td><td ` +
+               `class="num-cell">${fmtWhen(Number(r.created_at))}</td></tr>`,
            )
            .join("")}</table>`
       : "";
@@ -768,7 +779,8 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
       }</div>`;
     const empty = `<div class="empty">
 <h1>Your desk</h1>
-<p class="sub">Nothing compiled yet. Point the agent at this host. After the same stretch twice, a draft shows up under Approve.</p>
+<p class="sub">Nothing compiled yet. Point the agent at this host. After the same stretch twice, a \
+draft shows up under Approve.</p>
 <div class="row">
   <a href="/onboarding" class="btn secondary">Copy setup</a>
   <a href="/import" class="btn ghost">Import traces</a>
@@ -783,13 +795,15 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
     if (denied) return denied;
     if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
     const tools = await d.all<{ id: string; name: string; state: string; uses_count: number }>(
-      `SELECT id, name, state, uses_count FROM tool WHERE workspace_id = ? ORDER BY CASE state WHEN 'draft' THEN 0 WHEN 'on' THEN 1 ELSE 2 END, name`,
+      `SELECT id, name, state, uses_count FROM tool WHERE workspace_id = ? ORDER BY CASE state WHEN ` +
+        `'draft' THEN 0 WHEN 'on' THEN 1 ELSE 2 END, name`,
       [wsId],
     );
     const rows = tools
       .map(
         (t) =>
-          `<li><a href="/workshop/${t.id}"><code>${escapeHtml(t.name)}</code></a><span class="state">${escapeHtml(t.state)}</span></li>`,
+          `<li><a href="/workshop/${t.id}"><code>${escapeHtml(t.name)}</code></a><span ` +
+          `class="state">${escapeHtml(t.state)}</span></li>`,
       )
       .join("");
     return html(
@@ -841,13 +855,15 @@ ${
       : "";
     const approve =
       t.state !== "on"
-        ? `<form method="post" action="/v1/tools/${t.id}/approve" class="row"><button type="submit" class="btn ship">Approve</button></form>
+        ? `<form method="post" action="/v1/tools/${t.id}/approve" class="row"><button type="submit" \
+class="btn ship">Approve</button></form>
            <p class="muted">Matching calls will use this compiled tool. Reversible from this page later.</p>`
         : `<p class="status">Live. Matching calls in this workspace use this tool.</p>`;
     return html(
       `Eden — ${t.name}`,
       nav("Approve", true) +
-        `<div class="page-head"><h1><code>${escapeHtml(t.name)}</code></h1><span class="muted">${escapeHtml(t.state)}</span></div>
+        `<div class="page-head"><h1><code>${escapeHtml(t.name)}</code></h1><span \
+class="muted">${escapeHtml(t.state)}</span></div>
          <p class="sub">${escapeHtml(t.when_to_use) || "No description recorded."}</p>
          ${list}${approve}`,
     );
@@ -984,7 +1000,9 @@ export EDEN_API_KEY=<the key above>
     btn.disabled = true; btn.textContent = "Creating…";
     document.getElementById("signupErr").textContent = "";
     try {
-      const res = await fetch("/v1/signup", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ name: document.getElementById("wsName").value }) });
+      const res = await fetch("/v1/signup", { method: "POST", headers: \
+{"content-type":"application/json"}, body: JSON.stringify({ name: \
+document.getElementById("wsName").value }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Signup failed");
       minted = j.api_key;

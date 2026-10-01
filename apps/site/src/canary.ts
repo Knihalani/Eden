@@ -267,7 +267,8 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
   const compile = input.compileTracesFn;
   if (!compile) {
     console.error(
-      `[eden-canary] ${tool.name}: drift detected (${deopts} deopts/${windowMs / 3600_000}h) but no compileTracesFn wired — cannot recompile`,
+      `[eden-canary] ${tool.name}: drift detected (${deopts} deopts/${windowMs / 3600_000}h) but no ` +
+        `compileTracesFn wired — cannot recompile`,
     );
     return { action: "no-compiler" };
   }
@@ -288,7 +289,8 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
   const program = compiled.programs[0];
   if (!program) {
     console.error(
-      `[eden-canary] ${tool.name}: recompilation refused: ${compiled.refusals?.map((r) => r.reason).join("; ") || "no candidates"}`,
+      `[eden-canary] ${tool.name}: recompilation refused: ` +
+        `${compiled.refusals?.map((r) => r.reason).join("; ") || "no candidates"}`,
     );
     return { action: "recompile-refused", reasons: compiled.refusals?.map((r) => r.reason) ?? ["no candidates"] };
   }
