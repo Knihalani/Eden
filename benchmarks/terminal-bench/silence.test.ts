@@ -340,7 +340,7 @@ describe("omit gate lives in src/index.ts (M38)", () => {
     expect(wrapSrc).toMatch(/EDEN_MEMORY_INJECT_LOG/);
     expect(wrapSrc).toMatch(/logInjectMetric\(body, next\)/);
     expect(wrapSrc).toMatch(/return next;/);
-    expect(wrapSrc).not.toMatch(/if\s*\(.*junk.*\)\s*return body/);
+    expect(wrapSrc).not.toMatch(/\bif\s*\([^;{}]*junk[^;{}]*\)\s*return\s+body\b/);
     if (/EDEN_MEMORY_MIN|memoryInjectSilent/.test(wrapSrc)) {
       expect(indexSrc).toMatch(/EDEN_MEMORY_MIN/);
       expect(indexSrc).toMatch(/memoryInjectSilent/);
@@ -351,7 +351,7 @@ describe("omit gate lives in src/index.ts (M38)", () => {
   test("silence.ts imports MEMORY_MARK; does not fork the string", () => {
     const src = readFileSync(join(import.meta.dir, "silence.ts"), "utf8");
     expect(src).toMatch(/import \{ cueFor, MEMORY_MARK \} from \"\.\.\/\.\.\/src\/index\.ts\"/);
-    expect(src).not.toMatch(/export const MEMORY_MARK = \"Eden Memory:\"/);
+    expect(src).not.toMatch(/export\s+const\s+MEMORY_MARK\s*=\s*"Eden Memory:"/);
     expect(src).toMatch(/Do not omit/);
   });
 });

@@ -478,7 +478,7 @@ describe("M30.1 honesty", () => {
       expect(code, p).not.toMatch(/\bBrainMemory\b/);
     }
     const self = readFileSync(join(import.meta.dir, "memory-detqa.test.ts"), "utf8");
-    expect(self).not.toMatch(/^import\s+.*\bBrainMemory\b/m);
+    expect(self).not.toMatch(/^import\b[^;]*\bBrainMemory\b/m);
     expect(self).not.toMatch(/from\s+['"][^'"]*brain-memory[^'"]*['"]/);
     expect(self).not.toMatch(/\bmemory_search\s*\(/);
   });
