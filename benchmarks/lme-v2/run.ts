@@ -755,6 +755,9 @@ export function formatResults(args: {
     args.v.overall === "WIN"
       ? `Acc ${pct(accPct)} meets RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Plan §9.2 SOTA agent-trajectory memory only at ≥ ${AGENTRUNBOOK_C_SMALL}.`
       : `Overall WIN only if both rows WIN. Target first ≥ RAG ${RAG_SMALL}, then AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
+  const readerProbe = args.reader_ok
+    ? "NIM answered."
+    : `NIM unavailable (${args.reader_note}). Probe does not skip remaining questions; each row still goes to the per-question reader. HTTP 504 scores that row incorrect and CONTINUE.`;
   return (
     `# M26 LME-V2 Small RESULTS
 
@@ -864,7 +867,7 @@ ${filesLine}
 4. **k.** Product default ${kCap()} (\`EDEN_MEMORY_CAP\`). Silent slices add a small extra budget; not k=40 MCC.
 5. **Backbone.** NVIDIA NIM \`${args.nim_model}\`. Not 4o-mini. Not BrainMemory.
 6. **Chat-only / no \`memory_search\`.** Reader sees only the inject packet. Store cap ${storeCap()} still evicts JSONL; experience disk cap is distinct (\`EDEN_EXPERIENCE_BYTES\`).
-7. **Reader probe:** ${args.reader_ok ? "NIM answered." : `NIM unavailable (${args.reader_note}). Probe does not skip remaining questions; each row still goes to the per-question reader. HTTP 504 scores that row incorrect and CONTINUE.`}
+7. **Reader probe:** ${readerProbe}
 
 ## How to re-run
 

@@ -189,6 +189,11 @@ function candidateCard(c: Candidate): string {
         <div><b>${witnesses ?? "—"}</b><span>witnesses</span></div>
       </div>`
     : `<p class="muted">${esc(why)}${witnesses != null ? ` ${witnesses} witnesses.` : ""}</p>`;
+  const canShadow =
+    c.program &&
+    c.verdict !== "PASS" &&
+    !c.refusal?.reason?.startsWith("uncovered") &&
+    c.refusal?.reason !== "no wrap registry — start eden wrap to replay this stretch";
   return `<article class="card">
     <h2>${esc(c.program?.name || "stretch")} ${verdictBadge(c.verdict)}</h2>
     <div class="pills">${seq(c.sequence)}</div>
@@ -196,7 +201,7 @@ function candidateCard(c: Candidate): string {
     ${m && why && c.verdict !== "PASS" ? `<p class="muted">${esc(why)}</p>` : ""}
     <div class="row">
       <button ${c.verdict === "PASS" ? `onclick="post('/v1/tools/${esc(c.id)}/approve')"` : "disabled"}>Approve</button>
-      ${c.program && c.verdict !== "PASS" && !c.refusal?.reason?.startsWith("uncovered") && c.refusal?.reason !== "no wrap registry — start eden wrap to replay this stretch" ? `<button class="ghost" onclick="post('/v1/candidates/${esc(c.id)}/shadow')">Shadow</button>` : ""}
+      ${canShadow ? `<button class="ghost" onclick="post('/v1/candidates/${esc(c.id)}/shadow')">Shadow</button>` : ""}
       <a class="btn ghost" href="/tools/${esc(c.id)}">Open</a>
     </div>
   </article>`;
@@ -217,6 +222,12 @@ export function toolPage(store: Store, id: string, token?: string): string {
     })
     .join("");
   const m = program?.manifest || c?.manifest;
+  const pauseButton =
+    live?.state === "live" ? `<button class="ghost" onclick="post('/v1/tools/${esc(id)}/pause')">Pause</button>` : "";
+  const resumeButton =
+    live && live.state !== "live"
+      ? `<button class="ghost" onclick="post('/v1/tools/${esc(id)}/resume')">Resume</button>`
+      : "";
   const body = `
     <h1>${esc(program?.name || "Refused stretch")}</h1>
     <p class="lede">${esc(program?.description || c?.refusal?.reason || "")}</p>
@@ -232,8 +243,8 @@ export function toolPage(store: Store, id: string, token?: string): string {
     <div class="graph">${steps || `<p class="bad">${esc(c?.refusal?.reason || "")}</p>`}</div>
     <div class="row">
       ${c && c.verdict === "PASS" ? `<button onclick="post('/v1/tools/${esc(id)}/approve')">Approve</button>` : ""}
-      ${live?.state === "live" ? `<button class="ghost" onclick="post('/v1/tools/${esc(id)}/pause')">Pause</button>` : ""}
-      ${live && live.state !== "live" ? `<button class="ghost" onclick="post('/v1/tools/${esc(id)}/resume')">Resume</button>` : ""}
+      ${pauseButton}
+      ${resumeButton}
       ${live ? `<button class="ghost" onclick="post('/v1/tools/${esc(id)}/rollback')">Rollback</button>` : ""}
     </div>`;
   return layout(program?.name || "Tool", body, "/live", token, "", servingOf(store.tools()));
@@ -246,12 +257,16 @@ export function livePage(store: Store, token?: string): string {
     ? tools
         .map((t) => {
           const stats = store.receiptStats(t.id);
+          const pauseOrResume =
+            t.state === "live"
+              ? `<button class="ghost" onclick="post('/v1/tools/${esc(t.id)}/pause')">Pause</button>`
+              : `<button class="ghost" onclick="post('/v1/tools/${esc(t.id)}/resume')">Resume</button>`;
           return `<article class="card">
       <h2>${esc(t.name)} ${verdictBadge(t.state)}</h2>
       <p class="muted">${esc(t.version.slice(0, 12))} · ${stats.n} runs · ${stats.fail} failed · ${stats.llm} island calls</p>
       <div class="row">
         <a class="btn ghost" href="/tools/${esc(t.id)}">Open</a>
-        ${t.state === "live" ? `<button class="ghost" onclick="post('/v1/tools/${esc(t.id)}/pause')">Pause</button>` : `<button class="ghost" onclick="post('/v1/tools/${esc(t.id)}/resume')">Resume</button>`}
+        ${pauseOrResume}
         <button class="ghost" onclick="post('/v1/tools/${esc(t.id)}/rollback')">Rollback</button>
       </div>
     </article>`;
