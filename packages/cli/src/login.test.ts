@@ -95,6 +95,7 @@ describe("wrap cmd", () => {
     expect(letter).toMatch(/OPENAI_BASE_URL=http:\/\/127\.0\.0\.1:8788\/v1/);
     expect(letter).toMatch(/OPENAI_API_KEY/);
     expect(letter).toMatch(/OPENAI_API_BASE/);
+    expect(letter).toMatch(/x-eden-api-key/);
     expect(letter).toMatch(/compiled hit/);
     expect(letter).toMatch(/HTTP 200/);
     expect(letter).toMatch(/\/v1\/wrap/);
@@ -122,6 +123,7 @@ describe("wrap cmd", () => {
     expect(letter).toMatch(/\/v1\/wrap/);
     expect(letter).toMatch(/\/v1\/ingest/);
     expect(letter).toMatch(/Live tools: 0/);
+    expect(letter).toMatch(/x-eden-api-key/);
     expect(letter).toMatch(/T-100 is eden demo/);
     expect(letter).not.toMatch(/apps\/web/);
   });
