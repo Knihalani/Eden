@@ -14,14 +14,15 @@ export type Opts = {
   bazel: "none" | "build" | "module"; // F6
   pkgNeedsName: boolean;
   nxProjectJson: boolean;
-  globNeedsManifest?: boolean; // F0: a workspace glob match only counts if the dir has a manifest (npm/pnpm/cargo semantics)
+  // F0: a workspace glob match only counts if the dir has a manifest (npm/pnpm/cargo semantics)
+  globNeedsManifest?: boolean;
   polyglot?: boolean; // F5: extra ecosystems' manifests
-  topSplit?: number;
+  topSplit?: number; // F7: if "" owns > 50% of files, top-level dirs with >= topSplit files become scopes; 0 = off
   topSplitBazelOnly?: boolean; // only apply topSplit when the root is a Bazel/Buck/Pants workspace
-  bucketExamples?: boolean;
-  bucketAll?: boolean;
+  bucketExamples?: boolean; // denied manifests under examples-class segments collapse to a bucket scope at that segment
+  bucketAll?: boolean; // test/fixture-class segments bucket too (vendor-class never buckets)
   r3?: boolean; // R3 F9 spec literally
-  extraDeny?: string[]; // test/fixture-class segments bucket too (vendor-class never buckets)    // denied manifests under examples-class segments collapse to a bucket scope at that segment           // F7: if "" owns > 50% of files, top-level dirs with >= topSplit files become scopes; 0 = off
+  extraDeny?: string[];
 };
 
 export const V0: Opts = {

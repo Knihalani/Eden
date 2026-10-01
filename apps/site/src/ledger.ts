@@ -51,7 +51,10 @@ export type SavingsLedger = {
   fail: number;
   live: number;
   tokens_saved_mean: TokenFigure;
-  /** Mean over estimated-only manifests; null where none exist. Reported separately so an estimate can never masquerade as the measured figure above. */
+  /**
+   * Mean over estimated-only manifests; null where none exist. Reported separately so an estimate can never
+   * masquerade as the measured figure above.
+   */
   tokens_saved_estimated_mean: { value: number | null };
   time_saved_ms_mean: LedgerFigure;
   per_tool: ToolLedgerEntry[];

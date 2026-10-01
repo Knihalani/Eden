@@ -738,7 +738,9 @@ export function formatResults(args: {
   const domRows = args.domains
     .map(
       (d) =>
-        `| ${d.domain} | ${d.traj_found}/${d.traj_ids.length} | ${d.states_kept} | ${d.chars_kept} | ${d.records_after_ingest} / ${d.store_cap} | ${d.experience_files ?? 0} | ${(d.ingest_ms / 1000).toFixed(1)}s |`,
+        `| ${d.domain} | ${d.traj_found}/${d.traj_ids.length} | ${d.states_kept} | ${d.chars_kept} ` +
+        `| ${d.records_after_ingest} / ${d.store_cap} | ${d.experience_files ?? 0} ` +
+        `| ${(d.ingest_ms / 1000).toFixed(1)}s |`,
     )
     .join("\n");
   const goldRate = args.gold_in_packet.n ? `${pct((100 * args.gold_in_packet.hit) / args.gold_in_packet.n)}%` : "n/a";
@@ -753,7 +755,8 @@ export function formatResults(args: {
     args.v.overall === "WIN"
       ? `Acc ${pct(accPct)} meets RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Plan §9.2 SOTA agent-trajectory memory only at ≥ ${AGENTRUNBOOK_C_SMALL}.`
       : `Overall WIN only if both rows WIN. Target first ≥ RAG ${RAG_SMALL}, then AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
-  return `# M26 LME-V2 Small RESULTS
+  return (
+    `# M26 LME-V2 Small RESULTS
 
 **Date:** ${args.date}
 **ISO date:** ${args.date}
@@ -873,8 +876,14 @@ Data cache: \`benchmarks/lme-v2/.data/\` (gitignored). Do not retune \`src/index
 
 ## M15 lock appendix (${M15_LOCK.date})
 
-Frozen M15.2 official Small (**not** this run): n=${M15_LOCK.n}, correct=${M15_LOCK.n_correct}, acc=**${M15_LOCK.acc_pct}%**, gold_in_packet **${M15_LOCK.gold_hit} / ${M15_LOCK.gold_n}** phrase-match (${M15_LOCK.gold_na} llm/mc N/A), empty **${M15_LOCK.packet_empty} / ${M15_LOCK.n}** (junk always-on then). inject p50/p95 ${M15_LOCK.inject_p50}/${M15_LOCK.inject_p95} ms. Reader \`google/gemma-4-31b-it\`. Overall LOSS vs RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Do not copy these cells into the M26 headline.
-`;
+Frozen M15.2 official Small (**not** this run): n=${M15_LOCK.n}, correct=${M15_LOCK.n_correct}, ` +
+    `acc=**${M15_LOCK.acc_pct}%**, gold_in_packet **${M15_LOCK.gold_hit} / ${M15_LOCK.gold_n}** ` +
+    `phrase-match (${M15_LOCK.gold_na} llm/mc N/A), empty **${M15_LOCK.packet_empty} / ${M15_LOCK.n}** ` +
+    `(junk always-on then). inject p50/p95 ${M15_LOCK.inject_p50}/${M15_LOCK.inject_p95} ms. Reader ` +
+    `\`google/gemma-4-31b-it\`. Overall LOSS vs RAG ${RAG_SMALL} and ` +
+    `AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Do not copy these cells into the M26 headline.
+`
+  );
 }
 
 async function main() {
@@ -1006,7 +1015,9 @@ async function main() {
     const nDone = ++scored;
     if (p.i <= 15 || nDone % 25 === 0 || nDone === pending.length) {
       console.log(
-        `query ${nDone}/${pending.length} ${correct ? "Y" : "n"} gold_in_packet=${gold_in_packet} reader_ok=${reader_ok} boxed=${JSON.stringify(boxed).slice(0, 80)} pred=${JSON.stringify(prediction).slice(0, 100)}`,
+        `query ${nDone}/${pending.length} ${correct ? "Y" : "n"} gold_in_packet=${gold_in_packet} ` +
+          `reader_ok=${reader_ok} boxed=${JSON.stringify(boxed).slice(0, 80)} ` +
+          `pred=${JSON.stringify(prediction).slice(0, 100)}`,
       );
       try {
         writeFileSync(

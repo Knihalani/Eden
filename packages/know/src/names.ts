@@ -380,7 +380,11 @@ export const LANG_KEEP = new Set([
   "af",
 ]);
 
-/** RFC is-facts worth a packed title. The RFC index dump is thousands of unique English titles; packing all of them is what blew HDT 6% / 5 B/fact. Live pages and IANA xrefs still add a number if it is in this set. */
+/**
+ * RFC is-facts worth a packed title. The RFC index dump is thousands of unique English titles;
+ * packing all of them is what blew HDT 6% / 5 B/fact. Live pages and IANA xrefs still add a number
+ * if it is in this set.
+ */
 export const RFC_KEEP = new Set<number>([
   761, 768, 791, 793, 821, 822, 854, 959, 1034, 1035, 1738, 1808, 1918, 1928, 1945, 2045, 2046, 2047, 2119, 2396, 2460,
   2616, 2617, 2732, 2817, 2818, 3339, 3493, 3548, 3596, 3629, 3864, 3986, 3987, 4122, 4287, 4346, 4551, 4627, 4648,

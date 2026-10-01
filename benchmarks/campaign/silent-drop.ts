@@ -470,8 +470,14 @@ export function writeSilentDropMd(
     "| Meter | Raw (ctrl) | Eden (trt) | Δ | Verdict |",
     "|---|---|---|---|---|",
     `| cents | ${ctrl.toFixed(4)} | ${trt.toFixed(4)} | ${d.toFixed(2)}% | ${cents?.verdict ?? "—"} |`,
-    `| turns | ${(out.controlMeans.turns ?? 0).toFixed(2)} | ${(out.treatmentMeans.turns ?? 0).toFixed(2)} | ${relPct(out.controlMeans.turns ?? 0, out.treatmentMeans.turns ?? 0).toFixed(2)}% | ${turns?.verdict ?? "—"} |`,
-    `| wall_ms | ${(out.controlMeans.wall_ms ?? 0).toFixed(2)} | ${(out.treatmentMeans.wall_ms ?? 0).toFixed(2)} | ${relPct(out.controlMeans.wall_ms ?? 0, out.treatmentMeans.wall_ms ?? 0).toFixed(2)}% | ${wall?.verdict ?? "—"} |`,
+    `| turns | ${(out.controlMeans.turns ?? 0).toFixed(2)} ` +
+      `| ${(out.treatmentMeans.turns ?? 0).toFixed(2)} ` +
+      `| ${relPct(out.controlMeans.turns ?? 0, out.treatmentMeans.turns ?? 0).toFixed(2)}% ` +
+      `| ${turns?.verdict ?? "—"} |`,
+    `| wall_ms | ${(out.controlMeans.wall_ms ?? 0).toFixed(2)} ` +
+      `| ${(out.treatmentMeans.wall_ms ?? 0).toFixed(2)} ` +
+      `| ${relPct(out.controlMeans.wall_ms ?? 0, out.treatmentMeans.wall_ms ?? 0).toFixed(2)}% ` +
+      `| ${wall?.verdict ?? "—"} |`,
     "",
     `Break-even: Eden cents ≤ raw (or INDISTINGUISHABLE within ±1% **and** suppressions > 0). **${breakEven ? "PASS" : "FAIL"}** (Δcents ${d.toFixed(2)}% vs raw; ${suppressNote || "suppressions counted in notes"}).`,
     "",

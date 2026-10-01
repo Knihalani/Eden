@@ -393,7 +393,10 @@ function renderMarkdown(
     const lv = r.cal.lossVerdict.find((f) => f.n === 8)?.rate ?? NaN;
     const kind = r.kind === "modeled" ? `MODELED←${r.proxyOf}` : "measured";
     lines.push(
-      `| ${r.name} | ${kind} | ${r.cal.nPairs} | ${r.cal.stability.toFixed(3)} | ${fmtPct(r.cal.relativeSd)} | ${fmtNum(m8.absolute)} / ${fmtPct(m8.relative)} | ${fmtNum(m12.absolute)} / ${fmtPct(m12.relative)} | ${fmtNum(m16.absolute)} / ${fmtPct(m16.relative)} | ${fmtPct(fl)} | ${fmtPct(lv)} |`,
+      `| ${r.name} | ${kind} | ${r.cal.nPairs} | ${r.cal.stability.toFixed(3)} ` +
+        `| ${fmtPct(r.cal.relativeSd)} | ${fmtNum(m8.absolute)} / ${fmtPct(m8.relative)} ` +
+        `| ${fmtNum(m12.absolute)} / ${fmtPct(m12.relative)} | ${fmtNum(m16.absolute)} ` +
+        `/ ${fmtPct(m16.relative)} | ${fmtPct(fl)} | ${fmtPct(lv)} |`,
     );
   }
   lines.push("");
@@ -439,7 +442,12 @@ function printTable(rows: Row[]): void {
     const lv = r.cal.lossVerdict.find((f) => f.n === 8)?.rate ?? NaN;
     const tag = r.kind === "modeled" ? "*" : " ";
     console.log(
-      `${(r.name + tag).padEnd(22)} ${r.cal.stability.toFixed(2).padStart(5)} ${fmtPct(r.cal.relativeSd).padStart(8)} ${(fmtNum(m8.absolute) + "/" + fmtPct(m8.relative)).padStart(14)} ${(fmtNum(m12.absolute) + "/" + fmtPct(m12.relative)).padStart(14)} ${(fmtNum(m16.absolute) + "/" + fmtPct(m16.relative)).padStart(14)} ${fmtPct(fl).padStart(8)} ${fmtPct(lv).padStart(8)}`,
+      `${(r.name + tag).padEnd(22)} ${r.cal.stability.toFixed(2).padStart(5)} ` +
+        `${fmtPct(r.cal.relativeSd).padStart(8)} ` +
+        `${(fmtNum(m8.absolute) + "/" + fmtPct(m8.relative)).padStart(14)} ` +
+        `${(fmtNum(m12.absolute) + "/" + fmtPct(m12.relative)).padStart(14)} ` +
+        `${(fmtNum(m16.absolute) + "/" + fmtPct(m16.relative)).padStart(14)} ${fmtPct(fl).padStart(8)} ` +
+        `${fmtPct(lv).padStart(8)}`,
     );
   }
   console.log("(* = MODELED from proxy; see NOISE-FLOOR.md)");

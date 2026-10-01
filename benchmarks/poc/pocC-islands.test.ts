@@ -137,7 +137,9 @@ describe("POC C — deterministic-first islands", () => {
     console.log(`    baseline (always-LLM):   ${baselineMs.toFixed(0)} ms, ${callsBaseline} live calls`);
     console.log(`    proposed (steady state): ${steadyMs.toFixed(2)} ms, ${callsProposed} live calls`);
     console.log(
-      `    latency saved: ${savingsPct.toFixed(1)}%  ·  cost saved @ $${COST_PER_CALL_CENTS.toFixed(3)}/call: $${((callsBaseline - callsProposed) * COST_PER_CALL_CENTS).toFixed(3)} per 25 steps`,
+      `    latency saved: ${savingsPct.toFixed(1)}%  ·  cost saved @ ` +
+        `$${COST_PER_CALL_CENTS.toFixed(3)}/call: ` +
+        `$${((callsBaseline - callsProposed) * COST_PER_CALL_CENTS).toFixed(3)} per 25 steps`,
     );
     expect(savingsPct).toBeGreaterThan(95);
     expect(callsProposed).toBe(0);

@@ -258,11 +258,16 @@ export function livePage(store: Store, token?: string): string {
         })
         .join("")
     : `<p class="empty">0 programs. Approve one from the inbox.</p>`;
+  const saved = save.tokensSavedMean
+    ? Math.round(save.tokensSavedMean) + " tokens saved"
+    : save.timeSavedMsMean
+      ? Math.round(save.timeSavedMsMean) + " ms saved"
+      : "not measured";
   const strip = `<div class="strip">
     <span>live ${save.live}</span>
     <span>${save.runs} runs</span>
     <span>${save.fail} failed</span>
-    <span>${save.tokensSavedMean ? Math.round(save.tokensSavedMean) + " tokens saved" : save.timeSavedMsMean ? Math.round(save.timeSavedMsMean) + " ms saved" : "not measured"}</span>
+    <span>${saved}</span>
   </div>`;
   const serving = servingOf(tools);
   const title = toolsListTitle(serving);
