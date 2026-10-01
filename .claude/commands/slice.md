@@ -64,7 +64,7 @@ Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
 
 ## 7. Merge
 
-1. Rebase on `origin/main` and re-run CI's four steps locally.
+1. Rebase on `origin/main`. Re-run CI's four steps locally only if the rebase changed files your change touches or imports; otherwise GitHub CI covers it.
 2. Push, and open the PR titled `<slice id>: <title>`, with the report as its body.
 3. `gh pr checks --watch`.
    - CI must be green.
