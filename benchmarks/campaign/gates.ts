@@ -116,11 +116,16 @@ function dedupe(xs: string[]): string[] {
   return [...new Set(xs)];
 }
 
-export function summarize(outs: ScenarioOut[], opts: { /** Losses worse than this percentage fail the run; smaller ones
-   * are reported as measured overhead. Default 0 (any loss fails) —
-   * negative-control campaigns pass ~1 since their success criterion is
-   * parity, and their deterministic sign tests otherwise flag the
-   * ~35µs/call recording cost as soon as machine jitter runs low. */ lossTolerancePct?: number } = {}) {
+export function summarize(
+  outs: ScenarioOut[],
+  opts: {
+    /** Losses worse than this percentage fail the run; smaller ones
+     * are reported as measured overhead. Default 0 (any loss fails) —
+     * negative-control campaigns pass ~1 since their success criterion is
+     * parity, and their deterministic sign tests otherwise flag the
+     * ~35µs/call recording cost as soon as machine jitter runs low. */ lossTolerancePct?: number;
+  } = {},
+) {
   const tol = (opts.lossTolerancePct ?? 0) / 100;
   console.log("\n==================== CAMPAIGN SUMMARY ====================");
   let failures = 0;

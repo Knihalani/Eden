@@ -84,7 +84,9 @@ describe("apex compile + runProgram", () => {
     expect(refusals.filter((r) => r.code === "unbound_foreach")).toEqual([]);
     const p = programs.find((q) => q.steps.some((s) => s.kind === "loop" && s.until));
     expect(p, `stripe program ${refusals.map((r) => r.reason).join("|")}`).toBeTruthy();
-    expect(p!.steps.some((s) => s.kind === "loop" && s.over.kind === "transform" && s.over.fn === "flatten")).toBe(true);
+    expect(p!.steps.some((s) => s.kind === "loop" && s.over.kind === "transform" && s.over.fn === "flatten")).toBe(
+      true,
+    );
     const w = createStripeInvoices();
     await runProgram(p!, { merchant: "m0" }, { registry: registryFrom(w.tools()), checkEnvelope: false });
     expect(w.check([{ merchant: "m0" }])).toEqual([]);
@@ -92,7 +94,12 @@ describe("apex compile + runProgram", () => {
   });
 
   test("sentry / hris / cms / chunk / zip / oauth compile a program; noise is empty", async () => {
-    const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>>; wantLoop?: boolean }> = [
+    const cases: Array<{
+      name: string;
+      factory: () => World;
+      goals: Array<Record<string, unknown>>;
+      wantLoop?: boolean;
+    }> = [
       { name: "sentry", factory: createSentryFilter, goals: SVCS.slice(0, 4).map((q) => ({ q })), wantLoop: true },
       { name: "hris", factory: createHrisJoin, goals: ORGS.slice(0, 4).map((org) => ({ org })), wantLoop: true },
       { name: "cms", factory: createCmsFlatten, goals: SITES.slice(0, 4).map((site) => ({ site })), wantLoop: true },
@@ -106,42 +113,49 @@ describe("apex compile + runProgram", () => {
       const { programs, refusals } = compileTraces(traces);
       const p = programs[0];
       expect(p, `${c.name}: ${refusals.map((r) => r.reason).join("|")}`).toBeTruthy();
-      if (c.wantLoop) expect(p!.steps.some((s) => s.kind === "loop"), `${c.name} loop`).toBe(true);
+      if (c.wantLoop)
+        expect(
+          p!.steps.some((s) => s.kind === "loop"),
+          `${c.name} loop`,
+        ).toBe(true);
       const w = c.factory();
       await runProgram(p!, c.goals[0]!, { registry: registryFrom(w.tools()), checkEnvelope: false });
       expect(w.check([c.goals[0]!]), `${c.name} check`).toEqual([]);
     }
-    const noise = await recordN(createApexNoise, NOISE_IDS.slice(0, 4).map((id) => ({ id })));
+    const noise = await recordN(
+      createApexNoise,
+      NOISE_IDS.slice(0, 4).map((id) => ({ id })),
+    );
     const empty = compileTraces(noise);
     expect(empty.programs).toEqual([]);
   });
 });
 
 describe("apex goLive", () => {
-  test(
-    "stripe / sentry / oauth goLive PASS; wrap serve turns===1",
-    async () => {
-      const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
-        { name: "stripe-invoices", factory: createStripeInvoices, goals: [...MERCHANTS].map((merchant) => ({ merchant })) },
-        { name: "sentry-filter", factory: createSentryFilter, goals: [...SVCS].map((q) => ({ q })) },
-        { name: "oauth-session", factory: createOauthSession, goals: [...USERS].map((user) => ({ user })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true, NO_THINK);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`apex-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program).not.toBeNull();
-        const live = new Session([[c.name, c.factory]], true, NO_THINK);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`apex-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+  test("stripe / sentry / oauth goLive PASS; wrap serve turns===1", async () => {
+    const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
+      {
+        name: "stripe-invoices",
+        factory: createStripeInvoices,
+        goals: [...MERCHANTS].map((merchant) => ({ merchant })),
+      },
+      { name: "sentry-filter", factory: createSentryFilter, goals: [...SVCS].map((q) => ({ q })) },
+      { name: "oauth-session", factory: createOauthSession, goals: [...USERS].map((user) => ({ user })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true, NO_THINK);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`apex-live-${c.name}-${i}`, i));
       }
-    },
-    60_000,
-  );
+      const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program).not.toBeNull();
+      const live = new Session([[c.name, c.factory]], true, NO_THINK);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`apex-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+    }
+  }, 60_000);
 });

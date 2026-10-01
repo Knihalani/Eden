@@ -253,7 +253,8 @@ test("activityFromInbox maps a candidate description onto Replacement waiting", 
         created_at: 1,
         program: {
           name: "pr_status",
-          description: "The outside world renamed a field. A replacement is waiting. The live tool is unchanged until you Approve.",
+          description:
+            "The outside world renamed a field. A replacement is waiting. The live tool is unchanged until you Approve.",
         },
       },
     ],
@@ -430,13 +431,14 @@ test("dcPct is null until a receipt carries tokenClasses — never a fake 40%", 
 });
 
 test("last receipt remainder skip / host-drop use failLabel words; Live/Paused stay", () => {
-  expect<string | null>(
-    lastReceiptKind({ ok: 1, tokenClass: "steered-skip", skipped: ["Grep"] }),
-  ).toBe(failLabel("skipped"));
+  expect<string | null>(lastReceiptKind({ ok: 1, tokenClass: "steered-skip", skipped: ["Grep"] })).toBe(
+    failLabel("skipped"),
+  );
   expect<string | null>(lastReceiptKind({ ok: 1, skipped: ["Bash"] })).toBe(failLabel("skipped"));
   expect<string | null>(
     lastReceiptKind({
-      reason: "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the last tool output.",
+      reason:
+        "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the last tool output.",
     }),
   ).toBe(failLabel("skipped"));
   expect<string | null>(
@@ -448,7 +450,9 @@ test("last receipt remainder skip / host-drop use failLabel words; Live/Paused s
     }),
   ).toBe(failLabel("degraded"));
   expect(lastReceiptKind({ ok: 1, outcome: "ok" })).toBeNull();
-  expect(lastReceiptKind({ ok: 1, outcome: "degraded", reason: "capacity: session full (64/64), this stretch ran raw" })).toBeNull();
+  expect(
+    lastReceiptKind({ ok: 1, outcome: "degraded", reason: "capacity: session full (64/64), this stretch ran raw" }),
+  ).toBeNull();
   expect(lastReceiptKind({ ok: 0, skipped: ["check"], outcome: "skipped" })).toBeNull();
   expect(lastReceiptKind(null)).toBeNull();
 });
@@ -497,9 +501,9 @@ test("Home names the whole stretch — a later skip does not hide a drop", () =>
   ]);
   expect(items[0]?.status).not.toBe("Live · Skipped");
   expect(items[0]?.status).toContain("Degraded");
-  expect(items.every((item) => !/already served|last tool output|kept the original|Facts are still/i.test(item.status))).toBe(
-    true,
-  );
+  expect(
+    items.every((item) => !/already served|last tool output|kept the original|Facts are still/i.test(item.status)),
+  ).toBe(true);
   expect(items.every((item) => !/\d+%/.test(item.status) && !/\d+ skip/i.test(item.status))).toBe(true);
 });
 
@@ -637,4 +641,3 @@ test("Home status adds Canary and Zero-LLM only when those flags are set", () =>
     live: 1,
   });
 });
-

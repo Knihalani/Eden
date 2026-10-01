@@ -84,10 +84,7 @@ function fingerprint(v: unknown): string {
   }
 }
 
-export function findForkedGroups(
-  traces: StretchTrace[],
-  minSupport: number,
-): ForkCandidate[] {
+export function findForkedGroups(traces: StretchTrace[], minSupport: number): ForkCandidate[] {
   // Group traces by their full event-name signature to find cohorts.
   const bySig = new Map<string, StretchTrace[]>();
   for (const t of traces) {
@@ -133,7 +130,8 @@ export function findForkedGroups(
       const lastPrefixIdx = cp - 1;
       const lastA = groupA[0]?.events[lastPrefixIdx];
       const lastB = groupB[0]?.events[lastPrefixIdx];
-      if (!lastA?.result || typeof lastA.result !== "object" || !lastB?.result || typeof lastB.result !== "object") continue;
+      if (!lastA?.result || typeof lastA.result !== "object" || !lastB?.result || typeof lastB.result !== "object")
+        continue;
 
       const recA = lastA.result as Record<string, unknown>;
       const recB = lastB.result as Record<string, unknown>;
@@ -241,7 +239,8 @@ function armFieldValue(traces: StretchTrace[], prefixIdx: number, field: string)
 function unboundBranchRefuse(slot?: string): ForkRefuse {
   return {
     code: "unbound_branch",
-    reason: "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
+    reason:
+      "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
     hint: "Bind every branch arm from recorded witnesses. Eden will not guess.",
     slot,
   };
@@ -251,9 +250,7 @@ function underdeterminedWriteRefuse(tool: string, key?: string): ForkRefuse {
   const slot = key ? `${tool}.${key}` : tool;
   return {
     code: "underdetermined_write",
-    reason: key
-      ? `${tool}.${key}: under-determined mutating argument`
-      : `${tool} mutating call has no bound arguments`,
+    reason: key ? `${tool}.${key}: under-determined mutating argument` : `${tool} mutating call has no bound arguments`,
     hint: key
       ? `${tool}.${key} could not be bound from input or a prior step. Name the path — Eden will not guess.`
       : `${tool} is a write with no bound arguments. Pass IDs or payloads from input or a prior step.`,
@@ -272,11 +269,7 @@ function underdeterminedWriteRefuse(tool: string, key?: string): ForkRefuse {
  * guessing. A mutating arm that cannot bind sets `candidate.assembleRefuse`
  * to `underdetermined_write` so compile.ts stamps the same code as linear.
  */
-export function assembleForkProgram(
-  candidate: ForkCandidate,
-  programId: string,
-  name: string,
-): StretchProgram | null {
+export function assembleForkProgram(candidate: ForkCandidate, programId: string, name: string): StretchProgram | null {
   const { prefixNames, thenSuffix, thenTraces, elseSuffix, elseTraces, field, thenValue } = candidate;
   candidate.assembleRefuse = undefined;
   const fail = (refuse: ForkRefuse): null => {
@@ -311,9 +304,7 @@ export function assembleForkProgram(
     for (let pos = 0; pos < suffixNames.length; pos++) {
       const eventName = suffixNames[pos]!;
       const evIdx = startOffset + pos;
-      const alignedEvents = traces
-        .map((t) => t.events[evIdx])
-        .filter((e): e is NonNullable<typeof e> => !!e && e.ok);
+      const alignedEvents = traces.map((t) => t.events[evIdx]).filter((e): e is NonNullable<typeof e> => !!e && e.ok);
       if (!alignedEvents.length || alignedEvents.length < traces.length) {
         return { ids, ok: false, refuse: unboundBranchRefuse(eventName) };
       }
@@ -345,7 +336,9 @@ export function assembleForkProgram(
         return {
           ids,
           ok: false,
-          refuse: isMutating(realTool) ? underdeterminedWriteRefuse(realTool, failKey) : unboundBranchRefuse(`${realTool}.${failKey}`),
+          refuse: isMutating(realTool)
+            ? underdeterminedWriteRefuse(realTool, failKey)
+            : unboundBranchRefuse(`${realTool}.${failKey}`),
         };
       }
       if (isMutating(realTool) && !Object.keys(args).length) {
@@ -381,9 +374,7 @@ export function assembleForkProgram(
   const extras = built.slice(1, -1);
   // ≥3 arms → one branch with cases. Two-arm CI-gate stays expr/then/else, no cases.
   const cases =
-    extras.length === 0
-      ? undefined
-      : extras.map((a) => ({ expr: `${field} == "${a.value}"`, steps: a.ids }));
+    extras.length === 0 ? undefined : extras.map((a) => ({ expr: `${field} == "${a.value}"`, steps: a.ids }));
 
   let branchId = `branch_${field}`;
   let n = 2;
@@ -407,7 +398,10 @@ export function assembleForkProgram(
       const v = (t.input as Record<string, unknown>)?.[path];
       if (v !== undefined) {
         const k = fingerprint(v);
-        if (!seen.has(k)) { seen.add(k); vals.push(v); }
+        if (!seen.has(k)) {
+          seen.add(k);
+          vals.push(v);
+        }
       }
     }
     if (vals.length) envInputs[path] = vals;
@@ -422,8 +416,8 @@ export function assembleForkProgram(
   void lastThenStep;
 
   const propEntries = [...inputPaths].map((k) => {
-    const sample = allTraces.find((t) => (t.input as Record<string, unknown> | undefined)?.[k] !== undefined)
-      ?.input as Record<string, unknown> | undefined;
+    const sample = allTraces.find((t) => (t.input as Record<string, unknown> | undefined)?.[k] !== undefined)?.input as
+      Record<string, unknown> | undefined;
     const val = sample?.[k];
     const t = typeof val === "number" ? "number" : typeof val === "boolean" ? "boolean" : "string";
     return [k, { type: t }];

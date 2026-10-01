@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { classifyFail, emptyPanelCopy, failLabel, handoffContractLine, originLine, receiptPostmortem, REFRESH_WAITING_COPY, siblingStatus } from "./fail";
+import {
+  classifyFail,
+  emptyPanelCopy,
+  failLabel,
+  handoffContractLine,
+  originLine,
+  receiptPostmortem,
+  REFRESH_WAITING_COPY,
+  siblingStatus,
+} from "./fail";
 import { refusalCopy } from "@eden/ir";
 import type { CanvasReceipt } from "./model";
 
@@ -21,7 +30,10 @@ describe("canvas fail language", () => {
   });
 
   test("inconclusive is degraded", () => {
-    const f = classifyFail({ verdict: "INCONCLUSIVE", reason: "not measured — quality held but neither tokens nor time saved" });
+    const f = classifyFail({
+      verdict: "INCONCLUSIVE",
+      reason: "not measured — quality held but neither tokens nor time saved",
+    });
     expect(f?.kind).toBe("degraded");
     expect(failLabel("degraded")).toBe("Degraded");
   });
@@ -68,20 +80,21 @@ describe("canvas fail language", () => {
   });
 
   test("live postmortem confirms this run against the tape, not the estimate", () => {
-    expect(
-      receiptPostmortem(
-        { outcome: "ok", stepsRun: 4, timeSavedMs: 68, ms: 12 },
-        { budgetMs: 80 },
-      ),
-    ).toBe("Ok · 4 steps · 68ms saved this run · 12ms this run · budget 80ms");
-    expect(receiptPostmortem({ outcome: "deopt", early: true, deoptReason: "deopt: input not in witness envelope", ms: 0 })).toBe(
-      "Fell back · early · input not in witness envelope · 0ms this run",
+    expect(receiptPostmortem({ outcome: "ok", stepsRun: 4, timeSavedMs: 68, ms: 12 }, { budgetMs: 80 })).toBe(
+      "Ok · 4 steps · 68ms saved this run · 12ms this run · budget 80ms",
     );
+    expect(
+      receiptPostmortem({ outcome: "deopt", early: true, deoptReason: "deopt: input not in witness envelope", ms: 0 }),
+    ).toBe("Fell back · early · input not in witness envelope · 0ms this run");
     expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { budgetMs: 80, drift: true })).toContain(
       REFRESH_WAITING_COPY,
     );
-    expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { budgetMs: 80 })).toMatch(/4ms over the tape/);
-    expect(receiptPostmortem({ outcome: "ok", cache_lookups: 4, cache_hits: 3, ms: 12 })).toMatch(/3 of 4 reads from cache/);
+    expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { budgetMs: 80 })).toMatch(
+      /4ms over the tape/,
+    );
+    expect(receiptPostmortem({ outcome: "ok", cache_lookups: 4, cache_hits: 3, ms: 12 })).toMatch(
+      /3 of 4 reads from cache/,
+    );
     expect(receiptPostmortem({ outcome: "ok", cache_lookups: 0, cache_hits: 0, ms: 12 })).not.toMatch(/cache/);
     expect(receiptPostmortem({ outcome: "ok", ms: 12 })).not.toMatch(/cache/);
   });
@@ -127,7 +140,9 @@ describe("canvas fail language", () => {
         repeats: 6,
       }),
     ).toBe("Read-set · 6 of 12");
-    expect(siblingStatus({ verdict: "FAIL", reason: "writeRecord arguments are under-determined" })).toBe("Unbound write");
+    expect(siblingStatus({ verdict: "FAIL", reason: "writeRecord arguments are under-determined" })).toBe(
+      "Unbound write",
+    );
     expect(siblingStatus({ verdict: "PASS" })).toBe("Ready");
     expect(siblingStatus({ verdict: "FAIL", reason: "weak" })).toBe("Refused");
   });
@@ -149,7 +164,8 @@ describe("canvas fail language", () => {
 
   test("remainder skip names the program and does not invent skip counts", () => {
     const f = classifyFail({
-      reason: "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the last tool output.",
+      reason:
+        "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the last tool output.",
     });
     expect(f?.kind).toBe("skipped");
     expect(f?.step).toBe("Grep");
@@ -262,8 +278,6 @@ describe("canvas fail language", () => {
         },
         "compose",
       ),
-    ).toBe(
-      "Compose of lookupTicket_to_notify → fetchInvoice_to_applyCredit. Live tool unchanged until you Approve.",
-    );
+    ).toBe("Compose of lookupTicket_to_notify → fetchInvoice_to_applyCredit. Live tool unchanged until you Approve.");
   });
 });

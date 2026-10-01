@@ -173,4 +173,3 @@ export function formatDcLine(row: DcDay): string {
   };
   return `${row.workspace} ${row.day} ${row.dcPct} ${billed} ${det} ${row.classes.frontier} ${JSON.stringify(json)}`;
 }
-

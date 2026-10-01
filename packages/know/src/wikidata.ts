@@ -12,8 +12,7 @@ const SPARQL = `SELECT ?countryLabel ?capitalLabel ?iso WHERE {
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }`;
 
-export const WIKIDATA_SPARQL_URL =
-  `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(SPARQL)}`;
+export const WIKIDATA_SPARQL_URL = `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(SPARQL)}`;
 
 function tidyName(s: string): string | undefined {
   const t = s.replace(/\s+/g, " ").trim();
@@ -31,8 +30,7 @@ function tidyIso(s: string): string | undefined {
 
 /** Capitals plus tidy ISO 3166-1 alpha-2 `id` facts. Skips Q-ids. Old JSON without `iso` still parses. */
 export function parseWikidataCapitals(json: unknown): Triple[] {
-  const bindings = (json as { results?: { bindings?: Record<string, { value?: string }>[] } })?.results
-    ?.bindings;
+  const bindings = (json as { results?: { bindings?: Record<string, { value?: string }>[] } })?.results?.bindings;
   if (!Array.isArray(bindings)) return [];
   const out: Triple[] = [];
   const seenCap = new Set<string>();

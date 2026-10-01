@@ -82,7 +82,10 @@ function checkStep(step: unknown, path: string, issues: ValidateIssue[]): void {
     if (step.until !== undefined && (typeof step.until !== "string" || !step.until)) {
       issues.push({ path, message: "loop until must be a non-empty string when present" });
     }
-    if (step.maxIters !== undefined && (typeof step.maxIters !== "number" || !Number.isFinite(step.maxIters) || step.maxIters < 1)) {
+    if (
+      step.maxIters !== undefined &&
+      (typeof step.maxIters !== "number" || !Number.isFinite(step.maxIters) || step.maxIters < 1)
+    ) {
       issues.push({ path, message: "loop maxIters must be a positive number when present" });
     }
     return;
@@ -133,7 +136,8 @@ export function validateProgram(program: unknown): ValidateIssue[] {
   if (!isObj(program.inputSchema)) issues.push({ path: "inputSchema", message: "inputSchema is required" });
   if (!isObj(program.contract)) issues.push({ path: "contract", message: "contract is required" });
   else {
-    if (typeof program.contract.witnesses !== "number") issues.push({ path: "contract.witnesses", message: "witnesses must be a number" });
+    if (typeof program.contract.witnesses !== "number")
+      issues.push({ path: "contract.witnesses", message: "witnesses must be a number" });
     if (typeof program.contract.minLlmReduction !== "number") {
       issues.push({ path: "contract.minLlmReduction", message: "minLlmReduction must be a number" });
     }
@@ -142,7 +146,8 @@ export function validateProgram(program: unknown): ValidateIssue[] {
     }
     if (isObj(program.contract.envelope)) {
       const inputs = program.contract.envelope.inputs;
-      if (!isObj(inputs)) issues.push({ path: "contract.envelope.inputs", message: "envelope.inputs must be an object" });
+      if (!isObj(inputs))
+        issues.push({ path: "contract.envelope.inputs", message: "envelope.inputs must be an object" });
       else {
         for (const [path, values] of Object.entries(inputs)) {
           if (!Array.isArray(values)) {
@@ -209,7 +214,8 @@ export function validateProgram(program: unknown): ValidateIssue[] {
         if (b.kind === "from" && b.or !== undefined) check(b.or, `${path}.or`);
         if (b.kind === "transform") check(b.of, `${path}.of`);
       };
-      if (step?.kind === "tool") for (const [k, b] of Object.entries(step.args ?? {})) check(b, `steps[${i}].args.${k}`);
+      if (step?.kind === "tool")
+        for (const [k, b] of Object.entries(step.args ?? {})) check(b, `steps[${i}].args.${k}`);
       if (step?.kind === "island") check(step.input, `steps[${i}].input`);
       if (step?.kind === "loop") check(step.over, `steps[${i}].over`);
     }

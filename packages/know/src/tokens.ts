@@ -42,18 +42,7 @@ const QUERY_STOP = new Set(["of", "or", "an", "as", "at", "by", "be", "if", "it"
 export const KEEP_SHORT = new Set(["get", "put", "en", "ws", "tcp", "udp", "mit", "css", "xml", "pdf", "png"]);
 
 /** Catalog/RFC identifiers. DF prune must not drop these or token recall dies at scale. */
-const KEEP_POST = new Set([
-  ...KEEP_SHORT,
-  "json",
-  "html",
-  "http",
-  "https",
-  "iana",
-  "rfc",
-  "w3c",
-  "spdx",
-  "dns",
-]);
+const KEEP_POST = new Set([...KEEP_SHORT, "json", "html", "http", "https", "iana", "rfc", "w3c", "spdx", "dns"]);
 
 /**
  * High-DF generic terms only. Identifiers and RFC numbers stay even when they

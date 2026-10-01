@@ -22,11 +22,7 @@
  */
 import { Session } from "./session";
 import { summarize, runScenario, type ScenarioOut, type ArmRun as ArmRunLike } from "./gates";
-import {
-  DESK_IDS,
-  blockSeed,
-  createDesk,
-} from "./worlds";
+import { DESK_IDS, blockSeed, createDesk } from "./worlds";
 import { createNoise, createCreative, createMicro, createFastDesk, createChaos } from "./negative-worlds";
 import { N9_EXPECT, n9Scenario } from "./silent-drop";
 
@@ -34,14 +30,21 @@ const FAST = process.argv.includes("--fast");
 process.env.CAMPAIGN_THINK_MS = "120";
 
 /** Compile once so steady-state programs exist where compilation is possible. */
-async function prelive(factory: () => ReturnType<typeof createDesk> | (() => unknown), pool: Array<Record<string, unknown>>, count = 13) {
+async function prelive(
+  factory: () => ReturnType<typeof createDesk> | (() => unknown),
+  pool: Array<Record<string, unknown>>,
+  count = 13,
+) {
   const s = new Session([["w", factory as never]], true);
   for (let i = 0; i < count; i++) await s.stretch("w", pool[i % pool.length]!, blockSeed(`neg-pre-${i}`, i));
   return await s.goLive("w", { compile: count - 3, holdout: 3, sandbox: factory as never, maxGram: 26 });
 }
 
 /** Try to compile against a world; returns null when nothing can go live. */
-async function tryPrelive(factory: any, pool: Array<Record<string, unknown>>): Promise<{ program: unknown | null; notes: string[] }> {
+async function tryPrelive(
+  factory: any,
+  pool: Array<Record<string, unknown>>,
+): Promise<{ program: unknown | null; notes: string[] }> {
   const r = await prelive(factory, pool);
   const notes = r.program ? [] : [`no program went live (${r.verdict}) — as designed for this regime`];
   return { program: r.program, notes };
@@ -154,7 +157,8 @@ async function main() {
     const run = async (arm: "raw" | "eden"): Promise<ArmRunLike> => {
       const s = new Session([["desk", createDesk]], arm === "eden");
       if (arm === "eden") s.addPrograms(pre.program ? [pre.program as never] : []);
-      for (let i = 0; i < 4; i++) await s.stretch("desk", witnessPool[i % witnessPool.length]!, blockSeed(`n5-w${i}`, i));
+      for (let i = 0; i < 4; i++)
+        await s.stretch("desk", witnessPool[i % witnessPool.length]!, blockSeed(`n5-w${i}`, i));
       for (let i = 0; i < 4; i++) await s.stretch("desk", drifted[i % drifted.length]!, blockSeed(`n5-d${i}`, 50 + i));
       return { stats: s.finish(), notes: pre.notes };
     };
@@ -193,7 +197,8 @@ async function main() {
   }
 
   /* --- n7 concurrent ------------------------------------------------------ */
-  console.log("\n[n7] concurrent — three stretches interleaved on one wrapped surface");  {
+  console.log("\n[n7] concurrent — three stretches interleaved on one wrapped surface");
+  {
     const pool = [...DESK_IDS].map((id) => ({ id, text: "requesting refund for outage" }));
     const pre = await tryPrelive(createDesk, pool);
     const run = async (arm: "raw" | "eden"): Promise<ArmRunLike> => {
@@ -217,7 +222,6 @@ async function main() {
     );
   }
 
-
   /* --- n8 chaos-enforce --------------------------------------------------- */
   console.log("\n[n8] chaos-enforce — enforcement on a failure-dominant workload: help or harm?");
   {
@@ -225,7 +229,8 @@ async function main() {
     const run = async (arm: "raw" | "eden"): Promise<ArmRunLike> => {
       const s = new Session([["chaos", createChaos]], arm === "eden");
       if (arm === "eden") {
-        for (const [, slot] of (s as unknown as { slots: Map<string, { state?: { opts: Record<string, unknown> } }> }).slots) {
+        for (const [, slot] of (s as unknown as { slots: Map<string, { state?: { opts: Record<string, unknown> } }> })
+          .slots) {
           if (slot.state) slot.state.opts.enforce = true;
         }
       }
@@ -257,8 +262,6 @@ async function main() {
   // recording cost (~35µs/call), not defects; they print and pass.
   summarize(outs, { lossTolerancePct: 1 });
 }
-
-
 
 main().catch((err) => {
   console.error(err);

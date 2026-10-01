@@ -1,5 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalize, cloneJson, containsRedaction, containsSecret, eq, flatten, getPath, hashProgram, hashTrace, inDistribution, interpolate, isCheckName, isMutating, isSecretKey, isWeakValue, minLlmReductionOf, redact, redactString, validateProgram, withVersion } from "../src/index";
+import {
+  canonicalize,
+  cloneJson,
+  containsRedaction,
+  containsSecret,
+  eq,
+  flatten,
+  getPath,
+  hashProgram,
+  hashTrace,
+  inDistribution,
+  interpolate,
+  isCheckName,
+  isMutating,
+  isSecretKey,
+  isWeakValue,
+  minLlmReductionOf,
+  redact,
+  redactString,
+  validateProgram,
+  withVersion,
+} from "../src/index";
 import type { StretchProgram } from "../src/index";
 
 const mini = (): StretchProgram =>
@@ -209,7 +230,15 @@ describe("ir", () => {
   });
 
   test("compound key names are credentials, ordinary words that contain them are not", () => {
-    for (const k of ["user_password", "auth_token", "authToken", "github_token", "apiSecret", "x_api_key", "passwords"]) {
+    for (const k of [
+      "user_password",
+      "auth_token",
+      "authToken",
+      "github_token",
+      "apiSecret",
+      "x_api_key",
+      "passwords",
+    ]) {
       expect(isSecretKey(k)).toBe(true);
     }
     // Suffix matching, not substring: a redactor that eats "author" and
@@ -278,8 +307,26 @@ describe("ir", () => {
     // Object.entries returns nothing for any of these, so each redacted to an
     // empty object: the trace recorded {} where the tool had returned an error
     // message, and containsRedaction saw nothing to refuse.
-    expect(JSON.stringify(redact(new Map([["password", "p"], ["a", "1"]])))).toContain("[REDACTED]");
-    expect(JSON.stringify(redact(new Map([["password", "p"], ["a", "1"]])))).toContain('"1"');
+    expect(
+      JSON.stringify(
+        redact(
+          new Map([
+            ["password", "p"],
+            ["a", "1"],
+          ]),
+        ),
+      ),
+    ).toContain("[REDACTED]");
+    expect(
+      JSON.stringify(
+        redact(
+          new Map([
+            ["password", "p"],
+            ["a", "1"],
+          ]),
+        ),
+      ),
+    ).toContain('"1"');
     expect(JSON.stringify(redact(new Set(["Bearer abc123def"])))).toContain("[REDACTED]");
     expect(redact(new Date(0))).toBe("1970-01-01T00:00:00.000Z");
 
@@ -388,7 +435,12 @@ describe("ir", () => {
     p.contract.envelope = { inputs: { id: "T-1" as unknown as unknown[] } };
     const issues = validateProgram(p);
     expect(issues.some((i) => i.message.includes("array"))).toBe(true);
-    expect(inDistribution({ ...p, contract: { ...p.contract, envelope: { inputs: { id: "T-1" as unknown as unknown[] } } } }, { id: "T-1" })).toBe(false);
+    expect(
+      inDistribution(
+        { ...p, contract: { ...p.contract, envelope: { inputs: { id: "T-1" as unknown as unknown[] } } } },
+        { id: "T-1" },
+      ),
+    ).toBe(false);
   });
 
   test("branch cases ids must exist; binary branch has no cases", () => {
@@ -472,7 +524,10 @@ describe("canonicalize agrees with eq about what is different", () => {
       [new Set([1, 2]), new Set([2, 1])], // order is not a difference
       [new Error("boom"), new Error("boom")],
       [/a/g, /a/g],
-      [{ a: 1, b: 2 }, { b: 2, a: 1 }],
+      [
+        { a: 1, b: 2 },
+        { b: 2, a: 1 },
+      ],
     ];
     for (const [a, b] of same) {
       expect(eq(a, b)).toBe(true);
@@ -577,7 +632,15 @@ describe("a write is a write even when its name mentions a check", () => {
   });
 
   test("campaign write verbs are mutating", () => {
-    for (const n of ["applyCredit", "reserveSku", "assignOwner", "setRollout", "mergeRows", "restockLine", "applyChange"]) {
+    for (const n of [
+      "applyCredit",
+      "reserveSku",
+      "assignOwner",
+      "setRollout",
+      "mergeRows",
+      "restockLine",
+      "applyChange",
+    ]) {
       expect(isMutating(n), n).toBe(true);
     }
   });

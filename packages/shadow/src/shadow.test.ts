@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { registryFrom } from "@eden/runtime";
-import { canApprove, mutatingSteps, outputDerivesFromIsland, replayRegistry, shadowProgram, uncoveredTools } from "../src/index";
+import {
+  canApprove,
+  mutatingSteps,
+  outputDerivesFromIsland,
+  replayRegistry,
+  shadowProgram,
+  uncoveredTools,
+} from "../src/index";
 import { createTicketShip, ticketShipProgram, toNaiveTrace, WITNESS_IDS } from "../../runtime/src/ticketship";
 import { compileTraces } from "../../compile/src/index";
 import { runNaive } from "../../runtime/src/ticketship";
@@ -11,7 +18,7 @@ async function traces(n: number, skip = 0.2): Promise<StretchTrace[]> {
   for (let i = 0; i < n; i++) {
     const world = createTicketShip({ llmMs: 0 });
     const id = WITNESS_IDS[i % 3]!;
-      const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : skip, seed: 50 + i });
+    const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : skip, seed: 50 + i });
     out.push(toNaiveTrace(`s${i}`, id, run));
   }
   return out;
@@ -429,7 +436,8 @@ describe("a program that checks more than the agent did is credited, not failed"
     const empty = held.map((t) => ({ ...t, events: [] }));
     const result = await shadowProgram(ticketShipProgram(), held, {
       registry: registryFrom(world.tools),
-      registryFor: (t) => replayRegistry(registryFrom(world.tools), empty.find((e) => e.id === t.id) ?? { ...t, events: [] }),
+      registryFor: (t) =>
+        replayRegistry(registryFrom(world.tools), empty.find((e) => e.id === t.id) ?? { ...t, events: [] }),
       island: world.island,
       allowSideEffects: true,
     });
@@ -507,7 +515,9 @@ describe("skip rates share one denominator", () => {
     const result = await shadowProgram(ticketShipProgram(), heldStripped, {
       registry: reg,
       registryFor: (t) =>
-        stripped.has(t.id) ? replayRegistry(registryFrom(world.tools), t) : registryFrom(createTicketShip({ llmMs: 0 }).tools),
+        stripped.has(t.id)
+          ? replayRegistry(registryFrom(world.tools), t)
+          : registryFrom(createTicketShip({ llmMs: 0 }).tools),
       island: world.island,
       allowSideEffects: true,
     });
@@ -557,7 +567,9 @@ describe("skip rates share one denominator", () => {
       return shadowProgram(ticketShipProgram(), held, {
         registry: reg,
         registryFor: (t) =>
-          stripped.has(t.id) ? replayRegistry(registryFrom(world.tools), t) : registryFrom(createTicketShip({ llmMs: 0 }).tools),
+          stripped.has(t.id)
+            ? replayRegistry(registryFrom(world.tools), t)
+            : registryFrom(createTicketShip({ llmMs: 0 }).tools),
         island: world.island,
         allowSideEffects: true,
       });
@@ -625,7 +637,9 @@ describe("island-derived output comparison", () => {
   const proseTraces = (output: unknown): StretchTrace[] =>
     ["alpha", "beta", "gamma"].map((topic, i) => ({
       id: `p${i}`,
-      events: [{ name: "draftReply", args: { topic }, ok: true, result: { text: "recorded prose" }, duration_ms: 5000 }],
+      events: [
+        { name: "draftReply", args: { topic }, ok: true, result: { text: "recorded prose" }, duration_ms: 5000 },
+      ],
       input: { topic },
       output,
       llmCalls: 1,
@@ -665,10 +679,16 @@ describe("island-derived output comparison", () => {
     // from the input alone — no island anywhere up the chain.
     expect(outputDerivesFromIsland(ticketShipProgram())).toBe(false);
     // One hop through a tool whose argument carries the island's draft.
-    const throughTool = { ...ticketShipProgram(), returns: { kind: "from", step: "write", path: "" } } as unknown as StretchProgram;
+    const throughTool = {
+      ...ticketShipProgram(),
+      returns: { kind: "from", step: "write", path: "" },
+    } as unknown as StretchProgram;
     expect(outputDerivesFromIsland(throughTool)).toBe(true);
     // A reference to a step that does not exist proves nothing.
-    const ghost = { ...ticketShipProgram(), returns: { kind: "from", step: "ghost", path: "" } } as unknown as StretchProgram;
+    const ghost = {
+      ...ticketShipProgram(),
+      returns: { kind: "from", step: "ghost", path: "" },
+    } as unknown as StretchProgram;
     expect(outputDerivesFromIsland(ghost)).toBe(false);
   });
 });

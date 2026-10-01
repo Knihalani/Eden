@@ -32,10 +32,9 @@ export async function findOnTool(db: EdenDb, workspaceId: string, name: string):
     [workspaceId, name],
   );
   if (byName) return byName;
-  const tools = await db.all<OnTool>(
-    `SELECT id, name, steps, seen FROM tool WHERE workspace_id = ? AND state = 'on'`,
-    [workspaceId],
-  );
+  const tools = await db.all<OnTool>(`SELECT id, name, steps, seen FROM tool WHERE workspace_id = ? AND state = 'on'`, [
+    workspaceId,
+  ]);
   return tools.find((t) => {
     try {
       const seen = JSON.parse(t.seen || "[]") as string[];
@@ -75,10 +74,10 @@ export async function wrapPlay(
     if (hit && Date.now() - hit.at < RECENT_TTL_MS) {
       return { action: "play", facts: hit.facts, ok: hit.ok, server_ms: 0 };
     }
-    const row = await db.get<{ facts: string }>(
-      `SELECT facts FROM wrap_cache WHERE run_id = ? AND tool_id = ?`,
-      [runId, cacheId],
-    );
+    const row = await db.get<{ facts: string }>(`SELECT facts FROM wrap_cache WHERE run_id = ? AND tool_id = ?`, [
+      runId,
+      cacheId,
+    ]);
     if (row?.facts) {
       try {
         const facts = JSON.parse(row.facts);

@@ -16,9 +16,7 @@ describe("DC% frozen formula (ROADMAP §13 / Arc 1 catcher)", () => {
   });
 
   test("numerator is compiled+memoized+transparent+steeredSkip over frontier", () => {
-    expect(
-      dcShare({ compiled: 4, memoized: 1, transparent: 2, steeredSkip: 3, frontier: 10 }),
-    ).toBe(10 / 20);
+    expect(dcShare({ compiled: 4, memoized: 1, transparent: 2, steeredSkip: 3, frontier: 10 })).toBe(10 / 20);
     expect(dcPct({ compiled: 1, memoized: 0, transparent: 0, steeredSkip: 0, frontier: 1 })).toBe(50);
   });
 

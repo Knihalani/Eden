@@ -42,9 +42,16 @@ function walk(dir: string): string[] {
 }
 
 function fileHay(dir: string, pred: (p: string) => boolean): string {
-  return walk(dir).filter(pred).map((p) => {
-    try { return readFileSync(p, "utf8"); } catch { return ""; }
-  }).join("\n");
+  return walk(dir)
+    .filter(pred)
+    .map((p) => {
+      try {
+        return readFileSync(p, "utf8");
+      } catch {
+        return "";
+      }
+    })
+    .join("\n");
 }
 
 function sampleTraj(id = "m26-test-traj"): CompactTraj {
@@ -59,12 +66,14 @@ function sampleTraj(id = "m26-test-traj"): CompactTraj {
     n_states_kept: 1,
     chars_raw_est: 80,
     chars_kept: 80,
-    states: [{
-      url: "https://example.com/m26",
-      action: "click #go",
-      thought: "look for the widget",
-      observation: AX,
-    }],
+    states: [
+      {
+        url: "https://example.com/m26",
+        action: "click #go",
+        thought: "look for the widget",
+        observation: AX,
+      },
+    ],
   };
 }
 

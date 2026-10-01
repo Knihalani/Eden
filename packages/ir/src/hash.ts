@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import type { StretchProgram, StretchTrace } from "./types";
 import { canonicalize, cloneJson } from "./eq";
 
-export function hashProgram(program: Pick<StretchProgram, "name" | "description" | "inputSchema" | "steps" | "returns" | "contract" | "sequence">): string {
+export function hashProgram(
+  program: Pick<StretchProgram, "name" | "description" | "inputSchema" | "steps" | "returns" | "contract" | "sequence">,
+): string {
   const payload = {
     name: program.name,
     description: program.description,
@@ -61,6 +63,8 @@ export function hashTrace(t: Pick<StretchTrace, "events" | "input">): string {
   return createHash("sha256").update(canonicalize({ input, events })).digest("hex");
 }
 
-export function withVersion<T extends Omit<StretchProgram, "version"> & { version?: string }>(program: T): T & { version: string } {
+export function withVersion<T extends Omit<StretchProgram, "version"> & { version?: string }>(
+  program: T,
+): T & { version: string } {
   return { ...program, version: hashProgram(program) };
 }

@@ -114,10 +114,15 @@ function ProfileMenu({ portrait, owner }: { portrait: Portrait; owner: string })
   const [cachedPhoto, setCachedPhoto] = useState<string | null>(null);
 
   const workspace = organization?.name || "Workspace";
-  const initial =
-    (user?.firstName || user?.username || user?.primaryEmailAddress?.emailAddress || portrait.initial || "E")
-      .slice(0, 1)
-      .toUpperCase();
+  const initial = (
+    user?.firstName ||
+    user?.username ||
+    user?.primaryEmailAddress?.emailAddress ||
+    portrait.initial ||
+    "E"
+  )
+    .slice(0, 1)
+    .toUpperCase();
   const source = user?.hasImage ? user.imageUrl : portrait.imageUrl;
   const livePhoto = !photoFailed && source ? sizedAvatar(source) : null;
   const photo = livePhoto || (!photoFailed ? cachedPhoto : null);
@@ -244,13 +249,7 @@ function ProfileMenu({ portrait, owner }: { portrait: Portrait; owner: string })
         </span>
       </button>
       {open ? (
-        <div
-          id={menuId}
-          className="profile-menu"
-          role="menu"
-          aria-label="Account"
-          onKeyDown={onMenuKeyDown}
-        >
+        <div id={menuId} className="profile-menu" role="menu" aria-label="Account" onKeyDown={onMenuKeyDown}>
           <Link
             ref={(node) => {
               itemsRef.current[0] = node;

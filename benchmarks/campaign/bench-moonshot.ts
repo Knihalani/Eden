@@ -121,7 +121,8 @@ async function prelive(
     await s.stretch("w", g, blockSeed(`prelive-${i}-${JSON.stringify(g)}`, i));
   }
   const r = await s.goLive("w", { compile: Math.max(3, count - 3), holdout: 3, sandbox: factory, maxGram: 26 });
-  if (r.program == null) notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
+  if (r.program == null)
+    notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
   else notes.push(`prelive PASS: ${r.program.sequence.join("→")}`);
   return { program: r.program, notes };
 }
@@ -145,7 +146,8 @@ async function shortLiveRun(
   s.addPrograms(pre.program ? [pre.program] : []);
   await s.stretch(worldName, goal, blockSeed(`short-${worldName}-${task}`, repeat));
   const stats = s.finish();
-  if (!pre.program) stats.violations = [...stats.violations, ...pre.notes, "short cell with no live program — not a skip-as-win"];
+  if (!pre.program)
+    stats.violations = [...stats.violations, ...pre.notes, "short cell with no live program — not a skip-as-win"];
   return { stats, notes: pre.notes };
 }
 
@@ -215,9 +217,24 @@ async function main() {
     world: [string, WorldFactory];
     pool: Array<Record<string, unknown>>;
   }> = [
-    { key: "long-terraform", label: "plan-then-apply, showPlan then applyChange foreach", world: ["terraform", createTerraform], pool: terraformPool() },
-    { key: "long-flags", label: "two-field cohort rollout, setRollout then publishFlag", world: ["flags", createFlags], pool: flagsPool() },
-    { key: "long-dns", label: "cert-then-listener, createCert foreach then checkHttps", world: ["dns-tls", createDnsTls], pool: dnsPool() },
+    {
+      key: "long-terraform",
+      label: "plan-then-apply, showPlan then applyChange foreach",
+      world: ["terraform", createTerraform],
+      pool: terraformPool(),
+    },
+    {
+      key: "long-flags",
+      label: "two-field cohort rollout, setRollout then publishFlag",
+      world: ["flags", createFlags],
+      pool: flagsPool(),
+    },
+    {
+      key: "long-dns",
+      label: "cert-then-listener, createCert foreach then checkHttps",
+      world: ["dns-tls", createDnsTls],
+      pool: dnsPool(),
+    },
   ];
 
   for (let si = 0; si < longDefs.length; si++) {

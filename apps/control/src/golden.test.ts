@@ -85,7 +85,9 @@ describe("control plane", () => {
   test("empty inbox does not 500", async () => {
     const store = new Store(":memory:");
     const fetchHandler = createHandler({ store, token: "eden_dev" });
-    const inbox = await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }));
+    const inbox = await fetchHandler(
+      new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(inbox.status).toBe(200);
     const health = await fetchHandler(new Request("http://x/health"));
     const hj = (await health.json()) as { ok: boolean; traces?: number; registry?: boolean; island?: boolean };
@@ -100,10 +102,16 @@ describe("control plane", () => {
     const opt = await fetchHandler(new Request("http://x/v1/tools", { method: "OPTIONS" }));
     expect(opt.status).toBe(204);
     const badJson = await fetchHandler(
-      new Request("http://x/v1/traces", { method: "POST", headers: { authorization: "Bearer eden_dev", "content-type": "application/json" }, body: "{" }),
+      new Request("http://x/v1/traces", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: "{",
+      }),
     );
     expect(badJson.status).toBe(400);
-    const cands = await fetchHandler(new Request("http://x/v1/candidates", { headers: { authorization: "Bearer eden_dev" } }));
+    const cands = await fetchHandler(
+      new Request("http://x/v1/candidates", { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(cands.status).toBe(200);
     const locked = createHandler({ store, token: "secret-token" });
     const toolsNoAuth = await locked(new Request("http://x/v1/tools"));
@@ -115,16 +123,24 @@ describe("control plane", () => {
     );
     expect(alias.status).toBe(401);
     const ok = await locked(
-      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer secret-token" }, body: "{}" }),
+      new Request("http://x/v1/compile", {
+        method: "POST",
+        headers: { authorization: "Bearer secret-token" },
+        body: "{}",
+      }),
     );
     expect(ok.status).toBe(200);
     const tracesNoAuth = await locked(new Request("http://x/v1/traces"));
     expect(tracesNoAuth.status).toBe(401);
-    const tracesOk = await locked(new Request("http://x/v1/traces", { headers: { authorization: "Bearer secret-token" } }));
+    const tracesOk = await locked(
+      new Request("http://x/v1/traces", { headers: { authorization: "Bearer secret-token" } }),
+    );
     expect(tracesOk.status).toBe(200);
     const tracesBody = (await tracesOk.json()) as { traces: unknown[] };
     expect(Array.isArray(tracesBody.traces)).toBe(true);
-    const miss = await fetchHandler(new Request("http://x/v1/candidates/nope", { headers: { authorization: "Bearer eden_dev" } }));
+    const miss = await fetchHandler(
+      new Request("http://x/v1/candidates/nope", { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(miss.status).toBe(404);
   });
 
@@ -157,10 +173,13 @@ describe("control plane", () => {
     const compiled = await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
     expect(compiled.status).toBe(200);
 
-    const inbox = (await (
-      await fetchHandler(auth("/v1/inbox"))
-    ).json()) as {
-      candidates: Array<{ id: string; verdict: string; program: { name: string } | null; manifest: { llmReduction?: number } | null }>;
+    const inbox = (await (await fetchHandler(auth("/v1/inbox"))).json()) as {
+      candidates: Array<{
+        id: string;
+        verdict: string;
+        program: { name: string } | null;
+        manifest: { llmReduction?: number } | null;
+      }>;
     };
     const pass = inbox.candidates.find((c) => c.verdict === "PASS" && c.program);
     expect(pass).toBeTruthy();
@@ -224,7 +243,9 @@ describe("control plane", () => {
       new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
     );
     expect(compiled.status).toBe(200);
-    const inbox = await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json() as { candidates: Array<{ id: string; refusal?: { reason: string } }> };
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as { candidates: Array<{ id: string; refusal?: { reason: string } }> };
     expect(inbox.candidates.some((c) => c.refusal?.reason)).toBe(true);
     const page = await fetchHandler(new Request("http://x/"));
     expect(page.status).toBe(404);
@@ -232,7 +253,9 @@ describe("control plane", () => {
       new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
     );
     expect(again.status).toBe(200);
-    const inbox2 = await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json() as { candidates: Array<{ id: string }> };
+    const inbox2 = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as { candidates: Array<{ id: string }> };
     expect(inbox2.candidates[0]?.id).toBe(inbox.candidates[0]?.id);
   });
 });
@@ -245,9 +268,24 @@ describe("TicketShip golden", () => {
     const mk = (id: string): StretchTrace => ({
       id: `notion-${id}`,
       events: [
-        { name: "mcp__notion__query_database", args: { database_id: "db_1", filter: JSON.stringify({ property: "Status", select: { name: "Blocked" } }) }, result: { results: [{ id }] }, ok: true },
-        { name: "mcp__notion__update_page", args: { page_id: id, properties: { Status: { select: { name: "In progress" } } } }, result: { id, archived: false }, ok: true },
-        { name: "mcp__notion__create_comment", args: { page_id: id, rich_text: "moved to in progress" }, result: { id: `c-${id}` }, ok: true },
+        {
+          name: "mcp__notion__query_database",
+          args: { database_id: "db_1", filter: JSON.stringify({ property: "Status", select: { name: "Blocked" } }) },
+          result: { results: [{ id }] },
+          ok: true,
+        },
+        {
+          name: "mcp__notion__update_page",
+          args: { page_id: id, properties: { Status: { select: { name: "In progress" } } } },
+          result: { id, archived: false },
+          ok: true,
+        },
+        {
+          name: "mcp__notion__create_comment",
+          args: { page_id: id, rich_text: "moved to in progress" },
+          result: { id: `c-${id}` },
+          ok: true,
+        },
       ],
       input: { pageId: id },
       output: { moved: [id] },
@@ -272,11 +310,7 @@ describe("TicketShip golden", () => {
     // old kubectl loop by hand. The proxy must recognise the command's shape,
     // recover the slot value from the witness envelope, and redirect — the
     // same steer path URL-shaped tools already get.
-    const traces = [
-      kubectlTrace("dev", "k1"),
-      kubectlTrace("stage", "k2"),
-      kubectlTrace("prod", "k3"),
-    ];
+    const traces = [kubectlTrace("dev", "k1"), kubectlTrace("stage", "k2"), kubectlTrace("prod", "k3")];
     const { programs } = compileTraces(traces);
     expect(programs.length).toBe(1);
     const program = {
@@ -306,27 +340,62 @@ describe("TicketShip golden", () => {
     // (G13) steers a live raw logs call by template recovery, and the two
     // shell programs disambiguate — the pods call never lands on logs.
     const logsTraces: StretchTrace[] = [
-      { id: "l1", events: [
-        { name: "Bash", args: { command: "kubectl logs api -n dev" }, result: { lines: 1 }, ok: true },
-        { name: "Bash", args: { command: "kubectl get pods -n dev" }, result: { pods: [] }, ok: true },
-        { name: "Bash", args: { command: "kubectl get svc -n dev" }, result: { svc: [] }, ok: true },
-      ], input: { app: "api", namespace: "dev" }, output: { ns: "dev" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
-      { id: "l2", events: [
-        { name: "Bash", args: { command: "kubectl logs web -n stage" }, result: { lines: 4 }, ok: true },
-        { name: "Bash", args: { command: "kubectl get pods -n stage" }, result: { pods: [] }, ok: true },
-        { name: "Bash", args: { command: "kubectl get svc -n stage" }, result: { svc: [] }, ok: true },
-      ], input: { app: "web", namespace: "stage" }, output: { ns: "stage" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
-      { id: "l3", events: [
-        { name: "Bash", args: { command: "kubectl logs jobs -n prod" }, result: { lines: 7 }, ok: true },
-        { name: "Bash", args: { command: "kubectl get pods -n prod" }, result: { pods: [] }, ok: true },
-        { name: "Bash", args: { command: "kubectl get svc -n prod" }, result: { svc: [] }, ok: true },
-      ], input: { app: "jobs", namespace: "prod" }, output: { ns: "prod" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
+      {
+        id: "l1",
+        events: [
+          { name: "Bash", args: { command: "kubectl logs api -n dev" }, result: { lines: 1 }, ok: true },
+          { name: "Bash", args: { command: "kubectl get pods -n dev" }, result: { pods: [] }, ok: true },
+          { name: "Bash", args: { command: "kubectl get svc -n dev" }, result: { svc: [] }, ok: true },
+        ],
+        input: { app: "api", namespace: "dev" },
+        output: { ns: "dev" },
+        llmCalls: 3,
+        duration_ms: 3000,
+        cost_cents: 3,
+        complete: true,
+      },
+      {
+        id: "l2",
+        events: [
+          { name: "Bash", args: { command: "kubectl logs web -n stage" }, result: { lines: 4 }, ok: true },
+          { name: "Bash", args: { command: "kubectl get pods -n stage" }, result: { pods: [] }, ok: true },
+          { name: "Bash", args: { command: "kubectl get svc -n stage" }, result: { svc: [] }, ok: true },
+        ],
+        input: { app: "web", namespace: "stage" },
+        output: { ns: "stage" },
+        llmCalls: 3,
+        duration_ms: 3000,
+        cost_cents: 3,
+        complete: true,
+      },
+      {
+        id: "l3",
+        events: [
+          { name: "Bash", args: { command: "kubectl logs jobs -n prod" }, result: { lines: 7 }, ok: true },
+          { name: "Bash", args: { command: "kubectl get pods -n prod" }, result: { pods: [] }, ok: true },
+          { name: "Bash", args: { command: "kubectl get svc -n prod" }, result: { svc: [] }, ok: true },
+        ],
+        input: { app: "jobs", namespace: "prod" },
+        output: { ns: "prod" },
+        llmCalls: 3,
+        duration_ms: 3000,
+        cost_cents: 3,
+        complete: true,
+      },
     ];
     const logsMined = compileTraces(logsTraces);
     expect(logsMined.programs.length).toBe(1);
     const logsProgram = {
       ...logsMined.programs[0]!,
-      manifest: { name: "logs_bundle", llmReduction: 3, latencyReduction: 3, costReduction: 3, skipRateBefore: 0, skipRateAfter: 0, nShadow: 6 },
+      manifest: {
+        name: "logs_bundle",
+        llmReduction: 3,
+        latencyReduction: 3,
+        costReduction: 3,
+        skipRateBefore: 0,
+        skipRateAfter: 0,
+        nShadow: 6,
+      },
     };
     const both = [program, logsProgram];
     const toLogs = steerToolCalls(
@@ -410,7 +479,7 @@ describe("TicketShip golden", () => {
     expect(naive.stats.llmCalls).toBe(8);
 
     const steered = steerToolCalls(
-      [{ function: { name: "lookupTicket", arguments: "{\"id\":\"T-101\"}" } }],
+      [{ function: { name: "lookupTicket", arguments: '{"id":"T-101"}' } }],
       store.livePrograms(),
     );
     expect(steered[0]!.function?.name).toBe(program.name);
@@ -497,7 +566,9 @@ describe("TicketShip golden", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { candidates: unknown[] };
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as { candidates: unknown[] };
     expect(inbox.candidates.length).toBeGreaterThanOrEqual(1);
     const again = await fetchHandler(
       new Request("http://x/v1/traces", {
@@ -527,8 +598,12 @@ describe("TicketShip golden", () => {
       });
     }
     const fetchHandler = createHandler({ store, token: "eden_dev" });
-    await fetchHandler(new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }));
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { candidates: unknown[] };
+    await fetchHandler(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
+    );
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as { candidates: unknown[] };
     expect(inbox.candidates).toEqual([]);
   });
 
@@ -558,7 +633,17 @@ describe("TicketShip golden", () => {
       new Request(`http://x/v1/candidates/${program.id}/shadow`, {
         method: "POST",
         headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
-        body: JSON.stringify({ verdict: "PASS", manifest: { llmReduction: 99, latencyReduction: 99, costReduction: 99, skipRateBefore: 0, skipRateAfter: 0, nShadow: 99 } }),
+        body: JSON.stringify({
+          verdict: "PASS",
+          manifest: {
+            llmReduction: 99,
+            latencyReduction: 99,
+            costReduction: 99,
+            skipRateBefore: 0,
+            skipRateAfter: 0,
+            nShadow: 99,
+          },
+        }),
       }),
     );
     expect(forged.status).toBe(200);
@@ -606,9 +691,13 @@ describe("TicketShip golden", () => {
       }),
     );
     expect(approved.status).toBe(200);
-    const got = await fetchHandler(new Request(`http://x/v1/tools/${program.id}/program`, { headers: { authorization: "Bearer eden_dev" } }));
+    const got = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}/program`, { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(got.status).toBe(200);
-    const rec = await fetchHandler(new Request(`http://x/v1/tools/${program.id}`, { headers: { authorization: "Bearer eden_dev" } }));
+    const rec = await fetchHandler(
+      new Request(`http://x/v1/tools/${program.id}`, { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(rec.status).toBe(200);
     expect(((await rec.json()) as { state: string }).state).toBe("live");
     const liveProg = (await got.json()) as { name: string };
@@ -645,11 +734,15 @@ describe("TicketShip golden", () => {
       }),
     );
     expect(timed.status).toBe(200);
-    const recs = await fetchHandler(new Request("http://x/v1/receipts", { headers: { authorization: "Bearer eden_dev" } }));
+    const recs = await fetchHandler(
+      new Request("http://x/v1/receipts", { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(recs.status).toBe(200);
     const recBody = (await recs.json()) as { receipts: Array<{ ok: number }> };
     expect(recBody.receipts.length).toBeGreaterThan(0);
-    const liveOnly = await fetchHandler(new Request("http://x/v1/tools?state=live", { headers: { authorization: "Bearer eden_dev" } }));
+    const liveOnly = await fetchHandler(
+      new Request("http://x/v1/tools?state=live", { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(((await liveOnly.json()) as { tools: unknown[] }).tools.length).toBe(1);
     expect(store.receiptStats(program.id).fail).toBeGreaterThan(0);
     const paused = await fetchHandler(
@@ -705,9 +798,13 @@ describe("TicketShip golden", () => {
     expect(body.accepted).toBe(2);
     expect(body.duplicates).toBe(1);
     expect(store.traces().length).toBe(3);
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { sig: string };
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as { sig: string };
     expect(inbox.sig.length).toBeGreaterThan(0);
-    const savings = await fetchHandler(new Request("http://x/v1/savings", { headers: { authorization: "Bearer eden_dev" } }));
+    const savings = await fetchHandler(
+      new Request("http://x/v1/savings", { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(savings.status).toBe(200);
     expect(await savings.json()).toEqual({
       runs: 0,
@@ -828,7 +925,9 @@ describe("TicketShip golden", () => {
     await fetchHandler(
       new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
     );
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as {
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as {
       candidates: Array<{ id: string; program: unknown; verdict: string; refusal: { reason: string } | null }>;
     };
     const c = inbox.candidates.find((x) => x.program);
@@ -966,7 +1065,9 @@ describe("TicketShip golden", () => {
     });
     store.putReceipt({ tool_id: "t1", version: "1", ms: 40, llm_calls: 0, cents: 0.1, ok: 1 });
     const fetchHandler = createHandler({ store, token: "eden_dev" });
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as {
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as {
       live: Array<{ id: string; state: string; stats: { n: number } }>;
     };
     expect(inbox.live.some((t) => t.id === "t1" && t.state === "paused")).toBe(true);
@@ -1068,7 +1169,9 @@ describe("the control plane is not reachable from a web page", () => {
     for (const req of [
       new Request("http://x/v1/tools", { method: "OPTIONS", headers: { origin: "https://evil.example" } }),
       new Request("http://x/v1/inbox", { headers: { origin: "https://evil.example" } }),
-      new Request("http://x/v1/stats", { headers: { origin: "https://evil.example", authorization: "Bearer eden_dev" } }),
+      new Request("http://x/v1/stats", {
+        headers: { origin: "https://evil.example", authorization: "Bearer eden_dev" },
+      }),
     ]) {
       expect((await h(req)).headers.get("access-control-allow-origin")).not.toBe("*");
     }
@@ -1084,7 +1187,11 @@ describe("the control plane is not reachable from a web page", () => {
 
   test("/v1/chat/completions needs the key before it spends the upstream one", async () => {
     const res = await handler()(
-      new Request("http://x/v1/chat/completions", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" }),
+      new Request("http://x/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: "{}",
+      }),
     );
     expect(res.status).toBe(401);
   });
@@ -1101,7 +1208,9 @@ describe("the control plane is not reachable from a web page", () => {
     for (const authorization of ["secret-token", "Bearer secret", "Bearer secret-token-more", "Bearer "]) {
       expect((await h(new Request("http://x/v1/stats", { headers: { authorization } }))).status).toBe(401);
     }
-    expect((await h(new Request("http://x/v1/stats", { headers: { authorization: "Bearer secret-token" } }))).status).toBe(200);
+    expect(
+      (await h(new Request("http://x/v1/stats", { headers: { authorization: "Bearer secret-token" } }))).status,
+    ).toBe(200);
   });
 
   test("receipt fail rate auto-pauses a live tool", () => {
@@ -1207,7 +1316,9 @@ describe("list endpoints limit param", () => {
       store.putTrace({ id: `g${i}`, events: [{ name: `x${i}` }] } as unknown as StretchTrace);
     }
     for (const bad of ["abc", "-5", "1e999"]) {
-      const res = await fetchHandler(new Request(`http://x/v1/traces?limit=${encodeURIComponent(bad)}`, { headers: auth }));
+      const res = await fetchHandler(
+        new Request(`http://x/v1/traces?limit=${encodeURIComponent(bad)}`, { headers: auth }),
+      );
       expect(res.status).toBe(200);
       const body = (await res.json()) as { traces: unknown[] };
       // Non-numeric falls back to the default; non-numeric and infinite values

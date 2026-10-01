@@ -1,12 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  cellsEqual,
-  densifyPayload,
-  densifyValue,
-  densifyValueV1,
-  jsonBytes,
-  undensifyValue,
-} from "./densify";
+import { cellsEqual, densifyPayload, densifyValue, densifyValueV1, jsonBytes, undensifyValue } from "./densify";
 
 /**
  * Densification compression ratios across realistic agent payload archetypes.
@@ -34,9 +27,7 @@ describe("densification compression benchmarks", () => {
   });
 
   test("wide objects with repeated keys don't inflate", () => {
-    const obj = Object.fromEntries(
-      Array.from({ length: 100 }, (_, i) => [`field_${i}`, { value: i, type: "number" }]),
-    );
+    const obj = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`field_${i}`, { value: i, type: "number" }]));
     // Densify sorts keys and normalizes structure; it doesn't shrink
     // non-array payloads, but it must never inflate them.
     expect(ratio(obj)).toBeLessThanOrEqual(1);
@@ -161,9 +152,7 @@ describe("densify v1 vs v2", () => {
     const lines = [
       "| archetype | raw | v1 | v2 | v1 ratio | v2 ratio |",
       "|---|---:|---:|---:|---:|---:|",
-      ...table.map(
-        (r) => `| ${r.name} | ${r.raw} | ${r.v1} | ${r.v2} | ${r.v1ratio} | ${r.v2ratio} |`,
-      ),
+      ...table.map((r) => `| ${r.name} | ${r.raw} | ${r.v1} | ${r.v2} | ${r.v1ratio} | ${r.v2ratio} |`),
     ];
     console.log(`\n${lines.join("\n")}\n`);
     expect(table.find((r) => r.name === "uniform50")).toMatchObject({ raw: 6081, v1: 3992 });
@@ -174,7 +163,15 @@ describe("densify v1 vs v2", () => {
   });
 
   test("{keys, rows, total, page} is not treated as columnar", () => {
-    const original = { keys: ["id", "name"], rows: [[1, "a"], [2, "b"]], total: 2, page: 1 };
+    const original = {
+      keys: ["id", "name"],
+      rows: [
+        [1, "a"],
+        [2, "b"],
+      ],
+      total: 2,
+      page: 1,
+    };
     const packed = densifyValue(original);
     const back = undensifyValue(packed) as Record<string, unknown>;
     expect(Array.isArray(back)).toBe(false);
@@ -184,7 +181,14 @@ describe("densify v1 vs v2", () => {
   });
 
   test("{keys, rows, d:[0,0]} is user data and keeps d", () => {
-    const original = { keys: ["id", "name"], rows: [[1, "a"], [2, "b"]], d: [0, 0] };
+    const original = {
+      keys: ["id", "name"],
+      rows: [
+        [1, "a"],
+        [2, "b"],
+      ],
+      d: [0, 0],
+    };
     const back = undensifyValue(original) as Record<string, unknown>;
     expect(Array.isArray(back)).toBe(false);
     expect(back.d).toEqual([0, 0]);

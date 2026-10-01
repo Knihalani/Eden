@@ -105,7 +105,12 @@ async function ollamaAnswer(question: string, notes: string[]): Promise<string> 
     const res = await fetch(`${OLLAMA}/api/generate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false, options: { temperature: 0, num_predict: 48 } }),
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0, num_predict: 48 },
+      }),
     });
     if (!res.ok) return "";
     const j = (await res.json()) as { response?: string };

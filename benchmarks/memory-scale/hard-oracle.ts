@@ -34,9 +34,49 @@ export type CaseResult = {
 };
 
 const STOP = new Set([
-  "the", "and", "for", "with", "what", "whats", "which", "where", "when", "who", "how", "does", "did", "its",
-  "our", "are", "was", "were", "has", "have", "had", "this", "that", "into", "onto", "from", "use", "uses", "used",
-  "one", "there", "here", "then", "than", "you", "your", "can", "should", "would", "will", "not", "now", "every",
+  "the",
+  "and",
+  "for",
+  "with",
+  "what",
+  "whats",
+  "which",
+  "where",
+  "when",
+  "who",
+  "how",
+  "does",
+  "did",
+  "its",
+  "our",
+  "are",
+  "was",
+  "were",
+  "has",
+  "have",
+  "had",
+  "this",
+  "that",
+  "into",
+  "onto",
+  "from",
+  "use",
+  "uses",
+  "used",
+  "one",
+  "there",
+  "here",
+  "then",
+  "than",
+  "you",
+  "your",
+  "can",
+  "should",
+  "would",
+  "will",
+  "not",
+  "now",
+  "every",
 ]);
 
 /** Lower-cased word tokens of three or more characters, minus function words. */
@@ -64,7 +104,10 @@ function norm(text: string): string {
 }
 
 function subjectKey(subject: string): string {
-  return subject.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return subject
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 const COPULA = /^(?:the\s+)?(.{1,120}?)\s+(?:is now|is|uses)\s+(.+)$/;
@@ -155,8 +198,9 @@ export class Oracle {
       const claim = this.claim(text);
       return { text, cls: this.classify(c, claim), via: claim.via, slot: claim.slot };
     });
-    const missed = c.needs.filter((slot) => !c.states.includes(slot)
-      && !scored.some((b) => b.cls === "need" && b.slot === slot));
+    const missed = c.needs.filter(
+      (slot) => !c.states.includes(slot) && !scored.some((b) => b.cls === "need" && b.slot === slot),
+    );
     const checks: Check[] = c.needs.length
       ? ["need", "precision", "stale", ...(c.states.length ? (["redundant"] as const) : [])]
       : ["silence"];
@@ -207,9 +251,22 @@ function emptyChecks(): Record<Check, Tally> {
 
 export function summarize(results: CaseResult[]): Summary {
   const s: Summary = {
-    cases: results.length, passed: 0, checks: 0, metric: 0, byCheck: emptyChecks(), byCategory: new Map(),
-    positives: 0, needMiss: 0, bullets: 0, staleBullets: 0, falseBullets: 0, redundantBullets: 0,
-    wrongScopeBullets: 0, unknownBullets: 0, ack: { fail: 0, total: 0 }, nonhuman: { fail: 0, total: 0 },
+    cases: results.length,
+    passed: 0,
+    checks: 0,
+    metric: 0,
+    byCheck: emptyChecks(),
+    byCategory: new Map(),
+    positives: 0,
+    needMiss: 0,
+    bullets: 0,
+    staleBullets: 0,
+    falseBullets: 0,
+    redundantBullets: 0,
+    wrongScopeBullets: 0,
+    unknownBullets: 0,
+    ack: { fail: 0, total: 0 },
+    nonhuman: { fail: 0, total: 0 },
   };
   for (const r of results) {
     const cat = s.byCategory.get(r.category) ?? { cases: 0, checks: 0, fails: 0, byCheck: emptyChecks() };

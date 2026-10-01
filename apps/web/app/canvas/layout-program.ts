@@ -1,4 +1,11 @@
-import { billedTokens, reconcileTokenClasses, TOKEN_CLASSES, tokenClassKey, type TokenClass, type TokenClasses } from "@eden/ir";
+import {
+  billedTokens,
+  reconcileTokenClasses,
+  TOKEN_CLASSES,
+  tokenClassKey,
+  type TokenClass,
+  type TokenClasses,
+} from "@eden/ir";
 import type { Binding, Step, StretchProgram } from "@eden/ir/types";
 import { isMutating } from "@eden/ir/names";
 import { providerCacheHitLine } from "@eden/measure";
@@ -200,12 +207,14 @@ export function tokenClassLedgerReconcileLine(
  * NodeDetail "provider cache hit %" line. Omit when unmeasured.
  * Not run-cache `cache_hits / cache_lookups` ("3 of 4 reads").
  */
-export function nodeProviderCacheHitLine(rec?: {
-  cached_tokens?: number;
-  prompt_tokens?: number;
-  cache_write_tokens?: number;
-  cache_input_tokens?: number;
-} | null): string | null {
+export function nodeProviderCacheHitLine(
+  rec?: {
+    cached_tokens?: number;
+    prompt_tokens?: number;
+    cache_write_tokens?: number;
+    cache_input_tokens?: number;
+  } | null,
+): string | null {
   if (!rec) return null;
   return providerCacheHitLine(rec.cached_tokens, rec.prompt_tokens, rec.cache_write_tokens, rec.cache_input_tokens);
 }
@@ -257,9 +266,7 @@ export function layoutProgram(program: StretchProgram, tokenCtx: TokenClassCtx =
   const ids = steps.map((s) => s.id);
   const deps = new Map<string, string[]>();
   for (const s of steps) {
-    deps.set(s.id, [
-      ...new Set([...stepDeps(s, program).filter((id) => byId.has(id)), ...prevMethodDep(s, method)]),
-    ]);
+    deps.set(s.id, [...new Set([...stepDeps(s, program).filter((id) => byId.has(id)), ...prevMethodDep(s, method)])]);
   }
 
   const col = new Map<string, number>();
@@ -344,9 +351,7 @@ export function dependentsOf(program: StretchProgram, id: string): string[] {
 }
 
 export function strippedFromMethod(program: StretchProgram): string[] {
-  const kept = new Set(
-    program.steps.filter((s) => s.kind === "tool").map((s) => s.tool),
-  );
+  const kept = new Set(program.steps.filter((s) => s.kind === "tool").map((s) => s.tool));
   const controlIds = new Set(program.steps.filter((s) => s.kind !== "tool").map((s) => s.id));
   return (program.sequence ?? []).filter((name) => !kept.has(name) && !controlIds.has(name));
 }

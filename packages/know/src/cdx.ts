@@ -12,7 +12,12 @@ export type CdxHit = { url: string; filename: string; offset: number; length: nu
 
 export function parseCdxLine(line: string): CdxHit | undefined {
   try {
-    const j = JSON.parse(line) as { url?: string; filename?: string; offset?: string | number; length?: string | number };
+    const j = JSON.parse(line) as {
+      url?: string;
+      filename?: string;
+      offset?: string | number;
+      length?: string | number;
+    };
     if (!j.url || !j.filename) return undefined;
     return { url: j.url, filename: j.filename, offset: Number(j.offset), length: Number(j.length) };
   } catch {

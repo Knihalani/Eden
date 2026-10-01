@@ -23,7 +23,9 @@ const MIN_ICL = 4;
 const MIN_FACTS = 8;
 
 export function atomize(blob: string): Atomized {
-  const text = String(blob ?? "").replace(/\r\n/g, "\n").trim();
+  const text = String(blob ?? "")
+    .replace(/\r\n/g, "\n")
+    .trim();
   if (!text) return { kind: "narrative", atoms: [] };
 
   const iclN = countPat(text, /\nlabel:\s*\d+\s*(?:\n|$)/gi);
@@ -38,7 +40,11 @@ export function atomize(blob: string): Atomized {
   }
 
   let recsys = false;
-  try { recsys = isRecsysShot(text); } catch { recsys = false; }
+  try {
+    recsys = isRecsysShot(text);
+  } catch {
+    recsys = false;
+  }
   if (recsys) {
     const packs = splitRecsys(text);
     return {
@@ -75,7 +81,11 @@ export function splitIcl(blob: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(blob))) {
     const raw = m[1]!.replace(/^(?:here is (?:a list of )?(?:the )?(?:examples?|facts)[^\n]*\n)?/i, "");
-    const utt = raw.split(/\n{2,}/).pop()!.replace(/\s+/g, " ").trim();
+    const utt = raw
+      .split(/\n{2,}/)
+      .pop()!
+      .replace(/\s+/g, " ")
+      .trim();
     if (utt.length < 4) continue;
     out.push(`${utt}\nlabel: ${m[2]}`);
   }
@@ -118,13 +128,19 @@ function packChunks(parts: string[], maxChars: number): string[] {
 }
 
 function splitRecsys(blob: string): string[] {
-  const speakers = blob.split(/(?:^|\n)(?=(?:User|System)\s*:)/i).map((s) => s.trim()).filter(Boolean);
+  const speakers = blob
+    .split(/(?:^|\n)(?=(?:User|System)\s*:)/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (speakers.length >= 2) return packChunks(speakers, PACK_CHARS);
   return packSentences(blob, PACK_CHARS);
 }
 
 export function packSentences(blob: string, maxChars: number): string[] {
-  const sents = blob.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+  const sents = blob
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (!sents.length) return blob.trim() ? [blob.trim()] : [];
   const packs: string[] = [];
   let cur = "";

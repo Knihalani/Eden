@@ -5,12 +5,7 @@
  *
  *   bun run benchmarks/campaign/jit-id-soak.ts
  */
-import {
-  call,
-  runHoldoutSoak,
-  soakProg,
-  type HoldoutTurn,
-} from "./jit-holdout-lib";
+import { call, runHoldoutSoak, soakProg, type HoldoutTurn } from "./jit-holdout-lib";
 
 const STRIPE_CUS = "cus_8kQ2Lp0NaBcd";
 const SHOP_GID = "gid://shopify/Order/5988771123";

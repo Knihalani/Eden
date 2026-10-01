@@ -123,12 +123,22 @@ export const EMPTY_ACTIVITY: Activity = {
 export type InboxSlice = {
   candidates?: unknown[];
   live?: unknown[];
-  savings?: { runs?: number; live?: number; llmReductionMean?: number; tokensSavedMean?: number; timeSavedMsMean?: number };
+  savings?: {
+    runs?: number;
+    live?: number;
+    llmReductionMean?: number;
+    tokensSavedMean?: number;
+    timeSavedMsMean?: number;
+  };
 };
 
 const DEMO_IDS = new Set(["cand_resolve", "cand_pending", "cand_refused", "live_notify", "live_paused"]);
 
-export function activityFromInbox(inbox: InboxSlice | null | undefined, receipts: unknown[] = [], now = Date.now()): Activity {
+export function activityFromInbox(
+  inbox: InboxSlice | null | undefined,
+  receipts: unknown[] = [],
+  now = Date.now(),
+): Activity {
   if (!inbox) return emptyActivity();
   const byTool = stretchByTool(receipts);
   const lastCache = lastCacheFromReceipts(receipts);
@@ -414,7 +424,7 @@ function requestInboxStatus(item: RequestItem): string {
           repeats: item.repeats,
         })
       : null;
-  return fail ? `${fail}${from}` : refusedStatus ?? base;
+  return fail ? `${fail}${from}` : (refusedStatus ?? base);
 }
 
 function emptySeries(): DayPoint[] {
@@ -464,10 +474,12 @@ function lastKindOf(words: StretchWord[]): LastReceiptKind | undefined {
 
 /** Whole stretch per tool — not the latest row. Seed demo ids stay out. */
 function stretchByTool(receipts: unknown[]): Map<string, StretchWord[]> {
-  return stretchWordsByTool(receipts.filter((raw) => {
-    const id = toolIdOf(raw);
-    return Boolean(id) && !DEMO_IDS.has(id);
-  }));
+  return stretchWordsByTool(
+    receipts.filter((raw) => {
+      const id = toolIdOf(raw);
+      return Boolean(id) && !DEMO_IDS.has(id);
+    }),
+  );
 }
 
 function lastSharedFromReceipts(receipts: unknown[]): Map<string, string> {
@@ -507,15 +519,17 @@ export function fleetFromReceipts(receipts: unknown[]): FleetStrip {
   >();
   let maxShared = 0;
   let region: string | undefined;
-  const fleetRuns: Array<{ fleet?: string; agent?: string; region?: string; classes: ReturnType<typeof emptyTokenClasses> }> =
-    [];
+  const fleetRuns: Array<{
+    fleet?: string;
+    agent?: string;
+    region?: string;
+    classes: ReturnType<typeof emptyTokenClasses>;
+  }> = [];
   for (const raw of receipts) {
     const row = asRecord(raw);
     if (!row) continue;
     const agentId =
-      (typeof row.agentId === "string" && row.agentId) ||
-      (typeof row.agent === "string" && row.agent) ||
-      "";
+      (typeof row.agentId === "string" && row.agentId) || (typeof row.agent === "string" && row.agent) || "";
     const parentRunId = typeof row.parentRunId === "string" && row.parentRunId ? row.parentRunId : undefined;
     const fleetId = typeof row.fleetId === "string" && row.fleetId ? row.fleetId : undefined;
     const recRegion = typeof row.region === "string" && row.region ? row.region : undefined;
@@ -639,12 +653,13 @@ function asRequest(value: unknown): RequestItem | null {
     : [];
   const refusal = asRecord(row.refusal);
   const origin = asRecord(program?.origin) ?? asRecord(row.origin);
-  const failureMode =
-    /replacement is waiting/i.test(typeof program?.description === "string" ? program.description : "")
-      ? "refresh"
-      : typeof origin?.mode === "string" && origin.mode !== "happy"
-        ? origin.mode
-        : undefined;
+  const failureMode = /replacement is waiting/i.test(
+    typeof program?.description === "string" ? program.description : "",
+  )
+    ? "refresh"
+    : typeof origin?.mode === "string" && origin.mode !== "happy"
+      ? origin.mode
+      : undefined;
   const rawWarn = origin?.firstWarningAt;
   const warnAt = Number(rawWarn);
   const code = typeof refusal?.code === "string" ? (refusal.code as RefusalCode) : undefined;

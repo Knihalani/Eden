@@ -3,15 +3,7 @@
  * canary isolation, JIT storm.
  */
 import { describe, expect, test } from "bun:test";
-import {
-  dropEnvelopeValue,
-  inCanary,
-  jitMax,
-  llmBadge,
-  matchClass,
-  mayServe,
-  zeroLlm,
-} from "./graduate";
+import { dropEnvelopeValue, inCanary, jitMax, llmBadge, matchClass, mayServe, zeroLlm } from "./graduate";
 import { withVersion } from "./hash";
 import type { StretchProgram } from "./types";
 
@@ -55,9 +47,7 @@ describe("wave 10 red-team", () => {
 
   test("unpinned island is never Zero-LLM", () => {
     const p = mini({
-      steps: [
-        { id: "isle", kind: "island", input: { kind: "input", path: "q" }, system: "s", outputSchema: {} },
-      ],
+      steps: [{ id: "isle", kind: "island", input: { kind: "input", path: "q" }, system: "s", outputSchema: {} }],
     });
     expect(zeroLlm(p)).toBe(false);
     expect(llmBadge(p)).toBe("Island remains");

@@ -12,9 +12,9 @@ const CHROME = readFileSync(join(import.meta.dir, "../home/chrome.tsx"), "utf8")
 
 test("Approve is the crimson signup button; Pause and Resume are verbs, not a second hue", () => {
   expect(VIEW).toMatch(/className="signup signup-compact"/);
-  expect(VIEW).toContain("{pending ? \"Shipping…\" : \"Approve\"}");
-  expect(VIEW).toContain("{pending ? \"Working…\" : \"Pause\"}");
-  expect(VIEW).toContain("{pending ? \"Working…\" : \"Resume\"}");
+  expect(VIEW).toContain('{pending ? "Shipping…" : "Approve"}');
+  expect(VIEW).toContain('{pending ? "Working…" : "Pause"}');
+  expect(VIEW).toContain('{pending ? "Working…" : "Resume"}');
   expect(VIEW).not.toMatch(/\bochre\b/);
   expect(VIEW).not.toMatch(/\bcoral\b/);
   expect(VIEW).not.toMatch(/#00ffff/i);

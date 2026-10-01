@@ -5,13 +5,22 @@ import { hasUnsafeGhVerb, isMutatingGh } from "./named-cli";
 
 export function parseIssueList(raw: string | undefined | null): string[] {
   if (!raw) return [];
-  return [...new Set(String(raw).split(/[,\s]+/).filter((x) => /^\d+$/.test(x)))];
+  return [
+    ...new Set(
+      String(raw)
+        .split(/[,\s]+/)
+        .filter((x) => /^\d+$/.test(x)),
+    ),
+  ];
 }
 
 export function extractLoopIds(command: string): string[] {
   const forIds = command.match(/for\s+\w+\s+in\s+([\d\s]+)/);
   if (forIds) {
-    const ids = forIds[1]!.trim().split(/\s+/).filter((n) => /^\d+$/.test(n));
+    const ids = forIds[1]!
+      .trim()
+      .split(/\s+/)
+      .filter((n) => /^\d+$/.test(n));
     if (ids.length) return ids;
   }
   const fromPaths = [...command.matchAll(/\/(?:pulls|issues)\/(\d+)/g)].map((m) => m[1]!);
@@ -23,9 +32,7 @@ export function extractGhRepo(command: string): string | undefined {
   if (rest) return rest[1];
   const flag = command.match(/--repo\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/);
   if (flag) return flag[1];
-  const gql = command.match(
-    /owner:\s*["']([A-Za-z0-9_.-]+)["'][\s\S]{0,120}name:\s*["']([A-Za-z0-9_.-]+)["']/,
-  );
+  const gql = command.match(/owner:\s*["']([A-Za-z0-9_.-]+)["'][\s\S]{0,120}name:\s*["']([A-Za-z0-9_.-]+)["']/);
   if (gql) return `${gql[1]}/${gql[2]}`;
   if (process.env.EDEN_GH_OWNER && process.env.EDEN_GH_REPO) {
     return `${process.env.EDEN_GH_OWNER}/${process.env.EDEN_GH_REPO}`;
@@ -208,7 +215,10 @@ function isHiddenWhenBundle(name: string): boolean {
   return name.startsWith("github_pr") || name.startsWith("github_commit_status") || name === "fetch_issue_bundle";
 }
 
-export function selectMcpTools<T extends { name: string; uses_count?: number | null }>(tools: T[], limit = MCP_LIST_LIMIT): T[] {
+export function selectMcpTools<T extends { name: string; uses_count?: number | null }>(
+  tools: T[],
+  limit = MCP_LIST_LIMIT,
+): T[] {
   let ranked = [...tools].sort(
     (a, b) => (Number(b.uses_count) || 0) - (Number(a.uses_count) || 0) || a.name.localeCompare(b.name),
   );

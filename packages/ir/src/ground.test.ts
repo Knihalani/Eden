@@ -23,7 +23,11 @@ describe("grounding", () => {
   });
 
   test("absent output is judged once and cached", () => {
-    const trace = t({ output: undefined, complete: true, evidence: { required: [], present: ["verifyWrite"], absent: [], failed: [] } });
+    const trace = t({
+      output: undefined,
+      complete: true,
+      evidence: { required: [], present: ["verifyWrite"], absent: [], failed: [] },
+    });
     const first = judgeGrounding(trace);
     const second = judgeGrounding(trace);
     expect(first.cached).toBe(false);

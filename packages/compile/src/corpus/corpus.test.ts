@@ -14,9 +14,7 @@ import { CORPUS, type CorpusExpect, type IslandAt } from "./fixtures";
 function islandPlacement(p: StretchProgram): IslandAt | undefined {
   const idx = p.steps.findIndex((s) => s.kind === "island");
   if (idx < 0) return undefined;
-  const mut = p.steps
-    .map((s, i) => (s.kind === "tool" && isMutating(s.tool) ? i : -1))
-    .filter((i) => i >= 0);
+  const mut = p.steps.map((s, i) => (s.kind === "tool" && isMutating(s.tool) ? i : -1)).filter((i) => i >= 0);
   const firstMut = mut[0] ?? Infinity;
   const lastMut = mut.at(-1) ?? -1;
   if (idx > lastMut) return "tail";
@@ -27,7 +25,12 @@ function islandPlacement(p: StretchProgram): IslandAt | undefined {
   return "between";
 }
 
-function checkExpect(name: string, expectSpec: CorpusExpect, programs: StretchProgram[], refusals: { reason: string; code?: string; readSet?: number; repeats?: number }[]) {
+function checkExpect(
+  name: string,
+  expectSpec: CorpusExpect,
+  programs: StretchProgram[],
+  refusals: { reason: string; code?: string; readSet?: number; repeats?: number }[],
+) {
   if (expectSpec.kind === "empty") {
     expect(programs.length, `${name}: expected zero programs, got ${programs.map((p) => p.name).join("|")}`).toBe(0);
     return;
@@ -40,7 +43,10 @@ function checkExpect(name: string, expectSpec: CorpusExpect, programs: StretchPr
       if (expectSpec.reasonIncludes?.some((s) => !r.reason.includes(s))) return false;
       return true;
     });
-    expect(hit, `${name}: expected refusal code=${expectSpec.code} reason~${expectSpec.reasonIncludes?.join("|") ?? ""} got ${JSON.stringify(refusals)}`).toBeTruthy();
+    expect(
+      hit,
+      `${name}: expected refusal code=${expectSpec.code} reason~${expectSpec.reasonIncludes?.join("|") ?? ""} got ${JSON.stringify(refusals)}`,
+    ).toBeTruthy();
     return;
   }
   if (expectSpec.programCount != null) {
@@ -69,7 +75,10 @@ function checkExpect(name: string, expectSpec: CorpusExpect, programs: StretchPr
     expect((p.sequence?.length ?? 0) >= expectSpec.minSeqLen, `${name}: minSeqLen`).toBe(true);
   }
   if (expectSpec.hasLoop) {
-    expect(p.steps.some((s) => s.kind === "loop"), `${name}: hasLoop`).toBe(true);
+    expect(
+      p.steps.some((s) => s.kind === "loop"),
+      `${name}: hasLoop`,
+    ).toBe(true);
   }
   if (expectSpec.hasNestedLoop) {
     expect(nestedOf(p), `${name}: inner loop inside an outer loop`).toBeTruthy();
@@ -87,13 +96,22 @@ function checkExpect(name: string, expectSpec: CorpusExpect, programs: StretchPr
     }
   }
   if (expectSpec.hasBranch) {
-    expect(p.steps.some((s) => s.kind === "branch"), `${name}: hasBranch`).toBe(true);
+    expect(
+      p.steps.some((s) => s.kind === "branch"),
+      `${name}: hasBranch`,
+    ).toBe(true);
   }
   if (expectSpec.hasIsland) {
-    expect(p.steps.some((s) => s.kind === "island"), `${name}: hasIsland`).toBe(true);
+    expect(
+      p.steps.some((s) => s.kind === "island"),
+      `${name}: hasIsland`,
+    ).toBe(true);
   }
   if (expectSpec.hasAssert) {
-    expect(p.steps.some((s) => s.kind === "assert"), `${name}: hasAssert`).toBe(true);
+    expect(
+      p.steps.some((s) => s.kind === "assert"),
+      `${name}: hasAssert`,
+    ).toBe(true);
   }
   if (expectSpec.islandAt) {
     expect(islandPlacement(p), `${name}: islandAt`).toBe(expectSpec.islandAt);
@@ -171,10 +189,14 @@ function checkExpect(name: string, expectSpec: CorpusExpect, programs: StretchPr
       body.kind === "tool" &&
       Object.values(body.args).some(function walk(b: { kind: string; fn?: string; of?: unknown }): boolean {
         if (b.kind === "transform" && b.fn === "lookup") return true;
-        if (b.kind === "transform" && b.of && typeof b.of === "object") return walk(b.of as { kind: string; fn?: string; of?: unknown });
+        if (b.kind === "transform" && b.of && typeof b.of === "object")
+          return walk(b.of as { kind: string; fn?: string; of?: unknown });
         return false;
       });
-    expect(hasLookup, `${name}: loopArgLookup needs a lookup arg, got ${JSON.stringify(body && body.kind === "tool" ? body.args : body)}`).toBe(true);
+    expect(
+      hasLookup,
+      `${name}: loopArgLookup needs a lookup arg, got ${JSON.stringify(body && body.kind === "tool" ? body.args : body)}`,
+    ).toBe(true);
   }
   if (expectSpec.hasUntil) {
     const loop = p.steps.find((s) => s.kind === "loop");

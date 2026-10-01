@@ -141,7 +141,7 @@ function isSpace(c: number): boolean {
 
 /** Where a value ends: whitespace, or a separator that starts a *different* field. */
 function endsValue(c: number): boolean {
-  return isSpace(c) || c === 38 /* & */ || c === 59 /* ; */;
+  return isSpace(c) || c === 38 /* & */ || c === 59; /* ; */
 }
 
 /** Sentinel substituted for anything that looked like a credential. */
@@ -207,7 +207,10 @@ export function isSecretKey(key: string): boolean {
  * fast-path gate was not — there is nothing here that can drift out of step
  * with the nouns.
  */
-function scanAssignments(s: string, onSecret: null | ((keyEnd: number, valueStart: number, valueEnd: number) => void)): boolean {
+function scanAssignments(
+  s: string,
+  onSecret: null | ((keyEnd: number, valueStart: number, valueEnd: number) => void),
+): boolean {
   if (s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
   let found = false;
   for (let i = 0; i < s.length; i++) {
@@ -472,8 +475,11 @@ function walk(value: unknown, w: Walk, depth: number): unknown {
  * nothing there". Refusing to bind is the safe side of that uncertainty.
  */
 export function containsRedaction(value: unknown, stack?: WeakSet<object>): boolean {
-  return scan(value, { nodes: 0, path: stack ?? new WeakSet<object>() }, 0, (s) =>
-    s.includes(REDACTED) || s.includes(TRUNCATED) || s.includes(UNREADABLE),
+  return scan(
+    value,
+    { nodes: 0, path: stack ?? new WeakSet<object>() },
+    0,
+    (s) => s.includes(REDACTED) || s.includes(TRUNCATED) || s.includes(UNREADABLE),
   );
 }
 
@@ -481,13 +487,7 @@ export function containsSecret(value: unknown, seen?: WeakSet<object>): boolean 
   return scan(value, { nodes: 0, path: seen ?? new WeakSet<object>() }, 0, stringHasSecret, true);
 }
 
-function scan(
-  value: unknown,
-  w: Walk,
-  depth: number,
-  hit: (s: string) => boolean,
-  bySecretKey = false,
-): boolean {
+function scan(value: unknown, w: Walk, depth: number, hit: (s: string) => boolean, bySecretKey = false): boolean {
   if (typeof value === "string") return hit(value);
   if (value == null || typeof value !== "object") return false;
   // Out of budget means "not fully inspected". containsRedaction treats that as

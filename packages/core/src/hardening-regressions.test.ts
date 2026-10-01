@@ -48,9 +48,7 @@ describe("named cli dedupe respects mutation", () => {
   });
 
   test("identical GETs are still one call", () => {
-    const calls = extractNamedCliCalls(
-      "curl https://api.acme.com/v1/orders/1 ; curl https://api.acme.com/v1/orders/1",
-    );
+    const calls = extractNamedCliCalls("curl https://api.acme.com/v1/orders/1 ; curl https://api.acme.com/v1/orders/1");
     expect(calls.length).toBe(1);
   });
 
@@ -117,18 +115,10 @@ describe("gh named verbs gate mutations", () => {
   });
 
   test("hasUnsafeGhVerb refuses what it cannot prove read-only", () => {
-    for (const cmd of [
-      "gh pr close 12",
-      "gh run list\ngh repo delete o/r",
-      "gh widget frobnicate 1",
-    ]) {
+    for (const cmd of ["gh pr close 12", "gh run list\ngh repo delete o/r", "gh widget frobnicate 1"]) {
       expect(hasUnsafeGhVerb(cmd)).toBe(true);
     }
-    for (const cmd of [
-      "gh pr view 12",
-      "for n in 170 169; do gh api repos/o/r/pulls/$n; done",
-      "echo hello",
-    ]) {
+    for (const cmd of ["gh pr view 12", "for n in 170 169; do gh api repos/o/r/pulls/$n; done", "echo hello"]) {
       expect(hasUnsafeGhVerb(cmd)).toBe(false);
     }
   });
@@ -207,9 +197,13 @@ describe("resolveTemplate path traversal guard", () => {
   test("__proto__/constructor/prototype segments contribute nothing", () => {
     // {{s1.constructor.name}} resolved to "Object" and was spliced into the URL.
     expect(resolveTemplate("https://x/s/{{s1.constructor.name}}", {}, { s1: {} })).toBe("https://x/s/");
-    expect(resolveTemplate("https://x/s/{{s1.__proto__.polluted}}", {}, JSON.parse('{"s1":{"__proto__":{"polluted":"evil"}}}'))).toBe(
-      "https://x/s/",
-    );
+    expect(
+      resolveTemplate(
+        "https://x/s/{{s1.__proto__.polluted}}",
+        {},
+        JSON.parse('{"s1":{"__proto__":{"polluted":"evil"}}}'),
+      ),
+    ).toBe("https://x/s/");
     expect(resolveTemplate("https://x/s/{{s1.prototype.x}}", {}, { s1: {} })).toBe("https://x/s/");
   });
 

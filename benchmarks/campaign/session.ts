@@ -322,7 +322,13 @@ export class Session {
       });
       // Enforcement mode can refuse a call outright ({eden:"halted"}). A real
       // agent reads that and gives up on the stretch; it does not keep firing.
-      if (out.ok && out.value && typeof out.value === "object" && "eden" in (out.value as object) && (out.value as { eden?: string }).eden === "halted") {
+      if (
+        out.ok &&
+        out.value &&
+        typeof out.value === "object" &&
+        "eden" in (out.value as object) &&
+        (out.value as { eden?: string }).eden === "halted"
+      ) {
         break;
       }
       if (out.ok) lastValue = out.value;

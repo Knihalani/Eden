@@ -2,8 +2,7 @@ import { hostOf } from "./extract";
 
 const JUNK_TLD = /\.(xyz|top|click|loan|win|gq|cf|tk|ml|ga|icu|buzz|work|rest)$/i;
 const JUNK_HOST = /(googleusercontent\.com|\.onion$|^[\d.]+$)/i;
-const PAYWALL_HOST =
-  /(^|\.)(wsj|ft|economist|nytimes|washingtonpost|bloomberg|wired|theathletic)\.com$/i;
+const PAYWALL_HOST = /(^|\.)(wsj|ft|economist|nytimes|washingtonpost|bloomberg|wired|theathletic)\.com$/i;
 
 /** Hostname without `www.` — same class as `hostOf`, no URL() on the WET skip path. */
 export function fastHost(url: string): string {

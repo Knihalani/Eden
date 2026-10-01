@@ -30,11 +30,7 @@ describe("generic JSONL", () => {
   });
 
   test("skips malformed and nameless lines", () => {
-    const content = [
-      "not json",
-      '{"args":{"q":"no name"}}',
-      '{"name":"valid","args":{}}',
-    ].join("\n");
+    const content = ["not json", '{"args":{"q":"no name"}}', '{"name":"valid","args":{}}'].join("\n");
     const events = parseGenericJsonl(content);
     expect(events).toHaveLength(1);
     expect(events[0]!.name).toBe("valid");
@@ -82,8 +78,22 @@ describe("OpenTelemetry spans", () => {
 
   test("error spans are marked ok:false", () => {
     const spans = [
-      { traceId: "t", name: "s1", attributes: { "gen_ai.tool.name": "search" }, status: { code: "STATUS_CODE_OK" }, startTimeUnixNano: "1", endTimeUnixNano: "2" },
-      { traceId: "t", name: "s2", attributes: { "gen_ai.tool.name": "boom" }, status: { code: "STATUS_CODE_ERROR" }, startTimeUnixNano: "3", endTimeUnixNano: "4" },
+      {
+        traceId: "t",
+        name: "s1",
+        attributes: { "gen_ai.tool.name": "search" },
+        status: { code: "STATUS_CODE_OK" },
+        startTimeUnixNano: "1",
+        endTimeUnixNano: "2",
+      },
+      {
+        traceId: "t",
+        name: "s2",
+        attributes: { "gen_ai.tool.name": "boom" },
+        status: { code: "STATUS_CODE_ERROR" },
+        startTimeUnixNano: "3",
+        endTimeUnixNano: "4",
+      },
     ];
     const traces = parseOtelSpans(spans as any[]);
     const events = traces.get("t")!;
@@ -92,7 +102,13 @@ describe("OpenTelemetry spans", () => {
 
   test("single-event traces are excluded (need ≥2 to form a stretch)", () => {
     const spans = [
-      { traceId: "only-one", name: "s", attributes: { "gen_ai.tool.name": "search" }, status: {}, startTimeUnixNano: "1" },
+      {
+        traceId: "only-one",
+        name: "s",
+        attributes: { "gen_ai.tool.name": "search" },
+        status: {},
+        startTimeUnixNano: "1",
+      },
     ];
     expect(parseOtelSpans(spans as any[]).size).toBe(0);
   });
@@ -102,8 +118,27 @@ describe("LangSmith runs", () => {
   test("extracts tool-type runs grouped by trace_id", () => {
     const runs = [
       { id: "r1", run_type: "llm", name: "gpt-4o", inputs: {}, outputs: {} },
-      { id: "r2", run_type: "tool", name: "get_issue", inputs: { issue_number: 12 }, outputs: { title: "fix" }, start_time: "2026-01-01T00:00:00Z", end_time: "2026-01-01T00:00:01Z", trace_id: "trace-a" },
-      { id: "r3", run_type: "tool", name: "post_comment", inputs: { body: "done" }, outputs: { id: 99 }, start_time: "2026-01-01T00:00:02Z", end_time: "2026-01-01T00:00:03Z", error: null, trace_id: "trace-a" },
+      {
+        id: "r2",
+        run_type: "tool",
+        name: "get_issue",
+        inputs: { issue_number: 12 },
+        outputs: { title: "fix" },
+        start_time: "2026-01-01T00:00:00Z",
+        end_time: "2026-01-01T00:00:01Z",
+        trace_id: "trace-a",
+      },
+      {
+        id: "r3",
+        run_type: "tool",
+        name: "post_comment",
+        inputs: { body: "done" },
+        outputs: { id: 99 },
+        start_time: "2026-01-01T00:00:02Z",
+        end_time: "2026-01-01T00:00:03Z",
+        error: null,
+        trace_id: "trace-a",
+      },
     ];
     const traces = parseLangSmithRuns(runs);
     expect(traces.size).toBe(1);
@@ -115,7 +150,14 @@ describe("LangSmith runs", () => {
   test("error runs are marked ok:false", () => {
     const runs = [
       { run_type: "tool", name: "fetch", inputs: {}, error: null, start_time: "2026-01-01T00:00:00Z", trace_id: "t" },
-      { run_type: "tool", name: "boom", inputs: {}, error: "timeout", start_time: "2026-01-01T00:00:01Z", trace_id: "t" },
+      {
+        run_type: "tool",
+        name: "boom",
+        inputs: {},
+        error: "timeout",
+        start_time: "2026-01-01T00:00:01Z",
+        trace_id: "t",
+      },
     ];
     const traces = parseLangSmithRuns(runs);
     expect([...traces.values()][0]![1]!.ok).toBe(false);
@@ -143,30 +185,38 @@ describe("auto-detection", () => {
   test("parses OpenAI tool-call sequences from chat completion logs", () => {
     const logs = [
       {
-        choices: [{
-          message: {
-            role: "assistant",
-            tool_calls: [{ id: "call_1", function: { name: "get_issue", arguments: '{"issue_number":12}' } }],
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              tool_calls: [{ id: "call_1", function: { name: "get_issue", arguments: '{"issue_number":12}' } }],
+            },
           },
-        }],
+        ],
       },
       {
-        choices: [{
-          message: { role: "tool", tool_call_id: "call_1", content: '{"title":"fix bug","state":"open"}' },
-        }],
-      },
-      {
-        choices: [{
-          message: {
-            role: "assistant",
-            tool_calls: [{ id: "call_2", function: { name: "post_comment", arguments: '{"body":"done"}' } }],
+        choices: [
+          {
+            message: { role: "tool", tool_call_id: "call_1", content: '{"title":"fix bug","state":"open"}' },
           },
-        }],
+        ],
       },
       {
-        choices: [{
-          message: { role: "tool", tool_call_id: "call_2", content: '{"id":99}' },
-        }],
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              tool_calls: [{ id: "call_2", function: { name: "post_comment", arguments: '{"body":"done"}' } }],
+            },
+          },
+        ],
+      },
+      {
+        choices: [
+          {
+            message: { role: "tool", tool_call_id: "call_2", content: '{"id":99}' },
+          },
+        ],
       },
     ];
     const traces = parseOpenAIToolCalls(logs);
@@ -183,14 +233,34 @@ describe("auto-detection", () => {
     const convo = (id: number) => [
       {
         conversation_id: `conv-${id}`,
-        choices: [{ message: { role: "assistant", tool_calls: [{ id: `c${id}-1`, function: { name: "gh_pr_view", arguments: '{"pr":"10' + id + '"}' } }] } }],
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              tool_calls: [{ id: `c${id}-1`, function: { name: "gh_pr_view", arguments: '{"pr":"10' + id + '"}' } }],
+            },
+          },
+        ],
       },
-      { conversation_id: `conv-${id}`, choices: [{ message: { role: "tool", tool_call_id: `c${id}-1`, content: '{"pr":true}' } }] },
       {
         conversation_id: `conv-${id}`,
-        choices: [{ message: { role: "assistant", tool_calls: [{ id: `c${id}-2`, function: { name: "gh_pr_checks", arguments: '{"pr":"10' + id + '"}' } }] } }],
+        choices: [{ message: { role: "tool", tool_call_id: `c${id}-1`, content: '{"pr":true}' } }],
       },
-      { conversation_id: `conv-${id}`, choices: [{ message: { role: "tool", tool_call_id: `c${id}-2`, content: '{"state":"pass"}' } }] },
+      {
+        conversation_id: `conv-${id}`,
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              tool_calls: [{ id: `c${id}-2`, function: { name: "gh_pr_checks", arguments: '{"pr":"10' + id + '"}' } }],
+            },
+          },
+        ],
+      },
+      {
+        conversation_id: `conv-${id}`,
+        choices: [{ message: { role: "tool", tool_call_id: `c${id}-2`, content: '{"state":"pass"}' } }],
+      },
     ];
     const logs = [0, 1, 2, 3].flatMap(convo);
     const traces = parseOpenAIToolCalls(logs);
@@ -204,12 +274,16 @@ describe("auto-detection", () => {
     const log = JSON.stringify([
       {
         conversation_id: "conv-1",
-        choices: [{ message: { role: "assistant", tool_calls: [{ id: "x1", function: { name: "a_tool", arguments: "{}" } }] } }],
+        choices: [
+          { message: { role: "assistant", tool_calls: [{ id: "x1", function: { name: "a_tool", arguments: "{}" } }] } },
+        ],
       },
       { conversation_id: "conv-1", choices: [{ message: { role: "tool", tool_call_id: "x1", content: '{"ok":1}' } }] },
       {
         conversation_id: "conv-1",
-        choices: [{ message: { role: "assistant", tool_calls: [{ id: "x2", function: { name: "b_tool", arguments: "{}" } }] } }],
+        choices: [
+          { message: { role: "assistant", tool_calls: [{ id: "x2", function: { name: "b_tool", arguments: "{}" } }] } },
+        ],
       },
       { conversation_id: "conv-1", choices: [{ message: { role: "tool", tool_call_id: "x2", content: '{"ok":2}' } }] },
     ]);
@@ -221,9 +295,33 @@ describe("auto-detection", () => {
 
   test("parses Langfuse TOOL observations", () => {
     const observations = [
-      { type: "TOOL", name: "search", input: { q: "test" }, output: { hits: 3 }, level: "DEFAULT", startTime: "2026-01-01T00:00:00Z", traceId: "lf-1" },
-      { type: "LLM", name: "gpt4o", input: {}, output: {}, level: "DEFAULT", startTime: "2026-01-01T00:00:01Z", traceId: "lf-1" },
-      { type: "TOOL", name: "write", input: { path: "a.ts" }, output: { ok: true }, level: "DEFAULT", startTime: "2026-01-01T00:00:02Z", traceId: "lf-1" },
+      {
+        type: "TOOL",
+        name: "search",
+        input: { q: "test" },
+        output: { hits: 3 },
+        level: "DEFAULT",
+        startTime: "2026-01-01T00:00:00Z",
+        traceId: "lf-1",
+      },
+      {
+        type: "LLM",
+        name: "gpt4o",
+        input: {},
+        output: {},
+        level: "DEFAULT",
+        startTime: "2026-01-01T00:00:01Z",
+        traceId: "lf-1",
+      },
+      {
+        type: "TOOL",
+        name: "write",
+        input: { path: "a.ts" },
+        output: { ok: true },
+        level: "DEFAULT",
+        startTime: "2026-01-01T00:00:02Z",
+        traceId: "lf-1",
+      },
     ];
     const traces = parseLangfuseObservations(observations);
     expect(traces.size).toBe(1);

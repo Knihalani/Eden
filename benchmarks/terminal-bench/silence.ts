@@ -17,42 +17,133 @@ export const INJECT_LOG_ENV = "EDEN_MEMORY_INJECT_LOG";
 export const INJECT_LOG_DIR = join(HERE, ".data");
 
 /** Task-ish tokens for the locked TB 2.1 subset (openssl / regex-log). */
-export const TB_TASK_TOKENS = new Set([
-  "openssl",
-  "cert",
-  "certificate",
-  "tls",
-  "ssl",
-  "regex",
-  "log",
-  "fingerprint",
-]);
+export const TB_TASK_TOKENS = new Set(["openssl", "cert", "certificate", "tls", "ssl", "regex", "log", "fingerprint"]);
 
 /** Leftover store identity — on an openssl/regex cue these are junk, not help. */
-export const TB_LEFTOVER_TOKENS = new Set([
-  "sqlite",
-  "clerk",
-  "postgres",
-  "postgresql",
-  "circleci",
-  "diet",
-]);
+export const TB_LEFTOVER_TOKENS = new Set(["sqlite", "clerk", "postgres", "postgresql", "circleci", "diet"]);
 
 const STOP = new Set([
-  "eden", "memory", "this", "that", "with", "from", "have", "been", "will", "your", "task",
-  "please", "using", "into", "file", "files", "create", "created", "make", "made", "about",
-  "they", "them", "then", "than", "when", "what", "which", "would", "could", "should",
-  "must", "just", "also", "only", "some", "more", "most", "other", "after", "before",
-  "command", "commands", "linux", "output", "description", "assistant", "environment",
-  "current", "terminal", "script", "python", "simple", "internal", "following",
-  "requirements", "ensure", "proper", "save", "valid", "details", "including", "checks",
-  "company", "server", "directory", "store", "print", "prints", "verify", "write",
-  "written", "provide", "provided", "given", "used", "uses", "user", "name", "type",
-  "true", "false", "null", "json", "text", "line", "lines", "next", "step", "steps",
-  "need", "needs", "needed", "want", "based", "state", "still", "done", "goal",
-  "format", "structure", "response", "analysis", "plan", "duration", "exactly",
-  "complete", "completed", "successful", "verification", "exists", "loaded",
-  "self", "signed", "selfsigned", "notes", "note", "fact", "rule", "episode", "gist",
+  "eden",
+  "memory",
+  "this",
+  "that",
+  "with",
+  "from",
+  "have",
+  "been",
+  "will",
+  "your",
+  "task",
+  "please",
+  "using",
+  "into",
+  "file",
+  "files",
+  "create",
+  "created",
+  "make",
+  "made",
+  "about",
+  "they",
+  "them",
+  "then",
+  "than",
+  "when",
+  "what",
+  "which",
+  "would",
+  "could",
+  "should",
+  "must",
+  "just",
+  "also",
+  "only",
+  "some",
+  "more",
+  "most",
+  "other",
+  "after",
+  "before",
+  "command",
+  "commands",
+  "linux",
+  "output",
+  "description",
+  "assistant",
+  "environment",
+  "current",
+  "terminal",
+  "script",
+  "python",
+  "simple",
+  "internal",
+  "following",
+  "requirements",
+  "ensure",
+  "proper",
+  "save",
+  "valid",
+  "details",
+  "including",
+  "checks",
+  "company",
+  "server",
+  "directory",
+  "store",
+  "print",
+  "prints",
+  "verify",
+  "write",
+  "written",
+  "provide",
+  "provided",
+  "given",
+  "used",
+  "uses",
+  "user",
+  "name",
+  "type",
+  "true",
+  "false",
+  "null",
+  "json",
+  "text",
+  "line",
+  "lines",
+  "next",
+  "step",
+  "steps",
+  "need",
+  "needs",
+  "needed",
+  "want",
+  "based",
+  "state",
+  "still",
+  "done",
+  "goal",
+  "format",
+  "structure",
+  "response",
+  "analysis",
+  "plan",
+  "duration",
+  "exactly",
+  "complete",
+  "completed",
+  "successful",
+  "verification",
+  "exists",
+  "loaded",
+  "self",
+  "signed",
+  "selfsigned",
+  "notes",
+  "note",
+  "fact",
+  "rule",
+  "episode",
+  "gist",
 ]);
 
 export type InjectLogLine = {
@@ -143,8 +234,7 @@ export function countNotes(packet: string): number {
   return notesBody(packet)
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l.startsWith("- "))
-    .length;
+    .filter((l) => l.startsWith("- ")).length;
 }
 
 /**
@@ -158,8 +248,7 @@ export function packetIsJunk(packet: string, cue: string): boolean {
   const sharedTask = [...notes].some((t) => TB_TASK_TOKENS.has(t) && cueTok.has(t));
   if (sharedTask) return false;
   const leftoverOnTaskCue =
-    [...notes].some((t) => TB_LEFTOVER_TOKENS.has(t)) &&
-    [...cueTok].some((t) => TB_TASK_TOKENS.has(t));
+    [...notes].some((t) => TB_LEFTOVER_TOKENS.has(t)) && [...cueTok].some((t) => TB_TASK_TOKENS.has(t));
   if (leftoverOnTaskCue) return true;
   for (const t of notes) {
     if (cueTok.has(t) && !TB_LEFTOVER_TOKENS.has(t)) return false;
@@ -183,7 +272,15 @@ function walkMarkText(v: unknown, out: string[], depth = 0): void {
   }
   if (v && typeof v === "object") {
     const o = v as Record<string, unknown>;
-    for (const k of ["content", "text", "system", "systemInstruction", "system_instruction", "system_prompt", "systemPrompt"]) {
+    for (const k of [
+      "content",
+      "text",
+      "system",
+      "systemInstruction",
+      "system_instruction",
+      "system_prompt",
+      "systemPrompt",
+    ]) {
       if (k in o) walkMarkText(o[k], out, depth + 1);
     }
     if (Array.isArray(o.messages)) walkMarkText(o.messages, out, depth + 1);
@@ -354,11 +451,7 @@ function taskMatch(task: string, trial: string, tasks?: string[]): boolean {
   return tasks.some((want) => {
     const leaf = want.split("/").pop() || want;
     return (
-      task === want ||
-      task.endsWith(want) ||
-      task.includes(leaf) ||
-      trial.startsWith(leaf) ||
-      trial.includes(leaf)
+      task === want || task.endsWith(want) || task.includes(leaf) || trial.startsWith(leaf) || trial.includes(leaf)
     );
   });
 }

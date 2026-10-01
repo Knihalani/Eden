@@ -105,7 +105,9 @@ describe("horizon extra: compileTraces", () => {
       );
       const r = compileTraces(traces);
       const p = r.programs.find((q) =>
-        q.steps.some((s) => s.kind === "loop" && s.body.some((id) => q.steps.some((x) => x.id === id && x.kind === "loop"))),
+        q.steps.some(
+          (s) => s.kind === "loop" && s.body.some((id) => q.steps.some((x) => x.id === id && x.kind === "loop")),
+        ),
       );
       expect(p, `k8s-nested refusals ${r.refusals.map((x) => x.code).join(",")}`).toBeDefined();
       const inner = p!.steps.find((s) => s.kind === "loop" && s.id.includes("inner"));
@@ -184,7 +186,10 @@ describe("horizon extra: compileTraces", () => {
         const brs = q.steps.filter((s) => s.kind === "branch");
         return brs.length === 1 && brs[0]!.kind === "branch" && (brs[0].cases?.length ?? 0) >= 1;
       });
-      expect(p, `sev-triage programs=${r.programs.length} refusals=${r.refusals.map((x) => x.code).join(",")}`).toBeDefined();
+      expect(
+        p,
+        `sev-triage programs=${r.programs.length} refusals=${r.refusals.map((x) => x.code).join(",")}`,
+      ).toBeDefined();
       expect(r.programs.filter((q) => q.steps.some((s) => s.kind === "branch")).length).toBe(1);
     },
     TIMEOUT,
@@ -230,52 +235,44 @@ describe("horizon extra: compileTraces", () => {
 });
 
 describe("horizon extra: goLive", () => {
-  test(
-    "k8s-nested / email / s3 / delta / deep-bill goLive PASS; wrap serve turns===1",
-    async () => {
-      const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
-        { name: "k8s-nested", factory: createK8sNested, goals: [...NEST_CLUSTERS].map((cluster) => ({ cluster })) },
-        { name: "email-drip", factory: createEmailDrip, goals: [...CAMPAIGN_IDS].map((campaign) => ({ campaign })) },
-        { name: "s3-restore", factory: createS3Restore, goals: [...BUCKET_IDS].map((bucket) => ({ bucket })) },
-        { name: "delta", factory: createDelta, goals: [...DELTA_WAVES].map((wave) => ({ wave })) },
-        { name: "deep-bill", factory: createDeepBill, goals: [...ACCOUNT_IDS].map((account) => ({ account })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`extra-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program).not.toBeNull();
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`extra-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
-      }
-    },
-    90_000,
-  );
-
-  test(
-    "sev-triage goLive PASS with a branched program — FAIL loudly, never skip-as-win",
-    async () => {
-      const goals = [...SEV_ALERTS].map((alert) => ({ alert }));
-      const s = new Session([["sev-triage", createSevTriage]], true);
-      // Same witness budget as the other extras: 13 / compile 9 / holdout 3.
-      // A 3-arm fork is one shape family; 13 must PASS (not SKIP as thin arms).
+  test("k8s-nested / email / s3 / delta / deep-bill goLive PASS; wrap serve turns===1", async () => {
+    const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
+      { name: "k8s-nested", factory: createK8sNested, goals: [...NEST_CLUSTERS].map((cluster) => ({ cluster })) },
+      { name: "email-drip", factory: createEmailDrip, goals: [...CAMPAIGN_IDS].map((campaign) => ({ campaign })) },
+      { name: "s3-restore", factory: createS3Restore, goals: [...BUCKET_IDS].map((bucket) => ({ bucket })) },
+      { name: "delta", factory: createDelta, goals: [...DELTA_WAVES].map((wave) => ({ wave })) },
+      { name: "deep-bill", factory: createDeepBill, goals: [...ACCOUNT_IDS].map((account) => ({ account })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
       for (let i = 0; i < 13; i++) {
-        await s.stretch("sev-triage", goals[i % goals.length]!, blockSeed(`extra-live-sev-${i}`, i));
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`extra-live-${c.name}-${i}`, i));
       }
-      const r = await s.goLive("sev-triage", { compile: 9, holdout: 3, sandbox: createSevTriage, maxGram: 26 });
-      expect(r.verdict, `sev-triage goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
       expect(r.program).not.toBeNull();
-      const brs = r.program!.steps.filter((s) => s.kind === "branch");
-      expect(brs).toHaveLength(1);
-      expect(brs[0]!.kind === "branch" && (brs[0].cases?.length ?? 0) >= 1).toBe(true);
-    },
-    60_000,
-  );
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`extra-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+    }
+  }, 90_000);
+
+  test("sev-triage goLive PASS with a branched program — FAIL loudly, never skip-as-win", async () => {
+    const goals = [...SEV_ALERTS].map((alert) => ({ alert }));
+    const s = new Session([["sev-triage", createSevTriage]], true);
+    // Same witness budget as the other extras: 13 / compile 9 / holdout 3.
+    // A 3-arm fork is one shape family; 13 must PASS (not SKIP as thin arms).
+    for (let i = 0; i < 13; i++) {
+      await s.stretch("sev-triage", goals[i % goals.length]!, blockSeed(`extra-live-sev-${i}`, i));
+    }
+    const r = await s.goLive("sev-triage", { compile: 9, holdout: 3, sandbox: createSevTriage, maxGram: 26 });
+    expect(r.verdict, `sev-triage goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+    expect(r.program).not.toBeNull();
+    const brs = r.program!.steps.filter((s) => s.kind === "branch");
+    expect(brs).toHaveLength(1);
+    expect(brs[0]!.kind === "branch" && (brs[0].cases?.length ?? 0) >= 1).toBe(true);
+  }, 60_000);
 });

@@ -18,12 +18,7 @@
  * Pre-registered expect (ROADMAP §4.9) is `EXPECT` below.
  */
 import { openDb } from "../../apps/site/src/db";
-import {
-  publicResultKey,
-  readResult,
-  resultCacheKey,
-  writeResult,
-} from "../../apps/site/src/cache";
+import { publicResultKey, readResult, resultCacheKey, writeResult } from "../../apps/site/src/cache";
 import { playTool } from "../../apps/site/src/playback";
 import { handleWebhook, webhookHmacHex } from "../../apps/site/src/webhook";
 
@@ -31,8 +26,7 @@ import { handleWebhook, webhookHmacHex } from "../../apps/site/src/webhook";
  * Pre-registered Wave 15 rotation verdict. Recorded before the run.
  * expect: webhook-invalidated GET misses after drop; live stays On; not a field rename.
  */
-export const EXPECT =
-  "webhook-invalidated GET: named GET hits then miss after invalidate; live stays On";
+export const EXPECT = "webhook-invalidated GET: named GET hits then miss after invalidate; live stays On";
 
 export const GET_URL = "https://x.test/forge/1/comments";
 export const STEP = { id: "s1", name: "get_comments", method: "GET" } as const;
@@ -54,7 +48,9 @@ export async function runWebhookGet(opts?: { tag?: string; secret?: string }): P
   const db = await openDb(`/tmp/eden-webhook-get-${tag}-${Date.now()}.db`);
   const ws = `ws_${tag}`;
   const toolId = `t_get_${tag}`;
-  const steps = [{ id: STEP.id, kind: "cloud_http", name: STEP.name, method: STEP.method, commute: true, url: GET_URL }];
+  const steps = [
+    { id: STEP.id, kind: "cloud_http", name: STEP.name, method: STEP.method, commute: true, url: GET_URL },
+  ];
   await db.run(
     `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
      VALUES (?, ?, 'get_comments', ?, 'on', ?, '[]', ?, 2)`,
@@ -115,7 +111,11 @@ export async function runWebhookGet(opts?: { tag?: string; secret?: string }): P
   const row = await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = ?`, [toolId]);
   const live = row?.state ?? liveState;
 
-  const played = await playTool(db, { id: toolId, name: "get_comments", steps: JSON.stringify(steps), workspace_id: ws }, {});
+  const played = await playTool(
+    db,
+    { id: toolId, name: "get_comments", steps: JSON.stringify(steps), workspace_id: ws },
+    {},
+  );
 
   return {
     expect: EXPECT,

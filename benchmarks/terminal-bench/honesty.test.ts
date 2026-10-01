@@ -48,9 +48,7 @@ function extractBrace(src: string, openAt: number): string {
 }
 
 function extractNamedFn(src: string, name: string): string {
-  const re = new RegExp(
-    `(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{`,
-  );
+  const re = new RegExp(`(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{`);
   const m = src.match(re);
   if (!m || m.index == null) return "";
   return extractBrace(src, m.index + m[0].length - 1);
@@ -119,11 +117,7 @@ function publicBoardCell(src: string): string | null {
  * Throws if RESULTS claims the public 89-task tbench.ai board, or n≠2.
  * Locked-subset / "not 89-task" denials are required.
  */
-export function assertNotPublicBoard(
-  src: string,
-  subset: SubsetFile,
-  label = "RESULTS",
-): void {
+export function assertNotPublicBoard(src: string, subset: SubsetFile, label = "RESULTS"): void {
   const errors: string[] = [];
   if (subset.public_board !== false) {
     errors.push(`${label}: subset.json public_board must be false`);
@@ -163,9 +157,7 @@ export function assertTbProductHonesty(src: string, label = "RESULTS"): void {
   if (/\bBrainMemory\.retrieve\b/.test(src)) {
     errors.push(`${label}: names BrainMemory.retrieve`);
   }
-  const k40mcc =
-    /\bk\s*=\s*40\b[\s\S]{0,80}\bMCC\b/i.test(src) ||
-    /\bMCC\b[\s\S]{0,80}\bk\s*=\s*40\b/i.test(src);
+  const k40mcc = /\bk\s*=\s*40\b[\s\S]{0,80}\bMCC\b/i.test(src) || /\bMCC\b[\s\S]{0,80}\bk\s*=\s*40\b/i.test(src);
   if (k40mcc && !/not k=40|not .*k=40|k=40 is forbidden|do not k=40/i.test(src)) {
     errors.push(`${label}: k=40 as MCC`);
   }
@@ -247,12 +239,12 @@ describe("M32.4 Terminal-Bench honesty — no public-board 89-task claim", () =>
       "| n (tasks) | 89 |",
       "This is the 89-task tbench.ai board.",
     ].join("\n");
-    expect(() =>
-      assertNotPublicBoard(fake, { public_board: true, tasks: Array.from({ length: 89 }) }, "fake"),
-    ).toThrow(/89|public_board|locked subset/);
-    expect(() =>
-      assertNotPublicBoard(fake, { public_board: false, tasks: ["a", "b"] }, "fake-board"),
-    ).toThrow(/89|public board|locked subset/i);
+    expect(() => assertNotPublicBoard(fake, { public_board: true, tasks: Array.from({ length: 89 }) }, "fake")).toThrow(
+      /89|public_board|locked subset/,
+    );
+    expect(() => assertNotPublicBoard(fake, { public_board: false, tasks: ["a", "b"] }, "fake-board")).toThrow(
+      /89|public board|locked subset/i,
+    );
   });
 });
 
@@ -414,9 +406,7 @@ describe("M32.4 remain-silent: on-cue still injects; math omit is allowed/requir
       const cue = [{ role: "user" as const, content: "What store is postgres?" }];
       const out = mem.inject(cue);
       const blob = (Array.isArray(out) ? out : [])
-        .map((m) =>
-          m && typeof m === "object" ? String((m as { content?: unknown }).content ?? "") : "",
-        )
+        .map((m) => (m && typeof m === "object" ? String((m as { content?: unknown }).content ?? "") : ""))
         .join("\n");
       expect(blob).toContain(MEMORY_MARK);
       expect(blob).toMatch(/postgres/i);
@@ -424,9 +414,7 @@ describe("M32.4 remain-silent: on-cue still injects; math omit is allowed/requir
       const math = [{ role: "user" as const, content: "what's 2+2?" }];
       const silent = mem.inject(math);
       const silentBlob = (Array.isArray(silent) ? silent : [])
-        .map((m) =>
-          m && typeof m === "object" ? String((m as { content?: unknown }).content ?? "") : "",
-        )
+        .map((m) => (m && typeof m === "object" ? String((m as { content?: unknown }).content ?? "") : ""))
         .join("\n");
       expect(silent).toEqual(math);
       expect(silentBlob).not.toContain(MEMORY_MARK);

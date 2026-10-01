@@ -266,7 +266,9 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
   // whatever the local stretch table happens to hold today.
   const compile = input.compileTracesFn;
   if (!compile) {
-    console.error(`[eden-canary] ${tool.name}: drift detected (${deopts} deopts/${windowMs / 3600_000}h) but no compileTracesFn wired — cannot recompile`);
+    console.error(
+      `[eden-canary] ${tool.name}: drift detected (${deopts} deopts/${windowMs / 3600_000}h) but no compileTracesFn wired — cannot recompile`,
+    );
     return { action: "no-compiler" };
   }
 
@@ -325,7 +327,9 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
   // buildDag calls steps.map and throws, the workshop renders zero steps.
   const projection = programToCompiledSteps(program, tool.steps);
   if (!projection.ok) {
-    console.error(`[eden-canary] ${tool.name}: refusing to queue unplayable recompile: ${projection.reasons.join("; ")}`);
+    console.error(
+      `[eden-canary] ${tool.name}: refusing to queue unplayable recompile: ${projection.reasons.join("; ")}`,
+    );
     return { action: "unplayable-refused", reasons: projection.reasons };
   }
   const compiledSteps = JSON.stringify(projection.steps);
@@ -368,10 +372,12 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
     ],
   );
   // The surviving row wins even if a concurrent ingest landed first.
-  const queued = (await db.get<{ id: string }>(`SELECT id FROM tool WHERE workspace_id = ? AND fingerprint = ?`, [
-    input.workspace_id,
-    rcFingerprint,
-  ]))?.id;
+  const queued = (
+    await db.get<{ id: string }>(`SELECT id FROM tool WHERE workspace_id = ? AND fingerprint = ?`, [
+      input.workspace_id,
+      rcFingerprint,
+    ])
+  )?.id;
   const finalDraftId = queued || draftId;
   const knockId = crypto.randomUUID();
   const attemptRow = await db.get<{ n: number | string }>(

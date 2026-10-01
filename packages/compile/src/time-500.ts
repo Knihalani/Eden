@@ -107,6 +107,9 @@ writeCapture(
 
 if (cold500Med > 2000) process.exit(1);
 if (cold2000Med > 2500) process.exit(1);
-if (etl.programs[0]?.sequence?.length !== 20 || etl.refusals.some((r) => r.reason.includes("without a bindable foreach"))) {
+if (
+  etl.programs[0]?.sequence?.length !== 20 ||
+  etl.refusals.some((r) => r.reason.includes("without a bindable foreach"))
+) {
   process.exit(1);
 }

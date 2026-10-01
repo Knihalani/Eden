@@ -57,9 +57,7 @@ function xmlAttr(block: string, tag: string, attr: string): string {
 }
 
 function xmlAttrField(block: string, tag: string, attr: string, val: string): string {
-  const m = block.match(
-    new RegExp(`<${tag}[^>]*${attr}=["']${val}["'][^>]*>\\s*([^<]*)\\s*</${tag}>`, "i"),
-  );
+  const m = block.match(new RegExp(`<${tag}[^>]*${attr}=["']${val}["'][^>]*>\\s*([^<]*)\\s*</${tag}>`, "i"));
   return (m?.[1] ?? "").replace(/\s+/g, " ").trim();
 }
 
@@ -128,7 +126,11 @@ export function parseIanaRecord(block: string, kind: (typeof IANA_REGISTRIES)[nu
     return { s: `IANA well-known ${value}`, p: "is", o, e: "" };
   }
   if (kind === "charset") {
-    const name = (xmlField(block, "name") || xmlField(block, "value") || xmlField(block, "preferred_alias")).toLowerCase();
+    const name = (
+      xmlField(block, "name") ||
+      xmlField(block, "value") ||
+      xmlField(block, "preferred_alias")
+    ).toLowerCase();
     const pref = xmlField(block, "preferred_alias").toLowerCase() || name;
     if (!CHARSET_KEEP.test(pref) && !CHARSET_KEEP.test(name)) return undefined;
     const key = (pref || name).toLowerCase();
@@ -145,9 +147,7 @@ export function parseIanaRecord(block: string, kind: (typeof IANA_REGISTRIES)[nu
     const xrefText = xmlField(block, "xref");
     const rfcText = /rfc\s*(\d{1,5})/i.exec(xrefText);
     const useful = desc && !/^(permanent|provisional|deprecated)$/i.test(desc) && desc.length >= 3;
-    const o = (
-      useful ? desc : rfc ? `RFC ${rfc[1]}` : rfcText ? `RFC ${rfcText[1]}` : "HTTP field"
-    ).slice(0, 72);
+    const o = (useful ? desc : rfc ? `RFC ${rfc[1]}` : rfcText ? `RFC ${rfcText[1]}` : "HTTP field").slice(0, 72);
     if (o.length < 3) return undefined;
     return { s: `IANA header ${value}`, p: "is", o, e: "" };
   }

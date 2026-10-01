@@ -176,7 +176,10 @@ async function drain() {
   if (ex(runsDir)) {
     for (const f of rd(runsDir)) {
       if (!f.endsWith(".jsonl") || f.endsWith(".sent.jsonl")) continue;
-      appendFileSync(outbox, JSON.stringify({ run_id: f.replace(/\.jsonl$/, ""), kind: "stretch_end", ts: Date.now() }) + "\n");
+      appendFileSync(
+        outbox,
+        JSON.stringify({ run_id: f.replace(/\.jsonl$/, ""), kind: "stretch_end", ts: Date.now() }) + "\n",
+      );
     }
   }
   const proc = Bun.spawn(["bun", CLI, "drain"], {
@@ -190,7 +193,12 @@ async function drain() {
 function reviewCount(row: { reviews?: unknown }): number | null {
   if (typeof row.reviews === "number" && Number.isFinite(row.reviews)) return row.reviews;
   if (Array.isArray(row.reviews)) return row.reviews.length;
-  if (row.reviews && typeof row.reviews === "object" && "n" in row.reviews && typeof (row.reviews as { n: unknown }).n === "number") {
+  if (
+    row.reviews &&
+    typeof row.reviews === "object" &&
+    "n" in row.reviews &&
+    typeof (row.reviews as { n: unknown }).n === "number"
+  ) {
     return (row.reviews as { n: number }).n;
   }
   return null;
@@ -294,7 +302,7 @@ async function runClaude(opts: {
   writeFileSync(join(dir, "stdout.jsonl"), stdout);
   writeFileSync(join(dir, "stderr.txt"), stderr);
   const parsed = parseStream(stdout);
-  const usage = ((parsed.result?.usage || {}) as Record<string, number>);
+  const usage = (parsed.result?.usage || {}) as Record<string, number>;
   const mcp_calls = Object.entries(parsed.tool_names)
     .filter(([k]) => k.startsWith("mcp__eden__"))
     .reduce((a, [, n]) => a + n, 0);
@@ -318,7 +326,17 @@ async function runClaude(opts: {
     ingested,
   };
   writeFileSync(join(dir, "summary.json"), JSON.stringify(summary, null, 2));
-  console.log(JSON.stringify({ arm: opts.arm, task: opts.task, wall_ms, cost: summary.cost_usd, tools: parsed.tool_names, ingested, err: summary.is_error }));
+  console.log(
+    JSON.stringify({
+      arm: opts.arm,
+      task: opts.task,
+      wall_ms,
+      cost: summary.cost_usd,
+      tools: parsed.tool_names,
+      ingested,
+      err: summary.is_error,
+    }),
+  );
   if (opts.arm === "with") await drain();
   return summary;
 }

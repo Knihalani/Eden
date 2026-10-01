@@ -78,9 +78,7 @@ describe("aggregateDc", () => {
   });
 
   test("all-zero classes are 0 not NaN", () => {
-    const [row] = aggregateDc([
-      { workspace: "ws", day: "2026-08-01", classes: emptyTokenClasses() },
-    ]);
+    const [row] = aggregateDc([{ workspace: "ws", day: "2026-08-01", classes: emptyTokenClasses() }]);
     expect(row!.dcShare).toBe(0);
     expect(row!.dcPct).toBe(0);
     expect(Number.isNaN(row!.dcPct)).toBe(false);

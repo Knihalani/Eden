@@ -83,15 +83,7 @@ function stripEtag(raw: string): string {
 }
 
 export function fetchRemotePack(): RemotePack | null {
-  const head = aws([
-    "s3api",
-    "head-object",
-    "--bucket",
-    s3Bucket(),
-    "--key",
-    s3Key(),
-    ...commonArgs(),
-  ]);
+  const head = aws(["s3api", "head-object", "--bucket", s3Bucket(), "--key", s3Key(), ...commonArgs()]);
   const err = `${head.stdout} ${head.stderr}`;
   if (head.status !== 0 && /Not Found|404|NoSuchKey/i.test(err)) return null;
   if (head.status !== 0) throw new Error(`s3 head: ${head.stderr.slice(0, 200)}`);
@@ -104,16 +96,7 @@ export function fetchRemotePack(): RemotePack | null {
   const dir = mkdtempSync(join(tmpdir(), "eden-know-s3-"));
   const dest = join(dir, "graph.kpk");
   try {
-    const got = aws([
-      "s3api",
-      "get-object",
-      "--bucket",
-      s3Bucket(),
-      "--key",
-      s3Key(),
-      ...commonArgs(),
-      dest,
-    ]);
+    const got = aws(["s3api", "get-object", "--bucket", s3Bucket(), "--key", s3Key(), ...commonArgs(), dest]);
     if (got.status !== 0) throw new Error(`s3 get: ${got.stderr.slice(0, 200)}`);
     const bytes = new Uint8Array(readFileSync(dest));
     if (!etag) {
@@ -138,11 +121,7 @@ export function putRemotePack(
   const src = join(dir, "graph.kpk");
   try {
     writeFileSync(src, bytes);
-    const cond = key.startsWith("overlay/")
-      ? []
-      : etag
-        ? ["--if-match", etag]
-        : ["--if-none-match", "*"];
+    const cond = key.startsWith("overlay/") ? [] : etag ? ["--if-match", etag] : ["--if-none-match", "*"];
     const put = aws([
       "s3api",
       "put-object",
@@ -183,15 +162,7 @@ export function overlayPrefix(): string {
 }
 
 function listRemoteKeys(prefix: string): string[] {
-  const listed = aws([
-    "s3api",
-    "list-objects-v2",
-    "--bucket",
-    s3Bucket(),
-    "--prefix",
-    prefix,
-    ...commonArgs(),
-  ]);
+  const listed = aws(["s3api", "list-objects-v2", "--bucket", s3Bucket(), "--prefix", prefix, ...commonArgs()]);
   if (listed.status !== 0) return [];
   try {
     const j = JSON.parse(listed.stdout) as { Contents?: { Key?: string }[] };
@@ -205,16 +176,7 @@ function fetchRemoteObject(key: string): Uint8Array | null {
   const dir = mkdtempSync(join(tmpdir(), "eden-know-s3ov-"));
   const dest = join(dir, "obj");
   try {
-    const got = aws([
-      "s3api",
-      "get-object",
-      "--bucket",
-      s3Bucket(),
-      "--key",
-      key,
-      ...commonArgs(),
-      dest,
-    ]);
+    const got = aws(["s3api", "get-object", "--bucket", s3Bucket(), "--key", key, ...commonArgs(), dest]);
     if (got.status !== 0) return null;
     return new Uint8Array(readFileSync(dest));
   } finally {
@@ -320,7 +282,13 @@ export async function compactAndPublish(store: KnowStore): Promise<PublishResult
     try {
       remote = fetchRemotePack();
     } catch (e) {
-      return { compacted: true, uploaded: false, bytes: bytes.byteLength, sha256, skipped: `refetch-failed:${String(e).slice(0, 80)}` };
+      return {
+        compacted: true,
+        uploaded: false,
+        bytes: bytes.byteLength,
+        sha256,
+        skipped: `refetch-failed:${String(e).slice(0, 80)}`,
+      };
     }
     base = mergeFactLists(remote ? allFacts(decodePack(remote.bytes)) : [], fetchRemoteOverlays());
     const next = store.compact(base);

@@ -36,9 +36,7 @@ function convo(id: number) {
 
 header("POC I — OpenAI-log import fidelity (FIX SHIPPED)");
 
-const logs = [0, 1, 2, 3].flatMap((c) =>
-  convo(c).map((l) => ({ ...l, conversation_id: `conv-${c}` })),
-);
+const logs = [0, 1, 2, 3].flatMap((c) => convo(c).map((l) => ({ ...l, conversation_id: `conv-${c}` })));
 
 // Fact 1: reachability — the adapter used to be unreachable from auto-detect.
 const detected = detectAndParse(JSON.stringify(logs));
@@ -64,4 +62,3 @@ for (const p of r2.programs) printRow("CANDIDATE", `"${p.name}" — ${p.steps.le
 
 console.log("\nVERDICT: WIN (shipped) — OpenAI exports route into auto-detect, group per conversation,");
 console.log("and clear minSupport; without metadata the legacy single-trace behavior is preserved.");
-

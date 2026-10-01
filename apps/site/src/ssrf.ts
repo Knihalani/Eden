@@ -153,7 +153,7 @@ function ipv6Blocked(host: string): boolean {
   }
   // 64:ff9b::/96 — NAT64, likewise a v4 destination wearing a v6 address.
   if (g[0] === 0x64 && g[1] === 0xff9b && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
-    return ipv4Blocked(((((g[6]! << 16) >>> 0) + g[7]!) >>> 0));
+    return ipv4Blocked((((g[6]! << 16) >>> 0) + g[7]!) >>> 0);
   }
   if ((g[0]! & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
   if ((g[0]! & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
@@ -205,9 +205,7 @@ export async function resolvesToPublicAddress(hostname: string): Promise<boolean
   return (await publicAddressesFor(hostname)) !== null;
 }
 
-export type UrlCheck =
-  | { ok: true; url: URL; addresses: PinnedAddress[] }
-  | { ok: false; reason: string };
+export type UrlCheck = { ok: true; url: URL; addresses: PinnedAddress[] } | { ok: false; reason: string };
 
 export async function checkEgressUrl(raw: string): Promise<UrlCheck> {
   let url: URL;
@@ -388,8 +386,7 @@ export function pinnedFetch(pinned: PinnedAddress[], opts?: PinnedFetchOptions):
     // node:http does not transparently decompress the way fetch does.
     headers["accept-encoding"] = "identity";
 
-    const body =
-      req.method === "GET" || req.method === "HEAD" ? null : Buffer.from(await req.arrayBuffer());
+    const body = req.method === "GET" || req.method === "HEAD" ? null : Buffer.from(await req.arrayBuffer());
 
     return await new Promise<Response>((resolveRaw, rejectRaw) => {
       // destroy() alone does not reliably surface *why* a request ended — the

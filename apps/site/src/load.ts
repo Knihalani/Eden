@@ -37,7 +37,7 @@ const GARBAGE = [
   '{"run_id":}',
   "[]",
   '{"run_id": "x"}',
-  '<script>alert(1)</script>',
+  "<script>alert(1)</script>",
   '{"traces": [{"events": "notarray"}]}',
 ];
 

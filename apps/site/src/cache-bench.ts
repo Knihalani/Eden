@@ -127,7 +127,9 @@ async function main(): Promise<void> {
   const nKeys = ADMISSION_WINDOW_CAP * 2 + 16; // must exceed the window so frequency matters
   const visits = 4;
 
-  async function replayHitRate(force: boolean): Promise<{ warmupWrites: number; replayHits: number; replayLookups: number }> {
+  async function replayHitRate(
+    force: boolean,
+  ): Promise<{ warmupWrites: number; replayHits: number; replayLookups: number }> {
     resetCacheAdmission();
     const d = await openDb(`/tmp/eden-cache-bench-replay-${force ? "all" : "adm"}-${Date.now()}.db`);
     const opts = force ? { force: true as const } : undefined;
@@ -187,7 +189,8 @@ async function main(): Promise<void> {
   // Hit-path tax: gzip is at rest; the decoded hot set is what a run pays.
   // Percent-only on ~1µs Map gets is noise. Fail when compressed is both
   // ≥10% slower *and* slower by ≥0.05ms — the signature of gunzip on the hit.
-  if (readTax >= 0.1 && readTaxMs >= 0.05) fail.push(`read tax ${(readTax * 100).toFixed(2)}% ≥ 10% (${readTaxMs.toFixed(4)}ms)`);
+  if (readTax >= 0.1 && readTaxMs >= 0.05)
+    fail.push(`read tax ${(readTax * 100).toFixed(2)}% ≥ 10% (${readTaxMs.toFixed(4)}ms)`);
   if (hitRateLossPts >= 1) fail.push(`hit-rate loss ${hitRateLossPts.toFixed(3)}pt ≥ 1pt`);
   if (admittedStorm >= nStorm * 0.2) fail.push(`storm persisted ${admittedStorm} (≥20% of write-all)`);
   if (fail.length) {

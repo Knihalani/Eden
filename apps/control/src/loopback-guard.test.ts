@@ -145,8 +145,7 @@ describe("a loopback wrap server refuses requests driven by a web page", () => {
 
   test("a hosted or LAN bind, and in-process callers, skip the loopback check", async () => {
     const s = serveLoopback();
-    const req = () =>
-      new Request("http://useeden.example/v1/stats", { headers: { ...AUTH, host: "useeden.example" } });
+    const req = () => new Request("http://useeden.example/v1/stats", { headers: { ...AUTH, host: "useeden.example" } });
     expect((await s.handler(req())).status).toBe(200);
     expect((await s.handler(req(), { hostname: "0.0.0.0" })).status).toBe(200);
     expect((await s.handler(req(), { hostname: "127.0.0.1" })).status).toBe(403);

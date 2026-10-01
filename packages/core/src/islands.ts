@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 import type { IslandStep, StepKind, ToolEvent } from "./types";
-import { familyId, parseNamedCli, extractNamedCliCalls, isMutatingGh, isMutatingCurl, type ParsedCli } from "./named-cli";
+import {
+  familyId,
+  parseNamedCli,
+  extractNamedCliCalls,
+  isMutatingGh,
+  isMutatingCurl,
+  type ParsedCli,
+} from "./named-cli";
 import { githubRestFromCli, parameterizeUrl, toolNameFromUrls } from "./urls";
 import { commandShapeCached, isNoiseCommand, abstractShellGroup } from "./shapes";
 
@@ -349,8 +356,7 @@ function toStepFromParsed(parsed: ParsedCli, cmd: string): IslandStep {
   // whole command string gave every curl in a multi-call line the FIRST
   // call's URL, so dedupeCloudSteps then collapsed genuinely different
   // resources into one step.
-  let source_url =
-    githubRestFromCli(parsed, cmd) || githubRestFromCli(parsed, `gh api ${parsed.positionals[0] || ""}`);
+  let source_url = githubRestFromCli(parsed, cmd) || githubRestFromCli(parsed, `gh api ${parsed.positionals[0] || ""}`);
   if (!source_url) {
     const own = parsed.positionals.find((p) => /^https?:\/\//.test(p));
     if (own) source_url = own;
@@ -408,9 +414,7 @@ function dedupeCloudSteps(steps: IslandStep[]): IslandStep[] {
  * mining needs, while genuinely different commands keep distinct skeletons.
  */
 function abstractShellSteps(steps: IslandStep[], peers?: string[]): IslandStep[] {
-  const shellIdx = steps
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s.command && s.kind === "runner" && !s.cli_family);
+  const shellIdx = steps.map((s, i) => ({ s, i })).filter(({ s }) => s.command && s.kind === "runner" && !s.cli_family);
   if (shellIdx.length < 1) return steps;
   // Prior runs' shell commands vote alongside this run's: `kubectl logs api`
   // alone has no variation evidence, but with yesterday's `logs web` as a
@@ -455,8 +459,7 @@ export function explodeShellLoop(event: ToolEvent): ToolEvent[] {
   if (!body.includes(`$${varName}`) && !body.includes(`\${${varName}}`)) return [];
   const items = m[2]!.trim().split(/\s+/);
   if (items.length < 2 || items.length > 100) return [];
-  const substitute = (item: string) =>
-    body.replaceAll(`\${${varName}}`, item).replaceAll(`$${varName}`, item);
+  const substitute = (item: string) => body.replaceAll(`\${${varName}}`, item).replaceAll(`$${varName}`, item);
   return items.map((item, i) => ({
     event_id: `${event.event_id}-l${i}`,
     seq: event.seq,
@@ -483,7 +486,13 @@ export function cutIslands(
     let steps = dedupeCloudSteps(cur);
     steps = abstractShellSteps(steps, opts.peerCommands);
     if (process.env.EDEN_DEBUG_ISLANDS === "1") {
-      console.error("[flush]", cur.length, "->", steps.length, steps.map((s) => [s.name, s.kind, s.source_url]));
+      console.error(
+        "[flush]",
+        cur.length,
+        "->",
+        steps.length,
+        steps.map((s) => [s.name, s.kind, s.source_url]),
+      );
     }
     if (steps.length >= 2) islands.push(steps);
     cur = [];
@@ -523,9 +532,7 @@ export function cutIslands(
   }
   flush();
   return islands.filter(
-    (island) =>
-      opts.allowRunnerOnly ||
-      island.some((s) => s.kind === "cloud_http" || s.kind === "cloud_oauth"),
+    (island) => opts.allowRunnerOnly || island.some((s) => s.kind === "cloud_http" || s.kind === "cloud_oauth"),
   );
 }
 

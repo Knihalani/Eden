@@ -84,9 +84,7 @@ async function main() {
   for (const cell of abPlan) {
     const task = TASKS.find((t) => t.id === cell.task)!;
     const value =
-      cell.arm === "naive"
-        ? await naiveRun(task.tools, task.cycles)
-        : await guardedRun(task.tools, task.cycles);
+      cell.arm === "naive" ? await naiveRun(task.tools, task.cycles) : await guardedRun(task.tools, task.cycles);
     ab[cell.arm]!.push({ task: cell.task, repeat: cell.repeat, value });
   }
 
@@ -115,7 +113,9 @@ async function main() {
     const nav = ab.naive!.filter((s) => s.task === t.id);
     const g = ab.guarded!.filter((s) => s.task === t.id);
     const mean = (xs: Sample[]) => xs.reduce((a, b) => a + b.value, 0) / xs.length;
-    console.log(`  ${t.id.padEnd(12)} naive ${mean(nav).toFixed(0).padStart(6)}   guarded ${mean(g).toFixed(0).padStart(6)}   ${(mean(nav) / mean(g)).toFixed(1)}x less spend`);
+    console.log(
+      `  ${t.id.padEnd(12)} naive ${mean(nav).toFixed(0).padStart(6)}   guarded ${mean(g).toFixed(0).padStart(6)}   ${(mean(nav) / mean(g)).toFixed(1)}x less spend`,
+    );
   }
   if (decision.verdict !== "WIN") {
     console.error(`\nverdict is ${decision.verdict}, not WIN`);

@@ -1,12 +1,4 @@
-export function GoogleButton({
-  busy,
-  disabled,
-  onClick,
-}: {
-  busy?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+export function GoogleButton({ busy, disabled, onClick }: { busy?: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"

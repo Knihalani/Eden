@@ -14,7 +14,7 @@ const SQLITE_STATEMENTS = [
     )`,
   `CREATE TABLE IF NOT EXISTS stretch (
       id TEXT PRIMARY KEY, workspace_id TEXT, run_id TEXT, fingerprint TEXT, steps TEXT, island_index INTEGER
-    )`,  // Keyed by (workspace_id, fingerprint), not fingerprint alone. Fingerprints
+    )`, // Keyed by (workspace_id, fingerprint), not fingerprint alone. Fingerprints
   // are derived from URL *shape*, so two tenants calling the same public API
   // produce the same one by construction — and with a global key the second
   // tenant's upsert landed in the first's row, resetting its count so it never
@@ -29,7 +29,8 @@ const SQLITE_STATEMENTS = [
     )`,
   `CREATE TABLE IF NOT EXISTS knock (
       id TEXT PRIMARY KEY, workspace_id TEXT, tool_id TEXT, attempt INTEGER, resolution TEXT
-    )`,  `CREATE TABLE IF NOT EXISTS tool_run (
+    )`,
+  `CREATE TABLE IF NOT EXISTS tool_run (
       id TEXT PRIMARY KEY, tool_id TEXT, steps_attempted INTEGER, steps_ok INTEGER, server_ms INTEGER, runner_ms INTEGER, raw_bytes INTEGER, densified_bytes INTEGER, billable_ms INTEGER, cache_hits INTEGER, receipt TEXT, created_at BIGINT DEFAULT 0
     )`,
   `CREATE TABLE IF NOT EXISTS result_cache (cache_key TEXT PRIMARY KEY, body TEXT, expires_at BIGINT)`,
@@ -225,13 +226,21 @@ async function migrate(db: EdenDb, neon: boolean) {
   // could both see "no draft yet" and mint duplicate drafts for the same
   // stretch. Best-effort like the other backfilled indexes: legacy databases
   // holding duplicates must not block boot.
-  await db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_ws_fp ON tool (workspace_id, fingerprint)`).catch(() => undefined);
+  await db
+    .exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_ws_fp ON tool (workspace_id, fingerprint)`)
+    .catch(() => undefined);
   // Timestamps for the TTL housekeeping sweeps. Old rows carry 0, so a fresh
   // deployment's history is not immediately swept; it ages out on its own
   // schedule once real timestamps exist.
   await db.exec(`ALTER TABLE tool_event ADD COLUMN created_at BIGINT DEFAULT 0`).catch(() => undefined);
   await db.exec(`ALTER TABLE stretch ADD COLUMN created_at BIGINT DEFAULT 0`).catch(() => undefined);
-  await migrateTenantKey(db, neon, "cluster", "fingerprint", "fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT");
+  await migrateTenantKey(
+    db,
+    neon,
+    "cluster",
+    "fingerprint",
+    "fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT",
+  );
   await migrateTenantKey(
     db,
     neon,
@@ -246,7 +255,9 @@ async function migrate(db: EdenDb, neon: boolean) {
   // because databases created before this index can hold duplicate rows, and
   // creating a unique index over duplicates must not stop the server booting.
   await db
-    .exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stretch_observed ON stretch (workspace_id, run_id, fingerprint, island_index)`)
+    .exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_stretch_observed ON stretch (workspace_id, run_id, fingerprint, island_index)`,
+    )
     .catch(() => undefined);
   // Drift canary ledger: one row per caught DeoptError during playback. The
   // autoincrement id is the spec'd shape for SQLite; Neon cannot parse
@@ -300,13 +311,16 @@ export async function recordDeopt(
   opts: { reason?: string; steps_run?: number } = {},
 ): Promise<void> {
   try {
-    await db.run(`INSERT INTO deopt_event (workspace_id, tool_id, reason, steps_run, created_at) VALUES (?, ?, ?, ?, ?)`, [
-      workspaceId,
-      toolId,
-      opts.reason ?? null,
-      Number.isFinite(opts.steps_run) ? Number(opts.steps_run) : 0,
-      Date.now(),
-    ]);
+    await db.run(
+      `INSERT INTO deopt_event (workspace_id, tool_id, reason, steps_run, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [
+        workspaceId,
+        toolId,
+        opts.reason ?? null,
+        Number.isFinite(opts.steps_run) ? Number(opts.steps_run) : 0,
+        Date.now(),
+      ],
+    );
   } catch {
     /* best-effort by contract */
   }
@@ -331,7 +345,9 @@ export async function listDeopts(
   workspaceId: string,
   toolId: string,
   limit = 20,
-): Promise<Array<{ id: number; tool_id: string; reason: string | null; steps_run: number | null; created_at: number }>> {
+): Promise<
+  Array<{ id: number; tool_id: string; reason: string | null; steps_run: number | null; created_at: number }>
+> {
   return db.all(
     `SELECT id, tool_id, reason, steps_run, created_at FROM deopt_event
       WHERE workspace_id = ? AND tool_id = ? ORDER BY created_at DESC LIMIT ?`,

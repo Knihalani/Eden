@@ -35,7 +35,10 @@ function occurrences(goals: Array<Record<string, unknown>>, key: string): Map<st
   return m;
 }
 
-function occurrencesBy(goals: Array<Record<string, unknown>>, keyOf: (g: Record<string, unknown>) => string): Map<string, number> {
+function occurrencesBy(
+  goals: Array<Record<string, unknown>>,
+  keyOf: (g: Record<string, unknown>) => string,
+): Map<string, number> {
   const m = new Map<string, number>();
   for (const g of goals) {
     const k = keyOf(g);
@@ -461,7 +464,10 @@ const HOLDOUT_NOISE_TOOLS = [
 export const NOISE_IDS = ["NH-0", "NH-1", "NH-2", "NH-3", "NH-4", "NH-5"] as const;
 
 export function createHoldoutNoise(): World {
-  const toolDefs = (): Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> => {
+  const toolDefs = (): Record<
+    string,
+    { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }
+  > => {
     const out: Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> = {};
     for (const name of HOLDOUT_NOISE_TOOLS) {
       out[name] = {

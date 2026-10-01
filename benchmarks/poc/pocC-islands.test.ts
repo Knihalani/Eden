@@ -33,10 +33,9 @@ function fakeFetchWithLatency(ms: number): typeof fetch {
     // The "model": pick the longest repo name's owner. Deterministic task.
     const repos: string[] = user.repos ?? [];
     const owner = repos.sort((a: string, b: string) => b.length - a.length)[0]?.split("/")[0] ?? "unknown";
-    return new Response(
-      JSON.stringify({ choices: [{ message: { content: JSON.stringify({ owner }) } }] }),
-      { status: 200 },
-    );
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ owner }) } }] }), {
+      status: 200,
+    });
   };
 }
 
@@ -69,7 +68,12 @@ function deterministicFirst(base: IslandCaller, witnesses: WitnessTable): Island
 describe("POC C — deterministic-first islands", () => {
   test.failing("witnessed mappings never reach the LLM; unseen ones fall back safely", async () => {
     const calls = { n: 0 };
-    const base = openaiIsland({ fetch: async (...a) => { calls.n++; return fakeFetchWithLatency(CALL_MS)(...a); } });
+    const base = openaiIsland({
+      fetch: async (...a) => {
+        calls.n++;
+        return fakeFetchWithLatency(CALL_MS)(...a);
+      },
+    });
 
     // Witnesses recorded twice each from past runs.
     const w = new WitnessTable();
@@ -79,16 +83,20 @@ describe("POC C — deterministic-first islands", () => {
     const fast = deterministicFirst(base, w);
 
     const t0 = Date.now();
-    const r1 = await fast({ system: "s", input: { repos: ["acme/app", "acme/infra-long-name"] }, outputSchema: {} } as never);
+    const r1 = await fast({
+      system: "s",
+      input: { repos: ["acme/app", "acme/infra-long-name"] },
+      outputSchema: {},
+    } as never);
     const witnessedMs = Date.now() - t0;
 
     const t1 = Date.now();
     const r2 = await fast({ system: "s", input: { repos: ["other/one-repo"] }, outputSchema: {} } as never);
     const fallbackMs = Date.now() - t1;
 
-    expect(r1).toEqual({ owner: "acme" });   // served from witnesses
-    expect(r2).toEqual({ owner: "other" });  // fell back to the live call
-    expect(calls.n).toBe(1);                  // exactly one live call total
+    expect(r1).toEqual({ owner: "acme" }); // served from witnesses
+    expect(r2).toEqual({ owner: "other" }); // fell back to the live call
+    expect(calls.n).toBe(1); // exactly one live call total
     const clock = Number(process.env.EDEN_FLAKE_CLOCK_SCALE ?? "1");
     const scale = Number.isFinite(clock) && clock > 0 ? clock : 1;
     expect(witnessedMs).toBeLessThan(10 * Math.max(1, scale)); // lookup, not CALL_MS
@@ -97,7 +105,12 @@ describe("POC C — deterministic-first islands", () => {
 
   test("batch economics: witnessed inputs never pay the LLM tax", async () => {
     const calls = { n: 0 };
-    const base = openaiIsland({ fetch: async (...a) => { calls.n++; return fakeFetchWithLatency(CALL_MS)(...a); } });
+    const base = openaiIsland({
+      fetch: async (...a) => {
+        calls.n++;
+        return fakeFetchWithLatency(CALL_MS)(...a);
+      },
+    });
     const w = new WitnessTable();
     const inputs = Array.from({ length: 10 }, (_, i) => ({ repos: [`acme/r${i}`, `zzz/long-${i}`] }));
     for (const inp of inputs) {
@@ -123,7 +136,9 @@ describe("POC C — deterministic-first islands", () => {
     console.log("");
     console.log(`    baseline (always-LLM):   ${baselineMs.toFixed(0)} ms, ${callsBaseline} live calls`);
     console.log(`    proposed (steady state): ${steadyMs.toFixed(2)} ms, ${callsProposed} live calls`);
-    console.log(`    latency saved: ${savingsPct.toFixed(1)}%  ·  cost saved @ $${COST_PER_CALL_CENTS.toFixed(3)}/call: $${((callsBaseline - callsProposed) * COST_PER_CALL_CENTS).toFixed(3)} per 25 steps`);
+    console.log(
+      `    latency saved: ${savingsPct.toFixed(1)}%  ·  cost saved @ $${COST_PER_CALL_CENTS.toFixed(3)}/call: $${((callsBaseline - callsProposed) * COST_PER_CALL_CENTS).toFixed(3)} per 25 steps`,
+    );
     expect(savingsPct).toBeGreaterThan(95);
     expect(callsProposed).toBe(0);
   }, 20_000);

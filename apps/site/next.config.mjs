@@ -4,8 +4,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const bunSqliteStub = path.join(__dirname, "src/bun-sqlite-stub.js");
-const SQLITE_STUB =
-  '({Database:class Database{constructor(){throw new Error("bun:sqlite unavailable")}}})';
+const SQLITE_STUB = '({Database:class Database{constructor(){throw new Error("bun:sqlite unavailable")}}})';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

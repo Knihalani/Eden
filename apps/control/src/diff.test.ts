@@ -155,10 +155,17 @@ describe("candidate review surface", () => {
     });
     const res = await fetchHandler(new Request("http://x/v1/candidates/t", { headers: auth }));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { diff: { literals_introduced: unknown[]; bindings_changed: Array<{ from_kind: string; to_kind: string }> } | null };
+    const body = (await res.json()) as {
+      diff: { literals_introduced: unknown[]; bindings_changed: Array<{ from_kind: string; to_kind: string }> } | null;
+    };
     expect(body.diff).toBeTruthy();
     expect(body.diff!.literals_introduced).toEqual([{ step: "a", field: "id" }]);
-    expect(body.diff!.bindings_changed[0]).toMatchObject({ step: "a", field: "id", from_kind: "input", to_kind: "literal" });
+    expect(body.diff!.bindings_changed[0]).toMatchObject({
+      step: "a",
+      field: "id",
+      from_kind: "input",
+      to_kind: "literal",
+    });
   });
 
   test("a brand-new candidate diffs to null — there is nothing to review against", async () => {

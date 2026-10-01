@@ -125,8 +125,8 @@ export function createHrisJoin(): World {
       const org = String(goal.org ?? "org-a");
       const people = yield { tool: "listPeople", args: { org } };
       const teams = yield { tool: "listTeams", args: { org } };
-      const plist = ((people.value as { people?: Array<{ id: string; deptId: string }> })?.people ?? []);
-      const tlist = ((teams.value as { teams?: Array<{ id: string; name: string }> })?.teams ?? []);
+      const plist = (people.value as { people?: Array<{ id: string; deptId: string }> })?.people ?? [];
+      const tlist = (teams.value as { teams?: Array<{ id: string; name: string }> })?.teams ?? [];
       for (const p of plist) {
         const team = tlist.find((t) => t.id === p.deptId);
         yield { tool: "assignSeat", args: { person: p.id, teamName: team?.name } };
@@ -184,7 +184,9 @@ export function createSentryFilter(): World {
     async *script(goal) {
       const q = String(goal.q ?? "api");
       const listed = yield { tool: "listEvents", args: { q } };
-      const events = ((listed.value as { events?: Array<{ id: string; level: string }> })?.events ?? []).filter((e) => e.level === "error");
+      const events = ((listed.value as { events?: Array<{ id: string; level: string }> })?.events ?? []).filter(
+        (e) => e.level === "error",
+      );
       for (const e of events) yield { tool: "pageOncall", args: { id: e.id } };
       yield { tool: "writeDigest", args: { q } };
     },
@@ -218,10 +220,7 @@ export function createCmsFlatten(): World {
       listPage: {
         description: "Page sections with nested blocks.",
         execute: async ({ site }) => ({
-          sections: [
-            { blocks: [{ id: `${site}-b0` }, { id: `${site}-b1` }] },
-            { blocks: [{ id: `${site}-b2` }] },
-          ],
+          sections: [{ blocks: [{ id: `${site}-b0` }, { id: `${site}-b1` }] }, { blocks: [{ id: `${site}-b2` }] }],
           seq: nextOrd(),
         }),
       },
@@ -483,7 +482,7 @@ export function createLogGroup(): World {
     async *script(goal) {
       const svc = String(goal.svc ?? "api");
       const listed = yield { tool: "listLogs", args: { svc } };
-      const events = ((listed.value as { events?: Array<{ id: string; level: string }> })?.events ?? []);
+      const events = (listed.value as { events?: Array<{ id: string; level: string }> })?.events ?? [];
       const order: string[] = [];
       const groups = new Map<string, typeof events>();
       for (const e of events) {

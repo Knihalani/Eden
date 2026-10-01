@@ -90,12 +90,7 @@ function lookup(path: string, prev: unknown, input: Record<string, unknown>, ste
   return getPath(input, raw);
 }
 
-export function evalAssert(
-  expr: string,
-  prev: unknown,
-  input: Record<string, unknown>,
-  steps: StepResults,
-): boolean {
+export function evalAssert(expr: string, prev: unknown, input: Record<string, unknown>, steps: StepResults): boolean {
   const toks = tokenize(expr);
   let i = 0;
   const peek = () => toks[i]!;

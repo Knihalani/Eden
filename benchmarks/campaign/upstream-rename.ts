@@ -17,7 +17,12 @@
  */
 import type { StretchTrace } from "@eden/ir";
 import { canaryWorkspaceDeps } from "../../apps/site/src/canary-bind";
-import { maybeRecompile, maybeRecompileWorkspace, REFRESH_WAITING_COPY, type RecompileOutcome } from "../../apps/site/src/canary";
+import {
+  maybeRecompile,
+  maybeRecompileWorkspace,
+  REFRESH_WAITING_COPY,
+  type RecompileOutcome,
+} from "../../apps/site/src/canary";
 import { openDb, recordDeopt } from "../../apps/site/src/db";
 
 /**
@@ -30,19 +35,52 @@ export const EXPECT =
 export const RENAMED_FIELD = { from: "state", to: "conclusion" } as const;
 
 const LIVE_STEPS = [
-  { id: "s1", kind: "cloud_http", name: "get_pr", method: "GET", commute: true, url: "https://api.github.com/repos/acme/app/pulls/{issue}" },
-  { id: "s2", kind: "cloud_http", name: "get_files", method: "GET", commute: true, url: "https://api.github.com/repos/acme/app/pulls/{issue}/files" },
-  { id: "s3", kind: "cloud_http", name: "get_status", method: "GET", commute: true, url: "https://api.github.com/repos/acme/app/pulls/{issue}/status" },
+  {
+    id: "s1",
+    kind: "cloud_http",
+    name: "get_pr",
+    method: "GET",
+    commute: true,
+    url: "https://api.github.com/repos/acme/app/pulls/{issue}",
+  },
+  {
+    id: "s2",
+    kind: "cloud_http",
+    name: "get_files",
+    method: "GET",
+    commute: true,
+    url: "https://api.github.com/repos/acme/app/pulls/{issue}/files",
+  },
+  {
+    id: "s3",
+    kind: "cloud_http",
+    name: "get_status",
+    method: "GET",
+    commute: true,
+    url: "https://api.github.com/repos/acme/app/pulls/{issue}/status",
+  },
 ];
 
 /** v1 upstream: the field everyone consumes is `state` (and `mergeable`). */
 export function statusV1(): Record<string, unknown> {
-  return { checks: [{ name: "ci", state: "pass" }, { name: "lint", state: "pass" }], mergeable: true };
+  return {
+    checks: [
+      { name: "ci", state: "pass" },
+      { name: "lint", state: "pass" },
+    ],
+    mergeable: true,
+  };
 }
 
 /** v2 upstream: GitHub-style rename state→conclusion (and mergeable→is_mergeable). */
 export function statusV2(): Record<string, unknown> {
-  return { checks: [{ name: "ci", conclusion: "pass" }, { name: "lint", conclusion: "pass" }], is_mergeable: true };
+  return {
+    checks: [
+      { name: "ci", conclusion: "pass" },
+      { name: "lint", conclusion: "pass" },
+    ],
+    is_mergeable: true,
+  };
 }
 
 function prBody(issue: string): Record<string, unknown> {
@@ -101,7 +139,9 @@ export function makeShortTraces(): StretchTrace[] {
     duration_ms: 40,
     cost_cents: 1,
     complete: true as const,
-    events: [{ name: "get_pr", args: { issue: String(101 + i) }, result: prBody(String(101 + i)), ok: true, duration_ms: 40 }],
+    events: [
+      { name: "get_pr", args: { issue: String(101 + i) }, result: prBody(String(101 + i)), ok: true, duration_ms: 40 },
+    ],
   }));
 }
 
@@ -148,10 +188,7 @@ function wrapCompile(seen: { calls: number; blob: string }) {
   };
 }
 
-export async function runRenameViaCanary(opts: {
-  traces: StretchTrace[];
-  tag: string;
-}): Promise<RenameRun> {
+export async function runRenameViaCanary(opts: { traces: StretchTrace[]; tag: string }): Promise<RenameRun> {
   const db = await openDb(`/tmp/eden-rename-${opts.tag}-${Date.now()}.db`);
   const workspaceId = `ws_rename_${opts.tag}`;
   const liveId = await seedLive(db, workspaceId);
@@ -168,10 +205,7 @@ export async function runRenameViaCanary(opts: {
 }
 
 /** Production entry: workspace sweep, same deps cluster.ts now passes. */
-export async function runRenameViaWorkspace(opts: {
-  traces: StretchTrace[];
-  tag: string;
-}): Promise<RenameRun> {
+export async function runRenameViaWorkspace(opts: { traces: StretchTrace[]; tag: string }): Promise<RenameRun> {
   const db = await openDb(`/tmp/eden-rename-ws-${opts.tag}-${Date.now()}.db`);
   const workspaceId = `ws_rename_ws_${opts.tag}`;
   const liveId = await seedLive(db, workspaceId);

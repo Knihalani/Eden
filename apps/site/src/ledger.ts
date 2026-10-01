@@ -115,7 +115,8 @@ export function sanitizeManifest(v: unknown): { ok: true; value: ShadowManifestR
   const out: ShadowManifestRecord = {};
   for (const key of ["tokensSaved", "timeSavedMs"] as const) {
     if (rec[key] === undefined) continue;
-    if (typeof rec[key] !== "number" || !Number.isFinite(rec[key])) return { ok: false, error: `manifest.${key} must be a finite number` };
+    if (typeof rec[key] !== "number" || !Number.isFinite(rec[key]))
+      return { ok: false, error: `manifest.${key} must be a finite number` };
     // A negative saving is a cost, not a saving. Storing one would render as
     // "(measured)" savings in the ledger — exactly the evidence-without-
     // backing this module exists to refuse.
@@ -225,7 +226,11 @@ export async function buildLedger(db: EdenDb, wsId: string): Promise<SavingsLedg
     runs: totalRuns,
     fail: totalFails,
     live: tools.filter((t) => t.state === "on").length,
-    tokens_saved_mean: { value: measuredMean, measured: measuredTokens.length > 0, estimated: estimatedTokens.length > 0 },
+    tokens_saved_mean: {
+      value: measuredMean,
+      measured: measuredTokens.length > 0,
+      estimated: estimatedTokens.length > 0,
+    },
     tokens_saved_estimated_mean: { value: mean(estimatedTokens) },
     time_saved_ms_mean: { value: mean(measuredTime), measured: measuredTime.length > 0 },
     per_tool: perTool,

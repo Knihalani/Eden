@@ -217,8 +217,7 @@ function buildSpecs(): ScenarioSpec[] {
     {
       name: "creative",
       kind: "measured",
-      runAaPair: (r) =>
-        aaPair("creative", createCreative, [{ id: "C-1" }, { id: "C-2" }].slice(0, Math.min(n, 2)), r),
+      runAaPair: (r) => aaPair("creative", createCreative, [{ id: "C-1" }, { id: "C-2" }].slice(0, Math.min(n, 2)), r),
     },
     {
       name: "micro",
@@ -250,8 +249,7 @@ function buildSpecs(): ScenarioSpec[] {
     {
       name: "chaos-observe",
       kind: "measured",
-      runAaPair: (r) =>
-        aaPair("chaos", createChaos, [{ key: "svc-a" }, { key: "svc-b" }].slice(0, Math.min(n, 2)), r),
+      runAaPair: (r) => aaPair("chaos", createChaos, [{ key: "svc-a" }, { key: "svc-b" }].slice(0, Math.min(n, 2)), r),
     },
     {
       name: "concurrent",
@@ -268,8 +266,7 @@ function buildSpecs(): ScenarioSpec[] {
     {
       name: "chaos-enforce",
       kind: "measured",
-      runAaPair: (r) =>
-        aaPair("chaos", createChaos, [{ key: "svc-a" }, { key: "svc-b" }].slice(0, Math.min(n, 2)), r),
+      runAaPair: (r) => aaPair("chaos", createChaos, [{ key: "svc-a" }, { key: "svc-b" }].slice(0, Math.min(n, 2)), r),
     },
     {
       name: "slow-tool-timeout",
@@ -354,14 +351,21 @@ type Row = {
   cal: Calibration;
 };
 
-function renderMarkdown(rows: Row[], meta: { fast: boolean; repeats: number; stretches: number; host: string; when: string }): string {
+function renderMarkdown(
+  rows: Row[],
+  meta: { fast: boolean; repeats: number; stretches: number; host: string; when: string },
+): string {
   const lines: string[] = [];
   lines.push("# Noise floor — A/A calibration");
   lines.push("");
   lines.push(`Generated: ${meta.when}`);
   lines.push(`Host: \`${meta.host}\``);
-  lines.push(`Mode: ${meta.fast ? "**--fast** (reduced repeats/stretches — treat as indicative)" : "full (modest stretch counts)"}`);
-  lines.push(`Design: ${meta.repeats} A/A pairs × ${meta.stretches} stretches/session (scenario-specific; see runner), \`CAMPAIGN_THINK_MS=${process.env.CAMPAIGN_THINK_MS}\`.`);
+  lines.push(
+    `Mode: ${meta.fast ? "**--fast** (reduced repeats/stretches — treat as indicative)" : "full (modest stretch counts)"}`,
+  );
+  lines.push(
+    `Design: ${meta.repeats} A/A pairs × ${meta.stretches} stretches/session (scenario-specific; see runner), \`CAMPAIGN_THINK_MS=${process.env.CAMPAIGN_THINK_MS}\`.`,
+  );
   lines.push("");
   lines.push("## Frozen formulas");
   lines.push("");
@@ -377,7 +381,9 @@ function renderMarkdown(rows: Row[], meta: { fast: boolean; repeats: number; str
   lines.push("");
   lines.push("## Per-scenario MDE (wall_ms)");
   lines.push("");
-  lines.push("| scenario | kind | n pairs | stability | relSd | MDE@8 abs / rel | MDE@12 abs / rel | MDE@16 abs / rel | P(sign-flip)\\|0.1% @8 | P(LOSS)\\|0.1% @8 |");
+  lines.push(
+    "| scenario | kind | n pairs | stability | relSd | MDE@8 abs / rel | MDE@12 abs / rel | MDE@16 abs / rel | P(sign-flip)\\|0.1% @8 | P(LOSS)\\|0.1% @8 |",
+  );
   lines.push("|---|---|---:|---:|---:|---|---|---|---:|---:|");
   for (const r of rows) {
     const m8 = r.cal.mde.find((m) => m.n === 8)!;
@@ -441,7 +447,9 @@ function printTable(rows: Row[]): void {
 }
 
 async function main() {
-  console.log(`Noise-floor calibration — fast=${FAST} think_ms=${process.env.CAMPAIGN_THINK_MS} repeats=${REPEATS} stretches≈${STRETCHES}`);
+  console.log(
+    `Noise-floor calibration — fast=${FAST} think_ms=${process.env.CAMPAIGN_THINK_MS} repeats=${REPEATS} stretches≈${STRETCHES}`,
+  );
   const specs = buildSpecs();
   const rows: Row[] = [];
 

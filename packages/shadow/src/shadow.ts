@@ -1,8 +1,32 @@
-import type { Binding, IslandUsage, Manifest, StretchProgram, StretchTrace, ToolRegistry, IslandCaller } from "@eden/ir";
-import { canonicalize, inDistribution, isCheckName, isIslandName, isReadName, isUsableOutput, minLlmReductionOf, redact } from "@eden/ir";
+import type {
+  Binding,
+  IslandUsage,
+  Manifest,
+  StretchProgram,
+  StretchTrace,
+  ToolRegistry,
+  IslandCaller,
+} from "@eden/ir";
+import {
+  canonicalize,
+  inDistribution,
+  isCheckName,
+  isIslandName,
+  isReadName,
+  isUsableOutput,
+  minLlmReductionOf,
+  redact,
+} from "@eden/ir";
 import { isDeopt, runProgram } from "@eden/runtime";
 import { isUnrecordedCall } from "./replay";
-import { compiledTokens, compiledToolMs, isSyntheticDuration, naiveToolMs, tokensExtrapolated, traceTokens } from "./measure";
+import {
+  compiledTokens,
+  compiledToolMs,
+  isSyntheticDuration,
+  naiveToolMs,
+  tokensExtrapolated,
+  traceTokens,
+} from "./measure";
 
 export type Verdict = "PASS" | "FAIL" | "INCONCLUSIVE";
 
@@ -217,7 +241,13 @@ export async function shadowProgram(
     };
   }
   if (held.length < minN) {
-    return { verdict: "INCONCLUSIVE", manifest: null, reasons: [`n=${held.length} < ${minN}`], n: held.length, minLlmReduction: minLlmReductionOf(program.contract.minLlmReduction) };
+    return {
+      verdict: "INCONCLUSIVE",
+      manifest: null,
+      reasons: [`n=${held.length} < ${minN}`],
+      n: held.length,
+      minLlmReduction: minLlmReductionOf(program.contract.minLlmReduction),
+    };
   }
 
   const compiledLlm: number[] = [];
@@ -256,8 +286,7 @@ export async function shadowProgram(
    */
   let unvalidatable = 0;
   let validated = 0;
-  const required =
-    opts.requiredTools ?? program.sequence?.filter((n) => isCheckName(n)) ?? [];
+  const required = opts.requiredTools ?? program.sequence?.filter((n) => isCheckName(n)) ?? [];
   const hasIsland = program.steps.some((s) => s.kind === "island");
   // Proven once, statically: whether the final output chains back to an island
   // step decides only *how* outputs are compared, never whether they are.
@@ -318,7 +347,9 @@ export async function shadowProgram(
         row.reasons.push("trace has no recorded output — quality cannot be scored");
       } else if (match === "prose-divergent") {
         row.compiledComplete++;
-        row.reasons.push("prose-divergent: output derives from the island and was compared structurally, not byte-for-byte");
+        row.reasons.push(
+          "prose-divergent: output derives from the island and was compared structurally, not byte-for-byte",
+        );
       } else if (match) row.compiledComplete++;
       else {
         row.extraMisses++;
@@ -337,7 +368,9 @@ export async function shadowProgram(
     } catch (err) {
       if (isUnrecordedCall(err)) {
         row.unvalidatable = true;
-        row.reasons.push(`compiled program ran ${(err as { tool?: string }).tool ?? "a step"} that this trace never recorded`);
+        row.reasons.push(
+          `compiled program ran ${(err as { tool?: string }).tool ?? "a step"} that this trace never recorded`,
+        );
         return row;
       }
       if (isDeopt(err)) {
@@ -418,7 +451,8 @@ export async function shadowProgram(
   // latency number — not one computed from naive wall clock vs compiled
   // replay wall clock, which is exactly an estimate wearing measurement's
   // clothes. Manifest.latencyReduction is number|null for this reason.
-  const latencyReduction = timeMeasured && compiledTime.length ? reductionRatio(mean(naiveTime), mean(compiledTime)) : null;
+  const latencyReduction =
+    timeMeasured && compiledTime.length ? reductionRatio(mean(naiveTime), mean(compiledTime)) : null;
   const costReduction = reductionRatio(mean(naiveCents), mean(compiledCents));
   // One denominator for both rates: traces that could validate the program.
   const validatedN = Math.max(validated, 1);
@@ -493,7 +527,11 @@ export function canApprove(result: ShadowResult): boolean {
  * non-string scalar must be equal after redaction. Unknown references break
  * the chain and fail closed to byte equality.
  */
-function outputMatches(actual: unknown, expected: unknown, islandDerived: boolean): boolean | "vacuous" | "prose-divergent" {
+function outputMatches(
+  actual: unknown,
+  expected: unknown,
+  islandDerived: boolean,
+): boolean | "vacuous" | "prose-divergent" {
   if (expected === undefined) return "vacuous";
   try {
     if (canonicalize(redact(actual)) === canonicalize(redact(expected))) return true;

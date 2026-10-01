@@ -32,12 +32,9 @@ export function DashBoard() {
   const serving = useMemo(() => workflowServing(activity.workflows), [activity.workflows]);
   const toolsTitle = homeViewTitle("workflows", serving);
   const toolsMetric =
-    serving.canary && !failed
-      ? canaryLiveParts(serving).join(" · ")
-      : formatCount(failed ? 0 : activity.compiled);
+    serving.canary && !failed ? canaryLiveParts(serving).join(" · ") : formatCount(failed ? 0 : activity.compiled);
   const overview = view === "overview";
-  const connect =
-    overview && activity.ready && !failed && requests.length === 0 && workflows.length === 0;
+  const connect = overview && activity.ready && !failed && requests.length === 0 && workflows.length === 0;
   const waiting = overview && !activity.ready && !failed;
 
   if (!overview) {
@@ -75,17 +72,8 @@ export function DashBoard() {
       ) : (
         <>
           <section className="home-metrics" aria-label="Activity">
-            <Metric
-              value={toolsMetric}
-              label={toolsTitle}
-              tone="ink"
-              href={homePath("workflows")}
-            />
-            <Metric
-              value={formatCount(failed ? 0 : activity.runs)}
-              label="Compiled runs"
-              tone="ink"
-            />
+            <Metric value={toolsMetric} label={toolsTitle} tone="ink" href={homePath("workflows")} />
+            <Metric value={formatCount(failed ? 0 : activity.runs)} label="Compiled runs" tone="ink" />
             <Metric
               value={formatCount(failed ? 0 : activity.waiting)}
               label="Waiting"
@@ -97,11 +85,7 @@ export function DashBoard() {
               label="Failed"
               tone={!failed && activity.fails > 0 ? "fail" : "ink"}
             />
-            <Metric
-              value={failed ? "—" : formatDcPct(activity.dcPct)}
-              label="Deterministic share"
-              tone="ink"
-            />
+            <Metric value={failed ? "—" : formatDcPct(activity.dcPct)} label="Deterministic share" tone="ink" />
           </section>
 
           <FleetStripView fleet={activity.fleet} />
@@ -200,17 +184,7 @@ function FleetStripView({ fleet }: { fleet?: FleetStrip }) {
   );
 }
 
-function Metric({
-  value,
-  label,
-  tone,
-  href,
-}: {
-  value: string;
-  label: string;
-  tone: "ink" | "fail";
-  href?: string;
-}) {
+function Metric({ value, label, tone, href }: { value: string; label: string; tone: "ink" | "fail"; href?: string }) {
   const body = (
     <>
       <b>{value}</b>
@@ -224,7 +198,12 @@ function Metric({
       </span>
     </>
   );
-  if (!href) return <div className="home-metric" data-tone={tone}>{body}</div>;
+  if (!href)
+    return (
+      <div className="home-metric" data-tone={tone}>
+        {body}
+      </div>
+    );
   return (
     <Link className="home-metric" data-tone={tone} href={href} prefetch={true}>
       {body}
@@ -335,9 +314,7 @@ function RunChart({ series, dcSeries = [] }: { series: DayPoint[]; dcSeries?: Dc
     >
       <polygon className="home-plot-area" points={area} />
       <polyline className="home-plot-line" points={line} />
-      {dcMeasured
-        ? dcLines.map((pts) => <polyline key={pts} className="home-plot-line-dc" points={pts} />)
-        : null}
+      {dcMeasured ? dcLines.map((pts) => <polyline key={pts} className="home-plot-line-dc" points={pts} />) : null}
       {dcMeasured
         ? dcCoords
             .filter((point) => point.measured)

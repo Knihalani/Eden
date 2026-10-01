@@ -52,8 +52,12 @@ describe("need detect POC", () => {
     expect(detectNeed({ text: "Parse the body with RFC 4627." }).queries[0]).toBe("RFC 8259 obsoletes");
     expect(detectNeed({ text: "Parse the body with RFC-4627." }).queries[0]).toBe("RFC 8259 obsoletes");
     expect(detectNeed({ text: "Follow RFC 3986 when parsing the URI." }, { skipIdent: true }).silent).toBe(true);
-    expect(detectNeed({ text: "Set Content-Type to application/json", tools: ["Grep"] }).queries).not.toContain("used for JSON");
-    expect(detectNeed({ text: "Set Content-Type to application/json", tools: ["Grep"] }, { skipIdent: true }).silent).toBe(true);
+    expect(detectNeed({ text: "Set Content-Type to application/json", tools: ["Grep"] }).queries).not.toContain(
+      "used for JSON",
+    );
+    expect(
+      detectNeed({ text: "Set Content-Type to application/json", tools: ["Grep"] }, { skipIdent: true }).silent,
+    ).toBe(true);
     expect(detectNeed({ text: "grep the json media type from IANA" }).queries).not.toContain("used for JSON");
     expect(detectNeed({ text: "Does RFC 9110 update RFC 7230 or obsolete it?" }).queries[0]).toBe("RFC 9110 obsoletes");
   });
@@ -67,10 +71,7 @@ describe("need detect POC", () => {
       let hitN = 0;
       const misses: string[] = [];
       for (const row of INJECT_ROWS) {
-        const card = injectFromRequest(
-          { text: row.text, tools: row.tools, calls: row.calls },
-          store,
-        );
+        const card = injectFromRequest({ text: row.text, tools: row.tools, calls: row.calls }, store);
         const got = fact(card);
         if (row.want === "silent") {
           silentN++;
@@ -110,7 +111,9 @@ describe("need detect POC", () => {
     try {
       expect(fact(injectFromText("parse this CLI JSON output into records", store))).toMatch(/^jq is used for/);
       expect(injectFromText("use jq to filter JSON on the command line", store)).toBeUndefined();
-      expect(subjectMentioned("use jq to filter JSON", "jq is used for filtering JSON on the command line.")).toBe(true);
+      expect(subjectMentioned("use jq to filter JSON", "jq is used for filtering JSON on the command line.")).toBe(
+        true,
+      );
       expect(subjectMentioned("use rg to search the repo", "ripgrep is used for searching the repo.")).toBe(true);
       expect(subjectMentioned("parse nested JSON", "jq is used for filtering JSON on the command line.")).toBe(false);
       expect(subjectMentioned("Is RFC 9110 the successor to RFC 7230?", "RFC 9110 obsoletes RFC 7230.")).toBe(false);

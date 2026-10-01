@@ -77,7 +77,10 @@ async function runSharedPool(workspaces: number, perWorkspace: number): Promise<
 
 header("POC A — shared public-data pool (latency modeled at 120ms upstream)");
 
-for (const [W, K] of [[10, 5], [50, 5]] as Array<[number, number]>) {
+for (const [W, K] of [
+  [10, 5],
+  [50, 5],
+] as Array<[number, number]>) {
   const a = await runIsolated(W, K);
   const b = await runSharedPool(W, K);
   printRow(`W=${W} workspaces × ${K} public reads`, `today ${a} ms → pooled ${b} ms`);
@@ -85,7 +88,10 @@ for (const [W, K] of [[10, 5], [50, 5]] as Array<[number, number]>) {
 
 // Quota math is exact regardless of modeling:
 {
-  const W = 50, K = 5;
+  const W = 50,
+    K = 5;
   printRow(`upstream requests @W=${W}`, `today ${W * K} → pooled ≤${K} (first-arrival dedupe)`);
 }
-console.log("\nVERDICT: WIN — public reads cost the system once, not once per tenant; privacy unchanged (private keys never enter the pool).");
+console.log(
+  "\nVERDICT: WIN — public reads cost the system once, not once per tenant; privacy unchanged (private keys never enter the pool).",
+);

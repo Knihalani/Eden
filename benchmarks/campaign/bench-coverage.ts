@@ -48,7 +48,8 @@ async function prelive(
     sandbox: factory,
     maxGram: 26,
   });
-  if (r.program == null) notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
+  if (r.program == null)
+    notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
   else notes.push(`prelive PASS: ${r.program.sequence.join("→")}`);
   return { program: r.program, notes };
 }

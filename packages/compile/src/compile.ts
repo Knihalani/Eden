@@ -1,13 +1,60 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
-import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf, failureModeOf, isUsableOutput, isWeakValue, whenToUseOf } from "@eden/ir";
+import {
+  CHECK_MIN_SUPPORT,
+  assertValid,
+  canonicalize,
+  eq,
+  getPath,
+  hashStretch,
+  hashTrace,
+  withVersion,
+  minLlmReductionOf,
+  failureModeOf,
+  isUsableOutput,
+  isWeakValue,
+  whenToUseOf,
+} from "@eden/ir";
 import { isShellCommand } from "@eden/ir";
-import { argKeys, bindSlotWitnesses, inferSchema, isCheckName, isIslandName, isMutating, isReadName, keyJaccard, remapBinding } from "./bind";
-import { clusterFailureTraces, clusterTraces, effectiveEventName, buildShellNames, setActiveShellNames, autoMaxGram, envelopeTraces } from "./mine";
+import {
+  argKeys,
+  bindSlotWitnesses,
+  inferSchema,
+  isCheckName,
+  isIslandName,
+  isMutating,
+  isReadName,
+  keyJaccard,
+  remapBinding,
+} from "./bind";
+import {
+  clusterFailureTraces,
+  clusterTraces,
+  effectiveEventName,
+  buildShellNames,
+  setActiveShellNames,
+  autoMaxGram,
+  envelopeTraces,
+} from "./mine";
 import { findForkedGroups, assembleForkProgram, forkWitnessTraces } from "./fork";
 import { findHandoffGroups, assembleHandoffProgram, matchChildProgram } from "./handoff";
-import { findComposeJoins, assembleComposeProgram, findWitnessedComposeSplits, sliceTracesToSeq, matchProgramBySequence } from "./compose";
+import {
+  findComposeJoins,
+  assembleComposeProgram,
+  findWitnessedComposeSplits,
+  sliceTracesToSeq,
+  matchProgramBySequence,
+} from "./compose";
 import { normalizeTraces } from "./normalize";
-import { inferCursorWalk, inferOffsetWalk, inferFilterPred, inferGroupKey, lookupArg, concatPageItems, collectLeaves, collectDeepTrees } from "./walk";
+import {
+  inferCursorWalk,
+  inferOffsetWalk,
+  inferFilterPred,
+  inferGroupKey,
+  lookupArg,
+  concatPageItems,
+  collectLeaves,
+  collectDeepTrees,
+} from "./walk";
 import { evalAssert } from "@eden/runtime";
 
 export type CompileOpts = {
@@ -30,8 +77,7 @@ export type CompileResult = {
 function stretchName(sequence: string[]): string {
   const core = sequence.filter((n) => !isCheckName(n));
   const parts = core.length ? core : sequence;
-  const raw =
-    parts.length <= 2 ? parts.join("_") : `${parts[0]}_to_${parts[parts.length - 1]}`;
+  const raw = parts.length <= 2 ? parts.join("_") : `${parts[0]}_to_${parts[parts.length - 1]}`;
   return raw.replace(/[^A-Za-z0-9_]+/g, "_").slice(0, 48) || "stretch";
 }
 
@@ -120,7 +166,12 @@ export function islandWhenToUse(tool: string, prior: readonly string[]): string 
   return `When the next step is a ${tool} judgment${afterBit} — one call, do not re-run the loop.`;
 }
 
-function aligned(traces: StretchTrace[], tool: string, nth = 0, cutAt?: number[]): { traces: StretchTrace[]; events: TraceEvent[] } {
+function aligned(
+  traces: StretchTrace[],
+  tool: string,
+  nth = 0,
+  cutAt?: number[],
+): { traces: StretchTrace[]; events: TraceEvent[] } {
   const tracesOut: StretchTrace[] = [];
   const events: TraceEvent[] = [];
   for (const [k, t] of traces.entries()) {
@@ -153,7 +204,8 @@ function aligned(traces: StretchTrace[], tool: string, nth = 0, cutAt?: number[]
   return { traces: tracesOut, events };
 }
 
-function repeatingPeriod(seq: string[]): { start: number; unit: string[]; times: number; end: number } | null {  let best: { start: number; unit: string[]; times: number; end: number; score: number } | null = null;
+function repeatingPeriod(seq: string[]): { start: number; unit: string[]; times: number; end: number } | null {
+  let best: { start: number; unit: string[]; times: number; end: number; score: number } | null = null;
   for (let p = 2; p <= Math.min(4, Math.floor(seq.length / 2)); p++) {
     for (let start = 0; start <= seq.length - p * 2; start++) {
       const unit = seq.slice(start, start + p);
@@ -216,11 +268,7 @@ function traceRepeatRun(t: StretchTrace, tool: string, priorTool: string): numbe
  */
 const RESULT_ARRAY_MAX_DEPTH = 3;
 
-function collectResultArrays(
-  result: unknown,
-  prefix = "",
-  depth = 0,
-): Array<{ path: string; arr: unknown[] }> {
+function collectResultArrays(result: unknown, prefix = "", depth = 0): Array<{ path: string; arr: unknown[] }> {
   if (Array.isArray(result)) return [{ path: prefix, arr: result }];
   if (!result || typeof result !== "object") return [];
   const out: Array<{ path: string; arr: unknown[] }> = [];
@@ -299,12 +347,7 @@ function primitiveFieldHits(item: object, pred: (fv: unknown) => boolean, prefix
  * Structural item-field bind. Arg-key last segment, then unique match, then
  * unique-across-array. LOOP_ITEM_FIELDS is a last-resort tie break only.
  */
-function resolveItemField(
-  hits: string[],
-  key?: string,
-  item?: unknown,
-  siblings?: unknown[],
-): string | null {
+function resolveItemField(hits: string[], key?: string, item?: unknown, siblings?: unknown[]): string | null {
   if (!hits.length) return null;
   const keySeg = key ? lastSeg(key) : "";
   if (keySeg) {
@@ -423,7 +466,12 @@ function isRankedPrefix(arr: unknown[], k: number): boolean {
   if (!prefix.every((x) => x && typeof x === "object" && !Array.isArray(x))) return false;
   const recs = prefix as Record<string, unknown>[];
   if (recs.every((r, i) => typeof r.rank === "number" && r.rank === i + 1)) return true;
-  if (!arr.every((x) => x && typeof x === "object" && !Array.isArray(x) && typeof (x as Record<string, unknown>).score === "number")) {
+  if (
+    !arr.every(
+      (x) =>
+        x && typeof x === "object" && !Array.isArray(x) && typeof (x as Record<string, unknown>).score === "number",
+    )
+  ) {
     return false;
   }
   const scores = arr.map((x) => (x as Record<string, unknown>).score as number);
@@ -747,7 +795,9 @@ function inferLoopOver(
             of: { kind: "from", step: priorTool, path },
           };
         }
-      } else if (!hits.some((h) => h.slice || h.flatten || h.filter || h.nest || h.unique !== undefined || h.sort || h.deep)) {
+      } else if (
+        !hits.some((h) => h.slice || h.flatten || h.filter || h.nest || h.unique !== undefined || h.sort || h.deep)
+      ) {
         fromPrior = { kind: "from", step: priorTool, path };
       }
     }
@@ -784,7 +834,17 @@ function inferLoopOverEarlier(
         break;
       }
       const hit = findArrayBinding(t, src, need, loopRunEvents(t, tool, priorTool ?? src));
-      if (hit == null || "miss" in hit || hit.flatten || hit.filter || hit.slice || hit.nest || hit.unique !== undefined || hit.sort || hit.deep) {
+      if (
+        hit == null ||
+        "miss" in hit ||
+        hit.flatten ||
+        hit.filter ||
+        hit.slice ||
+        hit.nest ||
+        hit.unique !== undefined ||
+        hit.sort ||
+        hit.deep
+      ) {
         ok = false;
         break;
       }
@@ -1081,7 +1141,16 @@ function inferLoopOverExact(
   const paths: string[] = [];
   for (const t of traces) {
     const hit = findArrayBinding(t, priorTool, times);
-    if (hit == null || "miss" in hit || hit.flatten || hit.filter || hit.slice || hit.unique !== undefined || hit.sort || hit.deep) {
+    if (
+      hit == null ||
+      "miss" in hit ||
+      hit.flatten ||
+      hit.filter ||
+      hit.slice ||
+      hit.unique !== undefined ||
+      hit.sort ||
+      hit.deep
+    ) {
       paths.length = 0;
       break;
     }
@@ -1579,11 +1648,7 @@ function reduceHitsOn(items: unknown[], value: unknown): Array<{ op: "sum" | "co
   return hits;
 }
 
-function inferReduceBinding(
-  traces: StretchTrace[],
-  values: unknown[],
-  loops: readonly EmittedLoop[],
-): Binding | null {
+function inferReduceBinding(traces: StretchTrace[], values: unknown[], loops: readonly EmittedLoop[]): Binding | null {
   if (!loops.length || values.length !== traces.length || !values.length) return null;
   if (!values.every((v) => typeof v === "number" || Array.isArray(v))) return null;
   for (let li = loops.length - 1; li >= 0; li--) {
@@ -1891,7 +1956,10 @@ function compileAll(
   seenSeq: Set<string>,
 ): CompileResult {
   const { minSupport, allowExact, minLlmReduction } = opts;
-  for (const cluster of [...clusterTraces(traces, minSupport, opts.maxGram), ...clusterFailureTraces(traces, minSupport)]) {
+  for (const cluster of [
+    ...clusterTraces(traces, minSupport, opts.maxGram),
+    ...clusterFailureTraces(traces, minSupport),
+  ]) {
     const seqKey = cluster.sequence.join("\0");
     if (seenSeq.has(seqKey)) continue;
     seenSeq.add(seqKey);
@@ -1997,14 +2065,15 @@ function compileAll(
       if (times >= 2) {
         const priorTool = i > 0 ? sequence[i - 1] : undefined;
         const over = inferLoopOver(cluster.traces, priorTool, tool, sequence.slice(0, i));
-        const loopArgs = over && priorTool
-          ? loopItemArgs(cluster.traces, tool, priorTool, over, {
-              earlierTools: sequence.slice(0, i),
-              priorIds: sequence.slice(0, i),
-              mutating: isMutating(tool),
-              allowExact,
-            })
-          : null;
+        const loopArgs =
+          over && priorTool
+            ? loopItemArgs(cluster.traces, tool, priorTool, over, {
+                earlierTools: sequence.slice(0, i),
+                priorIds: sequence.slice(0, i),
+                mutating: isMutating(tool),
+                allowExact,
+              })
+            : null;
         if (over && loopArgs) {
           const bodyId = id;
           const loopId = stepId(`${tool}_loop`, used);
@@ -2410,33 +2479,51 @@ function compileAll(
     }
     const recorded = cluster.traces.filter((t) => t.output !== undefined);
     if (recorded.length && recorded.every((t) => !isUsableOutput(t.output))) {
-      refusals.push(stampWaste({
-        sequence,
-        reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding.",
-        code: "empty_output",
-        hint: "Check that the agent's tool calls succeed and return a useful result.",
-      }, cluster.traces));
+      refusals.push(
+        stampWaste(
+          {
+            sequence,
+            reason:
+              "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding.",
+            code: "empty_output",
+            hint: "Check that the agent's tool calls succeed and return a useful result.",
+          },
+          cluster.traces,
+        ),
+      );
       continue;
     }
     if (steps.length < 3) {
-      refusals.push(stampWaste({
-        sequence,
-        reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
-        code: "too_short",
-        hint: "Wrap a stretch of at least three steps.",
-      }, cluster.traces));
+      refusals.push(
+        stampWaste(
+          {
+            sequence,
+            reason:
+              "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
+            code: "too_short",
+            hint: "Wrap a stretch of at least three steps.",
+          },
+          cluster.traces,
+        ),
+      );
       continue;
     }
 
     const envTraces = envelopeTraces(cluster);
     const env = envelopeFrom(envTraces, inputPaths);
     if (!allowExact && !env) {
-      refusals.push(stampWaste({
-        sequence,
-        reason: "No witnessed input values found. Eden needs at least one recorded input parameter across your traces to know what values are valid. Make sure your agent passes arguments (IDs, paths, queries) rather than calling tools with no arguments.",
-        code: "no_envelope",
-        hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
-      }, cluster.traces));
+      refusals.push(
+        stampWaste(
+          {
+            sequence,
+            reason:
+              "No witnessed input values found. Eden needs at least one recorded input parameter across your traces to know what values are valid. Make sure your agent passes arguments (IDs, paths, queries) rather than calling tools with no arguments.",
+            code: "no_envelope",
+            hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
+          },
+          cluster.traces,
+        ),
+      );
       continue;
     }
     // The last *top-level* step, not the last step in the array. A loop is
@@ -2454,7 +2541,9 @@ function compileAll(
       .reverse()
       .find((s) => !inLoopBody.has(s.id) && (s.kind === "tool" || s.kind === "island" || s.kind === "loop"));
     const label = stretchName(sequence);
-    const propKeys = env ? Object.keys(env.inputs) : Object.keys(envTraces[0]?.input ?? cluster.traces[0]?.input ?? { id: true });
+    const propKeys = env
+      ? Object.keys(env.inputs)
+      : Object.keys(envTraces[0]?.input ?? cluster.traces[0]?.input ?? { id: true });
     const props = Object.fromEntries(
       propKeys.map((k) => {
         const sample = env?.inputs[k]?.[0] ?? envTraces[0]?.input?.[k] ?? cluster.traces[0]?.input?.[k];
@@ -2464,24 +2553,24 @@ function compileAll(
     );
     const description = `Run the repeating stretch as one tool: ${sequence.join(" → ")}. Prefer this over calling those tools one at a time.`;
     const drafted = withVersion({
-        id: `cand_${programs.length + refusals.length + 1}`,
-        name: label,
-        description,
-        when_to_use: whenToUseOf({ description, steps }),
-        inputSchema: { type: "object", properties: props, required: propKeys },
-        sequence,
-        steps,
-        returns: last ? { kind: "from", step: last.id, path: "" } : { kind: "literal", value: null },
-        contract: {
-          witnesses: envTraces.length,
-          minLlmReduction,
-          allowExact,
-          envelope: env,
-        },
-        manifest: null,
-        budget: budgetOf(envTraces),
-        origin: originOf(cluster.traces),
-      });
+      id: `cand_${programs.length + refusals.length + 1}`,
+      name: label,
+      description,
+      when_to_use: whenToUseOf({ description, steps }),
+      inputSchema: { type: "object", properties: props, required: propKeys },
+      sequence,
+      steps,
+      returns: last ? { kind: "from", step: last.id, path: "" } : { kind: "literal", value: null },
+      contract: {
+        witnesses: envTraces.length,
+        minLlmReduction,
+        allowExact,
+        envelope: env,
+      },
+      manifest: null,
+      budget: budgetOf(envTraces),
+      origin: originOf(cluster.traces),
+    });
     // id identifies the stretch, version identifies this compilation of it.
     // Deriving the id from the version instead made every new witness look like
     // a new tool.
@@ -2490,7 +2579,12 @@ function compileAll(
       assertValid(program);
       programs.push(stampProgramWaste(program, cluster.traces));
     } catch (err) {
-      refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, cluster.traces));
+      refusals.push(
+        stampWaste(
+          { sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" },
+          cluster.traces,
+        ),
+      );
     }
   }
 
@@ -2513,44 +2607,70 @@ function compileAll(
         // Mutating unbound arm is the same class as linear: underdetermined_write,
         // never a guessed bind and never a fork-only synonym.
         const refuse = fork.assembleRefuse;
-        refusals.push(stampWaste({
-          sequence,
-          reason: refuse?.reason ?? "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
-          code: refuse?.code ?? "unbound_branch",
-          hint: refuse?.hint ?? "Bind every branch arm from recorded witnesses. Eden will not guess.",
-          slot: refuse?.slot,
-        }, allForkTraces));
+        refusals.push(
+          stampWaste(
+            {
+              sequence,
+              reason:
+                refuse?.reason ??
+                "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
+              code: refuse?.code ?? "unbound_branch",
+              hint: refuse?.hint ?? "Bind every branch arm from recorded witnesses. Eden will not guess.",
+              slot: refuse?.slot,
+            },
+            allForkTraces,
+          ),
+        );
         continue;
       }
       // Honesty gates mirroring the linear pass.
       if ((drafted.steps?.length ?? 0) < 3) {
-        refusals.push(stampWaste({
-          sequence,
-          reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
-          code: "too_short",
-          hint: "Wrap a stretch of at least three steps.",
-        }, allForkTraces));
+        refusals.push(
+          stampWaste(
+            {
+              sequence,
+              reason:
+                "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
+              code: "too_short",
+              hint: "Wrap a stretch of at least three steps.",
+            },
+            allForkTraces,
+          ),
+        );
         continue;
       }
-      const envInputs = (drafted.contract as { envelope?: { inputs?: Record<string, unknown[]> } | null }).envelope?.inputs;
+      const envInputs = (drafted.contract as { envelope?: { inputs?: Record<string, unknown[]> } | null }).envelope
+        ?.inputs;
       const allowExact = (drafted.contract as { allowExact?: boolean }).allowExact === true;
       if (!envInputs && !allowExact) {
-        refusals.push(stampWaste({
-          sequence,
-          reason: "No witnessed input values found across the branched traces. Eden needs at least one recorded input parameter to know what values are valid.",
-          code: "no_envelope",
-          hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
-        }, allForkTraces));
+        refusals.push(
+          stampWaste(
+            {
+              sequence,
+              reason:
+                "No witnessed input values found across the branched traces. Eden needs at least one recorded input parameter to know what values are valid.",
+              code: "no_envelope",
+              hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
+            },
+            allForkTraces,
+          ),
+        );
         continue;
       }
       const recorded = allForkTraces.filter((t) => t.output !== undefined);
       if (recorded.length && recorded.every((t) => !isUsableOutput(t.output))) {
-        refusals.push(stampWaste({
-          sequence,
-          reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results.",
-          code: "empty_output",
-          hint: "Check that the agent's tool calls succeed and return a useful result.",
-        }, allForkTraces));
+        refusals.push(
+          stampWaste(
+            {
+              sequence,
+              reason:
+                "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results.",
+              code: "empty_output",
+              hint: "Check that the agent's tool calls succeed and return a useful result.",
+            },
+            allForkTraces,
+          ),
+        );
         continue;
       }
       // Stable identity, same scheme as linear programs: id identifies the
@@ -2569,7 +2689,12 @@ function compileAll(
           forkArmKeys.add([...fork.prefixNames, ...arm.suffix].join("\0"));
         }
       } catch (err) {
-        refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, allForkTraces));
+        refusals.push(
+          stampWaste(
+            { sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" },
+            allForkTraces,
+          ),
+        );
       }
     }
   }
@@ -2628,12 +2753,18 @@ function compileAll(
         allowExact: opts.allowExact,
       });
       if (!drafted) {
-        refusals.push(stampWaste({
-          sequence,
-          reason: "This handoff's child programs need inputs that were not witnessed on the orchestrator run. Eden will not guess.",
-          code: "no_envelope",
-          hint: "Pass the child programs' arguments on the parent/intake input.",
-        }, handoffTraces));
+        refusals.push(
+          stampWaste(
+            {
+              sequence,
+              reason:
+                "This handoff's child programs need inputs that were not witnessed on the orchestrator run. Eden will not guess.",
+              code: "no_envelope",
+              hint: "Pass the child programs' arguments on the parent/intake input.",
+            },
+            handoffTraces,
+          ),
+        );
         continue;
       }
       const withId = { ...drafted, id: `p_${hashStretch(drafted).slice(0, 16)}` };
@@ -2642,7 +2773,12 @@ function compileAll(
         assertValid(program);
         programs.push(stampProgramWaste(program, handoffTraces));
       } catch (err) {
-        refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, handoffTraces));
+        refusals.push(
+          stampWaste(
+            { sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" },
+            handoffTraces,
+          ),
+        );
       }
     }
   }
@@ -2668,13 +2804,7 @@ function compileAll(
           break;
         }
         const recovered: StretchProgram[] = [];
-        compileAll(
-          sliced,
-          { ...opts, maxGram: Math.max(seq.length, 3), skipCompose: true },
-          recovered,
-          [],
-          new Set(),
-        );
+        compileAll(sliced, { ...opts, maxGram: Math.max(seq.length, 3), skipCompose: true }, recovered, [], new Set());
         const child = matchProgramBySequence(recovered, seq) ?? recovered[0];
         if (!child) {
           missing = true;
@@ -2705,12 +2835,17 @@ function compileAll(
           reason: "This join could not be bound. Eden will not guess.",
           hint: "Pass the child programs' arguments on the composed run's input.",
         };
-        refusals.push(stampWaste({
-          sequence,
-          reason: refuse.reason,
-          code: refuse.code,
-          hint: refuse.hint,
-        }, pair.traces));
+        refusals.push(
+          stampWaste(
+            {
+              sequence,
+              reason: refuse.reason,
+              code: refuse.code,
+              hint: refuse.hint,
+            },
+            pair.traces,
+          ),
+        );
         continue;
       }
       const withId = { ...drafted.program, id: `p_${hashStretch(drafted.program).slice(0, 16)}` };
@@ -2720,7 +2855,12 @@ function compileAll(
         programs.push(stampProgramWaste(program, pair.traces));
         composedJoins.push([...(pair.a.sequence ?? []), ...(pair.b.sequence ?? [])].join("\0"));
       } catch (err) {
-        refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, pair.traces));
+        refusals.push(
+          stampWaste(
+            { sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" },
+            pair.traces,
+          ),
+        );
       }
     }
 
@@ -2744,9 +2884,13 @@ function compileAll(
 
   if (process.env.EDEN_DEBUG_FORK === "1") {
     const forks = findForkedGroups(traces, opts.minSupport);
-    console.error(`[fork-debug] traces=${traces.length} minSupport=${opts.minSupport} forks=${forks.length} programs=${programs.length}`);
+    console.error(
+      `[fork-debug] traces=${traces.length} minSupport=${opts.minSupport} forks=${forks.length} programs=${programs.length}`,
+    );
     for (const f of forks) {
-      console.error(`  fork: prefix=[${f.prefixNames}] field=${f.field} thenVal=${f.thenValue} nA=${f.thenTraces.length} nB=${f.elseTraces.length}`);
+      console.error(
+        `  fork: prefix=[${f.prefixNames}] field=${f.field} thenVal=${f.thenValue} nA=${f.thenTraces.length} nB=${f.elseTraces.length}`,
+      );
     }
   }
 

@@ -90,7 +90,10 @@ export function badWidth7Receipt(): WidthInheritReceipt {
 }
 
 /** Later stretch of a confirmed sibling id — not a newly invented value. */
-export function fourthWidth7Stretch(confirmed: { orderId: string }): { input: { orderId: string }; events: StretchTrace["events"] } {
+export function fourthWidth7Stretch(confirmed: { orderId: string }): {
+  input: { orderId: string };
+  events: StretchTrace["events"];
+} {
   return {
     input: { orderId: confirmed.orderId },
     events: fanoutEvents(confirmed.orderId, SIBLING_WIDTH),

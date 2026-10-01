@@ -209,7 +209,13 @@ describe("which predicate decides that this is production", () => {
     setEnv("VERCEL", undefined);
     setEnv("DATABASE_URL", "postgres://example/db");
     setEnv("EDEN_DEV", "0");
-    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", headers: { host: "127.0.0.1:8787" }, body: "{}" }));
+    const res = await handleFetch(
+      new Request("http://127.0.0.1:8787/v1/setup", {
+        method: "POST",
+        headers: { host: "127.0.0.1:8787" },
+        body: "{}",
+      }),
+    );
     expect(res.status).toBe(401);
     setEnv("DATABASE_URL", undefined);
     setEnv("EDEN_DEV", undefined);
@@ -218,7 +224,13 @@ describe("which predicate decides that this is production", () => {
   test("a laptop still can, which is what the endpoint is for", async () => {
     setEnv("VERCEL", undefined);
     setEnv("DATABASE_URL", undefined);
-    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", headers: { host: "127.0.0.1:8787" }, body: "{}" }));
+    const res = await handleFetch(
+      new Request("http://127.0.0.1:8787/v1/setup", {
+        method: "POST",
+        headers: { host: "127.0.0.1:8787" },
+        body: "{}",
+      }),
+    );
     expect(res.status).toBe(200);
   });
 });
@@ -324,7 +336,9 @@ describe("ingest cannot change what an approved tool does", () => {
     await ingest(db, "ws_a", "r3", evs("r3", other), true);
     await ingest(db, "ws_a", "r4", evs("r4", other), true);
 
-    const after = await db.get<{ steps: string; state: string }>(`SELECT steps, state FROM tool WHERE id = ?`, [tool!.id]);
+    const after = await db.get<{ steps: string; state: string }>(`SELECT steps, state FROM tool WHERE id = ?`, [
+      tool!.id,
+    ]);
     expect(after!.state).toBe("on");
     expect(after!.steps).toBe(approved!.steps);
     expect(after!.steps).not.toContain("/exfiltrate");
@@ -402,8 +416,22 @@ describe("one tenant's event ids cannot suppress another's", () => {
 
   const ev = (): ToolEvent[] =>
     [
-      { event_id: "bash-0", seq: 0, name: "Bash", args: { command: "curl https://api.acme.com/a" }, command: "curl https://api.acme.com/a", ok: true },
-      { event_id: "bash-1", seq: 1, name: "Bash", args: { command: "curl https://api.acme.com/b" }, command: "curl https://api.acme.com/b", ok: true },
+      {
+        event_id: "bash-0",
+        seq: 0,
+        name: "Bash",
+        args: { command: "curl https://api.acme.com/a" },
+        command: "curl https://api.acme.com/a",
+        ok: true,
+      },
+      {
+        event_id: "bash-1",
+        seq: 1,
+        name: "Bash",
+        args: { command: "curl https://api.acme.com/b" },
+        command: "curl https://api.acme.com/b",
+        ok: true,
+      },
     ] as ToolEvent[];
 
   test("both tenants keep their own events", async () => {

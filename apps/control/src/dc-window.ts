@@ -34,7 +34,12 @@ export function receiptTokenClasses(row: StoredReceipt): TokenClasses | null {
   return asTokenClasses(extra.tokenClasses) ?? asTokenClasses(extra.classes);
 }
 
-export function dcWindowFromReceipts(receipts: StoredReceipt[], days: number, now = Date.now(), workspace = Store.WORKSPACE_ID): DcWindow {
+export function dcWindowFromReceipts(
+  receipts: StoredReceipt[],
+  days: number,
+  now = Date.now(),
+  workspace = Store.WORKSPACE_ID,
+): DcWindow {
   const dayList = utcDaysEnding(now, days);
   const allowed = new Set(dayList);
   const runs: DcRun[] = [];

@@ -45,7 +45,11 @@ function makePayload(kind: "pr_files" | "checks" | "issue_list", n: number): unk
 
 header("POC F — billing-path bytes (densify runs on every served result)");
 
-for (const [kind, n] of [["pr_files", 60], ["checks", 120], ["issue_list", 100]] as const) {
+for (const [kind, n] of [
+  ["pr_files", 60],
+  ["checks", 120],
+  ["issue_list", 100],
+] as const) {
   const payload = makePayload(kind, n);
   const textBytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
 

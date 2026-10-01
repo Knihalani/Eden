@@ -16,14 +16,7 @@ import type { CompiledStep, Receipt } from "@eden/core";
 import { openDb } from "../../apps/site/src/db";
 import { playTool } from "../../apps/site/src/playback";
 import { drainPrefetches, resultCacheKey } from "../../apps/site/src/cache";
-import {
-  FUZZ_SEED,
-  MUTATING_TOOLS,
-  N_CASES,
-  N_FAST,
-  generateSuite,
-  type FuzzCase,
-} from "./failsafe-gen";
+import { FUZZ_SEED, MUTATING_TOOLS, N_CASES, N_FAST, generateSuite, type FuzzCase } from "./failsafe-gen";
 
 const TIMEOUT = 120_000;
 const TIMEOUT_10K = 180_000;
@@ -142,12 +135,7 @@ async function withSched<T>(mode: "waves" | "ready", fn: () => Promise<T>): Prom
   }
 }
 
-async function insertTool(
-  db: Awaited<ReturnType<typeof openDb>>,
-  id: string,
-  steps: CompiledStep[],
-  ws: string,
-) {
+async function insertTool(db: Awaited<ReturnType<typeof openDb>>, id: string, steps: CompiledStep[], ws: string) {
   await db.run(
     `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
     [id, ws, id, JSON.stringify(steps)],

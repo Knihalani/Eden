@@ -50,9 +50,24 @@ function makeTool(): CompiledStep[] {
   }
   // A write fed by chain 0; downstream state-reads depend on it.
   LATENCY["label"] = 420;
-  steps.push({ id: "label", kind: "cloud_http", name: "post_label", method: "POST", commute: false, url: "/labels", bind: { b: "{{checks3.id}}" } });
+  steps.push({
+    id: "label",
+    kind: "cloud_http",
+    name: "post_label",
+    method: "POST",
+    commute: false,
+    url: "/labels",
+    bind: { b: "{{checks3.id}}" },
+  });
   LATENCY["state"] = 90;
-  steps.push({ id: "state", kind: "cloud_http", name: "get_label_state", method: "GET", commute: true, url: "/state?label={{label.id}}" });
+  steps.push({
+    id: "state",
+    kind: "cloud_http",
+    name: "get_label_state",
+    method: "GET",
+    commute: true,
+    url: "/state?label={{label.id}}",
+  });
   return steps;
 }
 
@@ -106,7 +121,10 @@ async function runSim(mode: "waves" | "waves+prefetch" | "ready"): Promise<numbe
     for (;;) {
       if (inflight >= 8) return;
       const w = steps.find((s) => !readonly(s) && !started.has(s.id) && depsMet(s));
-      if (w) { launch(w); continue; }
+      if (w) {
+        launch(w);
+        continue;
+      }
       const r = steps.find((s) => readonly(s) && !started.has(s.id) && depsMet(s));
       if (!r) return;
       launch(r);
@@ -117,7 +135,10 @@ async function runSim(mode: "waves" | "waves+prefetch" | "ready"): Promise<numbe
     pump();
     await new Promise<void>((resolve) => {
       const iv = setInterval(() => {
-        if (results.size === steps.length) { clearInterval(iv); resolve(); }
+        if (results.size === steps.length) {
+          clearInterval(iv);
+          resolve();
+        }
       }, 4);
     });
     return Date.now() - t0;
@@ -132,14 +153,24 @@ async function runSim(mode: "waves" | "waves+prefetch" | "ready"): Promise<numbe
       if (!readonly(s) || !depsMet(s)) continue;
       started.add(s.id);
       inflight++;
-      setTimeout(() => { results.set(s.id, Date.now() - t0); inflight--; }, LATENCY[s.id] ?? 100);
+      setTimeout(() => {
+        results.set(s.id, Date.now() - t0);
+        inflight--;
+      }, LATENCY[s.id] ?? 100);
     }
     await Promise.all(
-      layer.map((s) => new Promise<void>((res) => {
-        started.add(s.id);
-        inflight++;
-        setTimeout(() => { results.set(s.id, Date.now() - t0); inflight--; res(); }, LATENCY[s.id] ?? 100);
-      })),
+      layer.map(
+        (s) =>
+          new Promise<void>((res) => {
+            started.add(s.id);
+            inflight++;
+            setTimeout(() => {
+              results.set(s.id, Date.now() - t0);
+              inflight--;
+              res();
+            }, LATENCY[s.id] ?? 100);
+          }),
+      ),
     );
   }
   await new Promise((r) => setTimeout(r, 150)); // stragglers

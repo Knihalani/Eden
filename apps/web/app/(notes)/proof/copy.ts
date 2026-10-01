@@ -4,12 +4,7 @@
  * Numbers live in PUBLIC_CLAIMS. This module maps over that table.
  * Do not paste a multiplier or percent here.
  */
-import {
-  claimsOf,
-  customerStudies,
-  fixtureStudies,
-  type PublicClaim,
-} from "@eden/measure";
+import { claimsOf, customerStudies, fixtureStudies, type PublicClaim } from "@eden/measure";
 
 export type { PublicClaim };
 
@@ -30,20 +25,14 @@ export const PROOF_NOT =
 export const CASES_LEAD =
   "These are campaign fixture verticals, not customers. Customer-approved measured studies: 0. Unpublished slots stay empty. No company names. Kind and Source use the same table chrome as the wins table so this cannot be read as a second unlabeled win board.";
 
-export const WINS_NOTE =
-  "Campaign WINs from packages/measure. Replica analogue cents are not in this table.";
+export const WINS_NOTE = "Campaign WINs from packages/measure. Replica analogue cents are not in this table.";
 
-export const PARITY_NOTE =
-  "Negative-control parity at ±1%. Same files, same rigor as the wins.";
+export const PARITY_NOTE = "Negative-control parity at ±1%. Same files, same rigor as the wins.";
 
-export const ANALOGUE_NOTE =
-  "Headless replica TURN_CENTS. Not a live Claude Code invoice. Not a campaign WIN.";
+export const ANALOGUE_NOTE = "Headless replica TURN_CENTS. Not a live Claude Code invoice. Not a campaign WIN.";
 
-export const LIMITS_NOTE =
-  "OOD, oblivious agents, certification bounds, host limits. Equal weight with the wins.";
+export const LIMITS_NOTE = "OOD, oblivious agents, certification bounds, host limits. Equal weight with the wins.";
 
-export const RETIRED_NOTE =
-  "Claims withdrawn in public until a file parses. Retired is a result.";
+export const RETIRED_NOTE = "Claims withdrawn in public until a file parses. Retired is a result.";
 
-export const PROOF_COUNTS =
-  `${WINS.length} wins · ${PARITY.length} parity · ${ANALOGUE.length} analogue · ${LIMITS.length} limits · ${RETIRED.length} retired · ${CUSTOMERS.length} customers`;
+export const PROOF_COUNTS = `${WINS.length} wins · ${PARITY.length} parity · ${ANALOGUE.length} analogue · ${LIMITS.length} limits · ${RETIRED.length} retired · ${CUSTOMERS.length} customers`;

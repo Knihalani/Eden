@@ -29,7 +29,11 @@ describe("savings ledger", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  async function addTool(wsId: string, name: string, opts: { state?: string; manifest?: Record<string, unknown> } = {}) {
+  async function addTool(
+    wsId: string,
+    name: string,
+    opts: { state?: string; manifest?: Record<string, unknown> } = {},
+  ) {
     const id = crypto.randomUUID();
     await db.run(
       `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
@@ -62,8 +66,12 @@ describe("savings ledger", () => {
   });
 
   test("means come only from manifests that carry a real measurement", async () => {
-    await addTool("ws_local", "a", { manifest: { tokensSaved: 100, timeSavedMs: 1000, tokensMeasured: true, timeMeasured: true } });
-    await addTool("ws_local", "b", { manifest: { tokensSaved: 300, timeSavedMs: 3000, tokensMeasured: true, timeMeasured: true } });
+    await addTool("ws_local", "a", {
+      manifest: { tokensSaved: 100, timeSavedMs: 1000, tokensMeasured: true, timeMeasured: true },
+    });
+    await addTool("ws_local", "b", {
+      manifest: { tokensSaved: 300, timeSavedMs: 3000, tokensMeasured: true, timeMeasured: true },
+    });
     // No measurement flags: contributes nothing to any mean.
     await addTool("ws_local", "bare", {});
     // Measured flag but no number: absent, not zero.
@@ -160,7 +168,9 @@ describe("GET /v1/ledger", () => {
   });
 
   test("answers with the workspace ledger and busts caches", async () => {
-    const res = await handleFetch(new Request("http://127.0.0.1/v1/ledger", { headers: { authorization: "Bearer eden_dev" } }));
+    const res = await handleFetch(
+      new Request("http://127.0.0.1/v1/ledger", { headers: { authorization: "Bearer eden_dev" } }),
+    );
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toContain("no-store");
     const body = (await res.json()) as SavingsLedger;

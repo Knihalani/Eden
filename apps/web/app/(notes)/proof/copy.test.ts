@@ -1,12 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import {
-  PUBLIC_CLAIMS,
-  claimsOf,
-  customerStudies,
-  fixtureStudies,
-} from "@eden/measure";
+import { PUBLIC_CLAIMS, claimsOf, customerStudies, fixtureStudies } from "@eden/measure";
 import { navCurrent } from "../../account/home";
 import sitemap from "../../sitemap";
 import {
@@ -47,9 +42,7 @@ test("every printed claim comes from PUBLIC_CLAIMS", () => {
   for (const row of printed) {
     const src = PUBLIC_CLAIMS.find((c) => c.id === row.id);
     expect(src).toEqual(row);
-    expect(existsSync(join(ROOT, row.file)) || row.kind === "retired" || row.source === "host-limit").toBe(
-      true,
-    );
+    expect(existsSync(join(ROOT, row.file)) || row.kind === "retired" || row.source === "host-limit").toBe(true);
   }
 });
 
@@ -150,9 +143,9 @@ test("fixture studies are campaign measurements; customer studies stay 0", () =>
   expect(PAGE).toContain("fromFixtures(FIXTURES)");
   expect(PAGE).toContain("ClaimTable");
   expect(PAGE).toContain("CLASS_KEY");
-  expect(PAGE).toContain("tag: \"fixture\"");
+  expect(PAGE).toContain('tag: "fixture"');
   expect(PAGE).toContain("Fixture verticals");
-  expect(PAGE).not.toContain("<h2 id=\"proof-cases\">Case studies</h2>");
+  expect(PAGE).not.toContain('<h2 id="proof-cases">Case studies</h2>');
   expect(TABLE).toContain("<th>Kind</th>");
   expect(TABLE).toContain("<th>Source</th>");
   expect(TABLE).toContain("iso-tag");

@@ -4,7 +4,10 @@ import { asView } from "./activity-context";
 
 test("asView keeps the fleet strip so Home can show measured agents", () => {
   const fleet = {
-    agents: [{ id: "a1", dcPct: 40, parentRunId: "p1" }, { id: "a2", dcPct: null }],
+    agents: [
+      { id: "a1", dcPct: 40, parentRunId: "p1" },
+      { id: "a2", dcPct: null },
+    ],
     fleetDcPct: 40,
     sharedLine: "shared across 2 agents",
     region: "us-east-1",

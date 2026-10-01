@@ -79,15 +79,12 @@ export function assertTable3OverallHasFourAvgs(src: string, label = "RESULTS"): 
   if (!claimsTable3Overall(src)) return;
   const missing = missingTable3CompetencyAvgs(src);
   if (missing.length) {
-    throw new Error(
-      `${label} claims Table 3 overall without four competency avgs (missing ${missing.join(", ")})`,
-    );
+    throw new Error(`${label} claims Table 3 overall without four competency avgs (missing ${missing.join(", ")})`);
   }
 }
 
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}[-|:\s]*$/;
-const BRAIN_CELL =
-  /^(?:eden\s+)?brainmemory(?:\.retrieve)?$|^cortex\s*:\s*false$|^cortex-off$|^cortex\s+false$/i;
+const BRAIN_CELL = /^(?:eden\s+)?brainmemory(?:\.retrieve)?$|^cortex\s*:\s*false$|^cortex-off$|^cortex\s+false$/i;
 
 function cellCanon(cell: string): string {
   return cell.replace(/[`*_]/g, "").replace(/\s+/g, " ").trim();
@@ -181,7 +178,10 @@ export function locomo92EdenHits(src: string): string[] {
 export function memoryUiProductHits(src: string): string[] {
   const hits: string[] = [];
   for (const line of src.split("\n")) {
-    if ((/memory\s+UI/i.test(line) || /memory\s+dashboard/i.test(line)) && !matchDenied(line, /memory\s+(?:UI|dashboard)/i)) {
+    if (
+      (/memory\s+UI/i.test(line) || /memory\s+dashboard/i.test(line)) &&
+      !matchDenied(line, /memory\s+(?:UI|dashboard)/i)
+    ) {
       hits.push(line.trim());
     }
     if (/\bmemorable-cli\b/i.test(line) && !matchDenied(line, /memorable-cli/i)) hits.push(line.trim());
@@ -250,9 +250,9 @@ function walkCampaign(dir: string, acc: string[] = []): string[] {
 
 describe("M50.4 honest claims", () => {
   test("detectors reject the seven banned claims", () => {
-    expect(() =>
-      assertTable3OverallHasFourAvgs("Table 3 overall 99. Eden wins.", "fixture"),
-    ).toThrow(/four competency avgs/);
+    expect(() => assertTable3OverallHasFourAvgs("Table 3 overall 99. Eden wins.", "fixture")).toThrow(
+      /four competency avgs/,
+    );
     expect(() =>
       assertTable3OverallHasFourAvgs(
         "Table 3 overall 44.8\n| AR | 57.3 |\n| TTL | 34.6 |\n| LRU | 53.8 |\n| SF | 33.5 |",
@@ -269,9 +269,7 @@ describe("M50.4 honest claims", () => {
     expect(k40AsMccHits("not k=40 MCC")).toEqual([]);
     expect(k40AsMccHits("Retrieve@40 ICL vs Table 7 MCC @ k=10")).toEqual([]);
 
-    expect(
-      eventqa64AsTable3Hits("Table 3 EventQA-64k scored 80.").length,
-    ).toBeGreaterThan(0);
+    expect(eventqa64AsTable3Hits("Table 3 EventQA-64k scored 80.").length).toBeGreaterThan(0);
     expect(eventqa64AsTable3Hits("EventQA-64k vs Table 3 EventQA-534k")).toEqual([]);
     expect(eventqa64AsTable3Hits('Sleep `"64k"` bytes. Not Table 3.')).toEqual([]);
 
@@ -290,8 +288,7 @@ describe("M50.4 honest claims", () => {
     expect(sotaWithoutProtocolHits("Eden memory is SOTA. Do not use k=40.").length).toBeGreaterThan(0);
     expect(k40AsMccHits("MCC k=40 is the Eden score, not a toy").length).toBeGreaterThan(0);
     expect(memoryUiProductHits("Eden ships a memory UI without a login wall.").length).toBeGreaterThan(0);
-    const qualified =
-      "SOTA on exam Table 3, metric exact_match, length 534k, k=10, backbone gemma, inject.";
+    const qualified = "SOTA on exam Table 3, metric exact_match, length 534k, k=10, backbone gemma, inject.";
     expect(sotaWithoutProtocolHits(qualified)).toEqual([]);
     expect(sotaWithoutProtocolHits("4o-mini Table 3 SOTA: no")).toEqual([]);
   });

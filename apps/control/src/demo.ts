@@ -4,8 +4,21 @@ import { Store } from "./store";
 import { createHandler } from "./server";
 import { registryFrom } from "@eden/runtime";
 import { replayRegistry } from "@eden/shadow";
-import { createTicketShip, runNaive, underdeterminedSiblingTraces, WITNESS_IDS } from "../../../packages/runtime/src/ticketship";
-import { parseInbox, parseLiveTools, pickPlayTool, demoPortBusyMessage, demoChildEnv, demoListenLines, demoListenFooter } from "../../../packages/cli/src/demo";
+import {
+  createTicketShip,
+  runNaive,
+  underdeterminedSiblingTraces,
+  WITNESS_IDS,
+} from "../../../packages/runtime/src/ticketship";
+import {
+  parseInbox,
+  parseLiveTools,
+  pickPlayTool,
+  demoPortBusyMessage,
+  demoChildEnv,
+  demoListenLines,
+  demoListenFooter,
+} from "../../../packages/cli/src/demo";
 import type { StretchTrace } from "@eden/ir";
 
 // Same as `eden demo`: a clone sitting uses the local key unless the operator
@@ -141,15 +154,21 @@ if (pass) {
 }
 
 const runOk = shipped?.id
-  ? await fetchHandler(auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: shipped.id, input: { id: "T-100" } }) }))
+  ? await fetchHandler(
+      auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: shipped.id, input: { id: "T-100" } }) }),
+    )
   : null;
 const runOod = shipped?.id
-  ? await fetchHandler(auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: shipped.id, input: { id: "T-999" } }) }))
+  ? await fetchHandler(
+      auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: shipped.id, input: { id: "T-999" } }) }),
+    )
   : null;
 const okBody = runOk ? ((await runOk.json()) as { value?: unknown; stats?: { llmCalls?: number; ms?: number } }) : null;
 const oodBody = runOod ? ((await runOod.json()) as { error?: string; reason?: string; deopt?: boolean }) : null;
 
-await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces: underdeterminedSiblingTraces(3) }) }));
+await fetchHandler(
+  auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces: underdeterminedSiblingTraces(3) }) }),
+);
 await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
 const after = await readInbox();
 if (after.notice) console.error(after.notice);

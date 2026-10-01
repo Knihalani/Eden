@@ -76,7 +76,9 @@ describe("graduated rollout", () => {
     const { store, fetchHandler } = handler();
     const p = program({ id: "a1", name: "a1" });
     putPass(store, p);
-    const canary = await fetchHandler(new Request("http://x/v1/tools/a1/approve", { method: "POST", headers: auth, body: "{}" }));
+    const canary = await fetchHandler(
+      new Request("http://x/v1/tools/a1/approve", { method: "POST", headers: auth, body: "{}" }),
+    );
     expect(canary.status).toBe(200);
     expect(store.tool("a1")?.rollout).toBe("canary");
 
@@ -100,19 +102,27 @@ describe("graduated rollout", () => {
     await fetchHandler(new Request("http://x/v1/tools/p1/approve", { method: "POST", headers: auth, body: "{}" }));
     expect(store.tool("p1")?.rollout).toBe("canary");
 
-    const miss = await fetchHandler(new Request("http://x/v1/tools/nope/promote", { method: "POST", headers: auth, body: "{}" }));
+    const miss = await fetchHandler(
+      new Request("http://x/v1/tools/nope/promote", { method: "POST", headers: auth, body: "{}" }),
+    );
     expect(miss.status).toBe(404);
 
-    const promoted = await fetchHandler(new Request("http://x/v1/tools/p1/promote", { method: "POST", headers: auth, body: "{}" }));
+    const promoted = await fetchHandler(
+      new Request("http://x/v1/tools/p1/promote", { method: "POST", headers: auth, body: "{}" }),
+    );
     expect(promoted.status).toBe(200);
     expect(((await promoted.json()) as { rollout: string }).rollout).toBe("live");
     expect(store.tool("p1")?.rollout).toBe("live");
 
-    const paused = await fetchHandler(new Request("http://x/v1/tools/p1/pause", { method: "POST", headers: auth, body: "{}" }));
+    const paused = await fetchHandler(
+      new Request("http://x/v1/tools/p1/pause", { method: "POST", headers: auth, body: "{}" }),
+    );
     expect(paused.status).toBe(200);
     expect(store.tool("p1")?.state).toBe("paused");
     expect(store.tool("p1")?.rollout).toBe("live");
-    const resumed = await fetchHandler(new Request("http://x/v1/tools/p1/resume", { method: "POST", headers: auth, body: "{}" }));
+    const resumed = await fetchHandler(
+      new Request("http://x/v1/tools/p1/resume", { method: "POST", headers: auth, body: "{}" }),
+    );
     expect(resumed.status).toBe(200);
     expect(store.tool("p1")?.state).toBe("live");
     expect(store.tool("p1")?.rollout).toBe("live");
@@ -170,7 +180,9 @@ describe("graduated rollout", () => {
       ],
     });
     putPass(store, p);
-    const skipped = await fetchHandler(new Request("http://x/v1/tools/isle/approve", { method: "POST", headers: auth, body: "{}" }));
+    const skipped = await fetchHandler(
+      new Request("http://x/v1/tools/isle/approve", { method: "POST", headers: auth, body: "{}" }),
+    );
     expect(skipped.status).toBe(200);
     const unpinned = store.tool("isle")!.program.steps.find((s) => s.id === "think");
     expect(unpinned?.kind === "island" && unpinned.pinned).toBeFalsy();
@@ -204,11 +216,21 @@ describe("graduated rollout", () => {
     const p = program({ id: "sync", name: "sync" });
     putPass(store, p);
     await fetchHandler(new Request("http://x/v1/tools/sync/approve", { method: "POST", headers: auth, body: "{}" }));
-    const written = JSON.parse(readFileSync(join(home, "live-tools.json"), "utf8")) as Array<{ id: string; rollout?: string }>;
+    const written = JSON.parse(readFileSync(join(home, "live-tools.json"), "utf8")) as Array<{
+      id: string;
+      rollout?: string;
+    }>;
     expect(written.find((t) => t.id === "sync")?.rollout).toBe("canary");
 
     for (let i = 0; i < 4; i++) {
-      store.putReceipt({ tool_id: "sync", version: store.tool("sync")!.version, ms: 10, llm_calls: 0, cents: 0, ok: 0 });
+      store.putReceipt({
+        tool_id: "sync",
+        version: store.tool("sync")!.version,
+        ms: 10,
+        llm_calls: 0,
+        cents: 0,
+        ok: 0,
+      });
     }
     expect(store.tool("sync")?.state).toBe("paused");
     expect(store.tool("sync")?.rollout).toBe("canary");

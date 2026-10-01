@@ -55,7 +55,7 @@ function estimate(key: string): number {
   const h1 = hash32(key, 0x9e3779b9);
   const h2 = hash32(key, 0x85ebca6b) | 1;
   for (let d = 0; d < CMS_DEPTH; d++) {
-    const idx = d * CMS_WIDTH + ((h1 + d * h2) >>> 0) % CMS_WIDTH;
+    const idx = d * CMS_WIDTH + (((h1 + d * h2) >>> 0) % CMS_WIDTH);
     const v = counters[idx]!;
     if (v < min) min = v;
   }
@@ -66,7 +66,7 @@ function increment(key: string): void {
   const h1 = hash32(key, 0x9e3779b9);
   const h2 = hash32(key, 0x85ebca6b) | 1;
   for (let d = 0; d < CMS_DEPTH; d++) {
-    const idx = d * CMS_WIDTH + ((h1 + d * h2) >>> 0) % CMS_WIDTH;
+    const idx = d * CMS_WIDTH + (((h1 + d * h2) >>> 0) % CMS_WIDTH);
     const v = counters[idx]!;
     if (v < 0xfffe) counters[idx] = (v + 1) as number;
   }

@@ -289,7 +289,13 @@ export function phraseExact(q: string): string | undefined {
   if (!f) return;
   let hit = EXACT.get(f);
   if (hit) return hit;
-  if (f.length > 4 && f.charCodeAt(3) === 32 && f.charCodeAt(0) === 116 && f.charCodeAt(1) === 104 && f.charCodeAt(2) === 101) {
+  if (
+    f.length > 4 &&
+    f.charCodeAt(3) === 32 &&
+    f.charCodeAt(0) === 116 &&
+    f.charCodeAt(1) === 104 &&
+    f.charCodeAt(2) === 101
+  ) {
     return EXACT.get(f.slice(4));
   }
   if (f.length > 2 && f.charCodeAt(1) === 32 && f.charCodeAt(0) === 97) return EXACT.get(f.slice(2));

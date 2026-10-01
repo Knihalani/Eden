@@ -6,12 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  claimById,
-  claimsOf,
-  parseClaimsKind,
-  renderClaimsBoard,
-} from "@eden/measure";
+import { claimById, claimsOf, parseClaimsKind, renderClaimsBoard } from "@eden/measure";
 import { PUBLIC_COPY_PATHS, scanPublicFiles, scanPublicText, winTableHas } from "@eden/measure/publish-check";
 import { LIMIT_CLAIMS } from "../../apps/web/app/(notes)/isolation/copy";
 import { LIMITS, PROOF_COUNTS, WINS } from "../../apps/web/app/(notes)/proof/copy";
@@ -42,7 +37,10 @@ function invoiceQuotes(text: string): string[] {
     const at = m.index ?? 0;
     const start = text.lastIndexOf("\n", at) + 1;
     const end = text.indexOf("\n", at + m[0].length);
-    const span = text.slice(start, end < 0 ? text.length : end).replace(/\s+/g, " ").trim();
+    const span = text
+      .slice(start, end < 0 ? text.length : end)
+      .replace(/\s+/g, " ")
+      .trim();
     if (!/not a live|retired|no live Claude Code invoice/i.test(span)) quotes.push(span);
   }
   return quotes;

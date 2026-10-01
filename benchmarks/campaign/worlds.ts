@@ -24,7 +24,10 @@ export type CallResult = { ok: true; value: unknown } | { ok: false; error: unkn
 export type World = {
   name: string;
   /** Fresh tool surface bound to this world's state. */
-  tools(): Record<string, { description: string; execute: (args: Record<string, unknown>) => Promise<unknown> | unknown }>;
+  tools(): Record<
+    string,
+    { description: string; execute: (args: Record<string, unknown>) => Promise<unknown> | unknown }
+  >;
   /** The cheap-model caller compiled islands use. Counts invocations on the world. */
   island(): IslandCaller;
   /** One agent stretch: yields (tool,args), receives results, stops when done. */
@@ -131,7 +134,8 @@ type DeskState = {
 export function createDesk(): World {
   const st: DeskState = { credits: new Map(), audits: new Map(), emails: new Map(), islands: 0 };
   const accounts: Record<string, { name: string; plan: string; mrr: number }> = {};
-  for (const id of DESK_IDS) accounts[id] = { name: `Acct ${id}`, plan: id.endsWith("4") ? "scale" : "pro", mrr: 400 + id.length * 97 };
+  for (const id of DESK_IDS)
+    accounts[id] = { name: `Acct ${id}`, plan: id.endsWith("4") ? "scale" : "pro", mrr: 400 + id.length * 97 };
   return {
     name: "desk",
     island:
@@ -155,7 +159,10 @@ export function createDesk(): World {
         description: "List recent invoices.",
         execute: async ({ id }) => {
           await Bun.sleep(60);
-          return { invoices: Array.from({ length: 5 }, (_, i) => ({ n: i, cents: 2900 + i * 131, overdue: i === 2 })), seq: nextOrd() };
+          return {
+            invoices: Array.from({ length: 5 }, (_, i) => ({ n: i, cents: 2900 + i * 131, overdue: i === 2 })),
+            seq: nextOrd(),
+          };
         },
       },
       classifyIssue: {
@@ -207,7 +214,14 @@ export function createDesk(): World {
       const acct = yield { tool: "getAccount", args: { id, text } };
       const inv = yield { tool: "listInvoices", args: { id } };
       const cls = yield { tool: "classifyIssue", args: { text: goal.text ?? "requesting refund for outage" } };
-      const credit = yield { tool: "composeCredit", args: { id, mrr: (acct.value as { mrr?: number })?.mrr ?? 300, category: (cls.value as { category?: string })?.category } };
+      const credit = yield {
+        tool: "composeCredit",
+        args: {
+          id,
+          mrr: (acct.value as { mrr?: number })?.mrr ?? 300,
+          category: (cls.value as { category?: string })?.category,
+        },
+      };
       yield { tool: "applyCredit", args: { id, amount: (credit.value as { amount?: number })?.amount ?? 100 } };
       // Sloppy agents skip the audit line 15% of the time. Seeded, so both
       // arms see the same sloppiness on the same block.
@@ -241,7 +255,8 @@ type OrderState = { refunds: Map<string, number>; restocks: Map<string, number>;
 
 export function createOrders(): World {
   const st: OrderState = { refunds: new Map(), restocks: new Map(), receipts: new Map() };
-  const itemsFor = (seededRng: () => number) => Array.from({ length: 3 + Math.floor(seededRng() * 10) }, (_, i) => `SKU-${1000 + i}`);
+  const itemsFor = (seededRng: () => number) =>
+    Array.from({ length: 3 + Math.floor(seededRng() * 10) }, (_, i) => `SKU-${1000 + i}`);
   return {
     name: "orders",
     island: () => async () => ({ ok: false }),
@@ -344,7 +359,15 @@ export function createEtl(sourceCount = 8): World {
         execute: async ({ source }) => {
           await Bun.sleep(100);
           const seq = nextOrd();
-          return { source, seq, rows: Array.from({ length: 64 }, (_, i) => ({ i, ts: 1_700_000_000_000 + i * 997 + seq, v: Math.sin(i + source.length) })) };
+          return {
+            source,
+            seq,
+            rows: Array.from({ length: 64 }, (_, i) => ({
+              i,
+              ts: 1_700_000_000_000 + i * 997 + seq,
+              v: Math.sin(i + source.length),
+            })),
+          };
         },
       },
       transformBatch: {
@@ -358,7 +381,9 @@ export function createEtl(sourceCount = 8): World {
         description: "Aggregate transformed batches.",
         execute: async ({ batches }) => {
           await Bun.sleep(90);
-          return { total: Array.isArray(batches) ? batches.reduce((a: number, b: { n?: number }) => a + (b.n ?? 0), 0) : 0 };
+          return {
+            total: Array.isArray(batches) ? batches.reduce((a: number, b: { n?: number }) => a + (b.n ?? 0), 0) : 0,
+          };
         },
       },
       writeReport: {
@@ -386,7 +411,9 @@ export function createEtl(sourceCount = 8): World {
       const batches: unknown[] = [];
       for (const s of sources) {
         const snap = yield { tool: "fetchSource", args: { source: s, run } };
-        batches.push(yield { tool: "transformBatch", args: { batch: (snap.value as { rows?: unknown[] }).rows ?? [] } });
+        batches.push(
+          yield { tool: "transformBatch", args: { batch: (snap.value as { rows?: unknown[] }).rows ?? [] } },
+        );
       }
       const agg = yield { tool: "aggregateRuns", args: { batches } };
       yield { tool: "writeReport", args: { run, total: (agg.value as { total?: number })?.total } };
@@ -396,9 +423,7 @@ export function createEtl(sourceCount = 8): World {
     done: (v) => Boolean((v as { verified?: boolean })?.verified),
     terminal: "verifyReport",
     check(doneGoals) {
-      return dupCheck("etl", doneGoals, "run", [
-        { name: "writeReport", get: (id) => reports.get(id) ?? 0 },
-      ]);
+      return dupCheck("etl", doneGoals, "run", [{ name: "writeReport", get: (id) => reports.get(id) ?? 0 }]);
     },
   };
 }
@@ -416,11 +441,13 @@ export function createIncident(flakeP = 0.12): World {
   const attempts = new Map<string, number>();
   return {
     name: "incident",
-    island: () => async ({ input }) => {
-      await Bun.sleep(200);
-      const f = (input ?? {}) as Record<string, unknown>;
-      return { rootCause: `spike in ${f.signature ?? "errors"}`, confidence: 0.82 };
-    },
+    island:
+      () =>
+      async ({ input }) => {
+        await Bun.sleep(200);
+        const f = (input ?? {}) as Record<string, unknown>;
+        return { rootCause: `spike in ${f.signature ?? "errors"}`, confidence: 0.82 };
+      },
     tools: () => ({
       searchLogs: {
         description: "Search the log index. Transiently flaky.",
@@ -436,7 +463,13 @@ export function createIncident(flakeP = 0.12): World {
           // shadow sandbox would then timeout on first call.
           if (n === 1 && hashStr(key) % 100 < flakeP * 100) throw new Error("upstream timeout");
           const seq = nextOrd();
-          return { events: Array.from({ length: 24 }, (_, i) => ({ lvl: i % 5 ? "info" : "error", msg: `${key} event ${i}`, ts: seq * 7 + i })) };
+          return {
+            events: Array.from({ length: 24 }, (_, i) => ({
+              lvl: i % 5 ? "info" : "error",
+              msg: `${key} event ${i}`,
+              ts: seq * 7 + i,
+            })),
+          };
         },
       },
       groupErrors: {
@@ -489,7 +522,10 @@ export function createIncident(flakeP = 0.12): World {
       let logs: CallResult = yield { tool: "searchLogs", args: { q: key, key } };
       if (!logs.ok) logs = yield { tool: "searchLogs", args: { q: key, key } };
       if (!logs.ok) return;
-      const grouped = yield { tool: "groupErrors", args: { events: (logs.value as { events?: unknown[] }).events ?? [] } };
+      const grouped = yield {
+        tool: "groupErrors",
+        args: { events: (logs.value as { events?: unknown[] }).events ?? [] },
+      };
       const sig = (grouped.value as { signature?: string }).signature ?? "sig-0";
       yield { tool: "fetchTrace", args: { signature: sig } };
       yield { tool: "diagnose", args: { signature: sig } };
@@ -523,10 +559,12 @@ export function createResearch(): World {
   const notes = new Map<string, number>();
   return {
     name: "research",
-    island: () => async ({ input }) => {
-      await Bun.sleep(200);
-      return { summary: `summary of ${JSON.stringify(input).slice(0, 40)}` };
-    },
+    island:
+      () =>
+      async ({ input }) => {
+        await Bun.sleep(200);
+        return { summary: `summary of ${JSON.stringify(input).slice(0, 40)}` };
+      },
     tools: () => ({
       grepCode: {
         description: "Grep the repo for a pattern.",
@@ -589,9 +627,7 @@ export function createResearch(): World {
     done: (v) => Boolean((v as { notesWritten?: boolean })?.notesWritten),
     terminal: "writeNotes",
     check(doneGoals) {
-      return dupCheck("research", doneGoals, "topic", [
-        { name: "writeNotes", get: (id) => notes.get(id) ?? 0 },
-      ]);
+      return dupCheck("research", doneGoals, "topic", [{ name: "writeNotes", get: (id) => notes.get(id) ?? 0 }]);
     },
   };
 }

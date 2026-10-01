@@ -16,7 +16,14 @@ describe("analyze", () => {
   });
 
   test("splits placebo rows out of the A/B sample", () => {
-    const e = extract("x.json", run([["t1-a", 100, 130], ["t2-b", 200, 150], ["t3-c", 300, 250]]));
+    const e = extract(
+      "x.json",
+      run([
+        ["t1-a", 100, 130],
+        ["t2-b", 200, 150],
+        ["t3-c", 300, 250],
+      ]),
+    );
     expect(e.control.map((s) => s.task)).toEqual(["t2-b", "t3-c"]);
     expect(e.placeboControl.map((s) => s.value)).toEqual([100]);
     expect(e.placeboTreatment.map((s) => s.value)).toEqual([130]);

@@ -25,13 +25,25 @@ function mockUpstream(v: 1 | 2): (path: string) => unknown {
   if (v === 1) {
     return (path) =>
       path.includes("/status")
-        ? { checks: [{ name: "ci", state: "pass" }, { name: "lint", state: "pass" }], mergeable: true }
+        ? {
+            checks: [
+              { name: "ci", state: "pass" },
+              { name: "lint", state: "pass" },
+            ],
+            mergeable: true,
+          }
         : { title: `PR ${path}`, author: "kai" };
   }
   // v2: the field everyone consumes was renamed state->conclusion (a real GitHub rename).
   return (path) =>
     path.includes("/status")
-      ? { checks: [{ name: "ci", conclusion: "pass" }, { name: "lint", conclusion: "pass" }], is_mergeable: true }
+      ? {
+          checks: [
+            { name: "ci", conclusion: "pass" },
+            { name: "lint", conclusion: "pass" },
+          ],
+          is_mergeable: true,
+        }
       : { title: `PR ${path}`, author: "kai" };
 }
 
@@ -52,7 +64,9 @@ function leafPaths(value: unknown, prefix = ""): string[] {
   if (value === null || typeof value !== "object") return [prefix];
   if (Array.isArray(value)) return value.flatMap((v, i) => leafPaths(v, `${prefix}.${i}`));
   const rec = value as Record<string, unknown>;
-  return Object.keys(rec).sort().flatMap((k) => leafPaths(rec[k], prefix ? `${prefix}.${k}` : k));
+  return Object.keys(rec)
+    .sort()
+    .flatMap((k) => leafPaths(rec[k], prefix ? `${prefix}.${k}` : k));
 }
 
 /** What the model actually sees, fingerprinted by deep fact-key paths. */
@@ -100,7 +114,14 @@ describe("POC 8 — self-healing loop", () => {
     // Re-mined program: same structure, adapted step names/paths for v2 upstream.
     const PROGRAM_V2: CompiledStep[] = [
       { id: "s0", kind: "cloud_http", name: "get_pr", method: "GET", commute: true, url: "/pull/{issue}" },
-      { id: "s1", kind: "cloud_http", name: "get_status_v2", method: "GET", commute: true, url: "/pull/{issue}/status" },
+      {
+        id: "s1",
+        kind: "cloud_http",
+        name: "get_status_v2",
+        method: "GET",
+        commute: true,
+        url: "/pull/{issue}/status",
+      },
     ];
     const healed = fingerprint(PROGRAM_V2, upstreamV2);
     // Coverage restored: at least as many fact keys as the original baseline.

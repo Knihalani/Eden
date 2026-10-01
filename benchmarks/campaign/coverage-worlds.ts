@@ -517,11 +517,7 @@ export function createPartialIteration(): World {
 }
 
 /** Drive one script against a world's tools; returns tool names in order. */
-export async function collectSequence(
-  world: World,
-  goal: Record<string, unknown>,
-  seed = 1,
-): Promise<string[]> {
+export async function collectSequence(world: World, goal: Record<string, unknown>, seed = 1): Promise<string[]> {
   const tools = world.tools();
   const rng = mulberry32(seed >>> 0);
   const gen = world.script(goal, rng);

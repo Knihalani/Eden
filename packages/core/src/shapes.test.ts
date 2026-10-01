@@ -67,7 +67,7 @@ describe("command shapes", () => {
   test("unknown binaries fail conservative on reads", () => {
     // No read verb up front → possiblyRead false → sequential, never deduped.
     expect(commandShape("terraform apply -auto-approve")?.possiblyRead).toBe(false);
-    expect(commandShape("psql -c \"delete from users\"")?.possiblyRead).toBe(false);
+    expect(commandShape('psql -c "delete from users"')?.possiblyRead).toBe(false);
     // Shell-level writes are caught regardless of verb.
     expect(commandShape("cat id_ed25519 > key.txt")?.possiblyRead).toBe(false);
     expect(commandShape("rm -rf build")?.possiblyRead).toBe(false);

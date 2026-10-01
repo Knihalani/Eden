@@ -7,13 +7,7 @@ import { useEffect } from "react";
  * Product-area boundary: keeps the rail and app bar alive when a page inside
  * the shell fails, so a broken canvas never takes the navigation with it.
  */
-export default function ProductError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function ProductError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error(error);
   }, [error]);

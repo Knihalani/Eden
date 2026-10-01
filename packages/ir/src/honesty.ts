@@ -215,13 +215,7 @@ export function renderHonestyLetter(input: HonestyLetterInput): string {
   }
 
   if (!findings.length && !refusals.length) {
-    return [
-      "Nothing waiting.",
-      "",
-      `  0 refusals · ${inventory}`,
-      "",
-      "eden doctor",
-    ].join("\n");
+    return ["Nothing waiting.", "", `  0 refusals · ${inventory}`, "", "eden doctor"].join("\n");
   }
 
   const lines: string[] = ["Nothing compiled.", ""];

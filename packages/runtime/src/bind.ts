@@ -155,7 +155,8 @@ export function evalBinding(binding: Binding, scope: BindScope, shell = false): 
       }
       if (binding.fn === "chunk") {
         const n = Number(binding.expr.trim());
-        if (!Number.isInteger(n) || n < 2) throw new Error(`chunk expr must be an integer >= 2, got ${JSON.stringify(binding.expr)}`);
+        if (!Number.isInteger(n) || n < 2)
+          throw new Error(`chunk expr must be an integer >= 2, got ${JSON.stringify(binding.expr)}`);
         const arr = asArray(inner);
         const out: unknown[][] = [];
         for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));

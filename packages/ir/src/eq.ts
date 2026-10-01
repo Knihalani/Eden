@@ -43,9 +43,7 @@ function tag(v: object): string {
 }
 
 function bytesOf(v: ArrayBufferView | ArrayBuffer): Uint8Array {
-  return v instanceof ArrayBuffer
-    ? new Uint8Array(v)
-    : new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  return v instanceof ArrayBuffer ? new Uint8Array(v) : new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
@@ -240,13 +238,17 @@ function canonBody(value: object, c: Canon): string {
   if (t === "RegExp") return `$RegExp:${String(value)}`;
   if (t === "Error") return `$Error:${JSON.stringify([(value as Error).name, (value as Error).message])}`;
   if (t === "ArrayBuffer" || ArrayBuffer.isView(value)) {
-    const name = value instanceof ArrayBuffer ? "ArrayBuffer" : ((value.constructor as { name?: string })?.name ?? "TypedArray");
+    const name =
+      value instanceof ArrayBuffer ? "ArrayBuffer" : ((value.constructor as { name?: string })?.name ?? "TypedArray");
     return `$${name}:${[...bytesOf(value as ArrayBuffer)].join(",")}`;
   }
   if (t === "Set") {
     // Sorted, so insertion order is not a difference — matching eq, which
     // compares sets without regard to order.
-    return `$Set:[${[...(value as Set<unknown>)].map((v) => canon(v, c)).sort().join(",")}]`;
+    return `$Set:[${[...(value as Set<unknown>)]
+      .map((v) => canon(v, c))
+      .sort()
+      .join(",")}]`;
   }
   if (t === "Map") {
     const entries = [...(value as Map<unknown, unknown>)].map(([k, v]) => `${canon(k, c)}:${canon(v, c)}`);

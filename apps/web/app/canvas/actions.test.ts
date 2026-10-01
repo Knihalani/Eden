@@ -173,7 +173,12 @@ describe("canvas server actions auth gate", () => {
 
   test("no eden_dev fallback on a managed install without EDEN_API_KEY", async () => {
     resetCalls();
-    const env = { DATABASE_URL: process.env.DATABASE_URL, VERCEL: process.env.VERCEL, EDEN_API_KEY: process.env.EDEN_API_KEY, EDEN_DEV: process.env.EDEN_DEV };
+    const env = {
+      DATABASE_URL: process.env.DATABASE_URL,
+      VERCEL: process.env.VERCEL,
+      EDEN_API_KEY: process.env.EDEN_API_KEY,
+      EDEN_DEV: process.env.EDEN_DEV,
+    };
     try {
       process.env.DATABASE_URL = "postgres://managed";
       delete process.env.VERCEL;

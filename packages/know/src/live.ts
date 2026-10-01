@@ -1,6 +1,15 @@
 import { EDENBOT, UA_TOKEN } from "./ua";
 import { robotsAllows, robotsCrawlDelaySec, robotsSitemaps, robotsTxtForHttpStatus, parseSitemap } from "./robots";
-import { skipHost, canonicalUrl, wikiActionApiUrl, wikiActionApiBatchUrl, wikiRestSummaryUrl, wikiRevisionPages, foldLinkTags, httpLinkHrefs } from "./extract";
+import {
+  skipHost,
+  canonicalUrl,
+  wikiActionApiUrl,
+  wikiActionApiBatchUrl,
+  wikiRestSummaryUrl,
+  wikiRevisionPages,
+  foldLinkTags,
+  httpLinkHrefs,
+} from "./extract";
 import { junkFrontier } from "./store";
 import { createHash } from "node:crypto";
 
@@ -102,7 +111,15 @@ export async function liveGetStream(
     const linkHdr = `Link: ${r.headers.get("link") || ""}`;
     const links = [...new Set([...httpLinkHrefs(linkHdr), ...httpLinkHrefs(linkHdr, "next")])].slice(0, 16);
     if (r.status === 304) {
-      return { ok: true, status: 304, html: "", chars: 0, digest: cached?.etag?.slice(0, 16) || "", skip: "not-modified", links };
+      return {
+        ok: true,
+        status: 304,
+        html: "",
+        chars: 0,
+        digest: cached?.etag?.slice(0, 16) || "",
+        skip: "not-modified",
+        links,
+      };
     }
     if (!r.ok) return { ok: false, status: r.status, html: "", chars: 0, digest: "", skip: `http-${r.status}`, links };
     const h = createHash("sha256");

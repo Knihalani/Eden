@@ -26,8 +26,7 @@ import {
 const ROOT = join(import.meta.dir, "../..");
 const ON_JOB = join(import.meta.dir, "jobs/eden-m153-on-google-gemma-4-31b-it");
 const HAS_JOBS = existsSync(ON_JOB);
-const OPENSSL_CUE =
-  "Create a self-signed TLS certificate using OpenSSL. Save the SHA-256 fingerprint.";
+const OPENSSL_CUE = "Create a self-signed TLS certificate using OpenSSL. Save the SHA-256 fingerprint.";
 const SQLITE_PACKET = `${MEMORY_MARK}\n- sqlite is the database.\n- Auth is Clerk.\n- CI is CircleCI.\n- postgres is the session store.\n- Kai is on a peanut diet.`;
 const OPENSSL_PACKET = `${MEMORY_MARK}\n- Use openssl req to mint a TLS cert.\n- Record the SHA-256 fingerprint.`;
 const REGEX_PACKET = `${MEMORY_MARK}\n- Parse the log with a regex capture.`;
@@ -54,13 +53,7 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void): void
   }
 }
 
-function writeTrial(
-  job: string,
-  trial: string,
-  task: string,
-  t0: string,
-  t1: string,
-): void {
+function writeTrial(job: string, trial: string, task: string, t0: string, t1: string): void {
   const dir = join(job, trial);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
@@ -216,7 +209,10 @@ describe("wrap inject log (measure only)", () => {
       withEnv({ EDEN_MEMORY_INJECT_LOG: undefined, EDEN_MEMORY: "on" }, () => {
         const body = { messages: [{ role: "user", content: OPENSSL_CUE }] };
         const injected = {
-          messages: [{ role: "system", content: OPENSSL_PACKET }, { role: "user", content: OPENSSL_CUE }],
+          messages: [
+            { role: "system", content: OPENSSL_PACKET },
+            { role: "user", content: OPENSSL_CUE },
+          ],
         };
         const out = injectBodyThenObserveTools({ injectBody: () => injected, observe() {} }, body);
         expect(out).toBe(injected);
@@ -248,7 +244,10 @@ describe("wrap inject log (measure only)", () => {
       withEnv({ EDEN_MEMORY_INJECT_LOG: onLog, EDEN_MEMORY: "on" }, () => {
         const body = { messages: [{ role: "user", content: OPENSSL_CUE }] };
         const injected = {
-          messages: [{ role: "system", content: SQLITE_PACKET }, { role: "user", content: OPENSSL_CUE }],
+          messages: [
+            { role: "system", content: SQLITE_PACKET },
+            { role: "user", content: OPENSSL_CUE },
+          ],
         };
         const out = injectBodyThenObserveTools(
           {
@@ -279,11 +278,12 @@ describe("wrap inject log (measure only)", () => {
       withEnv({ EDEN_MEMORY_INJECT_LOG: join(dir, "not-a-file"), EDEN_MEMORY: "on" }, () => {
         const body = { messages: [{ role: "user", content: OPENSSL_CUE }] };
         const injected = {
-          messages: [{ role: "system", content: SQLITE_PACKET }, { role: "user", content: OPENSSL_CUE }],
+          messages: [
+            { role: "system", content: SQLITE_PACKET },
+            { role: "user", content: OPENSSL_CUE },
+          ],
         };
-        expect(() =>
-          injectBodyThenObserveTools({ injectBody: () => injected, observe() {} }, body),
-        ).not.toThrow();
+        expect(() => injectBodyThenObserveTools({ injectBody: () => injected, observe() {} }, body)).not.toThrow();
         const out = injectBodyThenObserveTools({ injectBody: () => injected, observe() {} }, body);
         expect(out).toBe(injected);
         expect(JSON.stringify(out)).toContain(MEMORY_MARK);
@@ -297,36 +297,45 @@ describe("wrap inject log (measure only)", () => {
     const dir = tmp("eden-m323-omit-");
     const math = "what's 2+2?";
     try {
-      withEnv({ EDEN_MEMORY_INJECT_LOG: undefined, EDEN_MEMORY: "on", EDEN_KNOW: "0", EDEN_HOME: undefined, EDEN_MEMORY_MIN: undefined }, () => {
-        const leftover = openMemory({ dir });
-        leftover.observe([{ role: "user", content: "Use sqlite." }]);
-        leftover.observe([{ role: "user", content: "Auth is Clerk" }]);
-        for (const cue of [OPENSSL_CUE, math]) {
-          const out = injectBodyThenObserveTools(leftover, { messages: [{ role: "user", content: cue }] });
-          const blob = JSON.stringify(out);
-          expect(blob).not.toContain(MEMORY_MARK);
-          expect(Array.isArray((out as { messages?: unknown[] }).messages)).toBe(true);
-          expect((out as { messages: unknown[] }).messages).toEqual([{ role: "user", content: cue }]);
-        }
-        leftover.close();
-        const onOpenssl = openMemory({ dir: join(dir, "openssl") });
-        onOpenssl.remember("Use openssl req -x509 to mint a TLS cert and record the fingerprint.");
-        const opensslOut = injectBodyThenObserveTools(onOpenssl, {
-          messages: [{ role: "user", content: OPENSSL_CUE }],
-        });
-        expect(JSON.stringify(opensslOut)).toContain(MEMORY_MARK);
-        expect(JSON.stringify(opensslOut)).toMatch(/openssl/i);
-        onOpenssl.close();
-        const onSqlite = openMemory({ dir: join(dir, "sqlite") });
-        onSqlite.observe([{ role: "user", content: "Use sqlite." }]);
-        const sqliteOut = injectBodyThenObserveTools(onSqlite, {
-          messages: [{ role: "user", content: "What sqlite database do we use?" }],
-        });
-        const sqliteBlob = JSON.stringify(sqliteOut);
-        expect(sqliteBlob).toContain(MEMORY_MARK);
-        expect(sqliteBlob).toMatch(/sqlite/i);
-        onSqlite.close();
-      });
+      withEnv(
+        {
+          EDEN_MEMORY_INJECT_LOG: undefined,
+          EDEN_MEMORY: "on",
+          EDEN_KNOW: "0",
+          EDEN_HOME: undefined,
+          EDEN_MEMORY_MIN: undefined,
+        },
+        () => {
+          const leftover = openMemory({ dir });
+          leftover.observe([{ role: "user", content: "Use sqlite." }]);
+          leftover.observe([{ role: "user", content: "Auth is Clerk" }]);
+          for (const cue of [OPENSSL_CUE, math]) {
+            const out = injectBodyThenObserveTools(leftover, { messages: [{ role: "user", content: cue }] });
+            const blob = JSON.stringify(out);
+            expect(blob).not.toContain(MEMORY_MARK);
+            expect(Array.isArray((out as { messages?: unknown[] }).messages)).toBe(true);
+            expect((out as { messages: unknown[] }).messages).toEqual([{ role: "user", content: cue }]);
+          }
+          leftover.close();
+          const onOpenssl = openMemory({ dir: join(dir, "openssl") });
+          onOpenssl.remember("Use openssl req -x509 to mint a TLS cert and record the fingerprint.");
+          const opensslOut = injectBodyThenObserveTools(onOpenssl, {
+            messages: [{ role: "user", content: OPENSSL_CUE }],
+          });
+          expect(JSON.stringify(opensslOut)).toContain(MEMORY_MARK);
+          expect(JSON.stringify(opensslOut)).toMatch(/openssl/i);
+          onOpenssl.close();
+          const onSqlite = openMemory({ dir: join(dir, "sqlite") });
+          onSqlite.observe([{ role: "user", content: "Use sqlite." }]);
+          const sqliteOut = injectBodyThenObserveTools(onSqlite, {
+            messages: [{ role: "user", content: "What sqlite database do we use?" }],
+          });
+          const sqliteBlob = JSON.stringify(sqliteOut);
+          expect(sqliteBlob).toContain(MEMORY_MARK);
+          expect(sqliteBlob).toMatch(/sqlite/i);
+          onSqlite.close();
+        },
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

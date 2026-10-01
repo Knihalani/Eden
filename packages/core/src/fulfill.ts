@@ -4,13 +4,7 @@ import { dirname, join } from "node:path";
 import { minifyCli, stripAnsi } from "./densify";
 import { compactReceipt, modelFacing } from "./compact";
 import { commandShapeCached } from "./shapes";
-import {
-  extractLoopIds,
-  fulfillArgv,
-  isMutatingGh,
-  parseIssueList,
-  planFromBash,
-} from "./plan";
+import { extractLoopIds, fulfillArgv, isMutatingGh, parseIssueList, planFromBash } from "./plan";
 
 /** ~300 tokens. Overflow goes to the vault. */
 export const TOKEN_SLA_BYTES = 1200;
@@ -89,7 +83,10 @@ export function rewriteForLoop(command: string): string | null {
   // sequential semantics, which is what the agent did by hand anyway.
   let genericRead = false;
   if (!knownCloud) {
-    const segs = body.split(/&&|\|\||;|\|/).map((s) => s.trim()).filter(Boolean);
+    const segs = body
+      .split(/&&|\|\||;|\|/)
+      .map((s) => s.trim())
+      .filter(Boolean);
     genericRead =
       segs.length > 0 &&
       segs.every((seg) => {
@@ -359,7 +356,11 @@ function compactLs(command: string, text: string): string | null {
   return `ls: ${lines.length} entries\n${lines.slice(0, 12).join("\n")}\n…`;
 }
 
-export function compactStdout(command: string, stdout: string, maxBytes = TOKEN_SLA_BYTES): { stdout: string; vaulted: boolean } {
+export function compactStdout(
+  command: string,
+  stdout: string,
+  maxBytes = TOKEN_SLA_BYTES,
+): { stdout: string; vaulted: boolean } {
   const stripped = stripAnsi(stdout);
   if (!stripped.trim()) return { stdout: stripped, vaulted: false };
   // The --jq/-q bail used to fire on any command carrying `-q`, so `pytest -q`
@@ -398,7 +399,11 @@ export function compactStdout(command: string, stdout: string, maxBytes = TOKEN_
   return { stdout: vaultPointer(id, mini, mini.length), vaulted: true };
 }
 
-export function compactReadOutput(filePath: string, content: string, maxBytes = TOKEN_SLA_BYTES): { stdout: string; vaulted: boolean } {
+export function compactReadOutput(
+  filePath: string,
+  content: string,
+  maxBytes = TOKEN_SLA_BYTES,
+): { stdout: string; vaulted: boolean } {
   const keep = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|rb|md|json)$/i.test(filePath);
   if (keep && content.length < 2_000_000) return { stdout: content, vaulted: false };
   const json = tryJson(content);
@@ -421,8 +426,6 @@ export function receiptTableLine(issue: string, facts: unknown): string {
 }
 
 export function issuesFromParams(params: Record<string, string>): string[] {
-  const listed = parseIssueList(
-    params.issues || params.ids || params.issue || params.id || params.pr || params.number,
-  );
+  const listed = parseIssueList(params.issues || params.ids || params.issue || params.id || params.pr || params.number);
   return listed;
 }

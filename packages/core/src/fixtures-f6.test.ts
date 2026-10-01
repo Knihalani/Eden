@@ -37,7 +37,10 @@ function mcp(seq: number, name: string, args: Record<string, unknown>, result: u
   return { event_id: `e${seq}-${name}`, seq, name, args, ok: true };
 }
 
-function toTrace(id: string, events: Array<{ name: string; args?: Record<string, unknown>; result: unknown }>): FixtureTrace {
+function toTrace(
+  id: string,
+  events: Array<{ name: string; args?: Record<string, unknown>; result: unknown }>,
+): FixtureTrace {
   return {
     id,
     events: events.map((e) => ({ name: e.name, args: e.args ?? {}, result: e.result, ok: true })),
@@ -61,26 +64,36 @@ describe("F6 fixture suite — six domains, zero vendor knowledge", () => {
       ],
       input: { namespace: ns },
       output: { ns },
-      llmCalls: 6, duration_ms: 6000, cost_cents: 6, complete: true,
+      llmCalls: 6,
+      duration_ms: 6000,
+      cost_cents: 6,
+      complete: true,
     });
-    const mined = compileTraces([mk("dev", "a"), mk("stage", "b"), mk("prod", "c")] as unknown as Parameters<typeof compileTraces>[0]);
+    const mined = compileTraces([mk("dev", "a"), mk("stage", "b"), mk("prod", "c")] as unknown as Parameters<
+      typeof compileTraces
+    >[0]);
     expect(mined.programs.length).toBe(1);
     const ran: string[] = [];
-    await runProgram(mined.programs[0]!, { namespace: "prod" }, {
-      registry: registryFrom({ Bash: async (args) => { ran.push(String(args.command)); return {}; } }),
-      checkEnvelope: false,
-    });
+    await runProgram(
+      mined.programs[0]!,
+      { namespace: "prod" },
+      {
+        registry: registryFrom({
+          Bash: async (args) => {
+            ran.push(String(args.command));
+            return {};
+          },
+        }),
+        checkEnvelope: false,
+      },
+    );
     expect(ran).toEqual(["kubectl get pods -n prod", "kubectl get svc -n prod", "kubectl get deployments -n prod"]);
   });
 
   test("F2 cloud storage: s3 list variants slot into one skeleton; cp never reads", () => {
-    const islands = cutIslands(
-      [
-        bash("aws s3 ls s3://bucket-a"),
-        bash("aws s3 ls s3://bucket-b"),
-      ],
-      { allowRunnerOnly: true },
-    );
+    const islands = cutIslands([bash("aws s3 ls s3://bucket-a"), bash("aws s3 ls s3://bucket-b")], {
+      allowRunnerOnly: true,
+    });
     // Two list calls differing only by bucket = one parameterized identity.
     // Runner-kind steps stay local-only (hosted playback refuses them
     // honestly), and cautious binaries never read-classify, so nothing here
@@ -88,7 +101,9 @@ describe("F6 fixture suite — six domains, zero vendor knowledge", () => {
     expect(islands.length).toBe(1);
     expect(islands[0]!.every((s) => s.name.startsWith("aws.s3.ls"))).toBe(true);
     expect(islands[0]!.every((s) => s.commute === false)).toBe(true);
-    const cpIslands = cutIslands([bash("aws s3 cp s3://a/f.json ./f.json"), bash("echo done")], { allowRunnerOnly: true });
+    const cpIslands = cutIslands([bash("aws s3 cp s3://a/f.json ./f.json"), bash("echo done")], {
+      allowRunnerOnly: true,
+    });
     // A copy is work, not plumbing — but a single non-repeated command has no
     // repetition evidence, so no island forms.
     expect(cpIslands.length).toBe(0);
@@ -114,7 +129,7 @@ describe("F6 fixture suite — six domains, zero vendor knowledge", () => {
       [
         bash("psql -c \"SELECT count(*) FROM orders WHERE status='open'\""),
         bash("psql -c \"SELECT count(*) FROM users WHERE created_at > '2026-01-01'\""),
-        bash("psql -c \"SELECT sum(total) FROM invoices\""),
+        bash('psql -c "SELECT sum(total) FROM invoices"'),
       ],
       { allowRunnerOnly: true },
     );
@@ -133,10 +148,15 @@ describe("F6 fixture suite — six domains, zero vendor knowledge", () => {
       ],
       input: { pageId },
       output: { moved: [pageId] },
-      llmCalls: 9, duration_ms: 9000, cost_cents: 9, complete: true,
+      llmCalls: 9,
+      duration_ms: 9000,
+      cost_cents: 9,
+      complete: true,
     });
-    const mined = compileTraces([mk("p-1", "n1"), mk("p-2", "n2"), mk("p-3", "n3")] as unknown as Parameters<typeof compileTraces>[0]);
-            expect(mined.refusals.length).toBe(0);
+    const mined = compileTraces([mk("p-1", "n1"), mk("p-2", "n2"), mk("p-3", "n3")] as unknown as Parameters<
+      typeof compileTraces
+    >[0]);
+    expect(mined.refusals.length).toBe(0);
     expect(mined.programs[0]!.sequence).toEqual([
       "mcp__notion__query_database",
       "mcp__notion__update_page",
@@ -149,14 +169,24 @@ describe("F6 fixture suite — six domains, zero vendor knowledge", () => {
       id,
       events: [
         { name: "get_issue", args: { issue_number: 12 }, result: { id: 12, state: status }, ok: true },
-        { name: "post_comment", args: { issue_number: 12, body: JSON.stringify({ text: `Status: ${status}`, author: "bot" }) }, result: { comment_id: 1 }, ok: true },
+        {
+          name: "post_comment",
+          args: { issue_number: 12, body: JSON.stringify({ text: `Status: ${status}`, author: "bot" }) },
+          result: { comment_id: 1 },
+          ok: true,
+        },
         { name: "verify_comment", args: { issue_number: 12 }, result: { verified: true }, ok: true },
       ],
       input: { issue_number: 12, status },
       output: { commented: true },
-      llmCalls: 6, duration_ms: 6000, cost_cents: 6, complete: true,
+      llmCalls: 6,
+      duration_ms: 6000,
+      cost_cents: 6,
+      complete: true,
     });
-    const mined = compileTraces([mk("s1", "open"), mk("s2", "closed"), mk("s3", "blocked")] as unknown as Parameters<typeof compileTraces>[0]);
+    const mined = compileTraces([mk("s1", "open"), mk("s2", "closed"), mk("s3", "blocked")] as unknown as Parameters<
+      typeof compileTraces
+    >[0]);
     expect(mined.refusals.length).toBe(0);
     expect(mined.programs.length).toBe(1);
     // The body arg should be a template binding with {status}.
@@ -180,9 +210,15 @@ describe("F6 fixture suite — six domains, zero vendor knowledge", () => {
       },
       verify_comment: async () => ({ verified: true }),
     });
-    await runProgram(mined.programs[0]!, { issue_number: 12, status: "reopened" }, {
-      registry: reg, checkEnvelope: false, island: islandCaller,
-    });
+    await runProgram(
+      mined.programs[0]!,
+      { issue_number: 12, status: "reopened" },
+      {
+        registry: reg,
+        checkEnvelope: false,
+        island: islandCaller,
+      },
+    );
     // The runtime's interpolateSlots resolved {status} while preserving the
     // surrounding JSON braces.
     const parsed = JSON.parse(bodies[0]!);

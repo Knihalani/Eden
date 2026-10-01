@@ -70,11 +70,15 @@ function registryFor(items: number, latencyMs: number) {
 
 async function timeRun(items: number, latencyMs: number, loopConcurrency: number): Promise<number> {
   const t0 = performance.now();
-  const out = await runProgram(program(items), { q: "x" }, {
-    registry: registryFor(items, latencyMs),
-    checkEnvelope: false,
-    loopConcurrency,
-  });
+  const out = await runProgram(
+    program(items),
+    { q: "x" },
+    {
+      registry: registryFor(items, latencyMs),
+      checkEnvelope: false,
+      loopConcurrency,
+    },
+  );
   const ms = performance.now() - t0;
   // A speed number is meaningless if the work changed, so assert it did not.
   if ((out.value as unknown[]).length !== items) {

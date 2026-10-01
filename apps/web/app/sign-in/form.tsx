@@ -44,8 +44,7 @@ export function SignInForm() {
 
   const finish = () =>
     signIn?.finalize({
-      navigate: ({ session, decorateUrl }) =>
-        goDecorated(decorateUrl, router.replace, destAfterAuth(session)),
+      navigate: ({ session, decorateUrl }) => goDecorated(decorateUrl, router.replace, destAfterAuth(session)),
     });
 
   const onGoogle = async () => {
@@ -180,12 +179,7 @@ export function SignInForm() {
             <button className="account-enter" type="submit" disabled={busy}>
               {waiting ? "Verifying…" : "Verify"}
             </button>
-            <button
-              className="signin"
-              type="button"
-              disabled={busy}
-              onClick={() => void signIn?.mfa.sendEmailCode()}
-            >
+            <button className="signin" type="button" disabled={busy} onClick={() => void signIn?.mfa.sendEmailCode()}>
               Send a new code
             </button>
           </form>
@@ -327,15 +321,7 @@ export function SignInForm() {
   );
 }
 
-function CodeField({
-  error,
-  value,
-  onChange,
-}: {
-  error: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
+function CodeField({ error, value, onChange }: { error: string; value: string; onChange: (value: string) => void }) {
   return (
     <>
       <label className="account-field" htmlFor="signin-code">

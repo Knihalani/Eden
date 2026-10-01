@@ -125,12 +125,14 @@ export function negativeFixtureIssues(fix: NegativeFixture): string[] {
   if (fix.schema !== 1) issues.push(`schema ${fix.schema} !== 1`);
   if (fix.part !== "M35.1") issues.push(`part ${fix.part} !== M35.1`);
   if (!ISO_DATE.test(fix.dated_registered ?? "")) issues.push("dated_registered must be YYYY-MM-DD");
-  if (fix.api_under_test !== "openMemory.inject") issues.push(`api_under_test ${fix.api_under_test} !== openMemory.inject`);
+  if (fix.api_under_test !== "openMemory.inject")
+    issues.push(`api_under_test ${fix.api_under_test} !== openMemory.inject`);
   if (fix.k !== "default") issues.push(`k ${fix.k} !== default`);
   if (fix.k_default !== 6) issues.push(`k_default ${fix.k_default} !== 6`);
   if (fix.materiality !== 0.01) issues.push(`materiality ${fix.materiality} !== 0.01 (ROADMAP §4.9; do not retune)`);
   if (fix.know !== "EDEN_KNOW=0") issues.push("know must stay EDEN_KNOW=0");
-  if (!fix.seed_liveness?.cue?.trim() || fix.seed_liveness.needle !== "sqlite") issues.push("seed_liveness must be a sqlite setup cue, not a scored row");
+  if (!fix.seed_liveness?.cue?.trim() || fix.seed_liveness.needle !== "sqlite")
+    issues.push("seed_liveness must be a sqlite setup cue, not a scored row");
   if (fix.off !== "EDEN_MEMORY=0") issues.push("off must stay EDEN_MEMORY=0");
   const product = fix.product ?? [];
   for (const name of ["openMemory", "inject", "injectBody"]) {
@@ -141,15 +143,19 @@ export function negativeFixtureIssues(fix: NegativeFixture): string[] {
   for (const id of REQUIRED_CASE_IDS) if (!ids.has(id)) issues.push(`missing case ${id}`);
   for (const c of fix.cases ?? []) {
     const raw = c as NegativeCase & Record<string, unknown>;
-    if ("verdict" in raw || "delta_bytes" in raw || "packet_bytes" in raw) issues.push(`${c.id}: fixture must not hold measured fields`);
-    if (c.expect !== "DELTA_ZERO" && c.expect !== "MEASURE") issues.push(`${c.id}: expect ${c.expect} not DELTA_ZERO|MEASURE`);
+    if ("verdict" in raw || "delta_bytes" in raw || "packet_bytes" in raw)
+      issues.push(`${c.id}: fixture must not hold measured fields`);
+    if (c.expect !== "DELTA_ZERO" && c.expect !== "MEASURE")
+      issues.push(`${c.id}: expect ${c.expect} not DELTA_ZERO|MEASURE`);
     if (!c.cue?.trim()) issues.push(`${c.id}: cue empty`);
     if (!Array.isArray(c.arms) || c.arms.length !== 2) issues.push(`${c.id}: arms must be a pair`);
     else if (c.arms.some((a) => a !== "on" && a !== "off")) issues.push(`${c.id}: arm not on|off`);
     if (c.store === "sqlite-clerk") {
       const seed = c.seed ?? [];
-      if (!seed.some((s) => /sqlite/i.test(s)) || !seed.some((s) => /Clerk/.test(s))) issues.push(`${c.id}: seed must include sqlite and Clerk`);
-      if (!(c.leftover_needles ?? []).includes("sqlite") || !(c.leftover_needles ?? []).includes("Clerk")) issues.push(`${c.id}: leftover needles must name sqlite and Clerk`);
+      if (!seed.some((s) => /sqlite/i.test(s)) || !seed.some((s) => /Clerk/.test(s)))
+        issues.push(`${c.id}: seed must include sqlite and Clerk`);
+      if (!(c.leftover_needles ?? []).includes("sqlite") || !(c.leftover_needles ?? []).includes("Clerk"))
+        issues.push(`${c.id}: leftover needles must name sqlite and Clerk`);
     } else if (c.store !== "empty") issues.push(`${c.id}: store ${c.store} not empty|sqlite-clerk`);
     if ((c.id === "empty-math" || c.id === "aa-off" || c.id === "empty-coding") && c.expect !== "DELTA_ZERO") {
       issues.push(`${c.id}: pre-registered expect must stay DELTA_ZERO`);
@@ -220,7 +226,9 @@ function systemTexts(list: unknown[]): string[] {
 }
 
 function memoryPacket(list: unknown[]): string {
-  return systemTexts(list).filter((s) => s.includes(MEMORY_MARK)).join("\n");
+  return systemTexts(list)
+    .filter((s) => s.includes(MEMORY_MARK))
+    .join("\n");
 }
 
 function byteLen(s: string): number {
@@ -279,9 +287,10 @@ function probeArm(dir: string, arm: Arm, cue: string, needles: string[]): Probe 
     const body = { model: "gpt-4o", messages };
     const out = mem.injectBody(body);
     mem.close();
-    const list = out && typeof out === "object" && Array.isArray((out as { messages?: unknown[] }).messages)
-      ? (out as { messages: unknown[] }).messages
-      : [];
+    const list =
+      out && typeof out === "object" && Array.isArray((out as { messages?: unknown[] }).messages)
+        ? (out as { messages: unknown[] }).messages
+        : [];
     const packet = memoryPacket(list);
     return {
       body_identity: out === body,
@@ -289,9 +298,11 @@ function probeArm(dir: string, arm: Arm, cue: string, needles: string[]): Probe 
       body_packet_text: packet,
     };
   });
-  const body_agrees = bodyProbe.body_identity === injectProbe.identity
-    && bodyProbe.body_packet_bytes === injectProbe.packet_bytes
-    && leftoversOf(bodyProbe.body_packet_text, needles).join("|") === leftoversOf(injectProbe.packet_text, needles).join("|");
+  const body_agrees =
+    bodyProbe.body_identity === injectProbe.identity &&
+    bodyProbe.body_packet_bytes === injectProbe.packet_bytes &&
+    leftoversOf(bodyProbe.body_packet_text, needles).join("|") ===
+      leftoversOf(injectProbe.packet_text, needles).join("|");
   return { arm, ...injectProbe, ...bodyProbe, body_agrees };
 }
 
@@ -339,30 +350,50 @@ function localDate(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-function judge(row: Omit<NegativeRow, "verdict" | "note"> & { seed_expected: number; store: string }): { verdict: NegativeRow["verdict"]; note: string } {
+function judge(row: Omit<NegativeRow, "verdict" | "note"> & { seed_expected: number; store: string }): {
+  verdict: NegativeRow["verdict"];
+  note: string;
+} {
   const notes: string[] = [];
-  if (row.store !== "empty" && !row.seed_ok) notes.push(`seed store_n ${row.store_n} < ${row.seed_expected}; refusing a no-lift claim`);
-  if (row.store !== "empty" && !row.seed_live) notes.push("related sqlite cue did not inject sqlite; refusing a no-lift claim");
+  if (row.store !== "empty" && !row.seed_ok)
+    notes.push(`seed store_n ${row.store_n} < ${row.seed_expected}; refusing a no-lift claim`);
+  if (row.store !== "empty" && !row.seed_live)
+    notes.push("related sqlite cue did not inject sqlite; refusing a no-lift claim");
   if (row.baseline.consent !== "off") notes.push(`baseline consent ${row.baseline.consent} !== off`);
   if (row.probe.arm === "on" && row.probe.consent !== "on") notes.push(`probe consent ${row.probe.consent} !== on`);
   if (row.probe.arm === "off" && row.probe.consent !== "off") notes.push(`probe consent ${row.probe.consent} !== off`);
   if (row.baseline.k !== 6 || row.probe.k !== 6) notes.push(`k ${row.baseline.k}/${row.probe.k} !== 6`);
-  if (!row.baseline.body_agrees) notes.push(`injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`);
-  if (!row.probe.body_agrees) notes.push(`injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} disagrees with inject ${row.probe.packet_bytes} B`);
-  const setupBad = notes.some((n) => n.startsWith("seed") || n.startsWith("related") || n.startsWith("baseline consent") || n.startsWith("probe consent") || n.startsWith("k "));
-  const silent = row.delta_approx_0
-    && row.baseline.identity
-    && row.probe.identity
-    && row.baseline.packet_bytes === 0
-    && row.probe.packet_bytes === 0
-    && row.leftover.length === 0
-    && row.baseline.added_system_bytes === 0
-    && row.probe.added_system_bytes === 0;
-  const bodySilent = row.baseline.body_identity
-    && row.probe.body_identity
-    && row.baseline.body_packet_bytes === 0
-    && row.probe.body_packet_bytes === 0
-    && row.body_leftover.length === 0;
+  if (!row.baseline.body_agrees)
+    notes.push(
+      `injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`,
+    );
+  if (!row.probe.body_agrees)
+    notes.push(
+      `injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} disagrees with inject ${row.probe.packet_bytes} B`,
+    );
+  const setupBad = notes.some(
+    (n) =>
+      n.startsWith("seed") ||
+      n.startsWith("related") ||
+      n.startsWith("baseline consent") ||
+      n.startsWith("probe consent") ||
+      n.startsWith("k "),
+  );
+  const silent =
+    row.delta_approx_0 &&
+    row.baseline.identity &&
+    row.probe.identity &&
+    row.baseline.packet_bytes === 0 &&
+    row.probe.packet_bytes === 0 &&
+    row.leftover.length === 0 &&
+    row.baseline.added_system_bytes === 0 &&
+    row.probe.added_system_bytes === 0;
+  const bodySilent =
+    row.baseline.body_identity &&
+    row.probe.body_identity &&
+    row.baseline.body_packet_bytes === 0 &&
+    row.probe.body_packet_bytes === 0 &&
+    row.body_leftover.length === 0;
   if (setupBad) return { verdict: "FAIL", note: notes.join("; ") };
   if (silent && bodySilent) return { verdict: "Δ≈0", note: notes.join("; ") };
   if (row.expect === "DELTA_ZERO") {
@@ -371,7 +402,10 @@ function judge(row: Omit<NegativeRow, "verdict" | "note"> & { seed_expected: num
   }
   if (row.leftover.length) notes.push(`leftover in inject packet: ${row.leftover.join(", ")}`);
   if (row.body_leftover.length) notes.push(`leftover in injectBody packet: ${row.body_leftover.join(", ")}`);
-  if (!row.delta_approx_0 || row.body_delta_bytes !== 0) notes.push(`NON-ZERO packet Δ inject ${row.delta_bytes} B / injectBody ${row.body_delta_bytes} B vs remain-silent (omit is M38, not implemented)`);
+  if (!row.delta_approx_0 || row.body_delta_bytes !== 0)
+    notes.push(
+      `NON-ZERO packet Δ inject ${row.delta_bytes} B / injectBody ${row.body_delta_bytes} B vs remain-silent (omit is M38, not implemented)`,
+    );
   if (!row.probe.identity || !row.probe.body_identity) notes.push("probe inject is not identity");
   return { verdict: "LOSS", note: notes.join("; ") };
 }
@@ -395,7 +429,12 @@ export function runNegative(opts: { out?: string } = {}): NegativeRun {
           const dir = seedDir(c.seed ?? []);
           const n = storeCount(dir);
           const live = probeSeed(cloneDir(dir), fix.seed_liveness.cue, fix.seed_liveness.needle);
-          seedLiveness = { cue: fix.seed_liveness.cue, packet_bytes: live.bytes, sqlite: live.hit, preview: preview(live.text) };
+          seedLiveness = {
+            cue: fix.seed_liveness.cue,
+            packet_bytes: live.bytes,
+            sqlite: live.hit,
+            preview: preview(live.text),
+          };
           seeded = { dir, n, live: live.hit };
         }
         template = seeded.dir;
@@ -432,10 +471,18 @@ export function runNegative(opts: { out?: string } = {}): NegativeRun {
       };
       const judged = judge({ ...partial, seed_expected: seedExpected, store: c.store });
       rows.push({ ...partial, ...judged });
-      if (!baseline.body_agrees) bugs.push(`${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / identity ${baseline.body_identity} vs inject ${baseline.packet_bytes} B / identity ${baseline.identity}`);
-      if (!probe.body_agrees) bugs.push(`${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / identity ${probe.body_identity} vs inject ${probe.packet_bytes} B / identity ${probe.identity}`);
+      if (!baseline.body_agrees)
+        bugs.push(
+          `${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / identity ${baseline.body_identity} vs inject ${baseline.packet_bytes} B / identity ${baseline.identity}`,
+        );
+      if (!probe.body_agrees)
+        bugs.push(
+          `${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / identity ${probe.body_identity} vs inject ${probe.packet_bytes} B / identity ${probe.identity}`,
+        );
       if (body_leftover.length && leftover.join("|") !== body_leftover.join("|")) {
-        bugs.push(`${c.id}: injectBody leftover [${body_leftover.join(", ")}] vs inject leftover [${leftover.join(", ")}]`);
+        bugs.push(
+          `${c.id}: injectBody leftover [${body_leftover.join(", ")}] vs inject leftover [${leftover.join(", ")}]`,
+        );
       }
     }
   } finally {
@@ -472,20 +519,32 @@ function preview(text: string): string {
 
 export function formatNegative(run: NegativeRun): string {
   const byId = (id: string) => run.rows.find((r) => r.id === id);
-  const line = (r: NegativeRow | undefined) => r
-    ? `${r.baseline.packet_bytes} B → ${r.probe.packet_bytes} B, Δ ${r.delta_bytes} B, ${r.verdict}`
-    : "missing";
-  const rows = run.rows.map((r) => `| ${r.id} | ${r.expect} | ${r.baseline.arm} | ${r.probe.arm} | ${r.store_n} | ${r.baseline.packet_bytes} | ${r.probe.packet_bytes} | ${r.delta_bytes} | ${r.band_bytes} | ${yn(r.delta_approx_0)} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} | ${yn(r.baseline.identity)}/${yn(r.probe.identity)} | ${r.baseline.body_packet_bytes} | ${r.probe.body_packet_bytes} | ${r.verdict} |`).join("\n");
-  const notes = run.rows.filter((r) => r.note).map((r) => `- **${r.id}:** ${cell(r.note)}`).join("\n");
-  const packets = run.rows.filter((r) => r.probe.packet_text || r.baseline.packet_text).map((r) => {
-    const parts = [`### ${r.id}`];
-    if (r.baseline.packet_text) parts.push(`- baseline: ${cell(preview(r.baseline.packet_text))}`);
-    if (r.probe.packet_text) parts.push(`- probe: ${cell(preview(r.probe.packet_text))}`);
-    return parts.join("\n");
-  }).join("\n\n");
+  const line = (r: NegativeRow | undefined) =>
+    r ? `${r.baseline.packet_bytes} B → ${r.probe.packet_bytes} B, Δ ${r.delta_bytes} B, ${r.verdict}` : "missing";
+  const rows = run.rows
+    .map(
+      (r) =>
+        `| ${r.id} | ${r.expect} | ${r.baseline.arm} | ${r.probe.arm} | ${r.store_n} | ${r.baseline.packet_bytes} | ${r.probe.packet_bytes} | ${r.delta_bytes} | ${r.band_bytes} | ${yn(r.delta_approx_0)} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} | ${yn(r.baseline.identity)}/${yn(r.probe.identity)} | ${r.baseline.body_packet_bytes} | ${r.probe.body_packet_bytes} | ${r.verdict} |`,
+    )
+    .join("\n");
+  const notes = run.rows
+    .filter((r) => r.note)
+    .map((r) => `- **${r.id}:** ${cell(r.note)}`)
+    .join("\n");
+  const packets = run.rows
+    .filter((r) => r.probe.packet_text || r.baseline.packet_text)
+    .map((r) => {
+      const parts = [`### ${r.id}`];
+      if (r.baseline.packet_text) parts.push(`- baseline: ${cell(preview(r.baseline.packet_text))}`);
+      if (r.probe.packet_text) parts.push(`- probe: ${cell(preview(r.probe.packet_text))}`);
+      return parts.join("\n");
+    })
+    .join("\n\n");
   const aa = byId("aa-off");
   const wall = aa ? (aa.probe.wall_ms - aa.baseline.wall_ms).toFixed(3) : "n/a";
-  const bugs = run.bugs.length ? run.bugs.map((b) => `- ${cell(b)}`).join("\n") : "- None on this run. injectBody packet bytes and identity matched inject on every arm.";
+  const bugs = run.bugs.length
+    ? run.bugs.map((b) => `- ${cell(b)}`).join("\n")
+    : "- None on this run. injectBody packet bytes and identity matched inject on every arm.";
   return [
     "# M35.1 No-lift NEGATIVE",
     "",

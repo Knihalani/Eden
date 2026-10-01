@@ -96,7 +96,10 @@ const fullA = fullResponses;
     totalMs += r.ms;
     if (r.entry && revalidations > served304) served304++;
   }
-  printRow(`B proposed (revalidate, ${N} accesses)`, `full responses=${fullResponses - fullA} (+${revalidations} free 304s), total ${totalMs.toFixed(0)} ms`);
+  printRow(
+    `B proposed (revalidate, ${N} accesses)`,
+    `full responses=${fullResponses - fullA} (+${revalidations} free 304s), total ${totalMs.toFixed(0)} ms`,
+  );
 }
 
 console.log("");

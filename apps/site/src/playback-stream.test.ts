@@ -1,12 +1,7 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { buildDag, layers, type CompiledStep } from "@eden/core";
 import { openDb } from "./db";
-import {
-  clearPlaybackStreamProbe,
-  installPlaybackStreamProbe,
-  playTool,
-  setPlaybackFetchGate,
-} from "./playback";
+import { clearPlaybackStreamProbe, installPlaybackStreamProbe, playTool, setPlaybackFetchGate } from "./playback";
 import { drainPrefetches, prefetchCounters, resetPrefetchCounters } from "./cache";
 
 /**
@@ -48,12 +43,7 @@ async function settlesWithin(p: Promise<unknown>, ms: number): Promise<boolean> 
   }
 }
 
-async function insertTool(
-  db: Awaited<ReturnType<typeof openDb>>,
-  id: string,
-  steps: CompiledStep[],
-  ws = "ws_stream",
-) {
+async function insertTool(db: Awaited<ReturnType<typeof openDb>>, id: string, steps: CompiledStep[], ws = "ws_stream") {
   await db.run(
     `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
     [id, ws, id, JSON.stringify(steps)],

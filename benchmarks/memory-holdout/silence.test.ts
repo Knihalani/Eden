@@ -25,24 +25,31 @@ afterAll(() => rmSync(REPORT_DIR, { recursive: true, force: true }));
 
 function honest(row: SilenceRow): boolean {
   if (row.verdict === "WIN") {
-    const onOk = row.omitted_on === null
-      ? row.baseline.omitted && row.probe.omitted
-      : row.omitted_on === true;
-    return row.delta_approx_0
-      && row.delta_bytes === 0
-      && row.body_delta_bytes === 0
-      && row.leftover.length === 0
-      && row.body_leftover.length === 0
-      && onOk
-      && row.baseline.omitted
-      && row.probe.omitted
-      && row.baseline.body_omitted
-      && row.probe.body_omitted
-      && row.baseline.packet_bytes === 0
-      && row.probe.packet_bytes === 0;
+    const onOk = row.omitted_on === null ? row.baseline.omitted && row.probe.omitted : row.omitted_on === true;
+    return (
+      row.delta_approx_0 &&
+      row.delta_bytes === 0 &&
+      row.body_delta_bytes === 0 &&
+      row.leftover.length === 0 &&
+      row.body_leftover.length === 0 &&
+      onOk &&
+      row.baseline.omitted &&
+      row.probe.omitted &&
+      row.baseline.body_omitted &&
+      row.probe.body_omitted &&
+      row.baseline.packet_bytes === 0 &&
+      row.probe.packet_bytes === 0
+    );
   }
   if (row.verdict === "LOSS") {
-    return row.leftover.length > 0 || row.body_leftover.length > 0 || !row.delta_approx_0 || row.omitted_on === false || !row.probe.omitted || !row.baseline.omitted;
+    return (
+      row.leftover.length > 0 ||
+      row.body_leftover.length > 0 ||
+      !row.delta_approx_0 ||
+      row.omitted_on === false ||
+      !row.probe.omitted ||
+      !row.baseline.omitted
+    );
   }
   return row.verdict === "FAIL";
 }

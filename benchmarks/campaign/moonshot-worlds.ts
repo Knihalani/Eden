@@ -32,7 +32,10 @@ function occurrences(goals: Array<Record<string, unknown>>, key: string): Map<st
   return m;
 }
 
-function occurrencesBy(goals: Array<Record<string, unknown>>, keyOf: (g: Record<string, unknown>) => string): Map<string, number> {
+function occurrencesBy(
+  goals: Array<Record<string, unknown>>,
+  keyOf: (g: Record<string, unknown>) => string,
+): Map<string, number> {
   const m = new Map<string, number>();
   for (const g of goals) {
     const k = keyOf(g);
@@ -165,7 +168,8 @@ export function createGithubPr(): World {
         if (asg > n) bad.push(`github-pr:${id}: assignReviewers ran ${asg}x across ${n} stretch(es) — duplicated`);
         for (const f of filesFor(id)) {
           const c = st.comments.get(f.path) ?? 0;
-          if (c > n) bad.push(`github-pr:${id}: createReviewComment ${f.path} ran ${c}x across ${n} stretch(es) — duplicated`);
+          if (c > n)
+            bad.push(`github-pr:${id}: createReviewComment ${f.path} ran ${c}x across ${n} stretch(es) — duplicated`);
         }
       }
       return bad;
@@ -315,7 +319,8 @@ export function createFlags(): World {
       const flag = String(goal.flag);
       yield { tool: "getFlag", args: { flag } };
       const listed = yield { tool: "listCohorts", args: { flag } };
-      const cohorts = ((listed.value as { cohorts?: Array<{ cohort?: string; pct?: number }> })?.cohorts ?? []) as Array<{
+      const cohorts = ((listed.value as { cohorts?: Array<{ cohort?: string; pct?: number }> })?.cohorts ??
+        []) as Array<{
         cohort?: string;
         pct?: number;
       }>;
@@ -489,7 +494,8 @@ export function createInventory(): World {
     async *script(goal) {
       const wave = String(goal.wave);
       const listed = yield { tool: "listBins", args: { wave } };
-      const bins = ((listed.value as { bins?: Array<{ sku?: string; qty?: number; warehouse?: string }> })?.bins ?? []) as Array<{
+      const bins = ((listed.value as { bins?: Array<{ sku?: string; qty?: number; warehouse?: string }> })?.bins ??
+        []) as Array<{
         sku?: string;
         qty?: number;
         warehouse?: string;
@@ -731,7 +737,10 @@ const MOONSHOT_NOISE_TOOLS = [
 export const NOISE_IDS = ["MN-0", "MN-1", "MN-2", "MN-3", "MN-4", "MN-5"] as const;
 
 export function createMoonshotNoise(): World {
-  const toolDefs = (): Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> => {
+  const toolDefs = (): Record<
+    string,
+    { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }
+  > => {
     const out: Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> = {};
     for (const name of MOONSHOT_NOISE_TOOLS) {
       out[name] = {

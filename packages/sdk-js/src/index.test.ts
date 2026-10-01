@@ -13,12 +13,11 @@ import { runTool, endStretch, Eden, EDEN_PROTOCOL_VERSION } from "./index";
 
 type Hit = { path: string; version: string | null; auth: string | null; body: unknown };
 
-function mockWrap(replies: {
-  wrap?: unknown;
-  wrapStatus?: number;
-  ingest?: unknown;
-  ingestStatus?: number;
-}): { hits: Hit[]; url: string; stop: () => void } {
+function mockWrap(replies: { wrap?: unknown; wrapStatus?: number; ingest?: unknown; ingestStatus?: number }): {
+  hits: Hit[];
+  url: string;
+  stop: () => void;
+} {
   const hits: Hit[] = [];
   const server = Bun.serve({
     port: 0,

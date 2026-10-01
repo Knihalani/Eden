@@ -116,7 +116,9 @@ describe("scheduled programs", () => {
   test("POST compile does not insert a schedule row", async () => {
     const { store, fetchHandler } = handler();
     putLive(store);
-    const compiled = await fetchHandler(new Request("http://x/v1/compile", { method: "POST", headers: auth, body: "{}" }));
+    const compiled = await fetchHandler(
+      new Request("http://x/v1/compile", { method: "POST", headers: auth, body: "{}" }),
+    );
     expect(compiled.status).toBe(200);
     expect(store.schedulesCount()).toBe(0);
   });
@@ -125,7 +127,11 @@ describe("scheduled programs", () => {
     const { store, fetchHandler } = handler();
     putLive(store);
     const run = await fetchHandler(
-      new Request("http://x/v1/wrap-run", { method: "POST", headers: auth, body: JSON.stringify({ toolId: "sched_live" }) }),
+      new Request("http://x/v1/wrap-run", {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({ toolId: "sched_live" }),
+      }),
     );
     expect(run.status).toBe(200);
     expect(store.schedulesCount()).toBe(0);
