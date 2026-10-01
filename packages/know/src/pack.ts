@@ -299,13 +299,14 @@ export function cleanRfcTitle(o: string): string {
     .trim();
 }
 
+const RFC_BOILERPLATE_TITLE =
+  /when a server|table of contents|january 20|february 20|status of this memo|copyright notice|network working group/i;
+
 export function junkRfcTitle(o: string): boolean {
   const t = o.trim();
   if (t.length < 2) return true;
   if (/^RFC\s+\d{1,5}$/i.test(t)) return true;
-  return /when a server|table of contents|january 20|february 20|status of this memo|copyright notice|network working group/i.test(
-    t,
-  );
+  return RFC_BOILERPLATE_TITLE.test(t);
 }
 
 export function w3cSlug(s: string): string | undefined {

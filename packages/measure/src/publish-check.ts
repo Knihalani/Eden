@@ -34,6 +34,9 @@ export const PUBLIC_COPY_PATHS = [
 
 const WIN_IDS = new Set(PUBLIC_CLAIMS.filter((c) => c.kind === "win").map((c) => c.id));
 
+const INVOICE_DISCLAIMER =
+  /not a live|retired|no live Claude Code invoice|this quote is retired|missing invoice|^\s*name:|id:\s*"s1b-live-invoice"/i;
+
 export function scanPublicText(file: string, text: string): PublishFinding[] {
   const findings: PublishFinding[] = [];
   const lines = text.split(/\n/);
@@ -73,12 +76,7 @@ export function scanPublicText(file: string, text: string): PublishFinding[] {
     ) {
       findings.push({ file, line: n, rule: "replica-drop-as-live-ack", excerpt: l.trim() });
     }
-    if (
-      /(billed S1b|live Claude Code invoice)/i.test(l) &&
-      !/not a live|retired|no live Claude Code invoice|this quote is retired|missing invoice|^\s*name:|id:\s*"s1b-live-invoice"/i.test(
-        l,
-      )
-    ) {
+    if (/(billed S1b|live Claude Code invoice)/i.test(l) && !INVOICE_DISCLAIMER.test(l)) {
       findings.push({ file, line: n, rule: "billed-s1b-invoice", excerpt: l.trim() });
     }
     if (/(−9\.1%|-9\.1%)/.test(l) && !/analogue/i.test(l) && !/retired/i.test(l)) {
