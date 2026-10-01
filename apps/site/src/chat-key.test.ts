@@ -135,6 +135,21 @@ describe("the site chat route never spends the operator's key for a caller it ca
     expect(res.status).toBe(401);
   });
 
+  test("a signed-up key without a provider key does not spend the operator's key on an EDEN_DEV=0 host (#91)", async () => {
+    process.env.VERCEL = "1";
+    let key: string;
+    try {
+      key = await signupKey();
+    } finally {
+      delete process.env.VERCEL;
+    }
+    process.env.EDEN_DEV = "0";
+    const res = await chat({ authorization: `Bearer ${key}` });
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error?: { code?: string } }).error?.code).toBe("provider_key_required");
+    expect(upstreamAuth).toEqual([]);
+  });
+
   test("a caller's own provider key is forwarded as itself, plain and streaming", async () => {
     const plain = await chat({ authorization: `Bearer ${CALLER_KEY}` });
     expect(plain.status).toBe(200);
@@ -163,13 +178,14 @@ describe("the site chat route never spends the operator's key for a caller it ca
       expect(upstreamAuth).toEqual([]);
     });
 
-    test("a signed-up workspace key without a provider key still pays with the deployment's key", async () => {
+    test("a signed-up workspace key without a provider key is refused: anyone can sign up (#91)", async () => {
       const key = await signupKey();
       const res = await chat({ authorization: `Bearer ${key}` });
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-      expect(body.choices?.[0]?.message?.content).toBe("pong");
-      expect(upstreamAuth).toEqual([`Bearer ${OPERATOR_KEY}`]);
+      expect(res.status).toBe(401);
+      const body = (await res.json()) as { error?: { code?: string } };
+      expect(body.error?.code).toBe("provider_key_required");
+      await (await chat({ "x-eden-api-key": key }, true)).text();
+      expect(upstreamAuth).toEqual([]);
     });
 
     test("a signed-up caller that sends its own provider key pays with it", async () => {
