@@ -72,8 +72,11 @@ const OUTCOME_KEYS = ["outcome"] as const;
 const VERIFY_FIELD_KEYS = ["verify"] as const;
 const CMD_KEYS = ["command", "cmd", "script"] as const;
 const ALT_KEYS = ["alt", "caption", "altText", "alt_text"] as const;
-const IMAGE_KEY =
-  /^(?:screenshot|image|image_data|imagedata|png|jpe?g|webp|gif|bytes|bitmap|screenshot_uri|screenshoturi|screenshot_url|screenshoturl|image_url|imageurl)$/i;
+const IMAGE_KEY = new RegExp(
+  String.raw`^(?:screenshot|image|image_data|imagedata|png|jpe?g|webp|gif|bytes|bitmap|screenshot_uri|` +
+    String.raw`screenshoturi|screenshot_url|screenshoturl|image_url|imageurl)$`,
+  "i",
+);
 /** Same family as M10 sleep VERIFY_CMD — do not mint how-to from `ls` / `git grep`. */
 const VERIFY_CMD =
   /\b(?:pytest|vitest|jest|mocha)\b|\b(?:bun|cargo|go)\s+test\b|\b(?:npm|pnpm|yarn)\s+(?:run\s+)?test\b/i;

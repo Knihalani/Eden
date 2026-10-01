@@ -365,7 +365,11 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
   if (m) return take(m[1]!.replace(/^(?:the\s+)?(?:romantic comedy|film|movie)\s+/i, ""), "director", m[2]!);
 
   m = raw.match(
-    /^(?:the\s+)?director of\s+(?:the\s+)?(?:romantic comedy|film|movie)?\s*[""]?(.+?)[""]?\s+(?:is|was|are|were)\s+(.+)$/i,
+    new RegExp(
+      String.raw`^(?:the\s+)?director of\s+(?:the\s+)?(?:romantic comedy|film|movie)?\s*[""]?(.+?)[""]?\s+` +
+        String.raw`(?:is|was|are|were)\s+(.+)$`,
+      "i",
+    ),
   );
   if (m && !/^(?:based|located|born|from|directed)\b/i.test(clip(m[2]!))) return take(m[1]!, "director", m[2]!);
 
@@ -379,7 +383,11 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
   if (m) return take(m[1]!, "population", m[2]!);
 
   m = raw.match(
-    /^(.+?)\s+(?:is|was|are|were)\s+(?:the\s+)?(?:woman|man|actor|actress|person)\s+who\s+portrayed\s+(.+?)(?:\s+in\b|$)/i,
+    new RegExp(
+      String.raw`^(.+?)\s+(?:is|was|are|were)\s+(?:the\s+)?` +
+        String.raw`(?:woman|man|actor|actress|person)\s+who\s+portrayed\s+(.+?)(?:\s+in\b|$)`,
+      "i",
+    ),
   );
   if (m) return take(m[2]!, "portrayed", m[1]!);
 
@@ -396,7 +404,11 @@ export function extractTriple(text: string): { s: string; p: string; o: string }
 
   // Official FC-MH frames (not REL_ALIASES): associated/created/affiliated/located.
   m = raw.match(
-    /^(.+?)\s+(?:is|was|are|were)\s+(?:associated with|affiliated with|located in|created in)\s+(?:the\s+)?([a-z]+)\s+of\s+(.+)$/i,
+    new RegExp(
+      String.raw`^(.+?)\s+(?:is|was|are|were)\s+` +
+        String.raw`(?:associated with|affiliated with|located in|created in)\s+(?:the\s+)?([a-z]+)\s+of\s+(.+)$`,
+      "i",
+    ),
   );
   if (m) return take(m[1]!, m[2]!, m[3]!);
 

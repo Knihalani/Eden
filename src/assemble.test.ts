@@ -117,7 +117,9 @@ describe("extractCandidates", () => {
     const later = assemble(
       extractCandidates([
         {
-          text: "We decided to use postgres for the database because durability then we decided to use sqlite for the database.",
+          text:
+            "We decided to use postgres for the database because durability then we decided to use sqlite for " +
+            "the database.",
           t: 15,
         },
       ]),
@@ -335,8 +337,10 @@ describe("M16.4 FC-MH player→sport→country assembly miss", () => {
     "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. " +
     "He remembered the flood of his childhood and the oak that had fallen across the millrace. " +
     "The villagers said the oak still slept under the silt, waiting. " +
-    "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of grain until the loft beams creaked. " +
-    "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the millrace after the thaw.";
+    "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of " +
+    "grain until the loft beams creaked. " +
+    "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the " +
+    "millrace after the thaw.";
 
   function factLines(packet: string): string[] {
     return packet
@@ -681,7 +685,9 @@ describe("M17.4 FC-SH observe overwrite still latest", () => {
 
   test.failing("novel + Alice then Bob: packet has Bob, not Alice; miller stays narrative", async () => {
     const novel =
-      "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+      "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+      "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+      "villagers said the oak still slept under the silt, waiting.";
     expect(encodeLane(novel)).toBe("narrative");
     await withMem((mem) => {
       mem.observe([{ role: "user", content: `${novel} The chairperson of the committee is Alice.` }]);
@@ -699,7 +705,9 @@ describe("M17.4 FC-SH observe overwrite still latest", () => {
 
   test("keepLiveIdentity: system novel+Alice does not leftover Alice when live is Bob", async () => {
     const novel =
-      "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+      "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+      "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+      "villagers said the oak still slept under the silt, waiting.";
     await withMem((mem) => {
       mem.observe([{ role: "user", content: "The chairperson of the committee is Bob." }]);
       mem.injectBody({
@@ -742,7 +750,9 @@ describe("M20.4 kind firewall", () => {
   const ALICE = "The chairperson of the committee is Alice.";
   const POSTGRES = "The database is postgres.";
   const MILLER =
-    "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+    "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+    "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+    "villagers said the oak still slept under the silt, waiting.";
   const MILLER_ALICE = `${MILLER} The chairperson of the committee is Alice.`;
 
   test("kind=icl copula yields zero triples", () => {
@@ -805,7 +815,9 @@ describe("M20.4 kind firewall", () => {
 
   test.failing("inject packet omits leftover Alice; miller cue keeps miller without Alice", async () => {
     const novel =
-      "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+      "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+      "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+      "villagers said the oak still slept under the silt, waiting.";
     await withMem((mem) => {
       mem.observe([{ role: "user", content: `${novel} The chairperson of the committee is Alice.` }]);
       mem.observe([{ role: "user", content: "The chairperson of the committee is Bob." }]);

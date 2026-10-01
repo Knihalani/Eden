@@ -239,13 +239,15 @@ export async function collectBench(traces: StretchTrace[], opts: BenchOpts = {})
   if (!blocks.length) {
     const why =
       first.unrecorded || first.errored
-        ? `${first.unrecorded} made calls the recording does not contain, ${first.errored} errored${first.firstError ? ` (first: ${first.firstError})` : ""}`
+        ? `${first.unrecorded} made calls the recording does not contain, ${first.errored} ` +
+          `errored${first.firstError ? ` (first: ${first.firstError})` : ""}`
         : "every replay failed";
     throw new Error(`eden bench: no paired blocks could be replayed — ${why}`);
   }
 
   const notes: string[] = [
-    `program ${program.name}: ${program.steps.filter((s) => s.kind === "tool").length} tool steps${hasIsland ? ", island served locally (no network)" : ""}`,
+    `program ${program.name}: ${program.steps.filter((s) => s.kind === "tool").length} tool ` +
+      `steps${hasIsland ? ", island served locally (no network)" : ""}`,
   ];
   if (first.unrecorded + first.errored > 0) {
     notes.push(
@@ -293,7 +295,8 @@ export async function collectBench(traces: StretchTrace[], opts: BenchOpts = {})
       tokens = { delta: raw, measured: true, estimated };
       if (estimated) {
         notes.push(
-          "tokens estimated: island usage is scaled from the recording, not metered — it cannot gate a ship decision alone.",
+          "tokens estimated: island usage is scaled from the recording, not metered — it cannot gate a ship " +
+            "decision alone.",
         );
       }
     }

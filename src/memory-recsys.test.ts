@@ -39,7 +39,9 @@ const RECSYS_MATRIX = "I liked The Matrix (1999). Recommend similar sci-fi.";
 const ICL_GOLD = "The movie was great. label: 28";
 /** memory-lanes.test.ts EventQA miller paragraph — narrative, not recsys. */
 const MILLER =
-  "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+  "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+  "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+  "villagers said the oak still slept under the silt, waiting.";
 const CHAIR_SERIAL = "8. The chairperson is Bob";
 const CHAIR_LIST = "8. The chairperson is Bob\n9. The treasurer is Alice";
 const MOVIE_TITLES = ["superbad", "hangover", "knocked up", "the matrix", "matrix"] as const;
@@ -433,7 +435,8 @@ describe("M31.4 wrap + hook still silent inject", () => {
 describe("M31.4 assemble firewall", () => {
   test("extractCandidates on lane=narrative recsys text yields zero triples", () => {
     const recsysCopula =
-      "I liked Superbad (2007), The Hangover (2009), and Knocked Up (2007). Superbad is a comedy. Recommend similar comedies.";
+      "I liked Superbad (2007), The Hangover (2009), and Knocked Up (2007). Superbad is a comedy. " +
+      "Recommend similar comedies.";
     expect(extractCandidates([recsysCandidate(recsysCopula, { lane: "narrative" })])).toEqual([]);
     expect(extractCandidates([recsysCandidate(recsysCopula, { kind: "narrative" })])).toEqual([]);
     expect(extractCandidates([recsysCandidate(recsysCopula, { lane: "recsys" })])).toEqual([]);

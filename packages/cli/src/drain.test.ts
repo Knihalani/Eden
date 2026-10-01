@@ -206,7 +206,8 @@ describe("live-tool projection keeps skill fields", () => {
 
   test("island-bearing compile lands the one-liner, not the stretch dump", () => {
     const line =
-      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not re-run the loop.";
+      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not " +
+      "re-run the loop.";
     const dump = "Run the repeating stretch as one tool: lookupTicket → fetchDetails → draftReply → notify.";
     const island = projectLiveTools([
       {
@@ -269,7 +270,8 @@ describe("live-tool projection keeps skill fields", () => {
     expect(p).toBeTruthy();
     const projected = projectLiveTools([{ program: p }]);
     const line =
-      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not re-run the loop.";
+      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not " +
+      "re-run the loop.";
     expect(projected[0]?.when_to_use).toBe(line);
     const md = renderSkill(projected);
     const body = md.split(`## ${p!.name}`)[1] ?? "";
@@ -417,7 +419,8 @@ describe("drain refreshes opted-in SKILL.md in one cycle", () => {
     mkdirSync(paths.dir, { recursive: true });
     writeFileSync(paths.skill, "---\nname: eden-routines\ndescription: placeholder\n---\n\nstale\n");
     const line =
-      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not re-run the loop.";
+      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not " +
+      "re-run the loop.";
     live = [
       {
         id: "p-isle",

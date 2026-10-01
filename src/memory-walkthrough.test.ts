@@ -57,8 +57,10 @@ const NOVEL =
   "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. " +
   "He remembered the flood of his childhood and the oak that had fallen across the millrace. " +
   "The villagers said the oak still slept under the silt, waiting. " +
-  "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of grain until the loft beams creaked. " +
-  "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the millrace after the thaw.";
+  "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of " +
+  "grain until the loft beams creaked. " +
+  "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the " +
+  "millrace after the thaw.";
 const JUNK = "The shelf marker is m36-quark-991.";
 const TRAJ_MARK = "TRAJ-DUMP-M36-ZEBRA";
 const EXP_MARK = "m36-exp-only FAILED pytest in auth.ts";

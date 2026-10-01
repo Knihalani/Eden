@@ -12,11 +12,18 @@ export const FACT_CHAR_CAP = PROCEDURE_CHAR_CAP;
 
 export type HookLane = "copula" | "path" | "procedure" | "time" | "none";
 
-const NOOP_EXACT =
-  /^(?:ok|okay|thanks|thank you|got it|gotcha|nice|cool|will do|sure|yeah|yep|yup|lol|lmao|asdf|qwerty|hi|hey|yo|continue|lgtm|ok go|sounds good|ship it|thx|ty|np|kk|cheers)\s*[.!?]?\s*$/i;
+const NOOP_EXACT = new RegExp(
+  String.raw`^(?:ok|okay|thanks|thank you|got it|gotcha|nice|cool|will do|sure|yeah|yep|yup|lol|lmao|` +
+    String.raw`asdf|qwerty|hi|hey|yo|continue|lgtm|ok go|sounds good|ship it|thx|ty|np|kk|` +
+    String.raw`cheers)\s*[.!?]?\s*$`,
+  "i",
+);
 const MATH_CUE = /^\s*(?:what(?:'s| is)\s+)?\d+\s*(?:\+|plus|\-|minus|\*|x|×|times|\/|÷|divided by)\s*\d+\s*\??\s*$/i;
-const CONTENT_TERM =
-  /\b(?:auth|sqlite|postgres|clerk|flake|commit|test|database|provider|session|file|src\/|\.ts|\.py|adr|dlq|sqs|sidecar|istio|mesh)\b/i;
+const CONTENT_TERM = new RegExp(
+  String.raw`\b(?:auth|sqlite|postgres|clerk|flake|commit|test|database|provider|session|file|src\/|\.ts|` +
+    String.raw`\.py|adr|dlq|sqs|sidecar|istio|mesh)\b`,
+  "i",
+);
 
 export function isNoopCue(cue: string): boolean {
   try {

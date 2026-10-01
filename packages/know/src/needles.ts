@@ -6,9 +6,10 @@ import { firstRfcNeedle } from "./rfc-needle";
 export { firstRfcNeedle };
 
 const HEADER_SET = new Set(
-  "Accept Accept-Encoding Accept-Language Authorization Cache-Control Content-Type Cookie ETag Host If-None-Match If-Modified-Since Location Origin Referer User-Agent WWW-Authenticate X-Request-Id".split(
-    " ",
-  ),
+  (
+    "Accept Accept-Encoding Accept-Language Authorization Cache-Control Content-Type Cookie ETag Host " +
+    "If-None-Match If-Modified-Since Location Origin Referer User-Agent WWW-Authenticate X-Request-Id"
+  ).split(" "),
 );
 const METHOD_SET = new Set("GET POST PUT PATCH DELETE HEAD OPTIONS CONNECT TRACE".split(" "));
 const PROTO_SET = new Set("TCP UDP ICMP SCTP GRE".split(" "));
@@ -806,16 +807,31 @@ function likelyNeedles(slice: string): boolean {
   return false;
 }
 
-const TECHNIQUE_CUE =
-  /\b(?:(?:what(?:'s| is) the |the )?(?:best|right|usual|standard|recommended|good|proper|correct) (?:way|tool|thing)(?: to use)? (?:to|for)|what(?: should i)?(?: to)? use (?:to|for)|which (?:tool|thing) (?:should i use |to use )?(?:to|for)|is there a (?:way|tool) to|looking for a (?:way|tool) to|anyone know how to|how(?:\s+do(?:es)?(?:\s+(?:i|you|one|we))?|\s+can(?:\s+i)?|\s+would(?:\s+i)?|\s+should(?:\s+i)?|\s+to))\s+([^?!.]+)/i;
-const INTENT_CUE =
-  /\b(?:(?:need(?:s)?|trying|want(?:ing)?|looking) to|(?:can|could) (?:i|you|we|one)|help me|any(?: good)? (?:way|tool) to|recommend(?:ed)? (?:a )?(?:tool|way|something) (?:to|for)|(?:alternative|replacement) to \S+ for|tool for)\s+([^?!.]+)/i;
+const TECHNIQUE_CUE = new RegExp(
+  String.raw`\b(?:(?:what(?:'s| is) the |the )?` +
+    String.raw`(?:best|right|usual|standard|recommended|good|proper|correct) (?:way|tool|thing)` +
+    String.raw`(?: to use)? (?:to|for)|what(?: should i)?(?: to)? use (?:to|for)|which (?:tool|thing) ` +
+    String.raw`(?:should i use |to use )?(?:to|for)|is there a (?:way|tool) to|looking for a ` +
+    String.raw`(?:way|tool) to|anyone know how to|how` +
+    String.raw`(?:\s+do(?:es)?(?:\s+(?:i|you|one|we))?|\s+can(?:\s+i)?|\s+would(?:\s+i)?|\s+should` +
+    String.raw`(?:\s+i)?|\s+to))\s+([^?!.]+)`,
+  "i",
+);
+const INTENT_CUE = new RegExp(
+  String.raw`\b(?:(?:need(?:s)?|trying|want(?:ing)?|looking) to|(?:can|could) (?:i|you|we|one)|help me|` +
+    String.raw`any(?: good)? (?:way|tool) to|recommend(?:ed)? (?:a )?(?:tool|way|something) (?:to|for)|` +
+    String.raw`(?:alternative|replacement) to \S+ for|tool for)\s+([^?!.]+)`,
+  "i",
+);
 const LEAD_VERB = /^(?:(use|do|get|make)(?:ing|es|ne)?)\s+/i;
 
 const TASK_OBJ =
-  "jsonl?|ndjson|yaml|toml|xml|html|markdown|typescript|javascript|rustc|rust|python|sql|bash|csv|regex|protobuf|graphql|docker|kubernetes|sqlite|postgres|golang|ruby|php|css|terraform|nix|redis|parquet|avro|repo|codebase";
+  "jsonl?|ndjson|yaml|toml|xml|html|markdown|typescript|javascript|rustc|rust|python|sql|bash|csv|" +
+  "regex|protobuf|graphql|docker|kubernetes|sqlite|postgres|golang|ruby|php|css|terraform|nix|redis|" +
+  "parquet|avro|repo|codebase";
 const TASK_VERB =
-  "filter|parse|query|run|execute|build|compile|lint|format|bundle|deploy|extract|search|replace|convert|encode|decode|serialize|stream|pretty-?print|minify|validate|print|pull|pluck|slice";
+  "filter|parse|query|run|execute|build|compile|lint|format|bundle|deploy|extract|search|replace|" +
+  "convert|encode|decode|serialize|stream|pretty-?print|minify|validate|print|pull|pluck|slice";
 const TASK_OBJ_RE = new RegExp(`^(?:${TASK_OBJ})$`, "i");
 const TASK_OBJ_HIT = new RegExp(`\\b(?:${TASK_OBJ})\\b`, "i");
 const GREP_LINE = /\b(?:grep|ripgrep|rg|sed|awk|cat|perl|cut)\b/i;

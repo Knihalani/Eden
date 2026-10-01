@@ -501,7 +501,11 @@ describe("M14.4 wrap OpenAI + Anthropic share howto.jsonl", () => {
 });
 
 const M17_ICL_LONG =
-  "The movie review is glowing and mentions every scene in detail about the protagonist and the village festival that lasted three nights under lanterns while the orchestra played until dawn and the crowd wept. label: 28 extra filler words to exceed four hundred characters of extractDurable tax so we can see if the whole exemplar is dropped or chopped into pieces by the allow-list pipeline that is still the only encode path.";
+  "The movie review is glowing and mentions every scene in detail about the protagonist and the " +
+  "village festival that lasted three nights under lanterns while the orchestra played until dawn and " +
+  "the crowd wept. label: 28 extra filler words to exceed four hundred characters of extractDurable " +
+  "tax so we can see if the whole exemplar is dropped or chopped into pieces by the allow-list " +
+  "pipeline that is still the only encode path.";
 
 describe("M17 wrap encode lanes", () => {
   test("injectBody and Anthropic retrieve whole ICL shot stored on observe", () => {

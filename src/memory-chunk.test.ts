@@ -369,7 +369,9 @@ describe("M18.1 secrets + fail-open + chat", () => {
 
 describe("M18 leftover identity + empty cue + torn JSONL", () => {
   const NOVEL =
-    "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+    "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+    "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+    "villagers said the oak still slept under the silt, waiting.";
 
   test("queryHay does not inject LoCoMo diet hay", () => {
     expect(queryHay("best restaurant").has("diet")).toBe(false);

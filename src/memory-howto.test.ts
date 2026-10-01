@@ -135,7 +135,10 @@ function jsonHay(v: unknown): string {
 }
 
 function commandHay(row: ToolTrace): string {
-  return `${jsonHay(row.args)} ${jsonHay((row.args as { command?: unknown } | undefined)?.command)} ${jsonHay(row.name)}`;
+  return (
+    `${jsonHay(row.args)} ${jsonHay((row.args as { command?: unknown } | undefined)?.command)} ` +
+    `${jsonHay(row.name)}`
+  );
 }
 
 function hasAuthTs(row: ToolTrace): boolean {

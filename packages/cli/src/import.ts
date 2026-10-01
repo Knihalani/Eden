@@ -141,7 +141,8 @@ async function importFile(filePath: string, args: string[], opts?: { fetch?: typ
     const size = statSync(filePath).size;
     if (size > MAX_FILE_BYTES) {
       console.error(
-        `${filePath} is ${(size / 1e6).toFixed(0)}MB — over the ${MAX_FILE_BYTES / 1e6}MB import limit. Split the export and import in parts.`,
+        `${filePath} is ${(size / 1e6).toFixed(0)}MB — over the ${MAX_FILE_BYTES / 1e6}MB import limit. ` +
+          `Split the export and import in parts.`,
       );
       return 1;
     }
