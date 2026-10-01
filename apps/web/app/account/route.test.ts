@@ -4,6 +4,9 @@ import { expect, test } from "bun:test";
 import { continuePath, destAfterAuth, destAfterWorkspace, signedInDest } from "./home";
 import { productGate } from "./route";
 
+/** Page source as JSX renders its text: Prettier may wrap a phrase over two lines. */
+const prose = (src: string) => src.replace(/\s+/g, " ");
+
 function gate(path: string, auth: { isAuthenticated?: boolean | null; sessionStatus?: string | null; orgId?: string | null }) {
   return productGate(path, auth);
 }
@@ -74,9 +77,9 @@ test("landing and proof stay free of invented customers and unproven percents", 
     readFileSync(join(app, "landing/lamp.tsx"), "utf8"),
   ].join("\n");
   const proof = readFileSync(join(app, "(notes)/proof/page.tsx"), "utf8");
-  expect(landing).not.toMatch(/N teams|98%|SOC2 certified|6\.67|−9\.1|\+2\.8%/);
+  expect(prose(landing)).not.toMatch(/N teams|98%|SOC2 certified|6\.67|−9\.1|\+2\.8%/);
   expect(landing).not.toMatch(/from "@clerk/);
-  expect(proof).not.toMatch(/Sign up|from "@clerk"/);
+  expect(prose(proof)).not.toMatch(/Sign up|from "@clerk"/);
   expect(landing).toContain("Making your agent do less work.");
 });
 
@@ -111,8 +114,8 @@ test("landing story is company, not compile; proof invents 0 customers", async (
     readFileSync(join(app, "landing/products.tsx"), "utf8"),
     readFileSync(join(app, "landing/lamp.tsx"), "utf8"),
   ].join("\n");
-  expect(landing).not.toMatch(/look then write|Keep one|Show the repeats|Invoice runner/);
-  expect(landing).not.toMatch(/Compile repeating tools|Claude Code invoice|billed invoice|\$99/);
+  expect(prose(landing)).not.toMatch(/look then write|Keep one|Show the repeats|Invoice runner/);
+  expect(prose(landing)).not.toMatch(/Compile repeating tools|Claude Code invoice|billed invoice|\$99/);
   const { CUSTOMERS } = await import("../(notes)/proof/copy");
   expect(CUSTOMERS.length).toBe(0);
 });

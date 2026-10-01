@@ -6,6 +6,9 @@ import { navCurrent } from "../../account/home";
 import { ISOLATION_CLAIMS, LIMIT_CLAIMS, LOGGING, OWASP_ROWS, PACK, PACK_ROWS } from "./copy";
 
 const ROOT = join(import.meta.dir, "../../../../../");
+/** Page source as JSX renders its text: Prettier may wrap a phrase over two lines. */
+const prose = (src: string) => src.replace(/\s+/g, " ");
+
 const PAGE = readFileSync(join(import.meta.dir, "page.tsx"), "utf8");
 
 test("every isolation claim points at a test file that exists", () => {
@@ -102,7 +105,7 @@ test("isolation page is graphite copy, not a rail item, no ship CTA", () => {
   expect(navCurrent("/isolation")).toBe(null);
   expect(PAGE).toContain("iso-doc");
   expect(PAGE).not.toMatch(/className="[^"]*ship/);
-  expect(PAGE).not.toMatch(/SOC2 ready/i);
+  expect(prose(PAGE)).not.toMatch(/SOC2 ready/i);
   expect(PAGE).not.toMatch(/signup/);
   expect(PAGE).not.toMatch(/redirect/);
   expect(PAGE).not.toMatch(/sign-in/);
@@ -207,7 +210,7 @@ test("isolation docs and /isolation point at the pack; pool cadence is named", (
   expect(PACK.walk).toMatch(/eden audit review/);
   expect(PACK.walk).toMatch(/EDEN_NET_ALLOW/);
   expect(PAGE).toContain("{PACK_ROWS.map");
-  expect(PAGE).not.toMatch(/SOC 2 certified/i);
+  expect(prose(PAGE)).not.toMatch(/SOC 2 certified/i);
   expect(PAGE).not.toMatch(/className="[^"]*ship/);
 });
 
@@ -232,8 +235,8 @@ test("live /pack binder is graphite notes, eight controls, not a cert", () => {
   expect(packPage).toContain("iso-doc");
   expect(packPage).toContain("PACK_ROWS.map");
   expect(packPage).not.toMatch(/className="[^"]*ship/);
-  expect(packPage).not.toMatch(/SOC2 ready/i);
-  expect(packPage).not.toMatch(/SOC 2 certified/i);
+  expect(prose(packPage)).not.toMatch(/SOC2 ready/i);
+  expect(prose(packPage)).not.toMatch(/SOC 2 certified/i);
   expect(packPage).not.toMatch(/from "@clerk/);
   expect(PACK_ROWS.map((r) => r.control)).toEqual([
     "Isolation",
