@@ -181,18 +181,29 @@ const savings = (await (await fetchHandler(auth("/v1/savings"))).json()) as {
   llmReductionMean?: number;
 };
 
+const minedName = pass ? pass.program?.name : "nothing";
+const minedLlm = pass?.manifest?.llmReduction ? ` · ${pass.manifest.llmReduction.toFixed(1)}× LLM (ships from 2×)` : "";
+const minedReuse = shipped?.reused ? " this sitting (a live TicketShip tool was already shipped)" : "";
+const shippedLine = shipped?.reused
+  ? `Playing T-100 on already-shipped ${shipped.name ?? shipped.id}.`
+  : shipped?.name
+    ? `Approved and shipped ${shipped.name}.`
+    : "No PASS candidate to ship.";
+const runOkLine = runOk
+  ? `HTTP ${runOk.status} · ${JSON.stringify(okBody?.value)} · ${okBody?.stats?.llmCalls ?? "?"} island call(s)`
+  : "skipped";
 console.log(`
 ${demoListenLines(String(server.url), token)}
 
 What just happened
   10 TicketShip agent runs: lookupTicket → fetchDetails → parseFields → validate → draftReply → writeRecord → verifyWrite → notify.
-  Compile mined ${pass ? pass.program?.name : "nothing"}${pass?.manifest?.llmReduction ? ` · ${pass.manifest.llmReduction.toFixed(1)}× LLM (ships from 2×)` : ""}${shipped?.reused ? " this sitting (a live TicketShip tool was already shipped)" : ""}.
+  Compile mined ${minedName}${minedLlm}${minedReuse}.
   Sequence: ${(pass?.program?.sequence ?? []).join(" → ")}
-  ${shipped?.reused ? `Playing T-100 on already-shipped ${shipped.name ?? shipped.id}.` : shipped?.name ? `Approved and shipped ${shipped.name}.` : "No PASS candidate to ship."}
+  ${shippedLine}
   Then a sibling stretch with an unbound writeRecord.id was refused${refused ? ` · ${refused.refusal?.reason}` : ""}.
 
 Compiled run T-100 (in witness envelope)
-  ${runOk ? `HTTP ${runOk.status} · ${JSON.stringify(okBody?.value)} · ${okBody?.stats?.llmCalls ?? "?"} island call(s)` : "skipped"}
+  ${runOkLine}
 
 Unseen ticket T-999 (out of distribution)
   ${runOod ? `HTTP ${runOod.status} · ${oodBody?.error ?? ""} · ${oodBody?.reason ?? ""}` : "skipped"}
