@@ -239,9 +239,9 @@ describe("M26.3 latency — in-process inject, not a 60ms CLI", () => {
     expect(src).toMatch(/const inject_ms = Date\.now\(\) - tInject/);
     expect(src).toMatch(/reader_ms = r\.ms/);
     expect(src).toMatch(/query_ms: inject_ms \+ reader_ms/);
-    expect(src).toMatch(/inject_p50: percentile\(rows\.map\(\(r\) => r\.inject_ms\), 50\)/);
-    expect(src).toMatch(/inject_p95: percentile\(rows\.map\(\(r\) => r\.inject_ms\), 95\)/);
-    expect(src).toMatch(/reader_p50: percentile\(rows\.map\(\(r\) => r\.reader_ms\), 50\)/);
+    expect(src).toMatch(/inject_p50:\s*percentile\(\s*rows\.map\(\(r\) => r\.inject_ms\),\s*50,?\s*\)/);
+    expect(src).toMatch(/inject_p95:\s*percentile\(\s*rows\.map\(\(r\) => r\.inject_ms\),\s*95,?\s*\)/);
+    expect(src).toMatch(/reader_p50:\s*percentile\(\s*rows\.map\(\(r\) => r\.reader_ms\),\s*50,?\s*\)/);
     noMemoryCliSpawn(src);
     expect(src).toMatch(/## M26\.3 latency/);
     expect(src).toMatch(/Wrap inject is in-process \\`AgentMemory\.inject\\`, not a 60ms CLI/);
