@@ -30,7 +30,8 @@ import { openDb, recordDeopt } from "../../apps/site/src/db";
  * expect: field rename state→conclusion queues draft+knock via real compile/shadow; live stays On; human Approves.
  */
 export const EXPECT =
-  "field rename (state→conclusion): queued draft+knock via real compileTraces+shadowProgram; live stays On; human Approves; zero manual mining";
+  "field rename (state→conclusion): queued draft+knock via real compileTraces+shadowProgram; live " +
+  "stays On; human Approves; zero manual mining";
 
 export const RENAMED_FIELD = { from: "state", to: "conclusion" } as const;
 

@@ -72,7 +72,9 @@ export function formatMultiSession(run: MultiSessionRun): string {
   const stored = run.session_a_jsonl
     ? "Session A JSONL contained Clerk after UserPromptSubmit."
     : "Session A JSONL did not contain Clerk after UserPromptSubmit.";
-  const root = `After that flush check, root semantic ${run.root_semantic ? "contained" : "lacked"} Clerk and root gist ${run.root_gist ? "contained" : "lacked"} Clerk.`;
+  const root =
+    `After that flush check, root semantic ${run.root_semantic ? "contained" : "lacked"} Clerk and root ` +
+    `gist ${run.root_gist ? "contained" : "lacked"} Clerk.`;
   const same = run.same_session_clerk
     ? "Same cue on session A injected Clerk (store live; not a scored cell)."
     : "Same cue on session A also missed Clerk (not a scored cell).";

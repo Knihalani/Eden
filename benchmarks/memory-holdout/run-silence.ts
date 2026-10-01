@@ -391,11 +391,13 @@ function judge(row: Omit<SilenceRow, "verdict" | "note" | "omitted_on"> & { seed
   if (row.baseline.k !== 6 || row.probe.k !== 6) notes.push(`k ${row.baseline.k}/${row.probe.k} !== 6`);
   if (!row.baseline.body_agrees)
     notes.push(
-      `injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`,
+      `injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ` +
+        `${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`,
     );
   if (!row.probe.body_agrees)
     notes.push(
-      `injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} disagrees with inject ${row.probe.packet_bytes} B`,
+      `injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} ` +
+        `disagrees with inject ${row.probe.packet_bytes} B`,
     );
   const setupBad = notes.some(
     (n) =>
@@ -491,11 +493,13 @@ export function runSilence(opts: { out?: string } = {}): SilenceRun {
       rows.push({ ...partial, ...judged });
       if (!baseline.body_agrees)
         bugs.push(
-          `${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / omitted ${baseline.body_omitted} vs inject ${baseline.packet_bytes} B / omitted ${baseline.omitted}`,
+          `${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / omitted ` +
+            `${baseline.body_omitted} vs inject ${baseline.packet_bytes} B / omitted ${baseline.omitted}`,
         );
       if (!probe.body_agrees)
         bugs.push(
-          `${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / omitted ${probe.body_omitted} vs inject ${probe.packet_bytes} B / omitted ${probe.omitted}`,
+          `${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / omitted ${probe.body_omitted} vs ` +
+            `inject ${probe.packet_bytes} B / omitted ${probe.omitted}`,
         );
       if (body_leftover.length && leftover.join("|") !== body_leftover.join("|")) {
         bugs.push(
@@ -596,18 +600,23 @@ export function formatSilence(run: SilenceRun): string {
     "# M38.3 Remain-silent SILENCE",
     "",
     `**Date:** ${run.date}`,
-    `**Pre-registered:** ${run.registered} (\`silence-fixture.json\`, ROADMAP §4.9). Expects were not edited after this run.`,
+    `**Pre-registered:** ${run.registered} (\`silence-fixture.json\`, ROADMAP §4.9). Expects were not ` +
+      `edited after this run.`,
     `**Bun:** ${run.bun}`,
     "**Part:** M38.3",
-    `**API under test:** inject path (\`openMemory\` / \`inject\`). \`injectBody\` is the same \`openMemory\` path, checked beside inject and not a second product.`,
+    `**API under test:** inject path (\`openMemory\` / \`inject\`). \`injectBody\` is the same ` +
+      `\`openMemory\` path, checked beside inject and not a second product.`,
     "**hook-inject:** named, not scored. Dual-API forbidden.",
     `**k:** ${run.k}`,
     `**Backbone:** ${run.backbone}`,
-    `**Materiality:** ±${run.materiality * 100}% (band = materiality × max(baseline bytes, 1)). Baseline 0 ⇒ band 0.01 byte ⇒ only Δ = 0 is Δ≈0. Registered once.`,
+    `**Materiality:** ±${run.materiality * 100}% (band = materiality × max(baseline bytes, 1)). ` +
+      `Baseline 0 ⇒ band 0.01 byte ⇒ only Δ = 0 is Δ≈0. Registered once.`,
     "**Off:** `EDEN_MEMORY=0` (inject identity). **On:** `EDEN_MEMORY` unset (product default).",
     "**Know:** `EDEN_KNOW=0` so the Know catalog is not this memory packet.",
     "",
-    "No BrainMemory column. Inject path only. k default. No hay. No k=40. LoCoMo 92 is not an Eden claim. Ranker not tuned. Dual-API forbidden. Math cues are measurement reuse of M35.1, not a new training target. Rotation cell is `What is 17 times 23?`.",
+    "No BrainMemory column. Inject path only. k default. No hay. No k=40. LoCoMo 92 is not an Eden " +
+      "claim. Ranker not tuned. Dual-API forbidden. Math cues are measurement reuse of M35.1, not a new " +
+      "training target. Rotation cell is `What is 17 times 23?`.",
     "",
     "Remain-silent is compatible with fail-open; Start briefing is M38.2/M7.3 not this annex.",
     "",
@@ -623,7 +632,10 @@ export function formatSilence(run: SilenceRun): string {
     "",
     "## Silence table",
     "",
-    "Scored bytes are the UTF-8 length of system content containing `Eden Memory:`. Δ = probe − baseline. Omitted on-arm is yes only when the on arm has no `Eden Memory:` packet (inject identity, 0 bytes). A/A has no on-arm, so that cell is n/a; both off packets must still be omitted for WIN. Packet bytes are arithmetic.",
+    "Scored bytes are the UTF-8 length of system content containing `Eden Memory:`. Δ = probe − " +
+      "baseline. Omitted on-arm is yes only when the on arm has no `Eden Memory:` packet (inject identity, " +
+      "0 bytes). A/A has no on-arm, so that cell is n/a; both off packets must still be omitted for WIN. " +
+      "Packet bytes are arithmetic.",
     "",
     "| case | omitted on-arm | packet B off | packet B on | Δ B | leftover | verdict |",
     "|---|---|---|---|---|---|---|",
@@ -631,7 +643,8 @@ export function formatSilence(run: SilenceRun): string {
     "",
     "## injectBody (same path)",
     "",
-    "`injectBody` must agree with `inject` on identity, omit, packet bytes, and leftover. It is not a second product column.",
+    "`injectBody` must agree with `inject` on identity, omit, packet bytes, and leftover. It is not a " +
+      "second product column.",
     "",
     "| case | agrees | injectBody baseline B | injectBody probe B | injectBody Δ B | leftover | omitted |",
     "|---|---|---|---|---|---|---|",
@@ -641,7 +654,8 @@ export function formatSilence(run: SilenceRun): string {
     ...(packets ? ["## Packet text", "", packets, ""] : []),
     "## A/A noise floor",
     "",
-    "Packet bytes are arithmetic (ROADMAP §4.9 determinism). The A/A cell is two `EDEN_MEMORY=0` injects of `what's 2+2?` on empty stores. Wall-clock is one sample pair and is not the verdict.",
+    "Packet bytes are arithmetic (ROADMAP §4.9 determinism). The A/A cell is two `EDEN_MEMORY=0` " +
+      "injects of `what's 2+2?` on empty stores. Wall-clock is one sample pair and is not the verdict.",
     "",
     aa
       ? `- inject wall ms: ${aa.baseline.wall_ms.toFixed(3)} then ${aa.probe.wall_ms.toFixed(3)} (Δ ${wall} ms)`
@@ -651,7 +665,9 @@ export function formatSilence(run: SilenceRun): string {
     "",
     "## Seed liveness (not a scored row)",
     "",
-    "The seeded store is the same two facts (`Use sqlite.` / `Auth is Clerk.`). A related cue must inject sqlite, or the silent rows are FAIL (dead store). This cue is not a scored Δ row and not a product column.",
+    "The seeded store is the same two facts (`Use sqlite.` / `Auth is Clerk.`). A related cue must " +
+      "inject sqlite, or the silent rows are FAIL (dead store). This cue is not a scored Δ row and not a " +
+      "product column.",
     "",
     `- cue: \`${run.seed_liveness.cue}\``,
     `- packet: ${run.seed_liveness.packet_bytes} B`,
@@ -693,7 +709,8 @@ if (import.meta.main) {
   const summary = run.rows
     .map(
       (r) =>
-        `${r.id}\t${r.verdict}\tΔ${r.delta_bytes}\tomitted=${r.omitted_on === null ? "n/a" : r.omitted_on ? "yes" : "no"}`,
+        `${r.id}\t${r.verdict}\tΔ${r.delta_bytes}\t` +
+        `omitted=${r.omitted_on === null ? "n/a" : r.omitted_on ? "yes" : "no"}`,
     )
     .join("\n");
   console.error(`\n${summary}`);

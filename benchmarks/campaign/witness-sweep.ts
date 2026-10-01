@@ -122,7 +122,8 @@ async function main() {
 
   const CONCURRENCY = 4;
   console.log(
-    `witness-sweep: ${jobs.length} go-lives, CAMPAIGN_THINK_MS=${process.env.CAMPAIGN_THINK_MS} THINK_MS=${THINK_MS}, concurrency=${CONCURRENCY}`,
+    `witness-sweep: ${jobs.length} go-lives, CAMPAIGN_THINK_MS=${process.env.CAMPAIGN_THINK_MS} ` +
+      `THINK_MS=${THINK_MS}, concurrency=${CONCURRENCY}`,
   );
 
   async function runJob(job: Job): Promise<RunRow> {
@@ -166,7 +167,8 @@ async function main() {
     rows.push(...got);
     const done = Math.min(i + CONCURRENCY, jobs.length);
     process.stdout.write(
-      `  ${done}/${jobs.length}  last=${got.map((g) => `${g.world}:${g.verdict}/${g.mechanism ?? "pass"}`).join(" ")}\n`,
+      `  ${done}/${jobs.length}  ` +
+        `last=${got.map((g) => `${g.world}:${g.verdict}/${g.mechanism ?? "pass"}`).join(" ")}\n`,
     );
   }
 

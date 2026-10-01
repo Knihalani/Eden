@@ -365,11 +365,13 @@ function judge(row: Omit<NegativeRow, "verdict" | "note"> & { seed_expected: num
   if (row.baseline.k !== 6 || row.probe.k !== 6) notes.push(`k ${row.baseline.k}/${row.probe.k} !== 6`);
   if (!row.baseline.body_agrees)
     notes.push(
-      `injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`,
+      `injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ` +
+        `${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`,
     );
   if (!row.probe.body_agrees)
     notes.push(
-      `injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} disagrees with inject ${row.probe.packet_bytes} B`,
+      `injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} ` +
+        `disagrees with inject ${row.probe.packet_bytes} B`,
     );
   const setupBad = notes.some(
     (n) =>
@@ -404,7 +406,8 @@ function judge(row: Omit<NegativeRow, "verdict" | "note"> & { seed_expected: num
   if (row.body_leftover.length) notes.push(`leftover in injectBody packet: ${row.body_leftover.join(", ")}`);
   if (!row.delta_approx_0 || row.body_delta_bytes !== 0)
     notes.push(
-      `NON-ZERO packet Δ inject ${row.delta_bytes} B / injectBody ${row.body_delta_bytes} B vs remain-silent (omit is M38, not implemented)`,
+      `NON-ZERO packet Δ inject ${row.delta_bytes} B / injectBody ${row.body_delta_bytes} B vs ` +
+        `remain-silent (omit is M38, not implemented)`,
     );
   if (!row.probe.identity || !row.probe.body_identity) notes.push("probe inject is not identity");
   return { verdict: "LOSS", note: notes.join("; ") };
@@ -473,11 +476,13 @@ export function runNegative(opts: { out?: string } = {}): NegativeRun {
       rows.push({ ...partial, ...judged });
       if (!baseline.body_agrees)
         bugs.push(
-          `${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / identity ${baseline.body_identity} vs inject ${baseline.packet_bytes} B / identity ${baseline.identity}`,
+          `${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / identity ` +
+            `${baseline.body_identity} vs inject ${baseline.packet_bytes} B / identity ${baseline.identity}`,
         );
       if (!probe.body_agrees)
         bugs.push(
-          `${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / identity ${probe.body_identity} vs inject ${probe.packet_bytes} B / identity ${probe.identity}`,
+          `${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / identity ${probe.body_identity} vs ` +
+            `inject ${probe.packet_bytes} B / identity ${probe.identity}`,
         );
       if (body_leftover.length && leftover.join("|") !== body_leftover.join("|")) {
         bugs.push(
@@ -553,17 +558,23 @@ export function formatNegative(run: NegativeRun): string {
     "# M35.1 No-lift NEGATIVE",
     "",
     `**Date:** ${run.date}`,
-    `**Pre-registered:** ${run.registered} (\`negative-fixture.json\`, ROADMAP §4.9). Expects were not edited after this run.`,
+    `**Pre-registered:** ${run.registered} (\`negative-fixture.json\`, ROADMAP §4.9). Expects were not ` +
+      `edited after this run.`,
     `**Bun:** ${run.bun}`,
     "**Part:** M35.1",
-    `**API under test:** inject path (\`openMemory\` / \`inject\`). \`injectBody\` is the same \`openMemory\` path, checked in the table and not a second product.`,
+    `**API under test:** inject path (\`openMemory\` / \`inject\`). \`injectBody\` is the same ` +
+      `\`openMemory\` path, checked in the table and not a second product.`,
     "**hook-inject:** named, not scored. Gate 1 hook-inject is `RESULTS.md`. Dual-API forbidden.",
     `**k:** ${run.k}`,
-    `**Materiality:** ±${run.materiality * 100}% (band = materiality × max(baseline bytes, 1)). Baseline 0 ⇒ band 0.01 byte ⇒ only Δ = 0 is Δ≈0.`,
+    `**Materiality:** ±${run.materiality * 100}% (band = materiality × max(baseline bytes, 1)). ` +
+      `Baseline 0 ⇒ band 0.01 byte ⇒ only Δ = 0 is Δ≈0.`,
     "**Off:** `EDEN_MEMORY=0` (inject identity). **On:** `EDEN_MEMORY` unset (product default).",
     "**Know:** `EDEN_KNOW=0` so the Know catalog is not this memory packet.",
     "",
-    "No BrainMemory column. Inject path only. k default. No hay. No k=40. LoCoMo 92 is not an Eden claim. Ranker not tuned. Dual-API forbidden. Fail-open stays. Silent inject stays. No `memory_search`. Remain-silent omit is M38 (not implemented). Live wrap+hook HELP.md is M47 (not created).",
+    "No BrainMemory column. Inject path only. k default. No hay. No k=40. LoCoMo 92 is not an Eden " +
+      "claim. Ranker not tuned. Dual-API forbidden. Fail-open stays. Silent inject stays. No " +
+      "`memory_search`. Remain-silent omit is M38 (not implemented). Live wrap+hook HELP.md is M47 (not " +
+      "created).",
     "",
     "## Key numbers",
     "",
@@ -575,9 +586,11 @@ export function formatNegative(run: NegativeRun): string {
     "",
     "## On vs off Δ table",
     "",
-    "Scored bytes are the UTF-8 length of system content containing `Eden Memory:`. Δ = probe − baseline. `injectBody B` is the same path on a fresh copy of the store.",
+    "Scored bytes are the UTF-8 length of system content containing `Eden Memory:`. Δ = probe − " +
+      "baseline. `injectBody B` is the same path on a fresh copy of the store.",
     "",
-    "| case | expect | baseline | probe | store_n | baseline B | probe B | Δ B | band B | Δ≈0 | leftover | identity base/probe | injectBody baseline B | injectBody probe B | verdict |",
+    "| case | expect | baseline | probe | store_n | baseline B | probe B | Δ B | band B | Δ≈0 | " +
+      "leftover | identity base/probe | injectBody baseline B | injectBody probe B | verdict |",
     "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     rows,
     "",
@@ -585,7 +598,8 @@ export function formatNegative(run: NegativeRun): string {
     ...(packets ? ["## Packet text", "", packets, ""] : []),
     "## A/A noise floor",
     "",
-    "Packet bytes are arithmetic (ROADMAP §4.9 determinism). The A/A cell is two `EDEN_MEMORY=0` injects of `what's 2+2?` on empty stores. Wall-clock is one sample pair and is not the verdict.",
+    "Packet bytes are arithmetic (ROADMAP §4.9 determinism). The A/A cell is two `EDEN_MEMORY=0` " +
+      "injects of `what's 2+2?` on empty stores. Wall-clock is one sample pair and is not the verdict.",
     "",
     aa
       ? `- inject wall ms: ${aa.baseline.wall_ms.toFixed(3)} then ${aa.probe.wall_ms.toFixed(3)} (Δ ${wall} ms)`
@@ -594,7 +608,9 @@ export function formatNegative(run: NegativeRun): string {
     "",
     "## Seed liveness (not a scored row)",
     "",
-    "The seeded store is the same two facts. A related cue must inject sqlite, or the unrelated 0-byte rows would be a dead store and are filed FAIL instead of Δ≈0. This cue is not a Gate 1 score and not a product column.",
+    "The seeded store is the same two facts. A related cue must inject sqlite, or the unrelated 0-byte " +
+      "rows would be a dead store and are filed FAIL instead of Δ≈0. This cue is not a Gate 1 score and " +
+      "not a product column.",
     "",
     `- cue: \`${run.seed_liveness.cue}\``,
     `- packet: ${run.seed_liveness.packet_bytes} B`,
@@ -603,13 +619,18 @@ export function formatNegative(run: NegativeRun): string {
     "",
     "## By construction",
     "",
-    "Memorable **454/454** and Mem0 **92** fail by construction. They are not Eden product scores. COMPETITORS V-zero. This is not a published BrainMemory column.",
+    "Memorable **454/454** and Mem0 **92** fail by construction. They are not Eden product scores. " +
+      "COMPETITORS V-zero. This is not a published BrainMemory column.",
     "",
     "| claim | why it fails by construction |",
     "|---|---|",
-    "| Memorable 454/454 | Marketing 100% completion on a 3-bug fixture (`docs/MEMORY-COMPETITORS.md`). Saturated fixture plus a skill-dump denominator. Not a negative control. Cannot be an Eden product score. |",
-    "| Mem0 92 | Vendor LoCoMo dirt (`docs/MEMORY-COMPETITORS.md`: Mem0 vendor LoCoMo 92). Gold is dirty, the set is saturated, and this annex did not run LoCoMo. Cannot be an Eden product score. |",
-    "| MemoryBench ELO | `benchmarks/memoryagentbench/SOTA-GAP-REPORT.md` §11.2: often **No Memory ≈ Embedder**. Humility: memory can be zero lift. |",
+    "| Memorable 454/454 | Marketing 100% completion on a 3-bug fixture (`docs/MEMORY-COMPETITORS.md`). " +
+      "Saturated fixture plus a skill-dump denominator. Not a negative control. Cannot be an Eden product " +
+      "score. |",
+    "| Mem0 92 | Vendor LoCoMo dirt (`docs/MEMORY-COMPETITORS.md`: Mem0 vendor LoCoMo 92). Gold is " +
+      "dirty, the set is saturated, and this annex did not run LoCoMo. Cannot be an Eden product score. |",
+    "| MemoryBench ELO | `benchmarks/memoryagentbench/SOTA-GAP-REPORT.md` §11.2: often **No Memory ≈ " +
+      "Embedder**. Humility: memory can be zero lift. |",
     "",
     "## Protocol",
     "",
@@ -620,12 +641,14 @@ export function formatNegative(run: NegativeRun): string {
     "- Off switch is `EDEN_MEMORY=0`. On is the unset product default.",
     "- `EDEN_KNOW=0` during seed and probe.",
     "- Seeded rows with `store_n` below the seed length are FAIL, not Δ≈0.",
-    "- MEASURE rows that inject leftover sqlite/Clerk, or any Eden Memory packet outside the ±1% band, are LOSS vs remain-silent. Omit is not implemented.",
+    "- MEASURE rows that inject leftover sqlite/Clerk, or any Eden Memory packet outside the ±1% band, " +
+      "are LOSS vs remain-silent. Omit is not implemented.",
     "- Ranker and extract were not retuned.",
     "",
     "## M32 remain-silent (cited, not re-run)",
     "",
-    "`benchmarks/terminal-bench/RESULTS.md` on-arm empty/junk/on_cue/no_inject = 0/0/5/5 (dated 2026-09-21). This annex does not implement omit and does not re-run Harbor.",
+    "`benchmarks/terminal-bench/RESULTS.md` on-arm empty/junk/on_cue/no_inject = 0/0/5/5 (dated " +
+      "2026-09-21). This annex does not implement omit and does not re-run Harbor.",
     "",
     "## Product bugs",
     "",

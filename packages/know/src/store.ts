@@ -3135,7 +3135,8 @@ export function openStore(dir = knowDir()) {
 
   const hydrateSql = `
     SELECT s.s AS s, p.s AS p, o.s AS o, COALESCE(e.t,'') AS e, n.url AS url,
-      CASE p.s WHEN 'capital' THEN 0 WHEN 'is' THEN 1 WHEN 'obsoletes' THEN 2 WHEN 'updates' THEN 3 WHEN 'date' THEN 4 ELSE 5 END AS rk
+      CASE p.s WHEN 'capital' THEN 0 WHEN 'is' THEN 1 WHEN 'obsoletes' THEN 2 WHEN 'updates' THEN 3 \
+WHEN 'date' THEN 4 ELSE 5 END AS rk
     FROM nodes n
     JOIN intern s ON s.id = n.sid
     JOIN intern p ON p.id = n.pid

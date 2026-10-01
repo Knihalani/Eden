@@ -881,7 +881,8 @@ describe("island when_to_use (Wave 11.3)", () => {
     expect(p).toBeTruthy();
     const island = p!.steps.find((s) => s.kind === "island");
     const line =
-      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not re-run the loop.";
+      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not " +
+      "re-run the loop.";
     expect(island?.kind === "island" && island.when_to_use).toBe(line);
     expect(p!.when_to_use).toBe(line);
     expect(whenToUseOf(p!)).toBe(line);

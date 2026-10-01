@@ -341,7 +341,8 @@ describe("imported traces compile through the standard pipeline", () => {
     const jsonl = [
       '{"name":"Bash","command":"kubectl get pods -n prod","args":{"command":"kubectl get pods -n prod"},"ok":true}',
       '{"name":"Bash","command":"kubectl get svc -n prod","args":{"command":"kubectl get svc -n prod"},"ok":true}',
-      '{"name":"Bash","command":"kubectl get deployments -n prod","args":{"command":"kubectl get deployments -n prod"},"ok":true}',
+      '{"name":"Bash","command":"kubectl get deployments -n prod","args":{"command":"kubectl get ' +
+        'deployments -n prod"},"ok":true}',
     ].join("\n");
     const parsed = parseGenericJsonl(jsonl);
     const islands = cutIslands(parsed as unknown as ToolEvent[], { allowRunnerOnly: true });
@@ -352,8 +353,10 @@ describe("imported traces compile through the standard pipeline", () => {
 
   test("imported curl bundle forms a cloud island with resource-chain name", () => {
     const jsonl = [
-      '{"name":"Bash","command":"curl -s https://api.acme.com/v2/invoices/in_001","args":{"command":"curl -s https://api.acme.com/v2/invoices/in_001"},"ok":true}',
-      '{"name":"Bash","command":"curl -s https://api.acme.com/v2/invoices/in_001/lines","args":{"command":"curl -s https://api.acme.com/v2/invoices/in_001/lines"},"ok":true}',
+      '{"name":"Bash","command":"curl -s https://api.acme.com/v2/invoices/in_001","args":{"command":"curl ' +
+        '-s https://api.acme.com/v2/invoices/in_001"},"ok":true}',
+      '{"name":"Bash","command":"curl -s https://api.acme.com/v2/invoices/in_001/lines",' +
+        '"args":{"command":"curl -s https://api.acme.com/v2/invoices/in_001/lines"},"ok":true}',
     ].join("\n");
     const parsed = parseGenericJsonl(jsonl);
     const islands = cutIslands(parsed as unknown as ToolEvent[]);

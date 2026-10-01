@@ -146,7 +146,8 @@ export async function ingest(db: EdenDb, workspaceId: string, runId: string, eve
     // the same run, and the unique index from migrate() is what actually
     // enforces one observation — a loser here just keeps its count honest.
     await db.run(
-      `INSERT OR IGNORE INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index, ` +
+        `created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [crypto.randomUUID(), workspaceId, runId, fp, JSON.stringify(steps), island_index, Date.now()],
     );
     const existing = await db.get<{ count: number; status: string; steps: string }>(
@@ -329,7 +330,10 @@ async function uniqueToolName(db: EdenDb, workspaceId: string, base: string): Pr
  */
 function whenToUse(name: string): string {
   if (name.startsWith("github_pr_bundle")) {
-    return "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]. One call for all PRs; use instead of a per-PR gh api loop.";
+    return (
+      "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]. One call for all PRs; use " +
+      "instead of a per-PR gh api loop."
+    );
   }
   if (name.startsWith("github_pr_files")) {
     return "issues csv → number | files. One call for all PRs; use instead of a per-PR gh api loop.";

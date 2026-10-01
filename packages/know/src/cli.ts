@@ -108,7 +108,8 @@ export async function knowCli(argv: string[]): Promise<number> {
   }
   console.log(`${bin} — robots-ok public ingest onto a graph (paywalls skipped)
 
-  ${bin} run [--once] [--interval ${DEFAULT_INTERVAL_SEC}] [--cc ${DEFAULT_CC}] [--live ${DEFAULT_LIVE}] [--news ${DEFAULT_NEWS}]
+  ${bin} run [--once] [--interval ${DEFAULT_INTERVAL_SEC}] [--cc ${DEFAULT_CC}] [--live \
+${DEFAULT_LIVE}] [--news ${DEFAULT_NEWS}]
   ${bin} status
   ${bin} compact
   ${bin} dump

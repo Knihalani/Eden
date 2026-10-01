@@ -81,7 +81,8 @@ Then stop.`;
 
   const t2 = `Continue the desk in ${work}. Do not modify any other repo.
 
-1) Fetch orders ${ORDERS_MORE.join(", ")} the same way (order JSON + items). data/orders.json must cover ALL ids ${ORDERS_ALL.join(", ")}.
+1) Fetch orders ${ORDERS_MORE.join(", ")} the same way (order JSON + items). data/orders.json must \
+cover ALL ids ${ORDERS_ALL.join(", ")}.
 2) For EACH customer id ${CUSTOMERS.join(", ")} fetch:
    GET ${api}/customers/{id}
    GET ${api}/customers/{id}/orders

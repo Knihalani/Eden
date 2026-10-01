@@ -44,7 +44,8 @@ export function formatDecision(name: string, d: Decision, unit = "ms"): string {
     const s = d.selfCheck;
     lines.push(
       `  A/A self-check: ${s.status} ` +
-        `(delta ${s.delta.point.toFixed(0)}${unit}, CI ${s.delta.lo.toFixed(0)}..${s.delta.hi.toFixed(0)}, n=${s.blocks})`,
+        `(delta ${s.delta.point.toFixed(0)}${unit}, CI ${s.delta.lo.toFixed(0)}..${s.delta.hi.toFixed(0)}, ` +
+        `n=${s.blocks})`,
     );
   }
   for (const r of d.reasons) lines.push(`  - ${r}`);

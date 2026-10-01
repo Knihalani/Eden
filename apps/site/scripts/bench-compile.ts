@@ -113,7 +113,8 @@ function prPrompt(n: number, outfile: string) {
   return `You are in the ${REPO} git repo. Do not edit, commit, or install anything.
 Do not read .env or secrets.
 
-Task: gather three facts about pull request ${n} using three separate \`gh api\` REST calls (not one combined command, not the website):
+Task: gather three facts about pull request ${n} using three separate \`gh api\` REST calls (not \
+one combined command, not the website):
 1) GET repos/${REPO}/pulls/${n} — title
 2) GET repos/${REPO}/pulls/${n}/reviews — how many reviews
 3) GET repos/${REPO}/commits/<head-sha>/status — combined state
@@ -126,7 +127,8 @@ Then stop.`;
 function localPrompt(outfile: string) {
   return `You are in the Eden compiled-tool repo. Do not edit files. Do not call gh or curl.
 
-Question: in apps/site/src/playback.ts, when a compiled step has no URL, does playTool treat the step as fail or success?
+Question: in apps/site/src/playback.ts, when a compiled step has no URL, does playTool treat the \
+step as fail or success?
 Write exactly one line to ${outfile}:
 fail | apps/site/src/playback.ts
 or
@@ -370,7 +372,8 @@ try {
   const onNames = toolsAfter.tools.filter((t) => t.state === "on").map((t) => t.name);
   const edenHint =
     onNames.length > 0
-      ? `\nEden MCP is connected. If it lists a tool that covers this PR bundle, call it instead of repeating the three gh api calls. Compiled tools: ${onNames.join(", ")}.`
+      ? `\nEden MCP is connected. If it lists a tool that covers this PR bundle, call it instead of ` +
+        `repeating the three gh api calls. Compiled tools: ${onNames.join(", ")}.`
       : `\nEden MCP is connected. Use a hosted Eden tool if one matches; otherwise use gh api.`;
 
   const tasks: Array<{

@@ -151,7 +151,8 @@ describe("holdout worlds: compileTraces", () => {
         expect(traces.every((t) => t.complete)).toBe(true);
         const r = compileTraces(traces);
         console.log(
-          `holdout compile ${c.name}: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+          `holdout compile ${c.name}: programs=${r.programs.length} \
+seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
             .map((x) => x.code ?? x.reason)
             .slice(0, 3)
             .join("; ")}`,
@@ -180,7 +181,8 @@ describe("holdout worlds: compileTraces", () => {
       const r = compileTraces(traces);
       const looped = r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"));
       console.log(
-        `holdout compile cart: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+        `holdout compile cart: programs=${r.programs.length} loops=${looped.length} \
+seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
           .map((x) => x.code ?? x.reason)
           .slice(0, 4)
           .join("; ")}`,

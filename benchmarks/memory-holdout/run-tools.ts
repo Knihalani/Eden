@@ -264,21 +264,28 @@ export function formatResults(run: HoldoutRun): string {
     const hits = r.inject_hits.length ? r.inject_hits.join("; ") : "—";
     const miss = r.inject_miss.length ? r.inject_miss.join("; ") : "—";
     lines.push(
-      `| ${r.id} | ${r.verdict} | ${r.post_tool_stored ? "yes" : "no"} | ${r.jsonl_n_after_observe} | ${hits} | ${miss} |`,
+      `| ${r.id} | ${r.verdict} | ${r.post_tool_stored ? "yes" : "no"} | ${r.jsonl_n_after_observe} | ` +
+        `${hits} | ${miss} |`,
     );
   }
   lines.push("");
   if (!run.post_tool_stored) {
     lines.push(
-      "PostToolUse did not store gold needles. If `memoryHookResponse` still returns null *without* writing JSONL, the live hook is dropping tools (M2.2 not landed). FAIL is honest. Do not retune the ranker.",
+      "PostToolUse did not store gold needles. If `memoryHookResponse` still returns null *without* " +
+        "writing JSONL, the live hook is dropping tools (M2.2 not landed). FAIL is honest. Do not retune the " +
+        "ranker.",
     );
   } else if (run.overall === "FAIL") {
     lines.push(
-      "PostToolUse stored the trace, but inject/additionalContext still missed gold needles. FAIL is honest. Do not retune the ranker from this file.",
+      "PostToolUse stored the trace, but inject/additionalContext still missed gold needles. FAIL is " +
+        "honest. Do not retune the ranker from this file.",
     );
   } else {
     lines.push(
-      "True verdict on this tree: inject/additionalContext contained every gold needle. `respondToHook` PostToolUse forwards to `memoryHookResponse`, which observes tool name + result (returns null; inject is the later UserPromptSubmit). Pre-registered expect was FAIL until tools were observed; M2.2 had landed, so this is not a forced FAIL.",
+      "True verdict on this tree: inject/additionalContext contained every gold needle. `respondToHook` " +
+        "PostToolUse forwards to `memoryHookResponse`, which observes tool name + result (returns null; " +
+        "inject is the later UserPromptSubmit). Pre-registered expect was FAIL until tools were observed; " +
+        "M2.2 had landed, so this is not a forced FAIL.",
     );
   }
   lines.push("");
@@ -289,7 +296,8 @@ export function formatResults(run: HoldoutRun): string {
   lines.push("```");
   lines.push("");
   lines.push(
-    "Paste the table into this file and into `tools.md` § RESULTS. Score additionalContext only. Do not add a BrainMemory column. Do not set k=40.",
+    "Paste the table into this file and into `tools.md` § RESULTS. Score additionalContext only. Do not " +
+      "add a BrainMemory column. Do not set k=40.",
   );
   lines.push("");
   return lines.join("\n");

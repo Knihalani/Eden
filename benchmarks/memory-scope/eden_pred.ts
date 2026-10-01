@@ -87,7 +87,8 @@ for (const [name, f] of Object.entries(schemes)) {
     }
   }
   console.log(
-    `${name.padEnd(40)} turns=${turnsWith} multiScopeTurns=${multi} predict=${pred}/${tot} distinctScopes=${distinct.size}`,
+    `${name.padEnd(40)} turns=${turnsWith} multiScopeTurns=${multi} predict=${pred}/${tot} ` +
+      `distinctScopes=${distinct.size}`,
   );
 }
 process.exit(0);

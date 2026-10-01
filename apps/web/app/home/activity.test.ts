@@ -254,7 +254,8 @@ test("activityFromInbox maps a candidate description onto Replacement waiting", 
         program: {
           name: "pr_status",
           description:
-            "The outside world renamed a field. A replacement is waiting. The live tool is unchanged until you Approve.",
+            "The outside world renamed a field. A replacement is waiting. The live tool is unchanged until you " +
+            "Approve.",
         },
       },
     ],
@@ -438,7 +439,8 @@ test("last receipt remainder skip / host-drop use failLabel words; Live/Paused s
   expect<string | null>(
     lastReceiptKind({
       reason:
-        "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the last tool output.",
+        "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the " +
+        "last tool output.",
     }),
   ).toBe(failLabel("skipped"));
   expect<string | null>(

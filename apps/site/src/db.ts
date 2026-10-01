@@ -25,18 +25,24 @@ const SQLITE_STATEMENTS = [
       PRIMARY KEY (workspace_id, fingerprint)
     )`,
   `CREATE TABLE IF NOT EXISTS tool (
-      id TEXT PRIMARY KEY, workspace_id TEXT, name TEXT, when_to_use TEXT, state TEXT, steps TEXT, seen TEXT, fingerprint TEXT, uses_count INTEGER DEFAULT 0, cheap_check TEXT, required_k INTEGER DEFAULT 2, published INTEGER DEFAULT 0
+      id TEXT PRIMARY KEY, workspace_id TEXT, name TEXT, when_to_use TEXT, state TEXT, steps TEXT, \
+seen TEXT, fingerprint TEXT, uses_count INTEGER DEFAULT 0, cheap_check TEXT, required_k INTEGER \
+DEFAULT 2, published INTEGER DEFAULT 0
     )`,
   `CREATE TABLE IF NOT EXISTS knock (
       id TEXT PRIMARY KEY, workspace_id TEXT, tool_id TEXT, attempt INTEGER, resolution TEXT
     )`,
   `CREATE TABLE IF NOT EXISTS tool_run (
-      id TEXT PRIMARY KEY, tool_id TEXT, steps_attempted INTEGER, steps_ok INTEGER, server_ms INTEGER, runner_ms INTEGER, raw_bytes INTEGER, densified_bytes INTEGER, billable_ms INTEGER, cache_hits INTEGER, receipt TEXT, created_at BIGINT DEFAULT 0
+      id TEXT PRIMARY KEY, tool_id TEXT, steps_attempted INTEGER, steps_ok INTEGER, server_ms \
+INTEGER, runner_ms INTEGER, raw_bytes INTEGER, densified_bytes INTEGER, billable_ms INTEGER, \
+cache_hits INTEGER, receipt TEXT, created_at BIGINT DEFAULT 0
     )`,
   `CREATE TABLE IF NOT EXISTS result_cache (cache_key TEXT PRIMARY KEY, body TEXT, expires_at BIGINT)`,
   `CREATE TABLE IF NOT EXISTS ignore_fp (workspace_id TEXT, fingerprint TEXT, PRIMARY KEY (workspace_id, fingerprint))`,
-  `CREATE TABLE IF NOT EXISTS wrap_cache (run_id TEXT, tool_id TEXT, facts TEXT, created_at BIGINT, PRIMARY KEY (run_id, tool_id))`,
-  `CREATE TABLE IF NOT EXISTS watched_issue (workspace_id TEXT, issue TEXT, seen_at BIGINT, PRIMARY KEY (workspace_id, issue))`,
+  `CREATE TABLE IF NOT EXISTS wrap_cache (run_id TEXT, tool_id TEXT, facts TEXT, created_at BIGINT, ` +
+    `PRIMARY KEY (run_id, tool_id))`,
+  `CREATE TABLE IF NOT EXISTS watched_issue (workspace_id TEXT, issue TEXT, seen_at BIGINT, PRIMARY ` +
+    `KEY (workspace_id, issue))`,
   `CREATE INDEX IF NOT EXISTS idx_tool_run_tool_created ON tool_run (tool_id, created_at)`,
   // Hot-path lookups. Every tool query filters (workspace_id, state); mining
   // reads a run's events back ordered by seq; the knock scan runs on every
@@ -159,7 +165,8 @@ async function alreadyTenantKeyed(db: EdenDb, neon: boolean, table: string): Pro
     const row = await db.get<{ n: number | string }>(
       `SELECT count(*) AS n
          FROM information_schema.table_constraints c
-         JOIN information_schema.key_column_usage k ON k.constraint_name = c.constraint_name AND k.table_name = c.table_name
+         JOIN information_schema.key_column_usage k ON k.constraint_name = c.constraint_name AND \
+k.table_name = c.table_name
         WHERE c.table_name = $1 AND c.constraint_type = 'PRIMARY KEY' AND k.column_name = 'workspace_id'`,
       [table],
     );
@@ -256,7 +263,8 @@ async function migrate(db: EdenDb, neon: boolean) {
   // creating a unique index over duplicates must not stop the server booting.
   await db
     .exec(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_stretch_observed ON stretch (workspace_id, run_id, fingerprint, island_index)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_stretch_observed ON stretch (workspace_id, run_id, ` +
+        `fingerprint, island_index)`,
     )
     .catch(() => undefined);
   // Drift canary ledger: one row per caught DeoptError during playback. The

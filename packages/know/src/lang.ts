@@ -1,7 +1,11 @@
 /** Compact English trigram prior. Not fastText; beats raw Latin-letter ratio on mixed CC. */
 
 const EN = new Set(
-  `the and ing ion tio ent nce ter ate ers hat her tha eth for thi wit his you was not but had are from have been were they this that with will would there their about would could should which after first also into more some such only other than then them these being under over also just like back well even most many those come made find long down day did get own see way may say she use two how its our out
+  `the and ing ion tio ent nce ter ate ers hat her tha eth for thi wit his you was not but had are \
+from have been were they this that with will would there their about would could should which after \
+first also into more some such only other than then them these being under over also just like back \
+well even most many those come made find long down day did get own see way may say she use two how \
+its our out
 the and ing`.match(/[a-z]{3}/g) || [],
 );
 

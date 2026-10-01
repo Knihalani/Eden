@@ -93,5 +93,6 @@ for (const [W, K] of [
   printRow(`upstream requests @W=${W}`, `today ${W * K} → pooled ≤${K} (first-arrival dedupe)`);
 }
 console.log(
-  "\nVERDICT: WIN — public reads cost the system once, not once per tenant; privacy unchanged (private keys never enter the pool).",
+  "\nVERDICT: WIN — public reads cost the system once, not once per tenant; privacy unchanged " +
+    "(private keys never enter the pool).",
 );

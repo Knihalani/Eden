@@ -43,7 +43,8 @@ export function layout(
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${esc(title)} · Eden</title>
 <style>
-  :root { color-scheme: dark; --bg:#0c0d0a; --fg:#eceadd; --muted:#8b8878; --line:#24251e; --accent:#c8f542; --bad:#ff6b4a; --card:#14150f; }
+  :root { color-scheme: dark; --bg:#0c0d0a; --fg:#eceadd; --muted:#8b8878; --line:#24251e; \
+--accent:#c8f542; --bad:#ff6b4a; --card:#14150f; }
   * { box-sizing: border-box; }
   body { margin:0; font:15px/1.45 ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--fg); }
   header { display:flex; gap:1.5rem; align-items:center; padding:1rem 1.5rem; border-bottom:1px solid var(--line); }
@@ -53,7 +54,9 @@ export function layout(
   main { padding:1.5rem; max-width:68rem; }
   h1 { font-size:1.35rem; font-weight:560; margin:0 0 .35rem; letter-spacing:-.02em; }
   .lede { color:var(--muted); max-width:42rem; margin:0 0 1.5rem; }
-  .strip { display:flex; gap:1rem; flex-wrap:wrap; padding:.85rem 1rem; border:1px solid var(--line); background:var(--card); margin-bottom:1.25rem; font-family:ui-monospace,monospace; font-size:12px; }
+  .strip { display:flex; gap:1rem; flex-wrap:wrap; padding:.85rem 1rem; border:1px solid \
+var(--line); background:var(--card); margin-bottom:1.25rem; font-family:ui-monospace,monospace; \
+font-size:12px; }
   .strip span { color:var(--muted); }
   .dot { width:.55rem; height:.55rem; border-radius:99px; background:var(--muted); display:inline-block; }
   .dot.on { background:var(--accent); box-shadow:0 0 8px var(--accent); }
@@ -67,17 +70,20 @@ export function layout(
   .nums b { display:block; font-size:1.35rem; letter-spacing:-.03em; }
   .nums span { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
   .row { display:flex; gap:.5rem; flex-wrap:wrap; }
-  button, .btn { background:var(--accent); color:#111; border:0; padding:.45rem .8rem; font:600 13px ui-sans-serif,system-ui; cursor:pointer; }
+  button, .btn { background:var(--accent); color:#111; border:0; padding:.45rem .8rem; font:600 \
+13px ui-sans-serif,system-ui; cursor:pointer; }
   button:focus-visible, a:focus-visible, .btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
   .bad { color:var(--bad); }
   .muted { color:var(--muted); }
-  .badge { font:11px/1.2 ui-monospace,monospace; border:1px solid var(--line); padding:.12rem .4rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  .badge { font:11px/1.2 ui-monospace,monospace; border:1px solid var(--line); padding:.12rem .4rem;\
+ text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
   .badge.pass { color:var(--accent); border-color:var(--accent); }
   .badge.fail { color:var(--bad); border-color:var(--bad); }
   code { font-family:ui-monospace,monospace; font-size:.9em; }
   .graph { display:flex; flex-direction:column; gap:.4rem; margin:1rem 0; }
-  .step { font:13px/1.4 ui-monospace,monospace; padding:.45rem .6rem; border-left:2px solid var(--accent); background:#10110c; }
+  .step { font:13px/1.4 ui-monospace,monospace; padding:.45rem .6rem; border-left:2px solid \
+var(--accent); background:#10110c; }
   .step.island { border-color:#f5d742; }
   .step.assert { border-color:#7ec8ff; }
   .empty { color:var(--muted); padding:2rem 0; }
@@ -96,7 +102,8 @@ export function layout(
 <script>
 window.EDEN_TOKEN = ${JSON.stringify(token)};
 async function post(url) {
-  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + window.EDEN_TOKEN }, body: "{}" });
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", \
+authorization: "Bearer " + window.EDEN_TOKEN }, body: "{}" });
   const j = await r.json();
   if (!r.ok) { alert(j.error || r.status); return; }
   location.reload();
@@ -140,13 +147,17 @@ export function inboxPage(store: Store, token?: string): string {
   const save = store.savings();
   const cards = cands.length
     ? cands.map(candidateCard).join("")
-    : `<p class="empty">No stretches yet. Point your agent at this wrap — we compile the repeating parts and show you what we refused.</p>`;
+    : `<p class="empty">No stretches yet. Point your agent at this wrap — we compile the repeating parts ` +
+      `and show you what we refused.</p>`;
   const moment = cands.some((c) => c.program && !c.refusal)
-    ? `<p class="lede">We turned a repeating stretch into one tool that cannot skip steps. It ships when shadow shows at least 2× fewer LLM calls — latency is reported, not a gate. INCONCLUSIVE does not ship.</p>`
+    ? `<p class="lede">We turned a repeating stretch into one tool that cannot skip steps. It ships when ` +
+      `shadow shows at least 2× fewer LLM calls — latency is reported, not a gate. INCONCLUSIVE does not ` +
+      `ship.</p>`
     : "";
   const body = `
     <h1>Inbox</h1>
-    <p class="lede">Point Eden at the agent you already have. Repeating stretches become one tool that cannot skip checks. We ship when quality holds and tokens or time are measured.</p>
+    <p class="lede">Point Eden at the agent you already have. Repeating stretches become one tool \
+that cannot skip checks. We ship when quality holds and tokens or time are measured.</p>
     ${moment}
     <div class="strip">
       <span><i class="dot ${on ? "on" : ""}"></i> wrap ${on ? "connected" : "waiting"}</span>
@@ -183,7 +194,8 @@ function candidateCard(c: Candidate): string {
           : "";
   const nums = m
     ? `<div class="nums">
-        <div><b>${m.tokensMeasured && m.tokensSaved != null ? fmtAbs(m.tokensSaved) : "—"}</b><span>tokens saved</span></div>
+        <div><b>${m.tokensMeasured && m.tokensSaved != null ? fmtAbs(m.tokensSaved) : "—"}</b><span>\
+tokens saved</span></div>
         <div><b>${m.timeMeasured && m.timeSavedMs != null ? fmtAbs(m.timeSavedMs) : "—"}</b><span>ms saved</span></div>
         <div><b>${((m.skipRateAfter ?? 0) * 100).toFixed(0)}%</b><span>skips after</span></div>
         <div><b>${witnesses ?? "—"}</b><span>witnesses</span></div>
@@ -234,7 +246,8 @@ export function toolPage(store: Store, id: string, token?: string): string {
     ${
       m
         ? `<div class="nums">
-      <div><b>${m.tokensMeasured && m.tokensSaved != null ? fmtAbs(m.tokensSaved) : "—"}</b><span>tokens saved</span></div>
+      <div><b>${m.tokensMeasured && m.tokensSaved != null ? fmtAbs(m.tokensSaved) : "—"}</b>\
+<span>tokens saved</span></div>
       <div><b>${m.timeMeasured && m.timeSavedMs != null ? fmtAbs(m.timeSavedMs) : "—"}</b><span>ms saved</span></div>
       <div><b>${((m.skipRateAfter ?? 0) * 100).toFixed(0)}%</b><span>skips after</span></div>
     </div>`
@@ -263,7 +276,8 @@ export function livePage(store: Store, token?: string): string {
               : `<button class="ghost" onclick="post('/v1/tools/${esc(t.id)}/resume')">Resume</button>`;
           return `<article class="card">
       <h2>${esc(t.name)} ${verdictBadge(t.state)}</h2>
-      <p class="muted">${esc(t.version.slice(0, 12))} · ${stats.n} runs · ${stats.fail} failed · ${stats.llm} island calls</p>
+      <p class="muted">${esc(t.version.slice(0, 12))} · ${stats.n} runs · ${stats.fail} failed · \
+${stats.llm} island calls</p>
       <div class="row">
         <a class="btn ghost" href="/tools/${esc(t.id)}">Open</a>
         ${pauseOrResume}

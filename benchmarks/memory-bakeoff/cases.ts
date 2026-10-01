@@ -52,7 +52,8 @@ export const CAPTURE: Capture[] = [
     id: "eng-dsn",
     family: "buried",
     stated: [
-      "Quick recap from standup. Traffic looked fine. Also the staging DSN is postgres://staging.internal:5432/app. Then we talked about lunch.",
+      "Quick recap from standup. Traffic looked fine. Also the staging DSN is " +
+        "postgres://staging.internal:5432/app. Then we talked about lunch.",
     ],
     asked: "How do I connect the staging database?",
     want: /staging\.internal/i,

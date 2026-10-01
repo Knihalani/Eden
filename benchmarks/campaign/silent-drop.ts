@@ -70,7 +70,8 @@ export function uniqueCalls(id = "U-1"): SilentDropCall[] {
 }
 
 export const N9_EXPECT =
-  "host drops rewrite; remainder deny must not corrupt; suppressions counted; cents WIN or INDISTINGUISHABLE within ±1%";
+  "host drops rewrite; remainder deny must not corrupt; suppressions counted; cents WIN or " +
+  "INDISTINGUISHABLE within ±1%";
 
 export type StretchResult = {
   stats: SessionStats;
@@ -427,7 +428,8 @@ export async function n9Scenario(repeats: number): Promise<ScenarioOut> {
               `executions=${r.executions}`,
               `islands=${r.islands}`,
               `droppedRewrites=${r.droppedRewrites}`,
-              `ledger transparent=${r.ledgerTransparent} steered-skip=${r.ledgerSteeredSkip} host-drop=${r.ledgerHostDrop}`,
+              `ledger transparent=${r.ledgerTransparent} steered-skip=${r.ledgerSteeredSkip} ` +
+                `host-drop=${r.ledgerHostDrop}`,
             ]
           : [`raw executions=${r.executions} islands=${r.islands}`];
       if (arm === "eden" && r.suppressions < 1) {
@@ -460,12 +462,15 @@ export function writeSilentDropMd(
     "# Silent-drop host (Wave 5.4) + oblivious cents (Wave 5.2)",
     "",
     `Measured ${new Date().toISOString()} via \`bun run benchmarks/campaign/silent-drop.ts --fast\`.`,
-    "Headless host **always drops** \`updatedToolOutput\` (R1); \`additionalContext\` kept; S1b PreToolUse deny still fires.",
+    "Headless host **always drops** \`updatedToolOutput\` (R1); \`additionalContext\` kept; S1b " +
+      "PreToolUse deny still fires.",
     "",
     "## Oblivious compilable stretch (S1b on)",
     "",
-    "Agent issues the full 3-call sequence (Read → Grep → Bash). Bash is the island-cost analogue (ISLAND_CENTS=0.3 if executed).",
-    "Eden: first call executes + transparent serve; remainder denied (no island). Raw: all three execute, island billed.",
+    "Agent issues the full 3-call sequence (Read → Grep → Bash). Bash is the island-cost analogue " +
+      "(ISLAND_CENTS=0.3 if executed).",
+    "Eden: first call executes + transparent serve; remainder denied (no island). Raw: all three " +
+      "execute, island billed.",
     "",
     "| Meter | Raw (ctrl) | Eden (trt) | Δ | Verdict |",
     "|---|---|---|---|---|",
@@ -479,7 +484,9 @@ export function writeSilentDropMd(
       `| ${relPct(out.controlMeans.wall_ms ?? 0, out.treatmentMeans.wall_ms ?? 0).toFixed(2)}% ` +
       `| ${wall?.verdict ?? "—"} |`,
     "",
-    `Break-even: Eden cents ≤ raw (or INDISTINGUISHABLE within ±1% **and** suppressions > 0). **${breakEven ? "PASS" : "FAIL"}** (Δcents ${d.toFixed(2)}% vs raw; ${suppressNote || "suppressions counted in notes"}).`,
+    `Break-even: Eden cents ≤ raw (or INDISTINGUISHABLE within ±1% **and** suppressions > 0). ` +
+      `**${breakEven ? "PASS" : "FAIL"}** (Δcents ${d.toFixed(2)}% vs raw; ` +
+      `${suppressNote || "suppressions counted in notes"}).`,
     "",
     `Pre-registered expect: ${N9_EXPECT}`,
     "",
@@ -528,7 +535,8 @@ async function main(): Promise<void> {
     uniqEden.denies === 0 &&
     uniqRaw.stats.turns === uniqEden.stats.turns;
   console.log(
-    `  raw cents=${uniqRaw.stats.cents} eden cents=${uniqEden.stats.cents} denies=${uniqEden.denies} ${uniqOk ? "OK" : "FAIL"}`,
+    `  raw cents=${uniqRaw.stats.cents} eden cents=${uniqEden.stats.cents} denies=${uniqEden.denies} ` +
+      `${uniqOk ? "OK" : "FAIL"}`,
   );
   if (!uniqOk) n9.ok = false;
 

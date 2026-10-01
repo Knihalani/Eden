@@ -19,7 +19,8 @@ function prPrompt(n: number, outfile: string) {
   return `You are in the ${REPO} git repo. Do not edit, commit, or install anything.
 Do not read .env or secrets.
 
-Task: gather three facts about pull request ${n} using three separate \`gh api\` REST calls (not one combined command, not the website):
+Task: gather three facts about pull request ${n} using three separate \`gh api\` REST calls (not \
+one combined command, not the website):
 1) GET repos/${REPO}/pulls/${n} — title
 2) GET repos/${REPO}/pulls/${n}/reviews — how many reviews
 3) GET repos/${REPO}/commits/<head-sha>/status — combined state
@@ -28,7 +29,8 @@ Write exactly one line to ${outfile} in this shape:
 <title> | <review_count> | <status_state>
 Then stop.
 
-Eden MCP is connected. If it lists a tool that covers this PR bundle, call it instead of repeating the three gh api calls. Compiled tools: gh_api_gh_api_gh_api.`;
+Eden MCP is connected. If it lists a tool that covers this PR bundle, call it instead of repeating \
+the three gh api calls. Compiled tools: gh_api_gh_api_gh_api.`;
 }
 
 function parseStream(text: string) {
@@ -197,7 +199,8 @@ try {
   };
   report.totals = { without: sum("without"), with: sum("with") };
   report.note =
-    "WITH PR tasks re-run after handleForge stopped intercepting api.github.com. Compile warmups and without-arm unchanged.";
+    "WITH PR tasks re-run after handleForge stopped intercepting api.github.com. Compile warmups and " +
+    "without-arm unchanged.";
   writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
   writeFileSync(join(ROOT, "apps/site/scripts/bench-compile-results.json"), JSON.stringify(report, null, 2));
   console.log("totals", JSON.stringify(report.totals, null, 2));

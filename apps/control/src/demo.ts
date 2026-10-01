@@ -196,7 +196,8 @@ console.log(`
 ${demoListenLines(String(server.url), token)}
 
 What just happened
-  10 TicketShip agent runs: lookupTicket → fetchDetails → parseFields → validate → draftReply → writeRecord → verifyWrite → notify.
+  10 TicketShip agent runs: lookupTicket → fetchDetails → parseFields → validate → draftReply → \
+writeRecord → verifyWrite → notify.
   Compile mined ${minedName}${minedLlm}${minedReuse}.
   Sequence: ${(pass?.program?.sequence ?? []).join(" → ")}
   ${shippedLine}
@@ -209,7 +210,8 @@ Unseen ticket T-999 (out of distribution)
   ${runOod ? `HTTP ${runOod.status} · ${oodBody?.error ?? ""} · ${oodBody?.reason ?? ""}` : "skipped"}
 
 Savings
-  live ${savings.live ?? 0} · runs ${savings.runs ?? 0} · fails ${savings.fail ?? 0} · ${savings.llmReductionMean ? savings.llmReductionMean.toFixed(1) + "× LLM mean" : "n/a"}
+  live ${savings.live ?? 0} · runs ${savings.runs ?? 0} · fails ${savings.fail ?? 0} · \
+${savings.llmReductionMean ? savings.llmReductionMean.toFixed(1) + "× LLM mean" : "n/a"}
 
 ${demoListenFooter(String(server.url), token)}
 `);

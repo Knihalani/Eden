@@ -12,14 +12,16 @@ describe("ingest uniqueness constraints", () => {
   test("the same island observation in one run is stored once", async () => {
     const db = await openDb(`/tmp/eden-uniq-stretch-${Date.now()}.db`);
     await db.run(
-      `INSERT OR IGNORE INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index) VALUES ` +
+        `(?, ?, ?, ?, ?, ?)`,
       ["s1", "ws_local", "run1", "fp", "[]", 0],
     );
     // A concurrent ingest would insert a different id for the same
     // (workspace, run, fingerprint, island_index); the unique index must
     // swallow it rather than double-count toward the knock threshold.
     await db.run(
-      `INSERT OR IGNORE INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index) VALUES ` +
+        `(?, ?, ?, ?, ?, ?)`,
       ["s2", "ws_local", "run1", "fp", "[]", 0],
     );
     const n = (await db.get<{ c: number }>(`SELECT COUNT(*) as c FROM stretch`))?.c;

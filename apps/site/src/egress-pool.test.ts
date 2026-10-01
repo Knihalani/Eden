@@ -54,7 +54,8 @@ describe("egress connection amortization", () => {
       expect(connections).toBeLessThanOrEqual(2);
       expect(connections).toBeGreaterThan(0);
       console.log(
-        `egress-pool connections: pooled ${connections} for ${n} GETs; localhost p50=${p50(times).toFixed(3)}ms sum=${times.reduce((a, b) => a + b, 0).toFixed(1)}ms`,
+        `egress-pool connections: pooled ${connections} for ${n} GETs; localhost ` +
+          `p50=${p50(times).toFixed(3)}ms sum=${times.reduce((a, b) => a + b, 0).toFixed(1)}ms`,
       );
     } finally {
       destroyEgressAgents();
@@ -101,7 +102,8 @@ describe("egress connection amortization", () => {
     const unpooled = await measure(false);
 
     console.log(
-      `egress-pool p50: pooled=${pooled.p50.toFixed(3)}ms (${pooled.connections} conns, sum=${pooled.sum.toFixed(1)}ms) ` +
+      `egress-pool p50: pooled=${pooled.p50.toFixed(3)}ms (${pooled.connections} conns, ` +
+        `sum=${pooled.sum.toFixed(1)}ms) ` +
         `unpooled=${unpooled.p50.toFixed(3)}ms (${unpooled.connections} conns, sum=${unpooled.sum.toFixed(1)}ms) ` +
         `n=${n}`,
     );

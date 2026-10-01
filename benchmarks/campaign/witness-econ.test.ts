@@ -99,7 +99,8 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   test("unvalidatable — shadowing would perform writes for real", () => {
     const r = classifyGoLive(
       [
-        "shadowing would perform applyCredit, emailCustomer for real, once per held-out trace — supply a sandbox registry (registryFor) and set allowSideEffects",
+        "shadowing would perform applyCredit, emailCustomer for real, once per held-out trace — supply a " +
+          "sandbox registry (registryFor) and set allowSideEffects",
       ],
       "INCONCLUSIVE",
     );
@@ -154,7 +155,8 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   test("unmeasured_usage — extrapolated island tokens", () => {
     const r = classifyGoLive(
       [
-        "token savings are extrapolated from remaining LLM calls across the island step, not measured — supply measured time or provider-reported usage",
+        "token savings are extrapolated from remaining LLM calls across the island step, not measured — " +
+          "supply measured time or provider-reported usage",
       ],
       "INCONCLUSIVE",
     );
@@ -169,7 +171,8 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   test("unmeasured_usage — session UNCERTIFIED simulated-usage path", () => {
     const r = classifyGoLive(
       [
-        "UNCERTIFIED: provider-usage simulated; shadow said token savings are extrapolated from remaining LLM calls across the island step, not measured — supply measured time or provider-reported usage",
+        "UNCERTIFIED: provider-usage simulated; shadow said token savings are extrapolated from remaining " +
+          "LLM calls across the island step, not measured — supply measured time or provider-reported usage",
       ],
       "PASS",
     );
@@ -184,7 +187,8 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   test("NO_PROGRAM with compile-refusal text stays unknown until named", () => {
     const r = classifyGoLive(
       [
-        "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding.",
+        "All witnesses produced empty or identical output. Eden compiles stretches that produce useful " +
+          "results — check that your agent's tool calls are succeeding.",
       ],
       "NO_PROGRAM",
     );

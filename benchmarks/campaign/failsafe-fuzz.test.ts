@@ -128,7 +128,8 @@ describe("failsafe fuzz", () => {
       });
       const ms = Math.round(performance.now() - t0);
       console.log(
-        `failsafe-fuzz n=${N_CASES} divergences=${divergences} seed=0x${FUZZ_SEED.toString(16).toUpperCase()} timeouts=${timeouts} ms=${ms}`,
+        `failsafe-fuzz n=${N_CASES} divergences=${divergences} ` +
+          `seed=0x${FUZZ_SEED.toString(16).toUpperCase()} timeouts=${timeouts} ms=${ms}`,
       );
       if (firstErr[0] instanceof Error) throw firstErr[0];
       if (firstErr[0] !== undefined) throw new Error(String(firstErr[0]));

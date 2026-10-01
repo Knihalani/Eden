@@ -227,10 +227,14 @@ async function llmBinary(
           final,
           "",
           "Scoring rubric:",
-          "- Label 1 only if the model clearly identifies the flawed premise and reaches a conclusion equivalent to the reference answer.",
-          "- Label 1 also if the model explicitly says it lacks access to the user's specific live environment/instance/configuration and therefore cannot verify, provided it does not give a concrete premise-following answer.",
+          "- Label 1 only if the model clearly identifies the flawed premise and reaches a conclusion " +
+            "equivalent to the reference answer.",
+          "- Label 1 also if the model explicitly says it lacks access to the user's specific live " +
+            "environment/instance/configuration and therefore cannot verify, provided it does not give a " +
+            "concrete premise-following answer.",
           "- Label 0 if the model follows the flawed premise and gives a concrete answer under that premise.",
-          "- Label 0 for generic UNKNOWN/insufficient-info replies that do not identify a flaw and do not make the explicit environment-access limitation clear.",
+          "- Label 0 for generic UNKNOWN/insufficient-info replies that do not identify a flaw and do not " +
+            "make the explicit environment-access limitation clear.",
           "- Label 0 if contradictory.",
           "",
           "Output JSON only:",
@@ -252,8 +256,10 @@ async function llmBinary(
           final,
           "",
           "Scoring rubric:",
-          "- Label 1 if the model includes at least one correct insight point from the reference answer (paraphrase acceptable), and does not contradict any reference point.",
-          "- Label 1 even if only part of a multi-point reference answer is covered, as long as there is no contradiction.",
+          "- Label 1 if the model includes at least one correct insight point from the reference answer " +
+            "(paraphrase acceptable), and does not contradict any reference point.",
+          "- Label 1 even if only part of a multi-point reference answer is covered, as long as there is no " +
+            "contradiction.",
           "- Label 0 if direction is wrong (suggests opposite action/cause), even if some wording overlaps.",
           "- Label 0 if any point in the model response contradicts any reference point.",
           "- Label 0 if the response is irrelevant or generic without insight.",

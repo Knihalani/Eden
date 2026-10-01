@@ -114,5 +114,6 @@ printRow("session input spend — proposed (+breakpoints)", `$${proposed.toFixed
 printRow("speedup naive → proposed", `${(naive / proposed).toFixed(1)}x`);
 printRow("speedup today → proposed", `${(today / proposed).toFixed(1)}x`);
 console.log(
-  "\nVERDICT: WIN — pinned order holds the cache across turns; an append-only breakpoint makes every old token bill at 10%.",
+  "\nVERDICT: WIN — pinned order holds the cache across turns; an append-only breakpoint makes every " +
+    "old token bill at 10%.",
 );

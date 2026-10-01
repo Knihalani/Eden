@@ -1,8 +1,19 @@
 // Lexical machinery: tokenizer, BM25F (subject/text/aliases), char-trigram similarity, context augmentation.
 export const STOP = new Set(
   (
-    "a about above after again against all am an and any are aren't as at be because been before being below between both but by can can't cannot could couldn't did didn't do does doesn't doing don't down during each few for from further had hadn't has hasn't have haven't having he her here hers herself him himself his how i if in into is isn't it it's its itself let's me more most mustn't my myself no nor not of off on once only or other ought our ours ourselves out over own same shan't she should shouldn't so some such than that that's the their theirs them themselves then there there's these they this those through to too under until up very was wasn't we were weren't what what's when where which while who whom why with won't would wouldn't you your yours yourself yourselves " +
-    "ok okay yes yeah yep sure thanks thank please just also get got getting need needs want wants like use used using uses make makes way thing things something anything one two again still really now know tell show let lets go going do done does doing did can could should would will may might im ive youre whats hows wheres whos isnt dont doesnt cant here there than then us we our ours my me i you it its hey hi hello"
+    "a about above after again against all am an and any are aren't as at be because been before being " +
+    "below between both but by can can't cannot could couldn't did didn't do does doesn't doing don't " +
+    "down during each few for from further had hadn't has hasn't have haven't having he her here hers " +
+    "herself him himself his how i if in into is isn't it it's its itself let's me more most mustn't my " +
+    "myself no nor not of off on once only or other ought our ours ourselves out over own same shan't " +
+    "she should shouldn't so some such than that that's the their theirs them themselves then there " +
+    "there's these they this those through to too under until up very was wasn't we were weren't what " +
+    "what's when where which while who whom why with won't would wouldn't you your yours yourself yourselves " +
+    "ok okay yes yeah yep sure thanks thank please just also get got getting need needs want wants like " +
+    "use used using uses make makes way thing things something anything one two again still really now " +
+    "know tell show let lets go going do done does doing did can could should would will may might im " +
+    "ive youre whats hows wheres whos isnt dont doesnt cant here there than then us we our ours my me i " +
+    "you it its hey hi hello"
   ).split(/\s+/),
 );
 

@@ -181,7 +181,8 @@ function orgGate(req: Request, ctx: ApiCtx): Response | null {
       if (!warnedStores.has(ctx.store)) {
         warnedStores.add(ctx.store);
         console.error(
-          "[eden] workspace has no org binding; allowing unscoped state change only because this install is unmanaged — bind via POST /v1/workspace/orgs",
+          "[eden] workspace has no org binding; allowing unscoped state change only because this install is " +
+            "unmanaged — bind via POST /v1/workspace/orgs",
         );
       }
       return null;

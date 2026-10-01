@@ -88,7 +88,10 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
     expect(src).toMatch(/# M26 LME-V2 Small RESULTS/);
     expect(src).toMatch(/\*\*Wave:\*\*\s*M26\.2/);
     expect(src).toMatch(
-      /\*\*M37 recert:\*\* \d{4}-\d{2}-\d{2} — (?:same protocol; )?live n=451 after M16–M36; trajectory SOTA only if acc ≥ 74\.9/,
+      new RegExp(
+        String.raw`\*\*M37 recert:\*\* \d{4}-\d{2}-\d{2} — ` +
+          String.raw`(?:same protocol; )?live n=451 after M16–M36; trajectory SOTA only if acc ≥ 74\.9`,
+      ),
     );
     expect(src).toMatch(/\*\*ISO date:\*\*/);
     expect(src).toMatch(/Report:\*\*\s*§11\.1|\*\*Report:\*\*\s*§11\.1/);
@@ -99,7 +102,10 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
     expect(src).toMatch(/74\.9/);
     expect(src).toMatch(/\*\*(WIN|LOSS)\*\*/);
     expect(src).toMatch(
-      /Overall: (WIN|LOSS)|Overall:\*\* pending live|Overall:\*\* pending|\*\*Overall:\*\* pending live|\*\*Overall:\*\* pending/,
+      new RegExp(
+        String.raw`Overall: (WIN|LOSS)|Overall:\*\* pending live|Overall:\*\* pending|` +
+          String.raw`\*\*Overall:\*\* pending live|\*\*Overall:\*\* pending`,
+      ),
     );
     expect(src).not.toMatch(/Do not invent 2\.7/);
     expect(src).not.toMatch(/\*\*acc\*\*[^\n]*74\.9/);
@@ -442,7 +448,10 @@ describe("M26.1 runner honesty — smoke ≠ official, files ingest, no skip-all
     expect(src).toMatch(/const outPath = resultsPathFor\(n\)/);
     expect(src).toMatch(/if \(shouldWriteLastRun\(n\)\)/);
     expect(src).not.toMatch(
-      /writeFileSync\(\s*LAST_RUN_PATH[\s\S]{0,160}LME_LIMIT\s*\?\s*join\(\s*HOLD_DIR,\s*"RESULTS\.smoke\.md",?\s*\)\s*:\s*RESULTS_PATH/,
+      new RegExp(
+        String.raw`writeFileSync\(\s*LAST_RUN_PATH[\s\S]{0,160}` +
+          String.raw`LME_LIMIT\s*\?\s*join\(\s*HOLD_DIR,\s*"RESULTS\.smoke\.md",?\s*\)\s*:\s*RESULTS_PATH`,
+      ),
     );
     expect(src).toMatch(/part:\s*"M26",/);
     expect(src).not.toMatch(/part:\s*"M15\.2"/);

@@ -15,7 +15,9 @@ const FACT =
 
 function rec(uri: string, text: string): Uint8Array {
   const body = `${text}\n`;
-  const hdr = `WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: ${uri}\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n`;
+  const hdr =
+    `WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: ${uri}\r\nContent-Length: ` +
+    `${Buffer.byteLength(body)}\r\n\r\n`;
   return Buffer.concat([Buffer.from(hdr, "utf8"), Buffer.from(body, "utf8")]);
 }
 
@@ -108,13 +110,15 @@ describe("ingest scale", () => {
     const body = `${FACT.repeat(6)}\n`;
     const keep = Buffer.concat([
       Buffer.from(
-        `WARC/1.0\r\nwarc-type: conversion\r\nwarc-target-uri: https://www.rfc-editor.org/rfc/rfc9110.html\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n`,
+        `WARC/1.0\r\nwarc-type: conversion\r\nwarc-target-uri: ` +
+          `https://www.rfc-editor.org/rfc/rfc9110.html\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n`,
       ),
       Buffer.from(body, "utf8"),
     ]);
     const drop = Buffer.concat([
       Buffer.from(
-        `WARC/1.0\r\nwarc-type: conversion\r\nwarc-target-uri: https://www.nytimes.com/x\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n`,
+        `WARC/1.0\r\nwarc-type: conversion\r\nwarc-target-uri: https://www.nytimes.com/x\r\ncontent-length: ` +
+          `${Buffer.byteLength(body)}\r\n\r\n`,
       ),
       Buffer.from(body, "utf8"),
     ]);

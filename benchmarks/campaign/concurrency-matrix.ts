@@ -137,7 +137,8 @@ if (import.meta.main) {
     const r = await runCell(cell);
     const mark = r.ok ? "OK" : "RED";
     console.log(
-      `  ${mark} ${cellLabel(cell)} ${r.ms.toFixed(0)}ms misses=${r.capacityMisses}${r.ok ? "" : " " + r.duplicates.join(",")}`,
+      `  ${mark} ${cellLabel(cell)} ${r.ms.toFixed(0)}ms ` +
+        `misses=${r.capacityMisses}${r.ok ? "" : " " + r.duplicates.join(",")}`,
     );
     if (!r.ok) red.push(cellLabel(cell));
   }

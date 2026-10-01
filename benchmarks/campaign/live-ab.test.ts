@@ -62,7 +62,8 @@ describe("live-ab study", () => {
   test("LIVE-AB.md contains the retired live-invoice sentence", () => {
     const text = readFileSync(LIVE_AB_MD, "utf8");
     expect(text).toContain(
-      "No live Claude Code invoice file is in the tree. The analogue −9.1% cell is not a live bill. This quote is retired until an invoice parses as live-invoice.",
+      "No live Claude Code invoice file is in the tree. The analogue −9.1% cell is not a live bill. This " +
+        "quote is retired until an invoice parses as live-invoice.",
     );
     expect(text).toMatch(/oblivious-long is a limit/i);
   });

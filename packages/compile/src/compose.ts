@@ -352,7 +352,9 @@ export function assembleComposeProgram(
       refuse: {
         code: childIsMutating(b) ? "underdetermined_write" : "no_envelope",
         reason: "This join's second program needs inputs that were not witnessed. Eden will not guess.",
-        hint: "Pass the child programs' arguments on the composed run's input, or bind them from the first program's result.",
+        hint:
+          "Pass the child programs' arguments on the composed run's input, or bind them from the first " +
+          "program's result.",
       },
     };
   }

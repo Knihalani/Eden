@@ -27,7 +27,8 @@ import { hookCommand, preHookCommand } from "../../packages/cli/src/setup";
  * ../other does not; not post-batch.
  */
 export const EXPECT =
-  "cwd-hop: relative ./a.ts arms; abs /Users/me/repo/a.ts claims; disagreeing id refuses; mixed-file takes head; ../other does not claim; not post-batch";
+  "cwd-hop: relative ./a.ts arms; abs /Users/me/repo/a.ts claims; disagreeing id refuses; mixed-file " +
+  "takes head; ../other does not claim; not post-batch";
 
 export const CWD = "/Users/me/repo";
 export const RELATIVE = "./a.ts";

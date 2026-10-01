@@ -2,7 +2,8 @@ import type { ClaimKind, ClaimSource } from "@eden/measure";
 
 /** Limits-page legend. Isolation does not define win or fixture. */
 export const LIMIT_KEY =
-  "analogue — headless replica, not a live invoice. limit — wrap-path, host, soak FAIL, envelope miss, cert bounds. retired — withdrawn until a file parses.";
+  "analogue — headless replica, not a live invoice. limit — wrap-path, host, soak FAIL, envelope miss," +
+  " cert bounds. retired — withdrawn until a file parses.";
 
 /** Full legend for /proof. Isolation prints LIMIT_KEY only. */
 export const CLASS_KEY =

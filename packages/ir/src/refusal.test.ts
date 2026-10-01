@@ -9,7 +9,9 @@ describe("refusal copy", () => {
       code: "read_set_mismatch" as const,
       readSet: 12,
       repeats: 6,
-      hint: "grepCode returned 12; readFile ran 6 times. Expose the full array the loop iterates, or iterate once per item.",
+      hint:
+        "grepCode returned 12; readFile ran 6 times. Expose the full array the loop iterates, or iterate " +
+        "once per item.",
     };
     expect(refusalStatus(row)).toBe("Read-set · 6 of 12");
     expect(refusalCopy(row)).toMatch(/Read-set mismatch/);

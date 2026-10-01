@@ -41,7 +41,8 @@ describe("speculative read prefetch", () => {
 
   async function insertTool(db: Awaited<typeof dbP>, id: string, steps: CompiledStep[]) {
     await db.run(
-      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
+      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?,` +
+        ` ?, '', 'on', ?, '[]')`,
       [id, ws, id, JSON.stringify(steps)],
     );
     return { id, name: id, steps: JSON.stringify(steps), workspace_id: ws };
@@ -179,7 +180,8 @@ describe("speculative read prefetch", () => {
       step({ id: "r1", kind: "cloud_http", name: "r1", method: "GET", url: "https://x.test/forge/9/comments" }),
     ];
     await db.run(
-      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES ('t_iso', 'ws_iso_A', 't_iso', '', 'on', ?, '[]')`,
+      `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES ` +
+        `('t_iso', 'ws_iso_A', 't_iso', '', 'on', ?, '[]')`,
       [JSON.stringify(stepsA)],
     );
     const toolA = { id: "t_iso", name: "t_iso", steps: JSON.stringify(stepsA), workspace_id: "ws_iso_A" };
@@ -409,7 +411,8 @@ describe("mutating methods never land in the exact-result cache", () => {
         }),
       ];
       await d.run(
-        `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
+        `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?,` +
+          ` ?, '', 'on', ?, '[]')`,
         [id, ws, id, JSON.stringify(steps)],
       );
       const before = await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM result_cache`);

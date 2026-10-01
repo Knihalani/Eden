@@ -253,7 +253,8 @@ export function assertTable3OverallHasFourAvgs(src: string | Record<string, unkn
   const missing = missingTable3CompetencyAvgs(src);
   if (missing.length) {
     throw new Error(
-      `${label} claims Table 3 overall without four competency avgs (missing ${missing.join(", ")}; need AR / TTL / LRU / SF)`,
+      `${label} claims Table 3 overall without four competency avgs (missing ${missing.join(", ")}; need ` +
+        `AR / TTL / LRU / SF)`,
     );
   }
 }
@@ -650,10 +651,10 @@ function isStoredLabelStripCode(src: string): boolean {
   const jsEmpty =
     /\.(?:replace|replaceAll)\s*\(\s*\/label:\\s\*[^/\n]*\/[gimsuy]*\s*,\s*(?:""|''|``)\s*\)/.test(code) ||
     /\.(?:replace|replaceAll)\s*\(\s*['"`]label:[^'"`]*['"`]\s*,\s*(?:""|''|``)\s*\)/.test(code);
-  const pyEmpty =
-    /re\.sub(?:n)?\s*\(\s*(?:r|rf|fr|R)?(?:'''|"""|['"])[^'"]*label:[^'"]*(?:'''|"""|['"])\s*,\s*(?:'''|"""|['"])(?:'''|"""|['"])/.test(
-      code,
-    );
+  const pyEmpty = new RegExp(
+    String.raw`re\.sub(?:n)?\s*\(\s*(?:r|rf|fr|R)?(?:'''|"""|['"])[^'"]*label:[^'"]*` +
+      String.raw`(?:'''|"""|['"])\s*,\s*(?:'''|"""|['"])(?:'''|"""|['"])`,
+  ).test(code);
   const pyOnStore = pyEmpty && /\b(?:packet|shot|haystack|text|blob|memory|content|pending)\b/.test(code);
   return jsEmpty || pyEmpty || pyOnStore;
 }
@@ -1034,8 +1035,12 @@ function labeledYesNo(src: string, label: string): "yes" | "no" | "absent" {
   return "absent";
 }
 
-const LABELED_SOTA_NO =
-  /(?:4o-mini(?:\s+Table\s*3)?\s+SOTA|SF SOTA|selective forgetting SOTA|SOTA selective forgetting|trajectory SOTA|SOTA agent-trajectory|SOTA memory agent|Bar\s*(?:≥|>=)\s*50)\s*:\s*\**\s*no\b[^.]*/gi;
+const LABELED_SOTA_NO = new RegExp(
+  String.raw`(?:4o-mini(?:\s+Table\s*3)?\s+SOTA|SF SOTA|selective forgetting SOTA|` +
+    String.raw`SOTA selective forgetting|trajectory SOTA|SOTA agent-trajectory|SOTA memory agent|Bar\s*` +
+    String.raw`(?:≥|>=)\s*50)\s*:\s*\**\s*no\b[^.]*`,
+  "gi",
+);
 
 /** Phrase still present after labeled `: no` clauses are removed. `: no` is not a claim. */
 function bareSotaClaim(src: string, phrase: RegExp): string[] {
@@ -1247,7 +1252,8 @@ describe("M37.4 honest claims", () => {
     expect(sotaClaimsWithoutBars(table3, lme)).toEqual([]);
     const honestNo = [
       table3,
-      "**Bar ≥50:** no. **SF SOTA:** no (need FC-SH ≥82 and FC-MH ≥27). **4o-mini Table 3 SOTA:** no (backbone is google/gemma-4-31b-it).",
+      "**Bar ≥50:** no. **SF SOTA:** no (need FC-SH ≥82 and FC-MH ≥27). **4o-mini Table 3 SOTA:** no " +
+        "(backbone is google/gemma-4-31b-it).",
       "trajectory SOTA only if acc ≥ 74.9",
     ].join("\n");
     expect(sotaClaimsWithoutBars(honestNo, lme)).toEqual([]);

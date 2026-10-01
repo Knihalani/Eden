@@ -335,8 +335,12 @@ export const DISCOURSE_TALK_HOSTS = [
 ] as const;
 
 /** GitHub chrome: not problem/solution threads. */
-const GITHUB_CHROME =
-  /\/(?:pulls?|commit|commits|actions|security|pulse|projects?|settings|network|graphs|tree|blob|archive|releases|forks|stargazers|watchers|branches|tags|contributors|compare|blame|raw|search)(?:\/|$)/i;
+const GITHUB_CHROME = new RegExp(
+  String.raw`\/(?:pulls?|commit|commits|actions|security|pulse|projects?|settings|network|graphs|tree|` +
+    String.raw`blob|archive|releases|forks|stargazers|watchers|branches|tags|contributors|compare|` +
+    String.raw`blame|raw|search)(?:\/|$)`,
+  "i",
+);
 
 const GITHUB_TALK = /\/(?:issues|discussions)(?:\/\d+)?(?:\/|$)/i;
 

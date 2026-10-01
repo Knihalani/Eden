@@ -185,7 +185,8 @@ describe("canvas layout", () => {
       "compiled 100 · memoized 0 · transparent 20 · steered-skip 0 · frontier 50 = 170 · prompt+completion 170",
     );
     expect(tokenClassLedgerReconcileLine(classes, { prompt: 100, completion: 40 })).toBe(
-      "compiled 100 · memoized 0 · transparent 20 · steered-skip 0 · frontier 50 = 170 · prompt+completion 140 · mismatch",
+      "compiled 100 · memoized 0 · transparent 20 · steered-skip 0 · frontier 50 = 170 · " +
+        "prompt+completion 140 · mismatch",
     );
     expect(tokenClassLedgerReconcileLine(classes, { prompt: 100, completion: 40 })).not.toMatch(/40%/);
     expect(tokenClassLedgerReconcileLine(classes)).toBe(

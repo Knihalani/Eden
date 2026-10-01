@@ -45,7 +45,8 @@ function checkExpect(
     });
     expect(
       hit,
-      `${name}: expected refusal code=${expectSpec.code} reason~${expectSpec.reasonIncludes?.join("|") ?? ""} got ${JSON.stringify(refusals)}`,
+      `${name}: expected refusal code=${expectSpec.code} ` +
+        `reason~${expectSpec.reasonIncludes?.join("|") ?? ""} got ${JSON.stringify(refusals)}`,
     ).toBeTruthy();
     return;
   }
@@ -146,7 +147,8 @@ function checkExpect(
       const b = step.args[expectSpec.bindFromLoop.arg];
       expect(
         b && b.kind === "from" && b.step === loop.id && b.path === "",
-        `${name}: ${expectSpec.bindFromLoop.tool}.${expectSpec.bindFromLoop.arg} must bind from loop ${loop.id}, got ${JSON.stringify(b)}`,
+        `${name}: ${expectSpec.bindFromLoop.tool}.${expectSpec.bindFromLoop.arg} must bind from loop ` +
+          `${loop.id}, got ${JSON.stringify(b)}`,
       ).toBe(true);
     }
   }
@@ -195,7 +197,8 @@ function checkExpect(
       });
     expect(
       hasLookup,
-      `${name}: loopArgLookup needs a lookup arg, got ${JSON.stringify(body && body.kind === "tool" ? body.args : body)}`,
+      `${name}: loopArgLookup needs a lookup arg, got ` +
+        `${JSON.stringify(body && body.kind === "tool" ? body.args : body)}`,
     ).toBe(true);
   }
   if (expectSpec.hasUntil) {

@@ -119,7 +119,8 @@ describe("a failed tenant-key migration fails loudly", () => {
     );
     raw.exec(`INSERT INTO cluster VALUES ('fp', 'ws_a', 1, '[]', 'draft')`);
     raw.exec(
-      `CREATE TABLE cluster_v2 (fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT, oops TEXT NOT NULL)`,
+      `CREATE TABLE cluster_v2 (fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status ` +
+        `TEXT, oops TEXT NOT NULL)`,
     );
     (raw as unknown as { close(): void }).close();
 
@@ -132,7 +133,8 @@ describe("a failed tenant-key migration fails loudly", () => {
       expect(logged).toContain("FAILED");
       // Writes against the legacy table still work after the failed attempt.
       await d.run(
-        `INSERT OR REPLACE INTO cluster (fingerprint, workspace_id, count, steps, status) VALUES ('fp', 'ws_a', 2, '[]', 'knock')`,
+        `INSERT OR REPLACE INTO cluster (fingerprint, workspace_id, count, steps, status) VALUES ('fp', ` +
+          `'ws_a', 2, '[]', 'knock')`,
       );
       const row = await d.get<{ count: number }>(
         `SELECT count FROM cluster WHERE fingerprint = 'fp' AND workspace_id = 'ws_a'`,
