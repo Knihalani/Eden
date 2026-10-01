@@ -35,7 +35,7 @@ Read, in this order:
    - No `fixture:` edit changes an oracle without a stated reason.
    - No bench string is special-cased in `src/`.
 4. **Re-run the evidence yourself.**
-   - CI's four steps: `bun run format:check`, `bun run typecheck`, `bun run test`, `bash scripts/build-cli.sh`.
+   - CI's four steps: `bun run format:check`, `bun run typecheck`, `bun run test`, `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh` (without the variable, build-cli re-runs typecheck and the suite).
    - The slice's arms, twice, in fresh processes.
    - Both flag states.
    - Compare with the numbers in the draft report. **Any mismatch is a finding.**
