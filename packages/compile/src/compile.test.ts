@@ -1,8 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { compileTraces, inferSchema, isCheckName, isIslandName, isMutating, majoritySequence, tryTemplateForTest, oneInsert, oneSubstitute, islandWhenToUse } from "../src/index";
+import {
+  compileTraces,
+  inferSchema,
+  isCheckName,
+  isIslandName,
+  isMutating,
+  majoritySequence,
+  tryTemplateForTest,
+  oneInsert,
+  oneSubstitute,
+  islandWhenToUse,
+} from "../src/index";
 import type { StretchProgram, StretchTrace } from "@eden/ir";
 import { whenToUseOf } from "@eden/ir";
-import { createTicketShip, runNaive, ticketShipProgram, underdeterminedSiblingTraces, WITNESS_IDS } from "../../runtime/src/ticketship";
+import {
+  createTicketShip,
+  runNaive,
+  ticketShipProgram,
+  underdeterminedSiblingTraces,
+  WITNESS_IDS,
+} from "../../runtime/src/ticketship";
 
 /** A list/get/fetch is the world: it must compile as a tool, never an island. */
 function expectToolNotIsland(p: StretchProgram, tool: string) {
@@ -21,7 +38,7 @@ async function ticketTraces(n = 10): Promise<StretchTrace[]> {
   for (let i = 0; i < n; i++) {
     const world = createTicketShip({ llmMs: 0 });
     const id = WITNESS_IDS[i % WITNESS_IDS.length]!;
-      const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : 0, seed: 10 + i });
+    const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : 0, seed: 10 + i });
     traces.push({
       id: `t${i}`,
       events: run.events,
@@ -378,7 +395,12 @@ describe("compile", () => {
       },
       events: [
         { name: "lookupTicket", args: { id: `T-10${i}` }, result: { ok: true }, ok: true },
-        { name: "writeRecord", args: { id: `T-10${i}`, record: i === 1 ? { b: 2, a: 1 } : { a: 1, b: 2 } }, result: { written: true }, ok: true },
+        {
+          name: "writeRecord",
+          args: { id: `T-10${i}`, record: i === 1 ? { b: 2, a: 1 } : { a: 1, b: 2 } },
+          result: { written: true },
+          ok: true,
+        },
         { name: "verifyWrite", args: { id: `T-10${i}` }, result: { verified: true }, ok: true },
       ],
     }));
@@ -469,8 +491,18 @@ describe("compile", () => {
         input: { orderId: `O-${i}` },
         complete: true,
         events: [
-          { name: "findOrder", args: { orderId: `O-${i}` }, result: { orderId: `O-${i}`, items: ids, paid: true }, ok: true },
-          ...ids.map((id) => ({ name: "checkStock", args: { itemId: id }, result: { itemId: id, inStock: true }, ok: true })),
+          {
+            name: "findOrder",
+            args: { orderId: `O-${i}` },
+            result: { orderId: `O-${i}`, items: ids, paid: true },
+            ok: true,
+          },
+          ...ids.map((id) => ({
+            name: "checkStock",
+            args: { itemId: id },
+            result: { itemId: id, inStock: true },
+            ok: true,
+          })),
           { name: "issueRefund", args: { orderId: `O-${i}` }, result: { refunded: true }, ok: true },
           { name: "sendReceipt", args: { orderId: `O-${i}` }, result: { sent: true }, ok: true },
         ],
@@ -686,9 +718,7 @@ describe("compile", () => {
       const events = [
         { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
         { name: "writeRecord", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
-        ...(i >= 3
-          ? [{ name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true }]
-          : []),
+        ...(i >= 3 ? [{ name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true }] : []),
         { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
       ];
       traces.push({
@@ -899,11 +929,7 @@ describe("failure-cluster name decoration (H2)", () => {
 describe("map-reduce after foreach", () => {
   test("refuses an unbound merge after a bound foreach — fail closed", () => {
     const traces: StretchTrace[] = Array.from({ length: 4 }, (_, i) => {
-      const rows = [
-        { id: `r${i}-0` },
-        { id: `r${i}-1` },
-        { id: `r${i}-2` },
-      ];
+      const rows = [{ id: `r${i}-0` }, { id: `r${i}-1` }, { id: `r${i}-2` }];
       return {
         id: `u${i}`,
         llmCalls: 5,
@@ -914,7 +940,12 @@ describe("map-reduce after foreach", () => {
         output: { merged: true },
         events: [
           { name: "listRows", args: { batch: `B${i}` }, result: { rows }, ok: true },
-          ...rows.map((r) => ({ name: "mapRow", args: { id: r.id }, result: { id: r.id, out: `m-${r.id}` }, ok: true })),
+          ...rows.map((r) => ({
+            name: "mapRow",
+            args: { id: r.id },
+            result: { id: r.id, out: `m-${r.id}` },
+            ok: true,
+          })),
           { name: "writeRows", args: { dest: `OTHER-${i}` }, result: { merged: true }, ok: true },
         ],
       };

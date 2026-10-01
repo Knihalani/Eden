@@ -2,13 +2,7 @@
  * Unpublished skills-marketplace draft. Numbers come only from PUBLIC_CLAIMS.
  * Never POSTed. Never a customer list. Never a Determinism Index page.
  */
-import {
-  PUBLIC_CLAIMS,
-  customerStudies,
-  fixtureStudies,
-  type ClaimKind,
-  type PublicClaim,
-} from "./claims";
+import { PUBLIC_CLAIMS, customerStudies, fixtureStudies, type ClaimKind, type PublicClaim } from "./claims";
 
 /** First line of the withheld draft. Not a publish. */
 export const CLAIMS_LISTING_BANNER = "Not published. Arc 8 numbers first.";
@@ -69,10 +63,7 @@ export function renderClaimsListing(claims: readonly PublicClaim[] = PUBLIC_CLAI
   }
 
   const approved = claims === PUBLIC_CLAIMS ? customerStudies() : claims.filter((c) => c.approved === true);
-  const fixtures =
-    claims === PUBLIC_CLAIMS
-      ? fixtureStudies()
-      : uniqueVerticals(claims);
+  const fixtures = claims === PUBLIC_CLAIMS ? fixtureStudies() : uniqueVerticals(claims);
   const verticals = fixtures.map((c) => c.vertical).filter((v): v is string => typeof v === "string");
 
   lines.push("## Fixture verticals");
@@ -102,4 +93,3 @@ function uniqueVerticals(claims: readonly PublicClaim[]): PublicClaim[] {
   }
   return out;
 }
-

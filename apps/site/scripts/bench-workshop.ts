@@ -7,14 +7,7 @@
 import { mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import {
-  shopOrder,
-  shopItems,
-  shopCustomer,
-  shopCustomerOrders,
-  shopTicket,
-  shopTicketComments,
-} from "../src/forge";
+import { shopOrder, shopItems, shopCustomer, shopCustomerOrders, shopTicket, shopTicketComments } from "../src/forge";
 
 const ROOT = join(import.meta.dir, "../../..");
 const OUT = "/tmp/eden-workshop";
@@ -137,7 +130,10 @@ async function drain() {
   if (ex(runsDir)) {
     for (const f of rd(runsDir)) {
       if (!f.endsWith(".jsonl") || f.endsWith(".sent.jsonl")) continue;
-      appendFileSync(outbox, JSON.stringify({ run_id: f.replace(/\.jsonl$/, ""), kind: "stretch_end", ts: Date.now() }) + "\n");
+      appendFileSync(
+        outbox,
+        JSON.stringify({ run_id: f.replace(/\.jsonl$/, ""), kind: "stretch_end", ts: Date.now() }) + "\n",
+      );
     }
   }
   const proc = Bun.spawn(["bun", CLI, "drain"], {
@@ -235,7 +231,18 @@ function scoreDesk(work: string, phase: 1 | 2 | 3 | 4) {
 
   const quality = orderHits + customerHits + ticketHits + Number(report) + controlHits;
   const qualityMax = orderMax + customerMax + ticketMax + (phase >= 3 ? 1 : 0) + controlMax;
-  return { orderHits, orderMax, customerHits, customerMax, ticketHits, ticketMax, report, controlHits, quality, qualityMax };
+  return {
+    orderHits,
+    orderMax,
+    customerHits,
+    customerMax,
+    ticketHits,
+    ticketMax,
+    report,
+    controlHits,
+    quality,
+    qualityMax,
+  };
 }
 
 async function runClaude(opts: {

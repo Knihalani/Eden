@@ -7,7 +7,10 @@ import { productGate } from "./route";
 /** Page source as JSX renders its text: Prettier may wrap a phrase over two lines. */
 const prose = (src: string) => src.replace(/\s+/g, " ");
 
-function gate(path: string, auth: { isAuthenticated?: boolean | null; sessionStatus?: string | null; orgId?: string | null }) {
+function gate(
+  path: string,
+  auth: { isAuthenticated?: boolean | null; sessionStatus?: string | null; orgId?: string | null },
+) {
   return productGate(path, auth);
 }
 

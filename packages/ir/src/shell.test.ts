@@ -89,7 +89,7 @@ describe("interpolateShell: slot values are data", () => {
       "[[ {v} -eq 1 ]]",
       "(( {v} + 1 ))",
       "echo $[ {v} + 1 ]",
-      "echo \"$(printf %s {v})\"",
+      'echo "$(printf %s {v})"',
     ];
     for (const expr of opaque) {
       expect(interpolateShell(expr, { v: "a b" })).toBeNull();

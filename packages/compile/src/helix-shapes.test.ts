@@ -7,11 +7,7 @@ import type { StretchTrace } from "@eden/ir";
 import { compileTraces } from "./index";
 import { registryFrom, runProgram } from "@eden/runtime";
 
-function trace(
-  id: string,
-  events: StretchTrace["events"],
-  input: Record<string, unknown>,
-): StretchTrace {
+function trace(id: string, events: StretchTrace["events"], input: Record<string, unknown>): StretchTrace {
   return {
     id,
     events,
@@ -29,10 +25,7 @@ describe("helix shapes", () => {
     const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
       const project = `gl-${i}`;
       const pages = [1, 2, 3].map((page) => ({
-        items: [
-          { iid: (page - 1) * 2 + 1 },
-          { iid: (page - 1) * 2 + 2 },
-        ],
+        items: [{ iid: (page - 1) * 2 + 1 }, { iid: (page - 1) * 2 + 2 }],
         page,
         limit: 2,
         totalPages: 3,
@@ -71,7 +64,9 @@ describe("helix shapes", () => {
       expect(body.args.page?.kind === "transform" && body.args.page.fn === "add").toBe(true);
       expect(JSON.stringify(body.args)).not.toMatch(/nextCursor/);
     }
-    expect(p!.steps.some((s) => s.kind === "loop" && s.over.kind === "transform" && s.over.fn === "flatten")).toBe(true);
+    expect(p!.steps.some((s) => s.kind === "loop" && s.over.kind === "transform" && s.over.fn === "flatten")).toBe(
+      true,
+    );
 
     const seen: number[] = [];
     const reg = registryFrom({

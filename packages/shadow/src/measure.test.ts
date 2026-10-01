@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { compiledTokens, compiledToolMs, isSyntheticDuration, naiveToolMs, SYNTHETIC_MS_PER_LLM, tokensExtrapolated, traceTokens } from "./measure";
+import {
+  compiledTokens,
+  compiledToolMs,
+  isSyntheticDuration,
+  naiveToolMs,
+  SYNTHETIC_MS_PER_LLM,
+  tokensExtrapolated,
+  traceTokens,
+} from "./measure";
 import type { StretchTrace } from "@eden/ir";
 
 function t(over: Partial<StretchTrace> = {}): StretchTrace {

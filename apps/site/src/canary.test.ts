@@ -19,7 +19,15 @@ async function seedTool(db: Awaited<ReturnType<typeof openDb>>, workspaceId: str
       workspaceId,
       `issues_bundle_${workspaceId}`,
       "test tool",
-      JSON.stringify([{ id: "s1", kind: "cloud_http", name: "curl", commute: true, url: "https://api.github.com/repos/a/b/issues/{issue}" }]),
+      JSON.stringify([
+        {
+          id: "s1",
+          kind: "cloud_http",
+          name: "curl",
+          commute: true,
+          url: "https://api.github.com/repos/a/b/issues/{issue}",
+        },
+      ]),
       JSON.stringify(["curl"]),
       fingerprint,
     ],
@@ -84,12 +92,16 @@ describe("drift canary & auto-recompile", () => {
     expect((shadowedProgram as { id?: string })?.id).toBe("p1");
 
     // old version untouched and still On
-    const original = await db.get<{ state: string; steps: string }>(`SELECT state, steps FROM tool WHERE id = ?`, [oldTool]);
+    const original = await db.get<{ state: string; steps: string }>(`SELECT state, steps FROM tool WHERE id = ?`, [
+      oldTool,
+    ]);
     expect(original?.state).toBe("on");
     expect(JSON.parse(original!.steps!).length).toBe(1);
 
     // exactly one NEW row beside it
-    const rows = await db.all<{ id: string; state: string; steps: string; fingerprint: string }>(`SELECT id, state, steps, fingerprint FROM tool`);
+    const rows = await db.all<{ id: string; state: string; steps: string; fingerprint: string }>(
+      `SELECT id, state, steps, fingerprint FROM tool`,
+    );
     expect(rows.length).toBe(2);
     const fresh = rows.find((r) => r.id !== oldTool)!;
     expect(fresh.state).toBe("draft");
@@ -98,7 +110,13 @@ describe("drift canary & auto-recompile", () => {
     // program — URL-bearing, same shape every other writer stores — not the
     // raw StretchProgram object playback cannot consume.
     expect(JSON.parse(fresh.steps)).toEqual([
-      { id: "s1", kind: "cloud_http", name: "curl", commute: true, url: "https://api.github.com/repos/a/b/issues/{issue}" },
+      {
+        id: "s1",
+        kind: "cloud_http",
+        name: "curl",
+        commute: true,
+        url: "https://api.github.com/repos/a/b/issues/{issue}",
+      },
     ]);
     const copy = await db.get<{ when_to_use: string }>(`SELECT when_to_use FROM tool WHERE id = ?`, [fresh.id]);
     expect(copy?.when_to_use).toBe(REFRESH_WAITING_COPY);
@@ -244,7 +262,11 @@ describe("drift canary & auto-recompile", () => {
     // buildDag is what the object-shaped steps blew up on (.map over an
     // object). It must run clean against what we store now.
     const dag = buildDag(parsed as Parameters<typeof buildDag>[0]);
-    expect(layers(dag).flat().map((s) => s.id)).toEqual(["s1"]);
+    expect(
+      layers(dag)
+        .flat()
+        .map((s) => s.id),
+    ).toEqual(["s1"]);
   });
 
   test("a recompile that cannot be projected onto playable steps is refused, not queued", async () => {
@@ -257,7 +279,13 @@ describe("drift canary & auto-recompile", () => {
       tool_id: toolId,
       ...passingDeps,
       compileTracesFn: () => ({
-        programs: [{ id: "p2", sequence: ["curl"], steps: [{ id: "i1", kind: "island", input: { kind: "literal", value: "" }, system: "", outputSchema: {} }] }],
+        programs: [
+          {
+            id: "p2",
+            sequence: ["curl"],
+            steps: [{ id: "i1", kind: "island", input: { kind: "literal", value: "" }, system: "", outputSchema: {} }],
+          },
+        ],
         refusals: [],
       }),
     });
@@ -283,7 +311,13 @@ describe("drift canary & auto-recompile", () => {
       [
         oldTool,
         JSON.stringify([
-          { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/issues/{issue}" },
+          {
+            id: "s1",
+            kind: "cloud_http",
+            name: "issue",
+            commute: true,
+            url: "http://127.0.0.1/forge/repos/acme/app/issues/{issue}",
+          },
           {
             id: "s2",
             kind: "cloud_http",
@@ -326,9 +360,10 @@ describe("drift canary & auto-recompile", () => {
     expect(steps[1]!.bind).toEqual({ issue: "{{s1.number}}" });
 
     // …and the draft actually plays: resolveBound fills the template from s1.
-    const row = await db.get<{ id: string; name: string; steps: string }>(`SELECT id, name, steps FROM tool WHERE id = ?`, [
-      out.draft_id,
-    ]);
+    const row = await db.get<{ id: string; name: string; steps: string }>(
+      `SELECT id, name, steps FROM tool WHERE id = ?`,
+      [out.draft_id],
+    );
     const receipt = await playTool(db, row!, { issue: "12", origin: "http://127.0.0.1" });
     expect(receipt.ok).toBe(true);
     expect(receipt.steps_ok).toBe(2);
@@ -346,7 +381,14 @@ describe("drift canary & auto-recompile", () => {
       [
         oldTool,
         JSON.stringify([
-          { id: "s1", kind: "cloud_http", name: "curl", commute: false, method: "GET", url: "http://127.0.0.1/forge/repos/acme/app/issues/12" },
+          {
+            id: "s1",
+            kind: "cloud_http",
+            name: "curl",
+            commute: false,
+            method: "GET",
+            url: "http://127.0.0.1/forge/repos/acme/app/issues/12",
+          },
         ]),
         "fp/acme/ro",
       ],

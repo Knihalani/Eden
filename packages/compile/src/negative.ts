@@ -55,12 +55,7 @@ function addValues(into: Set<string>, value: unknown): void {
  * lives on input — notify({id}) is not a bind from status. A sha that only
  * appears on the terminal poll is.
  */
-function pollUsedByLater(
-  events: TraceEvent[],
-  start: number,
-  end: number,
-  input?: Record<string, unknown>,
-): boolean {
+function pollUsedByLater(events: TraceEvent[], start: number, end: number, input?: Record<string, unknown>): boolean {
   const later = events.slice(end);
   if (!later.length) return false;
   const prior = new Set<string>();

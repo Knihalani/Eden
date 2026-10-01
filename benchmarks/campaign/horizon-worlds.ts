@@ -34,7 +34,10 @@ function occurrences(goals: Array<Record<string, unknown>>, key: string): Map<st
   return m;
 }
 
-function occurrencesBy(goals: Array<Record<string, unknown>>, keyOf: (g: Record<string, unknown>) => string): Map<string, number> {
+function occurrencesBy(
+  goals: Array<Record<string, unknown>>,
+  keyOf: (g: Record<string, unknown>) => string,
+): Map<string, number> {
   const m = new Map<string, number>();
   for (const g of goals) {
     const k = keyOf(g);
@@ -157,7 +160,8 @@ export function createGraphqlRelay(): World {
         if (pub > n) bad.push(`graphql-relay:${id}: publishDigest ran ${pub}x across ${n} stretch(es) — duplicated`);
         for (const e of issuesFor(id)) {
           const u = st.updates.get(e.node.id) ?? 0;
-          if (u > n) bad.push(`graphql-relay:${id}: updateIssue ${e.node.id} ran ${u}x across ${n} stretch(es) — duplicated`);
+          if (u > n)
+            bad.push(`graphql-relay:${id}: updateIssue ${e.node.id} ran ${u}x across ${n} stretch(es) — duplicated`);
         }
       }
       return bad;
@@ -303,10 +307,7 @@ type SearchState = {
   digests: Map<string, number>;
 };
 
-function createSearchWorld(
-  name: string,
-  pick: (q: string) => SearchHit[],
-): World {
+function createSearchWorld(name: string, pick: (q: string) => SearchHit[]): World {
   const st: SearchState = { takes: new Map(), digests: new Map() };
   return {
     name,
@@ -766,7 +767,10 @@ export function createWebhookFanout(): World {
           ["ackEvent", st.acks],
         ] as const) {
           const got = map.get(id) ?? 0;
-          if (got !== n) bad.push(`webhook-fanout:${id}: ${name} ran ${got}x across ${n} stretch(es) — want exactly once per stretch`);
+          if (got !== n)
+            bad.push(
+              `webhook-fanout:${id}: ${name} ran ${got}x across ${n} stretch(es) — want exactly once per stretch`,
+            );
         }
       }
       return bad;
@@ -790,12 +794,14 @@ export function createInboxTriage(): World {
   const st: InboxState = { archives: new Map(), acks: new Map() };
   return {
     name: "inbox-triage",
-    island: () => async ({ input, signal }) => {
-      await Bun.sleep(12);
-      if (signal?.aborted) throw new Error("aborted");
-      const thread = String((input ?? {} as Record<string, unknown>).thread ?? "");
-      return { text: `re: ${thread}`, drafted: true };
-    },
+    island:
+      () =>
+      async ({ input, signal }) => {
+        await Bun.sleep(12);
+        if (signal?.aborted) throw new Error("aborted");
+        const thread = String((input ?? ({} as Record<string, unknown>)).thread ?? "");
+        return { text: `re: ${thread}`, drafted: true };
+      },
     tools: () => ({
       fetchThread: {
         description: "Fetch an inbox thread. Returns { thread, from }.",
@@ -871,7 +877,10 @@ const HORIZON_NOISE_TOOLS = [
 export const NOISE_IDS = ["HZ-0", "HZ-1", "HZ-2", "HZ-3", "HZ-4", "HZ-5"] as const;
 
 export function createHorizonNoise(): World {
-  const toolDefs = (): Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> => {
+  const toolDefs = (): Record<
+    string,
+    { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }
+  > => {
     const out: Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> = {};
     for (const name of HORIZON_NOISE_TOOLS) {
       out[name] = {

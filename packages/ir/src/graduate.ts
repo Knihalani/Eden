@@ -56,7 +56,11 @@ export function matchClass(program: StretchProgram, input: Record<string, unknow
 }
 
 /** Steer may serve soft only when the contract opted in. OOD never. */
-export function mayServe(program: StretchProgram, input: Record<string, unknown>, opts?: { canaryOrLive?: boolean }): boolean {
+export function mayServe(
+  program: StretchProgram,
+  input: Record<string, unknown>,
+  opts?: { canaryOrLive?: boolean },
+): boolean {
   const cls = matchClass(program, input);
   if (cls === "exact") return true;
   if (cls === "ood") return false;
@@ -140,7 +144,11 @@ export function rolloutOf(flag: string | undefined | null): "canary" | "live" {
 }
 
 /** Missing rollout is already-shipped 100% Live. Canary is never counted as Live. */
-export function rolloutPartition(tools: Array<{ rollout?: string | null }>): { n: number; canary: number; live: number } {
+export function rolloutPartition(tools: Array<{ rollout?: string | null }>): {
+  n: number;
+  canary: number;
+  live: number;
+} {
   const n = tools.length;
   const canary = tools.filter((t) => t.rollout === "canary").length;
   return { n, canary, live: n - canary };

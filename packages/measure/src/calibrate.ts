@@ -20,14 +20,7 @@
  *   same generative model — mean>0, pairedPermutationP<=alpha, bootstrap CI
  *   excludes 0 (wall_ms, higherIsBetter=false).
  */
-import {
-  mean,
-  minDetectableEffect,
-  mulberry32,
-  pairedBootstrapCI,
-  pairedPermutationP,
-  stdev,
-} from "./stats";
+import { mean, minDetectableEffect, mulberry32, pairedBootstrapCI, pairedPermutationP, stdev } from "./stats";
 
 const EPS = 1e-12;
 const STABILITY_CV = 0.05; // frozen: 5% relative CV → stability 1

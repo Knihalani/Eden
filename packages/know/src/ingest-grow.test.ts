@@ -3,11 +3,27 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { adaptCapitalLabel, noteCapitalLabel, resetAdaptForTest } from "./adapt";
-import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApiBatchUrl, wikiRevisionPages, ttlDaysFor } from "./extract";
+import {
+  canonicalUrl,
+  persistable,
+  triplesFromPage,
+  wikiGrowUrls,
+  wikiActionApiBatchUrl,
+  wikiRevisionPages,
+  ttlDaysFor,
+} from "./extract";
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickFeeds, tickRecrawl, tickWikiGrow } from "./loop";
-import { compactDue, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, expensiveLaneDue, shardOwns, shardWetIndex } from "./defaults";
+import {
+  compactDue,
+  DEFAULT_WIKI,
+  DEFAULT_WIKI_GROW,
+  DEFAULT_WET_EVERY,
+  expensiveLaneDue,
+  shardOwns,
+  shardWetIndex,
+} from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
 const LIST = "https://en.wikipedia.org/wiki/List_of_national_capitals";
@@ -34,7 +50,11 @@ describe("adaptive infobox", () => {
       <div class="infobox-label">ISO 3166 code</div>
       <div class="infobox-data">KE</div>
     </div>`;
-    const t = triplesFromPage(KENYA, `<html><title>Kenya</title>${html}<p>Kenya is a country in East Africa with enough text.</p></html>`, true);
+    const t = triplesFromPage(
+      KENYA,
+      `<html><title>Kenya</title>${html}<p>Kenya is a country in East Africa with enough text.</p></html>`,
+      true,
+    );
     expect(t.some((x) => x.p === "capital" && x.s === "Kenya" && x.o === "Nairobi")).toBe(true);
     expect(t.some((x) => x.p === "id" && x.s === "Kenya" && x.o === "KE")).toBe(true);
   });

@@ -171,7 +171,9 @@ export function inferCursorWalk(traces: StretchTrace[], tool: string, times: num
     const until = untilExpr(pages, nextPath);
     if (!until) return null;
     const initVals = traces.map((x) => (okNamed(x, tool)[0]?.args ?? {})[cursorArg]);
-    const init: Binding = initVals.every(isSeedCursor) ? { kind: "literal", value: null } : { kind: "literal", value: initVals[0] };
+    const init: Binding = initVals.every(isSeedCursor)
+      ? { kind: "literal", value: null }
+      : { kind: "literal", value: initVals[0] };
     const row: CursorWalk = {
       until,
       maxIters: pages.length,
@@ -224,7 +226,7 @@ function findPageResultPath(pages: TraceEvent[], pageArg: string): string | null
     const i = h.lastIndexOf(".");
     return (i < 0 ? h : h.slice(i + 1)) === pageArg;
   });
-  return named.length === 1 ? named[0]! : hits[0] ?? pageArg;
+  return named.length === 1 ? named[0]! : (hits[0] ?? pageArg);
 }
 
 function pageItems(p: TraceEvent, itemsPath: string): unknown[] {
@@ -234,20 +236,23 @@ function pageItems(p: TraceEvent, itemsPath: string): unknown[] {
 
 function offsetUntilExpr(pages: TraceEvent[], itemsPath: string): string | null {
   const last = pages.at(-1)!;
-  const rec = last.result && typeof last.result === "object" && !Array.isArray(last.result)
-    ? (last.result as Record<string, unknown>)
-    : null;
+  const rec =
+    last.result && typeof last.result === "object" && !Array.isArray(last.result)
+      ? (last.result as Record<string, unknown>)
+      : null;
   if (rec) {
     const page = rec.page ?? rec.pageIndex;
     const total = rec.totalPages ?? rec.total_pages ?? rec.pages;
     if (typeof page === "number" && typeof total === "number" && page >= total) {
       const earlier = pages.slice(0, -1);
-      if (earlier.every((p) => {
-        const r = p.result as Record<string, unknown> | undefined;
-        const pv = r?.page ?? r?.pageIndex;
-        const tv = r?.totalPages ?? r?.total_pages ?? r?.pages;
-        return typeof pv !== "number" || typeof tv !== "number" || pv < tv;
-      })) {
+      if (
+        earlier.every((p) => {
+          const r = p.result as Record<string, unknown> | undefined;
+          const pv = r?.page ?? r?.pageIndex;
+          const tv = r?.totalPages ?? r?.total_pages ?? r?.pages;
+          return typeof pv !== "number" || typeof tv !== "number" || pv < tv;
+        })
+      ) {
         const pageKey = "page" in rec ? "page" : "pageIndex";
         const totalKey = "totalPages" in rec ? "totalPages" : "total_pages" in rec ? "total_pages" : "pages";
         return `${pageKey} >= ${totalKey}`;
@@ -479,7 +484,8 @@ export function lookupArg(
     }
   }
   const uniq = hits.filter(
-    (h, i, a) => a.findIndex((x) => x.joinField === h.joinField && x.itemPath === h.itemPath && x.wantPath === h.wantPath) === i,
+    (h, i, a) =>
+      a.findIndex((x) => x.joinField === h.joinField && x.itemPath === h.itemPath && x.wantPath === h.wantPath) === i,
   );
   return uniq.length === 1 ? uniq[0]! : null;
 }

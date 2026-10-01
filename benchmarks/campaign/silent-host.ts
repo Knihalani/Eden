@@ -10,7 +10,9 @@ export function createSilentHost(): World {
   const writes = new Map<string, number>();
   return {
     name: "silent-host",
-    island: () => async ({ input }) => ({ note: "unscrapable", input }),
+    island:
+      () =>
+      async ({ input }) => ({ note: "unscrapable", input }),
     tools: () => ({
       fetchItem: {
         description: "Fetch an item.",

@@ -6,9 +6,7 @@ export const LIMIT_KEY =
 
 /** Full legend for /proof. Isolation prints LIMIT_KEY only. */
 export const CLASS_KEY =
-  "win — campaign cell that passed. " +
-  LIMIT_KEY +
-  " fixture — same win cell grouped by vertical; not a customer.";
+  "win — campaign cell that passed. " + LIMIT_KEY + " fixture — same win cell grouped by vertical; not a customer.";
 
 /** One honesty row. Isolation pins and PUBLIC_CLAIMS both map here. */
 export type BoardRow = {
@@ -27,13 +25,7 @@ export type BoardRow = {
  * Same chrome on /proof wins and /isolation published limits so Kind/Source
  * cannot be skipped. Graphite only.
  */
-export function ClaimTable({
-  rows,
-  caption,
-}: {
-  rows: readonly BoardRow[];
-  caption?: string;
-}) {
+export function ClaimTable({ rows, caption }: { rows: readonly BoardRow[]; caption?: string }) {
   return (
     <table className="iso-table">
       {caption ? <caption className="iso-caption">{caption}</caption> : null}
@@ -50,8 +42,7 @@ export function ClaimTable({
         {rows.map((row) => (
           <tr key={row.id} data-kind={row.kind}>
             <th scope="row">
-              <span className="iso-id">{row.printed}</span>{" "}
-              {row.name}
+              <span className="iso-id">{row.printed}</span> {row.name}
             </th>
             <td data-label="Kind">
               <span className={`iso-kind iso-kind-${row.kind}`}>{row.kind}</span>

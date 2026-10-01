@@ -133,7 +133,8 @@ async function prelive(
     await s.stretch("w", g, blockSeed(`prelive-${i}-${JSON.stringify(g)}`, i));
   }
   const r = await s.goLive("w", { compile: Math.max(3, count - 3), holdout: 3, sandbox: factory, maxGram: 26 });
-  if (r.program == null) notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
+  if (r.program == null)
+    notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
   else notes.push(`prelive PASS: ${r.program.sequence.join("→")}`);
   return { program: r.program, notes };
 }
@@ -157,7 +158,8 @@ async function shortLiveRun(
   s.addPrograms(pre.program ? [pre.program] : []);
   await s.stretch(worldName, goal, blockSeed(`short-${worldName}-${task}`, repeat));
   const stats = s.finish();
-  if (!pre.program) stats.violations = [...stats.violations, ...pre.notes, "short cell with no live program — not a skip-as-win"];
+  if (!pre.program)
+    stats.violations = [...stats.violations, ...pre.notes, "short cell with no live program — not a skip-as-win"];
   return { stats, notes: pre.notes };
 }
 
@@ -216,13 +218,48 @@ async function main() {
     world: [string, WorldFactory];
     pool: Array<Record<string, unknown>>;
   }> = [
-    { key: "long-offset", label: "GitLab page/limit then comment each iid", world: ["gitlab-offset", createGitlabOffset], pool: offsetPool() },
-    { key: "long-retry", label: "pushImage 429×2 then ok, then tagRelease", world: ["rate-limit-retry", createRateLimitRetry], pool: retryPool() },
-    { key: "long-tree", label: "nested children flatten then scan leaves", world: ["fs-tree", createFsTree], pool: treePool() },
-    { key: "long-unique", label: "first-seen unique addr then sendDigest", world: ["dedupe-mail", createDedupeMail], pool: mailPool() },
-    { key: "long-sort", label: "drain jobs by descending prio", world: ["prio-queue", createPrioQueue], pool: prioPool() },
-    { key: "long-reduce", label: "post lines then settle sum(amt)", world: ["ledger-settle", createLedgerSettle], pool: ledgerPool() },
-    { key: "long-barcode", label: "foreach barcode+lotCode (not an allowlist name)", world: ["barcode-lots", createBarcodeLots], pool: barcodePool() },
+    {
+      key: "long-offset",
+      label: "GitLab page/limit then comment each iid",
+      world: ["gitlab-offset", createGitlabOffset],
+      pool: offsetPool(),
+    },
+    {
+      key: "long-retry",
+      label: "pushImage 429×2 then ok, then tagRelease",
+      world: ["rate-limit-retry", createRateLimitRetry],
+      pool: retryPool(),
+    },
+    {
+      key: "long-tree",
+      label: "nested children flatten then scan leaves",
+      world: ["fs-tree", createFsTree],
+      pool: treePool(),
+    },
+    {
+      key: "long-unique",
+      label: "first-seen unique addr then sendDigest",
+      world: ["dedupe-mail", createDedupeMail],
+      pool: mailPool(),
+    },
+    {
+      key: "long-sort",
+      label: "drain jobs by descending prio",
+      world: ["prio-queue", createPrioQueue],
+      pool: prioPool(),
+    },
+    {
+      key: "long-reduce",
+      label: "post lines then settle sum(amt)",
+      world: ["ledger-settle", createLedgerSettle],
+      pool: ledgerPool(),
+    },
+    {
+      key: "long-barcode",
+      label: "foreach barcode+lotCode (not an allowlist name)",
+      world: ["barcode-lots", createBarcodeLots],
+      pool: barcodePool(),
+    },
   ];
 
   for (let si = 0; si < longDefs.length; si++) {

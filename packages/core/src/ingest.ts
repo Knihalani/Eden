@@ -108,14 +108,14 @@ export function parseOtelSpans(spans: OTelSpan[]): Map<string, ToolEvent[]> {
   const out = new Map<string, ToolEvent[]>();
   for (const [tid, spansInTrace] of byTrace) {
     // Sort by start time to preserve execution order.
-    const sorted = [...spansInTrace].sort((a, b) =>
-      Number(a.startTimeUnixNano ?? 0) - Number(b.startTimeUnixNano ?? 0),
+    const sorted = [...spansInTrace].sort(
+      (a, b) => Number(a.startTimeUnixNano ?? 0) - Number(b.startTimeUnixNano ?? 0),
     );
     const events: ToolEvent[] = [];
     let seq = 0;
     for (const span of sorted) {
-      const attrs = (span.attributes && typeof span.attributes === "object")
-        ? span.attributes as Record<string, unknown> : {};
+      const attrs =
+        span.attributes && typeof span.attributes === "object" ? (span.attributes as Record<string, unknown>) : {};
       let toolName = findToolName(attrs);
       // Phoenix/OpenInference: the span's own name IS the tool name.
       if (toolName === "__PHOENIX_USE_SPAN_NAME__") toolName = span.name ?? null;
@@ -131,7 +131,11 @@ export function parseOtelSpans(spans: OTelSpan[]): Map<string, ToolEvent[]> {
         {};
       let args: Record<string, unknown> = {};
       if (typeof argsRaw === "string") {
-        try { args = JSON.parse(argsRaw); } catch { args = { raw: argsRaw }; }
+        try {
+          args = JSON.parse(argsRaw);
+        } catch {
+          args = { raw: argsRaw };
+        }
       } else if (argsRaw && typeof argsRaw === "object") {
         args = argsRaw as Record<string, unknown>;
       }
@@ -184,8 +188,8 @@ export function parseLangSmithRuns(runs: LangSmithRun[]): Map<string, ToolEvent[
   }
   const out = new Map<string, ToolEvent[]>();
   for (const [tid, runsInTrace] of byTrace) {
-    const sorted = [...runsInTrace].sort((a, b) =>
-      new Date(a.start_time ?? 0).getTime() - new Date(b.start_time ?? 0).getTime(),
+    const sorted = [...runsInTrace].sort(
+      (a, b) => new Date(a.start_time ?? 0).getTime() - new Date(b.start_time ?? 0).getTime(),
     );
     const events: ToolEvent[] = [];
     for (let seq = 0; seq < sorted.length; seq++) {
@@ -235,8 +239,8 @@ export function parseLangfuseObservations(observations: LangfuseObservation[]): 
   }
   const out = new Map<string, ToolEvent[]>();
   for (const [tid, obsList] of byTrace) {
-    const sorted = [...obsList].sort((a, b) =>
-      new Date(a.startTime ?? 0).getTime() - new Date(b.startTime ?? 0).getTime(),
+    const sorted = [...obsList].sort(
+      (a, b) => new Date(a.startTime ?? 0).getTime() - new Date(b.startTime ?? 0).getTime(),
     );
     const events: ToolEvent[] = [];
     for (let seq = 0; seq < sorted.length; seq++) {
@@ -288,8 +292,7 @@ interface OpenAICompletionLog {
  */
 export function parseOpenAIToolCalls(logs: OpenAICompletionLog[]): Map<string, ToolEvent[]> {
   // Pairing is identical either way; only the trace partition differs.
-  const convoOf = (log: OpenAICompletionLog): string =>
-    log.conversation_id ?? log.session_id ?? log.thread_id ?? "";
+  const convoOf = (log: OpenAICompletionLog): string => log.conversation_id ?? log.session_id ?? log.thread_id ?? "";
 
   const hasConvoIds = logs.some((l) => convoOf(l) !== "");
   const partitions = new Map<string, OpenAICompletionLog[]>();
@@ -307,8 +310,15 @@ export function parseOpenAIToolCalls(logs: OpenAICompletionLog[]): Map<string, T
   const out = new Map<string, ToolEvent[]>();
   for (const [key, partLogs] of partitions) {
     // Pass 1: collect all tool_call requests and all tool results.
-    interface Pending { name: string; args: Record<string, unknown>; logIdx: number }
-    interface Result { output: unknown; isError: boolean }
+    interface Pending {
+      name: string;
+      args: Record<string, unknown>;
+      logIdx: number;
+    }
+    interface Result {
+      output: unknown;
+      isError: boolean;
+    }
     const pending = new Map<string, Pending>();
     const results = new Map<string, Result>();
     for (const log of partLogs) {
@@ -322,7 +332,9 @@ export function parseOpenAIToolCalls(logs: OpenAICompletionLog[]): Map<string, T
             try {
               const p = JSON.parse(tc.function.arguments ?? "{}");
               if (p && typeof p === "object") parsedArgs = p;
-            } catch { parsedArgs = { raw: tc.function.arguments }; }
+            } catch {
+              parsedArgs = { raw: tc.function.arguments };
+            }
             pending.set(tc.id, { name: tc.function.name, args: parsedArgs, logIdx: 0 });
           }
         }
@@ -331,7 +343,9 @@ export function parseOpenAIToolCalls(logs: OpenAICompletionLog[]): Map<string, T
           try {
             const p = JSON.parse(msg.content ?? "");
             if (p !== null && typeof p === "object") output = p;
-          } catch { /* keep as string */ }
+          } catch {
+            /* keep as string */
+          }
           results.set(msg.tool_call_id, { output, isError: false });
         }
       }
@@ -367,8 +381,7 @@ export function looksLikeOpenAILogs(parsed: unknown): parsed is OpenAICompletion
     Array.isArray(parsed) &&
     parsed.length > 0 &&
     parsed.every(
-      (entry) =>
-        entry !== null && typeof entry === "object" && Array.isArray((entry as OpenAICompletionLog).choices),
+      (entry) => entry !== null && typeof entry === "object" && Array.isArray((entry as OpenAICompletionLog).choices),
     )
   );
 }

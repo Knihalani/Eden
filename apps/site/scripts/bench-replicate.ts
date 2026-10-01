@@ -68,7 +68,10 @@ for (const job of jobs) {
     const code = await proc.exited;
     if (code !== 0) {
       console.error(`${job.name} ${i} exited ${code}`);
-      writeFileSync(join(DEST, "summary.json"), JSON.stringify({ ok: false, failed: `${job.name}-${i}`, rows }, null, 2));
+      writeFileSync(
+        join(DEST, "summary.json"),
+        JSON.stringify({ ok: false, failed: `${job.name}-${i}`, rows }, null, 2),
+      );
       process.exit(code || 1);
     }
     const dest = join(DEST, `${job.name}-${i}.json`);

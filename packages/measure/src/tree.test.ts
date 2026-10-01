@@ -54,7 +54,9 @@ describe("tree inventory", () => {
     expect(section.length).toBeGreaterThan(200);
     for (const r of WAVE_LEFTOVERS.filter((x) => x.band === "16-20" || x.band === "21")) {
       expect(section).toContain(r.close);
-      const line = section.split("\n").find((l) => l.includes(`| ${r.close} `) || l.includes(`| ${r.close} ·`) || l.includes(`| ${r.close}|`));
+      const line = section
+        .split("\n")
+        .find((l) => l.includes(`| ${r.close} `) || l.includes(`| ${r.close} ·`) || l.includes(`| ${r.close}|`));
       expect(line ?? section).toMatch(/Shipped|Limit/);
       expect(line ?? "").not.toMatch(/\|\s*Open\s*\|/);
     }

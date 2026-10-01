@@ -1,14 +1,6 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -21,7 +13,16 @@ import {
 import type { Triple } from "./extract";
 import { canonicalUrl, encyclopediaUrl, frozenEncyclopedia, hostOf, junkGraphFact, persistable } from "./extract";
 import { minhashBands } from "./minhash";
-import { allFacts, decodePack, encodePack, mergeFactLists, PACK_FILE, queryShapes, type KnowPack, type PackFact } from "./pack";
+import {
+  allFacts,
+  decodePack,
+  encodePack,
+  mergeFactLists,
+  PACK_FILE,
+  queryShapes,
+  type KnowPack,
+  type PackFact,
+} from "./pack";
 import { catalogAliasKeys, indexTokens, queryTokens } from "./tokens";
 import { catalogSubject } from "./names";
 import { SEED_URLS } from "./seed";
@@ -200,10 +201,7 @@ const W3C_TR_HTTPS = "https://www.w3.org/TR/";
 const W3C_TR_HTTP = "http://www.w3.org/TR/";
 const IANA_ASSIGN = "https://www.iana.org/assignments/";
 
-const WIKI_PREFIXES: readonly string[] = [
-  "https://en.wikipedia.org/wiki/",
-  "https://www.wikidata.org/wiki/",
-];
+const WIKI_PREFIXES: readonly string[] = ["https://en.wikipedia.org/wiki/", "https://www.wikidata.org/wiki/"];
 
 /** Longest-first slug prefixes. Residual after prefix is unique title text. */
 const SLUG_PREFIXES: readonly string[] = [
@@ -329,9 +327,7 @@ function zstdMaybe(raw: Uint8Array, level = 22): { z: boolean; b: Uint8Array } {
     if (level >= 19 && raw.byteLength >= 256 && zlibConstants.ZSTD_c_windowLog !== undefined) {
       params[zlibConstants.ZSTD_c_windowLog] = 22;
     }
-    const c = new Uint8Array(
-      Object.keys(params).length ? zstdCompressSync(raw, { params }) : zstdCompressSync(raw),
-    );
+    const c = new Uint8Array(Object.keys(params).length ? zstdCompressSync(raw, { params }) : zstdCompressSync(raw));
     if (c.byteLength < raw.byteLength) return { z: true, b: c };
   } catch {
     /* */
@@ -477,7 +473,10 @@ function readFramed(path: string, magic: string): Uint8Array[] {
 }
 
 type JnlPut = { op: "put"; url: string; ttl: number; at: number; t: [string, string, string, string][] };
-type JnlSnap = { op: "snap"; rows: { s: string; p: string; o: string; e: string; url: string; at: number; ttl: number }[] };
+type JnlSnap = {
+  op: "snap";
+  rows: { s: string; p: string; o: string; e: string; url: string; at: number; ttl: number }[];
+};
 type JnlExp = { op: "exp"; now: number };
 type JnlOp = JnlPut | JnlSnap | JnlExp | { op: "clr" };
 
@@ -930,12 +929,14 @@ function ianaNameOf(url: string): string | undefined {
 function w3cTrOf(url: string): { https: boolean; rest: string } | undefined {
   if (url.startsWith(W3C_TR_HTTPS) && url.length > W3C_TR_HTTPS.length) {
     const longer = slugPrefixOf(url);
-    if (longer && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTPS && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTP) return undefined;
+    if (longer && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTPS && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTP)
+      return undefined;
     return { https: true, rest: url.slice(W3C_TR_HTTPS.length) };
   }
   if (url.startsWith(W3C_TR_HTTP) && url.length > W3C_TR_HTTP.length) {
     const longer = slugPrefixOf(url);
-    if (longer && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTPS && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTP) return undefined;
+    if (longer && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTPS && SLUG_PREFIXES[longer.pi] !== W3C_TR_HTTP)
+      return undefined;
     return { https: false, rest: url.slice(W3C_TR_HTTP.length) };
   }
   return undefined;
@@ -1641,10 +1642,7 @@ class Crawl {
     return { hid, p, trail, qid };
   }
 
-  writeGrouped(
-    w: W,
-    items: { k: FrKey; write: (w: W) => void }[],
-  ) {
+  writeGrouped(w: W, items: { k: FrKey; write: (w: W) => void }[]) {
     const groups = new Map<number, { k: FrKey; write: (w: W) => void }[]>();
     for (const it of items) {
       const g = groups.get(it.k.hid) || [];
@@ -2821,9 +2819,7 @@ function crawlFromSqlite(db: Database, crawl: Crawl) {
     const hasFrom = cols.includes("from_url");
     const hasFid = cols.includes("fid") || sqliteHas(db, "fr_row");
     const rows = db
-      .query(
-        `SELECT url, next_fetch${hasFid ? ", fid" : ""}${hasFrom ? ", from_url" : ""} FROM frontier`,
-      )
+      .query(`SELECT url, next_fetch${hasFid ? ", fid" : ""}${hasFrom ? ", from_url" : ""} FROM frontier`)
       .all() as { url: string; next_fetch: number; fid?: number; from_url?: string }[];
     for (const r of rows) {
       let from = "seed";
@@ -3151,7 +3147,11 @@ export function openStore(dir = knowDir()) {
     const exactKeys = [...new Set([q.trim(), ...queryShapes(q), ...toks])].filter(Boolean);
     for (const t of exactKeys) {
       const exact = mem.query(`${hydrateSql} WHERE s.s = ? COLLATE NOCASE ORDER BY rk LIMIT ?`).all(t, k) as {
-        s: string; p: string; o: string; e: string; url: string;
+        s: string;
+        p: string;
+        o: string;
+        e: string;
+        url: string;
       }[];
       if (exact.length) return exact.filter((h) => h.p !== "about" && h.p !== "date" && h.o.length <= 96);
     }
@@ -3199,7 +3199,12 @@ export function openStore(dir = knowDir()) {
   const staleOf = mem.prepare(`SELECT id, sid, pid FROM nodes WHERE url = ?`);
   const delNode = mem.prepare(`DELETE FROM nodes WHERE id = ?`);
 
-  function applyPut(url: string, triples: Triple[], ttl_days: number, as_of: number): [string, string, string, string][] {
+  function applyPut(
+    url: string,
+    triples: Triple[],
+    ttl_days: number,
+    as_of: number,
+  ): [string, string, string, string][] {
     const kept: [string, string, string, string][] = [];
     const write = mem.transaction(() => {
       const keep = new Set<string>();
@@ -3314,7 +3319,7 @@ export function openStore(dir = knowDir()) {
   }
   snapshotJournal();
 
-  let walHint = !!(mem.query(`SELECT 1 AS x FROM nodes LIMIT 1`).get());
+  let walHint = !!mem.query(`SELECT 1 AS x FROM nodes LIMIT 1`).get();
   let crawlHold = 0;
   function crawlPersist(force = false) {
     if (!crawlHold) crawl.maybePersist(dir, force);
@@ -3351,7 +3356,7 @@ export function openStore(dir = knowDir()) {
       return crawl.pageFresh(url, now);
     },
     hasWalNodes(url: string): boolean {
-      return !!(mem.query(`SELECT 1 AS x FROM nodes WHERE url = ? LIMIT 1`).get(url));
+      return !!mem.query(`SELECT 1 AS x FROM nodes WHERE url = ? LIMIT 1`).get(url);
     },
     hostBlocked(url: string): string | undefined {
       return crawl.hostBlocked(url);
@@ -3365,14 +3370,7 @@ export function openStore(dir = knowDir()) {
       crawlPersist();
       return hit;
     },
-    putPage(row: {
-      url: string;
-      digest: string;
-      chars: number;
-      source: string;
-      ttl_days: number;
-      skip?: string;
-    }) {
+    putPage(row: { url: string; digest: string; chars: number; source: string; ttl_days: number; skip?: string }) {
       if (row.digest) {
         const h = urlHash(row.url);
         if (row.skip) {
@@ -3427,7 +3425,7 @@ export function openStore(dir = knowDir()) {
     },
     search(q: string, k = 5): { s: string; p: string; o: string; e: string; url: string }[] {
       const packed = pack ? pack.search(q, k) : [];
-      const wal = walHint && !!(mem.query(`SELECT 1 AS x FROM nodes LIMIT 1`).get());
+      const wal = walHint && !!mem.query(`SELECT 1 AS x FROM nodes LIMIT 1`).get();
       walHint = wal;
       if (!wal) return packed;
       if (packed.length) {

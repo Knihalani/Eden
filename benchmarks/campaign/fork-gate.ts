@@ -22,7 +22,13 @@ export const EXPECT =
 
 export const MAX_PROGRAMS = 24;
 
-function ciTrace(id: string, state: string, tail: string[], pr: number, output: unknown = { done: true }): StretchTrace {
+function ciTrace(
+  id: string,
+  state: string,
+  tail: string[],
+  pr: number,
+  output: unknown = { done: true },
+): StretchTrace {
   return {
     id,
     events: [

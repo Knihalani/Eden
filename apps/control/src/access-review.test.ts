@@ -4,13 +4,7 @@ import { createHandler } from "./server";
 import { useTempEdenHome } from "./test-home";
 import { handleApi } from "./api";
 import { Store, toolFlagsJson } from "./store";
-import {
-  AUDIT_COLUMNS,
-  GENESIS,
-  exportAudit,
-  hashPayload,
-  verifyAudit,
-} from "./audit-export";
+import { AUDIT_COLUMNS, GENESIS, exportAudit, hashPayload, verifyAudit } from "./audit-export";
 import {
   REVIEW_COLUMNS,
   actorOf,
@@ -284,9 +278,7 @@ describe("GET /v1/audit/review", () => {
           body: JSON.stringify({ org_id: "org_a" }),
         }),
       );
-      const denied = await handler(
-        new Request("http://x/v1/audit/review", { headers: headers("org_b") }),
-      );
+      const denied = await handler(new Request("http://x/v1/audit/review", { headers: headers("org_b") }));
       expect(denied.status).toBe(403);
       const body = (await denied.json()) as { error: string };
       expect(body.error).toBe("workspace not bound to this org");
@@ -306,9 +298,7 @@ describe("GET /v1/audit/review", () => {
           body: JSON.stringify({ org_id: "org_a" }),
         }),
       );
-      const res = await handler(
-        new Request("http://x/v1/audit/review?format=jsonl", { headers: headers("org_a") }),
-      );
+      const res = await handler(new Request("http://x/v1/audit/review?format=jsonl", { headers: headers("org_a") }));
       expect(res.status).toBe(200);
       const text = await res.text();
       expect(verifyAccessReview(text)).toEqual({ ok: true, n: 1 });

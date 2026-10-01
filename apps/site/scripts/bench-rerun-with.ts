@@ -179,7 +179,14 @@ try {
   }
   const scored = report.scored;
   const sum = (arm: "without" | "with") => {
-    const rows = scored.map((s: Record<string, { wall_ms: number; cost_usd?: number; tool_calls: number; output_tokens?: number; duration_ms?: number }>) => s[arm]);
+    const rows = scored.map(
+      (
+        s: Record<
+          string,
+          { wall_ms: number; cost_usd?: number; tool_calls: number; output_tokens?: number; duration_ms?: number }
+        >,
+      ) => s[arm],
+    );
     return {
       wall_ms: rows.reduce((a: number, r: { wall_ms: number }) => a + r.wall_ms, 0),
       cost_usd: rows.reduce((a: number, r: { cost_usd?: number }) => a + (r.cost_usd || 0), 0),
@@ -189,7 +196,8 @@ try {
     };
   };
   report.totals = { without: sum("without"), with: sum("with") };
-  report.note = "WITH PR tasks re-run after handleForge stopped intercepting api.github.com. Compile warmups and without-arm unchanged.";
+  report.note =
+    "WITH PR tasks re-run after handleForge stopped intercepting api.github.com. Compile warmups and without-arm unchanged.";
   writeFileSync(join(OUT, "report.json"), JSON.stringify(report, null, 2));
   writeFileSync(join(ROOT, "apps/site/scripts/bench-compile-results.json"), JSON.stringify(report, null, 2));
   console.log("totals", JSON.stringify(report.totals, null, 2));

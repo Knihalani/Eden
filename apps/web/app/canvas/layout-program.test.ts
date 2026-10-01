@@ -123,12 +123,19 @@ describe("canvas layout", () => {
     expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" }, { skipped: ["lookupTicket"] })).toBe(
       "steered-skip",
     );
-    expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" }, { compiledRan: true })).toBe("compiled");
-    expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" })).toBe("frontier");
-    expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" }, { transparent: true })).toBe("transparent");
-    expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" }, { skipped: ["lookupTicket"], transparent: true })).toBe(
-      "steered-skip",
+    expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" }, { compiledRan: true })).toBe(
+      "compiled",
     );
+    expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" })).toBe("frontier");
+    expect(tokenClassForNode({ id: "lookup", kind: "tool", tool: "lookupTicket" }, { transparent: true })).toBe(
+      "transparent",
+    );
+    expect(
+      tokenClassForNode(
+        { id: "lookup", kind: "tool", tool: "lookupTicket" },
+        { skipped: ["lookupTicket"], transparent: true },
+      ),
+    ).toBe("steered-skip");
     expect(tokenClassForNode({ id: "check", kind: "assert" })).toBeUndefined();
     expect(tokenClassForNode({ id: "each", kind: "loop" })).toBeUndefined();
     expect(tokenClassForNode({ id: "branch_state", kind: "branch" })).toBeUndefined();

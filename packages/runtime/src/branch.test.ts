@@ -45,9 +45,18 @@ describe("branch step execution (G2)", () => {
   function makeWorld(state: string) {
     const calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
     const registry = registryFrom({
-      inspect: async (args) => { calls.push({ tool: "inspect", args }); return { state }; },
-      fix: async (args) => { calls.push({ tool: "fix", args }); return { fixed: true }; },
-      notify: async () => { calls.push({ tool: "notify", args: {} }); return { notified: true }; },
+      inspect: async (args) => {
+        calls.push({ tool: "inspect", args });
+        return { state };
+      },
+      fix: async (args) => {
+        calls.push({ tool: "fix", args });
+        return { fixed: true };
+      },
+      notify: async () => {
+        calls.push({ tool: "notify", args: {} });
+        return { notified: true };
+      },
     });
     return { registry, calls };
   }
@@ -173,7 +182,11 @@ describe("n-way branch cases", () => {
     ];
     for (const arm of expected) {
       const calls: string[] = [];
-      const out = await runProgram(naryProgram(), { id: 1 }, { registry: sevRegistry(arm.sev, calls), checkEnvelope: false });
+      const out = await runProgram(
+        naryProgram(),
+        { id: 1 },
+        { registry: sevRegistry(arm.sev, calls), checkEnvelope: false },
+      );
       expect(calls).toEqual([arm.tool]);
       expect(out.value).toEqual(arm.value);
     }

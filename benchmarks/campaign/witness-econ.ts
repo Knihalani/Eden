@@ -27,11 +27,7 @@ export type GoLiveClass = {
   detail: string;
 };
 
-const ARC4: ReadonlySet<GoLiveMechanism> = new Set([
-  "variant_dilution",
-  "width_class_split",
-  "envelope_gap",
-]);
+const ARC4: ReadonlySet<GoLiveMechanism> = new Set(["variant_dilution", "width_class_split", "envelope_gap"]);
 
 export function isArc4Mechanism(mechanism: string): boolean {
   return ARC4.has(mechanism as GoLiveMechanism);

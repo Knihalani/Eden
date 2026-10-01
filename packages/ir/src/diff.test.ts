@@ -74,7 +74,9 @@ describe("diffPrograms", () => {
     const oldP = program({
       steps: [{ id: "a", kind: "tool", tool: "x", args: { id: { kind: "from", step: "root", path: "id" } } }],
     });
-    const newP = program({ steps: [{ id: "a", kind: "tool", tool: "x", args: { id: { kind: "input", path: "id" } } }] });
+    const newP = program({
+      steps: [{ id: "a", kind: "tool", tool: "x", args: { id: { kind: "input", path: "id" } } }],
+    });
     const d = diffPrograms(oldP, newP);
     expect(d.bindings_changed).toHaveLength(1);
     expect(d.bindings_changed[0]).toMatchObject({ step: "a", field: "id", from_kind: "from", to_kind: "input" });
@@ -82,7 +84,9 @@ describe("diffPrograms", () => {
   });
 
   test("a literal where a binding was is flagged for review", () => {
-    const newP = program({ steps: [{ id: "a", kind: "tool", tool: "x", args: { id: { kind: "literal", value: "T-100" } } }] });
+    const newP = program({
+      steps: [{ id: "a", kind: "tool", tool: "x", args: { id: { kind: "literal", value: "T-100" } } }],
+    });
     const d = diffPrograms(program(), newP);
     expect(d.literals_introduced).toEqual([{ step: "a", field: "id" }]);
     expect(d.bindings_changed[0]).toMatchObject({ from_kind: "input", to_kind: "literal" });
@@ -98,13 +102,23 @@ describe("diffPrograms", () => {
   });
 
   test("transform rewrites surface via detail without changing kind", () => {
-    const mk = (expr: string): Binding => ({ kind: "transform", fn: "jsonpath", expr, of: { kind: "input", path: "raw" } });
+    const mk = (expr: string): Binding => ({
+      kind: "transform",
+      fn: "jsonpath",
+      expr,
+      of: { kind: "input", path: "raw" },
+    });
     const d = diffPrograms(
       program({ steps: [{ id: "a", kind: "tool", tool: "x", args: { q: mk("$.a") } }] }),
       program({ steps: [{ id: "a", kind: "tool", tool: "x", args: { q: mk("$.b") } }] }),
     );
     expect(d.bindings_changed).toHaveLength(1);
-    expect(d.bindings_changed[0]).toMatchObject({ step: "a", field: "q", from_kind: "transform", to_kind: "transform" });
+    expect(d.bindings_changed[0]).toMatchObject({
+      step: "a",
+      field: "q",
+      from_kind: "transform",
+      to_kind: "transform",
+    });
     expect(d.bindings_changed[0]?.detail).toContain("$.a");
     expect(d.literals_introduced).toEqual([]);
   });
@@ -126,7 +140,10 @@ describe("diffPrograms", () => {
     const loosen = diffPrograms(program({ steps: [assertStep("error")] }), program({ steps: [assertStep("deopt")] }));
     expect(loosen.asserts_loosened).toBe(1);
 
-    const rewrite = diffPrograms(program({ steps: [assertStep("error", "$.n > 1")] }), program({ steps: [assertStep("error", "$.n > 2")] }));
+    const rewrite = diffPrograms(
+      program({ steps: [assertStep("error", "$.n > 1")] }),
+      program({ steps: [assertStep("error", "$.n > 2")] }),
+    );
     expect(rewrite.asserts_tightened).toBe(1);
 
     const drop = diffPrograms(program({ steps: [assertStep("error")] }), program({ steps: [] }));
@@ -138,7 +155,10 @@ describe("diffPrograms", () => {
   });
 
   test("contract changes list what moved", () => {
-    const d = diffPrograms(program(), program({ contract: { witnesses: 7, minLlmReduction: 5, allowExact: true, envelope: { inputs: {} } } }));
+    const d = diffPrograms(
+      program(),
+      program({ contract: { witnesses: 7, minLlmReduction: 5, allowExact: true, envelope: { inputs: {} } } }),
+    );
     expect(d.contract_changed).toBe(true);
     expect(d.contract_changes).toEqual(["witnesses 3 -> 7", "allowExact false -> true", "envelope changed"]);
   });
@@ -164,7 +184,14 @@ describe("diffPrograms", () => {
   test("fail-safe over partial IR", () => {
     // Missing steps arrays and contracts must not throw — this runs on the
     // approve path against whatever the store deserialised.
-    const bare = { id: "x", name: "x", description: "", inputSchema: {}, returns: null, manifest: null } as unknown as StretchProgram;
+    const bare = {
+      id: "x",
+      name: "x",
+      description: "",
+      inputSchema: {},
+      returns: null,
+      manifest: null,
+    } as unknown as StretchProgram;
     const d = diffPrograms(bare, bare);
     expect(d.steps_added).toEqual([]);
     expect(d.steps_removed).toEqual([]);
@@ -172,8 +199,12 @@ describe("diffPrograms", () => {
   });
 
   test("kind change reads as remove+add rather than half-matched bindings", () => {
-    const oldP = program({ steps: [{ id: "a", kind: "loop", over: { kind: "input", path: "xs" }, item: "x", body: ["b"] }] });
-    const newP = program({ steps: [{ id: "a", kind: "tool", tool: "x", args: { xs: { kind: "input", path: "xs" } } }] });
+    const oldP = program({
+      steps: [{ id: "a", kind: "loop", over: { kind: "input", path: "xs" }, item: "x", body: ["b"] }],
+    });
+    const newP = program({
+      steps: [{ id: "a", kind: "tool", tool: "x", args: { xs: { kind: "input", path: "xs" } } }],
+    });
     const d = diffPrograms(oldP, newP);
     expect(d.steps_removed).toEqual([{ id: "a" }]);
     expect(d.steps_added).toEqual([{ id: "a", kind: "tool", tool: "x" }]);
@@ -181,7 +212,12 @@ describe("diffPrograms", () => {
   });
 
   test("formatDiffCard is one screen: name, steps, vs live, witnesses", () => {
-    const first = formatDiffCard(null, { name: "desk_close", sequence: ["search", "close"], witnesses: 3, first: true });
+    const first = formatDiffCard(null, {
+      name: "desk_close",
+      sequence: ["search", "close"],
+      witnesses: 3,
+      first: true,
+    });
     expect(first).toContain("desk_close");
     expect(first).toContain("search → close");
     expect(first).toContain("first version");

@@ -218,7 +218,10 @@ export class Store {
    */
   sealUnmeasured(sealed: StretchTrace): boolean {
     const hash = hashTrace(sealed);
-    const row = this.db.query(`SELECT id, payload FROM traces WHERE hash = ?`).get(hash) as { id: string; payload: string } | null;
+    const row = this.db.query(`SELECT id, payload FROM traces WHERE hash = ?`).get(hash) as {
+      id: string;
+      payload: string;
+    } | null;
     if (!row) return false;
     let current: StretchTrace;
     try {
@@ -320,9 +323,11 @@ export class Store {
     // compilation would be gone and reviewers could not be shown what a new
     // candidate changes. Rows are scoped by tool_id, so two stretches never
     // see each other's versions.
-    const existing = this.db.query(`SELECT version, program, updated_at FROM tools WHERE id = ?`).get(t.id) as
-      | { version: string; program: string; updated_at: number }
-      | null;
+    const existing = this.db.query(`SELECT version, program, updated_at FROM tools WHERE id = ?`).get(t.id) as {
+      version: string;
+      program: string;
+      updated_at: number;
+    } | null;
     if (existing && existing.version !== t.version) {
       this.recordProgramVersion(t.id, existing.version, existing.program, Number(existing.updated_at));
     }
@@ -347,9 +352,9 @@ export class Store {
 
   private recordProgramVersion(toolId: string, version: string, programJson: string, at?: number): void {
     try {
-      const prev = this.db.query(`SELECT created_at FROM program_versions WHERE tool_id = ? AND version = ?`).get(toolId, version) as
-        | { created_at: number }
-        | null;
+      const prev = this.db
+        .query(`SELECT created_at FROM program_versions WHERE tool_id = ? AND version = ?`)
+        .get(toolId, version) as { created_at: number } | null;
       const kept = Number(prev?.created_at);
       const stamped = Number(at);
       const created =
@@ -358,10 +363,12 @@ export class Store {
           : Number.isFinite(stamped) && stamped > 0
             ? Math.round(stamped)
             : Date.now();
-      this.db.run(
-        `INSERT OR REPLACE INTO program_versions (tool_id, version, program, created_at) VALUES (?,?,?,?)`,
-        [toolId, version, programJson, created],
-      );
+      this.db.run(`INSERT OR REPLACE INTO program_versions (tool_id, version, program, created_at) VALUES (?,?,?,?)`, [
+        toolId,
+        version,
+        programJson,
+        created,
+      ]);
       const keep = Store.PROGRAM_VERSION_HISTORY;
       this.db.run(
         `DELETE FROM program_versions WHERE tool_id = ? AND version NOT IN (
@@ -423,14 +430,17 @@ export class Store {
   }
 
   putReceipt(r: Omit<StoredReceipt, "id" | "created_at"> & { id?: string; created_at?: number }): void {
-    const created = Number.isFinite(r.created_at) && (r.created_at as number) > 0 ? Math.round(r.created_at as number) : Date.now();
+    const created =
+      Number.isFinite(r.created_at) && (r.created_at as number) > 0 ? Math.round(r.created_at as number) : Date.now();
     this.db.run(
       `INSERT INTO receipts (id, tool_id, version, ms, llm_calls, cents, ok, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?)`,
       [r.id ?? crypto.randomUUID(), r.tool_id, r.version, r.ms, r.llm_calls, r.cents, r.ok, created, r.payload ?? null],
     );
     const n = (this.db.query(`SELECT COUNT(*) as n FROM receipts`).get() as { n: number }).n;
     if (n > 5000) {
-      this.db.run(`DELETE FROM receipts WHERE id IN (SELECT id FROM receipts ORDER BY created_at ASC LIMIT ?)`, [n - 5000]);
+      this.db.run(`DELETE FROM receipts WHERE id IN (SELECT id FROM receipts ORDER BY created_at ASC LIMIT ?)`, [
+        n - 5000,
+      ]);
     }
     this.maybeAutoPause(r.tool_id);
   }
@@ -453,7 +463,9 @@ export class Store {
   }
 
   receiptsFor(toolId: string): StoredReceipt[] {
-    return this.db.query(`SELECT * FROM receipts WHERE tool_id = ? ORDER BY created_at DESC`).all(toolId) as StoredReceipt[];
+    return this.db
+      .query(`SELECT * FROM receipts WHERE tool_id = ? ORDER BY created_at DESC`)
+      .all(toolId) as StoredReceipt[];
   }
 
   putSchedule(s: StoredSchedule): void {
@@ -682,7 +694,13 @@ function rowToTool(row: unknown): LiveTool {
   }
   let flags: { transparent_writes?: boolean; rollout?: string; approved_by?: string; approved_at?: number } = {};
   try {
-    if (r.flags) flags = JSON.parse(String(r.flags)) as { transparent_writes?: boolean; rollout?: string; approved_by?: string; approved_at?: number };
+    if (r.flags)
+      flags = JSON.parse(String(r.flags)) as {
+        transparent_writes?: boolean;
+        rollout?: string;
+        approved_by?: string;
+        approved_at?: number;
+      };
   } catch {
     flags = {};
   }
@@ -705,8 +723,15 @@ function rowToTool(row: unknown): LiveTool {
 }
 
 /** Persist serving flags together — writing one must not wipe the others. */
-export function toolFlagsJson(t: Pick<LiveTool, "transparent_writes" | "rollout" | "approved_by" | "approved_at">): string | null {
-  const flags: { transparent_writes?: boolean; rollout?: "canary" | "live"; approved_by?: string; approved_at?: number } = {};
+export function toolFlagsJson(
+  t: Pick<LiveTool, "transparent_writes" | "rollout" | "approved_by" | "approved_at">,
+): string | null {
+  const flags: {
+    transparent_writes?: boolean;
+    rollout?: "canary" | "live";
+    approved_by?: string;
+    approved_at?: number;
+  } = {};
   if (t.transparent_writes === true) flags.transparent_writes = true;
   if (t.rollout === "canary" || t.rollout === "live") flags.rollout = t.rollout;
   const who = typeof t.approved_by === "string" ? t.approved_by.trim() : "";

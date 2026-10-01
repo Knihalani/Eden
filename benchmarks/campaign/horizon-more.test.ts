@@ -71,7 +71,10 @@ async function recordN(factory: () => World, goals: Array<Record<string, unknown
   return traces;
 }
 
-function loopOverFrom(p: { steps: Array<{ kind: string; over?: { kind: string; step?: string; path?: string } }> }, tool: string) {
+function loopOverFrom(
+  p: { steps: Array<{ kind: string; over?: { kind: string; step?: string; path?: string } }> },
+  tool: string,
+) {
   const loop = p.steps.find((s) => s.kind === "loop");
   expect(loop && loop.kind === "loop").toBe(true);
   const over = loop && "over" in loop ? loop.over : undefined;
@@ -94,7 +97,10 @@ describe("horizon more: compileTraces", () => {
       const over = loopOverFrom(p!, "listExpiring");
       expect(over && "path" in over ? over.path : undefined).toBe("certs");
       const renew = p!.steps.find((s) => s.kind === "tool" && s.tool === "renewCert");
-      expect(renew && renew.kind === "tool" ? renew.args.host : undefined).toMatchObject({ kind: "from", path: "host" });
+      expect(renew && renew.kind === "tool" ? renew.args.host : undefined).toMatchObject({
+        kind: "from",
+        path: "host",
+      });
       expect(certsFor(SITE_IDS[0]).map((c) => c.host)).toHaveLength(3);
     },
     TIMEOUT,
@@ -114,7 +120,10 @@ describe("horizon more: compileTraces", () => {
       const over = loopOverFrom(p!, "listRoutes");
       expect(over && "path" in over ? over.path : undefined).toBe("routes");
       const purge = p!.steps.find((s) => s.kind === "tool" && s.tool === "purgePath");
-      expect(purge && purge.kind === "tool" ? purge.args.path : undefined).toMatchObject({ kind: "from", path: "path" });
+      expect(purge && purge.kind === "tool" ? purge.args.path : undefined).toMatchObject({
+        kind: "from",
+        path: "path",
+      });
       expect(routesFor(ZONE_IDS[0])).toHaveLength(3);
     },
     TIMEOUT,
@@ -145,30 +154,26 @@ describe("horizon more: compileTraces", () => {
 });
 
 describe("horizon more: goLive", () => {
-  test(
-    "cert / cdn / ldap goLive PASS; wrap serve turns===1",
-    async () => {
-      const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
-        { name: "cert-renew", factory: createCertRenew, goals: [...SITE_IDS].map((site) => ({ site })) },
-        { name: "cdn-purge", factory: createCdnPurge, goals: [...ZONE_IDS].map((zone) => ({ zone })) },
-        { name: "ldap-mail", factory: createLdapMail, goals: [...GROUP_DNS].map((dn) => ({ dn })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`more-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program).not.toBeNull();
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`more-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+  test("cert / cdn / ldap goLive PASS; wrap serve turns===1", async () => {
+    const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
+      { name: "cert-renew", factory: createCertRenew, goals: [...SITE_IDS].map((site) => ({ site })) },
+      { name: "cdn-purge", factory: createCdnPurge, goals: [...ZONE_IDS].map((zone) => ({ zone })) },
+      { name: "ldap-mail", factory: createLdapMail, goals: [...GROUP_DNS].map((dn) => ({ dn })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`more-live-${c.name}-${i}`, i));
       }
-    },
-    90_000,
-  );
+      const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program).not.toBeNull();
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`more-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+    }
+  }, 90_000);
 });

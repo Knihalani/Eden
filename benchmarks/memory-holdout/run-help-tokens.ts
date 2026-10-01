@@ -135,7 +135,9 @@ function systemTexts(list: unknown[]): string[] {
 }
 
 function memoryPacket(list: unknown[]): string {
-  return systemTexts(list).filter((s) => s.includes(MEMORY_MARK)).join("\n");
+  return systemTexts(list)
+    .filter((s) => s.includes(MEMORY_MARK))
+    .join("\n");
 }
 
 function byteLen(s: string): number {
@@ -158,7 +160,13 @@ function messagesFor(cue: string): { role: string; content: string }[] {
 
 function loadCases(): CueCase[] {
   const holdout = JSON.parse(readFileSync(HOLDOUT_FIXTURE, "utf8")) as {
-    cases: { id: string; observe: { prompt?: string }[]; cue: { prompt?: string }; gold_needles: string[]; junk_needles?: string[] }[];
+    cases: {
+      id: string;
+      observe: { prompt?: string }[];
+      cue: { prompt?: string };
+      gold_needles: string[];
+      junk_needles?: string[];
+    }[];
   };
   const silence = JSON.parse(readFileSync(SILENCE_FIXTURE, "utf8")) as {
     cases: { id: string; seed?: string[]; cue: string; leftover_needles?: string[] }[];
@@ -227,9 +235,10 @@ function probeBody(dir: string, arm: Arm, c: CueCase): Probe {
     const body = { messages };
     const out = mem.injectBody(body);
     mem.close();
-    const list = out && typeof out === "object" && Array.isArray((out as { messages?: unknown[] }).messages)
-      ? (out as { messages: unknown[] }).messages
-      : [];
+    const list =
+      out && typeof out === "object" && Array.isArray((out as { messages?: unknown[] }).messages)
+        ? (out as { messages: unknown[] }).messages
+        : [];
     const text = memoryPacket(list);
     const identity = out === body;
     const bytes = byteLen(text);
@@ -260,7 +269,10 @@ function probeInject(dir: string, cue: string): number {
   });
 }
 
-function judge(off: Probe, on: Probe): { accuracy_delta: number; silent: boolean; must_be_silent: boolean; verdict: string } {
+function judge(
+  off: Probe,
+  on: Probe,
+): { accuracy_delta: number; silent: boolean; must_be_silent: boolean; verdict: string } {
   const accuracy_delta = on.gold_hits.length - off.gold_hits.length;
   const silent = on.omitted && on.bytes === 0;
   const tokens_up = on.tokens > off.tokens;
@@ -328,27 +340,36 @@ function preview(text: string): string {
 }
 
 export function formatHelpTokens(run: Run): string {
-  const table = run.rows.map((r) => {
-    const acc = r.accuracy_delta > 0 ? `+${r.accuracy_delta}` : String(r.accuracy_delta);
-    return `| ${r.id} | ${r.off.tokens} | ${r.on.tokens} | ${r.off.bytes} | ${r.on.bytes} | ${r.delta_bytes} | ${acc} | ${yn(r.silent)} | ${r.verdict} |`;
-  }).join("\n");
+  const table = run.rows
+    .map((r) => {
+      const acc = r.accuracy_delta > 0 ? `+${r.accuracy_delta}` : String(r.accuracy_delta);
+      return `| ${r.id} | ${r.off.tokens} | ${r.on.tokens} | ${r.off.bytes} | ${r.on.bytes} | ${r.delta_bytes} | ${acc} | ${yn(r.silent)} | ${r.verdict} |`;
+    })
+    .join("\n");
   const flagged = run.rows.filter((r) => r.must_be_silent);
   const flagNote = flagged.length
-    ? flagged.map((r) => `- **${r.id}:** tokens ${r.off.tokens} → ${r.on.tokens}, accuracy Δ ${r.accuracy_delta}, bytes Δ ${r.delta_bytes}. This cue class is silent (M38). Ranker was not retuned.`).join("\n")
+    ? flagged
+        .map(
+          (r) =>
+            `- **${r.id}:** tokens ${r.off.tokens} → ${r.on.tokens}, accuracy Δ ${r.accuracy_delta}, bytes Δ ${r.delta_bytes}. This cue class is silent (M38). Ranker was not retuned.`,
+        )
+        .join("\n")
     : "- None. No cue class had tokens up and accuracy Δ≤0.";
-  const packets = run.rows.map((r) => {
-    const gold = r.on.gold_hits.length ? r.on.gold_hits.join(", ") : "none";
-    const left = r.on.leftover_hits.length ? r.on.leftover_hits.join(", ") : "none";
-    return [
-      `### ${r.id}`,
-      `- cue: \`${cell(r.cue)}\``,
-      `- store_n: ${r.store_n}`,
-      `- gold on-arm: ${cell(gold)}`,
-      `- leftover on-arm: ${cell(left)}`,
-      `- inject() bytes (Anthropic message source): ${r.anth_bytes} · agrees with injectBody: ${yn(r.anth_agrees)}`,
-      `- on packet: ${cell(preview(r.on.text))}`,
-    ].join("\n");
-  }).join("\n\n");
+  const packets = run.rows
+    .map((r) => {
+      const gold = r.on.gold_hits.length ? r.on.gold_hits.join(", ") : "none";
+      const left = r.on.leftover_hits.length ? r.on.leftover_hits.join(", ") : "none";
+      return [
+        `### ${r.id}`,
+        `- cue: \`${cell(r.cue)}\``,
+        `- store_n: ${r.store_n}`,
+        `- gold on-arm: ${cell(gold)}`,
+        `- leftover on-arm: ${cell(left)}`,
+        `- inject() bytes (Anthropic message source): ${r.anth_bytes} · agrees with injectBody: ${yn(r.anth_agrees)}`,
+        `- on packet: ${cell(preview(r.on.text))}`,
+      ].join("\n");
+    })
+    .join("\n\n");
   const anthAll = run.rows.every((r) => r.anth_agrees);
   return [
     "# M47.3 Wrap token Δ",
@@ -405,6 +426,13 @@ export function formatHelpTokens(run: Run): string {
 if (import.meta.main) {
   const run = runHelpTokens();
   process.stdout.write(formatHelpTokens(run));
-  const summary = run.rows.map((r) => `${r.id}\t${r.verdict}\toff ${r.off.tokens}/${r.off.bytes}B\ton ${r.on.tokens}/${r.on.bytes}B\tΔB ${r.delta_bytes}\tacc ${r.accuracy_delta}\tsilent ${r.silent ? "yes" : "no"}`).join("\n");
-  console.error(`\n${summary}\nsum Δ bytes ${run.sum_delta_bytes}\ntokens-up and accuracy Δ≤0: ${run.tokens_up_no_lift}`);
+  const summary = run.rows
+    .map(
+      (r) =>
+        `${r.id}\t${r.verdict}\toff ${r.off.tokens}/${r.off.bytes}B\ton ${r.on.tokens}/${r.on.bytes}B\tΔB ${r.delta_bytes}\tacc ${r.accuracy_delta}\tsilent ${r.silent ? "yes" : "no"}`,
+    )
+    .join("\n");
+  console.error(
+    `\n${summary}\nsum Δ bytes ${run.sum_delta_bytes}\ntokens-up and accuracy Δ≤0: ${run.tokens_up_no_lift}`,
+  );
 }

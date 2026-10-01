@@ -116,13 +116,9 @@ function dayLine(d: DigestDay): string {
 export function renderDigestText(input: DigestInput): string | null {
   if (!input.optIn) return null;
   const novelty =
-    input.novelty.length === 0
-      ? "Needs attention 0"
-      : input.novelty.map((n) => `${n.name} · ${n.status}`).join("\n");
+    input.novelty.length === 0 ? "Needs attention 0" : input.novelty.map((n) => `${n.name} · ${n.status}`).join("\n");
   const stretches =
-    input.stretches && input.stretches.length
-      ? input.stretches.map((s) => stretchText(s)).join("\n")
-      : null;
+    input.stretches && input.stretches.length ? input.stretches.map((s) => stretchText(s)).join("\n") : null;
   const dcDays = input.dcSeries.length
     ? input.dcSeries.map(dayLine).join(" · ")
     : "Mon 0 · Tue 0 · Wed 0 · Thu 0 · Fri 0 · Sat 0 · Sun 0";
@@ -156,9 +152,7 @@ export function renderDigestHtml(input: DigestInput): string | null {
       : []),
     ["Tokens saved", formatCount(input.tokensSaved)],
   ];
-  const metrics = rows
-    .map(([k, v]) => `<p><b>${escapeHtml(v!)}</b> ${escapeHtml(k!)}</p>`)
-    .join("");
+  const metrics = rows.map(([k, v]) => `<p><b>${escapeHtml(v!)}</b> ${escapeHtml(k!)}</p>`).join("");
   const days = (input.dcSeries.length ? input.dcSeries : emptyDays())
     .map((d) => `<li>${escapeHtml(d.label)} ${escapeHtml(d.measured ? formatDcPct(d.dcPct) : "0")}</li>`)
     .join("");

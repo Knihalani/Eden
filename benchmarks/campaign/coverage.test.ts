@@ -173,47 +173,39 @@ describe("coverage worlds: check() catches duplicated mutations", () => {
 });
 
 describe("coverage worlds: 100-stretch + bindable pagination", () => {
-  test(
-    "very-long-session: 100 stretches over cycling pool stay clean",
-    async () => {
-      const w = createLongSession();
-      const goals: Array<Record<string, unknown>> = [];
-      for (let i = 0; i < 100; i++) {
-        const id = LONG_SESSION_IDS[i % LONG_SESSION_IDS.length]!;
-        await driveOnce(w, { id }, i + 1);
-        goals.push({ id });
-      }
-      expect(w.check(goals)).toEqual([]);
-    },
-    120_000,
-  );
+  test("very-long-session: 100 stretches over cycling pool stay clean", async () => {
+    const w = createLongSession();
+    const goals: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < 100; i++) {
+      const id = LONG_SESSION_IDS[i % LONG_SESSION_IDS.length]!;
+      await driveOnce(w, { id }, i + 1);
+      goals.push({ id });
+    }
+    expect(w.check(goals)).toEqual([]);
+  }, 120_000);
 
-  test(
-    "very-long-session wrap path: 100 live stretches after goLive stay clean",
-    async () => {
-      process.env.CAMPAIGN_THINK_MS = "1";
-      const { Session } = await import("./session");
-      const pool = [...LONG_SESSION_IDS].map((id) => ({ id }));
-      const s = new Session([["long-session", createLongSession]], true);
-      for (let i = 0; i < 13; i++) {
-        await s.stretch("long-session", pool[i % pool.length]!, blockSeed(`vl-w-${i}`, i));
-      }
-      const r = await s.goLive("long-session", {
-        compile: 10,
-        holdout: 3,
-        sandbox: createLongSession,
-        maxGram: 16,
-      });
-      expect(r.program).not.toBeNull();
-      for (let i = 0; i < 100; i++) {
-        await s.stretch("long-session", pool[i % pool.length]!, blockSeed(`vl-l-${i}`, 200 + i));
-      }
-      const st = s.finish();
-      expect(st.violations).toEqual([]);
-      expect(st.completed).toBe(113);
-    },
-    180_000,
-  );
+  test("very-long-session wrap path: 100 live stretches after goLive stay clean", async () => {
+    process.env.CAMPAIGN_THINK_MS = "1";
+    const { Session } = await import("./session");
+    const pool = [...LONG_SESSION_IDS].map((id) => ({ id }));
+    const s = new Session([["long-session", createLongSession]], true);
+    for (let i = 0; i < 13; i++) {
+      await s.stretch("long-session", pool[i % pool.length]!, blockSeed(`vl-w-${i}`, i));
+    }
+    const r = await s.goLive("long-session", {
+      compile: 10,
+      holdout: 3,
+      sandbox: createLongSession,
+      maxGram: 16,
+    });
+    expect(r.program).not.toBeNull();
+    for (let i = 0; i < 100; i++) {
+      await s.stretch("long-session", pool[i % pool.length]!, blockSeed(`vl-l-${i}`, 200 + i));
+    }
+    const st = s.finish();
+    expect(st.violations).toEqual([]);
+    expect(st.completed).toBe(113);
+  }, 180_000);
 
   test(
     "pagination-bindable: one listAll then write each item; check clean",
@@ -257,9 +249,24 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
       input: { batch: `C${i}` },
       complete: true as const,
       events: [
-        { name: "listPage", args: { cursor: null, batch: `C${i}` }, result: { items: ["P-a", "P-b"], nextCursor: "1" }, ok: true },
-        { name: "listPage", args: { cursor: "1", batch: `C${i}` }, result: { items: ["P-c", "P-d"], nextCursor: "2" }, ok: true },
-        { name: "listPage", args: { cursor: "2", batch: `C${i}` }, result: { items: ["P-e", "P-f"], nextCursor: null }, ok: true },
+        {
+          name: "listPage",
+          args: { cursor: null, batch: `C${i}` },
+          result: { items: ["P-a", "P-b"], nextCursor: "1" },
+          ok: true,
+        },
+        {
+          name: "listPage",
+          args: { cursor: "1", batch: `C${i}` },
+          result: { items: ["P-c", "P-d"], nextCursor: "2" },
+          ok: true,
+        },
+        {
+          name: "listPage",
+          args: { cursor: "2", batch: `C${i}` },
+          result: { items: ["P-e", "P-f"], nextCursor: null },
+          ok: true,
+        },
         ...PAGE_ITEMS.flatMap((id) => [
           { name: "getItem", args: { id }, result: { id, ok: true }, ok: true },
           { name: "writeItem", args: { id }, result: { written: true, id }, ok: true },
@@ -270,7 +277,11 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
     const compiled = compileTraces(cursor);
     expect(compiled.refusals.filter((r) => r.code === "unbound_foreach" && r.reason.includes("listPage"))).toEqual([]);
     expect(compiled.programs.some((p) => p.steps.some((s) => s.kind === "loop" && s.until))).toBe(true);
-    expect(compiled.programs.some((p) => p.steps.some((s) => s.kind === "loop" && s.over.kind === "transform" && s.over.fn === "flatten"))).toBe(true);
+    expect(
+      compiled.programs.some((p) =>
+        p.steps.some((s) => s.kind === "loop" && s.over.kind === "transform" && s.over.fn === "flatten"),
+      ),
+    ).toBe(true);
   });
 
   test("partial-iteration (Wave 3 rotation): 12 hits / 6 reads is a named read-set miss", async () => {

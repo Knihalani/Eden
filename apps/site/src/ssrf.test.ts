@@ -85,8 +85,7 @@ describe("checkEgressUrl", () => {
 
 describe("safeFetch", () => {
   const ok = () => new Response("fine", { status: 200 });
-  const redirectTo = (location: string) =>
-    new Response(null, { status: 302, headers: { location } });
+  const redirectTo = (location: string) => new Response(null, { status: 302, headers: { location } });
 
   test("refuses a redirect into the private network", async () => {
     // The core bypass: the first URL passes every check, and the *response*

@@ -252,7 +252,13 @@ describe("runtime transforms", () => {
 
   test("filter keeps items matching an assert expr", async () => {
     const registry = registryFrom({
-      list: () => ({ events: [{ id: "1", level: "info" }, { id: "2", level: "error" }, { id: "3", level: "error" }] }),
+      list: () => ({
+        events: [
+          { id: "1", level: "info" },
+          { id: "2", level: "error" },
+          { id: "3", level: "error" },
+        ],
+      }),
     });
     const result = await runProgram(
       {
@@ -274,7 +280,10 @@ describe("runtime transforms", () => {
       {},
       { registry },
     );
-    expect(result.value).toEqual([{ id: "2", level: "error" }, { id: "3", level: "error" }]);
+    expect(result.value).toEqual([
+      { id: "2", level: "error" },
+      { id: "3", level: "error" },
+    ]);
   });
 
   test("from.or seeds the first iteration then reads the prior result", async () => {
@@ -364,7 +373,13 @@ describe("runtime transforms", () => {
 
   test("sort is stable and descending with a leading -", async () => {
     const registry = registryFrom({
-      list: () => ({ jobs: [{ id: "c", prio: 1 }, { id: "a", prio: 9 }, { id: "b", prio: 5 }] }),
+      list: () => ({
+        jobs: [
+          { id: "c", prio: 1 },
+          { id: "a", prio: 9 },
+          { id: "b", prio: 5 },
+        ],
+      }),
     });
     const result = await runProgram(
       {

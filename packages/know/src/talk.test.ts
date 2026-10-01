@@ -52,7 +52,12 @@ describe("frozen encyclopedia stays off the graph", () => {
       }),
     ).toBe(false);
     expect(
-      persistable("https://en.wikipedia.org/wiki/Kenya", { s: "Kenya", p: "id", o: "KE", e: "Kenya ISO 3166-1 alpha-2 KE" }),
+      persistable("https://en.wikipedia.org/wiki/Kenya", {
+        s: "Kenya",
+        p: "id",
+        o: "KE",
+        e: "Kenya ISO 3166-1 alpha-2 KE",
+      }),
     ).toBe(false);
   });
 
@@ -74,9 +79,7 @@ describe("frozen encyclopedia stays off the graph", () => {
         e: "",
       }),
     ).toBe(true);
-    expect(
-      persistable(url, { s: "RFC 4627", p: "is", o: "obsoleted by RFC 8259", e: "" }),
-    ).toBe(true);
+    expect(persistable(url, { s: "RFC 4627", p: "is", o: "obsoleted by RFC 8259", e: "" })).toBe(true);
   });
 
   test("wiki capital pages extract then drop at persist", () => {
@@ -84,7 +87,12 @@ describe("frozen encyclopedia stays off the graph", () => {
       <p>Kenya is a country in East Africa. The capital of Kenya is Nairobi.</p>`;
     const t = triplesFromPage("https://en.wikipedia.org/wiki/Kenya", html, true);
     expect(t.some((x) => x.p === "capital" && x.s === "Kenya" && x.o === "Nairobi")).toBe(true);
-    expect(persistable("https://en.wikipedia.org/wiki/Kenya", t.find((x) => x.p === "capital")!)).toBe(false);
+    expect(
+      persistable(
+        "https://en.wikipedia.org/wiki/Kenya",
+        t.find((x) => x.p === "capital")!,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -189,7 +197,9 @@ describe("inject useful techniques, skip frozen flash", () => {
         "Eden Know: jq is used for filtering JSON on the command line. Source: https://jqlang.github.io/jq/",
       );
       expect(injectFromText("how do I parse nested JSON in bash", store)?.url).toBe("https://jqlang.github.io/jq/");
-      expect(injectFromText("is there a way to parse JSON on the command line", store)?.fact).toMatch(/^jq is used for/);
+      expect(injectFromText("is there a way to parse JSON on the command line", store)?.fact).toMatch(
+        /^jq is used for/,
+      );
       expect(injectFromText("looking for a tool to filter JSON", store)?.fact).toMatch(/^jq is used for/);
       expect(injectFromText("What is the capital of Kenya?", store)).toBeUndefined();
       expect(injectFromText("Follow RFC 3986 when parsing the URI.", store)).toBeUndefined();

@@ -232,7 +232,11 @@ describe("s3 publish", () => {
       expect(compactLeader(1, 2)).toBe(false);
       process.env.EDEN_KNOW_SHARD = "1";
       const follow = openStore(join(dir, "follow"));
-      follow.putNodes("https://example.org/fr", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "", url: "" }], 30);
+      follow.putNodes(
+        "https://example.org/fr",
+        [{ s: "jq", p: "is", o: "used for filtering JSON", e: "", url: "" }],
+        30,
+      );
       const fr = await compactAndPublish(follow);
       expect(fr.uploaded).toBe(false);
       expect(fr.skipped).toBe("follower");
@@ -243,7 +247,11 @@ describe("s3 publish", () => {
 
       process.env.EDEN_KNOW_SHARD = "0";
       const lead = openStore(join(dir, "lead"));
-      lead.putNodes("https://example.org/ke", [{ s: "Bun", p: "is", o: "used for running TypeScript", e: "", url: "" }], 30);
+      lead.putNodes(
+        "https://example.org/ke",
+        [{ s: "Bun", p: "is", o: "used for running TypeScript", e: "", url: "" }],
+        30,
+      );
       const r = await compactAndPublish(lead);
       expect(r.uploaded).toBe(true);
       expect(lead.search("Bun")[0]?.s).toBe("Bun");

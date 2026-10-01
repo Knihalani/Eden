@@ -44,14 +44,40 @@ function db(): Promise<EdenDb> {
 
 async function seedBundle(d: EdenDb) {
   if (process.env.EDEN_SKIP_SEED === "1") return;
-  const existing = await d.get<{ id: string }>(`SELECT id FROM tool WHERE name = 'fetch_issue_bundle' AND workspace_id = 'ws_local'`);
+  const existing = await d.get<{ id: string }>(
+    `SELECT id FROM tool WHERE name = 'fetch_issue_bundle' AND workspace_id = 'ws_local'`,
+  );
   const steps = [
     { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "{origin}/forge/repos/acme/app/issues/{issue}" },
-    { id: "s2", kind: "cloud_http", name: "comments", commute: true, url: "{origin}/forge/repos/acme/app/issues/{issue}/comments" },
+    {
+      id: "s2",
+      kind: "cloud_http",
+      name: "comments",
+      commute: true,
+      url: "{origin}/forge/repos/acme/app/issues/{issue}/comments",
+    },
     { id: "s3", kind: "cloud_http", name: "pull", commute: true, url: "{origin}/forge/repos/acme/app/pulls/{issue}" },
-    { id: "s4", kind: "cloud_http", name: "reviews", commute: true, url: "{origin}/forge/repos/acme/app/pulls/{issue}/reviews" },
-    { id: "s5", kind: "cloud_http", name: "status", commute: true, url: "{origin}/forge/repos/acme/app/commits/abc{issue}/status" },
-    { id: "s6", kind: "cloud_http", name: "runs", commute: true, url: "{origin}/forge/repos/acme/app/actions/runs?pr={issue}" },
+    {
+      id: "s4",
+      kind: "cloud_http",
+      name: "reviews",
+      commute: true,
+      url: "{origin}/forge/repos/acme/app/pulls/{issue}/reviews",
+    },
+    {
+      id: "s5",
+      kind: "cloud_http",
+      name: "status",
+      commute: true,
+      url: "{origin}/forge/repos/acme/app/commits/abc{issue}/status",
+    },
+    {
+      id: "s6",
+      kind: "cloud_http",
+      name: "runs",
+      commute: true,
+      url: "{origin}/forge/repos/acme/app/actions/runs?pr={issue}",
+    },
   ];
   const when = "Prefer this over six curl/gh calls for issue+PR+checks.";
   const seen = JSON.stringify([
@@ -229,7 +255,10 @@ function hostHeaderMatchesDeployment(req: Request): boolean {
   } catch {
     /* fall through to the check below */
   }
-  const host = raw.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
+  const host = raw
+    .replace(/:\d+$/, "")
+    .replace(/^\[|\]$/g, "")
+    .toLowerCase();
   return allowedHostNames().has(host);
 }
 
@@ -269,7 +298,11 @@ function unauthorizedJson(): Response {
 export function wrapTokenFromRequest(req: Request): string {
   const named = (req.headers.get("x-eden-api-key") || req.headers.get("x-eden-key") || "").trim();
   if (named) return named;
-  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  const bearer =
+    req.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "")
+      .trim() || "";
   if (bearer === "eden_dev" || bearer.startsWith("eden_")) return bearer;
   const raw = req.headers.get("cookie") || "";
   const m = raw.match(/(?:^|;\s*)eden_key=([^;]*)/);
@@ -287,7 +320,11 @@ export function wrapTokenFromRequest(req: Request): string {
  */
 function callerProviderKey(req: Request): string {
   const header = (req.headers.get("x-openai-api-key") || req.headers.get("openai-api-key") || "").trim();
-  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  const bearer =
+    req.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "")
+      .trim() || "";
   return [header, bearer].find((k) => k && !k.startsWith("eden_")) ?? "";
 }
 
@@ -346,10 +383,18 @@ export async function handleFetch(req: Request): Promise<Response> {
         )?.c ?? 0,
       );
       const live = Number(
-        (await healthDb.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId]))?.c ?? 0,
+        (
+          await healthDb.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [
+            wsId,
+          ])
+        )?.c ?? 0,
       );
       const candidates = Number(
-        (await healthDb.get<{ c: number }>(`SELECT COUNT(*) as c FROM cluster WHERE workspace_id = ? AND count >= 2`, [wsId]))?.c ?? 0,
+        (
+          await healthDb.get<{ c: number }>(`SELECT COUNT(*) as c FROM cluster WHERE workspace_id = ? AND count >= 2`, [
+            wsId,
+          ])
+        )?.c ?? 0,
       );
       return Response.json({ ...base, traces, live, candidates }, { headers });
     } catch {
@@ -394,22 +439,21 @@ export async function handleFetch(req: Request): Promise<Response> {
   const wrapToken = wrapTokenFromRequest(req);
   const wsId = await workspaceForKey(d, wrapToken ? `Bearer ${wrapToken}` : null);
 
-/**
- * Auth gate for HTML pages: a signed-out browser is sent to onboarding
- * instead of a bare 401 body it cannot act on. API clients (no text/html in
- * Accept, or non-GET) still get the machine-readable 401.
- */
-function pageAuth(req: Request, wsId: string | null): Response | null {
-  if (wsId) return null;
-  const wantsHtml =
-    req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html");
-  if (!wantsHtml) return new Response("unauthorized", { status: 401 });
-  const url = new URL(req.url);
-  return new Response(null, {
-    status: 302,
-    headers: { location: `/onboarding?next=${encodeURIComponent(url.pathname)}` },
-  });
-}
+  /**
+   * Auth gate for HTML pages: a signed-out browser is sent to onboarding
+   * instead of a bare 401 body it cannot act on. API clients (no text/html in
+   * Accept, or non-GET) still get the machine-readable 401.
+   */
+  function pageAuth(req: Request, wsId: string | null): Response | null {
+    if (wsId) return null;
+    const wantsHtml = req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html");
+    if (!wantsHtml) return new Response("unauthorized", { status: 401 });
+    const url = new URL(req.url);
+    return new Response(null, {
+      status: 302,
+      headers: { location: `/onboarding?next=${encodeURIComponent(url.pathname)}` },
+    });
+  }
 
   if (url.pathname === "/onboarding") {
     if (!wsId) {
@@ -448,9 +492,27 @@ document.getElementById("signInForm").addEventListener("submit", async (e) => {
 </script>`,
       );
     }
-    const tc = Number((await d.get<{ c: number }>(`SELECT COUNT(DISTINCT run_id) as c FROM stretch WHERE workspace_id = ?`, [wsId]) ?? {c:0}).c);
-    const cc = Number((await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM cluster WHERE workspace_id = ? AND count >= 2`, [wsId]) ?? {c:0}).c);
-    const live = Number((await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId]) ?? {c:0}).c);
+    const tc = Number(
+      (
+        (await d.get<{ c: number }>(`SELECT COUNT(DISTINCT run_id) as c FROM stretch WHERE workspace_id = ?`, [
+          wsId,
+        ])) ?? { c: 0 }
+      ).c,
+    );
+    const cc = Number(
+      (
+        (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM cluster WHERE workspace_id = ? AND count >= 2`, [
+          wsId,
+        ])) ?? { c: 0 }
+      ).c,
+    );
+    const live = Number(
+      (
+        (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [
+          wsId,
+        ])) ?? { c: 0 }
+      ).c,
+    );
     const setupPrompt = [
       `OPENAI_BASE_URL=${origin.replace(/\/$/, "")}/v1`,
       "OPENAI_API_KEY=<your provider key — sent as Authorization>",
@@ -479,13 +541,14 @@ ${status}
     );
   }
 
-
   // Trace import page — cold-start elimination via observability exports.
   if (url.pathname === "/import") {
     const denied = pageAuth(req, wsId);
     if (denied) return denied;
     if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
-    const body = nav("Import", true) + `
+    const body =
+      nav("Import", true) +
+      `
 <h1>Import traces</h1>
 <p class="sub">LangSmith, OpenTelemetry, OpenAI, or JSONL. Repeats become drafts.</p>
 <form id="importForm">
@@ -616,7 +679,14 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
               COALESCE(SUM(CASE WHEN r.created_at >= ? THEN r.raw_bytes ELSE 0 END),0) as m_raw_bytes,
               COALESCE(SUM(CASE WHEN r.created_at >= ? THEN r.densified_bytes ELSE 0 END),0) as m_densified_bytes
        FROM tool_run r JOIN tool t ON t.id = r.tool_id WHERE t.workspace_id = ?`,
-      [monthStart.getTime(), monthStart.getTime(), monthStart.getTime(), monthStart.getTime(), monthStart.getTime(), wsId],
+      [
+        monthStart.getTime(),
+        monthStart.getTime(),
+        monthStart.getTime(),
+        monthStart.getTime(),
+        monthStart.getTime(),
+        wsId,
+      ],
     );
     const usage = totals || {
       runs: 0,
@@ -637,8 +707,13 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
       raw_bytes: Number(usage.m_raw_bytes),
       densified_bytes: Number(usage.m_densified_bytes),
     };
-    const drafts = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'draft'`, [wsId])) || { c: 0 };
-    const on = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId])) || { c: 0 };
+    const drafts = (await d.get<{ c: number }>(
+      `SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'draft'`,
+      [wsId],
+    )) || { c: 0 };
+    const on = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [
+      wsId,
+    ])) || { c: 0 };
     // The honest savings ledger, summarized in the same spare style. Absent
     // evidence renders as "not measured" — the dashboard must not say more
     // than the receipts behind it do.
@@ -682,7 +757,9 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
   ${fig("Compiled runs", ledger.runs === 0 ? "none yet" : String(ledger.runs), ledger.runs === 0)}
   ${fig("Live", on.c === 0 ? "none yet" : String(on.c), on.c === 0)}
 </dl>` +
-      (month.runs > 0 ? `<p class="muted">${month.runs} compiled run${month.runs === 1 ? "" : "s"} this month.</p>` : "") +
+      (month.runs > 0
+        ? `<p class="muted">${month.runs} compiled run${month.runs === 1 ? "" : "s"} this month.</p>`
+        : "") +
       activity +
       `<div class="row">${
         Number(drafts.c) > 0
@@ -735,10 +812,17 @@ ${
     const denied = pageAuth(req, wsId);
     if (denied) return denied;
     if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
-    const t = await d.get<{ id: string; name: string; when_to_use: string; state: string; steps: string; published?: number }>(
-      `SELECT id, name, when_to_use, state, steps, published FROM tool WHERE id = ? AND workspace_id = ?`,
-      [ws[1], wsId],
-    );
+    const t = await d.get<{
+      id: string;
+      name: string;
+      when_to_use: string;
+      state: string;
+      steps: string;
+      published?: number;
+    }>(`SELECT id, name, when_to_use, state, steps, published FROM tool WHERE id = ? AND workspace_id = ?`, [
+      ws[1],
+      wsId,
+    ]);
     if (!t) {
       return html(
         "Eden — Not found",
@@ -750,7 +834,9 @@ ${
     const steps = jsonRows(t.steps) as Array<{ id: string; name: string; kind: string; url?: string }>;
     const list = steps.length
       ? `<h2>What it runs</h2><table class="activity">${steps
-          .map((s, i) => `<tr><td>${i + 1}. ${escapeHtml(String(s.name))}</td><td>${escapeHtml(String(s.kind))}</td></tr>`)
+          .map(
+            (s, i) => `<tr><td>${i + 1}. ${escapeHtml(String(s.name))}</td><td>${escapeHtml(String(s.kind))}</td></tr>`,
+          )
           .join("")}</table>`
       : "";
     const approve =
@@ -773,16 +859,10 @@ ${
   // limited per IP so abuse costs bounded resources. The key is returned ONCE;
   // only its sha256 is stored.
   if (url.pathname === "/v1/signup" && req.method === "POST") {
-    const ip =
-      req.headers.get("x-real-ip") ||
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      "unknown";
+    const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const RATE_LIMIT = 5;
     const WINDOW_MS = 3_600_000;
-    await d.run(
-      `CREATE TABLE IF NOT EXISTS signup_rate (ip TEXT PRIMARY KEY, hits INTEGER, window_start BIGINT)`,
-      [],
-    );
+    await d.run(`CREATE TABLE IF NOT EXISTS signup_rate (ip TEXT PRIMARY KEY, hits INTEGER, window_start BIGINT)`, []);
     const row = await d.get<{ hits: number; window_start: number }>(
       `SELECT hits, window_start FROM signup_rate WHERE ip = ?`,
       [ip],
@@ -814,10 +894,7 @@ ${
     // WebCrypto has no randomBytes; getRandomValues is the portable form.
     const bytes = crypto.getRandomValues(new Uint8Array(24));
     const token = `eden_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
-    await d.run(`INSERT INTO workspace (id, name) VALUES (?, ?)`, [
-      wsId,
-      name || `workspace-${wsId.slice(3, 9)}`,
-    ]);
+    await d.run(`INSERT INTO workspace (id, name) VALUES (?, ?)`, [wsId, name || `workspace-${wsId.slice(3, 9)}`]);
     await d.run(`INSERT INTO api_key (prefix, hash, workspace_id) VALUES (?, ?, ?)`, [
       token.slice(0, 12),
       hashApiKey(token),
@@ -940,7 +1017,9 @@ export EDEN_API_KEY=<the key above>
       events?: unknown;
       traces?: Array<Record<string, unknown>>;
     };
-    const list: Array<Record<string, unknown>> = Array.isArray(body.traces) ? body.traces : [body as Record<string, unknown>];
+    const list: Array<Record<string, unknown>> = Array.isArray(body.traces)
+      ? body.traces
+      : [body as Record<string, unknown>];
     let accepted = 0;
     let batches = 0;
     for (const t of list) {
@@ -998,8 +1077,7 @@ export EDEN_API_KEY=<the key above>
         // POSTs, runner commands, island glue — stays explicit-only until a
         // human opts that program in.
         const read_only =
-          steps.length > 0 &&
-          steps.every((s) => s.kind === "cloud_http" && (s.method || "GET") === "GET");
+          steps.length > 0 && steps.every((s) => s.kind === "cloud_http" && (s.method || "GET") === "GET");
         return {
           id: t.id,
           name: t.name,
@@ -1030,7 +1108,10 @@ export EDEN_API_KEY=<the key above>
       return typeof rec.event_id !== "string" && typeof rec.name !== "string";
     });
     if (bad >= 0) {
-      return Response.json({ error: `events[${bad}] must be an object with a string event_id or name` }, { status: 400 });
+      return Response.json(
+        { error: `events[${bad}] must be an object with a string event_id or name` },
+        { status: 400 },
+      );
     }
     const cleanEvents = (body.events as ToolEvent[]).map((e, i) => ({
       ...e,
@@ -1140,7 +1221,11 @@ export EDEN_API_KEY=<the key above>
         [k.tool_id, wsId],
       );
       await d.run(`UPDATE knock SET resolution = 'reject' WHERE id = ?`, [k.id]);
-      if (tool) await d.run(`INSERT OR IGNORE INTO ignore_fp (workspace_id, fingerprint) VALUES (?, ?)`, [wsId, tool.fingerprint]);
+      if (tool)
+        await d.run(`INSERT OR IGNORE INTO ignore_fp (workspace_id, fingerprint) VALUES (?, ?)`, [
+          wsId,
+          tool.fingerprint,
+        ]);
       await d.run(`DELETE FROM tool WHERE id = ? AND workspace_id = ?`, [k.tool_id, wsId]);
     }
     return Response.json({ ok: true });
@@ -1285,7 +1370,13 @@ export EDEN_API_KEY=<the key above>
     if (!wsId) return unauthorizedJson();
     const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
-    const body = parsed.value as { name?: unknown; args?: unknown; input?: unknown; arguments?: unknown; run_id?: unknown };
+    const body = parsed.value as {
+      name?: unknown;
+      args?: unknown;
+      input?: unknown;
+      arguments?: unknown;
+      run_id?: unknown;
+    };
     if (typeof body.name !== "string" || !body.name) {
       return Response.json({ error: "name must be a non-empty string" }, { status: 400 });
     }
@@ -1317,7 +1408,10 @@ export EDEN_API_KEY=<the key above>
     return Response.json(played, { headers: proto });
   }
 
-  if ((url.pathname === "/v1" || url.pathname === "/v1/" || url.pathname === "/v1/openapi.json") && req.method === "GET") {
+  if (
+    (url.pathname === "/v1" || url.pathname === "/v1/" || url.pathname === "/v1/openapi.json") &&
+    req.method === "GET"
+  ) {
     if (!wsId) return unauthorizedJson();
     return Response.json(AGENT_OPENAPI, {
       headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) },
@@ -1378,4 +1472,3 @@ export EDEN_API_KEY=<the key above>
   }
   return new Response("not found", { status: 404 });
 }
-

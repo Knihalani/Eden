@@ -12,8 +12,7 @@ export default function PackPage() {
         <h1>Evidence pack</h1>
         <p className="iso-lead">{PACK.lead}</p>
         <p className="iso-not">
-          Isolation tests remain the shipped truth. There is no attestation. There is no
-          letter to request.
+          Isolation tests remain the shipped truth. There is no attestation. There is no letter to request.
         </p>
       </header>
 

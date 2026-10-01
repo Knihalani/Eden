@@ -169,8 +169,7 @@ export const ISO_LIMITS_NOTE =
   "Wrap-path loss, host limit, envelope miss, certification bounds. Not analogue cents. Not a retired invoice. JIT soak PASS lives with the wins.";
 export const ISO_ANALOGUE_NOTE =
   "Headless replica TURN_CENTS. Labeled analogue. Not a live Claude Code invoice. Not a campaign win.";
-export const ISO_RETIRED_NOTE =
-  "Withdrawn until a file parses. Retired is a result, not a missing row.";
+export const ISO_RETIRED_NOTE = "Withdrawn until a file parses. Retired is a result, not a missing row.";
 
 export type OwaspRow = {
   id: string;
@@ -238,7 +237,8 @@ export const OWASP_ROWS: OwaspRow[] = [
   {
     id: "MCP09:2025",
     risk: "Shadow MCP Servers",
-    control: "eden mcp is an explicit process the operator starts. It speaks only to the wrap control plane with the configured key.",
+    control:
+      "eden mcp is an explicit process the operator starts. It speaks only to the wrap control plane with the configured key.",
     gap: "Eden does not inventory or block other MCP servers the agent talks to on the host. Shadow servers are out of scope.",
   },
   {
@@ -263,8 +263,7 @@ export const LOGGING = {
     "Eden is not claiming high-risk AI-system certification under the EU AI Act, and this page is not a SOC 2 report. Article 12 alignment here means: automatic logs, exportable, tamper-evident, with a stated retention floor — and an explicit list of what we do not claim.",
 };
 
-export const ISO_LEAD =
-  "Each line is a fact we can open a test for. Nothing here is a badge.";
+export const ISO_LEAD = "Each line is a fact we can open a test for. Nothing here is a badge.";
 
 export type PackRow = {
   control: string;
@@ -279,8 +278,7 @@ export const PACK = {
   index: "docs/evidence-pack.md",
   href: "/pack",
   walk: "Open the pack index, then this table. eden audit review is who/what/when/version (tenant-bound). eden audit export is the full chain. eden doctor names EDEN_NET_ALLOW, including empty. Nothing goes live without human Approve. Kill switches are the EDEN_* rows in docs/ROADMAP.md §15.",
-  pool:
-    "Public-pool keys (rcp:) share a body only when three gates hold: the host is on PUBLIC_POOL_HOSTS, the request is credential-free, and the step is GET. The current host is api.github.com. The list is reviewed on every change to that Set — adding a host is a PR that must show unauthenticated GET bodies are byte-identical for every caller. An empty list means no public pool, not all hosts.",
+  pool: "Public-pool keys (rcp:) share a body only when three gates hold: the host is on PUBLIC_POOL_HOSTS, the request is credential-free, and the step is GET. The current host is api.github.com. The list is reviewed on every change to that Set — adding a host is a PR that must show unauthenticated GET bodies are byte-identical for every caller. An empty list means no public pool, not all hosts.",
 };
 
 export const PACK_ROWS: PackRow[] = [

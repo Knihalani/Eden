@@ -116,7 +116,12 @@ export function fixtureIssues(fix: ToolFixture): string[] {
   if (fix.api_under_test !== "hook-inject") issues.push(`api_under_test ${fix.api_under_test} !== hook-inject`);
   if (fix.k !== "default") issues.push(`k ${fix.k} !== default`);
   if (fix.k_default != null && fix.k_default === 40) issues.push("k_default must not be 40");
-  if (!Array.isArray(fix.product) || !fix.product.includes("respondToHook") || !fix.product.includes("memoryHookResponse") || !fix.product.includes("openMemory")) {
+  if (
+    !Array.isArray(fix.product) ||
+    !fix.product.includes("respondToHook") ||
+    !fix.product.includes("memoryHookResponse") ||
+    !fix.product.includes("openMemory")
+  ) {
     issues.push("product must list respondToHook, memoryHookResponse, openMemory");
   }
   if (fix.expect !== "PASS" && fix.expect !== "FAIL") issues.push(`expect ${fix.expect} not PASS|FAIL`);
@@ -127,7 +132,8 @@ export function fixtureIssues(fix: ToolFixture): string[] {
     if (!Array.isArray(c.gold_needles) || !c.gold_needles.length) issues.push(`${c.id}: gold_needles empty`);
     if (!c.cue || c.cue.hook_event_name !== "UserPromptSubmit") issues.push(`${c.id}: cue must be UserPromptSubmit`);
     if (!Array.isArray(c.observe) || !c.observe.length) issues.push(`${c.id}: observe empty`);
-    if (!c.observe.some((e) => e.hook_event_name === "PostToolUse")) issues.push(`${c.id}: observe must include PostToolUse`);
+    if (!c.observe.some((e) => e.hook_event_name === "PostToolUse"))
+      issues.push(`${c.id}: observe must include PostToolUse`);
   }
   const blob = JSON.stringify(fix);
   if (/\bfrom\s+['"][^'"]*brain-memory|\bnew\s+BrainMemory\b|\.retrieve\s*\(/.test(blob)) {
@@ -193,7 +199,13 @@ export async function runCase(c: ToolCase): Promise<CaseRow> {
       const afterObserve = jsonlBody(memDir, session);
       const storedAfter = hitsIn(afterObserve, c.gold_needles);
       const memAfter = openMemory({ dir: memDir, session });
-      const fromObject = hitsIn(memAfter.memories().map((m) => m.text).join("\n"), c.gold_needles);
+      const fromObject = hitsIn(
+        memAfter
+          .memories()
+          .map((m) => m.text)
+          .join("\n"),
+        c.gold_needles,
+      );
       const storedHits = [...new Set([...storedAfter.hit, ...fromObject.hit])];
       const cueOut = await respondToHook(c.cue);
       const ctx = additionalContextOf(asRec(cueOut));
@@ -251,7 +263,9 @@ export function formatResults(run: HoldoutRun): string {
   for (const r of run.rows) {
     const hits = r.inject_hits.length ? r.inject_hits.join("; ") : "—";
     const miss = r.inject_miss.length ? r.inject_miss.join("; ") : "—";
-    lines.push(`| ${r.id} | ${r.verdict} | ${r.post_tool_stored ? "yes" : "no"} | ${r.jsonl_n_after_observe} | ${hits} | ${miss} |`);
+    lines.push(
+      `| ${r.id} | ${r.verdict} | ${r.post_tool_stored ? "yes" : "no"} | ${r.jsonl_n_after_observe} | ${hits} | ${miss} |`,
+    );
   }
   lines.push("");
   if (!run.post_tool_stored) {
@@ -259,7 +273,9 @@ export function formatResults(run: HoldoutRun): string {
       "PostToolUse did not store gold needles. If `memoryHookResponse` still returns null *without* writing JSONL, the live hook is dropping tools (M2.2 not landed). FAIL is honest. Do not retune the ranker.",
     );
   } else if (run.overall === "FAIL") {
-    lines.push("PostToolUse stored the trace, but inject/additionalContext still missed gold needles. FAIL is honest. Do not retune the ranker from this file.");
+    lines.push(
+      "PostToolUse stored the trace, but inject/additionalContext still missed gold needles. FAIL is honest. Do not retune the ranker from this file.",
+    );
   } else {
     lines.push(
       "True verdict on this tree: inject/additionalContext contained every gold needle. `respondToHook` PostToolUse forwards to `memoryHookResponse`, which observes tool name + result (returns null; inject is the later UserPromptSubmit). Pre-registered expect was FAIL until tools were observed; M2.2 had landed, so this is not a forced FAIL.",
@@ -272,7 +288,9 @@ export function formatResults(run: HoldoutRun): string {
   lines.push("bun benchmarks/memory-holdout/run-tools.ts");
   lines.push("```");
   lines.push("");
-  lines.push("Paste the table into this file and into `tools.md` § RESULTS. Score additionalContext only. Do not add a BrainMemory column. Do not set k=40.");
+  lines.push(
+    "Paste the table into this file and into `tools.md` § RESULTS. Score additionalContext only. Do not add a BrainMemory column. Do not set k=40.",
+  );
   lines.push("");
   return lines.join("\n");
 }

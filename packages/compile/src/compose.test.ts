@@ -3,12 +3,7 @@ import type { StretchProgram, StretchTrace } from "@eden/ir";
 import { assertValid, withVersion } from "@eden/ir";
 import { compileTraces } from "./compile";
 import { intakeBillingHandoffTraces } from "./corpus/fixtures";
-import {
-  approveComposeInTest,
-  assembleComposeProgram,
-  assertComposeNotLive,
-  findComposeJoins,
-} from "./compose";
+import { approveComposeInTest, assembleComposeProgram, assertComposeNotLive, findComposeJoins } from "./compose";
 import { approveInTest, assertHandoffNotLive } from "./handoff";
 
 const passManifest = {
@@ -41,8 +36,20 @@ function childProgram(name: string, sequence: string[]): StretchProgram {
     sequence,
     steps,
     returns: { kind: "from", step: steps.at(-1)!.id, path: "" },
-    contract: { witnesses: 3, minLlmReduction: 2, allowExact: false, envelope: { inputs: { id: ["T-0", "T-1", "T-2"] } } },
-    manifest: { llmReduction: 3, latencyReduction: 1, costReduction: 1, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+    contract: {
+      witnesses: 3,
+      minLlmReduction: 2,
+      allowExact: false,
+      envelope: { inputs: { id: ["T-0", "T-1", "T-2"] } },
+    },
+    manifest: {
+      llmReduction: 3,
+      latencyReduction: 1,
+      costReduction: 1,
+      skipRateBefore: 0,
+      skipRateAfter: 0,
+      nShadow: 3,
+    },
   });
 }
 

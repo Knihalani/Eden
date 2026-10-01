@@ -59,7 +59,13 @@ function armEnv(arm: Arm, dir: string): Record<string, string | undefined> {
   };
 }
 
-async function scoreInject(arm: Arm, dir: string, seed: (mem: ReturnType<typeof openMemory>) => void | Promise<void>, cue: string, gold: string[]): Promise<{ hit: boolean; silent: boolean; bytes: number; body: string }> {
+async function scoreInject(
+  arm: Arm,
+  dir: string,
+  seed: (mem: ReturnType<typeof openMemory>) => void | Promise<void>,
+  cue: string,
+  gold: string[],
+): Promise<{ hit: boolean; silent: boolean; bytes: number; body: string }> {
   return withEnv(armEnv(arm, dir), async () => {
     const mem = openMemory({ dir });
     try {
@@ -70,7 +76,9 @@ async function scoreInject(arm: Arm, dir: string, seed: (mem: ReturnType<typeof 
       const hit = gold.every((g) => new RegExp(g, "i").test(body));
       return { hit, silent, bytes: body.length, body };
     } finally {
-      try { mem.close(); } catch {}
+      try {
+        mem.close();
+      } catch {}
     }
   });
 }
@@ -78,7 +86,13 @@ async function scoreInject(arm: Arm, dir: string, seed: (mem: ReturnType<typeof 
 export async function runAmbitiousCases(): Promise<CaseRow[]> {
   const rows: CaseRow[] = [];
 
-  const add = async (id: string, gold: string[], wantSilent: boolean, seed: (dir: string) => Promise<{ hit: boolean; silent: boolean; bytes: number }>, cueRun: (arm: Arm, dir: string) => Promise<{ hit: boolean; silent: boolean; bytes: number }>) => {
+  const add = async (
+    id: string,
+    gold: string[],
+    wantSilent: boolean,
+    seed: (dir: string) => Promise<{ hit: boolean; silent: boolean; bytes: number }>,
+    cueRun: (arm: Arm, dir: string) => Promise<{ hit: boolean; silent: boolean; bytes: number }>,
+  ) => {
     const d = tmp();
     const a = tmp();
     try {
@@ -102,105 +116,251 @@ export async function runAmbitiousCases(): Promise<CaseRow[]> {
     }
   };
 
-  await add("H1-paraphrase-login-clerk", ["Clerk"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => { mem.observe([{ role: "user", content: "Auth is Clerk." }]); }, "why is login broken?", ["Clerk"]));
+  await add(
+    "H1-paraphrase-login-clerk",
+    ["Clerk"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+        },
+        "why is login broken?",
+        ["Clerk"],
+      ),
+  );
 
-  await add("H2-math-still-silent", [], true, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => { mem.observe([{ role: "user", content: "Always use sqlite." }]); }, "what's 2+2?", ["sqlite"]));
+  await add(
+    "H2-math-still-silent",
+    [],
+    true,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          mem.observe([{ role: "user", content: "Always use sqlite." }]);
+        },
+        "what's 2+2?",
+        ["sqlite"],
+      ),
+  );
 
-  await add("H3-long-prompt-one-auth", ["Clerk"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => { mem.observe([{ role: "user", content: "Auth is Clerk." }]); },
-      "please look at the middleware and the session helper and tell me if auth is wired the way we wanted for the new dashboard rewrite",
-      ["Clerk"]));
+  await add(
+    "H3-long-prompt-one-auth",
+    ["Clerk"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+        },
+        "please look at the middleware and the session helper and tell me if auth is wired the way we wanted for the new dashboard rewrite",
+        ["Clerk"],
+      ),
+  );
 
-  await add("H4-who-owns-flake", ["auth.test"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => {
-      mem.observe([{ role: "user", content: "Please fix the flake in auth.test.ts. FAIL auth.test.ts Intermittent flake on login." }]);
-    }, "who owns the flake?", ["auth.test"]));
+  await add(
+    "H4-who-owns-flake",
+    ["auth.test"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          mem.observe([
+            {
+              role: "user",
+              content: "Please fix the flake in auth.test.ts. FAIL auth.test.ts Intermittent flake on login.",
+            },
+          ]);
+        },
+        "who owns the flake?",
+        ["auth.test"],
+      ),
+  );
 
-  await add("H5-two-golds-one-cue", ["Clerk", "sqlite"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => {
-      mem.observe([{ role: "user", content: "Auth is Clerk." }]);
-      mem.observe([{ role: "user", content: "The database is sqlite." }]);
-    }, "what stack do we use for login and the db?", ["Clerk", "sqlite"]));
+  await add(
+    "H5-two-golds-one-cue",
+    ["Clerk", "sqlite"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+          mem.observe([{ role: "user", content: "The database is sqlite." }]);
+        },
+        "what stack do we use for login and the db?",
+        ["Clerk", "sqlite"],
+      ),
+  );
 
-  await add("H6-new-session-after-sleep", ["sqlite"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) => {
-    return withEnv(armEnv(arm, dir), async () => {
-      const mem = openMemory({ dir });
-      mem.observe([{ role: "user", content: "The database is sqlite." }]);
-      await mem.sleep();
-      mem.close();
-      const b = openMemory({ dir, session: "sess-b" });
-      const out = b.inject([{ role: "user", content: "what database do we use" }]);
-      b.close();
-      const body = packetOf(out);
-      return { hit: /sqlite/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length, body };
-    });
-  });
-
-  await add("H7-hook-new-session", ["sqlite"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) => {
-    return withEnv(armEnv(arm, dir), async () => {
-      memoryHookResponse({
-        hook_event_name: "Stop",
-        session_id: "xa",
-        messages: [{ role: "user", content: "The database is sqlite." }],
+  await add(
+    "H6-new-session-after-sleep",
+    ["sqlite"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) => {
+      return withEnv(armEnv(arm, dir), async () => {
+        const mem = openMemory({ dir });
+        mem.observe([{ role: "user", content: "The database is sqlite." }]);
+        await mem.sleep();
+        mem.close();
+        const b = openMemory({ dir, session: "sess-b" });
+        const out = b.inject([{ role: "user", content: "what database do we use" }]);
+        b.close();
+        const body = packetOf(out);
+        return { hit: /sqlite/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length, body };
       });
-      const res = memoryHookResponse({
-        hook_event_name: "UserPromptSubmit",
-        session_id: "xb",
-        prompt: "what database do we use",
+    },
+  );
+
+  await add(
+    "H7-hook-new-session",
+    ["sqlite"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) => {
+      return withEnv(armEnv(arm, dir), async () => {
+        memoryHookResponse({
+          hook_event_name: "Stop",
+          session_id: "xa",
+          messages: [{ role: "user", content: "The database is sqlite." }],
+        });
+        const res = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          session_id: "xb",
+          prompt: "what database do we use",
+        });
+        const body = String(res?.additional_context ?? "");
+        return { hit: /sqlite/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length };
       });
-      const body = String(res?.additional_context ?? "");
-      return { hit: /sqlite/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length };
-    });
-  });
+    },
+  );
 
-  await add("H8-wrap-then-hook-cwd", ["sqlite"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) => {
-    return withEnv(armEnv(arm, dir), async () => {
-      const mem = openMemory({ dir });
-      mem.observe([{ role: "user", content: "The database is sqlite." }]);
-      mem.close();
-      const res = memoryHookResponse({
-        hook_event_name: "UserPromptSubmit",
-        prompt: "what database do we use",
-        cwd: "/tmp/eden-x-project-path",
+  await add(
+    "H8-wrap-then-hook-cwd",
+    ["sqlite"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) => {
+      return withEnv(armEnv(arm, dir), async () => {
+        const mem = openMemory({ dir });
+        mem.observe([{ role: "user", content: "The database is sqlite." }]);
+        mem.close();
+        const res = memoryHookResponse({
+          hook_event_name: "UserPromptSubmit",
+          prompt: "what database do we use",
+          cwd: "/tmp/eden-x-project-path",
+        });
+        const body = String(res?.additional_context ?? "");
+        return { hit: /sqlite/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length };
       });
-      const body = String(res?.additional_context ?? "");
-      return { hit: /sqlite/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length };
-    });
-  });
+    },
+  );
 
-  await add("H9-encode-drop", ["Clerk"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => { mem.observe([{ role: "user", content: "Pin Clerk in the session helper" }]); }, "what auth do we use", ["Clerk"]));
+  await add(
+    "H9-encode-drop",
+    ["Clerk"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          mem.observe([{ role: "user", content: "Pin Clerk in the session helper" }]);
+        },
+        "what auth do we use",
+        ["Clerk"],
+      ),
+  );
 
-  await add("H10-experience-thought", ["GOLDNEEDLE-zz9"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) => {
-    return withEnv(armEnv(arm, dir), async () => {
-      putExperience(dir, {
-        id: "traj-x1",
-        states: [{
-          t: 1,
-          thought: "the user wanted GOLDNEEDLE-zz9 on the change-request form",
-          action: "click submit",
-          tree: "RootWebArea [landmark] heading UnrelatedAX",
-        }],
+  await add(
+    "H10-experience-thought",
+    ["GOLDNEEDLE-zz9"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) => {
+      return withEnv(armEnv(arm, dir), async () => {
+        putExperience(dir, {
+          id: "traj-x1",
+          states: [
+            {
+              t: 1,
+              thought: "the user wanted GOLDNEEDLE-zz9 on the change-request form",
+              action: "click submit",
+              tree: "RootWebArea [landmark] heading UnrelatedAX",
+            },
+          ],
+        });
+        const mem = openMemory({ dir });
+        const out = mem.inject([{ role: "user", content: "what was on the change-request form" }]);
+        mem.close();
+        const body = packetOf(out);
+        return { hit: /GOLDNEEDLE-zz9/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length };
       });
-      const mem = openMemory({ dir });
-      const out = mem.inject([{ role: "user", content: "what was on the change-request form" }]);
-      mem.close();
-      const body = packetOf(out);
-      return { hit: /GOLDNEEDLE-zz9/i.test(body), silent: !body.includes(MEMORY_MARK), bytes: body.length };
-    });
-  });
+    },
+  );
 
-  await add("H11-chatter-thanks", [], true, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => { mem.observe([{ role: "user", content: "Auth is Clerk." }]); }, "thanks", ["Clerk"]));
+  await add(
+    "H11-chatter-thanks",
+    [],
+    true,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          mem.observe([{ role: "user", content: "Auth is Clerk." }]);
+        },
+        "thanks",
+        ["Clerk"],
+      ),
+  );
 
-  await add("H12-fat-many-auth", ["alpha", "omega"], false, async () => ({ hit: false, silent: false, bytes: 0 }), async (arm, dir) =>
-    scoreInject(arm, dir, (mem) => {
-      for (const n of ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "omega"]) {
-        mem.observe([{ role: "user", content: `Auth note ${n} is required for the login stack.` }]);
-      }
-    }, "auth login stack notes", ["alpha", "omega"]));
+  await add(
+    "H12-fat-many-auth",
+    ["alpha", "omega"],
+    false,
+    async () => ({ hit: false, silent: false, bytes: 0 }),
+    async (arm, dir) =>
+      scoreInject(
+        arm,
+        dir,
+        (mem) => {
+          for (const n of [
+            "alpha",
+            "bravo",
+            "charlie",
+            "delta",
+            "echo",
+            "foxtrot",
+            "golf",
+            "hotel",
+            "india",
+            "omega",
+          ]) {
+            mem.observe([{ role: "user", content: `Auth note ${n} is required for the login stack.` }]);
+          }
+        },
+        "auth login stack notes",
+        ["alpha", "omega"],
+      ),
+  );
 
   return rows;
 }
@@ -220,9 +380,11 @@ export function renderAmbitiousResults(rows: CaseRow[]): string {
     "|---|---|---|---|---|---|---:|",
   ];
   for (const r of rows) {
-    const dHit = r.wantSilent ? (r.defaultSilent ? "omit" : "LEAK") : (r.defaultHit ? "yes" : "MISS");
-    const aHit = r.wantSilent ? (r.auroraSilent ? "omit" : "LEAK") : (r.auroraHit ? "yes" : "MISS");
-    lines.push(`| ${r.id} | ${r.gold.join(", ") || "—"} | ${dHit} | ${aHit} | ${r.defaultSilent} | ${r.auroraSilent} | ${r.auroraBytes - r.defaultBytes} |`);
+    const dHit = r.wantSilent ? (r.defaultSilent ? "omit" : "LEAK") : r.defaultHit ? "yes" : "MISS";
+    const aHit = r.wantSilent ? (r.auroraSilent ? "omit" : "LEAK") : r.auroraHit ? "yes" : "MISS";
+    lines.push(
+      `| ${r.id} | ${r.gold.join(", ") || "—"} | ${dHit} | ${aHit} | ${r.defaultSilent} | ${r.auroraSilent} | ${r.auroraBytes - r.defaultBytes} |`,
+    );
   }
   const need = rows.filter((r) => !r.wantSilent);
   const defN = need.filter((r) => r.defaultHit).length;

@@ -156,7 +156,12 @@ export function classifyFail(input: {
   }
 
   if (input.outcome === "degraded") {
-    return line("degraded", reason || "The run finished degraded.", "Wrap more runs so tokens and time can be measured.", step);
+    return line(
+      "degraded",
+      reason || "The run finished degraded.",
+      "Wrap more runs so tokens and time can be measured.",
+      step,
+    );
   }
 
   if (typeof skipAfter === "number" && skipAfter > 0) {
@@ -199,7 +204,9 @@ export function classifyFail(input: {
     return line(
       "failed",
       reason || "The method failed quality.",
-      step ? `Select ${step}. Downstream steps stay blocked.` : "Inspect the named step. Downstream steps stay blocked.",
+      step
+        ? `Select ${step}. Downstream steps stay blocked.`
+        : "Inspect the named step. Downstream steps stay blocked.",
       step,
     );
   }
@@ -262,7 +269,9 @@ export function receiptPostmortem(
     rec.deoptReason ? rec.deoptReason.replace(/^deopt:\s*/i, "") : null,
     rec.skipped?.length ? `skipped ${rec.skipped.join(", ")}` : null,
     typeof rec.sharedAcross === "number" && rec.sharedAcross >= 2 ? `shared across ${rec.sharedAcross} agents` : null,
-    rec.reason && /shared across \d+ agents/.test(rec.reason) && !(typeof rec.sharedAcross === "number" && rec.sharedAcross >= 2)
+    rec.reason &&
+    /shared across \d+ agents/.test(rec.reason) &&
+    !(typeof rec.sharedAcross === "number" && rec.sharedAcross >= 2)
       ? rec.reason
       : null,
     opts?.drift ? REFRESH_WAITING_COPY : null,

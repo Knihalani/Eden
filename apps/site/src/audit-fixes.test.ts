@@ -63,13 +63,18 @@ describe("approve of an unknown or foreign tool is a 404", () => {
 
   const post = (id: string, headers: Record<string, string> = {}) =>
     handleFetch(
-      new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, { method: "POST", headers: { host: "127.0.0.1:8787", ...headers } }),
+      new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, {
+        method: "POST",
+        headers: { host: "127.0.0.1:8787", ...headers },
+      }),
     );
 
   test("an existing workspace tool still approves with a 303 redirect", async () => {
     const res = await post("t-live");
     expect(res.status).toBe(303);
-    const row = await db.get<{ state: string; published: number }>(`SELECT state, published FROM tool WHERE id = 't-live'`);
+    const row = await db.get<{ state: string; published: number }>(
+      `SELECT state, published FROM tool WHERE id = 't-live'`,
+    );
     expect(row?.state).toBe("on");
     expect(Number(row?.published)).toBe(1);
   });
@@ -126,8 +131,12 @@ describe("a failed tenant-key migration fails loudly", () => {
       expect(logged).toContain("cluster");
       expect(logged).toContain("FAILED");
       // Writes against the legacy table still work after the failed attempt.
-      await d.run(`INSERT OR REPLACE INTO cluster (fingerprint, workspace_id, count, steps, status) VALUES ('fp', 'ws_a', 2, '[]', 'knock')`);
-      const row = await d.get<{ count: number }>(`SELECT count FROM cluster WHERE fingerprint = 'fp' AND workspace_id = 'ws_a'`);
+      await d.run(
+        `INSERT OR REPLACE INTO cluster (fingerprint, workspace_id, count, steps, status) VALUES ('fp', 'ws_a', 2, '[]', 'knock')`,
+      );
+      const row = await d.get<{ count: number }>(
+        `SELECT count FROM cluster WHERE fingerprint = 'fp' AND workspace_id = 'ws_a'`,
+      );
       expect(Number(row?.count)).toBe(2);
     } finally {
       errSpy.mockRestore();
@@ -153,7 +162,13 @@ describe("the wrap result cache is workspace-scoped", () => {
         name: "bundle",
         seen: "[]",
         steps: JSON.stringify([
-          { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/issues/{issue}" },
+          {
+            id: "s1",
+            kind: "cloud_http",
+            name: "issue",
+            commute: true,
+            url: "http://127.0.0.1/forge/repos/acme/app/issues/{issue}",
+          },
         ]),
       };
       const failing = {
@@ -197,7 +212,9 @@ describe("batch fan-out over a caller-supplied issues csv is bounded", () => {
          VALUES ('t-cap', 'ws_local', 'capped', 'x', 'on', ?, '[]', 'fp-cap')`,
         [JSON.stringify([{ id: "s1", kind: "runner", name: "git.status", commute: true }])],
       );
-      const tool = await db.get<{ id: string; name: string; steps: string }>(`SELECT id, name, steps FROM tool WHERE id = 't-cap'`);
+      const tool = await db.get<{ id: string; name: string; steps: string }>(
+        `SELECT id, name, steps FROM tool WHERE id = 't-cap'`,
+      );
       const ids = Array.from({ length: 250 }, (_, i) => String(i + 1)).join(",");
       const receipt = await playTool(db, tool!, { ids });
       // One attempted step per id played: 250 requested, 100 played.
@@ -246,7 +263,13 @@ describe("state-changing requests with a forged Host are refused", () => {
     // Cache-busted import: each suite here owns its private server/db
     // singleton, same reason as the approve-404 suite above.
     import(`./server?bust=${"host-" + Math.random().toString(36).slice(2)}`).then(({ handleFetch }) =>
-      handleFetch(new Request(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ run_id: "r1", events: [] }) })),
+      handleFetch(
+        new Request(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify({ run_id: "r1", events: [] }),
+        }),
+      ),
     );
 
   test("a rebinding page's shape — no Origin, same-site fetch marker, forged Host — is refused", async () => {
@@ -336,7 +359,11 @@ describe("approving persists the candidate's shadow manifest", () => {
       handleFetch(
         new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, {
           method: "POST",
-          headers: { accept: "application/json", host: "127.0.0.1:8787", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+          headers: {
+            accept: "application/json",
+            host: "127.0.0.1:8787",
+            ...(body !== undefined ? { "content-type": "application/json" } : {}),
+          },
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         }),
       ),
@@ -347,9 +374,16 @@ describe("approving persists the candidate's shadow manifest", () => {
       manifest: { tokensSaved: 1200, timeSavedMs: 4000, tokensMeasured: true, timeMeasured: true },
     });
     expect(res.status).toBe(200);
-    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    const row = await db.get<{ manifest: string | null; state: string }>(
+      `SELECT manifest, state FROM tool WHERE id = 't-m'`,
+    );
     expect(row?.state).toBe("on");
-    expect(JSON.parse(row!.manifest!)).toEqual({ tokensSaved: 1200, timeSavedMs: 4000, tokensMeasured: true, timeMeasured: true });
+    expect(JSON.parse(row!.manifest!)).toEqual({
+      tokensSaved: 1200,
+      timeSavedMs: 4000,
+      tokensMeasured: true,
+      timeMeasured: true,
+    });
     const ledger = await buildLedger(db, "ws_local");
     expect(ledger.tokens_saved_mean).toEqual({ value: 1200, measured: true, estimated: false });
     expect(ledger.time_saved_ms_mean).toEqual({ value: 4000, measured: true });
@@ -361,7 +395,9 @@ describe("approving persists the candidate's shadow manifest", () => {
     // The refusal path exits before the route's own schema ensure, so provide
     // the column here to assert nothing was written into it.
     await ensureLedgerSchema(db);
-    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    const row = await db.get<{ manifest: string | null; state: string }>(
+      `SELECT manifest, state FROM tool WHERE id = 't-m'`,
+    );
     expect(row?.state).toBe("draft");
     expect(row?.manifest).toBeNull();
   });
@@ -378,7 +414,9 @@ describe("approving persists the candidate's shadow manifest", () => {
     // The refusal path exits before the route's own schema ensure, so provide
     // the column here to assert nothing was written into it.
     await ensureLedgerSchema(db);
-    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    const row = await db.get<{ manifest: string | null; state: string }>(
+      `SELECT manifest, state FROM tool WHERE id = 't-m'`,
+    );
     expect(row?.state).toBe("draft");
     expect(row?.manifest).toBeNull();
   });
@@ -386,7 +424,9 @@ describe("approving persists the candidate's shadow manifest", () => {
   test("the workshop's form approval carries no manifest and works unchanged", async () => {
     const res = await postJson("t-m");
     expect([200, 303]).toContain(res.status);
-    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    const row = await db.get<{ manifest: string | null; state: string }>(
+      `SELECT manifest, state FROM tool WHERE id = 't-m'`,
+    );
     expect(row?.state).toBe("on");
     expect(row?.manifest).toBeNull();
   });

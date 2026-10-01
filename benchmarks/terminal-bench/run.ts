@@ -41,8 +41,7 @@ export const DATASET_DIR = join(HERE, "dataset");
 export const TASKS_DIR = join(DATASET_DIR, "tasks");
 
 export const WAVE = "M32" as const;
-export const WRAP_INJECT =
-  "packages/wrap handleChatCompletions → injectBodyThenObserveTools(processMemory())";
+export const WRAP_INJECT = "packages/wrap handleChatCompletions → injectBodyThenObserveTools(processMemory())";
 export const NIM_BASE = "https://integrate.api.nvidia.com/v1";
 export const NIM_MODEL = "google/gemma-4-31b-it";
 export const DEFAULT_WRAP_PORT = 18788;
@@ -312,7 +311,10 @@ function harborBin(info: { bin: string | null }): { cmd: string; prefix: string[
   return { cmd: info.bin, prefix: [] };
 }
 
-function curlNimChatSync(model: string, timeoutSec: number): { http: number | null; ms: number; snippet: string; empty: boolean } {
+function curlNimChatSync(
+  model: string,
+  timeoutSec: number,
+): { http: number | null; ms: number; snippet: string; empty: boolean } {
   const key = nvidiaKey();
   const payload = JSON.stringify({
     model,
@@ -339,7 +341,9 @@ function curlNimChatSync(model: string, timeoutSec: number): { http: number | nu
     http: m ? Number(m[1]) : null,
     ms: Date.now() - t0,
     snippet: out.slice(0, 280),
-    empty: /Empty reply|timed out after|0 bytes received|ECONNRESET|RemoteProtocolError/i.test(out) && !/"content":"[^"]+"/.test(out),
+    empty:
+      /Empty reply|timed out after|0 bytes received|ECONNRESET|RemoteProtocolError/i.test(out) &&
+      !/"content":"[^"]+"/.test(out),
   };
 }
 
@@ -424,7 +428,11 @@ async function harborDryRun(h: { cmd: string; prefix: string[] }, subset: Subset
   const r = await sh(
     h.cmd,
     [...h.prefix, "run", "--config", cfg, "-k", String(subset.k), "-n", "1", "-y", "--dry-run"],
-    { cwd: HERE, env: { ...process.env, PATH: `${localBin}:${process.env.PATH || ""}`, OPENAI_API_KEY: HARBOR_WRAP_KEY }, timeoutMs: 60_000 },
+    {
+      cwd: HERE,
+      env: { ...process.env, PATH: `${localBin}:${process.env.PATH || ""}`, OPENAI_API_KEY: HARBOR_WRAP_KEY },
+      timeoutMs: 60_000,
+    },
   );
   const out = `${r.stdout}\n${r.stderr}`;
   if (r.code === 0 && /Dry run OK/i.test(out)) return null;
@@ -522,11 +530,15 @@ function startWrap(arm: Arm): { child: ChildProcess; log: string; port: number }
     NIM_MODEL: modelId(),
     EDEN_MEMORY_INJECT_LOG: injectLog,
   };
-  const child = spawn("bun", [join(ROOT, "packages/cli/src/cli.ts"), "wrap", "--no-coding", "--port", String(wrapPort), "--host", "127.0.0.1"], {
-    cwd: ROOT,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = spawn(
+    "bun",
+    [join(ROOT, "packages/cli/src/cli.ts"), "wrap", "--no-coding", "--port", String(wrapPort), "--host", "127.0.0.1"],
+    {
+      cwd: ROOT,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   const stream = { n: 0 };
   const onChunk = (b: Buffer) => {
     stream.n += b.length;
@@ -937,15 +949,11 @@ export function memoryDeltaNotes(off: ArmResult, on: ArmResult): string[] {
   const regexOn = namedErrors(on, (t) => t.trial.startsWith("regex-log") && Boolean(t.error));
   if (regexOff) {
     const sample = off.trials.find((t) => t.trial.startsWith("regex-log") && t.error_message)?.error_message;
-    notes.push(
-      `regex-log tmux failures (off, all 5): ${regexOff}${sample ? ` — ${sample}` : ""}.`,
-    );
+    notes.push(`regex-log tmux failures (off, all 5): ${regexOff}${sample ? ` — ${sample}` : ""}.`);
   }
   if (regexOn) {
     const sample = on.trials.find((t) => t.trial.startsWith("regex-log") && t.error_message)?.error_message;
-    notes.push(
-      `regex-log tmux failures (on): ${regexOn}${sample ? ` — ${sample}` : ""}.`,
-    );
+    notes.push(`regex-log tmux failures (on): ${regexOn}${sample ? ` — ${sample}` : ""}.`);
   }
   const onBg = namedErrors(on, (t) => t.error === "BadGatewayError");
   const onRt = namedErrors(on, (t) => t.error === "RuntimeError" && !t.trial.startsWith("regex-log"));
@@ -1026,15 +1034,15 @@ export function renderResults(r: RunReport): string {
   const lines: string[] = [];
   lines.push("# M32 Terminal-Bench 2.1 Δ RESULTS");
   lines.push("");
-  lines.push(
-    `**M37.3 recert:** ${r.date} — after M16–M36; locked subset k=5; not 89-task; backbone \`${NIM_MODEL}\`.`,
-  );
+  lines.push(`**M37.3 recert:** ${r.date} — after M16–M36; locked subset k=5; not 89-task; backbone \`${NIM_MODEL}\`.`);
   lines.push("");
   if (!r.harbor_ran) {
     lines.push("**Harbor ran: no.** Jobs were not launched in this file. No public-board % is claimed.");
     lines.push("");
   }
-  lines.push("Own schema (not MAB Table 3 / not LME-V2). Absolute % is the **agent** (**terminus-2**), not Eden. Memory claim is **Δ** vs the same locked harness (Plan §9.2 CLI SOTA: k=5, wrap ± inject).");
+  lines.push(
+    "Own schema (not MAB Table 3 / not LME-V2). Absolute % is the **agent** (**terminus-2**), not Eden. Memory claim is **Δ** vs the same locked harness (Plan §9.2 CLI SOTA: k=5, wrap ± inject).",
+  );
   lines.push("");
   lines.push("| field | value |");
   lines.push("|---|---|");
@@ -1053,36 +1061,54 @@ export function renderResults(r: RunReport): string {
   lines.push(`| agent | ${r.agent} |`);
   lines.push(`| wrap | ${r.wrap} |`);
   if (r.inject) {
-    lines.push(`| inject check | off identity=${r.inject.off_identity}; on mark=${r.inject.on_has_mark}; on fact=${r.inject.on_has_fact} |`);
+    lines.push(
+      `| inject check | off identity=${r.inject.off_identity}; on mark=${r.inject.on_has_mark}; on fact=${r.inject.on_has_fact} |`,
+    );
   }
   lines.push(`| NIM base | ${r.nim_base} |`);
   lines.push(`| reasoning_effort | ${r.reasoning_effort} (both arms) |`);
-  lines.push(`| NVIDIA trial $/MTok | input ${r.nvidia_trial_usd_per_mtok.input} / output ${r.nvidia_trial_usd_per_mtok.output} |`);
+  lines.push(
+    `| NVIDIA trial $/MTok | input ${r.nvidia_trial_usd_per_mtok.input} / output ${r.nvidia_trial_usd_per_mtok.output} |`,
+  );
   lines.push(`| tasks | ${r.tasks.map((t) => "`" + t + "`").join(", ")} |`);
   lines.push("");
   lines.push("## Δ (on − off)");
   lines.push("");
   lines.push("| metric | off (EDEN_MEMORY=0 identity) | on (inject) | Δ |");
   lines.push("|---|---|---|---|");
-  lines.push(`| accuracy (Harbor mean) | ${fmtPct(r.off.accuracy)} | ${fmtPct(r.on.accuracy)} | ${fmtPp(r.delta.accuracy_pp)} |`);
+  lines.push(
+    `| accuracy (Harbor mean) | ${fmtPct(r.off.accuracy)} | ${fmtPct(r.on.accuracy)} | ${fmtPp(r.delta.accuracy_pp)} |`,
+  );
   const tokOff = r.off.tokens.measured;
   const tokOn = r.on.tokens.measured;
-  lines.push(`| tokens prompt | ${tokOff ? fmtN(r.off.tokens.prompt) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.prompt) : "n/a"} | ${tokOff && tokOn ? fmtN(r.on.tokens.prompt - r.off.tokens.prompt) : "n/a"} |`);
-  lines.push(`| tokens completion | ${tokOff ? fmtN(r.off.tokens.completion) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.completion) : "n/a"} | ${tokOff && tokOn ? fmtN(r.on.tokens.completion - r.off.tokens.completion) : "n/a"} |`);
-  lines.push(`| tokens total | ${tokOff ? fmtN(r.off.tokens.total) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.total) : "n/a"} | ${fmtN(r.delta.tokens_total)} |`);
+  lines.push(
+    `| tokens prompt | ${tokOff ? fmtN(r.off.tokens.prompt) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.prompt) : "n/a"} | ${tokOff && tokOn ? fmtN(r.on.tokens.prompt - r.off.tokens.prompt) : "n/a"} |`,
+  );
+  lines.push(
+    `| tokens completion | ${tokOff ? fmtN(r.off.tokens.completion) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.completion) : "n/a"} | ${tokOff && tokOn ? fmtN(r.on.tokens.completion - r.off.tokens.completion) : "n/a"} |`,
+  );
+  lines.push(
+    `| tokens total | ${tokOff ? fmtN(r.off.tokens.total) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.total) : "n/a"} | ${fmtN(r.delta.tokens_total)} |`,
+  );
   const dollarOff = r.harbor_ran ? `$${r.off.dollars.toFixed(4)}` : "n/a";
   const dollarOn = r.harbor_ran ? `$${r.on.dollars.toFixed(4)}` : "n/a";
   const dollarD = r.harbor_ran ? `$${(r.delta.dollars ?? 0).toFixed(4)}` : "n/a";
   lines.push(`| $ (NVIDIA trial $0/MTok) | ${dollarOff} | ${dollarOn} | ${dollarD} |`);
   lines.push(`| n_trials | ${r.off.n_trials} | ${r.on.n_trials} | |`);
   lines.push(`| n_resolved (reward=1.0) | ${r.off.n_resolved} | ${r.on.n_resolved} | |`);
-  lines.push(`| n_resolved / n_trials | ${r.off.n_trials ? `${r.off.n_resolved}/${r.off.n_trials}` : "n/a"} | ${r.on.n_trials ? `${r.on.n_resolved}/${r.on.n_trials}` : "n/a"} | |`);
+  lines.push(
+    `| n_resolved / n_trials | ${r.off.n_trials ? `${r.off.n_resolved}/${r.off.n_trials}` : "n/a"} | ${r.on.n_trials ? `${r.on.n_resolved}/${r.on.n_trials}` : "n/a"} | |`,
+  );
   lines.push(`| n_errored | ${r.off.n_errored} | ${r.on.n_errored} | |`);
   lines.push("");
-  lines.push("**Accuracy definition:** Harbor job mean (`stats.evals.*.metrics[].mean`) over `n_total_trials`. Errored trials count as **0 reward in that mean**, but they are **not** listed as reward 0.0 in the trial table — they are named exceptions. Also published: n_resolved/n_trials (reward 1.0 only). Absolute % is the **agent** (**terminus-2** + NVIDIA NIM `google/gemma-4-31b-it`), not Eden. Δ = on − off.");
+  lines.push(
+    "**Accuracy definition:** Harbor job mean (`stats.evals.*.metrics[].mean`) over `n_total_trials`. Errored trials count as **0 reward in that mean**, but they are **not** listed as reward 0.0 in the trial table — they are named exceptions. Also published: n_resolved/n_trials (reward 1.0 only). Absolute % is the **agent** (**terminus-2** + NVIDIA NIM `google/gemma-4-31b-it`), not Eden. Δ = on − off.",
+  );
   const verdict = accuracyVerdict(r.delta.accuracy_pp);
   if (verdict) lines.push(verdict);
-  lines.push("Cost is NVIDIA hosted trial list ($0/MTok). Token counts are still reported. Not Friendli / third-party list price.");
+  lines.push(
+    "Cost is NVIDIA hosted trial list ($0/MTok). Token counts are still reported. Not Friendli / third-party list price.",
+  );
   lines.push("No BrainMemory column. No cortex-off. Not the 89-task tbench.ai board.");
   lines.push("");
   // --- M32.3 remain-silent measure (count only; omit gate is M38) ---
@@ -1139,7 +1165,9 @@ export function renderResults(r: RunReport): string {
     for (const n of r.notes) lines.push(`- ${n}`);
     lines.push("");
   }
-  lines.push("Cite: Terminal-Bench [arxiv:2601.11868]; memory exam slot [arxiv:2607.08716] via Plan §11.1. Harbor dataset: https://github.com/harbor-framework/terminal-bench-2-1");
+  lines.push(
+    "Cite: Terminal-Bench [arxiv:2601.11868]; memory exam slot [arxiv:2607.08716] via Plan §11.1. Harbor dataset: https://github.com/harbor-framework/terminal-bench-2-1",
+  );
   lines.push("");
   return lines.join("\n");
 }
@@ -1282,8 +1310,7 @@ export async function main(): Promise<RunReport> {
   }
 
   const canRun =
-    !skip &&
-    !blockers.some((b) => b.startsWith("Docker:") || b.startsWith("Harbor CLI:") || b.startsWith("Dataset:"));
+    !skip && !blockers.some((b) => b.startsWith("Docker:") || b.startsWith("Harbor CLI:") || b.startsWith("Dataset:"));
 
   if (canRun) {
     for (const arm of ["off", "on"] as const) {

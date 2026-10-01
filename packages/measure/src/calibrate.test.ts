@@ -95,10 +95,7 @@ describe("calibrate", () => {
   });
 
   test("calibrate is deterministic for a fixed seed", () => {
-    const pairs = pairsFromDeltas(
-      500,
-      [3, -1, 4, -1, 5, 9, -2, 6],
-    );
+    const pairs = pairsFromDeltas(500, [3, -1, 4, -1, 5, 9, -2, 6]);
     const a = calibrate(pairs, { seed: 11, falseLossTrials: 200, lossVerdictTrials: 80 });
     const b = calibrate(pairs, { seed: 11, falseLossTrials: 200, lossVerdictTrials: 80 });
     expect(a).toEqual(b);

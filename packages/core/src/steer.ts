@@ -2,9 +2,7 @@ export function steerTemplate(toolName: string, whenToUse: string): string {
   return `Call Eden tool ${toolName} instead of this stretch. ${whenToUse}`.trim();
 }
 
-export type SteerDecision =
-  | { action: "allow" }
-  | { action: "deny"; reason: string; tool: string };
+export type SteerDecision = { action: "allow" } | { action: "deny"; reason: string; tool: string };
 
 export function matchPrefix(
   live: { name: string; seen: string[]; required_k: number }[],

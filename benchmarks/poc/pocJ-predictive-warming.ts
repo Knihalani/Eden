@@ -73,8 +73,7 @@ void last6;
 function makeWarmers(alpha: number) {
   return {
     none: (): Set<number> => new Set(),
-    today: (history: Array<{ id: number; t: number }>): Set<number> =>
-      new Set(history.slice(-6).map((h) => h.id)),
+    today: (history: Array<{ id: number; t: number }>): Set<number> => new Set(history.slice(-6).map((h) => h.id)),
     proposed: (history: Array<{ id: number; t: number }>): Set<number> => {
       const now = history[history.length - 1]?.t ?? 0;
       const score = new Map<number, number>();
@@ -83,7 +82,12 @@ function makeWarmers(alpha: number) {
         const recency = Math.exp(-age / 30);
         score.set(h.id, (score.get(h.id) ?? 0) + alpha * recency + (1 - alpha) * (1 / (1 + age / 100)));
       }
-      return new Set([...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => id));
+      return new Set(
+        [...score.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6)
+          .map(([id]) => id),
+      );
     },
   };
 }
@@ -102,10 +106,7 @@ for (const arch of ["triage", "burst", "mixed"] as const) {
     agg.proposed += hitRate(s, w.proposed);
   }
   const pct = (x: number) => `${((x / runs) * 100).toFixed(1)}%`;
-  printRow(
-    `${arch} workspace`,
-    `none ${pct(agg.none)} · today ${pct(agg.today)} · proposed ${pct(agg.proposed)}`,
-  );
+  printRow(`${arch} workspace`, `none ${pct(agg.none)} · today ${pct(agg.today)} · proposed ${pct(agg.proposed)}`);
 }
 console.log("\nFINDING: today's last-6 warming ties 'no warming at all' in every archetype — it");
 console.log("re-warms ids whose entries were just refreshed by their own access. Scored");

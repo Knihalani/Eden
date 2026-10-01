@@ -195,11 +195,7 @@ export function isPublicPoolCandidate(url: string): boolean {
  * refreshes the stored TTL at ~zero cost; anything else falls through to a
  * normal full fetch. Best-effort by contract like everything cache-side.
  */
-async function tryRevalidate(
-  db: EdenDb,
-  key: string,
-  url: string,
-): Promise<unknown | undefined> {
+async function tryRevalidate(db: EdenDb, key: string, url: string): Promise<unknown | undefined> {
   const stale = await readStaleEntry(db, key);
   if (!stale?.etag) return undefined;
   try {
@@ -242,7 +238,6 @@ async function resolveWorkspaceId(db: EdenDb, tool: ToolRef): Promise<string> {
  * loops; 100 covers them and bounds the amplification.
  */
 const MAX_BATCH_ISSUES = 100;
-
 
 function requestHeaders(url: string): Record<string, string> {
   try {
@@ -392,9 +387,7 @@ async function playOne(
           }
           const isGet = (step.method || "GET") === "GET";
           const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
-          const pubKey = isGet
-            ? publicResultKey({ toolId: tool.id, step, url, bound })
-            : undefined;
+          const pubKey = isGet ? publicResultKey({ toolId: tool.id, step, url, bound }) : undefined;
           if (isGet) {
             // One logical lookup per GET step (join / tenant / public / revalidate
             // are probes of the same key, not four lookups).
@@ -594,11 +587,16 @@ async function playOne0(
 ): Promise<Receipt> {
   const issues = issuesFromParams(params);
   if (issues.length <= 1) {
-    return playOne(db, tool, {
-      ...params,
-      issue: issues[0] || params.issue || params.pr || params.number || params.id || "",
-      id: issues[0] || params.id || params.issue || params.pr || params.number || "",
-    }, opts);
+    return playOne(
+      db,
+      tool,
+      {
+        ...params,
+        issue: issues[0] || params.issue || params.pr || params.number || params.id || "",
+        id: issues[0] || params.id || params.issue || params.pr || params.number || "",
+      },
+      opts,
+    );
   }
   const t0 = Date.now();
   // Bounded, not trusted: see MAX_BATCH_ISSUES. The cap is silent by design —
@@ -681,7 +679,9 @@ export async function playOneReady(
   const dag = buildDag(steps);
   const workspaceId = await resolveWorkspaceId(db, tool);
 
-  interface Node extends DagNode { waitingOn: Set<string> }
+  interface Node extends DagNode {
+    waitingOn: Set<string>;
+  }
   const nodes = new Map<string, Node>();
   for (const n of dag) nodes.set(n.id, { ...n, waitingOn: new Set(n.deps) });
   // deps may reference ids not in this set — those never resolve, matching
@@ -722,7 +722,11 @@ export async function playOneReady(
       const url = resolveTemplate(step.url || "", bound, results);
       if (!url) return { id: step.id, value: { error: "no_url" }, fail: true } as StepOutcome;
       if (opts.dryRun && !stepIsReadOnly(step)) {
-        return { id: step.id, value: { skipped: "dry_run", method: step.method || "GET", url }, fail: false } as StepOutcome;
+        return {
+          id: step.id,
+          value: { skipped: "dry_run", method: step.method || "GET", url },
+          fail: false,
+        } as StepOutcome;
       }
       const isGet = (step.method || "GET") === "GET";
       const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
@@ -816,7 +820,9 @@ export async function playOneReady(
     // Unresolvable deps would spin forever here; detect and throw like the
     // wave path does.
     if (inflight.size === 0 && outcomes.size < nodes.size) {
-      const progressPossible = byOrder.some((n) => !outcomes.has(n.id) && !inflightIds.has(n.id) && n.waitingOn.size === 0);
+      const progressPossible = byOrder.some(
+        (n) => !outcomes.has(n.id) && !inflightIds.has(n.id) && n.waitingOn.size === 0,
+      );
       if (!progressPossible) {
         const stuck = byOrder.filter((n) => !outcomes.has(n.id)).map((n) => n.id);
         throw new Error(`unresolvable step deps: ${stuck.join(",")}`);

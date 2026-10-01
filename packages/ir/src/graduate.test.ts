@@ -22,11 +22,7 @@ import {
 import { withVersion } from "./hash";
 import type { StretchProgram } from "./types";
 
-const mini = (opts?: {
-  ids?: unknown[];
-  soft?: boolean;
-  islands?: Array<{ pinned?: boolean }>;
-}): StretchProgram =>
+const mini = (opts?: { ids?: unknown[]; soft?: boolean; islands?: Array<{ pinned?: boolean }> }): StretchProgram =>
   withVersion({
     id: "t",
     name: "t",

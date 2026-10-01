@@ -58,7 +58,11 @@ describe("inheritWidth", () => {
 
   test("fail-open: bad receipt does not count toward K", () => {
     const p = mined(["O-10-0"]);
-    const mixed = [width7("O-7-0"), width7("O-7-1"), { ok: false as const, input: { orderId: "O-7-2" }, events: width7("O-7-2").events }];
+    const mixed = [
+      width7("O-7-0"),
+      width7("O-7-1"),
+      { ok: false as const, input: { orderId: "O-7-2" }, events: width7("O-7-2").events },
+    ];
     expect(inheritWidth(p, mixed)).toBe(p);
   });
 

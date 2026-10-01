@@ -22,8 +22,7 @@ import {
   type Sample,
 } from "../src/index";
 
-const samples = (task: string, values: number[]): Sample[] =>
-  values.map((value, repeat) => ({ task, repeat, value }));
+const samples = (task: string, values: number[]): Sample[] => values.map((value, repeat) => ({ task, repeat, value }));
 
 /** One sample per (task, repeat) across several tasks. */
 function grid(values: Record<string, number[]>): Sample[] {
@@ -342,8 +341,14 @@ describe("score", () => {
   });
 
   test("a fabricating suite reports 0%, never a tie", () => {
-    const gold = [{ id: 1, status: "failure" }, { id: 2, status: "success" }];
-    const lies = [{ id: 1, status: "success" }, { id: 2, status: "failure" }];
+    const gold = [
+      { id: 1, status: "failure" },
+      { id: 2, status: "success" },
+    ];
+    const lies = [
+      { id: 1, status: "success" },
+      { id: 2, status: "failure" },
+    ];
     const s = scoreRecords(lies, gold, [{ name: "status", required: true }]);
     expect(s.fabricated).toBe(true);
     expect(s.fabricatedFields).toBe(2);
@@ -366,11 +371,10 @@ describe("the scorer does not award marks it cannot justify", () => {
   });
 
   test("a wrong nested field is scored wrong, not correct", () => {
-    const r = scoreRecord(
-      { owner: { login: "WRONG" }, n: 5 },
-      { owner: { login: "alice" }, n: 5 },
-      [{ name: "owner" }, { name: "n" }],
-    );
+    const r = scoreRecord({ owner: { login: "WRONG" }, n: 5 }, { owner: { login: "alice" }, n: 5 }, [
+      { name: "owner" },
+      { name: "n" },
+    ]);
     expect(r.score).toBe(0); // one correct, one fabricated, penalty 1
     expect(r.max).toBe(2);
     expect(r.fabricated).toEqual(["owner"]);

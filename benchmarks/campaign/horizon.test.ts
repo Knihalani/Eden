@@ -246,16 +246,20 @@ describe("horizon worlds: compileTraces", () => {
       const r = compileTraces(traces);
       const looped = r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"));
       console.log(
-        `horizon compile graphql-relay: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 4).join("; ")}`,
+        `horizon compile graphql-relay: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 4)
+          .join("; ")}`,
       );
       expect(r.programs.length, "graphql-relay should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(looped.length, "graphql-relay should have a foreach over edges").toBeGreaterThanOrEqual(1);
       const over = looped[0]!.steps.find((s) => s.kind === "loop");
       expect(over && over.kind === "loop" && over.over).toMatchObject({ path: "edges" });
       const body = looped[0]!.steps.find((s) => s.kind === "tool" && s.tool === "updateIssue") as
-        | { args?: Record<string, { kind?: string; path?: string }> }
-        | undefined;
-      expect(body?.args?.id?.path, "updateIssue.id should bind from node.id, not a top-level edge id").toMatch(/node\.id/);
+        { args?: Record<string, { kind?: string; path?: string }> } | undefined;
+      expect(body?.args?.id?.path, "updateIssue.id should bind from node.id, not a top-level edge id").toMatch(
+        /node\.id/,
+      );
       expect(body?.args?.title?.path, "updateIssue.title should bind from node.title").toMatch(/node\.title/);
     },
     TIMEOUT,
@@ -270,15 +274,17 @@ describe("horizon worlds: compileTraces", () => {
       expect(traces[0]!.events.map((e) => e.name)).toEqual(["getOrg", "createUser", "grantRole", "sendInvite"]);
       const r = compileTraces(traces);
       console.log(
-        `horizon compile sso: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 4).join("; ")}`,
+        `horizon compile sso: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 4)
+          .join("; ")}`,
       );
       expect(r.programs.length, "sso should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(r.programs[0]!.sequence.length).toBeGreaterThanOrEqual(4);
       const envKeys = Object.keys(r.programs[0]!.contract.envelope?.inputs ?? {}).sort();
       expect(envKeys).toEqual(["email", "orgId"]);
       const create = r.programs[0]!.steps.find((s) => s.kind === "tool" && s.tool === "createUser") as
-        | { args?: Record<string, { kind?: string; step?: string; path?: string }> }
-        | undefined;
+        { args?: Record<string, { kind?: string; step?: string; path?: string }> } | undefined;
       expect(create?.args?.body, "createUser.body must be bound").toBeDefined();
       const body = create?.args?.body;
       expect(
@@ -325,7 +331,10 @@ describe("horizon worlds: compileTraces", () => {
       expect(taken).toEqual(nonPrefixHitsFor(QUERY_IDS[0]).map((h) => h.id));
       const r = compileTraces(traces);
       console.log(
-        `horizon compile search-random-subset: programs=${r.programs.length} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 3).join("; ")}`,
+        `horizon compile search-random-subset: programs=${r.programs.length} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 3)
+          .join("; ")}`,
       );
       expect(r.programs.length, "non-prefix top-k must still refuse").toBe(0);
     },
@@ -439,80 +448,72 @@ describe("horizon worlds: check() catches duplicated mutation", () => {
 });
 
 describe("horizon worlds: compileTraces → shadow goLive", () => {
-  test(
-    "graphql / sso / sql / blob / inbox / webhook goLive PASS with a certified program; wrap serve turns===1",
-    async () => {
-      const cases: Array<{
-        name: string;
-        factory: () => World;
-        goals: Array<Record<string, unknown>>;
-      }> = [
-        { name: "graphql-relay", factory: createGraphqlRelay, goals: [...REPO_IDS].map((repo) => ({ repo })) },
-        { name: "sso", factory: createSsoProvision, goals: SSO_ORGS.map((t) => ({ orgId: t.orgId, email: t.email })) },
-        { name: "sql-report", factory: createSqlReport, goals: [...REPORT_IDS].map((report) => ({ report })) },
-        { name: "blob-pipeline", factory: createBlobPipeline, goals: [...BLOB_IDS].map((blob) => ({ blob })) },
-        { name: "inbox-triage", factory: createInboxTriage, goals: [...THREAD_IDS].map((thread) => ({ thread })) },
-        { name: "webhook-fanout", factory: createWebhookFanout, goals: [...HOOK_IDS].map((hook) => ({ hook })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`horizon-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, {
-          compile: 9,
-          holdout: 3,
-          sandbox: c.factory,
-          maxGram: 26,
-        });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program, `${c.name} program`).not.toBeNull();
-        expect(r.program!.manifest?.certified).toBe(true);
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`horizon-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
+  test("graphql / sso / sql / blob / inbox / webhook goLive PASS with a certified program; wrap serve turns===1", async () => {
+    const cases: Array<{
+      name: string;
+      factory: () => World;
+      goals: Array<Record<string, unknown>>;
+    }> = [
+      { name: "graphql-relay", factory: createGraphqlRelay, goals: [...REPO_IDS].map((repo) => ({ repo })) },
+      { name: "sso", factory: createSsoProvision, goals: SSO_ORGS.map((t) => ({ orgId: t.orgId, email: t.email })) },
+      { name: "sql-report", factory: createSqlReport, goals: [...REPORT_IDS].map((report) => ({ report })) },
+      { name: "blob-pipeline", factory: createBlobPipeline, goals: [...BLOB_IDS].map((blob) => ({ blob })) },
+      { name: "inbox-triage", factory: createInboxTriage, goals: [...THREAD_IDS].map((thread) => ({ thread })) },
+      { name: "webhook-fanout", factory: createWebhookFanout, goals: [...HOOK_IDS].map((hook) => ({ hook })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`horizon-live-${c.name}-${i}`, i));
       }
-    },
-    60_000,
-  );
+      const r = await s.goLive(c.name, {
+        compile: 9,
+        holdout: 3,
+        sandbox: c.factory,
+        maxGram: 26,
+      });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program, `${c.name} program`).not.toBeNull();
+      expect(r.program!.manifest?.certified).toBe(true);
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`horizon-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
+    }
+  }, 60_000);
 
-  test(
-    "poll / saga / topk goLive PASS with a certified program — FAIL loudly, never skip-as-win",
-    async () => {
-      const cases: Array<{
-        name: string;
-        factory: () => World;
-        goals: Array<Record<string, unknown>>;
-      }> = [
-        { name: "k8s-rollout", factory: createK8sRollout, goals: [...DEPLOY_IDS].map((deploy) => ({ deploy })) },
-        { name: "saga-hold", factory: createSagaHold, goals: [...HOLD_IDS].map((holdId) => ({ holdId })) },
-        { name: "search-rank", factory: createSearchRank, goals: [...QUERY_IDS].map((q) => ({ q })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`horizon-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, {
-          compile: 9,
-          holdout: 3,
-          sandbox: c.factory,
-          maxGram: 26,
-        });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")} — not a skip-as-win`).toBe("PASS");
-        expect(r.program, `${c.name} program`).not.toBeNull();
-        expect(r.program!.manifest?.certified).toBe(true);
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`horizon-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
+  test("poll / saga / topk goLive PASS with a certified program — FAIL loudly, never skip-as-win", async () => {
+    const cases: Array<{
+      name: string;
+      factory: () => World;
+      goals: Array<Record<string, unknown>>;
+    }> = [
+      { name: "k8s-rollout", factory: createK8sRollout, goals: [...DEPLOY_IDS].map((deploy) => ({ deploy })) },
+      { name: "saga-hold", factory: createSagaHold, goals: [...HOLD_IDS].map((holdId) => ({ holdId })) },
+      { name: "search-rank", factory: createSearchRank, goals: [...QUERY_IDS].map((q) => ({ q })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`horizon-live-${c.name}-${i}`, i));
       }
-    },
-    60_000,
-  );
+      const r = await s.goLive(c.name, {
+        compile: 9,
+        holdout: 3,
+        sandbox: c.factory,
+        maxGram: 26,
+      });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")} — not a skip-as-win`).toBe("PASS");
+      expect(r.program, `${c.name} program`).not.toBeNull();
+      expect(r.program!.manifest?.certified).toBe(true);
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`horizon-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
+    }
+  }, 60_000);
 });

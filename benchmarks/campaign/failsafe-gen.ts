@@ -13,7 +13,7 @@ import { mulberry32 } from "@eden/measure";
 import { withVersion, type Step, type StretchProgram } from "@eden/ir";
 import type { ToolDef } from "@eden/wrap";
 
-export const FUZZ_SEED = 0xF5A1;
+export const FUZZ_SEED = 0xf5a1;
 export const N_CASES = 10000;
 export const N_FAST = 50;
 /** Cap timeout-fault cases so the 10k suite stays well under the wall budget. */
@@ -124,9 +124,7 @@ export function generateCase(rng: () => number, index: number, timeoutLeft: { n:
   // Fault carrier: for timeout, prefer a non-mutating mid tool (P3 shape).
   let faultAt = int(rng, 1, sequence.length - 1);
   if (fault === "timeout") {
-    const slowCandidates = sequence
-      .map((t, i) => ({ t, i }))
-      .filter(({ t, i }) => i > 0 && !MUTATING_TOOLS.has(t));
+    const slowCandidates = sequence.map((t, i) => ({ t, i })).filter(({ t, i }) => i > 0 && !MUTATING_TOOLS.has(t));
     if (slowCandidates.length) faultAt = pick(rng, slowCandidates).i;
   } else if (fault === "throw500" || fault === "abort") {
     faultAt = int(rng, 0, sequence.length - 1);
@@ -238,7 +236,14 @@ export function buildProgram(spec: FuzzCase): StretchProgram {
     steps,
     returns: { kind: "from", step: lastId, path: "" },
     contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-    manifest: { llmReduction: 5, latencyReduction: 2, costReduction: 5, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+    manifest: {
+      llmReduction: 5,
+      latencyReduction: 2,
+      costReduction: 5,
+      skipRateBefore: 0,
+      skipRateAfter: 0,
+      nShadow: 3,
+    },
   }) as StretchProgram;
 }
 
@@ -266,9 +271,7 @@ export function makeIsland(spec: FuzzCase): (req: unknown) => Promise<unknown> {
   };
 }
 
-export function buildScript(
-  spec: FuzzCase,
-): Array<{ tool: string; args: Record<string, unknown> }> {
+export function buildScript(spec: FuzzCase): Array<{ tool: string; args: Record<string, unknown> }> {
   return spec.sequence.map((tool, i) => ({
     tool,
     args: i === 0 ? { id: spec.id, text: `t-${spec.index}` } : { id: spec.id },
@@ -342,11 +345,7 @@ export function formatCase(spec: FuzzCase, raw: MutationMap, wrapped: MutationMa
   ].join(" ");
 }
 
-export function assertEdenAbsentEquivalent(
-  spec: FuzzCase,
-  raw: MutationMap,
-  wrapped: MutationMap,
-): void {
+export function assertEdenAbsentEquivalent(spec: FuzzCase, raw: MutationMap, wrapped: MutationMap): void {
   const keys = new Set([...Object.keys(raw), ...Object.keys(wrapped), ...mutKeys(spec.sequence, spec.id)]);
   for (const key of keys) {
     const w = wrapped[key] ?? 0;

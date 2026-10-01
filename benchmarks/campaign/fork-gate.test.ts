@@ -38,9 +38,7 @@ describe("rotation: fork-gate (Wave 14.4)", () => {
     expect(mined.programs).toHaveLength(1);
     expect(branches[0]!.name).toMatch(/forked_state_gate/);
     expect(branches[0]!.steps.some((s) => s.kind === "branch")).toBe(true);
-    console.log(
-      `fork-gate: programs=${mined.programs.length} branches=1 refusals=${mined.refusals.length}`,
-    );
+    console.log(`fork-gate: programs=${mined.programs.length} branches=1 refusals=${mined.refusals.length}`);
   });
 
   test("min-3 per arm: two failing witnesses do not mine a fork", () => {
@@ -78,9 +76,7 @@ describe("rotation: fork-gate (Wave 14.4)", () => {
     expect(forkInSoup(mined)).toBe(true);
     const extras = mined.refusals.filter((r) => r.code === "max_programs");
     expect(mined.programs.length + extras.length).toBeGreaterThanOrEqual(25);
-    console.log(
-      `fork-cap: programs=${mined.programs.length} max_programs=${extras.length} fork_in_soup=true`,
-    );
+    console.log(`fork-cap: programs=${mined.programs.length} max_programs=${extras.length} fork_in_soup=true`);
   });
 
   test("happy-path fixture still detects the CI-gate shape", () => {

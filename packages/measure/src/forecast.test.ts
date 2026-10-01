@@ -20,11 +20,13 @@ describe("remainingBudget / forecastHalt", () => {
     expect(view.spent).toBe(true);
     expect(view.overflow).toBe("llmCalls");
     expect(view.halt).toBe(true);
-    expect(forecastHalt({
-      predicted: view.predicted,
-      actual: view.actual,
-      remainingTimeoutMs: view.remainingTimeoutMs,
-    })).toBe(true);
+    expect(
+      forecastHalt({
+        predicted: view.predicted,
+        actual: view.actual,
+        remainingTimeoutMs: view.remainingTimeoutMs,
+      }),
+    ).toBe(true);
     expect(forecastCopy(view)).toBe("predicted llmCalls=2 actual=2");
     console.log(`copy ${forecastCopy(view)}`);
   });
@@ -102,11 +104,13 @@ describe("remainingBudget / forecastHalt", () => {
     });
     expect(view.halt).toBe(false);
     expect(view.overflow).toBeNull();
-    expect(forecastHalt({
-      predicted: view.predicted,
-      actual: view.actual,
-      remainingTimeoutMs: view.remainingTimeoutMs,
-    })).toBe(false);
+    expect(
+      forecastHalt({
+        predicted: view.predicted,
+        actual: view.actual,
+        remainingTimeoutMs: view.remainingTimeoutMs,
+      }),
+    ).toBe(false);
   });
 
   test("zero predicted dimensions never halt (nothing to compare)", () => {

@@ -15,20 +15,68 @@ const HAS_BASELINE_KPK = existsSync(BASELINE_KPK);
 
 const facts: PackFact[] = [
   { s: "Kenya", p: "capital", o: "Nairobi", e: "", url: "https://example.org/a" },
-  { s: "RFC 3986", p: "is", o: "Uniform Resource Identifier (URI): Generic Syntax", e: "", url: "https://example.org/rfc" },
+  {
+    s: "RFC 3986",
+    p: "is",
+    o: "Uniform Resource Identifier (URI): Generic Syntax",
+    e: "",
+    url: "https://example.org/rfc",
+  },
   { s: "W3C web-share", p: "is", o: "Web Share API", e: "", url: "https://example.org/w3" },
   { s: "RFC 9110", p: "obsoletes", o: "RFC 7230, RFC 7231", e: "", url: "https://example.org/rfc" },
   { s: "RFC 8259", p: "updates", o: "RFC 7159", e: "", url: "https://example.org/rfc" },
   { s: "RFC 234", p: "updates", o: "RFC 222, RFC 204", e: "", url: "https://example.org/rfc" },
   { s: "RFC 872", p: "is", o: "TCP-on-a-LAN", e: "", url: "https://example.org/rfc" },
-  { s: "IANA protocol 6", p: "is", o: "TCP", e: "Transmission Control", url: "https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml" },
-  { s: "IANA media application/json", p: "is", o: "JSON", e: "", url: "https://www.iana.org/assignments/media-types/media-types.xml" },
-  { s: "RFC 4627", p: "is", o: "The application/json Media Type for JavaScript Object Notation (JSON)", e: "", url: "https://www.rfc-editor.org/rfc/rfc4627.html" },
-  { s: "IANA http 404", p: "is", o: "Not Found", e: "", url: "https://www.iana.org/assignments/http-status-codes/http-status-codes.xml" },
+  {
+    s: "IANA protocol 6",
+    p: "is",
+    o: "TCP",
+    e: "Transmission Control",
+    url: "https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml",
+  },
+  {
+    s: "IANA media application/json",
+    p: "is",
+    o: "JSON",
+    e: "",
+    url: "https://www.iana.org/assignments/media-types/media-types.xml",
+  },
+  {
+    s: "RFC 4627",
+    p: "is",
+    o: "The application/json Media Type for JavaScript Object Notation (JSON)",
+    e: "",
+    url: "https://www.rfc-editor.org/rfc/rfc4627.html",
+  },
+  {
+    s: "IANA http 404",
+    p: "is",
+    o: "Not Found",
+    e: "",
+    url: "https://www.iana.org/assignments/http-status-codes/http-status-codes.xml",
+  },
   { s: "SPDX MIT", p: "is", o: "MIT License", e: "", url: "https://spdx.org/licenses/licenses.json" },
-  { s: "IANA method GET", p: "is", o: "Transfer a current representation", e: "", url: "https://www.iana.org/assignments/http-methods/http-methods.xml" },
-  { s: "IANA header Accept", p: "is", o: "RFC 9110", e: "", url: "https://www.iana.org/assignments/http-fields/http-fields.xml" },
-  { s: "IANA header Accept-CH", p: "is", o: "HTTP field Accept-CH", e: "", url: "https://www.iana.org/assignments/http-fields/http-fields.xml" },
+  {
+    s: "IANA method GET",
+    p: "is",
+    o: "Transfer a current representation",
+    e: "",
+    url: "https://www.iana.org/assignments/http-methods/http-methods.xml",
+  },
+  {
+    s: "IANA header Accept",
+    p: "is",
+    o: "RFC 9110",
+    e: "",
+    url: "https://www.iana.org/assignments/http-fields/http-fields.xml",
+  },
+  {
+    s: "IANA header Accept-CH",
+    p: "is",
+    o: "HTTP field Accept-CH",
+    e: "",
+    url: "https://www.iana.org/assignments/http-fields/http-fields.xml",
+  },
 ];
 
 describe("KPK9", () => {
@@ -47,7 +95,9 @@ describe("KPK9", () => {
     const buf = encodePack(extra);
     const p = decodePack(buf);
     const got = allFacts(p);
-    expect(got.some((f) => f.s === "IANA media application/1d-interleaved-parityfec" && f.o === "1d-interleaved-parityfec")).toBe(true);
+    expect(
+      got.some((f) => f.s === "IANA media application/1d-interleaved-parityfec" && f.o === "1d-interleaved-parityfec"),
+    ).toBe(true);
     expect(got.some((f) => f.s === "IANA media application/json" && f.o === "JSON")).toBe(true);
     expect(got.some((f) => f.s === "IANA scheme acap" && f.o === "acap")).toBe(true);
     expect(got.some((f) => f.s === "SPDX SISSL" && f.o === "SISSL")).toBe(true);
@@ -161,7 +211,13 @@ describe("KPK9", () => {
     const extra: PackFact[] = [
       { s: "IANA media application/json", p: "is", o: "JSON", e: "", url: "" },
       { s: "IANA media application/vnd.3gpp.mcvideo-info+xml", p: "is", o: "3gpp.mcvideo-info+xml", e: "", url: "" },
-      { s: "IANA media application/vnd.openxmlformats-officedocument.wordprocessingml.document", p: "is", o: "document", e: "", url: "" },
+      {
+        s: "IANA media application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        p: "is",
+        o: "document",
+        e: "",
+        url: "",
+      },
       { s: "IANA media application/vnd.ms-excel", p: "is", o: "ms-excel", e: "", url: "" },
       { s: "IANA media application/vnd.oma.poc+xml", p: "is", o: "oma.poc+xml", e: "", url: "" },
       { s: "IANA media application/vnd.oasis.opendocument.text", p: "is", o: "opendocument.text", e: "", url: "" },
@@ -172,7 +228,9 @@ describe("KPK9", () => {
     const got = allFacts(decodePack(encodePack(extra)));
     for (const f of extra) expect(got.some((g) => g.s === f.s && g.p === f.p)).toBe(true);
     expect(got.some((g) => g.s === "IANA media application/vnd.3gpp.mcvideo-info+xml")).toBe(true);
-    expect(got.some((g) => g.s === "IANA media application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe(true);
+    expect(
+      got.some((g) => g.s === "IANA media application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ).toBe(true);
     expect(got.some((g) => g.s === "IANA media application/vnd.oasis.opendocument.text")).toBe(true);
     expect(got.some((g) => g.s === "IANA media application/vnd.collabio.xodocuments.document")).toBe(true);
   });
@@ -180,11 +238,35 @@ describe("KPK9", () => {
   test("compound vendor-stem leftover media round-trips", () => {
     const extra: PackFact[] = [
       { s: "IANA media application/json", p: "is", o: "JSON", e: "", url: "" },
-      { s: "IANA media application/mbms-user-service-description", p: "is", o: "mbms-user-service-description", e: "", url: "" },
-      { s: "IANA media application/mbms-associated-procedure-description", p: "is", o: "mbms-associated-procedure-description", e: "", url: "" },
-      { s: "IANA media application/mbms-protection-description", p: "is", o: "mbms-protection-description", e: "", url: "" },
+      {
+        s: "IANA media application/mbms-user-service-description",
+        p: "is",
+        o: "mbms-user-service-description",
+        e: "",
+        url: "",
+      },
+      {
+        s: "IANA media application/mbms-associated-procedure-description",
+        p: "is",
+        o: "mbms-associated-procedure-description",
+        e: "",
+        url: "",
+      },
+      {
+        s: "IANA media application/mbms-protection-description",
+        p: "is",
+        o: "mbms-protection-description",
+        e: "",
+        url: "",
+      },
       { s: "IANA media application/vnd.3gpp.mcptt-info+xml", p: "is", o: "info", e: "", url: "" },
-      { s: "IANA media application/vnd.3gpp.mcptt-affiliation-command+xml", p: "is", o: "affiliation-command", e: "", url: "" },
+      {
+        s: "IANA media application/vnd.3gpp.mcptt-affiliation-command+xml",
+        p: "is",
+        o: "affiliation-command",
+        e: "",
+        url: "",
+      },
       { s: "IANA media application/vnd.collabio.xodocuments.document", p: "is", o: "document", e: "", url: "" },
       { s: "IANA media text/html", p: "is", o: "html", e: "", url: "" },
       { s: "RFC 3986", p: "is", o: "Uniform Resource Identifier (URI): Generic Syntax", e: "", url: "" },
@@ -266,7 +348,9 @@ describe("KPK9", () => {
     expect(p.search("Accept")[0]?.o).toBe("RFC 9110");
     expect(p.search("Accept-CH")[0]?.o).toBe("HTTP field Accept-CH");
     expect(p.search("Kenya")[0]?.o).toBe("Nairobi");
-    expect(allFacts(p).some((f) => f.s === "RFC 3986" && f.o === "Uniform Resource Identifier (URI): Generic Syntax")).toBe(true);
+    expect(
+      allFacts(p).some((f) => f.s === "RFC 3986" && f.o === "Uniform Resource Identifier (URI): Generic Syntax"),
+    ).toBe(true);
     expect(p.nTriples).toBe(allFacts(p).length);
     expect(p.search("France").length).toBe(0);
   });
@@ -433,15 +517,17 @@ describe("KPK9", () => {
     expect(p.search("RFC 1000")[0]?.o).toMatch(/HTTP|Internet/);
     expect(p.search("Kenya")[0]?.o).toBe("Nairobi");
     expect(p.search("France").length).toBe(0);
-    const dests2 = (decodePack(encodePack(facts)).search("RFC 1980").find((f) => f.p === "updates")?.o ?? "")
+    const dests2 = (
+      decodePack(encodePack(facts))
+        .search("RFC 1980")
+        .find((f) => f.p === "updates")?.o ?? ""
+    )
       .split(/,\s*/)
       .sort();
     expect(dests2).toEqual(["RFC 1900", "RFC 1910"]);
   }, 15_000);
 
-  test(
-    "live graph.kpk re-encodes as one self-contained dump",
-    () => {
+  test("live graph.kpk re-encodes as one self-contained dump", () => {
     const paths = [
       new URL("../../../.gauntlet/refs/graph.kpk", import.meta.url),
       "/Users/kaiavnihalani/.eden/know/graph.kpk",
@@ -482,9 +568,7 @@ describe("KPK9", () => {
     expect(p.search("application/json")[0]?.s).toBe("IANA media application/json");
     expect(p.search("application/json")[0]?.o).toBe("JSON");
     expect(encodePack(allFacts(p)).byteLength).toBe(buf.byteLength);
-    },
-    120_000,
-  );
+  }, 120_000);
 
   test("gold/holdout dump titles live in graph.kpk bytes, not rfc-hot", () => {
     const paths = [
@@ -535,34 +619,30 @@ describe("KPK9", () => {
     }
   });
 
-  test(
-    "launch dump re-encodes smaller with gold titles in the file",
-    () => {
-      const launchPath = new URL("../../../.gauntlet/baseline/know-launch/graph.kpk", import.meta.url);
-      let launch: Uint8Array;
-      try {
-        launch = new Uint8Array(readFileSync(launchPath));
-      } catch {
-        return;
-      }
-      expect(new TextDecoder().decode(launch.subarray(0, 4))).toBe("KPK9");
-      const facts = allFacts(decodePack(launch));
-      const buf = encodePack(facts);
-      expect(buf.byteLength).toBeLessThan(launch.byteLength);
-      expect(decodePack(buf).nTriples).toBe(facts.length);
-      const prev = RFC_TITLE_HOT[3986];
-      RFC_TITLE_HOT[3986] = "broken-hot-3986";
-      try {
-        expect(decodePack(buf).search("RFC 3986")[0]?.o).toContain("URI");
-        expect(decodePack(buf).search("RFC 9110")[0]?.o).toContain("HTTP Semantics");
-        expect(decodePack(buf).search("RFC 35")[0]?.o).toBe("Network Meeting");
-      } finally {
-        if (prev === undefined) delete RFC_TITLE_HOT[3986];
-        else RFC_TITLE_HOT[3986] = prev;
-      }
-    },
-    120_000,
-  );
+  test("launch dump re-encodes smaller with gold titles in the file", () => {
+    const launchPath = new URL("../../../.gauntlet/baseline/know-launch/graph.kpk", import.meta.url);
+    let launch: Uint8Array;
+    try {
+      launch = new Uint8Array(readFileSync(launchPath));
+    } catch {
+      return;
+    }
+    expect(new TextDecoder().decode(launch.subarray(0, 4))).toBe("KPK9");
+    const facts = allFacts(decodePack(launch));
+    const buf = encodePack(facts);
+    expect(buf.byteLength).toBeLessThan(launch.byteLength);
+    expect(decodePack(buf).nTriples).toBe(facts.length);
+    const prev = RFC_TITLE_HOT[3986];
+    RFC_TITLE_HOT[3986] = "broken-hot-3986";
+    try {
+      expect(decodePack(buf).search("RFC 3986")[0]?.o).toContain("URI");
+      expect(decodePack(buf).search("RFC 9110")[0]?.o).toContain("HTTP Semantics");
+      expect(decodePack(buf).search("RFC 35")[0]?.o).toBe("Network Meeting");
+    } finally {
+      if (prev === undefined) delete RFC_TITLE_HOT[3986];
+      else RFC_TITLE_HOT[3986] = prev;
+    }
+  }, 120_000);
 
   test("wiki infobox templates round-trip leftover is-rows", () => {
     const extra: PackFact[] = [

@@ -38,7 +38,8 @@ function bullets(pkt: string): string[] {
 function pct(sorted: number[], p: number): number {
   if (!sorted.length) return 0;
   const i = (p / 100) * (sorted.length - 1);
-  const lo = Math.floor(i), hi = Math.ceil(i);
+  const lo = Math.floor(i),
+    hi = Math.ceil(i);
   if (lo === hi) return sorted[lo]!;
   return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (i - lo);
 }
@@ -66,11 +67,13 @@ function runCap(storeCap: number, turns: number): Record<string, unknown> {
     for (let i = 0; i < turns; i++) {
       const folder = FOLDERS[i % FOLDERS.length]!;
       const day = Math.floor(i / TURNS_PER_DAY);
-      mem.observe([{
-        role: "user",
-        content: `On day ${day} in ${folder} operator op${String(i).padStart(5, "0")} shipped file ${folder}/mod-${i % 97}.ts and left city c${i % 2000}.`,
-        open_files: [`${folder}/mod-${i % 97}.ts`],
-      }]);
+      mem.observe([
+        {
+          role: "user",
+          content: `On day ${day} in ${folder} operator op${String(i).padStart(5, "0")} shipped file ${folder}/mod-${i % 97}.ts and left city c${i % 2000}.`,
+          open_files: [`${folder}/mod-${i % 97}.ts`],
+        },
+      ]);
       if (i === Math.floor(turns * 0.5)) {
         mem.observe([{ role: "user", content: "Auth is Clerk.", open_files: ["apps/web/app/login.ts"] }]);
         mem.observe([{ role: "user", content: "Auth is none.", open_files: ["packages/cli/src/cli.ts"] }]);
@@ -136,8 +139,10 @@ function runCap(storeCap: number, turns: number): Record<string, unknown> {
   const webHasPostgres = /postgres/i.test(webDb);
   const cliHasSqlite = /sqlite/i.test(cliDb);
   const pinHasEnv = /\.env/i.test(pin);
-  const leak = cliHasClerk || (/sqlite/i.test(webDb) && /postgres/i.test(cliDb) === false && /postgres/i.test(webDb) === false);
-  const packetOk = bullets(webAuth).length <= PACKET_BULLET_MAX && Buffer.byteLength(webAuth, "utf8") <= PACKET_BYTE_CAP;
+  const leak =
+    cliHasClerk || (/sqlite/i.test(webDb) && /postgres/i.test(cliDb) === false && /postgres/i.test(webDb) === false);
+  const packetOk =
+    bullets(webAuth).length <= PACKET_BULLET_MAX && Buffer.byteLength(webAuth, "utf8") <= PACKET_BYTE_CAP;
 
   return {
     storeCap,

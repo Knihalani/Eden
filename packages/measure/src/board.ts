@@ -4,12 +4,7 @@
  * Limits, analogue, and retired print with the same file path as wins.
  * A number that is not on PUBLIC_CLAIMS must not be invented here.
  */
-import {
-  PUBLIC_CLAIMS,
-  customerStudies,
-  type ClaimKind,
-  type PublicClaim,
-} from "./claims";
+import { PUBLIC_CLAIMS, customerStudies, type ClaimKind, type PublicClaim } from "./claims";
 
 export const BOARD_KIND_ORDER: ClaimKind[] = ["win", "parity", "analogue", "limit", "retired"];
 
@@ -21,16 +16,15 @@ export const BOARD_KIND_HEAD: Record<ClaimKind, string> = {
   retired: "Retired",
 };
 
-export function claimsForKind(
-  kind: ClaimKind | "all",
-  claims: readonly PublicClaim[] = PUBLIC_CLAIMS,
-): PublicClaim[] {
+export function claimsForKind(kind: ClaimKind | "all", claims: readonly PublicClaim[] = PUBLIC_CLAIMS): PublicClaim[] {
   if (kind === "all") return [...claims];
   return claims.filter((c) => c.kind === kind);
 }
 
 export function parseClaimsKind(raw: string | undefined): ClaimKind | "all" | null {
-  const v = String(raw ?? "all").trim().toLowerCase();
+  const v = String(raw ?? "all")
+    .trim()
+    .toLowerCase();
   if (!v || v === "all") return "all";
   if (v === "win" || v === "wins") return "win";
   if (v === "parity") return "parity";

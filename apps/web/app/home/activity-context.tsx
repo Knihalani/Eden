@@ -1,7 +1,14 @@
 "use client";
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { EMPTY_ACTIVITY, EMPTY_FLEET, failedActivity, type Activity, type FleetAgent, type FleetStrip } from "./activity";
+import {
+  EMPTY_ACTIVITY,
+  EMPTY_FLEET,
+  failedActivity,
+  type Activity,
+  type FleetAgent,
+  type FleetStrip,
+} from "./activity";
 
 export type ActivityView = Activity & { ready: boolean };
 

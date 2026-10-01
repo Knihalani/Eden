@@ -10,7 +10,10 @@ export function linearProgram(id: string, sequence: string[], opts: { text?: boo
     id: tool,
     kind: "tool",
     tool,
-    args: { id: { kind: "input", path: "id" }, ...(i === 0 && opts.text ? { text: { kind: "input", path: "text" } } : {}) },
+    args: {
+      id: { kind: "input", path: "id" },
+      ...(i === 0 && opts.text ? { text: { kind: "input", path: "text" } } : {}),
+    },
   }));
   return withVersion({
     id,
@@ -25,7 +28,14 @@ export function linearProgram(id: string, sequence: string[], opts: { text?: boo
     steps,
     returns: { kind: "from", step: sequence[sequence.length - 1]!, path: "" },
     contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-    manifest: { llmReduction: 5, latencyReduction: 2, costReduction: 5, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+    manifest: {
+      llmReduction: 5,
+      latencyReduction: 2,
+      costReduction: 5,
+      skipRateBefore: 0,
+      skipRateAfter: 0,
+      nShadow: 3,
+    },
   }) as StretchProgram;
 }
 

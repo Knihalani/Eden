@@ -16,7 +16,8 @@ function sizes(dir: string) {
     const b = existsSync(p) ? statSync(p).size : 0;
     out[n] = b;
     if (n === "graph.sqlite" || n === "graph.sqlite-wal") sqliteWal += b;
-    if (n === "graph.sqlite" || n === "graph.sqlite-wal" || n === JNL_FILE || n === "seen.bin" || n === CRAWL_FILE) ingest += b;
+    if (n === "graph.sqlite" || n === "graph.sqlite-wal" || n === JNL_FILE || n === "seen.bin" || n === CRAWL_FILE)
+      ingest += b;
   }
   out.sqlite_wal = sqliteWal;
   out.ingest = ingest;
@@ -32,7 +33,10 @@ function crawlMagic(dir: string) {
 describe("ingest journal", () => {
   test("query store never opens sqlite and ignores journal until compact", () => {
     const packed = mkdtempSync(join(tmpdir(), "eden-know-jnl-pack-"));
-    writeFileSync(join(packed, "graph.kpk"), encodePack([{ s: "RFC 3986", p: "is", o: "URI Generic Syntax", e: "", url: "" }]));
+    writeFileSync(
+      join(packed, "graph.kpk"),
+      encodePack([{ s: "RFC 3986", p: "is", o: "URI Generic Syntax", e: "", url: "" }]),
+    );
     const q0 = openQueryStore(packed);
     expect(q0.search("RFC 3986")[0]?.o).toContain("URI");
     q0.close?.();
@@ -41,7 +45,11 @@ describe("ingest journal", () => {
 
     const dir = mkdtempSync(join(tmpdir(), "eden-know-jnl-q-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    s.putNodes(
+      "https://example.org/a",
+      [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }],
+      30,
+    );
     expect(s.search("jq")[0]?.s).toBe("jq");
     const q = openQueryStore(dir);
     expect(q.search("jq").length).toBe(0);
@@ -78,9 +86,9 @@ describe("ingest journal", () => {
     expect(s.search("Singapore").length).toBe(0);
     expect(s.search("Germany").length).toBe(0);
     expect(s.search("Berlin").some((h) => h.p === "capital" && h.s === "Berlin")).toBe(false);
-    expect(s.search("Vatican City").some((h) => h.p === "capital" && h.s === "Vatican City" && h.o === "Vatican City")).toBe(
-      false,
-    );
+    expect(
+      s.search("Vatican City").some((h) => h.p === "capital" && h.s === "Vatican City" && h.o === "Vatican City"),
+    ).toBe(false);
     s.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -116,7 +124,11 @@ describe("ingest journal", () => {
   test("journal round-trips overlay across reopen; compact merges into pack", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-jnl-rt-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    s.putNodes(
+      "https://example.org/a",
+      [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }],
+      30,
+    );
     s.close();
     const s2 = openStore(dir);
     expect(s2.search("jq")[0]?.s).toBe("jq");
@@ -191,9 +203,7 @@ describe("ingest journal", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test(
-    "legacy overlay sqlite folds into journal and sqlite+wal shrinks under 50 KB",
-    () => {
+  test("legacy overlay sqlite folds into journal and sqlite+wal shrinks under 50 KB", () => {
     const src = mkdtempSync(join(tmpdir(), "eden-know-legacy-src-"));
     const fixture = join(src, "legacy.sqlite");
     const fat = new Database(fixture);
@@ -239,12 +249,24 @@ describe("ingest journal", () => {
     const now = Date.now();
     const insN = fat.prepare(`INSERT INTO nodes(sid,pid,oid,eid,url,as_of,ttl_days) VALUES (?,?,?,?,?,?,?)`);
     for (let i = 0; i < 200; i++) {
-      insN.run(intern(`Tool${i}`), used, intern(`used for task ${i} work`), intern(`Tool${i} is used for task ${i} work.`), "https://example.org/tools", now, 30);
+      insN.run(
+        intern(`Tool${i}`),
+        used,
+        intern(`used for task ${i} work`),
+        intern(`Tool${i} is used for task ${i} work.`),
+        "https://example.org/tools",
+        now,
+        30,
+      );
     }
-    fat.run(
-      `INSERT INTO pages(url,digest,chars,source,fetched_at,ttl_days) VALUES (?,?,?,?,?,?)`,
-      ["https://example.org/kept", "keep-digest", 12, "cc", now, 30],
-    );
+    fat.run(`INSERT INTO pages(url,digest,chars,source,fetched_at,ttl_days) VALUES (?,?,?,?,?,?)`, [
+      "https://example.org/kept",
+      "keep-digest",
+      12,
+      "cc",
+      now,
+      30,
+    ]);
     fat.run(`INSERT INTO frontier(url, next_fetch, from_url) VALUES (?,?,?)`, [
       "https://example.org/queued",
       now,
@@ -263,9 +285,16 @@ describe("ingest journal", () => {
     expect(s.count().wal_nodes).toBeGreaterThanOrEqual(200);
     expect(s.pageDigest("https://example.org/kept")).toBe("keep-digest");
     expect(s.pageDigest("https://spam.example/x")).toBe("skip-digest");
-    expect((s.db.query(`SELECT COUNT(*) AS n FROM pages WHERE url = 'https://example.org/kept'`).get() as { n: number }).n).toBe(1);
-    expect((s.db.query(`SELECT COUNT(*) AS n FROM frontier WHERE url = 'https://example.org/queued'`).get() as { n: number }).n).toBe(1);
-    expect((s.db.query(`SELECT kept FROM host_prior WHERE host = 'example.org'`).get() as { kept: number }).kept).toBe(4);
+    expect(
+      (s.db.query(`SELECT COUNT(*) AS n FROM pages WHERE url = 'https://example.org/kept'`).get() as { n: number }).n,
+    ).toBe(1);
+    expect(
+      (s.db.query(`SELECT COUNT(*) AS n FROM frontier WHERE url = 'https://example.org/queued'`).get() as { n: number })
+        .n,
+    ).toBe(1);
+    expect((s.db.query(`SELECT kept FROM host_prior WHERE host = 'example.org'`).get() as { kept: number }).kept).toBe(
+      4,
+    );
     s.close();
 
     const z = sizes(dir);
@@ -275,24 +304,33 @@ describe("ingest journal", () => {
     expect(crawlMagic(dir)).toBe("KNC1");
 
     const s2 = openStore(dir);
-    expect((s2.db.query(`SELECT digest FROM pages WHERE url = 'https://example.org/kept'`).get() as { digest: string }).digest).toBe(
-      "keep-digest",
+    expect(
+      (s2.db.query(`SELECT digest FROM pages WHERE url = 'https://example.org/kept'`).get() as { digest: string })
+        .digest,
+    ).toBe("keep-digest");
+    expect(
+      (
+        s2.db.query(`SELECT COUNT(*) AS n FROM frontier WHERE url = 'https://example.org/queued'`).get() as {
+          n: number;
+        }
+      ).n,
+    ).toBe(1);
+    expect((s2.db.query(`SELECT kept FROM host_prior WHERE host = 'example.org'`).get() as { kept: number }).kept).toBe(
+      4,
     );
-    expect((s2.db.query(`SELECT COUNT(*) AS n FROM frontier WHERE url = 'https://example.org/queued'`).get() as { n: number }).n).toBe(1);
-    expect((s2.db.query(`SELECT kept FROM host_prior WHERE host = 'example.org'`).get() as { kept: number }).kept).toBe(4);
     s2.close();
 
     rmSync(src, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
-    },
-    30_000,
-  );
+  }, 30_000);
 
   test("near-dup matches other URLs; same URL is not a dup", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-mh-"));
     const s = openStore(dir);
     const text =
-      "the capital of kenya is nairobi and the country lies on the equator with a long indian ocean coastline ".repeat(6);
+      "the capital of kenya is nairobi and the country lies on the equator with a long indian ocean coastline ".repeat(
+        6,
+      );
     const other =
       "quantum chromodynamics lagrangian density of the standard model of particle physics and gauge bosons ".repeat(6);
     expect(s.nearDup("https://example.org/a", text)).toBe(false);
@@ -307,7 +345,9 @@ describe("ingest journal", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-sz-compact-"));
     const s = openStore(dir);
     const body =
-      "the capital of kenya is nairobi and the country lies on the equator with a long indian ocean coastline ".repeat(5);
+      "the capital of kenya is nairobi and the country lies on the equator with a long indian ocean coastline ".repeat(
+        5,
+      );
     for (let i = 0; i < 72; i++) {
       const url = `https://example.org/p/${i}`;
       s.putPage({ url, digest: `d${i}`, chars: 400, source: "cc", ttl_days: 7 });
@@ -326,17 +366,19 @@ describe("ingest journal", () => {
     expect(crawlMagic(dir)).toBe("KNC1");
     const s2 = openStore(dir);
     expect((s2.db.query(`SELECT COUNT(*) AS n FROM pages`).get() as { n: number }).n).toBe(72);
-    expect((s2.db.query(`SELECT COUNT(*) AS n FROM pages WHERE url = 'https://example.org/p/0'`).get() as { n: number }).n).toBe(1);
+    expect(
+      (s2.db.query(`SELECT COUNT(*) AS n FROM pages WHERE url = 'https://example.org/p/0'`).get() as { n: number }).n,
+    ).toBe(1);
     expect((s2.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).map((c) => c.name)).toContain("url");
-    expect((s2.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip")).toBe(false);
+    expect((s2.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip")).toBe(
+      false,
+    );
     expect((s2.db.query(`SELECT COUNT(*) AS n FROM frontier`).get() as { n: number }).n).toBeGreaterThanOrEqual(80);
     s2.close();
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test(
-    "fat TEXT mh_band at 4096-byte pages vacuums to compact 512-byte sqlite",
-    () => {
+  test("fat TEXT mh_band at 4096-byte pages vacuums to compact 512-byte sqlite", () => {
     const src = mkdtempSync(join(tmpdir(), "eden-know-fat-src-"));
     const fixture = join(src, "fat.sqlite");
     const fat = new Database(fixture);
@@ -355,9 +397,7 @@ describe("ingest journal", () => {
       CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
     `);
     const now = Date.now();
-    const insP = fat.prepare(
-      `INSERT INTO pages(url,digest,chars,source,fetched_at,ttl_days) VALUES (?,?,?,?,?,?)`,
-    );
+    const insP = fat.prepare(`INSERT INTO pages(url,digest,chars,source,fetched_at,ttl_days) VALUES (?,?,?,?,?,?)`);
     for (let i = 0; i < 72; i++) {
       insP.run(`https://stackoverflow.com/questions/${i}/how-to-parse-json-with-jq`, `digest${i}`, 1200, "cc", now, 30);
     }
@@ -389,7 +429,9 @@ describe("ingest journal", () => {
     expect((s.db.query(`SELECT COUNT(*) AS n FROM pages`).get() as { n: number }).n).toBe(72);
     expect((s.db.query(`SELECT COUNT(*) AS n FROM frontier`).get() as { n: number }).n).toBeGreaterThanOrEqual(400);
     const text =
-      "the capital of kenya is nairobi and the country lies on the equator with a long indian ocean coastline ".repeat(6);
+      "the capital of kenya is nairobi and the country lies on the equator with a long indian ocean coastline ".repeat(
+        6,
+      );
     expect(s.nearDup("https://example.org/x", text)).toBe(false);
     expect(s.nearDup("https://example.org/y", text)).toBe(true);
     expect((s.db.query(`SELECT COUNT(*) AS n FROM host_prior WHERE kept = 0`).get() as { n: number }).n).toBe(0);
@@ -405,14 +447,13 @@ describe("ingest journal", () => {
 
     rmSync(src, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
-    },
-    30_000,
-  );
+  }, 30_000);
 
   test("interned frontier/pages URLs round-trip; enqueue/dequeue keep full strings", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-url-intern-"));
     const s = openStore(dir);
-    const long = "https://stackoverflow.com/questions/12345678/how-to-parse-json-with-jq-on-the-command-line-without-loading-the-entire-file";
+    const long =
+      "https://stackoverflow.com/questions/12345678/how-to-parse-json-with-jq-on-the-command-line-without-loading-the-entire-file";
     const httpSlash = "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd";
     const qhash = "https://example.org/path/page?format=json&limit=200#frag";
     s.enqueue([long, httpSlash, qhash, "https://example.org/queued"], "https://example.org/feed");
@@ -422,9 +463,10 @@ describe("ingest journal", () => {
     expect(queued).toContain(httpSlash);
     expect(queued).toContain("https://example.org/path/page?format=json&limit=200");
     expect(queued).toContain("https://example.org/queued");
-    expect((s.db.query(`SELECT digest FROM pages WHERE url = 'https://example.org/kept'`).get() as { digest: string }).digest).toBe(
-      "keep-digest",
-    );
+    expect(
+      (s.db.query(`SELECT digest FROM pages WHERE url = 'https://example.org/kept'`).get() as { digest: string })
+        .digest,
+    ).toBe("keep-digest");
     const taken = s.takeFrontier(2000);
     expect(taken).toContain(long);
     expect(taken).toContain(httpSlash);
@@ -436,13 +478,18 @@ describe("ingest journal", () => {
     expect(crawlMagic(dir)).toBe("KNC1");
     expect(readFileSync(join(dir, CRAWL_FILE))[4]).toBe(8);
     const s2 = openStore(dir);
-    expect((s2.db.query(`SELECT digest FROM pages WHERE url = 'https://example.org/kept'`).get() as { digest: string }).digest).toBe(
-      "keep-digest",
+    expect(
+      (s2.db.query(`SELECT digest FROM pages WHERE url = 'https://example.org/kept'`).get() as { digest: string })
+        .digest,
+    ).toBe("keep-digest");
+    expect(
+      (s2.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some(
+        (c) => c.name === "skip" || c.name === "url",
+      ),
+    ).toBe(true);
+    expect((s2.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip")).toBe(
+      false,
     );
-    expect((s2.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip" || c.name === "url")).toBe(
-      true,
-    );
-    expect((s2.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip")).toBe(false);
     s2.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -483,17 +530,28 @@ describe("ingest journal", () => {
     leftover.run(`INSERT INTO intern(s) VALUES (?)`, ["ExtraCountry"]);
     leftover.run(`INSERT INTO intern(s) VALUES (?)`, ["capital"]);
     leftover.run(`INSERT INTO intern(s) VALUES (?)`, ["Nowhere"]);
-    leftover.run(
-      `INSERT INTO nodes(sid,pid,oid,eid,url,as_of,ttl_days) VALUES (?,?,?,?,?,?,?)`,
-      [1, 2, 3, 0, "https://example.org/extra", Date.now(), 30],
-    );
+    leftover.run(`INSERT INTO nodes(sid,pid,oid,eid,url,as_of,ttl_days) VALUES (?,?,?,?,?,?,?)`, [
+      1,
+      2,
+      3,
+      0,
+      "https://example.org/extra",
+      Date.now(),
+      30,
+    ]);
     leftover.close();
 
     const s2 = openStore(dir);
     expect(s2.search("jq")[0]?.o).toContain("filtering JSON");
     expect(s2.count().wal_nodes).toBe(0);
     expect(s2.search("ExtraCountry").length).toBe(0);
-    expect((s2.db.query(`SELECT COUNT(*) AS n FROM frontier WHERE url = 'https://example.org/queued'`).get() as { n: number }).n).toBe(1);
+    expect(
+      (
+        s2.db.query(`SELECT COUNT(*) AS n FROM frontier WHERE url = 'https://example.org/queued'`).get() as {
+          n: number;
+        }
+      ).n,
+    ).toBe(1);
     s2.close();
     expect(statSync(join(dir, JNL_FILE)).size).toBe(4);
     expect(existsSync(join(dir, "graph.sqlite"))).toBe(true);

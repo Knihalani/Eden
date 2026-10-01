@@ -40,16 +40,20 @@ function ingestPending() {
   const { kind: nextKind, atoms } = atomize(pending.join("\n"));
   kind = nextKind;
   pending.length = 0;
-  try { mem?.close(); } catch {}
+  try {
+    mem?.close();
+  } catch {}
   if (!dir) dir = mkdtempSync(join(tmpdir(), "eden-mab-"));
   mem = new BrainMemory({ dir, cortex: false, semantic: nextKind === "facts" }); // not-product
   if (atoms.length) {
-    mem.ingestTurns(atoms.map((a) => ({
-      text: a.text,
-      speaker: "User",
-      date: "",
-      session: a.session,
-    })));
+    mem.ingestTurns(
+      atoms.map((a) => ({
+        text: a.text,
+        speaker: "User",
+        date: "",
+        session: a.session,
+      })),
+    );
   }
   return { episodes: mem.stored().length, kind };
 }
@@ -77,8 +81,12 @@ function handle(req: Req) {
   switch (req.op) {
     case "init": {
       if (mem) {
-        try { mem.close(); } catch {}
-        try { if (dir) rmSync(dir, { recursive: true, force: true }); } catch {}
+        try {
+          mem.close();
+        } catch {}
+        try {
+          if (dir) rmSync(dir, { recursive: true, force: true });
+        } catch {}
       }
       dir = mkdtempSync(join(tmpdir(), "eden-mab-"));
       mem = new BrainMemory({ dir, cortex: false }); // not-product
@@ -112,8 +120,12 @@ function handle(req: Req) {
       return { ok: true, contents: notes, kind: stats.kind, episodes: stats.episodes };
     }
     case "close": {
-      try { mem?.close(); } catch {}
-      try { if (dir) rmSync(dir, { recursive: true, force: true }); } catch {}
+      try {
+        mem?.close();
+      } catch {}
+      try {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+      } catch {}
       mem = null;
       dir = "";
       pending.length = 0;

@@ -23,7 +23,11 @@ import { expect, test } from "bun:test";
 
 test("goDecorated uses relative push", () => {
   const calls: string[] = [];
-  goDecorated((url) => url, (url) => calls.push(url), "/");
+  goDecorated(
+    (url) => url,
+    (url) => calls.push(url),
+    "/",
+  );
   expect(calls).toEqual(["/"]);
 });
 

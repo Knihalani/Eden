@@ -4,12 +4,7 @@ import { createHandler } from "./server";
 import { useTempEdenHome } from "./test-home";
 import { maybeQueueRefresh, refreshCandidateId, REFRESH_WAITING_COPY, isRefreshCandidate } from "./refresh";
 import { replayRegistry } from "@eden/shadow";
-import {
-  createTicketShip,
-  runNaive,
-  toNaiveTrace,
-  WITNESS_IDS,
-} from "../../../packages/runtime/src/ticketship";
+import { createTicketShip, runNaive, toNaiveTrace, WITNESS_IDS } from "../../../packages/runtime/src/ticketship";
 import type { StretchTrace } from "@eden/ir";
 
 useTempEdenHome();
@@ -95,10 +90,7 @@ describe("control-plane drift refresh", () => {
     expect(cand?.program?.description).toBe(REFRESH_WAITING_COPY);
     expect(store.tool(liveId)?.state).toBe("live");
 
-    const pending = await maybeQueueRefresh(
-      { store, sandboxFor: (t) => replayRegistry(undefined, t) },
-      liveId,
-    );
+    const pending = await maybeQueueRefresh({ store, sandboxFor: (t) => replayRegistry(undefined, t) }, liveId);
     expect(pending).toBe("pending");
   });
 
@@ -238,7 +230,7 @@ describe("control-plane drift refresh", () => {
       { store, sandboxFor: (t) => replayRegistry(undefined, t), island: createTicketShip({ llmMs: 0 }).island },
       pass.id,
     );
-    const one = await (await fetchHandler(auth(`/v1/tools/${pass.id}`))).json() as {
+    const one = (await (await fetchHandler(auth(`/v1/tools/${pass.id}`))).json()) as {
       state: string;
       candidate: { id: string; verdict: string } | null;
     };

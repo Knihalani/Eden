@@ -79,7 +79,10 @@ describe("campaign lifecycle", () => {
   test(
     "out-of-envelope goals fall back to raw with correct state",
     async () => {
-      const { program } = await liveAfter(createDesk, [...DESK_IDS].map((id) => ({ id })));
+      const { program } = await liveAfter(
+        createDesk,
+        [...DESK_IDS].map((id) => ({ id })),
+      );
       expect(program).not.toBeNull();
       const s = new Session([["desk", createDesk]], true);
       s.addPrograms(program ? [program] : []);

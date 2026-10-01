@@ -10,14 +10,7 @@ import { canApprove, shadowProgram } from "../../shadow/src/index";
 import { createState, injectTools, steerToolCalls, wrapTools } from "../../wrap/src/index";
 import { Store, createHandler } from "../../../apps/control/src/index";
 import { registryFrom, runProgram } from "../src/index";
-import {
-  OOD_ID,
-  WITNESS_IDS,
-  createTicketShip,
-  runNaive,
-  ticketShipProgram,
-  toNaiveTrace,
-} from "../src/ticketship";
+import { OOD_ID, WITNESS_IDS, createTicketShip, runNaive, ticketShipProgram, toNaiveTrace } from "../src/ticketship";
 import type { StretchTrace } from "@eden/ir";
 
 const LLM_MS = Number(process.env.LLM_MS || 200);
@@ -113,22 +106,30 @@ const minedRunMs: number[] = [];
 for (const id of ids) {
   const world = createTicketShip({ llmMs: LLM_MS });
   const t0 = performance.now();
-  const run = await runProgram(live, { id }, {
-    registry: registryFrom(world.tools),
-    island: world.island,
-    llmCents: 1,
-  });
+  const run = await runProgram(
+    live,
+    { id },
+    {
+      registry: registryFrom(world.tools),
+      island: world.island,
+      llmCents: 1,
+    },
+  );
   minedRunMs.push(performance.now() - t0);
   minedRunLlm.push(run.stats.llmCalls);
 }
 
 const hwWorld = createTicketShip({ llmMs: LLM_MS });
 const hw0 = performance.now();
-await runProgram(handwritten, { id: "T-100" }, {
-  registry: registryFrom(hwWorld.tools),
-  island: hwWorld.island,
-  llmCents: 1,
-});
+await runProgram(
+  handwritten,
+  { id: "T-100" },
+  {
+    registry: registryFrom(hwWorld.tools),
+    island: hwWorld.island,
+    llmCents: 1,
+  },
+);
 const hwMs = performance.now() - hw0;
 
 const oodWorld = createTicketShip({ llmMs: 0 });
@@ -141,10 +142,7 @@ const oodVerifySteered = oodWorld.verified.has(OOD_ID);
 
 let steered = 0;
 for (const id of WITNESS_IDS) {
-  const out = steerToolCalls(
-    [{ function: { name: "lookupTicket", arguments: JSON.stringify({ id }) } }],
-    [live],
-  );
+  const out = steerToolCalls([{ function: { name: "lookupTicket", arguments: JSON.stringify({ id }) } }], [live]);
   if (out[0]?.function?.name === live.name) steered++;
 }
 const oodSteer = steerToolCalls(
@@ -181,7 +179,9 @@ const nestedTraces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
 const nestedMined = compileTraces(nestedTraces);
 const nestedProg = nestedMined.programs[0];
 const nestedHasInner = Boolean(
-  nestedProg?.steps.some((s) => s.kind === "loop" && s.body.some((id) => nestedProg.steps.some((x) => x.id === id && x.kind === "loop"))),
+  nestedProg?.steps.some(
+    (s) => s.kind === "loop" && s.body.some((id) => nestedProg.steps.some((x) => x.id === id && x.kind === "loop")),
+  ),
 );
 let nestedHits = 0;
 if (nestedProg) {
@@ -214,13 +214,17 @@ const handler = createHandler({
 });
 const auth = { authorization: "Bearer eden_dev", "content-type": "application/json" };
 for (const t of traces.slice(0, 12)) {
-  const r = await handler(new Request("http://x/v1/traces", { method: "POST", headers: auth, body: JSON.stringify(t) }));
+  const r = await handler(
+    new Request("http://x/v1/traces", { method: "POST", headers: auth, body: JSON.stringify(t) }),
+  );
   if (!r.ok) throw new Error(`trace post ${r.status}`);
 }
 const compiledHttp = await handler(new Request("http://x/v1/compile", { method: "POST", headers: auth, body: "{}" }));
 const compiledBody = (await compiledHttp.json()) as { programs?: number };
 const cands = await handler(new Request("http://x/v1/candidates", { headers: auth }));
-const candBody = (await cands.json()) as { candidates: Array<{ id: string; verdict: string; program?: { id: string } }> };
+const candBody = (await cands.json()) as {
+  candidates: Array<{ id: string; verdict: string; program?: { id: string } }>;
+};
 const pass = candBody.candidates.find((c) => c.verdict === "PASS" && c.program);
 if (!pass?.program) throw new Error("control plane minted no PASS candidate");
 const approved = await handler(
@@ -285,8 +289,19 @@ const report = {
   hot: {
     llmMs: LLM_MS,
     tickets: HOT_N,
-    naive: { llm: summarize(naiveLlm), ms: summarize(naiveMs), cents: summarize(naiveCents), skipVerify: naiveSkip.reduce((a, b) => a + b, 0), verified: naiveVerify.filter(Boolean).length },
-    wrapToolsMined: { llm: summarize(wrapLlm), ms: summarize(wrapMs), cents: summarize(wrapCents), verified: wrapVerify.filter(Boolean).length },
+    naive: {
+      llm: summarize(naiveLlm),
+      ms: summarize(naiveMs),
+      cents: summarize(naiveCents),
+      skipVerify: naiveSkip.reduce((a, b) => a + b, 0),
+      verified: naiveVerify.filter(Boolean).length,
+    },
+    wrapToolsMined: {
+      llm: summarize(wrapLlm),
+      ms: summarize(wrapMs),
+      cents: summarize(wrapCents),
+      verified: wrapVerify.filter(Boolean).length,
+    },
     runProgramMined: { llm: summarize(minedRunLlm), ms: summarize(minedRunMs) },
     handwrittenOneShotMs: Math.round(hwMs),
     reduction: {
@@ -334,7 +349,9 @@ const report = {
 };
 
 console.log(JSON.stringify(report, null, 2));
-const failed = Object.entries(report.gates).filter(([, v]) => !v).map(([k]) => k);
+const failed = Object.entries(report.gates)
+  .filter(([, v]) => !v)
+  .map(([k]) => k);
 if (failed.length) {
   console.error("GATES FAILED", failed);
   process.exit(1);

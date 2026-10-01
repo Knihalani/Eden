@@ -84,9 +84,7 @@ export function createLaunchPad(): World {
             const k = siteKey(site, env);
             const m = counts.get(step)!;
             m.set(k, (m.get(k) ?? 0) + 1);
-            return terminal
-              ? { published: true, site, env }
-              : { ok: true, site, env, step };
+            return terminal ? { published: true, site, env } : { ok: true, site, env, step };
           },
         };
       }
@@ -262,10 +260,7 @@ export function treeFor(tree: string): TreeNode {
     children: [
       {
         path: `${tree}/a`,
-        children: [
-          { path: `${tree}/a/f0.txt` },
-          { path: `${tree}/a/f1.txt` },
-        ],
+        children: [{ path: `${tree}/a/f0.txt` }, { path: `${tree}/a/f1.txt` }],
       },
       {
         path: `${tree}/b`,
@@ -628,7 +623,15 @@ export function createBarcodeLots(): World {
 
 export const NOISE_IDS = ["hx-0", "hx-1", "hx-2", "hx-3"] as const;
 
-const NOISE_READS = ["fetchBlob", "showDiff", "listHosts", "runQuery", "describeRole", "listPods", "searchHits"] as const;
+const NOISE_READS = [
+  "fetchBlob",
+  "showDiff",
+  "listHosts",
+  "runQuery",
+  "describeRole",
+  "listPods",
+  "searchHits",
+] as const;
 
 /** Unique-work: shuffled unrelated reads. compile 0 programs. check empty. */
 export function createHelixNoise(): World {

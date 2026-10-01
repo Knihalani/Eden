@@ -84,8 +84,12 @@ function handle(req: Req) {
   switch (req.op) {
     case "init": {
       if (mem) {
-        try { mem.close(); } catch {}
-        try { if (dir) rmSync(dir, { recursive: true, force: true }); } catch {}
+        try {
+          mem.close();
+        } catch {}
+        try {
+          if (dir) rmSync(dir, { recursive: true, force: true });
+        } catch {}
       }
       dir = mkdtempSync(join(tmpdir(), "eden-mab-inject-"));
       mem = openMemory({ dir });
@@ -100,7 +104,10 @@ function handle(req: Req) {
     case "flush": {
       try {
         const stats = ingestPending();
-        try { consolidate(ensure()); slept = true; } catch {}
+        try {
+          consolidate(ensure());
+          slept = true;
+        } catch {}
         return { ok: true, ...stats };
       } catch {
         return { ok: true, stored: mem?.memories().length ?? 0 };
@@ -109,7 +116,10 @@ function handle(req: Req) {
     case "query": {
       const stats = ingestPending();
       if (!slept) {
-        try { consolidate(ensure()); slept = true; } catch {}
+        try {
+          consolidate(ensure());
+          slept = true;
+        } catch {}
       }
       const q = String(req.text ?? "");
       let packet = "";
@@ -122,8 +132,12 @@ function handle(req: Req) {
       return { ok: true, packet, mark: MEMORY_MARK, stored: stats.stored };
     }
     case "close": {
-      try { mem?.close(); } catch {}
-      try { if (dir) rmSync(dir, { recursive: true, force: true }); } catch {}
+      try {
+        mem?.close();
+      } catch {}
+      try {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+      } catch {}
       mem = null;
       dir = "";
       pending.length = 0;

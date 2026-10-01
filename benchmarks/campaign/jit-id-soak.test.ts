@@ -11,10 +11,7 @@ import { runJitIdSoak, idSoakTurns, PROGRAMS as ID_PROGRAMS } from "./jit-id-soa
 import { runJitCliSoak, cliSoakTurns } from "./jit-cli-soak";
 import { runJitUrlSoak, urlSoakTurns } from "./jit-url-soak";
 
-function assertPass(
-  r: ReturnType<typeof runJitIdSoak>,
-  turns: { label: string }[],
-) {
+function assertPass(r: ReturnType<typeof runJitIdSoak>, turns: { label: string }[]) {
   expect(r.uniqueWorkSchemas).toBe(0);
   expect(r.vagueSchemas).toBe(0);
   expect(r.crossHits).toBe(0);

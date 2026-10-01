@@ -57,7 +57,11 @@ function pickScalar(k: string, v: unknown, t: Truncation): unknown {
 /** Which caps pickFacts actually hit. Truncation is structural, not a size guess. */
 type Truncation = { depth: boolean; sample: boolean; longString: boolean };
 
-function pickFacts(value: unknown, depth = 0, t: Truncation = { depth: false, sample: false, longString: false }): unknown {
+function pickFacts(
+  value: unknown,
+  depth = 0,
+  t: Truncation = { depth: false, sample: false, longString: false },
+): unknown {
   if (depth > 4) {
     t.depth = true;
     return undefined;
@@ -104,8 +108,7 @@ export function modelFacing(value: unknown, maxChars = 2500): { text: string; fa
   // it said "not truncated" whenever the picked facts happened to serialize
   // shorter than the raw body — true for every sampled or depth-capped result,
   // exactly the cases where information was discarded. Ask the walk instead.
-  const truncated =
-    t.depth || t.sample || t.longString || factsJson.length > maxChars;
+  const truncated = t.depth || t.sample || t.longString || factsJson.length > maxChars;
   if (factsJson.length <= maxChars) return { text: factsJson, facts, truncated };
   return {
     text: JSON.stringify({ n: "truncated", hint: "full result stored on Eden" }),
@@ -171,9 +174,7 @@ export function prRowFromFacts(facts: unknown, fallbackNumber?: string): TypedPr
 
 export function prRowsFromFacts(facts: unknown, issues?: string[]): TypedPrRow[] {
   if (isPlainObject(facts) && Array.isArray(facts.rows)) {
-    return facts.rows
-      .map((f, i) => prRowFromFacts(f, issues?.[i]))
-      .filter((r): r is TypedPrRow => r !== null);
+    return facts.rows.map((f, i) => prRowFromFacts(f, issues?.[i])).filter((r): r is TypedPrRow => r !== null);
   }
   const one = prRowFromFacts(facts, issues?.[0]);
   return one ? [one] : [];

@@ -41,7 +41,14 @@ function identity(workspaceId: string, toolId = "t_hook") {
   return { workspaceId, toolId, step: STEP, url: GET_URL, bound: {} as Record<string, string> };
 }
 
-function webhookReq(over: { secret?: string | null; header?: "named" | "bearer" | "raw" | "none" | "hmac" | "hmac-hub"; body?: unknown; path?: string } = {}): Request {
+function webhookReq(
+  over: {
+    secret?: string | null;
+    header?: "named" | "bearer" | "raw" | "none" | "hmac" | "hmac-hub";
+    body?: unknown;
+    path?: string;
+  } = {},
+): Request {
   const headers: Record<string, string> = { host: "127.0.0.1:8787", "content-type": "application/json" };
   const secret = over.secret === undefined ? SECRET : over.secret;
   const header = over.header ?? "hmac";
@@ -105,7 +112,12 @@ describe("webhook invalidation", () => {
     const toolId = "t_live_hook";
     await db.run(
       `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
-      [toolId, "ws_hook", "get_issue", JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }])],
+      [
+        toolId,
+        "ws_hook",
+        "get_issue",
+        JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }]),
+      ],
     );
     const key = resultCacheKey(identity("ws_hook", toolId));
     await writeResult(db, key, { n: 1 }, 60_000, undefined, { method: "GET", force: true });
@@ -124,7 +136,9 @@ describe("webhook invalidation", () => {
   test("passing recompile queues a mined draft — not a clone of live steps", async () => {
     const db = await dbP;
     const toolId = "t_mined_hook";
-    const liveSteps = JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }]);
+    const liveSteps = JSON.stringify([
+      { id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL },
+    ]);
     await db.run(
       `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint) VALUES (?, ?, ?, '', 'on', ?, '[]', ?)`,
       [toolId, "ws_mined", "get_issue", liveSteps, "fp/mined/get"],
@@ -156,7 +170,12 @@ describe("webhook invalidation", () => {
     const toolId = "t_empty_knock";
     await db.run(
       `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
-      [toolId, "ws_empty_knock", "get_issue", JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }])],
+      [
+        toolId,
+        "ws_empty_knock",
+        "get_issue",
+        JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }]),
+      ],
     );
     const key = resultCacheKey(identity("ws_empty_knock", toolId));
     await writeResult(db, key, { v: 1 }, 60_000, undefined, { method: "GET", force: true });
@@ -166,7 +185,9 @@ describe("webhook invalidation", () => {
     expect(empty.message).toBe(WEBHOOK_NOOP_COPY);
     expect(empty.message).not.toMatch(/replacement is waiting/);
     expect(await readResult<{ v: number }>(db, key)).toEqual({ v: 1 });
-    expect(await db.all(`SELECT id FROM tool WHERE workspace_id = ? AND id != ?`, ["ws_empty_knock", toolId])).toEqual([]);
+    expect(await db.all(`SELECT id FROM tool WHERE workspace_id = ? AND id != ?`, ["ws_empty_knock", toolId])).toEqual(
+      [],
+    );
     expect(await db.all(`SELECT id FROM knock WHERE workspace_id = ?`, ["ws_empty_knock"])).toEqual([]);
     const live = await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = ?`, [toolId]);
     expect(live?.state).toBe("on");
@@ -177,7 +198,13 @@ describe("webhook invalidation", () => {
     const toolId = "t_dampen";
     await db.run(
       `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint) VALUES (?, ?, ?, '', 'on', ?, '[]', ?)`,
-      [toolId, "ws_dampen", "get_issue", JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }]), "fp/dampen/get"],
+      [
+        toolId,
+        "ws_dampen",
+        "get_issue",
+        JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }]),
+        "fp/dampen/get",
+      ],
     );
     const key = resultCacheKey(identity("ws_dampen", toolId));
     await writeResult(db, key, { n: 1 }, 60_000, undefined, { method: "GET", force: true });
@@ -186,7 +213,9 @@ describe("webhook invalidation", () => {
     await writeResult(db, key, { n: 2 }, 60_000, undefined, { method: "GET", force: true });
     await invalidateFromWebhook(db, { keys: [key], toolId, workspaceId: "ws_dampen" }, mineGetIssue);
 
-    const drafts = await db.all<{ id: string }>(`SELECT id FROM tool WHERE workspace_id = ? AND state = 'draft'`, ["ws_dampen"]);
+    const drafts = await db.all<{ id: string }>(`SELECT id FROM tool WHERE workspace_id = ? AND state = 'draft'`, [
+      "ws_dampen",
+    ]);
     expect(drafts.length).toBe(1);
     const live = await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = ?`, [toolId]);
     expect(live?.state).toBe("on");
@@ -199,7 +228,12 @@ describe("webhook invalidation", () => {
     const toolId = "t_403_knock";
     await db.run(
       `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
-      [toolId, "ws_403", "get_issue", JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }])],
+      [
+        toolId,
+        "ws_403",
+        "get_issue",
+        JSON.stringify([{ id: "s1", kind: "cloud_http", name: "get_issue", method: "GET", url: GET_URL }]),
+      ],
     );
     const key = resultCacheKey(identity("ws_403", toolId));
     await writeResult(db, key, { stay: true }, 60_000, undefined, { method: "GET", force: true });
@@ -287,7 +321,9 @@ describe("webhook invalidation", () => {
     const db = await dbP;
     const getKey = resultCacheKey(identity("ws_mut"));
     await writeResult(db, getKey, { get: 1 }, 60_000, undefined, { method: "GET", force: true });
-    expect(keysToDrop({ url: GET_URL, toolId: "t_hook", workspaceId: "ws_mut", step: { ...STEP, method: "POST" } })).toEqual([]);
+    expect(
+      keysToDrop({ url: GET_URL, toolId: "t_hook", workspaceId: "ws_mut", step: { ...STEP, method: "POST" } }),
+    ).toEqual([]);
     const out = await invalidateFromWebhook(db, {
       url: GET_URL,
       toolId: "t_hook",

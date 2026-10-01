@@ -18,8 +18,7 @@ import { registryFrom, runProgram } from "@eden/runtime";
  * expect: compiled sequence poll-count = 0; unique-work programs = 0.
  * Not thrash-enforce.
  */
-export const EXPECT =
-  "poll-world mines a program whose sequence contains zero poll tools; unique-work still refuses.";
+export const EXPECT = "poll-world mines a program whose sequence contains zero poll tools; unique-work still refuses.";
 
 export const POLL_TOOL = "get_status";
 export const JOB_IDS = ["J-100", "J-101", "J-102", "J-103"] as const;

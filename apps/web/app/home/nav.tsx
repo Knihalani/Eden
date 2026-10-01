@@ -30,13 +30,7 @@ export function useNavCollapsed() {
   return { collapsed, ready, onToggle };
 }
 
-export function AppNav({
-  collapsed,
-  onToggle,
-}: {
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
+export function AppNav({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const path = usePathname();
   const view = parseHomeView(useSearchParams().get("view"));
   const { requests, workflows } = useActivity();

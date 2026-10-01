@@ -209,7 +209,10 @@ describe("moonshot worlds: compileTraces", () => {
         expect(traces.every((t) => t.complete)).toBe(true);
         const r = compileTraces(traces);
         console.log(
-          `moonshot compile ${c.name}: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 3).join("; ")}`,
+          `moonshot compile ${c.name}: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+            .map((x) => x.code ?? x.reason)
+            .slice(0, 3)
+            .join("; ")}`,
         );
         expect(r.programs.length, `${c.name} should compile ≥1 program`).toBeGreaterThanOrEqual(1);
         if (c.seq) expect(r.programs[0]!.sequence).toEqual(c.seq);
@@ -226,7 +229,10 @@ describe("moonshot worlds: compileTraces", () => {
       expect(traces.every((t) => t.complete)).toBe(true);
       const r = compileTraces(traces);
       console.log(
-        `moonshot compile tenant: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 3).join("; ")}`,
+        `moonshot compile tenant: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 3)
+          .join("; ")}`,
       );
       expect(r.programs.length, "tenant should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(r.programs[0]!.sequence.length).toBeGreaterThanOrEqual(5);
@@ -252,7 +258,10 @@ describe("moonshot worlds: compileTraces", () => {
       const r = compileTraces(traces);
       const looped = r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"));
       console.log(
-        `moonshot compile github-pr: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 4).join("; ")}`,
+        `moonshot compile github-pr: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 4)
+          .join("; ")}`,
       );
       expect(r.programs.length, "github-pr should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(looped.length, "github-pr should have a foreach").toBeGreaterThanOrEqual(1);
@@ -271,7 +280,10 @@ describe("moonshot worlds: compileTraces", () => {
       const r = compileTraces(traces);
       const looped = r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"));
       console.log(
-        `moonshot compile inventory: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 4).join("; ")}`,
+        `moonshot compile inventory: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 4)
+          .join("; ")}`,
       );
       expect(r.programs.length, "inventory should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(looped.length, "inventory should have a foreach").toBeGreaterThanOrEqual(1);
@@ -290,13 +302,15 @@ describe("moonshot worlds: compileTraces", () => {
       const r = compileTraces(traces);
       const looped = r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"));
       console.log(
-        `moonshot compile map-reduce: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 4).join("; ")}`,
+        `moonshot compile map-reduce: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 4)
+          .join("; ")}`,
       );
       expect(r.programs.length, "map-reduce should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(looped.length, "map-reduce should have a foreach over chunks").toBeGreaterThanOrEqual(1);
       const merge = r.programs[0]!.steps.find((s) => s.kind === "tool" && s.tool === "mergeReport") as
-        | { args?: Record<string, { kind?: string; step?: string }> }
-        | undefined;
+        { args?: Record<string, { kind?: string; step?: string }> } | undefined;
       expect(merge?.args?.rows?.kind, "mergeReport.rows should bind from the loop").toBe("from");
       expect(r.refusals.some((x) => x.code === "underdetermined_write")).toBe(false);
     },
@@ -423,108 +437,95 @@ describe("moonshot worlds: check() catches duplicated mutation", () => {
 });
 
 describe("moonshot worlds: compileTraces → shadow goLive", () => {
-  test(
-    "github / tenant / inventory goLive PASS with a certified program; wrap serve turns===1",
-    async () => {
-      const cases: Array<{
-        name: string;
-        factory: () => World;
-        goals: Array<Record<string, unknown>>;
-      }> = [
-        { name: "github-pr", factory: createGithubPr, goals: [...PR_IDS].map((pr) => ({ pr })) },
-        { name: "tenant", factory: createTenant, goals: TENANT_ORGS.map((t) => ({ orgId: t.orgId, plan: t.plan })) },
-        { name: "inventory", factory: createInventory, goals: [...WAVE_IDS].map((wave) => ({ wave })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`moonshot-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, {
-          compile: 9,
-          holdout: 3,
-          sandbox: c.factory,
-          maxGram: 26,
-        });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program, `${c.name} program`).not.toBeNull();
-        expect(r.program!.manifest?.certified).toBe(true);
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`moonshot-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
-      }
-    },
-    60_000,
-  );
-
-  test(
-    "terraform / flags / dns-tls goLive PASS with a certified program; wrap serve turns===1",
-    async () => {
-      const cases: Array<{
-        name: string;
-        factory: () => World;
-        goals: Array<Record<string, unknown>>;
-      }> = [
-        { name: "terraform", factory: createTerraform, goals: [...STACK_IDS].map((stack) => ({ stack })) },
-        { name: "flags", factory: createFlags, goals: [...FLAG_IDS].map((flag) => ({ flag })) },
-        { name: "dns-tls", factory: createDnsTls, goals: [...ZONE_IDS].map((zone) => ({ zone })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`moonshot-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, {
-          compile: 9,
-          holdout: 3,
-          sandbox: c.factory,
-          maxGram: 26,
-        });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program, `${c.name} program`).not.toBeNull();
-        expect(r.program!.manifest?.certified).toBe(true);
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`moonshot-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
-      }
-    },
-    90_000,
-  );
-
-  test(
-    "map-reduce goLive PASS with a certified program; wrap serve turns===1",
-    async () => {
-      const goals = [...JOB_IDS].map((job) => ({ job }));
-      const s = new Session([["map-reduce", createMapReduce]], true);
+  test("github / tenant / inventory goLive PASS with a certified program; wrap serve turns===1", async () => {
+    const cases: Array<{
+      name: string;
+      factory: () => World;
+      goals: Array<Record<string, unknown>>;
+    }> = [
+      { name: "github-pr", factory: createGithubPr, goals: [...PR_IDS].map((pr) => ({ pr })) },
+      { name: "tenant", factory: createTenant, goals: TENANT_ORGS.map((t) => ({ orgId: t.orgId, plan: t.plan })) },
+      { name: "inventory", factory: createInventory, goals: [...WAVE_IDS].map((wave) => ({ wave })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
       for (let i = 0; i < 13; i++) {
-        await s.stretch("map-reduce", goals[i % goals.length]!, blockSeed(`moonshot-live-map-reduce-${i}`, i));
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`moonshot-live-${c.name}-${i}`, i));
       }
-      const r = await s.goLive("map-reduce", {
+      const r = await s.goLive(c.name, {
         compile: 9,
         holdout: 3,
-        sandbox: createMapReduce,
+        sandbox: c.factory,
         maxGram: 26,
       });
-      expect(r.verdict, `map-reduce goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-      expect(r.program, "map-reduce program").not.toBeNull();
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program, `${c.name} program`).not.toBeNull();
       expect(r.program!.manifest?.certified).toBe(true);
-      const rows = r.program!.steps.find((s) => s.kind === "tool" && s.tool === "mergeReport") as
-        | { args?: Record<string, { kind?: string }> }
-        | undefined;
-      expect(rows?.args?.rows?.kind, "certified program still binds rows from the loop").toBe("from");
-      const live = new Session([["map-reduce", createMapReduce]], true);
+      const live = new Session([[c.name, c.factory]], true);
       live.addPrograms([r.program!]);
-      await live.stretch("map-reduce", goals[0]!, blockSeed("moonshot-serve-map-reduce", 99));
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`moonshot-serve-${c.name}`, 99));
       const fin = live.finish();
-      expect(fin.violations, `map-reduce wrap serve ${fin.violations.join("; ")}`).toEqual([]);
-      expect(fin.turns, `map-reduce wrap serve turns=${fin.turns} (want 1)`).toBe(1);
-    },
-    45_000,
-  );
+      expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
+    }
+  }, 60_000);
+
+  test("terraform / flags / dns-tls goLive PASS with a certified program; wrap serve turns===1", async () => {
+    const cases: Array<{
+      name: string;
+      factory: () => World;
+      goals: Array<Record<string, unknown>>;
+    }> = [
+      { name: "terraform", factory: createTerraform, goals: [...STACK_IDS].map((stack) => ({ stack })) },
+      { name: "flags", factory: createFlags, goals: [...FLAG_IDS].map((flag) => ({ flag })) },
+      { name: "dns-tls", factory: createDnsTls, goals: [...ZONE_IDS].map((zone) => ({ zone })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`moonshot-live-${c.name}-${i}`, i));
+      }
+      const r = await s.goLive(c.name, {
+        compile: 9,
+        holdout: 3,
+        sandbox: c.factory,
+        maxGram: 26,
+      });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program, `${c.name} program`).not.toBeNull();
+      expect(r.program!.manifest?.certified).toBe(true);
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`moonshot-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} wrap serve turns=${fin.turns} (want 1)`).toBe(1);
+    }
+  }, 90_000);
+
+  test("map-reduce goLive PASS with a certified program; wrap serve turns===1", async () => {
+    const goals = [...JOB_IDS].map((job) => ({ job }));
+    const s = new Session([["map-reduce", createMapReduce]], true);
+    for (let i = 0; i < 13; i++) {
+      await s.stretch("map-reduce", goals[i % goals.length]!, blockSeed(`moonshot-live-map-reduce-${i}`, i));
+    }
+    const r = await s.goLive("map-reduce", {
+      compile: 9,
+      holdout: 3,
+      sandbox: createMapReduce,
+      maxGram: 26,
+    });
+    expect(r.verdict, `map-reduce goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+    expect(r.program, "map-reduce program").not.toBeNull();
+    expect(r.program!.manifest?.certified).toBe(true);
+    const rows = r.program!.steps.find((s) => s.kind === "tool" && s.tool === "mergeReport") as
+      { args?: Record<string, { kind?: string }> } | undefined;
+    expect(rows?.args?.rows?.kind, "certified program still binds rows from the loop").toBe("from");
+    const live = new Session([["map-reduce", createMapReduce]], true);
+    live.addPrograms([r.program!]);
+    await live.stretch("map-reduce", goals[0]!, blockSeed("moonshot-serve-map-reduce", 99));
+    const fin = live.finish();
+    expect(fin.violations, `map-reduce wrap serve ${fin.violations.join("; ")}`).toEqual([]);
+    expect(fin.turns, `map-reduce wrap serve turns=${fin.turns} (want 1)`).toBe(1);
+  }, 45_000);
 });

@@ -6,12 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { Session } from "./session";
 import { createDesk } from "./worlds";
-import {
-  classifyGoLive,
-  GO_LIVE_MECHANISMS,
-  isArc4Mechanism,
-  tagGoLive,
-} from "./witness-econ";
+import { classifyGoLive, GO_LIVE_MECHANISMS, isArc4Mechanism, tagGoLive } from "./witness-econ";
 
 describe("classifyGoLive — locked mechanism names", () => {
   test("the locked set is exactly the eight named mechanisms", () => {
@@ -81,18 +76,12 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   });
 
   test("unvalidatable — compiled program ran a step the trace never recorded", () => {
-    const r = classifyGoLive(
-      ["compiled program ran lookup that this trace never recorded"],
-      "INCONCLUSIVE",
-    );
+    const r = classifyGoLive(["compiled program ran lookup that this trace never recorded"], "INCONCLUSIVE");
     expect(r.mechanism).toBe("unvalidatable");
   });
 
   test("unvalidatable — env flake the recording also contains", () => {
-    const r = classifyGoLive(
-      ["replay hit a searchLogs failure the recording also contains"],
-      "INCONCLUSIVE",
-    );
+    const r = classifyGoLive(["replay hit a searchLogs failure the recording also contains"], "INCONCLUSIVE");
     expect(r.mechanism).toBe("unvalidatable");
   });
 
@@ -118,10 +107,7 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   });
 
   test("quality_fail — extra misses (FAIL, not SKIP)", () => {
-    const r = classifyGoLive(
-      ["compiled output differs from the recorded trace", "extra misses 2"],
-      "FAIL",
-    );
+    const r = classifyGoLive(["compiled output differs from the recorded trace", "extra misses 2"], "FAIL");
     expect(r.mechanism).toBe("quality_fail");
   });
 
@@ -136,10 +122,7 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   });
 
   test("quality_fail — trace has no recorded output", () => {
-    const r = classifyGoLive(
-      ["trace has no recorded output — quality cannot be scored", "extra misses 1"],
-      "FAIL",
-    );
+    const r = classifyGoLive(["trace has no recorded output — quality cannot be scored", "extra misses 1"], "FAIL");
     expect(r.mechanism).toBe("quality_fail");
   });
 
@@ -179,10 +162,7 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
   });
 
   test("unmeasured_usage — quality held but neither tokens nor time saved", () => {
-    const r = classifyGoLive(
-      ["not measured — quality held but neither tokens nor time saved"],
-      "INCONCLUSIVE",
-    );
+    const r = classifyGoLive(["not measured — quality held but neither tokens nor time saved"], "INCONCLUSIVE");
     expect(r.mechanism).toBe("unmeasured_usage");
   });
 
@@ -203,7 +183,9 @@ describe("classifyGoLive — shadow.ts INCONCLUSIVE / FAIL reasons (copied)", ()
 
   test("NO_PROGRAM with compile-refusal text stays unknown until named", () => {
     const r = classifyGoLive(
-      ["All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding."],
+      [
+        "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding.",
+      ],
       "NO_PROGRAM",
     );
     expect(r.mechanism).toBe("unknown");

@@ -51,7 +51,10 @@ function freshHome(): string {
 /** Hook echoes one packet on additional_context and hookSpecificOutput.additionalContext. Score it once. */
 function packetOf(out: unknown): { text: string; bytes: number; omitted: boolean; mark: boolean; raw: string } {
   const raw = additionalContextOf(out as Rec);
-  const blocks = raw.split(/(?=Eden Memory:)/).map((s) => s.trim()).filter((s) => s.includes(MEMORY_MARK));
+  const blocks = raw
+    .split(/(?=Eden Memory:)/)
+    .map((s) => s.trim())
+    .filter((s) => s.includes(MEMORY_MARK));
   const uniq: string[] = [];
   for (const b of blocks) if (!uniq.includes(b)) uniq.push(b);
   const text = uniq.join("\n");
@@ -121,7 +124,12 @@ async function mathCase(): Promise<Record<string, unknown>> {
     for (const prompt of SEED) {
       await submit(home, "on", { hook_event_name: "UserPromptSubmit", session_id: session, cwd, prompt });
     }
-    const live = await submit(home, "on", { hook_event_name: "UserPromptSubmit", session_id: session, cwd, prompt: LIVE_CUE });
+    const live = await submit(home, "on", {
+      hook_event_name: "UserPromptSubmit",
+      session_id: session,
+      cwd,
+      prompt: LIVE_CUE,
+    });
     const storeN = withEnv(armEnv("on", home), async () => {
       assertProtocol();
       const mem = openMemory({ dir: join(home, "memory"), session });
@@ -134,7 +142,12 @@ async function mathCase(): Promise<Record<string, unknown>> {
     const cues = [];
     for (const prompt of MATH_CUES) {
       const on = await submit(home, "on", { hook_event_name: "UserPromptSubmit", session_id: session, cwd, prompt });
-      const off = await submit(offHome, "off", { hook_event_name: "UserPromptSubmit", session_id: session, cwd, prompt });
+      const off = await submit(offHome, "off", {
+        hook_event_name: "UserPromptSubmit",
+        session_id: session,
+        cwd,
+        prompt,
+      });
       const leftover = hitsIn(on.text, LEFTOVER).hit;
       cues.push({
         cue: prompt,
@@ -159,7 +172,11 @@ async function mathCase(): Promise<Record<string, unknown>> {
       live_sqlite: liveHit.includes("sqlite"),
       live_preview: live.text.replace(/\s+/g, " ").trim().slice(0, 240),
       cues,
-      pass: allOmit && liveHit.includes("sqlite") && texts.some((t) => /sqlite/i.test(t)) && texts.some((t) => /Clerk/.test(t)),
+      pass:
+        allOmit &&
+        liveHit.includes("sqlite") &&
+        texts.some((t) => /sqlite/i.test(t)) &&
+        texts.some((t) => /Clerk/.test(t)),
     };
   } finally {
     rmSync(home, { recursive: true, force: true });

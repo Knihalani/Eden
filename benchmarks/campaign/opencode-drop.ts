@@ -14,11 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { respondToHook, type HookIn } from "../../packages/cli/src/hook";
-import {
-  applyOpenCodeAfter,
-  type AppliedHook,
-  type HookResponse,
-} from "../../packages/cli/src/transcript-diff";
+import { applyOpenCodeAfter, type AppliedHook, type HookResponse } from "../../packages/cli/src/transcript-diff";
 import { appendLedgerRow } from "../../packages/cli/src/remainder";
 import type { LiveTool } from "../../packages/cli/src/transparent";
 
@@ -205,7 +201,8 @@ export async function runOpenCodeStretch(opts: RunOpts = {}): Promise<StretchRes
       const applied = applyOpenCodeAfter(call.tool, original, post);
       if (applied.droppedRewrite) {
         droppedRewrites++;
-        const hit = liveTools.find((t) => (t.sequence ?? [])[0]?.toLowerCase() === call.tool.toLowerCase()) ?? liveTools[0];
+        const hit =
+          liveTools.find((t) => (t.sequence ?? [])[0]?.toLowerCase() === call.tool.toLowerCase()) ?? liveTools[0];
         appendLedgerRow({
           session,
           class: "host-drop",

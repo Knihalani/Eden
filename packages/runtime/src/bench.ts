@@ -24,11 +24,15 @@ const naiveMs = performance.now() - t0;
 const compiledWorld = createTicketShip({ llmMs });
 const program = ticketShipProgram();
 const c0 = performance.now();
-const compiled = await runProgram(program, { id: "T-100" }, {
-  registry: registryFrom(compiledWorld.tools),
-  island: compiledWorld.island,
-  llmCents: 1,
-});
+const compiled = await runProgram(
+  program,
+  { id: "T-100" },
+  {
+    registry: registryFrom(compiledWorld.tools),
+    island: compiledWorld.island,
+    llmCents: 1,
+  },
+);
 const compiledMs = performance.now() - c0;
 
 const mined = compileTraces(await traces(n));
@@ -37,14 +41,28 @@ const mined40 = compileTraces(await traces(40));
 const compile40ms = performance.now() - c40t0;
 
 const report = {
-  naive: { llm: naive.stats.llmCalls, ms: Math.round(naiveMs), cents: naive.stats.cost_cents, skipVerify: naive.stats.skipped.includes("verifyWrite") },
-  handwritten: { llm: compiled.stats.llmCalls, ms: Math.round(compiledMs), cents: compiled.stats.cents, verify: compiledWorld.verified.has("T-100") },
+  naive: {
+    llm: naive.stats.llmCalls,
+    ms: Math.round(naiveMs),
+    cents: naive.stats.cost_cents,
+    skipVerify: naive.stats.skipped.includes("verifyWrite"),
+  },
+  handwritten: {
+    llm: compiled.stats.llmCalls,
+    ms: Math.round(compiledMs),
+    cents: compiled.stats.cents,
+    verify: compiledWorld.verified.has("T-100"),
+  },
   reduction: {
     llm: naive.stats.llmCalls / compiled.stats.llmCalls,
     ms: naiveMs / compiledMs,
     cents: naive.stats.cost_cents / compiled.stats.cents,
   },
-  compiler: { programs: mined.programs.length, refusals: mined.refusals.length, island: mined.programs[0]?.steps.some((s) => s.kind === "island") },
+  compiler: {
+    programs: mined.programs.length,
+    refusals: mined.refusals.length,
+    island: mined.programs[0]?.steps.some((s) => s.kind === "island"),
+  },
   compile40: { ms: Math.round(compile40ms), programs: mined40.programs.length, refusals: mined40.refusals.length },
   gates: {
     llm5x: naive.stats.llmCalls / compiled.stats.llmCalls >= 5,

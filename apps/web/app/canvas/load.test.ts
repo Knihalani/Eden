@@ -62,7 +62,13 @@ describe("live canvas load forwards remainder onto classifyFail", () => {
   });
 
   test("cache lookups forward onto the canvas receipt and stay omitted when absent", () => {
-    const withCache = liveFailFromReceipt(program, { ok: 1, outcome: "ok", cache_lookups: 4, cache_hits: 3, cache_hit_rate: 0.75 });
+    const withCache = liveFailFromReceipt(program, {
+      ok: 1,
+      outcome: "ok",
+      cache_lookups: 4,
+      cache_hits: 3,
+      cache_hit_rate: 0.75,
+    });
     expect(withCache.receipt?.cache_lookups).toBe(4);
     expect(withCache.receipt?.cache_hits).toBe(3);
     expect(withCache.receipt?.cache_hit_rate).toBe(0.75);
@@ -96,14 +102,23 @@ describe("live canvas load forwards remainder onto classifyFail", () => {
     expect(withProviderCache.receipt?.cached_tokens).toBe(40);
     expect(withProviderCache.receipt?.cache_write_tokens).toBe(10);
     expect(withProviderCache.receipt?.cache_input_tokens).toBe(100);
-    const unmeasured = liveFailFromReceipt(program, { ok: 1, outcome: "ok", tokenClass: "steered-skip", skipped: ["Grep"] });
+    const unmeasured = liveFailFromReceipt(program, {
+      ok: 1,
+      outcome: "ok",
+      tokenClass: "steered-skip",
+      skipped: ["Grep"],
+    });
     expect(unmeasured.receipt?.tokenClasses).toBeUndefined();
     expect(unmeasured.receipt?.prompt_tokens).toBeUndefined();
     expect(unmeasured.receipt?.cached_tokens).toBeUndefined();
   });
 
   test("a queued replacement on the live tool uses the same words as the draft row", () => {
-    const { fail } = liveFailFromReceipt(program, { ok: 0, outcome: "deopt", deoptReason: "envelope" }, { refreshWaiting: true });
+    const { fail } = liveFailFromReceipt(
+      program,
+      { ok: 0, outcome: "deopt", deoptReason: "envelope" },
+      { refreshWaiting: true },
+    );
     expect(fail?.kind).toBe("degraded");
     expect(fail?.detail).toMatch(/renamed a field/i);
     expect(fail?.next).toMatch(/unchanged until you Approve/i);
@@ -131,7 +146,10 @@ describe("live canvas load forwards remainder onto classifyFail", () => {
 describe("canvas origin warning offset", () => {
   test("null firstWarningAt is omitted — not call 0", () => {
     expect(canvasOrigin({ mode: "loop", firstWarningAt: 3 })).toEqual({ mode: "loop", firstWarningAt: 3 });
-    expect(canvasOrigin({ mode: "fail_streak", firstWarningAt: 0 })).toEqual({ mode: "fail_streak", firstWarningAt: 0 });
+    expect(canvasOrigin({ mode: "fail_streak", firstWarningAt: 0 })).toEqual({
+      mode: "fail_streak",
+      firstWarningAt: 0,
+    });
     expect(canvasOrigin({ mode: "low_gain", firstWarningAt: null })).toEqual({ mode: "low_gain" });
     expect(canvasOrigin({ mode: "happy", firstWarningAt: 2 })).toBeUndefined();
     expect(canvasOrigin(null)).toBeUndefined();

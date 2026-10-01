@@ -121,16 +121,14 @@ export function runHoldoutSoak(opts: {
     if (top && top !== t.expect) crossHits++;
   }
 
-  const surfaceCount = (messages: unknown[]) =>
-    selectSurfacePrograms({ mode: "jit", live, messages }).surface.length;
+  const surfaceCount = (messages: unknown[]) => selectSurfacePrograms({ mode: "jit", live, messages }).surface.length;
   let uniqueWorkSchemas = 0;
   for (const messages of uniqueWork) uniqueWorkSchemas += surfaceCount(messages);
   let vagueSchemas = 0;
   for (const messages of vague) vagueSchemas += surfaceCount(messages);
 
   const precision = n ? hits / n : 0;
-  const pass =
-    precision >= PRECISION_BAR && n > 0 && uniqueWorkSchemas === 0 && vagueSchemas === 0 && crossHits === 0;
+  const pass = precision >= PRECISION_BAR && n > 0 && uniqueWorkSchemas === 0 && vagueSchemas === 0 && crossHits === 0;
   const byLine = Object.entries(by)
     .map(([k, v]) => `${k}:${v.hits}/${v.n}`)
     .join(" ");

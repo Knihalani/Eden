@@ -41,12 +41,16 @@ describe("independent islands share a wave", () => {
       { id: "a", kind: "island", input: { kind: "input", path: "x" }, system: "s", outputSchema: { type: "object" } },
       { id: "b", kind: "island", input: { kind: "input", path: "y" }, system: "s", outputSchema: { type: "object" } },
     ]);
-    const out = await runProgram(program, { x: 1, y: 2 }, {
-      registry: registryFrom({}),
-      island,
-      llmCents: 1,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      program,
+      { x: 1, y: 2 },
+      {
+        registry: registryFrom({}),
+        island,
+        llmCents: 1,
+        checkEnvelope: false,
+      },
+    );
     expect(peak).toBe(2);
     expect(waits).toEqual([true, true]);
     expect(out.stats.llmCalls).toBe(2);
@@ -62,7 +66,15 @@ describe("independent islands share a wave", () => {
       return new IslandReply({ v: req.input }, { prompt_tokens: 10, completion_tokens: 2 });
     };
     const out = await runProgram(
-      islands([{ id: "a", kind: "island", input: { kind: "literal", value: 1 }, system: "s", outputSchema: { type: "object" } }]),
+      islands([
+        {
+          id: "a",
+          kind: "island",
+          input: { kind: "literal", value: 1 },
+          system: "s",
+          outputSchema: { type: "object" },
+        },
+      ]),
       {},
       { registry: registryFrom({}), island, llmCents: 1, checkEnvelope: false },
     );
@@ -86,15 +98,31 @@ describe("independent islands share a wave", () => {
       );
     };
     const program = islands([
-      { id: "a", kind: "island", input: { kind: "literal", value: "first" }, system: "s", outputSchema: { type: "object" } },
-      { id: "b", kind: "island", input: { kind: "from", step: "a", path: "" }, system: "s", outputSchema: { type: "object" } },
+      {
+        id: "a",
+        kind: "island",
+        input: { kind: "literal", value: "first" },
+        system: "s",
+        outputSchema: { type: "object" },
+      },
+      {
+        id: "b",
+        kind: "island",
+        input: { kind: "from", step: "a", path: "" },
+        system: "s",
+        outputSchema: { type: "object" },
+      },
     ]);
-    const out = await runProgram(program, {}, {
-      registry: registryFrom({}),
-      island,
-      llmCents: 1,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      program,
+      {},
+      {
+        registry: registryFrom({}),
+        island,
+        llmCents: 1,
+        checkEnvelope: false,
+      },
+    );
     expect(peak).toBe(1);
     expect(order).toEqual(['"first"', '{"next":"first"}']);
     expect(out.stats.cents).toBe(2);
@@ -115,12 +143,16 @@ describe("independent islands share a wave", () => {
       { id: "b", kind: "island", input: { kind: "input", path: "y" }, system: "s", outputSchema: { type: "object" } },
     ]);
     const t0 = performance.now();
-    const out = await runProgram(program, { x: 1, y: 2 }, {
-      registry: registryFrom({}),
-      island,
-      llmCents: 1,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      program,
+      { x: 1, y: 2 },
+      {
+        registry: registryFrom({}),
+        island,
+        llmCents: 1,
+        checkEnvelope: false,
+      },
+    );
     const wall = performance.now() - t0;
     expect(peak).toBe(2);
     expect(out.stats.cents).toBe(2);

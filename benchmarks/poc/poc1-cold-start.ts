@@ -94,10 +94,7 @@ printRow("compile time", `${tCompile.toFixed(1)} ms`);
 printRow("total wall clock to candidate", `${total.toFixed(1)} ms  (budget: 60,000 ms)`);
 console.log("");
 for (const p of result.programs) {
-  printRow(
-    "CANDIDATE",
-    `"${p.name}" — ${p.steps.length} steps, id ${p.id}`,
-  );
+  printRow("CANDIDATE", `"${p.name}" — ${p.steps.length} steps, id ${p.id}`);
 }
 for (const r of result.refusals.slice(0, 4)) {
   printRow("refusal (honest gate)", `${r.reason?.slice(0, 60) ?? "see code"}`);

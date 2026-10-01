@@ -11,13 +11,7 @@ import { BrandMark } from "./brand-mark";
  * survives even when everything else fails. Voice follows PRODUCT.md: quiet,
  * exact, honest — including about what did *not* happen.
  */
-export default function RootError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function RootError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error(error);
   }, [error]);

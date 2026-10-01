@@ -86,9 +86,12 @@ export function runHookSafely(fn: () => Json): Json {
 /** Cross-platform browser open. */
 export function openCommand(url: string): string {
   switch (platform()) {
-    case "darwin": return `open "${url}"`;
-    case "win32": return `start "" "${url}"`;
-    default: return `xdg-open "${url}"`;
+    case "darwin":
+      return `open "${url}"`;
+    case "win32":
+      return `start "" "${url}"`;
+    default:
+      return `xdg-open "${url}"`;
   }
 }
 
@@ -125,8 +128,12 @@ describe("POC 6 — multi-agent hook installer", () => {
 
   test("fail-open contract: throwing hook answers allow", () => {
     expect(runHookSafely(() => JSON.parse("not json"))).toEqual({});
-    expect(runHookSafely(() => { throw new Error("hookd down"); })).toEqual({});
-    expect(runHookSafely(() => ({ decision: "block" } as Json))).toEqual({ decision: "block" });
+    expect(
+      runHookSafely(() => {
+        throw new Error("hookd down");
+      }),
+    ).toEqual({});
+    expect(runHookSafely(() => ({ decision: "block" }) as Json)).toEqual({ decision: "block" });
   });
 
   test("open command resolves on this platform", () => {

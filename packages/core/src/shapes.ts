@@ -39,7 +39,11 @@ const NOISE_BINARIES = new Set([
 const CAUTIOUS_BINARIES = new Set(["git", "docker", "npm", "pnpm", "yarn", "bun", "pip", "cargo"]);
 
 export function isNoiseCommand(command: string): boolean {
-  const bin = command.trim().split(/\s+/)[0]?.replace(/^["']|["']$/g, "") ?? "";
+  const bin =
+    command
+      .trim()
+      .split(/\s+/)[0]
+      ?.replace(/^["']|["']$/g, "") ?? "";
   return NOISE_BINARIES.has(bin);
 }
 
@@ -169,7 +173,11 @@ function psVerb(bin: string): string {
  * value that looks like an identifier increments `varSlots`.
  */
 export function commandShape(command: string): CommandShape | null {
-  const cleaned = command.trim().replace(/\b sudo \b/, "").replace(/^sudo\s+/,"").replace(/[;&|]+\s*$/, "");
+  const cleaned = command
+    .trim()
+    .replace(/\b sudo \b/, "")
+    .replace(/^sudo\s+/, "")
+    .replace(/[;&|]+\s*$/, "");
   if (!cleaned) return null;
   const segments = cleaned.split(/\s*(?:&&|\|\||;|\|)\s*/);
   // Shape reflects the first segment; pipelines are handled by callers that
@@ -210,14 +218,17 @@ export function commandShape(command: string): CommandShape | null {
     else literals.push(w);
   }
 
-  const parts = [(() => {
-    // PowerShell cmdlets normalize into a readable, lowercase identity
-    // (Get-ChildItem → powershell.get.childitem) so PS stretches name and
-    // cluster like everything else.
-    const psm = bin.match(PS_VERB_NOUN);
-    if (psm) return `powershell.${psm[1]!.toLowerCase()}.${psm[2]!.toLowerCase()}`;
-    return bin.replace(/[.\-/]/g, ".");
-  })(), ...sub];
+  const parts = [
+    (() => {
+      // PowerShell cmdlets normalize into a readable, lowercase identity
+      // (Get-ChildItem → powershell.get.childitem) so PS stretches name and
+      // cluster like everything else.
+      const psm = bin.match(PS_VERB_NOUN);
+      if (psm) return `powershell.${psm[1]!.toLowerCase()}.${psm[2]!.toLowerCase()}`;
+      return bin.replace(/[.\-/]/g, ".");
+    })(),
+    ...sub,
+  ];
   return {
     // Collapse doubled dots: a subcommand like ".field" (jq .field f.json)
     // used to emit "jq..field".
@@ -247,7 +258,9 @@ function commandPossiblyRead(cleaned: string, bin: string, words: string[]): boo
   // Unknown binaries fail conservative: the command must *open* with a read
   // verb somewhere in its first two words to be considered possibly-read.
   const head = [words[1], words[2]].map((w) => (w ?? "").toLowerCase().replace(/[^\w]/g, ""));
-  return head.some((w) => /^(get|list|show|view|describe|status|search|fetch|read|query|scan|inspect|select|cat|print|dump)$/.test(w));
+  return head.some((w) =>
+    /^(get|list|show|view|describe|status|search|fetch|read|query|scan|inspect|select|cat|print|dump)$/.test(w),
+  );
 }
 
 /**
@@ -363,7 +376,10 @@ export function abstractShellGroup(commands: string[]): Map<string, string> {
       nameTokens.push(clean);
       len += clean.length + 1;
     }
-    const name = nameTokens.join(".").replace(/\.{2,}/g, ".").replace(/\.$/, "");
+    const name = nameTokens
+      .join(".")
+      .replace(/\.{2,}/g, ".")
+      .replace(/\.$/, "");
     if (!name && !truncated) continue;
     const finalName =
       truncated || !name ? `${nameTokens.join(".") || "shell"}.${hash8(skeletonTokens.join(" "))}`.slice(0, 80) : name;

@@ -57,7 +57,9 @@ describe("speculative read prefetch", () => {
       step({ id: "w2", method: "GET", url: "https://x.test/forge/7/comments" }),
     ]);
     resetPrefetchCounters();
-    const knownKeys = new Set((await db.all<{ cache_key: string }>(`SELECT cache_key FROM result_cache`)).map((r) => r.cache_key));
+    const knownKeys = new Set(
+      (await db.all<{ cache_key: string }>(`SELECT cache_key FROM result_cache`)).map((r) => r.cache_key),
+    );
     const receipt = await playTool(db, tool, {});
     await drainPrefetches();
 
@@ -72,9 +74,9 @@ describe("speculative read prefetch", () => {
     expect(prefetchCounters.started).toBe(1);
     expect(prefetchCounters.errors).toBe(0);
     // The prefetched GET landed in result_cache under a hashed tenant-scoped key.
-    const fresh = (await db.all<{ cache_key: string; body: string }>(`SELECT cache_key, body FROM result_cache`)).filter(
-      (r) => !knownKeys.has(r.cache_key),
-    );
+    const fresh = (
+      await db.all<{ cache_key: string; body: string }>(`SELECT cache_key, body FROM result_cache`)
+    ).filter((r) => !knownKeys.has(r.cache_key));
     expect(fresh.length).toBe(1);
     expect(fresh[0]!.cache_key.startsWith("rc:")).toBe(true);
     const expectedBody = await handleForge(new URL("https://x.test/forge/7/comments"))!.json();
@@ -161,9 +163,9 @@ describe("speculative read prefetch", () => {
     };
     const k = resultCacheKey(base);
     // Canonical: key order in resolved bind args cannot change the hash.
-    expect(
-      resultCacheKey({ ...base, bound: { a: "1", b: "2" } }),
-    ).toBe(resultCacheKey({ ...base, bound: { b: "2", a: "1" } }));
+    expect(resultCacheKey({ ...base, bound: { a: "1", b: "2" } })).toBe(
+      resultCacheKey({ ...base, bound: { b: "2", a: "1" } }),
+    );
     // Any identity-bearing difference produces a different key.
     expect(resultCacheKey({ ...base, workspaceId: "ws_b" })).not.toBe(k);
     expect(resultCacheKey({ ...base, url: "https://x.test/b" })).not.toBe(k);
@@ -173,7 +175,9 @@ describe("speculative read prefetch", () => {
 
   test("tenant isolation end to end: one workspace's cached body cannot answer another's call", async () => {
     const db = await dbP;
-    const stepsA = [step({ id: "r1", kind: "cloud_http", name: "r1", method: "GET", url: "https://x.test/forge/9/comments" })];
+    const stepsA = [
+      step({ id: "r1", kind: "cloud_http", name: "r1", method: "GET", url: "https://x.test/forge/9/comments" }),
+    ];
     await db.run(
       `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES ('t_iso', 'ws_iso_A', 't_iso', '', 'on', ?, '[]')`,
       [JSON.stringify(stepsA)],
@@ -192,7 +196,7 @@ describe("speculative read prefetch", () => {
     const cachedRowsAfter = await db.all<{ c: number }>(
       `SELECT COUNT(*) as c FROM result_cache WHERE cache_key LIKE 'rc:%'`,
     );
-    expect((cachedRowsAfter[0]?.c ?? 0)).toBeGreaterThan(cachedRowsBefore[0]?.c ?? 0);
+    expect(cachedRowsAfter[0]?.c ?? 0).toBeGreaterThan(cachedRowsBefore[0]?.c ?? 0);
   });
 
   test("singleFlight dedupes concurrent loads and never sticks on rejection", async () => {
@@ -203,7 +207,7 @@ describe("speculative read prefetch", () => {
     });
     await expect(p1).rejects.toBeInstanceOf(Error); // first caller sees the failure
     expect(await joinInflight("sf:1")).toBeUndefined(); // rejected load is a miss, not sticky
-    expect(await singleFlight("sf:1", async () => ((runs++, "fresh")))).toBe("fresh");
+    expect(await singleFlight("sf:1", async () => (runs++, "fresh"))).toBe("fresh");
     expect(runs).toBe(2);
 
     // Hold the winner open with a deferred so the rider joins the same
@@ -255,9 +259,10 @@ describe("public pool + etag envelopes", () => {
     expect(entry?.etag).toBe('"abc"');
     expect(entry?.value).toEqual({ hello: "world" });
     // legacy row (no envelope) written directly
-    await d.run(`INSERT OR REPLACE INTO result_cache (cache_key, body, expires_at) VALUES ('k-legacy', '{"plain":1}', ?)`, [
-      Date.now() + 60_000,
-    ]);
+    await d.run(
+      `INSERT OR REPLACE INTO result_cache (cache_key, body, expires_at) VALUES ('k-legacy', '{"plain":1}', ?)`,
+      [Date.now() + 60_000],
+    );
     expect(await readResult<Record<string, unknown>>(d, "k-legacy")).toEqual({ plain: 1 });
     const stale = await readStaleEntry(d, "k-legacy");
     expect(stale?.value).toEqual({ plain: 1 });
@@ -292,7 +297,7 @@ function jsonishBody(minBytes: number): unknown {
     body: "the lockfile drifted and the deploy pipeline failed; pin and rerun. ",
     labels: ["bug", "deploy", "ci"],
   };
-  const rows: typeof row[] = [];
+  const rows: (typeof row)[] = [];
   const one = JSON.stringify({ ...row, body: row.body.repeat(8) });
   const n = Math.max(1, Math.ceil(minBytes / one.length) + 1);
   for (let i = 0; i < n; i++) rows.push({ ...row, id: i, body: row.body.repeat(8) });

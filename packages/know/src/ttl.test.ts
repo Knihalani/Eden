@@ -37,11 +37,12 @@ describe("pageTtl host/path/source, not URL substrings", () => {
   });
 
   test("NewsArticle markup is news; encyclopedic today is not", () => {
-    const ld = `<script type="application/ld+json">{"@type":"NewsArticle","headline":"Vote"}</script>` + " body ".repeat(20);
+    const ld =
+      `<script type="application/ld+json">{"@type":"NewsArticle","headline":"Vote"}</script>` + " body ".repeat(20);
     expect(ttlDaysFor("https://cms.example/vote", ld)).toBe(1);
-    expect(ttlDaysFor("https://notes.example/stable-note", "a long enough english page about widgets today and yesterday")).toBe(
-      365,
-    );
+    expect(
+      ttlDaysFor("https://notes.example/stable-note", "a long enough english page about widgets today and yesterday"),
+    ).toBe(365);
   });
 
   test("blogs are weekly; generic pages are yearly", () => {
@@ -60,18 +61,16 @@ describe("RFC 9111 hints and unchanged backoff", () => {
   const now = Date.parse("2026-09-03T12:00:00Z");
 
   test("304 / unchanged doubles TTL up to the class cap; news caps at 7", () => {
-    expect(
-      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", status: 304, prevTtl: 1 }),
-    ).toBe(2);
-    expect(
-      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 2 }),
-    ).toBe(4);
-    expect(
-      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 4 }),
-    ).toBe(7);
-    expect(
-      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 7 }),
-    ).toBe(7);
+    expect(ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", status: 304, prevTtl: 1 })).toBe(2);
+    expect(ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 2 })).toBe(
+      4,
+    );
+    expect(ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 4 })).toBe(
+      7,
+    );
+    expect(ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 7 })).toBe(
+      7,
+    );
     expect(ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news" })).toBe(1);
     expect(
       ttlDaysFor("https://en.wikipedia.org/wiki/Newspaper", "A newspaper is a periodical.", {
@@ -112,9 +111,7 @@ describe("RFC 9111 hints and unchanged backoff", () => {
 
   test("Last-Modified 10% heuristic lengthens non-news when older than 10 days and no max-age", () => {
     const lmOld = new Date(now - 2000 * 86_400_000).toUTCString();
-    expect(
-      ttlDaysFor("https://en.wikipedia.org/wiki/Physics", "operators", { lastModified: lmOld, now }),
-    ).toBe(180);
+    expect(ttlDaysFor("https://en.wikipedia.org/wiki/Physics", "operators", { lastModified: lmOld, now })).toBe(180);
     const lmNews = new Date(now - 2000 * 86_400_000).toUTCString();
     expect(
       ttlDaysFor("https://www.reuters.com/world/x", "", {
@@ -124,9 +121,9 @@ describe("RFC 9111 hints and unchanged backoff", () => {
       }),
     ).toBe(1);
     const lmNew = new Date(now - 5 * 86_400_000).toUTCString();
-    expect(
-      ttlDaysFor("https://notes.example/stable-note", "widgets ".repeat(20), { lastModified: lmNew, now }),
-    ).toBe(365);
+    expect(ttlDaysFor("https://notes.example/stable-note", "widgets ".repeat(20), { lastModified: lmNew, now })).toBe(
+      365,
+    );
     expect(
       ttlDaysFor("https://en.wikipedia.org/wiki/Physics", "operators", {
         cacheControl: "max-age=7776000",

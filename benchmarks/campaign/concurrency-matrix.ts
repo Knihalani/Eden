@@ -68,7 +68,10 @@ export function interiorCells(seed = 0x4a41, n = 8): MatrixCell[] {
 
 export async function runCell(cell: MatrixCell): Promise<CellResult> {
   const t0 = performance.now();
-  const sequence = ["lookup", ...Array.from({ length: cell.tail }, (_, i) => (i === cell.tail - 1 ? WRITE : `step${i}`))];
+  const sequence = [
+    "lookup",
+    ...Array.from({ length: cell.tail }, (_, i) => (i === cell.tail - 1 ? WRITE : `step${i}`)),
+  ];
   const writes: Record<string, number> = {};
   const tools: Record<string, ToolDef> = {};
   for (const name of sequence) {
@@ -133,7 +136,9 @@ if (import.meta.main) {
   for (const cell of cells) {
     const r = await runCell(cell);
     const mark = r.ok ? "OK" : "RED";
-    console.log(`  ${mark} ${cellLabel(cell)} ${r.ms.toFixed(0)}ms misses=${r.capacityMisses}${r.ok ? "" : " " + r.duplicates.join(",")}`);
+    console.log(
+      `  ${mark} ${cellLabel(cell)} ${r.ms.toFixed(0)}ms misses=${r.capacityMisses}${r.ok ? "" : " " + r.duplicates.join(",")}`,
+    );
     if (!r.ok) red.push(cellLabel(cell));
   }
   console.log(red.length ? `MATRIX RED: ${red.join("; ")}` : "MATRIX GREEN");

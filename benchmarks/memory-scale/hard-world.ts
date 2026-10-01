@@ -109,34 +109,104 @@ type Unit = { id: string; repo: RepoId; folder: string; filler: number; alias: R
 
 /** `filler` is the unit's share of the 20k background rows: a few busy services, a long tail of quiet ones. */
 export const UNITS: Unit[] = [
-  { id: "billing", repo: "acme-shop", folder: "services/billing", filler: 4200,
-    alias: { dev: "the invoicing service", test: "the thing that charges customers" } },
-  { id: "storefront", repo: "acme-shop", folder: "apps/storefront", filler: 3600,
-    alias: { dev: "the site shoppers browse", test: "the customer-facing shop" } },
-  { id: "search", repo: "acme-shop", folder: "services/search", filler: 3000,
-    alias: { dev: "product lookup", test: "the find-a-product backend" } },
-  { id: "gateway", repo: "acme-infra", folder: "services/gateway", filler: 2500,
-    alias: { dev: "the edge proxy", test: "the entry point for all inbound traffic" } },
-  { id: "admin", repo: "acme-shop", folder: "apps/admin", filler: 1600,
-    alias: { dev: "the back-office panel", test: "the internal staff console" } },
-  { id: "ingest", repo: "acme-data", folder: "pipelines/ingest", filler: 1500,
-    alias: { dev: "the CSV importer", test: "the raw-file loader" } },
-  { id: "billing-worker", repo: "acme-shop", folder: "services/billing-worker", filler: 1100,
-    alias: { dev: "the async invoicing runner", test: "the offline charging process" } },
-  { id: "notifier", repo: "acme-infra", folder: "services/notifier", filler: 900,
-    alias: { dev: "the service that sends emails and push alerts", test: "the messaging fan-out service" } },
-  { id: "search-indexer", repo: "acme-shop", folder: "services/search-indexer", filler: 600,
-    alias: { dev: "the catalog reindexing process", test: "the product-index builder" } },
-  { id: "warehouse-api", repo: "acme-data", folder: "services/warehouse-api", filler: 450,
-    alias: { dev: "the analytics query service", test: "the BI backend" } },
-  { id: "scheduler", repo: "acme-infra", folder: "services/scheduler", filler: 250,
-    alias: { dev: "the cron runner", test: "the thing that fires timed work" } },
-  { id: "reports", repo: "acme-data", folder: "pipelines/reports", filler: 150,
-    alias: { dev: "the nightly finance exports", test: "the spreadsheet generator" } },
-  { id: "deployer", repo: "acme-infra", folder: "tools/deployer", filler: 90,
-    alias: { dev: "our release tooling", test: "the rollout CLI" } },
-  { id: "scoring", repo: "acme-data", folder: "services/scoring", filler: 60,
-    alias: { dev: "the fraud model server", test: "the risk scorer" } },
+  {
+    id: "billing",
+    repo: "acme-shop",
+    folder: "services/billing",
+    filler: 4200,
+    alias: { dev: "the invoicing service", test: "the thing that charges customers" },
+  },
+  {
+    id: "storefront",
+    repo: "acme-shop",
+    folder: "apps/storefront",
+    filler: 3600,
+    alias: { dev: "the site shoppers browse", test: "the customer-facing shop" },
+  },
+  {
+    id: "search",
+    repo: "acme-shop",
+    folder: "services/search",
+    filler: 3000,
+    alias: { dev: "product lookup", test: "the find-a-product backend" },
+  },
+  {
+    id: "gateway",
+    repo: "acme-infra",
+    folder: "services/gateway",
+    filler: 2500,
+    alias: { dev: "the edge proxy", test: "the entry point for all inbound traffic" },
+  },
+  {
+    id: "admin",
+    repo: "acme-shop",
+    folder: "apps/admin",
+    filler: 1600,
+    alias: { dev: "the back-office panel", test: "the internal staff console" },
+  },
+  {
+    id: "ingest",
+    repo: "acme-data",
+    folder: "pipelines/ingest",
+    filler: 1500,
+    alias: { dev: "the CSV importer", test: "the raw-file loader" },
+  },
+  {
+    id: "billing-worker",
+    repo: "acme-shop",
+    folder: "services/billing-worker",
+    filler: 1100,
+    alias: { dev: "the async invoicing runner", test: "the offline charging process" },
+  },
+  {
+    id: "notifier",
+    repo: "acme-infra",
+    folder: "services/notifier",
+    filler: 900,
+    alias: { dev: "the service that sends emails and push alerts", test: "the messaging fan-out service" },
+  },
+  {
+    id: "search-indexer",
+    repo: "acme-shop",
+    folder: "services/search-indexer",
+    filler: 600,
+    alias: { dev: "the catalog reindexing process", test: "the product-index builder" },
+  },
+  {
+    id: "warehouse-api",
+    repo: "acme-data",
+    folder: "services/warehouse-api",
+    filler: 450,
+    alias: { dev: "the analytics query service", test: "the BI backend" },
+  },
+  {
+    id: "scheduler",
+    repo: "acme-infra",
+    folder: "services/scheduler",
+    filler: 250,
+    alias: { dev: "the cron runner", test: "the thing that fires timed work" },
+  },
+  {
+    id: "reports",
+    repo: "acme-data",
+    folder: "pipelines/reports",
+    filler: 150,
+    alias: { dev: "the nightly finance exports", test: "the spreadsheet generator" },
+  },
+  {
+    id: "deployer",
+    repo: "acme-infra",
+    folder: "tools/deployer",
+    filler: 90,
+    alias: { dev: "our release tooling", test: "the rollout CLI" },
+  },
+  {
+    id: "scoring",
+    repo: "acme-data",
+    folder: "services/scoring",
+    filler: 60,
+    alias: { dev: "the fraud model server", test: "the risk scorer" },
+  },
 ];
 
 /** Near-duplicate unit names: a cue about one must not pull the other's facts. */
@@ -179,10 +249,16 @@ export const SLOTS: Record<SlotId, SlotDef> = {
       test: ["what's the {u} database?", "{u} database: which one is it?"],
     },
     para: {
-      dev: ["where does {u} store its records?", "what datastore sits behind {u}?",
-        "which engine holds the tables for {u}?"],
-      test: ["what does {u} persist rows into?", "what storage backend lives underneath {u}?",
-        "when {u} saves an order, where does it end up?"],
+      dev: [
+        "where does {u} store its records?",
+        "what datastore sits behind {u}?",
+        "which engine holds the tables for {u}?",
+      ],
+      test: [
+        "what does {u} persist rows into?",
+        "what storage backend lives underneath {u}?",
+        "when {u} saves an order, where does it end up?",
+      ],
     },
     path: {
       dev: ["{p} keeps timing out on connect. which database is this talking to?"],
@@ -204,8 +280,11 @@ export const SLOTS: Record<SlotId, SlotDef> = {
     },
     para: {
       dev: ["how do people sign in to {u}?", "who issues login tokens for {u}?", "how does {u} know who a user is?"],
-      test: ["what identity service does {u} trust?", "which vendor verifies passwords for {u}?",
-        "where do sessions come from when someone logs into {u}?"],
+      test: [
+        "what identity service does {u} trust?",
+        "which vendor verifies passwords for {u}?",
+        "where do sessions come from when someone logs into {u}?",
+      ],
     },
     path: {
       dev: ["{p} rejects every login. what auth setup sits behind it?"],
@@ -226,8 +305,10 @@ export const SLOTS: Record<SlotId, SlotDef> = {
       test: ["which CI pipeline service does {u} use?", "{u} pipeline: which CI?"],
     },
     para: {
-      dev: ["what executes the checks when I open a pull request against {u}?",
-        "where do {u} changes get verified after a push?"],
+      dev: [
+        "what executes the checks when I open a pull request against {u}?",
+        "where do {u} changes get verified after a push?",
+      ],
       test: ["which system goes red when a commit to {u} breaks something?", "what automation gates merges into {u}?"],
     },
     path: {
@@ -239,8 +320,11 @@ export const SLOTS: Record<SlotId, SlotDef> = {
   cache: {
     key: "cache",
     values: ["Redis", "Memcached", "Varnish", "Hazelcast", "KeyDB"],
-    facts: ["The {u} cache is {v}.", "{u} keeps a {v} cache in front of its reads.",
-      "Hot reads in {u} hit a {v} cache."],
+    facts: [
+      "The {u} cache is {v}.",
+      "{u} keeps a {v} cache in front of its reads.",
+      "Hot reads in {u} hit a {v} cache.",
+    ],
     updates: ["The {u} cache is now {v}."],
     migrations: ["We moved {u} from {old} to {v}.", "The {u} cache moved from {old} to {v}."],
     drops: ["{u} no longer has a cache; we removed {old}.", "We dropped {old} from {u} entirely."],
@@ -262,8 +346,11 @@ export const SLOTS: Record<SlotId, SlotDef> = {
   queue: {
     key: "queue",
     values: ["Kafka", "RabbitMQ", "SQS", "NATS", "Pub/Sub"],
-    facts: ["The {u} queue is {v}.", "{u} uses {v} as its job queue.",
-      "Background jobs for {u} go through the {v} queue."],
+    facts: [
+      "The {u} queue is {v}.",
+      "{u} uses {v} as its job queue.",
+      "Background jobs for {u} go through the {v} queue.",
+    ],
     updates: ["The {u} queue is now {v}."],
     migrations: ["We moved {u} from {old} to {v}.", "The {u} queue moved from {old} to {v}."],
     drops: ["{u} no longer uses a queue; we removed {old}.", "We dropped {old} from {u} entirely."],
@@ -383,26 +470,80 @@ const REPO_CUES: Record<RepoSlot, Record<Split, string>> = {
 
 /** Rare codenames: a cue naming one should retrieve exactly one row. The known-pass floor. */
 const ANCHORS: { split: Split; name: string; unit: string; text: string; cue: string }[] = [
-  { split: "dev", name: "kestrel", unit: "billing", text: "Kestrel is the codename for the billing ledger rewrite.",
-    cue: "what's Kestrel?" },
-  { split: "dev", name: "osprey", unit: "search", text: "Osprey is the codename for the search relevance project.",
-    cue: "Osprey?" },
-  { split: "dev", name: "heron", unit: "gateway", text: "Heron is the codename for the gateway rate-limit work.",
-    cue: "what's Heron again?" },
-  { split: "test", name: "plover", unit: "ingest", text: "Plover is the codename for the ingest backfill.",
-    cue: "Plover?" },
-  { split: "test", name: "avocet", unit: "storefront", text: "Avocet is the codename for the storefront redesign.",
-    cue: "what's Avocet?" },
-  { split: "test", name: "tern", unit: "notifier", text: "Tern is the codename for the notifier digest emails.",
-    cue: "what's Tern again?" },
+  {
+    split: "dev",
+    name: "kestrel",
+    unit: "billing",
+    text: "Kestrel is the codename for the billing ledger rewrite.",
+    cue: "what's Kestrel?",
+  },
+  {
+    split: "dev",
+    name: "osprey",
+    unit: "search",
+    text: "Osprey is the codename for the search relevance project.",
+    cue: "Osprey?",
+  },
+  {
+    split: "dev",
+    name: "heron",
+    unit: "gateway",
+    text: "Heron is the codename for the gateway rate-limit work.",
+    cue: "what's Heron again?",
+  },
+  {
+    split: "test",
+    name: "plover",
+    unit: "ingest",
+    text: "Plover is the codename for the ingest backfill.",
+    cue: "Plover?",
+  },
+  {
+    split: "test",
+    name: "avocet",
+    unit: "storefront",
+    text: "Avocet is the codename for the storefront redesign.",
+    cue: "what's Avocet?",
+  },
+  {
+    split: "test",
+    name: "tern",
+    unit: "notifier",
+    text: "Tern is the codename for the notifier digest emails.",
+    cue: "what's Tern again?",
+  },
 ];
 
 /** A7 §2 `ack` turns after an assistant *report* (no proposal): must inject nothing (A5 silence b). */
 const ACKS: Record<Split, string[]> = {
-  dev: ["ok", "thanks", "cool", "great", "got it", "ok thanks", "nice", "sounds good", "continue", "keep going",
-    "great thanks", "next"],
-  test: ["thanks!", "cool thanks", "nice, thanks", "got it, thanks", "sounds good!", "great!", "ok cool", "go on",
-    "ok, next", "ok great", "great, thanks", "cool cool"],
+  dev: [
+    "ok",
+    "thanks",
+    "cool",
+    "great",
+    "got it",
+    "ok thanks",
+    "nice",
+    "sounds good",
+    "continue",
+    "keep going",
+    "great thanks",
+    "next",
+  ],
+  test: [
+    "thanks!",
+    "cool thanks",
+    "nice, thanks",
+    "got it, thanks",
+    "sounds good!",
+    "great!",
+    "ok cool",
+    "go on",
+    "ok, next",
+    "ok great",
+    "great, thanks",
+    "cool cool",
+  ],
 };
 
 const REPORTS: Record<Split, string[]> = {
@@ -423,43 +564,72 @@ const REPORTS: Record<Split, string[]> = {
 /** A5 silence (a): non-human submits. */
 const NONHUMAN: Record<Split, string[]> = {
   dev: [
-    "<task-notification>Background command \"bun test services/billing\" completed (exit code 0).</task-notification>",
+    '<task-notification>Background command "bun test services/billing" completed (exit code 0).</task-notification>',
     "<task-notification>Agent finished: searched the gateway auth middleware, 4 files matched.</task-notification>",
-    "<task-notification>Background command \"docker compose up search\" exited with code 1.</task-notification>",
-    "<task-notification>Background command \"bun run lint --filter admin\" completed (exit code 0)."
-      + "</task-notification>",
+    '<task-notification>Background command "docker compose up search" exited with code 1.</task-notification>',
+    '<task-notification>Background command "bun run lint --filter admin" completed (exit code 0).' +
+      "</task-notification>",
   ],
   test: [
-    "<task-notification>Background command \"pytest pipelines/ingest\" completed (exit code 0).</task-notification>",
+    '<task-notification>Background command "pytest pipelines/ingest" completed (exit code 0).</task-notification>',
     "<task-notification>Subagent finished reviewing the notifier queue consumer.</task-notification>",
-    "<task-notification>Background command \"bun run build --filter storefront\" completed (exit code 0)."
-      + "</task-notification>",
-    "<task-notification>Background command \"make migrate\" in services/billing exited with code 2."
-      + "</task-notification>",
+    '<task-notification>Background command "bun run build --filter storefront" completed (exit code 0).' +
+      "</task-notification>",
+    '<task-notification>Background command "make migrate" in services/billing exited with code 2.' +
+      "</task-notification>",
   ],
 };
 
 /** Human turns that are not acks and ask nothing of memory. */
 const CHATTER: Record<Split, string[]> = {
-  dev: ["haha that's wild", "brb, grabbing coffee", "hmm let me think about that for a sec",
-    "can you make that answer shorter?", "lol the build was slow again today", "wait, what did you just change?",
-    "sorry, I meant the other file", "no rush on this one"],
-  test: ["ugh, mondays", "that makes sense, I guess", "sorry, typo above", "no worries, take your time",
-    "one sec, my laptop is updating", "heh, nice catch on that one", "can you say that again more simply?",
-    "let's pause here for today"],
+  dev: [
+    "haha that's wild",
+    "brb, grabbing coffee",
+    "hmm let me think about that for a sec",
+    "can you make that answer shorter?",
+    "lol the build was slow again today",
+    "wait, what did you just change?",
+    "sorry, I meant the other file",
+    "no rush on this one",
+  ],
+  test: [
+    "ugh, mondays",
+    "that makes sense, I guess",
+    "sorry, typo above",
+    "no worries, take your time",
+    "one sec, my laptop is updating",
+    "heh, nice catch on that one",
+    "can you say that again more simply?",
+    "let's pause here for today",
+  ],
 };
 
 /** General questions that share vocabulary with stored facts: memory adds nothing (R1 hard lexical traps). */
 const OFFTOPIC: Record<Split, string[]> = {
-  dev: ["how does Postgres MVCC work in general?", "what's the difference between Redis and Memcached?",
-    "explain what a Kafka consumer group is", "write a haiku about continuous integration",
-    "how do I center a div with flexbox?", "what's the capital of Australia?", "what does HTTP 429 mean?",
-    "give me a regex that matches an email address", "why is the sky blue?", "what is a database index, conceptually?"],
-  test: ["how does Kubernetes schedule pods onto nodes?", "is DynamoDB eventually consistent by default?",
-    "what's a good book on distributed systems?", "translate 'good morning' into French",
-    "how do JWTs get signed?", "what's the time complexity of quicksort?", "explain the OAuth device flow simply",
-    "how many bytes are in a kilobyte?", "what's the difference between a mutex and a semaphore?",
-    "recommend a mechanical keyboard"],
+  dev: [
+    "how does Postgres MVCC work in general?",
+    "what's the difference between Redis and Memcached?",
+    "explain what a Kafka consumer group is",
+    "write a haiku about continuous integration",
+    "how do I center a div with flexbox?",
+    "what's the capital of Australia?",
+    "what does HTTP 429 mean?",
+    "give me a regex that matches an email address",
+    "why is the sky blue?",
+    "what is a database index, conceptually?",
+  ],
+  test: [
+    "how does Kubernetes schedule pods onto nodes?",
+    "is DynamoDB eventually consistent by default?",
+    "what's a good book on distributed systems?",
+    "translate 'good morning' into French",
+    "how do JWTs get signed?",
+    "what's the time complexity of quicksort?",
+    "explain the OAuth device flow simply",
+    "how many bytes are in a kilobyte?",
+    "what's the difference between a mutex and a semaphore?",
+    "recommend a mechanical keyboard",
+  ],
 };
 
 const STAGING = {
@@ -490,16 +660,61 @@ const FILLER_TEMPLATES = [
 ];
 
 const FILLER_TOPICS = [
-  "database", "migration", "schema", "tables", "records", "auth", "login", "session", "tokens", "pipeline",
-  "build", "checks", "pull request", "cache", "queue", "events", "jobs", "workers", "deploy", "rollout",
-  "production", "errors", "alerts", "stack traces", "tests", "flaky test", "dependencies", "config", "logging",
-  "metrics", "latency", "retries", "timeouts", "webhooks", "api", "dashboard", "docs", "onboarding",
+  "database",
+  "migration",
+  "schema",
+  "tables",
+  "records",
+  "auth",
+  "login",
+  "session",
+  "tokens",
+  "pipeline",
+  "build",
+  "checks",
+  "pull request",
+  "cache",
+  "queue",
+  "events",
+  "jobs",
+  "workers",
+  "deploy",
+  "rollout",
+  "production",
+  "errors",
+  "alerts",
+  "stack traces",
+  "tests",
+  "flaky test",
+  "dependencies",
+  "config",
+  "logging",
+  "metrics",
+  "latency",
+  "retries",
+  "timeouts",
+  "webhooks",
+  "api",
+  "dashboard",
+  "docs",
+  "onboarding",
 ];
 
 const FILLER_FILES = [
-  "src/index.ts", "src/db/pool.ts", "src/auth/session.ts", "src/handlers/orders.ts", "src/jobs/consumer.ts",
-  "config/prod.yaml", "test/smoke.test.ts", "package.json", "README.md", "src/cache/client.ts",
-  "src/events/publish.ts", "src/lib/telemetry.ts", "deploy/manifest.yaml", "ci/config.yml",
+  "src/index.ts",
+  "src/db/pool.ts",
+  "src/auth/session.ts",
+  "src/handlers/orders.ts",
+  "src/jobs/consumer.ts",
+  "config/prod.yaml",
+  "test/smoke.test.ts",
+  "package.json",
+  "README.md",
+  "src/cache/client.ts",
+  "src/events/publish.ts",
+  "src/lib/telemetry.ts",
+  "deploy/manifest.yaml",
+  "ci/config.yml",
 ];
 
 const SLOT_IDS = Object.keys(SLOTS) as SlotId[];
@@ -664,7 +879,10 @@ export function buildCases(world: World, split: Split): HardCase[] {
     cases.push({ states: [], ...c, id, split });
   };
   const mine = world.pairs.filter((p) => p.split === split);
-  const plain = shuffle(r, mine.filter((p) => p.tag === "plain"));
+  const plain = shuffle(
+    r,
+    mine.filter((p) => p.tag === "plain"),
+  );
   const repoOf = (unit: string) => unitOf(unit).repo;
   const pathFor = (unit: string, slot: SlotId) => `${unitOf(unit).folder}/${pick(r, SLOTS[slot].files)}`;
 
@@ -696,49 +914,87 @@ export function buildCases(world: World, split: Split): HardCase[] {
   });
   for (const p of mine.filter((x) => x.tag === "history")) {
     const need = [slotKey(p.unit, p.slot)];
-    add({ category: "stale", repo: repoOf(p.unit), cue: fill(pick(r, SLOTS[p.slot].named[split]), { u: p.unit }),
-      needs: need });
-    add({ category: "stale", repo: repoOf(p.unit), cue: fill(pick(r, SLOTS[p.slot].path[split]),
-      { p: pathFor(p.unit, p.slot) }), needs: need });
+    add({
+      category: "stale",
+      repo: repoOf(p.unit),
+      cue: fill(pick(r, SLOTS[p.slot].named[split]), { u: p.unit }),
+      needs: need,
+    });
+    add({
+      category: "stale",
+      repo: repoOf(p.unit),
+      cue: fill(pick(r, SLOTS[p.slot].path[split]), { p: pathFor(p.unit, p.slot) }),
+      needs: need,
+    });
   }
   for (const p of mine.filter((x) => x.tag === "staging")) {
     const key = slotKey(p.unit, p.slot);
-    add({ category: "distract", repo: repoOf(p.unit), cue: fill(STAGING.cues.prod[split], { u: p.unit }),
-      needs: [key] });
-    add({ category: "distract", repo: repoOf(p.unit), cue: fill(STAGING.cues.staging[split], { u: p.unit }),
-      needs: [`${key}.staging`] });
+    add({
+      category: "distract",
+      repo: repoOf(p.unit),
+      cue: fill(STAGING.cues.prod[split], { u: p.unit }),
+      needs: [key],
+    });
+    add({
+      category: "distract",
+      repo: repoOf(p.unit),
+      cue: fill(STAGING.cues.staging[split], { u: p.unit }),
+      needs: [`${key}.staging`],
+    });
   }
   for (const p of mine.filter((x) => x.tag === "negation")) {
-    add({ category: "distract", repo: repoOf(p.unit), cue: fill(pick(r, SLOTS[p.slot].named[split]), { u: p.unit }),
-      needs: [slotKey(p.unit, p.slot)] });
+    add({
+      category: "distract",
+      repo: repoOf(p.unit),
+      cue: fill(pick(r, SLOTS[p.slot].named[split]), { u: p.unit }),
+      needs: [slotKey(p.unit, p.slot)],
+    });
   }
   for (const [a, b] of SIBLINGS) {
     for (const unit of [a, b]) {
       const other = unit === a ? b : a;
-      const shared = mine.filter((p) => p.unit === unit && p.tag === "plain"
-        && world.current.has(slotKey(other, p.slot)));
+      const shared = mine.filter(
+        (p) => p.unit === unit && p.tag === "plain" && world.current.has(slotKey(other, p.slot)),
+      );
       for (const p of shared.slice(0, 2)) {
-        add({ category: "distract", repo: repoOf(unit), cue: fill(pick(r, SLOTS[p.slot].named[split]), { u: unit }),
-          needs: [slotKey(unit, p.slot)] });
+        add({
+          category: "distract",
+          repo: repoOf(unit),
+          cue: fill(pick(r, SLOTS[p.slot].named[split]), { u: unit }),
+          needs: [slotKey(unit, p.slot)],
+        });
       }
     }
   }
   const byUnit = new Map<string, typeof plain>();
   for (const p of plain) byUnit.set(p.unit, [...(byUnit.get(p.unit) ?? []), p]);
-  const multi = shuffle(r, [...byUnit.values()].filter((ps) => ps.length >= 2));
+  const multi = shuffle(
+    r,
+    [...byUnit.values()].filter((ps) => ps.length >= 2),
+  );
   for (const ps of multi.slice(0, 12)) {
     const [x, y] = shuffle(r, ps) as [(typeof ps)[number], (typeof ps)[number]];
     const said = statementFor(world, slotKey(x.unit, x.slot));
     const state = said.text.replace(/[.!?]+$/, "");
     const ask = fill(pick(r, SLOTS[y.slot].named[split]), { u: y.unit });
     const cue = fill(pick(r, REDUNDANT[split]), { state: lowerFirst(state), ask });
-    add({ category: "redundant", repo: repoOf(x.unit), cue, needs: [slotKey(y.unit, y.slot)],
-      states: [slotKey(x.unit, x.slot)] });
+    add({
+      category: "redundant",
+      repo: repoOf(x.unit),
+      cue,
+      needs: [slotKey(y.unit, y.slot)],
+      states: [slotKey(x.unit, x.slot)],
+    });
   }
   const repoIds = REPOS.map((x) => x.id);
   ACKS[split].forEach((ack, i) => {
-    add({ category: "ack", repo: pick(r, repoIds), prev: REPORTS[split][i % REPORTS[split].length], cue: ack,
-      needs: [] });
+    add({
+      category: "ack",
+      repo: pick(r, repoIds),
+      prev: REPORTS[split][i % REPORTS[split].length],
+      cue: ack,
+      needs: [],
+    });
   });
   for (const cue of NONHUMAN[split]) add({ category: "nonhuman", repo: pick(r, repoIds), cue, needs: [] });
   for (const cue of CHATTER[split]) add({ category: "chatter", repo: pick(r, repoIds), cue, needs: [] });

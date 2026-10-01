@@ -4,11 +4,7 @@ import { assertValid } from "@eden/ir";
 import { composedRegistry, registryFrom, runProgram } from "@eden/runtime";
 import { compileTraces } from "./compile";
 import { intakeBillingHandoffTraces } from "./corpus/fixtures";
-import {
-  approveInTest,
-  assertHandoffNotLive,
-  findHandoffGroups,
-} from "./handoff";
+import { approveInTest, assertHandoffNotLive, findHandoffGroups } from "./handoff";
 
 /**
  * Wave 7.3: repeated agent→agent patterns compile to a composed candidate.
@@ -264,9 +260,9 @@ describe("handoff mining", () => {
   test("mutating under-determined child refuses; no guessed compose", () => {
     const { programs, refusals } = compileTraces(underdeterminedBillingTraces());
     expect(programs.filter((p) => p.origin?.mode === "handoff")).toHaveLength(0);
-    expect(refusals.some((r) => r.code === "underdetermined_write" || /under-determined|Handoff refused/i.test(r.reason))).toBe(
-      true,
-    );
+    expect(
+      refusals.some((r) => r.code === "underdetermined_write" || /under-determined|Handoff refused/i.test(r.reason)),
+    ).toBe(true);
   });
 
   test("fork programs are not stolen as handoffs", () => {

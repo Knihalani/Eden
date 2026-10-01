@@ -2,12 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PUBLIC_CLAIMS, customerStudies } from "./claims";
-import {
-  CLAIMS_LISTING_BANNER,
-  claimNumberTokens,
-  listingNumberTokens,
-  renderClaimsListing,
-} from "./listing";
+import { CLAIMS_LISTING_BANNER, claimNumberTokens, listingNumberTokens, renderClaimsListing } from "./listing";
 import * as measure from "./index";
 
 const ROOT = join(import.meta.dir, "../../..");
@@ -84,7 +79,9 @@ describe("claims-sourced marketplace listing", () => {
     expect(draft).not.toMatch(/https?:\/\//i);
     expect(draft).not.toMatch(/skillhub/i);
     expect(draft).not.toMatch(/\/v1\/listings/i);
-    expect(draft).not.toMatch(/\b(Acme|Globex|Initech|Umbrella|Stark|Wayne|Stripe|Shopify|Salesforce|Netflix|Uber|Airbnb)\b/);
+    expect(draft).not.toMatch(
+      /\b(Acme|Globex|Initech|Umbrella|Stark|Wayne|Stripe|Shopify|Salesforce|Netflix|Uber|Airbnb)\b/,
+    );
   });
 
   test("docs/marketplace-draft.md is the renderer output", () => {

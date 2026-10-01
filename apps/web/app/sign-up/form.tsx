@@ -63,8 +63,7 @@ export function SignUpForm() {
     if (verified.error) return;
     if (signUp.status !== "complete") return;
     await signUp.finalize({
-      navigate: ({ session, decorateUrl }) =>
-        goDecorated(decorateUrl, router.replace, destAfterAuth(session, "up")),
+      navigate: ({ session, decorateUrl }) => goDecorated(decorateUrl, router.replace, destAfterAuth(session, "up")),
     });
   };
 
@@ -78,7 +77,7 @@ export function SignUpForm() {
       <section className="account-stage">
         <AccountCopy title="You’re in." lead="Taking you there." />
         <div className="account-door" id="account-door" aria-busy="true">
-        <p className="account-switch">Taking you there.</p>
+          <p className="account-switch">Taking you there.</p>
         </div>
       </section>
     );
@@ -93,10 +92,7 @@ export function SignUpForm() {
     const codeError = field("code");
     return (
       <section className="account-stage">
-        <AccountCopy
-          title="Check your email."
-          lead={`Enter the code we sent to ${email || "your inbox"}.`}
-        />
+        <AccountCopy title="Check your email." lead={`Enter the code we sent to ${email || "your inbox"}.`} />
         <div className="account-door" id="account-door">
           <form className="account-form" onSubmit={onVerify}>
             <label className="account-field" htmlFor="signup-code">
@@ -142,10 +138,10 @@ export function SignUpForm() {
   const emailError = field("emailAddress");
   const passwordError = field("password");
 
-    return (
-      <section className="account-stage">
-        <AccountCopy title="Create an account." lead="Then you name a workspace." />
-        <div className="account-door" id="account-door">
+  return (
+    <section className="account-stage">
+      <AccountCopy title="Create an account." lead="Then you name a workspace." />
+      <div className="account-door" id="account-door">
         <GoogleButton busy={oauthBusy} disabled={!signUp || busy} onClick={onGoogle} />
         <p className="account-or">
           <span>or use email</span>

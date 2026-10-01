@@ -84,9 +84,7 @@ async function run(label: "without" | "with") {
     duration_ms: result?.duration_ms,
     duration_api_ms: result?.duration_api_ms,
     num_turns: result?.num_turns,
-    tool_calls: Array.isArray((result as { modelUsage?: unknown })?.permission_denials)
-      ? undefined
-      : result?.num_turns,
+    tool_calls: Array.isArray((result as { modelUsage?: unknown })?.permission_denials) ? undefined : result?.num_turns,
     total_cost_usd: result?.total_cost_usd,
     input_tokens: usage.input_tokens,
     output_tokens: usage.output_tokens,

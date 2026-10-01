@@ -3,10 +3,7 @@
  * from github.com/xiaowu0162/LongMemEval-V2 — own schema, not MAB Table 3.
  */
 
-export type JudgeFn = (args: {
-  system: string;
-  user: string;
-}) => Promise<string>;
+export type JudgeFn = (args: { system: string; user: string }) => Promise<string>;
 
 const ABSTENTION_JUDGE_SYSTEM =
   "You are a strict grader for flawed-premise (abstention) questions. " +
@@ -27,7 +24,16 @@ const GOTCHAS_JUDGE_SYSTEM =
   "If the model gives multiple points, partial coverage is enough for 1 as long as no contradictions appear.";
 
 const MULTI_SELECT_FILLER = new Set([
-  "AND", "ANSWER", "ANSWERS", "CHOICE", "CHOICES", "FINAL", "LETTER", "LETTERS", "OPTION", "OPTIONS",
+  "AND",
+  "ANSWER",
+  "ANSWERS",
+  "CHOICE",
+  "CHOICES",
+  "FINAL",
+  "LETTER",
+  "LETTERS",
+  "OPTION",
+  "OPTIONS",
 ]);
 
 export function extractBoxedAnswer(text: string): string {
@@ -68,18 +74,28 @@ export function normalizePhrase(
   return t.replace(/\s+/g, " ").trim();
 }
 
-function splitPhrases(text: string | null | undefined, separators: string[], opts: Parameters<typeof normalizePhrase>[1]): string[] {
+function splitPhrases(
+  text: string | null | undefined,
+  separators: string[],
+  opts: Parameters<typeof normalizePhrase>[1],
+): string[] {
   if (text == null) return [];
   if (!separators.length) {
     const n = normalizePhrase(text, opts);
     return n ? [n] : [];
   }
   const pattern = new RegExp(separators.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"));
-  return String(text).split(pattern).map((p) => normalizePhrase(p, opts)).filter(Boolean);
+  return String(text)
+    .split(pattern)
+    .map((p) => normalizePhrase(p, opts))
+    .filter(Boolean);
 }
 
 function parseSpec(spec: string): { name: string; kwargs: Record<string, unknown> } {
-  const parts = spec.split("|").map((p) => p.trim()).filter(Boolean);
+  const parts = spec
+    .split("|")
+    .map((p) => p.trim())
+    .filter(Boolean);
   const name = parts[0] || "";
   const kwargs: Record<string, unknown> = {};
   for (const part of parts.slice(1)) {
@@ -120,7 +136,11 @@ export function normPhraseSetMatch(prediction: string, answer: string, kwargs: R
   return true;
 }
 
-export function normPhraseSetMatchOrdered(prediction: string, answer: string, kwargs: Record<string, unknown>): boolean {
+export function normPhraseSetMatchOrdered(
+  prediction: string,
+  answer: string,
+  kwargs: Record<string, unknown>,
+): boolean {
   const opts = normOpts(kwargs);
   const pred = normalizePhrase(prediction, opts);
   const phrases = splitPhrases(answer, separatorsOf(kwargs), opts);
@@ -160,7 +180,8 @@ export function mcChoiceSetMatch(prediction: string, answer: string, kwargs: Rec
   const pred = extractMultiSelectLetters(prediction);
   const gold = extractMultiSelectLetters(answer);
   if (kwargs.require_non_empty !== false && (!pred.length || !gold.length)) return false;
-  if (pred.length !== gold.length) return new Set(pred).size === new Set(gold).size && gold.every((g) => pred.includes(g));
+  if (pred.length !== gold.length)
+    return new Set(pred).size === new Set(gold).size && gold.every((g) => pred.includes(g));
   return new Set(pred).size === new Set(gold).size && gold.every((g) => pred.includes(g));
 }
 
@@ -170,7 +191,8 @@ function parseJudgeLabel(text: string): number {
   if (jsonMatch) {
     try {
       const payload = JSON.parse(jsonMatch[0]!) as { label?: unknown };
-      if (payload.label === 0 || payload.label === 1 || payload.label === "0" || payload.label === "1") return Number(payload.label);
+      if (payload.label === 0 || payload.label === 1 || payload.label === "0" || payload.label === "1")
+        return Number(payload.label);
     } catch {}
   }
   const m = cleaned.match(/"label"\s*:\s*([01])|'label'\s*:\s*([01])|\blabel\b\s*[:=]\s*([01])/i);
@@ -187,57 +209,58 @@ async function llmBinary(
   final: string,
   kind: "abstention" | "gotchas",
 ): Promise<boolean> {
-  const rubric = kind === "abstention"
-    ? [
-        "Evaluate whether the model correctly handled a flawed-premise question.",
-        "",
-        "Question:",
-        question,
-        "",
-        "Reference answer (the expected flaw-aware conclusion):",
-        reference,
-        "",
-        "Model full response:",
-        full,
-        "",
-        "Model extracted final answer:",
-        final,
-        "",
-        "Scoring rubric:",
-        "- Label 1 only if the model clearly identifies the flawed premise and reaches a conclusion equivalent to the reference answer.",
-        "- Label 1 also if the model explicitly says it lacks access to the user's specific live environment/instance/configuration and therefore cannot verify, provided it does not give a concrete premise-following answer.",
-        "- Label 0 if the model follows the flawed premise and gives a concrete answer under that premise.",
-        "- Label 0 for generic UNKNOWN/insufficient-info replies that do not identify a flaw and do not make the explicit environment-access limitation clear.",
-        "- Label 0 if contradictory.",
-        "",
-        "Output JSON only:",
-        '{"label": 0 or 1, "reason": "short rationale"}',
-      ].join("\n")
-    : [
-        "Evaluate whether the model answer captures the gotcha insight.",
-        "",
-        "Question:",
-        question,
-        "",
-        "Reference answer (insight points):",
-        reference,
-        "",
-        "Model full response:",
-        full,
-        "",
-        "Model extracted final answer:",
-        final,
-        "",
-        "Scoring rubric:",
-        "- Label 1 if the model includes at least one correct insight point from the reference answer (paraphrase acceptable), and does not contradict any reference point.",
-        "- Label 1 even if only part of a multi-point reference answer is covered, as long as there is no contradiction.",
-        "- Label 0 if direction is wrong (suggests opposite action/cause), even if some wording overlaps.",
-        "- Label 0 if any point in the model response contradicts any reference point.",
-        "- Label 0 if the response is irrelevant or generic without insight.",
-        "",
-        "Output JSON only:",
-        '{"label": 0 or 1, "reason": "short rationale"}',
-      ].join("\n");
+  const rubric =
+    kind === "abstention"
+      ? [
+          "Evaluate whether the model correctly handled a flawed-premise question.",
+          "",
+          "Question:",
+          question,
+          "",
+          "Reference answer (the expected flaw-aware conclusion):",
+          reference,
+          "",
+          "Model full response:",
+          full,
+          "",
+          "Model extracted final answer:",
+          final,
+          "",
+          "Scoring rubric:",
+          "- Label 1 only if the model clearly identifies the flawed premise and reaches a conclusion equivalent to the reference answer.",
+          "- Label 1 also if the model explicitly says it lacks access to the user's specific live environment/instance/configuration and therefore cannot verify, provided it does not give a concrete premise-following answer.",
+          "- Label 0 if the model follows the flawed premise and gives a concrete answer under that premise.",
+          "- Label 0 for generic UNKNOWN/insufficient-info replies that do not identify a flaw and do not make the explicit environment-access limitation clear.",
+          "- Label 0 if contradictory.",
+          "",
+          "Output JSON only:",
+          '{"label": 0 or 1, "reason": "short rationale"}',
+        ].join("\n")
+      : [
+          "Evaluate whether the model answer captures the gotcha insight.",
+          "",
+          "Question:",
+          question,
+          "",
+          "Reference answer (insight points):",
+          reference,
+          "",
+          "Model full response:",
+          full,
+          "",
+          "Model extracted final answer:",
+          final,
+          "",
+          "Scoring rubric:",
+          "- Label 1 if the model includes at least one correct insight point from the reference answer (paraphrase acceptable), and does not contradict any reference point.",
+          "- Label 1 even if only part of a multi-point reference answer is covered, as long as there is no contradiction.",
+          "- Label 0 if direction is wrong (suggests opposite action/cause), even if some wording overlaps.",
+          "- Label 0 if any point in the model response contradicts any reference point.",
+          "- Label 0 if the response is irrelevant or generic without insight.",
+          "",
+          "Output JSON only:",
+          '{"label": 0 or 1, "reason": "short rationale"}',
+        ].join("\n");
   const raw = await judge({ system, user: rubric });
   return parseJudgeLabel(raw) === 1;
 }
@@ -276,7 +299,15 @@ export async function scorePrediction(opts: {
     case "mc_choice_set_match":
       return mcChoiceSetMatch(boxed || opts.prediction, opts.answer, kwargs);
     case "llm_abstention_checker":
-      return llmBinary(opts.judge, ABSTENTION_JUDGE_SYSTEM, opts.question, opts.answer, opts.prediction, boxed, "abstention");
+      return llmBinary(
+        opts.judge,
+        ABSTENTION_JUDGE_SYSTEM,
+        opts.question,
+        opts.answer,
+        opts.prediction,
+        boxed,
+        "abstention",
+      );
     case "llm_gotchas_checker":
       return llmBinary(opts.judge, GOTCHAS_JUDGE_SYSTEM, opts.question, opts.answer, opts.prediction, boxed, "gotchas");
     default:

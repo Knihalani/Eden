@@ -98,9 +98,17 @@ describe("org binding", () => {
       const store = new Store(":memory:");
       const handler = createHandler({ store, token: TOKEN });
       seedApprovableCandidate(store);
-      const bind = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      const bind = await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
       expect(bind.status).toBe(200);
-      const res = await handler(new Request("http://x/v1/tools/tool_1/approve", { method: "POST", headers: auth("org_a"), body: "{}" }));
+      const res = await handler(
+        new Request("http://x/v1/tools/tool_1/approve", { method: "POST", headers: auth("org_a"), body: "{}" }),
+      );
       expect(res.status).toBe(200);
       const body = (await res.json()) as { ok: boolean };
       expect(body.ok).toBe(true);
@@ -113,8 +121,16 @@ describe("org binding", () => {
       const store = new Store(":memory:");
       const handler = createHandler({ store, token: TOKEN });
       seedApprovableCandidate(store);
-      await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
-      const res = await handler(new Request("http://x/v1/tools/tool_1/approve", { method: "POST", headers: auth("org_b"), body: "{}" }));
+      await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
+      const res = await handler(
+        new Request("http://x/v1/tools/tool_1/approve", { method: "POST", headers: auth("org_b"), body: "{}" }),
+      );
       expect(res.status).toBe(403);
       expect(((await res.json()) as { error: string }).error).toBe("workspace not bound to this org");
       // Nothing shipped: the candidate is still there.
@@ -127,11 +143,21 @@ describe("org binding", () => {
       const store = new Store(":memory:");
       const handler = createHandler({ store, token: TOKEN });
       seedTool(store);
-      await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
-      const pause = await handler(new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_b"), body: "{}" }));
+      await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
+      const pause = await handler(
+        new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_b"), body: "{}" }),
+      );
       expect(pause.status).toBe(403);
       expect(store.tool("tool_1")?.state).toBe("live");
-      const okPause = await handler(new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_a"), body: "{}" }));
+      const okPause = await handler(
+        new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_a"), body: "{}" }),
+      );
       expect(okPause.status).toBe(200);
       // A bound workspace refuses even an absent org header.
       const noOrg = await handler(new Request("http://x/v1/candidates/cand_1", { method: "DELETE", headers: auth() }));
@@ -145,12 +171,22 @@ describe("org binding", () => {
       const handler = createHandler({ store, token: TOKEN });
       seedTool(store);
       // No bindings at all: managed must refuse rather than fall open.
-      const res = await handler(new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_a"), body: "{}" }));
+      const res = await handler(
+        new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_a"), body: "{}" }),
+      );
       expect(res.status).toBe(403);
       // Provisioning still works on managed — that is how the first binding arrives.
-      const bind = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      const bind = await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
       expect(bind.status).toBe(200);
-      const okPause = await handler(new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_a"), body: "{}" }));
+      const okPause = await handler(
+        new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth("org_a"), body: "{}" }),
+      );
       expect(okPause.status).toBe(200);
     });
   });
@@ -164,7 +200,9 @@ describe("org binding", () => {
       const orig = console.error;
       console.error = (...parts: unknown[]) => errors.push(parts.join(" "));
       try {
-        const res = await handler(new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth(), body: "{}" }));
+        const res = await handler(
+          new Request("http://x/v1/tools/tool_1/pause", { method: "POST", headers: auth(), body: "{}" }),
+        );
         expect(res.status).toBe(200);
       } finally {
         console.error = orig;
@@ -178,7 +216,13 @@ describe("org binding", () => {
       const store = new Store(":memory:");
       const handler = createHandler({ store, token: TOKEN });
       seedTool(store);
-      await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
       for (const path of ["/v1/inbox", "/v1/candidates", "/v1/receipts"]) {
         // Wrong org and no org both read fine — the gate is tenant writes, not reads.
         const wrong = await handler(new Request(`http://x${path}`, { headers: auth("org_b") }));
@@ -193,9 +237,21 @@ describe("org binding", () => {
     await withEnv({ DATABASE_URL: undefined, VERCEL: undefined }, async () => {
       const store = new Store(":memory:");
       const handler = createHandler({ store, token: TOKEN });
-      const first = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      const first = await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
       expect(first.status).toBe(200);
-      const steal = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_b"), body: JSON.stringify({ org_id: "org_b" }) }));
+      const steal = await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_b"),
+          body: JSON.stringify({ org_id: "org_b" }),
+        }),
+      );
       // 409, not 403: the refusal now comes from the store's atomic claim
       // (the binding already exists and names a different org) rather than a
       // read-then-write pre-check that raced across processes.
@@ -203,7 +259,13 @@ describe("org binding", () => {
       expect(((await steal.json()) as { error: string }).error).toBe("workspace not bound to this org");
       expect(store.orgsFor(Store.WORKSPACE_ID)).toEqual(["org_a"]);
       // Re-binding the same org is idempotent.
-      const again = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      const again = await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
       expect(again.status).toBe(200);
     });
   });
@@ -225,10 +287,18 @@ describe("org binding", () => {
       const store = new Store(":memory:");
       const handler = createHandler({ store, token: TOKEN });
       seedTool(store);
-      await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
       // Running a tool performs its third-party calls — state-changing, so a
       // foreign (or absent) org must not reach the executor.
-      const wrong = await handler(new Request("http://x/v1/wrap-run", { method: "POST", headers: auth("org_b"), body: "{}" }));
+      const wrong = await handler(
+        new Request("http://x/v1/wrap-run", { method: "POST", headers: auth("org_b"), body: "{}" }),
+      );
       expect(wrong.status).toBe(403);
       const noOrg = await handler(new Request("http://x/v1/wrap-run", { method: "POST", headers: auth(), body: "{}" }));
       expect(noOrg.status).toBe(403);
@@ -242,14 +312,24 @@ describe("org binding", () => {
       const store = new Store(":memory:");
       const handler = createHandler({ store, token: TOKEN });
       seedApprovableCandidate(store);
-      await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      await handler(
+        new Request("http://x/v1/workspace/orgs", {
+          method: "POST",
+          headers: auth("org_a"),
+          body: JSON.stringify({ org_id: "org_a" }),
+        }),
+      );
       // Re-shadowing overwrites verdict/manifest/refusal — review state a
       // foreign org must not be able to rewrite or clear.
       const before = store.candidate("tool_1");
-      const wrong = await handler(new Request("http://x/v1/candidates/tool_1/shadow", { method: "POST", headers: auth("org_b"), body: "{}" }));
+      const wrong = await handler(
+        new Request("http://x/v1/candidates/tool_1/shadow", { method: "POST", headers: auth("org_b"), body: "{}" }),
+      );
       expect(wrong.status).toBe(403);
       expect(store.candidate("tool_1")).toEqual(before);
-      const noOrg = await handler(new Request("http://x/v1/candidates/tool_1/shadow", { method: "POST", headers: auth(), body: "{}" }));
+      const noOrg = await handler(
+        new Request("http://x/v1/candidates/tool_1/shadow", { method: "POST", headers: auth(), body: "{}" }),
+      );
       expect(noOrg.status).toBe(403);
     });
   });
@@ -271,7 +351,13 @@ describe("org binding", () => {
       // gets 401 instead of a full read of all workspaces.
       const res = await handler(new Request("http://x/v1/tools", { headers: { authorization: "Bearer eden_dev" } }));
       expect(res.status).toBe(401);
-      const chat = await handler(new Request("http://x/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }));
+      const chat = await handler(
+        new Request("http://x/v1/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer eden_dev" },
+          body: "{}",
+        }),
+      );
       expect(chat.status).toBe(401);
       expect(errors.some((e) => e.includes("refusing the public dev credential"))).toBe(true);
     });

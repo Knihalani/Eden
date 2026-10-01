@@ -51,9 +51,7 @@ async function runWrapped(spec: FuzzCase): Promise<MutationMap> {
   const prog = buildProgram(spec);
   const state = createState({
     programs: [prog],
-    ...(spec.fault === "timeout" || spec.islandBehavior === "timeout"
-      ? { timeoutMs: 40 }
-      : {}),
+    ...(spec.fault === "timeout" || spec.islandBehavior === "timeout" ? { timeoutMs: 40 } : {}),
     ...(spec.islandAt != null ? { island: makeIsland(spec) } : {}),
   });
   const wrapped = wrapTools(tools, state) as Record<string, ToolDef>;
@@ -101,7 +99,9 @@ describe("failsafe fuzz", () => {
           throw err;
         }
       }
-      console.log(`failsafe-fuzz n=${N_FAST} divergences=${divergences} seed=0x${FUZZ_SEED.toString(16).toUpperCase()}`);
+      console.log(
+        `failsafe-fuzz n=${N_FAST} divergences=${divergences} seed=0x${FUZZ_SEED.toString(16).toUpperCase()}`,
+      );
       expect(divergences).toBe(0);
     },
     TIMEOUT,
@@ -141,7 +141,7 @@ describe("failsafe fuzz", () => {
   test(
     "failsafe fuzz: concurrent stretches keep exactly-once per id",
     async () => {
-      const rng = mulberry32(FUZZ_SEED ^ 0xC0FF);
+      const rng = mulberry32(FUZZ_SEED ^ 0xc0ff);
       const timeoutLeft = { n: 5 };
       const N = 32; // well under ARM_MAX_ENTRIES (64)
       const base = generateCase(rng, 0, timeoutLeft);

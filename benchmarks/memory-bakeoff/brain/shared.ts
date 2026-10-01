@@ -8,7 +8,9 @@ export const LOCOMO = process.env.LOCOMO_PATH || "/tmp/eden-mem-bakeoff/locomo10
 export const LOCOMO_URL = "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json";
 
 export const STOP = new Set(
-  "the of is a an on to and in for this that with from into about these then still has out how what why was are you your its our not or no hey hi hello yeah yes ok okay thanks thank".split(" "),
+  "the of is a an on to and in for this that with from into about these then still has out how what why was are you your its our not or no hey hi hello yeah yes ok okay thanks thank".split(
+    " ",
+  ),
 );
 
 export type Turn = { text: string; speaker: string; session: number; date: string; at: number };
@@ -23,11 +25,15 @@ export type MemSys = {
 };
 
 export function toks(s: string): string[] {
-  return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).filter((w) => w.length >= 2 && !STOP.has(w));
+  return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).filter(
+    (w) => w.length >= 2 && !STOP.has(w),
+  );
 }
 
 export function goldHit(retrieved: string, answer: string): boolean {
-  const a = String(answer || "").toLowerCase().trim();
+  const a = String(answer || "")
+    .toLowerCase()
+    .trim();
   const r = retrieved.toLowerCase();
   if (!a) return false;
   if (r.includes(a)) return true;
@@ -48,7 +54,8 @@ export function bm25(query: string, docs: string[], k: number): string[] {
     return m;
   });
   const q = toks(query);
-  const k1 = 1.5, b = 0.75;
+  const k1 = 1.5,
+    b = 0.75;
   return docs
     .map((d, i) => {
       let s = 0;
@@ -72,7 +79,10 @@ export function rrfFuse(lists: string[][], k: number, rrfK = 60): string[] {
   for (const list of lists) {
     list.forEach((d, i) => score.set(d, (score.get(d) || 0) + 1 / (rrfK + i + 1)));
   }
-  return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, k).map(([d]) => d);
+  return [...score.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, k)
+    .map(([d]) => d);
 }
 
 export function formatTurn(t: Turn): string {

@@ -2,7 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, memoryInjectSwallows, memoryStoreCap, openMemory, PACKET_BYTE_CAP, PACKET_BULLET_MAX } from "../../src/index";
+import {
+  MEMORY_MARK,
+  memoryInjectSwallows,
+  memoryStoreCap,
+  openMemory,
+  PACKET_BYTE_CAP,
+  PACKET_BULLET_MAX,
+} from "../../src/index";
 
 function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), "eden-whatever-contract-"));

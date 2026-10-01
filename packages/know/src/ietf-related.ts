@@ -2,8 +2,7 @@
 
 import { type Triple } from "./extract";
 
-export const IETF_RELATED_URL =
-  "https://datatracker.ietf.org/api/v1/doc/relateddocument/?format=json&limit=200";
+export const IETF_RELATED_URL = "https://datatracker.ietf.org/api/v1/doc/relateddocument/?format=json&limit=200";
 
 type RelRow = {
   relationship?: string;

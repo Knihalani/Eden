@@ -5,14 +5,7 @@ function isTokStart(c: number): boolean {
 }
 
 function isTokChar(c: number): boolean {
-  return (
-    (c >= 65 && c <= 90) ||
-    (c >= 97 && c <= 122) ||
-    (c >= 48 && c <= 57) ||
-    c === 43 ||
-    c === 46 ||
-    c === 45
-  );
+  return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 43 || c === 46 || c === 45;
 }
 
 function isDigit(c: number): boolean {

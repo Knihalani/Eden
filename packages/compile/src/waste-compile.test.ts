@@ -91,7 +91,13 @@ describe("wave 12.3 waste compile", () => {
         activityFromInbox({
           candidates: [
             ...programs.map((p) => ({ id: p.id, program: p, verdict: "PASS", created_at: 1 })),
-            ...refusals.map((r, i) => ({ id: `uw${i}`, sequence: r.sequence, verdict: "FAIL", created_at: 1, refusal: r })),
+            ...refusals.map((r, i) => ({
+              id: `uw${i}`,
+              sequence: r.sequence,
+              verdict: "FAIL",
+              created_at: 1,
+              refusal: r,
+            })),
           ],
         }),
       ),

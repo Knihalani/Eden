@@ -59,7 +59,13 @@ describe("online signals", () => {
         named("sleep", {}),
         named("list_rows", { page: 3 }),
       ];
-      expect(takeSignals(events.map((e, i) => ({ ...e, args: { page: i === 0 ? 1 : i === 2 ? 2 : 3 } })), budget, new Set())).toEqual([]);
+      expect(
+        takeSignals(
+          events.map((e, i) => ({ ...e, args: { page: i === 0 ? 1 : i === 2 ? 2 : 3 } })),
+          budget,
+          new Set(),
+        ),
+      ).toEqual([]);
     });
 
     test("two identical polls still warn — indistinguishable from thrash yet", () => {
@@ -74,11 +80,7 @@ describe("online signals", () => {
     });
 
     test("latestRepeatStalled: identical repeats are stalled", () => {
-      const events = [
-        named("search", { hit: 1 }),
-        named("write", { ok: true }),
-        named("search", { hit: 1 }),
-      ];
+      const events = [named("search", { hit: 1 }), named("write", { ok: true }), named("search", { hit: 1 })];
       expect(latestRepeatStalled(events, ["search", "write"])).toBe(true);
     });
 
@@ -130,7 +132,12 @@ describe("online signals", () => {
     test("argument jitter with constant results is spinning, not progress", () => {
       // Rotating a nonce argument while returning the same body must not buy
       // unbounded mutating cycles.
-      const ev = (nonce: string): TraceEvent => ({ name: "post_comment", args: { nonce }, result: { ok: true }, ok: true });
+      const ev = (nonce: string): TraceEvent => ({
+        name: "post_comment",
+        args: { nonce },
+        result: { ok: true },
+        ok: true,
+      });
       const sync = (): TraceEvent => ({ name: "sync", args: {}, result: { ok: true }, ok: true });
       const events = [ev("aaa"), sync(), ev("bbb"), sync(), ev("ccc")];
       expect(takeSignals(events, budget, new Set()).some((w) => w.kind === "repeat_ngram")).toBe(true);
@@ -211,7 +218,14 @@ describe("online signals", () => {
     const budget = { duration_ms: 40, llmCalls: 2, prompt_tokens: 11, completion_tokens: 3 };
     const out = takeSignals(events, budget, seen);
     expect(out.map((w) => w.kind)).toEqual(["fail_streak", "budget"]);
-    expect(out[0]).toMatchObject({ at: 1, n: 2, duration_ms: 40, llmCalls: 2, prompt_tokens: 11, completion_tokens: 3 });
+    expect(out[0]).toMatchObject({
+      at: 1,
+      n: 2,
+      duration_ms: 40,
+      llmCalls: 2,
+      prompt_tokens: 11,
+      completion_tokens: 3,
+    });
     expect(out[1]).toMatchObject({ kind: "budget", at: 1, duration_ms: 40, llmCalls: 2 });
     expect(takeSignals([...events, ev("notify", false)], budget, seen)).toEqual([]);
   });
@@ -226,7 +240,11 @@ describe("online signals", () => {
   test("a repeating tool bigram warns while the run is still short", () => {
     const seen = new Set<string>();
     expect(takeSignals([ev("search"), ev("write")], { duration_ms: 1, llmCalls: 0 }, seen)).toEqual([]);
-    const out = takeSignals([ev("search"), ev("write"), ev("search"), ev("write")], { duration_ms: 9, llmCalls: 1 }, seen);
+    const out = takeSignals(
+      [ev("search"), ev("write"), ev("search"), ev("write")],
+      { duration_ms: 9, llmCalls: 1 },
+      seen,
+    );
     expect(out.map((w) => w.kind)).toEqual(["repeat_ngram", "budget"]);
     expect(out[0]!.ngram).toEqual(["search", "write"]);
     expect(out[0]!.at).toBe(3);
@@ -258,11 +276,7 @@ describe("online signals", () => {
   });
 
   test("a steered skip of a required check is not presence", () => {
-    const events = [
-      ev("writeRecord"),
-      { name: "verifyWrite", args: {}, ok: true, skipped: true },
-      ev("notify"),
-    ];
+    const events = [ev("writeRecord"), { name: "verifyWrite", args: {}, ok: true, skipped: true }, ev("notify")];
     const ledger = evidenceLedger(events, ["verifyWrite"]);
     expect(ledger.present).toEqual([]);
     expect(ledger.absent).toEqual(["verifyWrite"]);

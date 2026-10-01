@@ -66,14 +66,12 @@ describe("M30.2 DetQA output unwrap", () => {
     expect(py).toMatch(/Fail-open|fail-open/);
     expect(py).toMatch(/text = _icl_complete\(text, agent\)/);
     expect(py).toMatch(/text = _detqa_complete\(text, agent\)/);
-    const icl = py.match(
-      /def _icl_complete\s*\(\s*text\s*,\s*agent\s*\)\s*:[\s\S]*?(?=\n(?:def |class |_[A-Z]))/,
-    )?.[0] ?? "";
+    const icl =
+      py.match(/def _icl_complete\s*\(\s*text\s*,\s*agent\s*\)\s*:[\s\S]*?(?=\n(?:def |class |_[A-Z]))/)?.[0] ?? "";
     expect(icl).toContain('if "icl" not in sub');
     expect(icl).toContain('re.match(r"^(?:label\\s*:\\s*)(.+)$", raw, re.I)');
-    const det = py.match(
-      /def _detqa_complete\s*\(\s*text\s*,\s*agent\s*\)\s*:[\s\S]*?(?=\n(?:def |class |_[A-Z]))/,
-    )?.[0] ?? "";
+    const det =
+      py.match(/def _detqa_complete\s*\(\s*text\s*,\s*agent\s*\)\s*:[\s\S]*?(?=\n(?:def |class |_[A-Z]))/)?.[0] ?? "";
     expect(det).toContain('if "detective" not in sub');
     expect(det).not.toMatch(/\bobserve\b/);
     expect(det).not.toMatch(/\bhaystack\b/);
@@ -82,26 +80,21 @@ describe("M30.2 DetQA output unwrap", () => {
   });
 
   test("unwraps Gemma JSON / fences to the short gold string", () => {
-    const bare =
-      '{"answer":"C. The Brandt couple", "reasoning":" Brand got out of near-bankruptcy."}';
+    const bare = '{"answer":"C. The Brandt couple", "reasoning":" Brand got out of near-bankruptcy."}';
     expect(call("_detqa_complete", bare, "detective_qa")).toBe("C. The Brandt couple");
 
-    const fenced =
-      '```json\n{"answer":"B. Miss Martin Dale", "reasoning":" Miss Marple killed Ingrid."}\n```';
+    const fenced = '```json\n{"answer":"B. Miss Martin Dale", "reasoning":" Miss Marple killed Ingrid."}\n```';
     expect(call("_detqa_complete", fenced, "detective_qa")).toBe("B. Miss Martin Dale");
 
     const prose =
       'Based on the provided context, there is no mention of Quentin Ducassin.\n\nOutput: {"answer":"None of the above", "reasoning":"missing character"}';
     expect(call("_detqa_complete", prose, "detective_qa")).toBe("None of the above");
 
-    expect(call("_detqa_complete", "C. The Brandt couple", "detective_qa")).toBe(
-      "C. The Brandt couple",
-    );
+    expect(call("_detqa_complete", "C. The Brandt couple", "detective_qa")).toBe("C. The Brandt couple");
   });
 
   test("non-detective and fail-open leave text alone; ICL complete is unchanged", () => {
-    const dump =
-      '{"answer":"C. The Brandt couple", "reasoning":" Brand got out of near-bankruptcy."}';
+    const dump = '{"answer":"C. The Brandt couple", "reasoning":" Brand got out of near-bankruptcy."}';
     expect(call("_detqa_complete", dump, "icl_banking77")).toBe(dump);
     expect(call("_detqa_complete", dump, "ruler_qa1_197K")).toBe(dump);
 

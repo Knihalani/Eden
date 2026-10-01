@@ -24,13 +24,7 @@ function parseJson<T>(raw: string, fallback: T): T {
   }
 }
 
-export async function ingest(
-  db: EdenDb,
-  workspaceId: string,
-  runId: string,
-  events: ToolEvent[],
-  stretchEnd: boolean,
-) {
+export async function ingest(db: EdenDb, workspaceId: string, runId: string, events: ToolEvent[], stretchEnd: boolean) {
   // The events are independent rows keyed by (workspace_id, event_id) and are
   // read back ORDER BY seq, so insertion order carries no meaning. One round
   // trip per event dominated ingest latency on a remote driver, and Promise.all
@@ -97,10 +91,10 @@ export async function ingest(
     args: string;
     command: string | null;
     ok: number;
-  }>(`SELECT event_id, seq, name, args, command, ok FROM tool_event WHERE workspace_id = ? AND run_id = ? ORDER BY seq`, [
-    workspaceId,
-    runId,
-  ]);
+  }>(
+    `SELECT event_id, seq, name, args, command, ok FROM tool_event WHERE workspace_id = ? AND run_id = ? ORDER BY seq`,
+    [workspaceId, runId],
+  );
   const parsed: ToolEvent[] = rows.map((r) => ({
     event_id: r.event_id,
     seq: r.seq,
@@ -143,12 +137,10 @@ export async function ingest(
       fp,
     ]);
     if (ignored) continue;
-    const dup = await db.get(`SELECT 1 as ok FROM stretch WHERE workspace_id = ? AND run_id = ? AND fingerprint = ? AND island_index = ?`, [
-      workspaceId,
-      runId,
-      fp,
-      island_index,
-    ]);
+    const dup = await db.get(
+      `SELECT 1 as ok FROM stretch WHERE workspace_id = ? AND run_id = ? AND fingerprint = ? AND island_index = ?`,
+      [workspaceId, runId, fp, island_index],
+    );
     if (dup) continue;
     // OR IGNORE, not INSERT: the dup-check read races concurrent ingests of
     // the same run, and the unique index from migrate() is what actually
@@ -191,8 +183,7 @@ export async function ingest(
       // subsets (a PR loop with files, one without) canonicalise to the same
       // compiled steps here, so they must land on the same tool name and the
       // second observation updates the first instead of forking it.
-      const base =
-        toolNameFromUrls(compiled.map((s) => s.url || "").filter(Boolean)) || heuristicName(storedSteps);
+      const base = toolNameFromUrls(compiled.map((s) => s.url || "").filter(Boolean)) || heuristicName(storedSteps);
       if (!isCompilableToolName(base)) continue;
       const prior = await db.get<{ id: string; steps: string }>(
         `SELECT id, steps FROM tool WHERE workspace_id = ? AND (name = ? OR name LIKE ?) LIMIT 1`,
@@ -211,7 +202,10 @@ export async function ingest(
         await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ? AND state = 'draft'`, [
           JSON.stringify(next),
           JSON.stringify(storedSteps.map((s) => s.name)),
-          whenToUseFor(base, compiled.map((s) => s.url || "")),
+          whenToUseFor(
+            base,
+            compiled.map((s) => s.url || ""),
+          ),
           prior.id,
         ]);
         await maybeAutoOn(db, workspaceId, prior.id, compiled);
@@ -229,17 +223,20 @@ export async function ingest(
             id,
             workspaceId,
             name,
-            whenToUseFor(name, compiled.map((s) => s.url || "")),
+            whenToUseFor(
+              name,
+              compiled.map((s) => s.url || ""),
+            ),
             JSON.stringify(compiled),
             JSON.stringify(storedSteps.map((s) => s.name)),
             fp,
             requiredK(storedSteps),
           ],
         );
-        const winner = await db.get<{ id: string }>(
-          `SELECT id FROM tool WHERE workspace_id = ? AND fingerprint = ?`,
-          [workspaceId, fp],
-        );
+        const winner = await db.get<{ id: string }>(`SELECT id FROM tool WHERE workspace_id = ? AND fingerprint = ?`, [
+          workspaceId,
+          fp,
+        ]);
         if (winner) await maybeAutoOn(db, workspaceId, winner.id, compiled);
         if (winner?.id === id) drafts++;
       }
@@ -249,7 +246,10 @@ export async function ingest(
     // and the tool stays a draft permanently. The insert below is guarded by
     // the absence of an existing knock, so a later ingest cannot duplicate it.
     if (count >= 2) {
-      const tool = await db.get<{ id: string; state: string }>(`SELECT id, state FROM tool WHERE fingerprint = ? AND workspace_id = ?`, [fp, workspaceId]);
+      const tool = await db.get<{ id: string; state: string }>(
+        `SELECT id, state FROM tool WHERE fingerprint = ? AND workspace_id = ?`,
+        [fp, workspaceId],
+      );
       const already = tool
         ? await db.get<{ id: string }>(`SELECT id FROM knock WHERE tool_id = ? AND workspace_id = ?`, [
             tool.id,
@@ -268,7 +268,10 @@ export async function ingest(
         await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ? AND state = 'draft'`, [
           JSON.stringify(compiled),
           JSON.stringify(storedSteps.map((s) => s.name)),
-          whenToUseFor(heuristicName(storedSteps), storedSteps.map((s) => s.source_url || "")),
+          whenToUseFor(
+            heuristicName(storedSteps),
+            storedSteps.map((s) => s.source_url || ""),
+          ),
           tool.id,
         ]);
         await maybeAutoOn(db, workspaceId, tool.id, compiled);

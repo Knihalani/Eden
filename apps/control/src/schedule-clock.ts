@@ -15,7 +15,10 @@ export function scheduleClockEnabled(raw = process.env[SCHEDULE_CLOCK_ENV]): boo
  * Minute clock for already-scheduled live tools. Does not invent cron rows.
  * Paused still never fires. Same tick path as POST /v1/schedule/tick.
  */
-export function startScheduleClock(ctx: ApiCtx, opts?: { intervalMs?: number }): { stop: () => void; intervalMs: number } {
+export function startScheduleClock(
+  ctx: ApiCtx,
+  opts?: { intervalMs?: number },
+): { stop: () => void; intervalMs: number } {
   const intervalMs = opts?.intervalMs ?? 60_000;
   const tick = () => {
     if (!ctx.registry) return;

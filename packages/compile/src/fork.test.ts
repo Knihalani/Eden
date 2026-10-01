@@ -81,19 +81,12 @@ describe("fork mining", () => {
   });
 
   test("no fork when all traces share the same sequence", () => {
-    const traces = [
-      ciTrace("a", "open", ["act"]),
-      ciTrace("b", "open", ["act"]),
-      ciTrace("c", "open", ["act"]),
-    ];
+    const traces = [ciTrace("a", "open", ["act"]), ciTrace("b", "open", ["act"]), ciTrace("c", "open", ["act"])];
     expect(findForkedGroups(traces, 3)).toHaveLength(0);
   });
 
   test("insufficient witnesses refuse cleanly", () => {
-    const traces = [
-      ciTrace("solo_a", "failure", ["fix_build"]),
-      ciTrace("solo_b", "success", ["notify"]),
-    ];
+    const traces = [ciTrace("solo_a", "failure", ["fix_build"]), ciTrace("solo_b", "success", ["notify"])];
     expect(findForkedGroups(traces, 3)).toHaveLength(0);
   });
 
@@ -200,7 +193,9 @@ describe("fork mining", () => {
     const mined = compileTraces(traces);
     const branches = mined.programs.filter((p) => p.steps?.some((s) => s.kind === "branch"));
     expect(branches).toHaveLength(0);
-    expect(mined.refusals.some((r) => r.code === "empty_output" || /empty or identical output/i.test(r.reason))).toBe(true);
+    expect(mined.refusals.some((r) => r.code === "empty_output" || /empty or identical output/i.test(r.reason))).toBe(
+      true,
+    );
   });
 
   test("compileTraces does not mine a fork when an arm has fewer than 3 witnesses", () => {
@@ -307,7 +302,9 @@ describe("fork mining", () => {
       (r) => r.code === "max_programs" && r.sequence.some((s) => s.startsWith("branch_")),
     );
     expect(forkInPrograms || forkCapped).toBe(true);
-    expect(mined.programs.length + mined.refusals.filter((r) => r.code === "max_programs").length).toBeGreaterThanOrEqual(25);
+    expect(
+      mined.programs.length + mined.refusals.filter((r) => r.code === "max_programs").length,
+    ).toBeGreaterThanOrEqual(25);
   });
 
   function alertTrace(id: string, sev: string, arm: [string, string], alertId: number): StretchTrace {

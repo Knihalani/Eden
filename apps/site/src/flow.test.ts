@@ -74,7 +74,9 @@ describe("ingest → draft → approve → play", () => {
       ev(3, "gh api repos/KaiavN/Eden/commits/abc123def/status"),
     ];
     await ingest(db, "ws_local", "on-run-1", island, true);
-    const tool = await db.get<{ id: string; state: string; steps: string }>(`SELECT id, state, steps FROM tool LIMIT 1`);
+    const tool = await db.get<{ id: string; state: string; steps: string }>(
+      `SELECT id, state, steps FROM tool LIMIT 1`,
+    );
     expect(tool?.state).toBe("on");
 
     await ingest(
@@ -153,10 +155,7 @@ describe("ingest → draft → approve → play", () => {
       db,
       "ws_local",
       "pull-only",
-      [
-        ev(1, "gh api repos/KaiavN/Eden/pulls/12"),
-        ev(2, "gh api repos/KaiavN/Eden/pulls/12/reviews"),
-      ],
+      [ev(1, "gh api repos/KaiavN/Eden/pulls/12"), ev(2, "gh api repos/KaiavN/Eden/pulls/12/reviews")],
       true,
     );
     delete process.env.EDEN_AUTO_APPROVE;
@@ -180,8 +179,20 @@ describe("ingest → draft → approve → play", () => {
       [
         crypto.randomUUID(),
         JSON.stringify([
-          { id: "s1", kind: "cloud_http", name: "pull", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}" },
-          { id: "s2", kind: "cloud_http", name: "reviews", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}/reviews" },
+          {
+            id: "s1",
+            kind: "cloud_http",
+            name: "pull",
+            commute: true,
+            url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}",
+          },
+          {
+            id: "s2",
+            kind: "cloud_http",
+            name: "reviews",
+            commute: true,
+            url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}/reviews",
+          },
           {
             id: "s3",
             kind: "cloud_http",
@@ -208,7 +219,13 @@ describe("ingest → draft → approve → play", () => {
   test("dry-run rehearses mutating steps without performing them (G9)", async () => {
     const db = await openDb(`/tmp/eden-dry-${Date.now()}.db`);
     const steps = [
-      { id: "s1", kind: "cloud_http", name: "get", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}" },
+      {
+        id: "s1",
+        kind: "cloud_http",
+        name: "get",
+        commute: true,
+        url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}",
+      },
       {
         id: "s2",
         kind: "cloud_http",
@@ -322,7 +339,9 @@ describe("product wrap matches seen names", () => {
        VALUES (?, 'ws_local', 'issue_bundle', 'use it', 'on', ?, ?, 'fp')`,
       [
         crypto.randomUUID(),
-        JSON.stringify([{ id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "http://example.invalid/{issue}" }]),
+        JSON.stringify([
+          { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "http://example.invalid/{issue}" },
+        ]),
         JSON.stringify(["get_issue", "list_comments"]),
       ],
     );
@@ -340,10 +359,7 @@ describe("runner fail-closed", () => {
     await db.run(
       `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
        VALUES (?, 'ws_local', 'local_only', 'x', 'on', ?, '[]', 'fp')`,
-      [
-        crypto.randomUUID(),
-        JSON.stringify([{ id: "s1", kind: "runner", name: "git.status", commute: true }]),
-      ],
+      [crypto.randomUUID(), JSON.stringify([{ id: "s1", kind: "runner", name: "git.status", commute: true }])],
     );
     const tool = await db.get<{ id: string; name: string; steps: string }>(
       `SELECT id, name, steps FROM tool WHERE name = 'local_only'`,
@@ -364,7 +380,12 @@ describe("wrap cache", () => {
       [id, JSON.stringify([{ id: "s1", kind: "runner", name: "git.status", commute: true }])],
     );
     const { wrapPlay } = await import("./wrap");
-    const tool = { id, name: "local_only", steps: JSON.stringify([{ id: "s1", kind: "runner", name: "git.status" }]), seen: "[]" };
+    const tool = {
+      id,
+      name: "local_only",
+      steps: JSON.stringify([{ id: "s1", kind: "runner", name: "git.status" }]),
+      seen: "[]",
+    };
     const a = await wrapPlay(db, "ws_local", tool, {}, "http://127.0.0.1", "run-fail");
     const b = await wrapPlay(db, "ws_local", tool, {}, "http://127.0.0.1", "run-fail");
     expect(a.ok).toBe(false);
@@ -384,7 +405,13 @@ describe("playback bind", () => {
       [
         crypto.randomUUID(),
         JSON.stringify([
-          { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "{origin}/forge/repos/acme/app/issues/{issue}" },
+          {
+            id: "s1",
+            kind: "cloud_http",
+            name: "issue",
+            commute: true,
+            url: "{origin}/forge/repos/acme/app/issues/{issue}",
+          },
           {
             id: "s2",
             kind: "cloud_http",
@@ -407,10 +434,7 @@ describe("playback bind", () => {
   test("curl shop traces compile a playable shop_orders tool", async () => {
     process.env.EDEN_AUTO_APPROVE = "1";
     const db = await openDb(`/tmp/eden-shop-${Date.now()}.db`);
-    const island = [
-      ev(1, "curl http://127.0.0.1/shop/orders/11"),
-      ev(2, "curl http://127.0.0.1/shop/orders/11/items"),
-    ];
+    const island = [ev(1, "curl http://127.0.0.1/shop/orders/11"), ev(2, "curl http://127.0.0.1/shop/orders/11/items")];
     await ingest(db, "ws_local", "shop1", island, true);
     delete process.env.EDEN_AUTO_APPROVE;
     const tool = await db.get<{ id: string; name: string; state: string; steps: string }>(
