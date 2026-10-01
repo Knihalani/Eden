@@ -165,7 +165,7 @@ function unboundMutatingJoinTraces(): StretchTrace[] {
 }
 
 describe("same-agent compose", () => {
-  test("3 traces of lookup then resolve (two child programs exist) → one compose candidate, manifest null, composedOf length 2", () => {
+  test("3 lookup→resolve traces (2 child programs exist) → one compose candidate, manifest null, composedOf 2", () => {
     const lookup = childProgram("lookup_ticket", [...LOOKUP]);
     const resolve = childProgram("resolve_ticket", [...RESOLVE]);
     const traces = concatTraces(3);
