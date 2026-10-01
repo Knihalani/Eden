@@ -5,10 +5,14 @@
  * never breaks a comment, a string, a template or a regex literal. Comments
  * can always be rewrapped by hand, so they must fit. Literals are the one
  * exception: splitting one changes the program's tokens, which a formatting
- * rule must not require, and a test title or message split in two can no
- * longer be found by searching for it. So a line may exceed the width only by
- * the literals on it: strings, regexes and the text of templates. The code in
- * a template's `${…}` still counts.
+ * rule must not require. Most long literals in live code are split by hand
+ * anyway, but some must stay whole: a test title, so it can be found by
+ * searching for it; public copy, which packages/measure/src/publish-check.ts
+ * scans line by line; a Next.js route's `config`, which Next reads without
+ * running it; and benchmarks/memory-long-horizon/, whose tree hash
+ * (harness_sha) slice preregistrations pin. So a line may exceed the width
+ * only by the literals on it: strings, regexes and the text of templates. The
+ * code in a template's `${…}` still counts.
  *
  * Usage: bun scripts/check-line-length.ts <file>...
  */
