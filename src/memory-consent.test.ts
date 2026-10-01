@@ -187,7 +187,7 @@ describe("M43 forget and pin in language", () => {
           expect(pinned.some(isPin)).toBe(true);
 
           for (let i = 0; i < 16; i++) {
-            mem.remember(`The banner color is shade${i}.`, { kind: "fact", sal: 0 });
+            mem.remember(`The banner color is shade${i}.`, { kind: "fact" });
           }
           const live = mem.memories().filter((r) => /sqlite/i.test(r.text));
           expect(live.length).toBeGreaterThan(0);

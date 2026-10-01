@@ -85,7 +85,7 @@ async function persistChild(dir: string, tag: string): Promise<number> {
     });
     mem.close();
   `;
-  const env = { ...process.env, EDEN_M51_DIR: dir, EDEN_M51_TAG: tag };
+  const env: Record<string, string | undefined> = { ...process.env, EDEN_M51_DIR: dir, EDEN_M51_TAG: tag };
   delete env.EDEN_MEMORY_STORE_CAP;
   const proc = Bun.spawn(["bun", "-e", src], {
     env,

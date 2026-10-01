@@ -2341,7 +2341,7 @@ describe("M45.2 failed child does not prune parent how-to", () => {
       await withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
         const child = openMemory({ dir, session: childName, cwd: project, child: true });
         expect(child.jsonlDir).not.toBe(dir);
-        expect(child.howtoDir).toBe(dir);
+        expect((child as unknown as { howtoDir?: string }).howtoDir).toBe(dir);
         persistToolTraces(child.jsonlDir, [
           {
             name: "Bash",

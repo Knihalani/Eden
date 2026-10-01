@@ -10,7 +10,7 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { injectBodyThenObserveTools } from "../packages/wrap/src/tool-observe";
 import { CHUNK_TARGET_TOKENS, estimateTokens } from "./chunk-store";
-import { completeNotes, completeScores, extractTriple, hopChain } from "./cls/complete";
+import { completeNotes, completeScores, extractTriple, hopChain, type HopSource } from "./cls/complete";
 import { encodeLane, MEMORY_MARK, openMemory } from "./index";
 import * as edenMem from "./index";
 
@@ -155,8 +155,8 @@ describe("product inject 3-hop", () => {
       mem.remember("8. Vladimir Nabokov is a citizen of Canada.");
       const cue = "Which country is the author of Pale Fire a citizen of?";
       const orig = mem.notesFor.bind(mem);
-      mem.notesFor = ((text?: string, k?: number, opts?: { fuse?: boolean }) => {
-        const rows = orig(text, k, opts);
+      mem.notesFor = ((text?: string, k?: number) => {
+        const rows = orig(text, k);
         const missed = rows.filter((r) => !/Canada/i.test(r.text));
         return missed.length ? missed : rows;
       }) as typeof mem.notesFor;
@@ -228,7 +228,7 @@ describe("M22 hop-order two-hop overwrite", () => {
       { text: "[fact] Player Zane plays lacrosse.", id: "p", kind: "fact" as const },
       { text: "[fact] 8. Lacrosse originated in Canada.", id: "win", kind: "fact" as const },
     ];
-    const out = completeNotes(CUE, notes, sportRows);
+    const out = completeNotes<HopSource>(CUE, notes, sportRows);
     expect(out.some((n) => /\[rule(?:\s*·[^\]]*)?\]/i.test(n.text))).toBe(true);
     const facts = out.filter((n) => /^\[fact(?:\s*·[^\]]*)?\]/i.test(String(n.text).trim()));
     expect(facts.length).toBeGreaterThan(0);

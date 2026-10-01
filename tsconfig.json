@@ -13,12 +13,14 @@
     "apps/control/src",
     "apps/site/src",
     "benchmarks/memory-scale",
-    "scripts"
+    "scripts",
+    "src"
   ],
   "exclude": [
     "**/node_modules",
     "**/.next",
     "**/dist",
-    "apps/site/src/app"
+    "apps/site/src/app",
+    "src/memory-harmed.test.ts"
   ]
 }

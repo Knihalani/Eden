@@ -233,7 +233,9 @@ describe("M31.4 ICL still ICL, not recsys (M7.4)", () => {
       try {
         mem.observe([{ role: "user", content: ICL_GOLD }]);
         expect(mem.memories().some((r) => r.lane === "icl" && /label:\s*28/.test(r.text))).toBe(true);
-        expect(mem.memories().some((r) => r.lane === "recsys" && /label:\s*28/.test(r.text))).toBe(false);
+        expect(
+          mem.memories().some((r) => (r.lane as string | undefined) === "recsys" && /label:\s*28/.test(r.text)),
+        ).toBe(false);
         await sleep({ dir, mem });
         const store = new SemanticStore(dir);
         expect(factObject(store.get("movie", "is"))).not.toMatch(/great/i);
@@ -327,7 +329,7 @@ describe("M31.4 chat facts unchanged", () => {
       expect(clerk.every((r) => (r.lane || "chat") === "chat")).toBe(true);
       const chair = mem.memories().filter((r) => /chairperson/i.test(r.text) && /Bob/.test(r.text));
       expect(chair.length).toBeGreaterThan(0);
-      expect(chair.every((r) => r.lane !== "recsys" && r.lane !== "narrative")).toBe(true);
+      expect(chair.every((r) => (r.lane as string | undefined) !== "recsys" && r.lane !== "narrative")).toBe(true);
       expect(chair.every((r) => (r.lane || "chat") === "chat" || r.lane === "fact")).toBe(true);
     });
   });
@@ -343,7 +345,7 @@ describe("M31.4 EventQA miller is narrative, not recsys", () => {
       const miller = mem.memories().filter((r) => /miller of Blackford/.test(r.text));
       expect(miller.length).toBeGreaterThan(0);
       expect(miller.every((r) => r.lane === "narrative")).toBe(true);
-      expect(miller.every((r) => r.lane !== "recsys")).toBe(true);
+      expect(miller.every((r) => (r.lane as string | undefined) !== "recsys")).toBe(true);
       expect(storedBlob(mem)).toContain(flatten(MILLER));
     });
   });
