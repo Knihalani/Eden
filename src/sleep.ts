@@ -210,8 +210,11 @@ const READ_TOOL = /^(read|grep|glob|ls|websearch|semanticsearch|cat|head|tail)$/
 const SHELL_TOOL = /^(bash|shell|terminal|zsh|sh)$/i;
 const MUTATE_TOOL = /^(write|edit|strreplace)$/i;
 const VERIFY_CMD = /\b(?:pytest|vitest|jest|mocha)\b|\b(?:bun|cargo|go)\s+test\b|\bnpm\s+(?:run\s+)?test\b/i;
-const READ_BASH =
-  /^(?:git\s+(?:log|status|show|diff|blame|grep)|ls|cat|head|tail|grep|egrep|fgrep|rg|find|echo|pwd|which|type|wc|file|stat)\b/i;
+const READ_BASH = new RegExp(
+  String.raw`^(?:git\s+(?:log|status|show|diff|blame|grep)|ls|cat|head|tail|grep|egrep|fgrep|rg|find|` +
+    String.raw`echo|pwd|which|type|wc|file|stat)\b`,
+  "i",
+);
 
 function jsonHay(v: unknown): string {
   try {

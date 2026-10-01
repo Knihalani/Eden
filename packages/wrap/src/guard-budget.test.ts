@@ -65,7 +65,8 @@ describe("budget guard", () => {
     p.budget = { ms: 4_000, llmCalls: 2, cents: 0 };
     const d = decideGuard({ name: "b", run: r, live: [p], ...timing });
     console.log(
-      `unwarned spent action=${d?.action} reason=${d && "reason" in d ? d.reason : ""} detail=${d && "detail" in d ? d.detail : ""}`,
+      `unwarned spent action=${d?.action} reason=${d && "reason" in d ? d.reason : ""} ` +
+        `detail=${d && "detail" in d ? d.detail : ""}`,
     );
     expect(d).toMatchObject({ action: "halt", reason: "budget", detail: "predicted llmCalls=2 actual=2" });
   });

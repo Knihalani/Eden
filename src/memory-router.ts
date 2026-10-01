@@ -21,8 +21,11 @@ const ICL_OUTPUT_RE = /\boutput\s*:/i;
 const SUMMARY_RE = /\b(?:summarize|summary|summarise|tldr|recap|overview|synopsis|abstract)\b/i;
 const DETQA_MEMORIZED_RE = /based on the context you memorized/i;
 const DETQA_MC_RE = /\bA\.\s+[\s\S]*\bB\.\s+[\s\S]*\bC\.\s+[\s\S]*\bD\./;
-const DETECTIVE_RE =
-  /\b(?:murder(?:er)?|detective|victim|suicide|homicide|killed|killer|suspect|alibi|poison|corpse|culprit|whodunit|inspector|forensic|method of death)\b/i;
+const DETECTIVE_RE = new RegExp(
+  String.raw`\b(?:murder(?:er)?|detective|victim|suicide|homicide|killed|killer|suspect|alibi|poison|` +
+    String.raw`corpse|culprit|whodunit|inspector|forensic|method of death)\b`,
+  "i",
+);
 
 const SERIAL_FACT_RE = /(?:^|\n)\s*\d+[.)]\s+.+\b(?:is|are|was|were|became|becomes)\b/i;
 const BECAME_RE = /\b(?:became|becomes|instead)\b/i;

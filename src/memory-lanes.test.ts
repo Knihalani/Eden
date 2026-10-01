@@ -99,10 +99,16 @@ function stored(mem: ReturnType<typeof openMemory>): string[] {
 const ICL_SHORT = "The movie was great. label: 28";
 /** >400 chars. M16 dropped this; M17 stores the whole exemplar. */
 const ICL_LONG =
-  "The movie review is glowing and mentions every scene in detail about the protagonist and the village festival that lasted three nights under lanterns while the orchestra played until dawn and the crowd wept. label: 28 extra filler words to exceed four hundred characters of extractDurable tax so we can see if the whole exemplar is dropped or chopped into pieces by the allow-list pipeline that is still the only encode path.";
+  "The movie review is glowing and mentions every scene in detail about the protagonist and the " +
+  "village festival that lasted three nights under lanterns while the orchestra played until dawn and " +
+  "the crowd wept. label: 28 extra filler words to exceed four hundred characters of extractDurable " +
+  "tax so we can see if the whole exemplar is dropped or chopped into pieces by the allow-list " +
+  "pipeline that is still the only encode path.";
 /** EventQA-class prose. M16 sentence-split; M17 stores the whole paragraph. */
 const NOVEL_PARA =
-  "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+  "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+  "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+  "villagers said the oak still slept under the silt, waiting.";
 const NOVEL_SPLIT = [
   "In the year 1847 the miller of Blackford walked beside the river that ran through the valley",
   "He remembered the flood of his childhood and the oak that had fallen across the millrace",
@@ -110,7 +116,11 @@ const NOVEL_SPLIT = [
 ] as const;
 /** One sentence, no period, >400 chars. M16 dropped; M17 stores whole. */
 const NOVEL_LONG =
-  "It was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness it was the epoch of belief it was the epoch of incredulity it was the season of light it was the season of darkness it was the spring of hope it was the winter of despair we had everything before us we had nothing before us we were all going direct to heaven we were all going direct the other way.";
+  "It was the best of times it was the worst of times it was the age of wisdom it was the age of " +
+  "foolishness it was the epoch of belief it was the epoch of incredulity it was the season of light " +
+  "it was the season of darkness it was the spring of hope it was the winter of despair we had " +
+  "everything before us we had nothing before us we were all going direct to heaven we were all going " +
+  "direct the other way.";
 /** Chat allow-list miss. Chat still extractDurable. */
 const NOVEL_ALLOW_DROP = "Nobody mentioned the letter.";
 
@@ -193,7 +203,8 @@ describe("M17 encode lanes (flipped M16.3 extract tax)", () => {
   test.failing("M31.1 recsys is narrative store-all; ICL and chat stay isolated", () => {
     const movies = "1. Superbad (2007)\n2. Super Troopers (2001)\n3. Knocked Up (2007)";
     const redial =
-      "You are a movie recommender. Here is the conversation:\nUser: I like Superbad (2007)\nSystem: Super Troopers (2001) is similar.";
+      "You are a movie recommender. Here is the conversation:\nUser: I like Superbad (2007)\nSystem: " +
+      "Super Troopers (2001) is similar.";
     const miller = NOVEL_PARA;
     const detqa = `Lichem Rocchi's method of death was certainly not ( )
 A. Murder

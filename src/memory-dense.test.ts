@@ -23,8 +23,10 @@ const PRODUCT = [
 ];
 
 /** Import / dynamic import / require of an embedding provider or this reject module. */
-const EMBED_IMPORT =
-  /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*)['"][^'"]*(?:openai|voyageai|voyage|cohere|@xenova\/transformers|memory-dense)[^'"]*['"]/;
+const EMBED_IMPORT = new RegExp(
+  String.raw`(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*)['"][^'"]*` +
+    String.raw`(?:openai|voyageai|voyage|cohere|@xenova\/transformers|memory-dense)[^'"]*['"]`,
+);
 
 const HOWTO_EMBED_FREEZE = `function howtoEmbedScore(a: string, b: string): number {
   try {

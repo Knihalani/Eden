@@ -201,8 +201,10 @@ describe("M22 hop-order two-hop overwrite", () => {
     "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. " +
     "He remembered the flood of his childhood and the oak that had fallen across the millrace. " +
     "The villagers said the oak still slept under the silt, waiting. " +
-    "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of grain until the loft beams creaked. " +
-    "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the millrace after the thaw.";
+    "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of " +
+    "grain until the loft beams creaked. " +
+    "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the " +
+    "millrace after the thaw.";
 
   const sportRows = [
     { text: PLAYS, at: 1, i: 0, id: "p" },
@@ -401,8 +403,10 @@ const MILLER_NOVEL =
   "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. " +
   "He remembered the flood of his childhood and the oak that had fallen across the millrace. " +
   "The villagers said the oak still slept under the silt, waiting. " +
-  "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of grain until the loft beams creaked. " +
-  "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the millrace after the thaw.";
+  "Winter after winter the mill wheel turned against the ice, and the miller's sons counted sacks of " +
+  "grain until the loft beams creaked. " +
+  "They spoke of the flood as if it were still coming, and of the oak as if it might rise from the " +
+  "millrace after the thaw.";
 
 function millerPad(seed: number, minToks: number): string {
   const parts: string[] = [];

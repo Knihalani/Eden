@@ -103,9 +103,11 @@ export function subjectMentioned(text: string, fact: string): boolean {
       text.indexOf("update") >= 0 ||
       text.indexOf("successor") >= 0 ||
       text.indexOf("replac") >= 0) &&
-      /\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b/i.test(
-        text,
-      )
+      new RegExp(
+        String.raw`\b(?:does|did|do|is|was|which|what|has)\b[^?!.]{0,120}\b` +
+          String.raw`(?:obsolete|obsoletes|obsoleted|update|updates|updated|successor|replaces|replaced)\b`,
+        "i",
+      ).test(text)
       ? false
       : new RegExp(`\\brfc[\\s#:-]*${subject.replace(/^RFC\s+/i, "")}\\b`, "i").test(text);
   return (TOOL_ALIASES[subject.toLowerCase()] || [subject]).some((a) => boundMention(text, a));

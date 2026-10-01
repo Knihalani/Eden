@@ -59,7 +59,10 @@ export function ledgerPath(): string {
 }
 
 export function remainderDenyReason(program: string, tool: string): string {
-  return `Already served by ${program}. Do not re-run ${tool} — facts are in the last tool output or attached as context.`;
+  return (
+    `Already served by ${program}. Do not re-run ${tool} — facts are in the last tool output or ` +
+    `attached as context.`
+  );
 }
 
 export function hostDropReason(): string {

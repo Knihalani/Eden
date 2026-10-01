@@ -38,7 +38,9 @@ export async function handleMcp(
       capabilities: { tools: {}, resources: {} },
       serverInfo: { name: "eden", version: "0.1.0" },
       instructions:
-        "Eden compiles repeated tool sequences into single calls. tools/list is an empty catalog. POST tools/dispatch with the conversation messages to receive at most one schema when the transcript matches a live program, or an empty list when nothing matches.",
+        "Eden compiles repeated tool sequences into single calls. tools/list is an empty catalog. POST " +
+        "tools/dispatch with the conversation messages to receive at most one schema when the transcript " +
+        "matches a live program, or an empty list when nothing matches.",
     });
     return;
   }

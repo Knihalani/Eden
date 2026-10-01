@@ -173,7 +173,9 @@ describe("M13 AgentMemory off / readonly / on", () => {
         mem.observe([
           {
             role: "user",
-            content: `Use sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}. Token sk-abc123XYZ999 ghp_abc123XYZ999`,
+            content:
+              `Use sqlite. Contact ${EMAIL}. cwd ${CWD}. session ${SESSION}. Token sk-abc123XYZ999 ` +
+              `ghp_abc123XYZ999`,
           },
         ]);
         mem.close();

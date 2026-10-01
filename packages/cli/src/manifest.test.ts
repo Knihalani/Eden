@@ -107,7 +107,8 @@ describe("skill-native surface (SKILL.md)", () => {
 
   test("island when_to_use is the SKILL.md body, not the stretch dump", () => {
     const line =
-      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not re-run the loop.";
+      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not " +
+      "re-run the loop.";
     const md = renderSkill([
       {
         name: "lookupTicket_to_notify",

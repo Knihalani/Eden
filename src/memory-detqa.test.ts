@@ -34,7 +34,8 @@ const FILLER = [
 const RARE = "The lantern-keeper at Quellbridge mill signed the flood ledger in ochre ink.";
 const RARE_RE = /Quellbridge|ochre|flood ledger/i;
 
-const DETQA_LICHEM = `Based on the context you memorized, answer the question below. Keep the answer as short as possible.
+const DETQA_LICHEM = `Based on the context you memorized, answer the question below. Keep the answer as short as \
+possible.
 
 Question: Lichem Rocchi's method of death was certainly not ( )
 A. Murder
@@ -42,7 +43,8 @@ B. Sudden death
 C. Suicide
 D. Sudden illness`;
 
-const DETQA_QUELL = `Based on the context you memorized, answer the question below. Keep the answer as short as possible.
+const DETQA_QUELL = `Based on the context you memorized, answer the question below. Keep the answer as short as \
+possible.
 
 Question: The lantern-keeper at Quellbridge mill signed the flood ledger in ( )
 A. Murder

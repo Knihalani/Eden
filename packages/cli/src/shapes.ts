@@ -28,14 +28,20 @@ export function escapeFacts(facts: unknown): string {
 
 export function buildSentinel(programName: string, facts: unknown): string {
   const body = escapeFacts(facts);
-  return `\n\n[eden:${programName}] The remaining steps of this routine were already served (read-only). Facts:\n${body}\nDo not re-run this routine — the facts above are complete.`;
+  return (
+    `\n\n[eden:${programName}] The remaining steps of this routine were already served (read-only). ` +
+    `Facts:\n${body}\nDo not re-run this routine — the facts above are complete.`
+  );
 }
 
 export function capMerged(original: string, suffix: string, cap = HOOK_OUTPUT_CAP): string {
   const merged = `${original}${suffix}`;
   if (merged.length <= cap) return merged;
   const kept = cap - 120;
-  return `${original.slice(0, Math.max(0, kept))}\n…[eden truncated ${original.length - kept} chars of the original output to fit the harness limit]\n${suffix}`;
+  return (
+    `${original.slice(0, Math.max(0, kept))}\n…[eden truncated ${original.length - kept} chars of the ` +
+    `original output to fit the harness limit]\n${suffix}`
+  );
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
