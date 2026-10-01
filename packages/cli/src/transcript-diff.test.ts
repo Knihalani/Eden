@@ -75,7 +75,7 @@ describe("transcript-diff headless host (Claude Code silent drop)", () => {
     }
   });
 
-  test("unknown MCP tool: string rewrite lands; additionalContext still carries the sentinel if the host drops it", () => {
+  test("unknown MCP tool: string rewrite lands; additionalContext keeps the sentinel if the host drops it", () => {
     const orig = "vendor-body";
     const hook = postToolUseReplacement("mcp__vendor__thing", orig, "facts", "pr_summary");
     const landed = applyHookOutput("mcp__vendor__thing", orig, hook);

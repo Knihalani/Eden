@@ -716,7 +716,7 @@ describe("M9.4 injectBody OpenAI wrap pytest reconstructs fields", () => {
 });
 
 describe("M10.4 Sleep on flake fixture writes how-to", () => {
-  test("observeToolTraces pytestWindow then Stop + sleep: how-to has verify/files/steps/exit 0; traces remain", async () => {
+  test("observeToolTraces pytestWindow, Stop + sleep: how-to has verify/files/steps/exit 0; traces stay", async () => {
     await withMem("eden-m104-sleep-flake-", async (mem, dir) => {
       const window = pytestWindow();
       expect(toolTraceMessages(window).length).toBeGreaterThanOrEqual(1);
@@ -1541,7 +1541,7 @@ describe("M11.4 omit stale place", () => {
 });
 
 describe("M11.4 shared-prefix merge does not invent steps", () => {
-  test("mergeSharedPrefix keeps Write+Edit only; no pytest+npm concat; sleep does not invent a third path", async () => {
+  test("mergeSharedPrefix keeps only Write+Edit; no pytest+npm concat; sleep invents no third path", async () => {
     const { a, b } = prefixParents();
     const fromStore =
       (howtoMod as { mergeSharedPrefix?: typeof mergeSharedPrefix }).mergeSharedPrefix ??
@@ -1621,7 +1621,7 @@ describe("M11.4 chat-only still zero how-to", () => {
 });
 
 describe("M11.4 wrap/hook fail-open and no [procedure]", () => {
-  test("OpenAI wrap, Anthropic wrap, hook Submit/Stop: Clerk still injects; no [procedure]; throw fails open", async () => {
+  test("OpenAI wrap, Anthropic wrap, hook Submit/Stop: Clerk injects; no [procedure]; throw fails open", async () => {
     await withMem("eden-m114-wrap-hook-", async (mem) => {
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
 

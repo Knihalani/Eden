@@ -264,7 +264,7 @@ describe("M8.4 episode kind", () => {
 });
 
 describe("M8.4 gist + empty cue", () => {
-  test("after sleep, SessionStart has [gist]; notesFor labels kinds it has; empty cue does not dump last-k", async () => {
+  test("after sleep, SessionStart has [gist]; notesFor labels its kinds; empty cue does not dump last-k", async () => {
     const session = "s-m84-gist";
     await withMemAsync(
       "eden-m84-gist-",

@@ -82,7 +82,7 @@ describe("transparent execution (surfacing without a surface)", () => {
     }
   });
 
-  test("replacement uses Bash's NATIVE result shape ({stdout,stderr,interrupted}) — bare strings are silently dropped by the harness", () => {
+  test("replacement uses Bash's native {stdout,stderr,interrupted} shape; the harness drops bare strings", () => {
     const out = postToolUseReplacement(
       "Bash",
       '{"state":"pending"}',
@@ -109,7 +109,7 @@ describe("transparent execution (surfacing without a surface)", () => {
     expect(matchesNativeShape("Bash", u)).toBe(true);
   });
 
-  test("unknown tools get the string form plus additionalContext; oversized merges are honestly truncated under the 10k cap", () => {
+  test("unknown tools get the string form plus additionalContext; oversized merges say they were cut at 10k", () => {
     const out = postToolUseReplacement("mcp__github__search", "original", "facts") as {
       hookSpecificOutput: { updatedToolOutput: string; additionalContext: string };
     };
