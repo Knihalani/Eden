@@ -1088,7 +1088,9 @@ describe("M13 honest off switch (hook)", () => {
           type: "user",
           message: {
             role: "user",
-            content: `Use sqlite. Always email ${M13_EMAIL}. Working in ${M13_CWD}. Session ${M13_SESSION}. Token sk-abc123XYZ999 ghp_abc123XYZ999`,
+            content:
+              `Use sqlite. Always email ${M13_EMAIL}. Working in ${M13_CWD}. Session ${M13_SESSION}. Token ` +
+              `sk-abc123XYZ999 ghp_abc123XYZ999`,
           },
         })}\n`,
       );
@@ -1230,7 +1232,11 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
 });
 
 const M17_ICL_LONG =
-  "The movie review is glowing and mentions every scene in detail about the protagonist and the village festival that lasted three nights under lanterns while the orchestra played until dawn and the crowd wept. label: 28 extra filler words to exceed four hundred characters of extractDurable tax so we can see if the whole exemplar is dropped or chopped into pieces by the allow-list pipeline that is still the only encode path.";
+  "The movie review is glowing and mentions every scene in detail about the protagonist and the " +
+  "village festival that lasted three nights under lanterns while the orchestra played until dawn and " +
+  "the crowd wept. label: 28 extra filler words to exceed four hundred characters of extractDurable " +
+  "tax so we can see if the whole exemplar is dropped or chopped into pieces by the allow-list " +
+  "pipeline that is still the only encode path.";
 
 describe("M17 hook encode lanes", () => {
   test("UserPromptSubmit stores whole ICL shot and later injects label: 28", () => {

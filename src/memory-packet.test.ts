@@ -601,7 +601,8 @@ describe("M39 diverse packet", () => {
 
   test("mix budget keeps a fact and a procedure, not 10 copies", () => {
     const verify = "verify: bun test src/task/migrate.ts";
-    const procedure = `${"step ".repeat(800)} Migrate sqlite task files → src/task/schema.ts src/task/migrate.ts · ${verify}`;
+    const procedure =
+      `${"step ".repeat(800)} Migrate sqlite task files → src/task/schema.ts src/task/migrate.ts · ` + `${verify}`;
     expect(procedure.length).toBeGreaterThan(PROCEDURE_CHAR_CAP);
     const facts = [
       "sqlite task files keep the schema in src/task/schema.ts.",

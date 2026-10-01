@@ -293,7 +293,8 @@ export function memoryHooksCheck(settings: unknown, opts?: { pluginEvents?: stri
   let detail: string;
   if (listed.length === 0) {
     ok = false;
-    detail = `memory hooks: none · run eden setup · eden memory import · ${MEMORY_HOOK_EVENTS.join(" ")} · ${consentBit}`;
+    detail =
+      `memory hooks: none · run eden setup · eden memory import · ${MEMORY_HOOK_EVENTS.join(" ")} · ` + `${consentBit}`;
   } else {
     detail = `memory hooks: ${listed.join(" ")}`;
     if (missing.length) detail += ` · missing ${missing.join(" ")}`;
@@ -592,7 +593,9 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
     health.push({
       name: "planes",
       ok: false,
-      detail: `hooks/MCP config is site ${configured}; compiled tools live on wrap ${base}. Run eden setup so traces hit /v1/traces.`,
+      detail:
+        `hooks/MCP config is site ${configured}; compiled tools live on wrap ${base}. Run eden setup so ` +
+        `traces hit /v1/traces.`,
     });
   }
 
@@ -721,7 +724,9 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   health.push({
     name: "lanes",
     ok: true,
-    detail: `wrap ${base} · site ingest ${configured.includes("8787") ? configured : "http://127.0.0.1:8787"} · hookd :${hookdPort}`,
+    detail:
+      `wrap ${base} · site ingest ${configured.includes("8787") ? configured : "http://127.0.0.1:8787"} · ` +
+      `hookd :${hookdPort}`,
   });
 
   const live = liveToolsPath();
@@ -819,7 +824,10 @@ export function doctorHelp(): string {
 NET_ALLOW empty refuses piped network binaries. A live hookd without a
 matching pid file is named orphan · eden hookd --stop. EDEN_AUTO_APPROVE=1
 prints as a bypass, never a default. Wave 21 honesty files shipped. Wave 22 stays Later.
-Memory hooks listed in health. Extra hosts named skip / half-wired / ok / not installed — unequal capture is not silent. Codex trust/hooks can fail silently. EDEN_MEMORY=0|readonly|on. Prune by deleting the store or EDEN_MEMORY=0. eden memory import observes existing transcripts locally (no cloud / no NVIDIA).
+Memory hooks listed in health. Extra hosts named skip / half-wired / ok / not installed — unequal \
+capture is not silent. Codex trust/hooks can fail silently. EDEN_MEMORY=0|readonly|on. Prune by \
+deleting the store or EDEN_MEMORY=0. eden memory import observes existing transcripts locally (no \
+cloud / no NVIDIA).
 `;
 }
 

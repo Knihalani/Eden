@@ -66,7 +66,10 @@ function cardFor(c: CandidateRow): string {
     first: !c.diff,
   });
   if (!c.program) return card;
-  return `${card}\n${envelopeLine(c.program.contract?.envelope)}\n${llmBadge({ steps: c.program.steps ?? [] })}\nCanary · ${canaryPct()}% of sessions until promote.`;
+  return (
+    `${card}\n${envelopeLine(c.program.contract?.envelope)}\n` +
+    `${llmBadge({ steps: c.program.steps ?? [] })}\nCanary · ${canaryPct()}% of sessions until promote.`
+  );
 }
 
 function nonPassRows(all: CandidateRow[]): CandidateRow[] {

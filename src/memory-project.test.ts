@@ -378,7 +378,8 @@ describe("M44 project identity", () => {
           hook_event_name: "UserPromptSubmit",
           session_id: SESSION_A,
           prompt:
-            "We decided to use postgres for the database because durability then we decided to use sqlite for the database.",
+            "We decided to use postgres for the database because durability then we decided to use sqlite for " +
+            "the database.",
         });
         memoryHookResponse({ hook_event_name: "Stop", session_id: SESSION_A });
         const db = memoryHookResponse({

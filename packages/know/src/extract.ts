@@ -567,7 +567,12 @@ export function qualityUrlSql(col = "url"): string {
       slash = needle.indexOf("/"),
       host = slash >= 0 ? needle.slice(0, slash) : needle,
       path = slash >= 0 ? needle.slice(slash) : "";
-    const hostMatch = `(${col} = 'https://${host}' OR ${col} = 'http://${host}' OR ${col} LIKE 'https://${host}/%' OR ${col} LIKE 'http://${host}/%' OR ${col} LIKE 'https://${host}?%' OR ${col} LIKE 'http://${host}?%' OR ${col} LIKE 'https://%.${host}' OR ${col} LIKE 'http://%.${host}' OR ${col} LIKE 'https://%.${host}/%' OR ${col} LIKE 'http://%.${host}/%' OR ${col} LIKE 'https://%.${host}?%' OR ${col} LIKE 'http://%.${host}?%')`;
+    const hostMatch =
+      `(${col} = 'https://${host}' OR ${col} = 'http://${host}' OR ${col} LIKE 'https://${host}/%' OR ` +
+      `${col} LIKE 'http://${host}/%' OR ${col} LIKE 'https://${host}?%' OR ${col} LIKE 'http://${host}?%' ` +
+      `OR ${col} LIKE 'https://%.${host}' OR ${col} LIKE 'http://%.${host}' OR ${col} LIKE ` +
+      `'https://%.${host}/%' OR ${col} LIKE 'http://%.${host}/%' OR ${col} LIKE 'https://%.${host}?%' OR ` +
+      `${col} LIKE 'http://%.${host}?%')`;
     return path
       ? `(${hostMatch} AND (${col} LIKE '%${path}' OR ${col} LIKE '%${path}/%' OR ${col} LIKE '%${path}?%'))`
       : hostMatch;
@@ -801,8 +806,11 @@ const WIKI_PIPE_FIELD = /\b(?:leader_title|image_skyline|image_map|image_flag|fl
 const WIKI_LEFTOVER = /\[\[|\{\{|]]|<!--|<[^>]+>|\|{2,}/;
 const GENERIC_SETTLEMENT =
   /^(unincorporated community|census-designated place|human settlement|municipality|township|village|town|city)$/i;
-const MOTTO_NOT_MOTTO =
-  /^(latin|english|french|german|spanish|italian|portuguese|dutch|greek|arabic|chinese|japanese|russian|yoruba|catalan|hebrew|hindi|swahili|municipality|town|city)('*)?$/i;
+const MOTTO_NOT_MOTTO = new RegExp(
+  String.raw`^(latin|english|french|german|spanish|italian|portuguese|dutch|greek|arabic|chinese|` +
+    String.raw`japanese|russian|yoruba|catalan|hebrew|hindi|swahili|municipality|town|city)('*)?$`,
+  "i",
+);
 
 function wikiNoise(s: string): boolean {
   return WIKI_LEFTOVER.test(s) || /'{2,}/.test(s) || /^\d+px\b/i.test(s) || /^[\s}'"]+$/.test(s);
@@ -880,7 +888,10 @@ export function wikiActionApiUrl(articleUrl: string): string | undefined {
   const art = wikiArticle(articleUrl);
   if (!art) return undefined;
   const titles = encodeURIComponent(art.title.replace(/ /g, "_"));
-  return `${art.origin}/w/api.php?action=query&format=json&formatversion=2&prop=revisions&rvprop=content&rvslots=main&rvsection=0&redirects=1&titles=${titles}`;
+  return (
+    `${art.origin}/w/api.php?action=query&format=json&formatversion=2&prop=revisions&rvprop=content&` +
+    `rvslots=main&rvsection=0&redirects=1&titles=${titles}`
+  );
 }
 
 /** Up to 50 Wikipedia titles on one Action API query (read API, robots-ok). */
@@ -896,7 +907,10 @@ export function wikiActionApiBatchUrl(articleUrls: string[], cap = 50): string |
     if (titles.length >= cap) break;
   }
   if (!origin || !titles.length) return undefined;
-  return `${origin}/w/api.php?action=query&format=json&formatversion=2&prop=revisions&rvprop=content&rvslots=main&rvsection=0&redirects=1&titles=${titles.map(encodeURIComponent).join("|")}`;
+  return (
+    `${origin}/w/api.php?action=query&format=json&formatversion=2&prop=revisions&rvprop=content&` +
+    `rvslots=main&rvsection=0&redirects=1&titles=${titles.map(encodeURIComponent).join("|")}`
+  );
 }
 
 export function wikiRevisionPages(json: unknown): { title: string; wikitext: string }[] {
@@ -1081,7 +1095,9 @@ export function applyWikiApiFallback(url: string, html: string, apiBody: string)
     const art = wikiArticle(url);
     if (title && art) {
       const href = `${art.origin}/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`;
-      out = `<link rel="canonical" href="${href}"><meta property="mw:PageProp/displaytitle" content="${title.replace(/"/g, "")}"/>\n${out}`;
+      out =
+        `<link rel="canonical" href="${href}"><meta property="mw:PageProp/displaytitle" ` +
+        `content="${title.replace(/"/g, "")}"/>\n${out}`;
     }
   } catch {
     /* body is wikitext, not JSON */
@@ -1089,8 +1105,11 @@ export function applyWikiApiFallback(url: string, html: string, apiBody: string)
   return out;
 }
 
-const CONTINENT =
-  /^(africa|antarctica|asia|europe|oceania|americas|north america|south america|central america|eurasia|afro-eurasia)$/i;
+const CONTINENT = new RegExp(
+  String.raw`^(africa|antarctica|asia|europe|oceania|americas|north america|south america|` +
+    String.raw`central america|eurasia|afro-eurasia)$`,
+  "i",
+);
 
 const NAME_JUNK = /^(capital|country|city|town|notes|continent|nation|state|territory)$/i;
 
@@ -1592,8 +1611,12 @@ function wikiRowPairs(scope: string): { label: string; data: string }[] {
 /** Parsoid / mobile infobox as label+data divs, not table rows. */
 function wikiDivPairs(html: string): { label: string; data: string }[] {
   const out: { label: string; data: string }[] = [];
-  const re =
-    /<(?:div|th|td)\b[^>]*class="[^"]*\binfobox-label\b[^"]*"[^>]*>([\s\S]{0,240}?)<\/(?:div|th|td)>\s*<(?:div|td)\b[^>]*class="[^"]*\binfobox-data\b[^"]*"[^>]*>([\s\S]{0,1200}?)<\/(?:div|td)>/gi;
+  const re = new RegExp(
+    String.raw`<(?:div|th|td)\b[^>]*class="[^"]*\binfobox-label\b[^"]*"[^>]*>([\s\S]{0,240}?)<\/` +
+      String.raw`(?:div|th|td)>\s*<(?:div|td)\b[^>]*class="[^"]*\binfobox-data\b[^"]*"[^>]*>` +
+      String.raw`([\s\S]{0,1200}?)<\/(?:div|td)>`,
+    "gi",
+  );
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
     const label = headerLabel(m[1]!);
@@ -1794,7 +1817,13 @@ function countryFactsFromScope(scope: string): Triple[] {
     tidyCapital(attrOrInner(scope, "capital")) ||
     tidyCapital(
       scope.match(
-        /(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?capital["'][\s\S]{0,400}?(?:itemprop|property)\s*=\s*["'](?:[\w.]+:|https?:\/\/schema\.org\/)?name["'][^>]*>([\s\S]{1,60}?)</i,
+        new RegExp(
+          String.raw`(?:itemprop|property)\s*=\s*["']` +
+            String.raw`(?:[\w.]+:|https?:\/\/schema\.org\/)?capital["'][\s\S]{0,400}?` +
+            String.raw`(?:itemprop|property)\s*=\s*["']` +
+            String.raw`(?:[\w.]+:|https?:\/\/schema\.org\/)?name["'][^>]*>([\s\S]{1,60}?)<`,
+          "i",
+        ),
       )?.[1] || "",
     );
   if (country && city)
@@ -2215,7 +2244,15 @@ function extrasFromProse(text: string): Triple[] {
       add({ s: lang, p: "is", o: `an official language of ${hint}`, e: cut.slice(0, 280) });
   }
   for (const m of head.matchAll(
-    /\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|all-in-one\s+|all in one\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi,
+    new RegExp(
+      String.raw`\b([A-Z][\w.+-]{1,40})\s+is an?\s+` +
+        String.raw`((?:incredibly\s+|fast\s+|all-in-one\s+|all in one\s+|open[- ]source\s+|high[- ]level\s+|` +
+        String.raw`general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|` +
+        String.raw`typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|` +
+        String.raw`web framework|testing framework|container runtime|version control system|build tool|` +
+        String.raw`command-line tool|cli(?:\s+tool)?|library|framework))\b`,
+      "gi",
+    ),
   )) {
     const s = tidyProper(m[1]!);
     if (s && !/^(this|it|there|what|github|the)$/i.test(s)) {
@@ -2501,7 +2538,11 @@ export function rfcStatusFromText(num: string, html: string, text: string): Trip
   const cat =
     head.match(/\bCategory:\s*([A-Za-z][A-Za-z \-]{1,40})/i)?.[1] ||
     head.match(
-      /\bStatus:\s*(Internet Standard|Proposed Standard|Draft Standard|Best Current Practice|Informational|Experimental|Historic)\b/i,
+      new RegExp(
+        String.raw`\bStatus:\s*(Internet Standard|Proposed Standard|Draft Standard|Best Current Practice|` +
+          String.raw`Informational|Experimental|Historic)\b`,
+        "i",
+      ),
     )?.[1];
   const o = cat ? rfcStatusObject(cat) : undefined;
   if (o) out.push({ s: `RFC ${num}`, p: "is", o, e: (cat || o).slice(0, 280) });
@@ -2529,9 +2570,11 @@ export function shortTitle(s: string): string {
 }
 
 function rfcGistJunk(s: string): boolean {
-  return /table of contents|january 20|february 20|when server|status of this|copyright notice|this document specifies|this memo|internet society|network working group/i.test(
-    s,
-  );
+  return new RegExp(
+    String.raw`table of contents|january 20|february 20|when server|status of this|copyright notice|` +
+      String.raw`this document specifies|this memo|internet society|network working group`,
+    "i",
+  ).test(s);
 }
 
 function innerText(raw: string): string {
@@ -2655,8 +2698,11 @@ function softwareName(url: string, scan?: HtmlScan): string | undefined {
   return tidyProper((h1 || title).replace(/\s*[-–|].*$/, "").trim());
 }
 
-const TOOL_SKIP =
-  /^(this|it|there|what|which|that|and|github|the|a|an|you|we|they|use|used|using|cookie|cookies|here|only|data|system|software|example|project|plugin|service|information|program)$/i;
+const TOOL_SKIP = new RegExp(
+  String.raw`^(this|it|there|what|which|that|and|github|the|a|an|you|we|they|use|used|using|cookie|` +
+    String.raw`cookies|here|only|data|system|software|example|project|plugin|service|information|program)$`,
+  "i",
+);
 
 function tidyToolName(raw: string): string | undefined {
   const proper = tidyProper(raw);
@@ -2693,11 +2739,25 @@ export function techniquesFromProse(text: string): Triple[] {
   };
   const head = text.slice(0, 12_000);
   const pats = [
-    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    new RegExp(
+      String.raw`\b([A-Za-z][\w.+-]{1,40})\s+is\s+` +
+        String.raw`(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?` +
+        String.raw`(?:used|designed|meant|intended)\s+(?:to|for)\s+([^.!?\n]{4,80})`,
+      "gi",
+    ),
     /\b[Uu]se\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/g,
-    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:the\s+)?(?:recommended|standard|usual|preferred|common)\s+(?:way|tool|method)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    new RegExp(
+      String.raw`\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:the\s+)?` +
+        String.raw`(?:recommended|standard|usual|preferred|common)\s+(?:way|tool|method)\s+` +
+        String.raw`(?:to|for)\s+([^.!?\n]{4,80})`,
+      "gi",
+    ),
     /\binstead of\s+[A-Za-z][\w.+-]{0,40}.{0,40}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
-    /\bdon(?:['’])?t use\s+[A-Za-z][\w.+-]{0,40}.{0,48}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
+    new RegExp(
+      String.raw`\bdon(?:['’])?t use\s+[A-Za-z][\w.+-]{0,40}.{0,48}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+` +
+        String.raw`(?:to|for)\s+([^.!?\n]{4,80})`,
+      "gi",
+    ),
     /\b(?:I|we|you)\s+(?:just\s+)?used\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
     /\b(?:fixed|solved|resolved)\b[\s\S]{0,48}?\busing\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
     /\btry(?:ing)?\s+(?:using\s+)?([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi,
@@ -2893,8 +2953,15 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
   return [...capitals.slice(0, 400), ...rest.slice(0, listPage ? 400 : 128)];
 }
 
-const LINK_PREFER =
-  /wikipedia\.org|wikidata\.org|rfc-editor\.org|ietf\.org|w3\.org|iana\.org|httpwg\.org|github\.com\/(?:whatwg|oven-sh|denoland|rust-lang|golang|python|nodejs|kubernetes|jqlang)|raw\.githubusercontent\.com|docs\.python\.org|nodejs\.org|doc\.rust-lang\.org|go\.dev|bun\.sh|kubernetes\.io|developer\.mozilla\.org|git-scm\.com|docs\.github\.com|docs\.docker\.com|react\.dev|nextjs\.org|typescriptlang\.org|reddit\.com\/r\/|stackoverflow\.com\/questions|news\.ycombinator\.com\/item/i;
+const LINK_PREFER = new RegExp(
+  String.raw`wikipedia\.org|wikidata\.org|rfc-editor\.org|ietf\.org|w3\.org|iana\.org|httpwg\.org|` +
+    String.raw`github\.com\/(?:whatwg|oven-sh|denoland|rust-lang|golang|python|nodejs|kubernetes|jqlang)|` +
+    String.raw`raw\.githubusercontent\.com|docs\.python\.org|nodejs\.org|doc\.rust-lang\.org|go\.dev|` +
+    String.raw`bun\.sh|kubernetes\.io|developer\.mozilla\.org|git-scm\.com|docs\.github\.com|` +
+    String.raw`docs\.docker\.com|react\.dev|nextjs\.org|typescriptlang\.org|reddit\.com\/r\/|` +
+    String.raw`stackoverflow\.com\/questions|news\.ycombinator\.com\/item`,
+  "i",
+);
 
 /** Wiki article and list URLs from HTML hrefs and `[[wikilinks]]` so random pages fan out. */
 export function wikiGrowUrls(base: string, html: string): string[] {

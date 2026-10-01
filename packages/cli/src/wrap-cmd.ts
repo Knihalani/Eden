@@ -52,7 +52,8 @@ Point an agent at OPENAI_BASE_URL=http://127.0.0.1:8788/v1
 Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth for /v1/wrap, not OpenAI.
 The Eden key is --key, EDEN_API_KEY or eden login. Without one, the first loopback start writes a
 per-install key to ~/.eden/config.json (mode 0600); eden commands and the SDKs read it there.
-A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 (model: eden), not 502.
+A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 \
+(model: eden), not 502.
 Wrap reaches the model at api.openai.com (override: OPENAI_API_BASE).
 SDK (JS/Python): POST /v1/wrap then POST /v1/ingest — miss is original, wrap down is original
 Does not Approve. Live tools stay 0 until a human Approve. T-100 is eden demo.
@@ -64,7 +65,8 @@ export function wrapBootLetter(origin: string, live = 0): string {
   return `Eden wrap ${base}
 OPENAI_BASE_URL=${base}/v1
 Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth, not OpenAI.
-A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 (model: eden), not 502.
+A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 \
+(model: eden), not 502.
 SDK  POST ${base}/v1/wrap  then  POST ${base}/v1/ingest
 Does not Approve. Live tools: ${live} (0 until a human Approve). T-100 is eden demo.`;
 }

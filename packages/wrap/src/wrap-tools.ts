@@ -308,7 +308,9 @@ function stampRemainderSkip(state: WrapState, armed: Armed, toolName: string): v
   const prog = state.programs.find((p) => p.id === armed.programId);
   const programName = prog?.name?.trim() || "this routine";
   last.skipped = [...new Set([...(last.skipped ?? []), toolName])];
-  last.reason = `Already served by ${programName}. Do not re-run ${toolName} — facts are in the last tool output or attached as context.`;
+  last.reason =
+    `Already served by ${programName}. Do not re-run ${toolName} — facts are in the last tool output or ` +
+    `attached as context.`;
   const n = armed.agentIds?.size ?? 0;
   if (n >= 2) {
     const line = sharedAcrossLine(n);
@@ -703,7 +705,8 @@ export function wrapTools<T extends ToolsIn>(
     if (state.agentId) armed.agentIds = new Set([state.agentId]);
     if (!store.insert(session, key, armed)) {
       state.capacityMisses++;
-      const detail = `capacity: session full (${store.sessionSize(session)}/${store.perSessionMax}), this stretch ran raw`;
+      const detail =
+        `capacity: session full (${store.sessionSize(session)}/${store.perSessionMax}), this stretch ran ` + `raw`;
       const w = {
         kind: "budget" as const,
         at: run.events.length,

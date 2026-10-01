@@ -8,8 +8,11 @@ export type CandidateText = { text: string; t: number; id?: string; kind?: strin
 
 type NoteLike = { id?: string; text: string; at?: number; kind?: string; lane?: string };
 
-const STATUS_OBJECT =
-  /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
+const STATUS_OBJECT = new RegExp(
+  String.raw`\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|` +
+    String.raw`slow|errors?|offline|unavailable)\b`,
+  "i",
+);
 const SKIP_SUBJ = new Set([
   "it",
   "this",
@@ -190,8 +193,11 @@ function becameAsserted(text: string): { s: string; p: string; o: string } | und
   return { s, p: "is", o };
 }
 
-const DECIDED_RE =
-  /\b(?:decided|chose|picked|went with|going with|settled on|opted for)\s+(?:to\s+)?(?:use|go with)?\s*(.{1,40}?)\s+for\s+(.{1,40}?)(?=\s+(?:because|since|as|so)\b|[.,;:!?]|$)/gi;
+const DECIDED_RE = new RegExp(
+  String.raw`\b(?:decided|chose|picked|went with|going with|settled on|opted for)\s+(?:to\s+)?` +
+    String.raw`(?:use|go with)?\s*(.{1,40}?)\s+for\s+(.{1,40}?)(?=\s+(?:because|since|as|so)\b|[.,;:!?]|$)`,
+  "gi",
+);
 
 function parseDecided(m: RegExpMatchArray): { s: string; p: string; o: string } | undefined {
   const o = m[1]!

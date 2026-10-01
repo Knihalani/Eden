@@ -382,7 +382,9 @@ describe("M19.2 hook isolation", () => {
 });
 
 const NOVEL_PARA =
-  "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He remembered the flood of his childhood and the oak that had fallen across the millrace. The villagers said the oak still slept under the silt, waiting.";
+  "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
+  "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
+  "villagers said the oak still slept under the silt, waiting.";
 
 describe("M19 locks: novel vs ICL, identity, hay, search, order", () => {
   test.failing("ICL cue does not pull novel chunks; novel cue does not pull ICL", () => {

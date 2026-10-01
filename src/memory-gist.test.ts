@@ -51,7 +51,8 @@ Write a summary of about 1000 to 1200 words. Only write about the plot and chara
 For example:
 
 [story text]
-Summary: Alayah rigorously argues that civil peace and social unity are best achieved by the establishment of a commonwealth through social contract.
+Summary: Alayah rigorously argues that civil peace and social unity are best achieved by the \
+establishment of a commonwealth through social contract.
 
 [story text]
 Summary: Halley Darlene is born in a workhouse in 1830s England.
@@ -520,7 +521,8 @@ describe("M29 adversarial locks", () => {
     try {
       const cs = new ChunkStore(dir);
       cs.put(
-        "Zebra pack opens the ledger at dusk. Villagers said the oak still slept under the silt waiting for summer rain.",
+        "Zebra pack opens the ledger at dusk. Villagers said the oak still slept under the silt waiting for " +
+          "summer rain.",
         { src: "zzz-uuid-bbbb", t: 10 },
       );
       cs.put(

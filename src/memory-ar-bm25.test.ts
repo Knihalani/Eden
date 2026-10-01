@@ -162,7 +162,9 @@ describe("M27.4 identical-chunk BM25 vs fused AR", () => {
     withEnv({ EDEN_MEMORY_CAP: "10" }, () => {
       const report = measureM274();
       console.log(
-        `M27.4 unit gold_in_top10 BM25-only ${report.bm25GoldInTop10}/${report.n} vs fused ${report.fusedGoldInTop10}/${report.n}; gold_in_packet ${report.goldInPacket}/${report.n}; verdict ${report.verdict}`,
+        `M27.4 unit gold_in_top10 BM25-only ${report.bm25GoldInTop10}/${report.n} vs fused ` +
+          `${report.fusedGoldInTop10}/${report.n}; gold_in_packet ${report.goldInPacket}/${report.n}; verdict ` +
+          `${report.verdict}`,
       );
       for (const t of report.trials) {
         expect(t.nChunks).toBeGreaterThan(K);

@@ -24,7 +24,9 @@ import { AgentMemory, MEMORY_MARK, openMemory } from "./index";
 const SESSION = "sess-m23-very-long-session-id";
 const EMAIL = "kai@example.com";
 const FAKE_CWD = "/tmp/eden-m23-unique-cwd";
-const AX_HOOK = `RootWebArea [landmark] heading Change-request UNIQUE_AX_MARKER_M23 button Submit contact ${EMAIL} session ${SESSION} cwd ${FAKE_CWD}`;
+const AX_HOOK =
+  `RootWebArea [landmark] heading Change-request UNIQUE_AX_MARKER_M23 button Submit contact ${EMAIL} ` +
+  `session ${SESSION} cwd ${FAKE_CWD}`;
 const AX_WRAP = "RootWebArea [landmark] heading Change-request UNIQUE_AX_WRAP_M23";
 const AX_ANTH = "RootWebArea [landmark] heading Change-request UNIQUE_AX_ANTH_M23";
 const AX_TOOL = "RootWebArea UNIQUE_AX_FROM_TOOL_M23";
@@ -138,7 +140,8 @@ function longAx(marker: string): string {
     live = process.cwd();
   } catch {}
   return (
-    `RootWebArea [landmark] heading Change-request ${marker} button Submit contact ${EMAIL} session ${SESSION} cwd ${FAKE_CWD} live ${live} ` +
+    `RootWebArea [landmark] heading Change-request ${marker} button Submit contact ${EMAIL} session ` +
+    `${SESSION} cwd ${FAKE_CWD} live ${live} ` +
     "n".repeat(420)
   );
 }

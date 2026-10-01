@@ -361,10 +361,18 @@ export function cueFor(list: unknown[]): string {
   return ask(paras.at(-1)!) ? paras.at(-1)! : ask(paras[0]!) ? paras[0]! : paras.at(-1)!;
 }
 
-const CHAT =
-  /^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b/i;
-const ACK_PREFIX =
-  /^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|going forward)[:,!.]?\s+)+/i;
+const CHAT = new RegExp(
+  String.raw`^(ok|okay|thanks|thank you|got it|sure|yeah|yep|hmm|wait|anyway|nah|hey|yo|lol|haha|lmao|` +
+    String.raw`nope|np|wow|whoa|idk|dunno|alright|gotcha|sounds good|lgtm|ack|cheers|ty|gg|brb|nvm|omg|kk|` +
+    String.raw`yup|thx|ttyl|smh|wfm|idc|ngl|fr|ikr|meh|ugh|welp|yikes|oops|huh)\b`,
+  "i",
+);
+const ACK_PREFIX = new RegExp(
+  String.raw`^(?:(?:please\s+remember|remember(?:\s+that)?|got it|understood` +
+    String.raw`(?:[,']?\s*I'?ll follow that)?|for reference|fyi|heads up|one rule(?:\s+for\s+this\s+repo)?|` +
+    String.raw`going forward)[:,!.]?\s+)+`,
+  "i",
+);
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
 const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
@@ -459,8 +467,11 @@ function load(path: string): Compiled[] {
   return out;
 }
 
-const STATUS_OBJECT =
-  /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
+const STATUS_OBJECT = new RegExp(
+  String.raw`\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|` +
+    String.raw`slow|errors?|offline|unavailable)\b`,
+  "i",
+);
 
 export const PACKET_CHAT_K_MIN = 6,
   PACKET_CHAT_K_MAX = 10,
@@ -843,9 +854,12 @@ export class AgentMemory {
               ? "constraint"
               : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text)
                 ? "constraint"
-                : /\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b/i.test(
-                      text,
-                    ) ||
+                : new RegExp(
+                      String.raw`\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|` +
+                        String.raw`standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|` +
+                        String.raw`deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b`,
+                      "i",
+                    ).test(text) ||
                     (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text))
                   ? "episode"
                   : "fact";

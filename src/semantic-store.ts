@@ -19,8 +19,11 @@ type Row = {
   seq: number;
 };
 
-export const STATUS_OBJECT =
-  /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
+export const STATUS_OBJECT = new RegExp(
+  String.raw`\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|` +
+    String.raw`slow|errors?|offline|unavailable)\b`,
+  "i",
+);
 const SKIP_SUBJ = new Set([
   "it",
   "this",
@@ -419,9 +422,11 @@ function looksCodeInput(text: string): boolean {
   if (!v) return false;
   if (/[\\/]/.test(v)) return true;
   if (
-    /\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|kts|c|cc|cpp|h|hpp|cs|php|swift|m|mm|json|ya?ml|toml|md|txt|sql|sh|bash|zsh)\b/i.test(
-      v,
-    )
+    new RegExp(
+      String.raw`\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|kts|c|cc|cpp|h|hpp|cs|php|swift|m|mm|json|` +
+        String.raw`ya?ml|toml|md|txt|sql|sh|bash|zsh)\b`,
+      "i",
+    ).test(v)
   )
     return true;
   if (/^src\b/i.test(v)) return true;
@@ -453,8 +458,11 @@ const LIKE_RE = /\blike[ds]?\b/i;
 const NUMBERED_LINE_RE = /^\s*\d+[.)]\s+/;
 const COPULA_RE = /\b(?:is|are|was|were|uses)\b/i;
 const DOC_ID_RE = /\b(?:RFC|ISO|CVE|IEEE|W3C|PEP)\s*[-.]?\s*\d/i;
-const VERSION_TITLE_RE =
-  /\b(?:Node|Python|TypeScript|JavaScript|React|Vue|Angular|Java|Ruby|PHP|Go|Rust|Swift|Kotlin|Scala|Perl|Deno|Bun)\s+v?\d/i;
+const VERSION_TITLE_RE = new RegExp(
+  String.raw`\b(?:Node|Python|TypeScript|JavaScript|React|Vue|Angular|Java|Ruby|PHP|Go|Rust|Swift|Kotlin|` +
+    String.raw`Scala|Perl|Deno|Bun)\s+v?\d`,
+  "i",
+);
 
 function countTitleYears(t: string, cap = 8): number {
   TITLE_YEAR_RE.lastIndex = 0;

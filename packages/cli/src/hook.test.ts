@@ -109,7 +109,8 @@ describe("hook", () => {
     const path = join(home, "runs", "s.jsonl");
     writeFileSync(
       path,
-      `${JSON.stringify({ id: "a", name: "a" })}\n${JSON.stringify({ id: "b", name: "b" })}\n${JSON.stringify({ id: "c", name: "c" })}\n`,
+      `${JSON.stringify({ id: "a", name: "a" })}\n${JSON.stringify({ id: "b", name: "b" })}\n` +
+        `${JSON.stringify({ id: "c", name: "c" })}\n`,
     );
     applyFlushTruncate(path, ["a", "b"]);
     const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
