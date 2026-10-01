@@ -1,5 +1,7 @@
 # A6 — Trust and safety (v2): secrets, poisoning, provenance, forgetting
 
+> **Code citations.** `file:line` references in this document point at commit `11c3101c3`, when it was written. Later commits, including R-5's reformat (#94, #97, #99), moved those lines. To read one: `git show 11c3101c3:<path>`.
+
 **Dated 2026-09-29, v2.** It specifies DECISIONS D12–D14 and D19 (guard safety). The index is `ROADMAP.md`. Evidence:
 - A1 D4–D6 (repros)
 - R3 F4, F16, F17, E7, E12 (real transcripts: a pasted API token and pasted test logs would have become `src=user` facts; the entropy rule flags ULIDs and misses passwords)

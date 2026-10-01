@@ -1,5 +1,7 @@
 # Appendix A2 — Eden technical choices vs the 2024–2026 state of the art
 
+> **Code citations.** `file:line` references in this document point at commit `11c3101c3`, when it was written. Later commits, including R-5's reformat (#94, #97, #99), moved those lines. To read one: `git show 11c3101c3:<path>`.
+
 > **Precedence note (v2, 2026-09-29):** [DECISIONS.md](DECISIONS.md) and [A4 v2](A4-DELIVERY-CONTRACT.md) supersede this appendix wherever they differ. Examples: the ledger is per context window, `resume` never resets it, scope follows R5 §9, and only slot facts supersede by key.
 
 **Dated 2026-09-29.** Part of the memory-ship set; the index is `ROADMAP.md`. Where this appendix and `A4-DELIVERY-CONTRACT.md` differ, **A4 decides**. For example, A4 names the session ledger `delivery.json` (this appendix's `injected.json`), and A4 §2 replaces the scope rule. Background: `docs/MEMORY-COMPETITORS.md`, `docs/MEMORY-SOTA-BUILD-REPORT.md`.
