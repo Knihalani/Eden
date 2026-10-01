@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 
+/** Page source as JSX renders its text: Prettier may wrap a phrase over two lines. */
+const prose = (src: string) => src.replace(/\s+/g, " ");
+
 const VIEW = readFileSync(join(import.meta.dir, "view.tsx"), "utf8");
 const BOARD = readFileSync(join(import.meta.dir, "../home/board.tsx"), "utf8");
 const NAV = readFileSync(join(import.meta.dir, "../home/nav.tsx"), "utf8");
@@ -22,7 +25,7 @@ test("canvas is a method graph with a named hold, not a Hub or Reach explorer", 
   expect(VIEW).toContain('id="canvas-hold"');
   expect(VIEW).toContain("receiptPostmortem");
   expect(VIEW).toContain("tipLine");
-  expect(VIEW + BOARD + NAV).not.toMatch(/Hub|Reach adapter|play\.modiqo|Play URI/);
+  expect(prose(VIEW + BOARD + NAV)).not.toMatch(/Hub|Reach adapter|play\.modiqo|Play URI/);
 });
 
 test("empty Home tells the truth and points at wrap", () => {

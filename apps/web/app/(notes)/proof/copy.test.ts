@@ -24,6 +24,9 @@ import {
 } from "./copy";
 
 const ROOT = join(import.meta.dir, "../../../../../");
+/** Page source as JSX renders its text: Prettier may wrap a phrase over two lines. */
+const prose = (src: string) => src.replace(/\s+/g, " ");
+
 const PAGE = readFileSync(join(import.meta.dir, "page.tsx"), "utf8");
 const TABLE = readFileSync(join(import.meta.dir, "../claim-table.tsx"), "utf8");
 const COPY = readFileSync(join(import.meta.dir, "copy.ts"), "utf8");
@@ -67,10 +70,10 @@ test("page maps statement and file, iso-doc, no ship CTA", () => {
   expect(PAGE).toContain("eden claims");
   expect(TABLE).toContain("iso-table");
   expect(PAGE).toContain("{CUSTOMERS.length}");
-  expect(PAGE).not.toMatch(/Arc 8/);
+  expect(prose(PAGE)).not.toMatch(/Arc 8/);
   expect(PAGE).not.toMatch(/className="[^"]*ship/);
   expect(PAGE).not.toMatch(/signup/i);
-  expect(PAGE).not.toMatch(/Sign up/);
+  expect(prose(PAGE)).not.toMatch(/Sign up/);
   expect(PAGE).not.toMatch(/redirect/);
   expect(PAGE).not.toMatch(/sign-in/);
   expect(PAGE).not.toMatch(/from "@clerk/);
