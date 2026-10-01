@@ -20,7 +20,8 @@ const step = (over: Partial<CompiledStep> & { id: string }): CompiledStep => ({
 
 async function insertTool(db: Awaited<ReturnType<typeof openDb>>, id: string, steps: CompiledStep[], ws = "ws_ready") {
   await db.run(
-    `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
+    `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?,` +
+      ` ?, '', 'on', ?, '[]')`,
     [id, ws, id, JSON.stringify(steps)],
   );
   return { id, name: id, steps: JSON.stringify(steps), workspace_id: ws };

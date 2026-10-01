@@ -48,7 +48,8 @@ describe("savings ledger", () => {
 
   async function addRun(toolId: string, opts: { steps_ok?: number; steps_attempted?: number } = {}) {
     await db.run(
-      `INSERT INTO tool_run (id, tool_id, steps_attempted, steps_ok, server_ms, runner_ms, raw_bytes, densified_bytes, billable_ms, cache_hits, created_at)
+      `INSERT INTO tool_run (id, tool_id, steps_attempted, steps_ok, server_ms, runner_ms, raw_bytes, \
+densified_bytes, billable_ms, cache_hits, created_at)
        VALUES (?, ?, ?, ?, 10, 0, 1, 1, 1, 0, ?)`,
       [crypto.randomUUID(), toolId, opts.steps_attempted ?? 2, opts.steps_ok ?? 2, Date.now()],
     );

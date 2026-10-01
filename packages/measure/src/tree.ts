@@ -311,7 +311,9 @@ export function treeCheck(): { name: "tree"; ok: boolean; count: number; detail:
     name: "tree",
     ok: true,
     count: 0,
-    detail: `Wave 16–20 0 open · ${snap.shipped16_20} shipped · ${snap.limit16_20} limit · Wave 21 closed · Wave 22.2 shipped`,
+    detail:
+      `Wave 16–20 0 open · ${snap.shipped16_20} shipped · ${snap.limit16_20} limit · Wave 21 closed · ` +
+      `Wave 22.2 shipped`,
   };
 }
 

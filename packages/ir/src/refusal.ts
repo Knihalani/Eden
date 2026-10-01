@@ -54,7 +54,10 @@ export function refusalCopy(row: Pick<Refusal, "code" | "reason" | "hint" | "rea
   if (hint) return `${label}. ${hint}`;
   if (code === "read_set_mismatch" && row.readSet != null && row.repeats != null) {
     const slot = row.slot ? `${row.slot} ran` : "the loop ran";
-    return `${label}. A prior read returned ${row.readSet}; ${slot} ${row.repeats} times. Expose the full array the loop iterates, or iterate once per item.`;
+    return (
+      `${label}. A prior read returned ${row.readSet}; ${slot} ${row.repeats} times. Expose the full ` +
+      `array the loop iterates, or iterate once per item.`
+    );
   }
   return `${label}. ${row.reason}`;
 }

@@ -109,7 +109,8 @@ export function rewriteForLoop(command: string): string | null {
     `done`,
     `wait`,
     `_fail=0`,
-    `for ${varName} in ${items.join(" ")}; do cat "$_e/$${varName}"; [ "$(cat "$_e/$${varName}.ec" 2>/dev/null)" = 0 ] || _fail=1; done`,
+    `for ${varName} in ${items.join(" ")}; do cat "$_e/$${varName}"; [ "$(cat "$_e/$${varName}.ec" ` +
+      `2>/dev/null)" = 0 ] || _fail=1; done`,
     `rm -rf "$_e"`,
     `[ "$_fail" = 0 ]`,
   ].join("\n");

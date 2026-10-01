@@ -77,7 +77,8 @@ describe("rotation: sibling-width inherit (Wave 10)", () => {
     expect(extra.contract.envelope!.inputs.invented).toBeUndefined();
 
     console.log(
-      `width-inherit: mined=${MINED_WIDTH} sibling=${SIBLING_WIDTH} k=${K} after2_ood=2/2 after3_in_dist=3/3 fourth_in_dist=true bad_inherit=false`,
+      `width-inherit: mined=${MINED_WIDTH} sibling=${SIBLING_WIDTH} k=${K} after2_ood=2/2 ` +
+        `after3_in_dist=3/3 fourth_in_dist=true bad_inherit=false`,
     );
   });
 

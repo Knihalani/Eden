@@ -171,13 +171,16 @@ async function main(): Promise<void> {
     `cold_unpack_tax         ${(coldUnpackTax * 100).toFixed(2)}%  (once per hot-set miss; not the hit path)`,
     `read_ms_uncompressed    ${tReadU.toFixed(4)}`,
     `read_ms_compressed      ${tReadC.toFixed(4)}`,
-    `read_tax                ${(readTax * 100).toFixed(2)}%  (${readTaxMs >= 0 ? "+" : ""}${readTaxMs.toFixed(4)}ms; need <10% and not a gunzip leak)`,
+    `read_tax                ${(readTax * 100).toFixed(2)}%  ` +
+      `(${readTaxMs >= 0 ? "+" : ""}${readTaxMs.toFixed(4)}ms; need <10% and not a gunzip leak)`,
     `storm_admitted          ${admittedStorm}/${nStorm}  (window cap ${ADMISSION_WINDOW_CAP})`,
     `storm_write_all         ${writeAllStorm}/${nStorm}`,
     `write_volume_delta      ${(writeVolumeDelta * 100).toFixed(2)}% vs write-all`,
     `replay_keys             ${nKeys} × ${visits} warmup then 1 replay`,
-    `replay_hit_rate_admit   ${(admRate * 100).toFixed(3)}%  (${admittedReplay.replayHits}/${admittedReplay.replayLookups})`,
-    `replay_hit_rate_all     ${(allRate * 100).toFixed(3)}%  (${writeAllReplay.replayHits}/${writeAllReplay.replayLookups})`,
+    `replay_hit_rate_admit   ${(admRate * 100).toFixed(3)}%  ` +
+      `(${admittedReplay.replayHits}/${admittedReplay.replayLookups})`,
+    `replay_hit_rate_all     ${(allRate * 100).toFixed(3)}%  ` +
+      `(${writeAllReplay.replayHits}/${writeAllReplay.replayLookups})`,
     `replay_hit_rate_loss    ${hitRateLossPts.toFixed(3)} pt  (need < 1pt)`,
     `warmup_writes_admit     ${admittedReplay.warmupWrites}`,
     `warmup_writes_all       ${writeAllReplay.warmupWrites}`,

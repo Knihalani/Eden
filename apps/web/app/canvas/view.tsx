@@ -250,7 +250,8 @@ export function CanvasView({ model }: { model: CanvasModel }) {
           {origin}
           {origin && model.fail ? " · " : null}
           {model.fail
-            ? `${failLabel(model.fail.kind)}${model.fail.step ? ` · ${model.fail.step}` : ""} · ${model.fail.detail} ${model.fail.next}`
+            ? `${failLabel(model.fail.kind)}${model.fail.step ? ` · ${model.fail.step}` : ""} · ` +
+              `${model.fail.detail} ${model.fail.next}`
             : null}
         </p>
       ) : null}

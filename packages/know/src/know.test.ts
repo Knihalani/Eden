@@ -139,14 +139,19 @@ describe("extract", () => {
     ).toBe(true);
   });
   test("json-ld triples", () => {
-    const html = `<html><title>JSON-LD 1.1</title><script type="application/ld+json">{"@type":"TechArticle","name":"JSON-LD 1.1","description":"A JSON-based serialization for Linked Data."}</script><h1>JSON-LD 1.1</h1><p>body text for extract</p></html>`;
+    const html =
+      `<html><title>JSON-LD 1.1</title><script type="application/ld+json">{"@type":"TechArticle",` +
+      `"name":"JSON-LD 1.1","description":"A JSON-based serialization for Linked ` +
+      `Data."}</script><h1>JSON-LD 1.1</h1><p>body text for extract</p></html>`;
     const t = triplesFromPage("https://www.w3.org/TR/json-ld11/", html, true);
     expect(t.some((x) => /JSON-LD/i.test(x.s) || /JSON-LD/i.test(x.o))).toBe(true);
     expect(htmlToText(html).includes("body")).toBe(true);
     expect(jsonLdBlocks(html).length).toBe(1);
   });
   test("json-ld Country capital persists", () => {
-    const html = `<script type="application/ld+json">{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},"description":"A country in East Africa."}</script>`;
+    const html =
+      `<script type="application/ld+json">{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},` +
+      `"description":"A country in East Africa."}</script>`;
     const t = triplesFromPage("https://en.wikipedia.org/wiki/Kenya", html, true);
     expect(t.some((x) => x.p === "capital" && x.s === "Kenya" && x.o === "Nairobi")).toBe(true);
   });
@@ -329,7 +334,9 @@ describe("extract", () => {
   test("w3 tr title is persistable", () => {
     const t = triplesFromPage(
       "https://www.w3.org/TR/web-share/",
-      `<html><title>Web Share API</title><h1>Web Share API</h1><div id="abstract"><p>This specification defines an API for sharing text, links and other content to an arbitrary destination of the user's choice.</p></div></html>`,
+      `<html><title>Web Share API</title><h1>Web Share API</h1><div id="abstract"><p>This specification ` +
+        `defines an API for sharing text, links and other content to an arbitrary destination of the user's ` +
+        `choice.</p></div></html>`,
       true,
     );
     expect(t.some((x) => x.p === "is" && /web-share/i.test(x.s) && /Share/i.test(x.o))).toBe(true);
@@ -337,9 +344,14 @@ describe("extract", () => {
   test("rfc index skips obsoleted and keeps current titles", () => {
     const xml = `<?xml version="1.0"?>
 <rfc-index>
-<rfc-entry><doc-id>RFC2616</doc-id><title>Hypertext Transfer Protocol -- HTTP/1.1</title><current-status>DRAFT STANDARD</current-status><obsoleted-by><doc-id>RFC7230</doc-id></obsoleted-by></rfc-entry>
-<rfc-entry><doc-id>RFC3986</doc-id><title>Uniform Resource Identifier (URI): Generic Syntax</title><current-status>INTERNET STANDARD</current-status></rfc-entry>
-<rfc-entry><doc-id>RFC9110</doc-id><title>HTTP Semantics</title><current-status>INTERNET STANDARD</current-status><obsoletes><doc-id>RFC2818</doc-id><doc-id>RFC7230</doc-id><doc-id>RFC7231</doc-id></obsoletes><updates><doc-id>RFC3864</doc-id></updates></rfc-entry>
+<rfc-entry><doc-id>RFC2616</doc-id><title>Hypertext Transfer Protocol -- \
+HTTP/1.1</title><current-status>DRAFT \
+STANDARD</current-status><obsoleted-by><doc-id>RFC7230</doc-id></obsoleted-by></rfc-entry>
+<rfc-entry><doc-id>RFC3986</doc-id><title>Uniform Resource Identifier (URI): Generic \
+Syntax</title><current-status>INTERNET STANDARD</current-status></rfc-entry>
+<rfc-entry><doc-id>RFC9110</doc-id><title>HTTP Semantics</title><current-status>INTERNET \
+STANDARD</current-status><obsoletes><doc-id>RFC2818</doc-id><doc-id>RFC7230</doc-id>\
+<doc-id>RFC7231</doc-id></obsoletes><updates><doc-id>RFC3864</doc-id></updates></rfc-entry>
 <rfc-entry><doc-id>RFC0000</doc-id><title>Not Issued</title><current-status>NOT ISSUED</current-status></rfc-entry>
 </rfc-index>`;
     const t = parseRfcIndex(xml);
@@ -348,11 +360,13 @@ describe("extract", () => {
     expect(t.some((x) => x.s === "RFC 9110" && x.p === "updates" && /3864/.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "RFC 2616")).toBe(false);
     const longTail = parseRfcIndex(
-      `<rfc-entry><doc-id>RFC0872</doc-id><title>TCP-on-a-LAN</title><current-status>INFORMATIONAL</current-status></rfc-entry>`,
+      `<rfc-entry><doc-id>RFC0872</doc-id><title>TCP-on-a-LAN</title><current-status>INFORMATIONAL</current-status>` +
+        `</rfc-entry>`,
     );
     expect(longTail.some((x) => x.s === "RFC 872" && /TCP/i.test(x.o))).toBe(true);
     const junk = parseRfcIndex(
-      `<rfc-entry><doc-id>RFC0001</doc-id><title>When a server</title><current-status>INFORMATIONAL</current-status></rfc-entry>`,
+      `<rfc-entry><doc-id>RFC0001</doc-id><title>When a ` +
+        `server</title><current-status>INFORMATIONAL</current-status></rfc-entry>`,
     );
     expect(junk.some((x) => x.s === "RFC 1")).toBe(false);
   });
@@ -393,7 +407,8 @@ describe("extract", () => {
     expect(blocks[0]).toEqual({ s: "Unicode Block Basic Latin", p: "is", o: "U+0000..U+007F", e: "" });
     expect(persistable("https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt", blocks[0]!)).toBe(false);
     const langs = parseLangSubtags(
-      "%%\nType: language\nSubtag: en\nDescription: English\n%%\nType: language\nSubtag: zxx\nDescription: No linguistic content\nScope: special\n",
+      "%%\nType: language\nSubtag: en\nDescription: English\n%%\nType: language\nSubtag: zxx\n" +
+        "Description: No linguistic content\nScope: special\n",
     );
     expect(langs).toEqual([{ s: "IANA language en", p: "is", o: "English", e: "" }]);
     expect(
@@ -405,7 +420,8 @@ describe("extract", () => {
     );
     expect(methods[0]?.s).toBe("IANA method GET");
     const methodsXml = parseIanaXml(
-      `<record><value>GET</value><safe>yes</safe><idempotent>yes</idempotent><xref type="rfc" data="rfc9110" section="9.3.1"/></record>`,
+      `<record><value>GET</value><safe>yes</safe><idempotent>yes</idempotent><xref type="rfc" ` +
+        `data="rfc9110" section="9.3.1"/></record>`,
       "method",
     );
     expect(methodsXml[0]?.o).toBe("safe, idempotent, RFC 9110");
@@ -491,18 +507,18 @@ describe("extract", () => {
         text: "RFC 3986 Uniform Resource Identifier Generic Syntax. This document defines the generic syntax of URI.",
       }),
     ).toBe(true);
-    const long =
-      "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(
-        4,
-      );
+    const long = (
+      "This is a long enough english page about nothing in particular, just filler text for a junk host " +
+      "that the old length floor would have admitted. "
+    ).repeat(4);
     expect(keepWet({ uri: "https://learn-python-scam.example/essay", text: long })).toBe(false);
     expect(keepWet({ uri: "https://spam.rfc.test/clickbait", text: long })).toBe(false);
   });
   test("keepWet slice yield is the FineWeb meter (not lifetime host_prior.skipped)", () => {
-    const longJunk =
-      "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(
-        4,
-      );
+    const longJunk = (
+      "This is a long enough english page about nothing in particular, just filler text for a junk host " +
+      "that the old length floor would have admitted. "
+    ).repeat(4);
     expect(longJunk.length).toBeGreaterThanOrEqual(200);
     const junk = [
       ...Array.from({ length: 90 }, (_, i) => ({
@@ -515,11 +531,15 @@ describe("extract", () => {
     const quality = [
       ...Array.from({ length: 7 }, (_, i) => ({
         uri: `https://www.rfc-editor.org/rfc/rfc${3900 + i}.html`,
-        text: "RFC document that defines an internet standard with enough body text to pass the WET length floor for conversion records.",
+        text:
+          "RFC document that defines an internet standard with enough body text to pass the WET length floor " +
+          "for conversion records.",
       })),
       {
         uri: "https://www.ietf.org/rfc/rfc9110.html",
-        text: "RFC 9110 HTTP Semantics. This document specifies HTTP semantics for the web as used by agents and servers.",
+        text:
+          "RFC 9110 HTTP Semantics. This document specifies HTTP semantics for the web as used by agents and " +
+          "servers.",
       },
       {
         uri: "https://www.w3.org/TR/json-ld11/",
@@ -568,7 +588,9 @@ describe("extract", () => {
 describe("warc", () => {
   test("parses a conversion record", () => {
     const body = "The capital of France is Paris. France is a country.";
-    const rec = `WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: https://example.org/fr\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
+    const rec =
+      `WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: https://example.org/fr\r\nContent-Length: ` +
+      `${body.length}\r\n\r\n${body}`;
     const out: { uri: string; text: string }[] = [];
     pushWarc(rec, out, 5);
     expect(out[0]?.uri).toBe("https://example.org/fr");

@@ -246,7 +246,8 @@ describe("horizon worlds: compileTraces", () => {
       const r = compileTraces(traces);
       const looped = r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"));
       console.log(
-        `horizon compile graphql-relay: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+        `horizon compile graphql-relay: programs=${r.programs.length} loops=${looped.length} \
+seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
           .map((x) => x.code ?? x.reason)
           .slice(0, 4)
           .join("; ")}`,

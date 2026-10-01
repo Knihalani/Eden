@@ -88,7 +88,8 @@ async function main() {
       heapSamples.push(heap);
       gcRuns.push(round);
       process.stdout.write(
-        `  round ${round}: heap ${heap.toFixed(1)}MB, turns ${totalTurns}, execs ${totalExecs}, goLive ${goLivePass}/${goLives}\n`,
+        `  round ${round}: heap ${heap.toFixed(1)}MB, turns ${totalTurns}, execs ${totalExecs}, goLive ` +
+          `${goLivePass}/${goLives}\n`,
       );
     }
   }
@@ -109,7 +110,8 @@ async function main() {
   for (const [w, ok] of goLiveByWorld) console.log(`  ${w}: ${ok.pass}/${ok.total} certified`);
   const canForceGC = typeof globalThis.gc === "function";
   console.log(
-    `heap: early(mean of ${early.length}) ${mean(early).toFixed(1)}MB -> late ${mean(late).toFixed(1)}MB (${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%)` +
+    `heap: early(mean of ${early.length}) ${mean(early).toFixed(1)}MB -> late ` +
+      `${mean(late).toFixed(1)}MB (${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%)` +
       (canForceGC ? "" : " [UNFORCED GC — growth number is not a leak signal; run with bun --expose-gc]"),
   );
   console.log(`violations: ${violations.length === 0 ? "none" : ""}`);

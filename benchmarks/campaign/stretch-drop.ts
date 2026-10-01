@@ -16,7 +16,8 @@ import { stretchWords, type StretchWord } from "@eden/measure";
  * expect: stretchWords ["Served","Skipped","Degraded"]; Home `Live · Served · Skipped · Degraded`
  */
 export const EXPECT =
-  "3-call serve + host-drop + remainder skip (skip latest): stretchWords Served, Skipped, Degraded; Home Live · Served · Skipped · Degraded";
+  "3-call serve + host-drop + remainder skip (skip latest): stretchWords Served, Skipped, Degraded; " +
+  "Home Live · Served · Skipped · Degraded";
 
 export const TOOL_ID = "wf_stretch";
 

@@ -49,7 +49,8 @@ function remainingBudgetForRun(args: {
  * observe never forecast-halts; killAfterWarning still wins.
  */
 export const EXPECT =
-  "forecast halt is predicted vs actual llm/ms/cents; unique-work halt count 0; observe never forecast-halts; EDEN_KILL_AFTER_WARNING still wins.";
+  "forecast halt is predicted vs actual llm/ms/cents; unique-work halt count 0; observe never " +
+  "forecast-halts; EDEN_KILL_AFTER_WARNING still wins.";
 
 const liveManifest = {
   llmReduction: 5,

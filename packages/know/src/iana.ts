@@ -62,8 +62,11 @@ function xmlAttrField(block: string, tag: string, attr: string, val: string): st
 }
 
 const SKIP_NAME = /^(unassigned|reserved|deprecated|private encryption|experimental)$/i;
-const CHARSET_KEEP =
-  /^(utf-8|us-ascii|iso-8859-\d+|windows-125\d|shift_jis|euc-jp|euc-kr|gbk|gb2312|gb18030|big5|koi8-r|koi8-u|macintosh|ibm437|iso-2022-jp)$/i;
+const CHARSET_KEEP = new RegExp(
+  String.raw`^(utf-8|us-ascii|iso-8859-\d+|windows-125\d|shift_jis|euc-jp|euc-kr|gbk|gb2312|gb18030|big5|` +
+    String.raw`koi8-r|koi8-u|macintosh|ibm437|iso-2022-jp)$`,
+  "i",
+);
 
 export function parseIanaRecord(block: string, kind: (typeof IANA_REGISTRIES)[number]["kind"]): Triple | undefined {
   if (kind === "protocol") {

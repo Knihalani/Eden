@@ -45,9 +45,12 @@ export function renderClaimsListing(claims: readonly PublicClaim[] = PUBLIC_CLAI
     "",
     "# eden-routines (unpublished draft)",
     "",
-    "Withheld until a real customer n exists. This file is not a public listing and is not submitted anywhere. This draft is not a Determinism Index.",
+    "Withheld until a real customer n exists. This file is not a public listing and is not submitted " +
+      "anywhere. This draft is not a Determinism Index.",
     "",
-    "Every multiplier and percent below is a row in `packages/measure/src/claims.ts` (`PUBLIC_CLAIMS`), with the file that measured it. A number that is not on that table must not be printed here. The word certified in a limits row means a shadow go-live PASS, not a SOC 2 attestation.",
+    "Every multiplier and percent below is a row in `packages/measure/src/claims.ts` (`PUBLIC_CLAIMS`), " +
+      "with the file that measured it. A number that is not on that table must not be printed here. The " +
+      "word certified in a limits row means a shadow go-live PASS, not a SOC 2 attestation.",
     "",
   ];
 
@@ -69,13 +72,16 @@ export function renderClaimsListing(claims: readonly PublicClaim[] = PUBLIC_CLAI
   lines.push("## Fixture verticals");
   lines.push("");
   lines.push(
-    `Customer-approved measured studies: ${approved.length}. Fixture verticals (${verticals.join(", ") || "none"}) are campaign measurements, not customers. Do not invent a company.`,
+    `Customer-approved measured studies: ${approved.length}. Fixture verticals ` +
+      `(${verticals.join(", ") || "none"}) are campaign measurements, not customers. Do not invent a ` +
+      `company.`,
   );
   lines.push("");
   lines.push("## Determinism Index");
   lines.push("");
   lines.push(
-    "The Determinism Index public page stays unpublished. It needs an n we do not have. ROADMAP §6 keeps it pruned. This draft is not that page and does not stand in for it.",
+    "The Determinism Index public page stays unpublished. It needs an n we do not have. ROADMAP §6 " +
+      "keeps it pruned. This draft is not that page and does not stand in for it.",
   );
   lines.push("");
 

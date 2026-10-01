@@ -82,7 +82,8 @@ function parseStream(text: string) {
 }
 
 function taskPrompts(work: string) {
-  const t1 = `You are building a new tool from scratch in ${work}. Do not modify any other repo. Do not read .env or secrets.
+  const t1 = `You are building a new tool from scratch in ${work}. Do not modify any other repo. Do not read \
+.env or secrets.
 
 Build a bun TypeScript CLI called shipstat:
 - package.json with type module
@@ -91,7 +92,8 @@ Build a bun TypeScript CLI called shipstat:
 - src/index.test.ts runnable with \`bun test\`
 - git init, one commit
 
-For EACH of these GitHub PRs in ${REPO}, fetch with separate \`gh api\` REST calls (pull JSON, reviews list, combined commit status). PRs: ${PRS_LEARN.join(", ")}.
+For EACH of these GitHub PRs in ${REPO}, fetch with separate \`gh api\` REST calls (pull JSON, \
+reviews list, combined commit status). PRs: ${PRS_LEARN.join(", ")}.
 Write data/prs.json as an array of {number, title, reviews, status}.
 src/index.ts must print one line per PR: number | title | reviews | status
 bun test must check that data/prs.json has ${PRS_LEARN.length} rows and each title is non-empty.
@@ -100,12 +102,14 @@ Use git. Use GitHub. Use bun tests. Then stop.`;
   const t2 = `Continue the shipstat project in ${work}. Do not modify any other repo.
 
 Extend it:
-- Fetch PRs ${PRS_MORE.join(", ")} the same way (pull + reviews + status) AND also \`gh api repos/${REPO}/pulls/{n}/files\` for every PR in ${PRS_MID.join(", ")} (re-fetch the earlier ones too).
+- Fetch PRs ${PRS_MORE.join(", ")} the same way (pull + reviews + status) AND also \`gh api \
+repos/${REPO}/pulls/{n}/files\` for every PR in ${PRS_MID.join(", ")} (re-fetch the earlier ones too).
 - data/prs.json becomes {number, title, reviews, status, files}
 - add \`bun src/index.ts files\` that prints number | files
 - tests cover ${PRS_MID.length} PRs and files >= 0
 - git commit the work
-If Eden MCP offers github_pr_bundle or similar, use it instead of repeating gh api for title/reviews/status. Then stop.`;
+If Eden MCP offers github_pr_bundle or similar, use it instead of repeating gh api for \
+title/reviews/status. Then stop.`;
 
   const t3 = `Finish shipstat in ${work}. Do not modify any other repo.
 
@@ -116,7 +120,8 @@ Run bun test. git commit. Then stop.`;
 
   const t4 = `Continue shipstat in ${work}. Do not modify any other repo.
 
-Add PRs ${PRS_LATER.join(", ")} the same way (pull + reviews + status + files). Re-fetch every PR in ${PRS_ALL.join(", ")}.
+Add PRs ${PRS_LATER.join(", ")} the same way (pull + reviews + status + files). Re-fetch every PR \
+in ${PRS_ALL.join(", ")}.
 data/prs.json covers all ${PRS_ALL.length} PRs as {number, title, reviews, status, files}.
 tests cover ${PRS_ALL.length} PRs and files >= 0.
 Update REPORT.md ranking all ${PRS_ALL.length} PRs by CI status (failure first), with title, reviews, files.

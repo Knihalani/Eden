@@ -450,26 +450,36 @@ export function formatHelp(run: HelpRun): string {
     "",
     `**Date:** ${run.date}`,
     `**Bun:** ${run.bun}`,
-    "**Report:** §11.2 — MemoryBench humility (memory can help, no-lift, or harm). This file is the live wrap+hook product ledger. `SAVINGS.md` is the M35 bench annex.",
-    "**API:** wrap `injectBody` (`openMemory({ dir }).injectBody`) and hook `memoryHookResponse` / `respondToHook` (`openMemory` inject). Not BrainMemory. Not `memory_search`.",
+    "**Report:** §11.2 — MemoryBench humility (memory can help, no-lift, or harm). This file is the " +
+      "live wrap+hook product ledger. `SAVINGS.md` is the M35 bench annex.",
+    "**API:** wrap `injectBody` (`openMemory({ dir }).injectBody`) and hook `memoryHookResponse` / " +
+      "`respondToHook` (`openMemory` inject). Not BrainMemory. Not `memory_search`.",
     `**k:** product default (\`EDEN_MEMORY_CAP\` unset → ${run.k}). Not k=40. Not hay. Not LoCoMo 92.`,
-    "**No-memory control:** `EDEN_MEMORY=0` (off = inject identity). On arm: `EDEN_MEMORY` unset. `EDEN_KNOW=0` so the Know catalog is not this packet.",
+    "**No-memory control:** `EDEN_MEMORY=0` (off = inject identity). On arm: `EDEN_MEMORY` unset. " +
+      "`EDEN_KNOW=0` so the Know catalog is not this packet.",
     "",
     `**Totals:** helped ${run.helped} / no-lift ${run.no_lift} / harmed ${run.harmed}`,
     "",
-    "Counted rows are host × case, on vs off. Harmed is a count, not a target. Correct omit (silent-math, both packets empty) is no-lift. Ranker not retuned. Fail-open stays. Token Δ is not in this file.",
+    "Counted rows are host × case, on vs off. Harmed is a count, not a target. Correct omit " +
+      "(silent-math, both packets empty) is no-lift. Ranker not retuned. Fail-open stays. Token Δ is not " +
+      "in this file.",
     "Verdict: helped = WIN. harmed = LOSS. no-lift is junk-silent, not a LOSS.",
     "",
     "## Counted (on vs off)",
     "",
-    `Measured ${run.date}. Each row is one scripted live-shaped session. Wrap seeds with \`openMemory({ dir }).observe\`, then scores \`injectBody\`. Hook seeds and cues with \`respondToHook\` → \`memoryHookResponse\` UserPromptSubmit. Off is a clone of that seeded store under \`EDEN_MEMORY=0\`. Hook echoes one packet on both \`additional_context\` and \`hookSpecificOutput.additionalContext\`; this ledger scores that text once.`,
+    `Measured ${run.date}. Each row is one scripted live-shaped session. Wrap seeds with \`openMemory({ ` +
+      `dir }).observe\`, then scores \`injectBody\`. Hook seeds and cues with \`respondToHook\` → ` +
+      `\`memoryHookResponse\` UserPromptSubmit. Off is a clone of that seeded store under ` +
+      `\`EDEN_MEMORY=0\`. Hook echoes one packet on both \`additional_context\` and ` +
+      `\`hookSpecificOutput.additionalContext\`; this ledger scores that text once.`,
     "",
     "| case | host | class | on | off | Δ | control | notes |",
     "|---|---|---|---|---|---|---|---|",
   ];
   for (const r of run.rows) {
     lines.push(
-      `| ${mdCell(r.id)} | ${r.host} | ${r.klass} | ${mdCell(r.on)} | ${mdCell(r.off)} | ${mdCell(r.delta)} | ${r.control} | ${mdCell(r.notes)} |`,
+      `| ${mdCell(r.id)} | ${r.host} | ${r.klass} | ${mdCell(r.on)} | ${mdCell(r.off)} | ` +
+        `${mdCell(r.delta)} | ${r.control} | ${mdCell(r.notes)} |`,
     );
   }
   lines.push("");
@@ -490,7 +500,8 @@ export function formatHelp(run: HelpRun): string {
   lines.push("");
   for (const r of run.rows) {
     lines.push(
-      `- **${r.id} / ${r.host}** jsonl ${r.store_n} — on: ${r.on_packet ? mdCell(r.on_packet) : "empty"} — off: ${r.off_packet ? mdCell(r.off_packet) : "empty"}`,
+      `- **${r.id} / ${r.host}** jsonl ${r.store_n} — on: ${r.on_packet ? mdCell(r.on_packet) : "empty"} ` +
+        `— off: ${r.off_packet ? mdCell(r.off_packet) : "empty"}`,
     );
   }
   lines.push("");
@@ -502,14 +513,16 @@ export function formatHelp(run: HelpRun): string {
   lines.push("- Mem0 92 (LoCoMo 92) is not an Eden on-vs-off result.");
   lines.push("");
   lines.push(
-    "No BrainMemory column. No cortex-off column. No k=40. No hay. No `memory_search`. Fail-open and silent inject stay as they are.",
+    "No BrainMemory column. No cortex-off column. No k=40. No hay. No `memory_search`. Fail-open and " +
+      "silent inject stay as they are.",
   );
   lines.push("");
   lines.push("## Not in this file");
   lines.push("");
   lines.push("- Token Δ lives in `HELP-TOKENS.md` (M47.3). This ledger does not invent token numbers.");
   lines.push(
-    "- Harmed ids omitted on the next inject is M47.2 product code (`src/memory-harmed.ts`). This file only classifies sessions.",
+    "- Harmed ids omitted on the next inject is M47.2 product code (`src/memory-harmed.ts`). This file " +
+      "only classifies sessions.",
   );
   lines.push("");
   lines.push("## How to re-run");

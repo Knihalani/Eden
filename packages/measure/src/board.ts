@@ -54,7 +54,10 @@ export function boardCounts(claims: readonly PublicClaim[] = PUBLIC_CLAIMS): {
 
 export function boardSummaryLine(claims: readonly PublicClaim[] = PUBLIC_CLAIMS): string {
   const n = boardCounts(claims);
-  return `${n.wins} wins · ${n.parity} parity · ${n.analogue} analogue · ${n.limits} limits · ${n.retired} retired · ${n.customers} customers`;
+  return (
+    `${n.wins} wins · ${n.parity} parity · ${n.analogue} analogue · ${n.limits} limits · ${n.retired} ` +
+    `retired · ${n.customers} customers`
+  );
 }
 
 /**

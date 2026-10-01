@@ -122,7 +122,9 @@ describe("canvas fail language", () => {
       code: "read_set_mismatch",
       readSet: 12,
       repeats: 6,
-      hint: "grepCode returned 12; readFile ran 6 times. Expose the full array the loop iterates, or iterate once per item.",
+      hint:
+        "grepCode returned 12; readFile ran 6 times. Expose the full array the loop iterates, or iterate " +
+        "once per item.",
     });
     expect(copy).toMatch(/^Read-set mismatch\./);
     expect(copy).toMatch(/12/);
@@ -153,7 +155,9 @@ describe("canvas fail language", () => {
       code: "read_set_mismatch",
       readSet: 12,
       repeats: 6,
-      hint: "grepCode returned 12; readFile ran 6 times. Expose the full array the loop iterates, or iterate once per item.",
+      hint:
+        "grepCode returned 12; readFile ran 6 times. Expose the full array the loop iterates, or iterate " +
+        "once per item.",
     });
     expect(emptyPanelCopy({ program: null, refusal: copy })).toBe(copy);
     expect(emptyPanelCopy({ program: { id: "p" }, refusal: copy })).toBe(
@@ -165,7 +169,8 @@ describe("canvas fail language", () => {
   test("remainder skip names the program and does not invent skip counts", () => {
     const f = classifyFail({
       reason:
-        "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the last tool output.",
+        "Already served by pr_summary. Do not re-run Grep — the remaining steps of this routine are in the " +
+        "last tool output.",
     });
     expect(f?.kind).toBe("skipped");
     expect(f?.step).toBe("Grep");

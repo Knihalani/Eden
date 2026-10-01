@@ -408,7 +408,8 @@ describe("islands", () => {
           'for n in 170 169; do gh api "repos/KaiavN/Eden/pulls/$n"; gh api "repos/KaiavN/Eden/pulls/$n/reviews"; done',
         args: {
           command:
-            'for n in 170 169; do gh api "repos/KaiavN/Eden/pulls/$n"; gh api "repos/KaiavN/Eden/pulls/$n/reviews"; done',
+            'for n in 170 169; do gh api "repos/KaiavN/Eden/pulls/$n"; gh api ' +
+            '"repos/KaiavN/Eden/pulls/$n/reviews"; done',
         },
       }),
     ]);
@@ -575,7 +576,8 @@ describe("fulfill wrap", () => {
 
   test("playFor rewrites GraphQL PR loops once a live tool exists", () => {
     const cmd =
-      "for n in 170 169; do gh api graphql -f query='query { repository { pullRequest(number: '$n') { title } } }'; done";
+      "for n in 170 169; do gh api graphql -f query='query { repository { pullRequest(number: '$n') { " +
+      "title } } }'; done";
     const r = rewriteBash(cmd, {
       playFor: (kind, issues) => (kind === "bundle" ? `eden play github_pr_bundle --issues ${issues.join(",")}` : null),
     });
@@ -672,7 +674,8 @@ describe("plan + mcp ranking", () => {
 
   test("planFromBash expands RAW=/dir dests and skips unknown $VAR dests", () => {
     const cmd =
-      "RAW=/tmp/shipstat-raw; mkdir -p $RAW; for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > $RAW/pull-$n.json; done";
+      "RAW=/tmp/shipstat-raw; mkdir -p $RAW; for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > " +
+      "$RAW/pull-$n.json; done";
     const plan = planFromBash(cmd);
     expect(plan?.pullOut).toBe("/tmp/shipstat-raw/pull-$n.json");
     expect(planFromBash("for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > $RAW/pull-$n.json; done")).toBeNull();
@@ -680,7 +683,8 @@ describe("plan + mcp ranking", () => {
 
   test("planFromBash reads GraphQL owner/name and does not rewrite redirected graphql", () => {
     const cmd =
-      "for n in 170 169; do gh api graphql -f query='query { repository(owner:\"KaiavN\", name:\"Eden\") { pullRequest(number: '$n') { title reviews { totalCount } statusCheckRollup { state } } } }'; done";
+      'for n in 170 169; do gh api graphql -f query=\'query { repository(owner:"KaiavN", name:"Eden") ' +
+      "{ pullRequest(number: '$n') { title reviews { totalCount } statusCheckRollup { state } } } }'; done";
     const plan = planFromBash(cmd);
     expect(plan?.repo).toBe("KaiavN/Eden");
     expect(plan?.ids).toEqual(["170", "169"]);
@@ -688,7 +692,8 @@ describe("plan + mcp ranking", () => {
     expect(plan?.status).toBe(true);
     expect(
       planFromBash(
-        'for n in 170 169; do gh api graphql -f query=\'query { repository(owner:"KaiavN", name:"Eden") { pullRequest(number: 1) { title } } }\' > raw/$n.json; done',
+        'for n in 170 169; do gh api graphql -f query=\'query { repository(owner:"KaiavN", name:"Eden") { ' +
+          "pullRequest(number: 1) { title } } }' > raw/$n.json; done",
       ),
     ).toBeNull();
   });
@@ -880,10 +885,12 @@ describe("domain-general compilation (no vendor knowledge)", () => {
       ev({
         name: "Bash",
         command:
-          "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done",
+          "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s " +
+          "https://api.acme.com/v2/orders/$n/items; done",
         args: {
           command:
-            "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done",
+            "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s " +
+            "https://api.acme.com/v2/orders/$n/items; done",
         },
       }),
     ];
@@ -1056,7 +1063,8 @@ describe("any-workflow compile", () => {
 
   test("playFor rewrites a curl loop when the callback matches", () => {
     const cmd =
-      "for n in 11 12; do curl http://127.0.0.1:8801/shop/orders/$n; curl http://127.0.0.1:8801/shop/orders/$n/items; done";
+      "for n in 11 12; do curl http://127.0.0.1:8801/shop/orders/$n; curl " +
+      "http://127.0.0.1:8801/shop/orders/$n/items; done";
     const r = rewriteBash(cmd, {
       playFor: (_kind, issues) => `eden play shop_orders --ids ${issues.join(",")}`,
     });

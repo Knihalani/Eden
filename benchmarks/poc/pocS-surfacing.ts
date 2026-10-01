@@ -58,7 +58,8 @@ printRow("D  Transparent execution", `$${transparent.spend.toFixed(5)} · 0 mode
 console.log("");
 printRow(
   "schema-token tax vs A",
-  `B −${Math.round((1 - jit.spend / mcp.spend) * 100)}% · C −${Math.round((1 - manifest.spend / mcp.spend) * 100)}% · D −100%`,
+  `B −${Math.round((1 - jit.spend / mcp.spend) * 100)}% · C ` +
+    `−${Math.round((1 - manifest.spend / mcp.spend) * 100)}% · D −100%`,
 );
 printRow(
   "loop suppression bonus (D only)",

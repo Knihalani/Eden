@@ -87,7 +87,8 @@ describe("M30.2 DetQA output unwrap", () => {
     expect(call("_detqa_complete", fenced, "detective_qa")).toBe("B. Miss Martin Dale");
 
     const prose =
-      'Based on the provided context, there is no mention of Quentin Ducassin.\n\nOutput: {"answer":"None of the above", "reasoning":"missing character"}';
+      'Based on the provided context, there is no mention of Quentin Ducassin.\n\nOutput: {"answer":"None ' +
+      'of the above", "reasoning":"missing character"}';
     expect(call("_detqa_complete", prose, "detective_qa")).toBe("None of the above");
 
     expect(call("_detqa_complete", "C. The Brandt couple", "detective_qa")).toBe("C. The Brandt couple");
@@ -109,7 +110,8 @@ describe("M30.2 DetQA output unwrap", () => {
 
 describe("M30.2 retrieval_query extract (inject-agent)", () => {
   test("Now Answer the Question extract keeps A./B./C./D. and has no Question: prefix", () => {
-    const official = `Based on the context you memorized, answer the question below. You are required to answer the question based on the strict output format.
+    const official = `Based on the context you memorized, answer the question below. You are required to answer the \
+question based on the strict output format.
 
 For example:
 [story text]

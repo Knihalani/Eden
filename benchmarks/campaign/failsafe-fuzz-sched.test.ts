@@ -137,7 +137,8 @@ async function withSched<T>(mode: "waves" | "ready", fn: () => Promise<T>): Prom
 
 async function insertTool(db: Awaited<ReturnType<typeof openDb>>, id: string, steps: CompiledStep[], ws: string) {
   await db.run(
-    `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?, ?, '', 'on', ?, '[]')`,
+    `INSERT OR REPLACE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen) VALUES (?, ?,` +
+      ` ?, '', 'on', ?, '[]')`,
     [id, ws, id, JSON.stringify(steps)],
   );
   return { id, name: id, steps: JSON.stringify(steps), workspace_id: ws };
@@ -276,7 +277,8 @@ describe("failsafe fuzz × schedulers", () => {
             divergences++;
             if (firstErr.length < 4) {
               firstErr.push(
-                `case=${spec.index} seq=[${spec.sequence.join(",")}] fault=${spec.fault}@${spec.faultAt} waves=${JSON.stringify(want)} ready=${JSON.stringify(got)}`,
+                `case=${spec.index} seq=[${spec.sequence.join(",")}] fault=${spec.fault}@${spec.faultAt} ` +
+                  `waves=${JSON.stringify(want)} ready=${JSON.stringify(got)}`,
               );
             }
           }
@@ -340,7 +342,8 @@ describe("failsafe fuzz × schedulers", () => {
             divergences++;
             if (firstErr.length < 8) {
               firstErr.push(
-                `case=${spec.index} seq=[${spec.sequence.join(",")}] fault=${spec.fault}@${spec.faultAt} waves=${JSON.stringify(want)} ready=${JSON.stringify(got)}`,
+                `case=${spec.index} seq=[${spec.sequence.join(",")}] fault=${spec.fault}@${spec.faultAt} ` +
+                  `waves=${JSON.stringify(want)} ready=${JSON.stringify(got)}`,
               );
             }
           }
@@ -363,7 +366,8 @@ describe("failsafe fuzz × schedulers", () => {
 
       const ms = wavesMs + readyMs;
       console.log(
-        `failsafe-fuzz-sched n=${N_CASES} divergences=${divergences} seed=0x${FUZZ_SEED.toString(16).toUpperCase()} waves_ms=${wavesMs} ready_ms=${readyMs} ms=${ms}`,
+        `failsafe-fuzz-sched n=${N_CASES} divergences=${divergences} ` +
+          `seed=0x${FUZZ_SEED.toString(16).toUpperCase()} waves_ms=${wavesMs} ready_ms=${readyMs} ms=${ms}`,
       );
       if (firstErr[0]) throw new Error(firstErr[0]);
       expect(divergences).toBe(0);

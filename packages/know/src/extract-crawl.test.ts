@@ -141,7 +141,9 @@ describe("wikipedia Action API fallback (no network)", () => {
     title: "Kenya",
     extract: "Kenya is a country in East Africa. Its capital and largest city is Nairobi.",
   });
-  const SHELL = `<html><title>Kenya</title><p>Kenya is a country in East Africa with a long enough lead for extract.</p></html>`;
+  const SHELL =
+    `<html><title>Kenya</title><p>Kenya is a country in East Africa with a long enough lead for ` +
+    `extract.</p></html>`;
 
   test("Action API URL is wikipedia.org only; nytimes is out", () => {
     const api = wikiActionApiUrl(KENYA);
@@ -234,13 +236,17 @@ describe("national capitals table yield", () => {
       <tr><th>City/Town</th><th>Country/Territory</th><th>Continent</th><th>Notes</th></tr>
       <tr>
         <td><a href="/wiki/Berlin">Berlin</a></td>
-        <td><span class="flagicon"><span typeof="mw:File"><a href="/wiki/File:Flag_of_Germany.svg"><img alt="Flag of Germany"></a></span></span><span typeof="mw:Entity">&#160;</span><a href="/wiki/Germany" title="Germany">Germany</a></td>
+        <td><span class="flagicon"><span typeof="mw:File"><a \
+href="/wiki/File:Flag_of_Germany.svg"><img alt="Flag of Germany"></a></span></span><span \
+typeof="mw:Entity">&#160;</span><a href="/wiki/Germany" title="Germany">Germany</a></td>
         <td rowspan="2">Europe</td>
         <td><a>Bonn</a> was the capital of <a>West Germany</a>.</td>
       </tr>
       <tr>
         <td><a href="/wiki/Canberra">Canberra</a></td>
-        <td data-mw='{"html":"<b>x</b>"}'><span class="flagicon"><a href="./File:Flag_of_Australia.svg" class="mw-file-description"><img alt=""></a></span><span typeof="mw:Entity">&#160;</span><a href="/wiki/Australia" title="Australia">Australia</a></td>
+        <td data-mw='{"html":"<b>x</b>"}'><span class="flagicon"><a \
+href="./File:Flag_of_Australia.svg" class="mw-file-description"><img alt=""></a></span><span \
+typeof="mw:Entity">&#160;</span><a href="/wiki/Australia" title="Australia">Australia</a></td>
         <td>Planned city to mitigate rivalry between <a>Melbourne</a> (de facto capital) and <a>Sydney</a>.</td>
       </tr>
     </table>`;
@@ -295,7 +301,8 @@ RFC 3986                   URI Generic Syntax               January 2005
   test("RFC HTML prose obsoletes become edge facts", () => {
     const html = `<html><head><title>RFC 3986: Uniform Resource Identifier (URI): Generic Syntax</title>
       <meta name="citation_title" content="Uniform Resource Identifier (URI): Generic Syntax"></head>
-      <body><h1>RFC 3986</h1><p>This document defines Uniform Resource Identifier (URI): Generic Syntax and obsoletes RFC 2396 and RFC 2732.</p></body></html>`;
+      <body><h1>RFC 3986</h1><p>This document defines Uniform Resource Identifier (URI): Generic \
+Syntax and obsoletes RFC 2396 and RFC 2732.</p></body></html>`;
     const t = triplesFromPage("https://www.rfc-editor.org/rfc/rfc3986.html", html, true);
     expect(t.some((x) => x.s === "RFC 3986" && x.p === "is" && /URI/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "RFC 3986" && x.p === "obsoletes" && /2396/.test(x.o) && /2732/.test(x.o))).toBe(true);
@@ -381,7 +388,8 @@ describe("prose capital sax", () => {
   test("prose Kenya's capital is Nairobi", () => {
     const t = triplesFromPage(
       "https://en.wikipedia.org/wiki/Kenya",
-      `<html><p>Kenya's capital is Nairobi and the country is in East Africa with more than eighty letters of english prose here so extract keeps going.</p></html>`,
+      `<html><p>Kenya's capital is Nairobi and the country is in East Africa with more than eighty ` +
+        `letters of english prose here so extract keeps going.</p></html>`,
       true,
     );
     expect(t.some((x) => x.s === "Kenya" && x.p === "capital" && x.o === "Nairobi")).toBe(true);
@@ -415,10 +423,10 @@ describe("extractLinks", () => {
 
 describe("keepWet FineWeb meter", () => {
   test("junk hosts stay false; rfc/ietf/w3/iana/spdx/unicode/whatwg stay true; nist is not a registry", () => {
-    const long =
-      "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(
-        4,
-      );
+    const long = (
+      "This is a long enough english page about nothing in particular, just filler text for a junk host " +
+      "that the old length floor would have admitted. "
+    ).repeat(4);
     expect(keepWet({ uri: "https://spam.junk.test/long", text: long })).toBe(false);
     expect(keepWet({ uri: "https://learn-python-scam.example/essay", text: long })).toBe(false);
     expect(keepWet({ uri: "https://spam.rfc.test/clickbait", text: long })).toBe(false);
@@ -449,11 +457,13 @@ describe("keepWet FineWeb meter", () => {
   test("wikipedia encyclopedia drops; casino wiki-mirrors still drop", () => {
     const filler = "The protocol is used by agents and origin servers around the world for everyday work. ";
     const kenya = `The capital of Kenya is Nairobi and the city hosts the government. ${filler.repeat(3)}`;
-    const long =
-      "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(
-        4,
-      );
-    const casino = `Best casino slots bahis win now! The capital of luck is winning tonight. ${"bahis casino slot ".repeat(20)}`;
+    const long = (
+      "This is a long enough english page about nothing in particular, just filler text for a junk host " +
+      "that the old length floor would have admitted. "
+    ).repeat(4);
+    const casino =
+      `Best casino slots bahis win now! The capital of luck is winning tonight. ` +
+      `${"bahis casino slot ".repeat(20)}`;
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: kenya })).toBe(false);
     expect(keepWet({ uri: "https://www.wikidata.org/wiki/Q114", text: kenya })).toBe(false);
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Travel", text: long })).toBe(false);
@@ -481,13 +491,15 @@ describe("keepWet FineWeb meter", () => {
       "After more than eight hundred characters of that survey, " +
       "the author finally cites RFC 3986: Uniform Resource Identifier Generic Syntax for parsers.";
     const capital = `Nairobi is the capital of Kenya and the city hosts the government. ${filler3}`;
-    const casino = `Best casino slots bahis win now! The capital of luck is winning tonight. ${"bahis casino slot ".repeat(20)}`;
+    const casino =
+      `Best casino slots bahis win now! The capital of luck is winning tonight. ` +
+      `${"bahis casino slot ".repeat(20)}`;
     const thinRepeat = `The capital of France is Paris. A long travel essay about wine. ${"word ".repeat(40)}`;
     const paywall = `The capital of Kenya is Nairobi. ${filler3}`;
-    const spanish =
-      "El capital de Francia es Paris y la historia sigue con muchas palabras espanolas sobre vino y viajes por el pais. ".repeat(
-        4,
-      );
+    const spanish = (
+      "El capital de Francia es Paris y la historia sigue con muchas palabras espanolas sobre vino y " +
+      "viajes por el pais. "
+    ).repeat(4);
 
     expect(gopherSkip(rfc)).toBeUndefined();
     expect(wetFactBearing(rfc)).toBe(true);
@@ -528,7 +540,9 @@ describe("keepWet FineWeb meter", () => {
       },
       {
         uri: "https://en.wikipedia.org/wiki/Kenya",
-        text: "The capital of Kenya is Nairobi. Kenya is a country in East Africa and the city hosts the government for the republic.",
+        text:
+          "The capital of Kenya is Nairobi. Kenya is a country in East Africa and the city hosts the " +
+          "government for the republic.",
       },
       { uri: "https://spam.example/clickbait", text: "buy now!!! cheap cheap cheap " + "CLICK ".repeat(80) },
       {
@@ -586,7 +600,8 @@ describe("keepWet FineWeb meter", () => {
 describe("JSON-LD @graph / @value yield", () => {
   test("@graph array of Country + @value names", () => {
     const html = `<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
-      {"@type":"Country","name":{"@value":"Kenya","@language":"en"},"capital":{"@type":"City","name":{"@value":"Nairobi"}}},
+      {"@type":"Country","name":{"@value":"Kenya","@language":"en"},"capital":{"@type":"City",\
+"name":{"@value":"Nairobi"}}},
       {"@type":["Country","Place"],"name":"France","capital":{"@id":"https://en.wikipedia.org/wiki/Paris"}},
       {"@type":"https://schema.org/Country","name":{"en":"Japan"},"capital":"Tokyo"}
     ]}</script>`;
@@ -598,7 +613,9 @@ describe("JSON-LD @graph / @value yield", () => {
   });
 
   test("ld+json charset + entity-encoded block still parses", () => {
-    const html = `<script type="application/ld+json; charset=utf-8">{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"}}</script>`;
+    const html =
+      `<script type="application/ld+json; charset=utf-8">{"@type":"Country","name":"Kenya",` +
+      `"capital":{"name":"Nairobi"}}</script>`;
     const t = triplesFromPage(KENYA, html, true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "capital" && x.o === "Nairobi")).toBe(true);
   });
@@ -627,7 +644,8 @@ describe("microdata / RDFa capitals", () => {
 describe("RFC XML docName/title", () => {
   test("xml2rfc title with attributes and number/docName", () => {
     const xml = `<?xml version="1.0"?>
-<rfc xmlns="http://www.rfc-editor.org/rfc" number="3986" category="std" docName="rfc3986" obsoletes="1808,2732" updates="1738">
+<rfc xmlns="http://www.rfc-editor.org/rfc" number="3986" category="std" docName="rfc3986" \
+obsoletes="1808,2732" updates="1738">
   <front>
     <title abbrev="URI Generic Syntax">Uniform Resource Identifier (URI): Generic Syntax</title>
     <author><title>Editor</title></author>
@@ -694,7 +712,8 @@ describe("Link rel=alternate + HTTP Link", () => {
 
   test("WARC Link header is folded into the body as rel=alternate", () => {
     const raw =
-      'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nLink: <https://www.rfc-editor.org/rfc/rfc3986.xml>; rel="alternate"; type="application/rfc+xml"\r\n\r\n<html>ok</html>';
+      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nLink: <https://www.rfc-editor.org/rfc/rfc3986.xml>; " +
+      'rel="alternate"; type="application/rfc+xml"\r\n\r\n<html>ok</html>';
     const body = httpBody(raw);
     expect(body).toContain('rel="alternate"');
     expect(body).toContain("rfc3986.xml");
@@ -706,7 +725,8 @@ describe("infobox extras, definition lists, WET harvest", () => {
   test("official language and currency from infobox are persistable is-facts", () => {
     const html = `<table class="infobox ib-country">
       <tr><th>Capital</th><td><a href="/wiki/Nairobi">Nairobi</a></td></tr>
-      <tr><th>Official languages</th><td><a href="/wiki/English_language">English</a>, <a href="/wiki/Swahili_language">Swahili</a></td></tr>
+      <tr><th>Official languages</th><td><a href="/wiki/English_language">English</a>, <a \
+href="/wiki/Swahili_language">Swahili</a></td></tr>
       <tr><th>Currency</th><td><a href="/wiki/Kenyan_shilling">Kenyan shilling</a></td></tr>
     </table>`;
     const extras = wikiInfoboxExtras(KENYA, html);
@@ -743,7 +763,8 @@ describe("infobox extras, definition lists, WET harvest", () => {
 
   test("GitHub README and tool docs yield a persistable software is-fact", () => {
     const bun = "https://github.com/oven-sh/bun";
-    const html = `<meta property="og:description" content="Incredibly fast JavaScript runtime, bundler, test runner, and package manager.">
+    const html = `<meta property="og:description" content="Incredibly fast JavaScript runtime, bundler, test runner, \
+and package manager.">
       <p>Bun is a fast JavaScript runtime. SPDX-License-Identifier: MIT</p>`;
     const t = triplesFromPage(bun, html, true);
     expect(t.some((x) => x.s === "Bun" && x.p === "is" && /runtime/i.test(x.o))).toBe(true);
@@ -859,7 +880,10 @@ describe("infobox extras, definition lists, WET harvest", () => {
   });
 
   test("JSON-LD Country officialLanguage + iso3166Code", () => {
-    const html = `<script type="application/ld+json">{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},"iso3166Code":"KE","officialLanguage":{"name":"Swahili"},"currency":{"name":"Kenyan shilling"}}</script>`;
+    const html =
+      `<script type="application/ld+json">{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},` +
+      `"iso3166Code":"KE","officialLanguage":{"name":"Swahili"},"currency":{"name":"Kenyan ` +
+      `shilling"}}</script>`;
     const t = triplesFromPage(KENYA, html, true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "capital" && x.o === "Nairobi")).toBe(true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "id" && x.o === "KE")).toBe(true);
@@ -869,7 +893,9 @@ describe("infobox extras, definition lists, WET harvest", () => {
   });
 
   test("JSON-LD officialLanguage array + unlinked infobox languages both persist", () => {
-    const ld = `<script type="application/ld+json">{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},"officialLanguage":[{"name":"English"},{"name":"Swahili"}]}</script>`;
+    const ld =
+      `<script type="application/ld+json">{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},` +
+      `"officialLanguage":[{"name":"English"},{"name":"Swahili"}]}</script>`;
     const tLd = triplesFromPage(KENYA, ld, true);
     expect(tLd.some((x) => x.s === "English" && /official language of Kenya/i.test(x.o))).toBe(true);
     expect(tLd.some((x) => x.s === "Swahili" && /official language of Kenya/i.test(x.o))).toBe(true);
@@ -904,9 +930,14 @@ RFC 3986                   URI Generic Syntax               January 2005
     const rows = Array.from({ length: 80 }, (_, i) => {
       const country = `Country${String(i + 1).padStart(3, "0")}`;
       const city = `City${String(i + 1).padStart(3, "0")}`;
-      return `<tr><td><a href="/wiki/${city}">${city}</a></td><td><a href="/wiki/${country}">${country}</a></td><td>Africa</td></tr>`;
+      return (
+        `<tr><td><a href="/wiki/${city}">${city}</a></td><td><a ` +
+        `href="/wiki/${country}">${country}</a></td><td>Africa</td></tr>`
+      );
     }).join("");
-    const html = `<table class="wikitable"><tr><th>City/Town</th><th>Country/Territory</th><th>Continent</th></tr>${rows}</table>`;
+    const html =
+      `<table class="wikitable"><tr><th>City/Town</th><th>Country/Territory</th><th>Continent</th></tr>` +
+      `${rows}</table>`;
     const t = triplesFromPage(LIST, html, true);
     const caps = t.filter((x) => x.p === "capital");
     expect(caps.length).toBe(80);
@@ -969,7 +1000,8 @@ describe("one-pass yield: infobox extras, entities, thin HTML", () => {
   test("JSON-LD ItemList + description + population", () => {
     const html = `<script type="application/ld+json">{"@graph":[
       {"@type":"ItemList","itemListElement":[
-        {"@type":"ListItem","item":{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},"description":"A country in East Africa.","population":"55864655","containedInPlace":"East Africa"}}
+        {"@type":"ListItem","item":{"@type":"Country","name":"Kenya","capital":{"name":"Nairobi"},\
+"description":"A country in East Africa.","population":"55864655","containedInPlace":"East Africa"}}
       ]}
     ]}</script>`;
     const t = triplesFromPage(KENYA, html, true);
@@ -993,12 +1025,14 @@ describe("one-pass yield: infobox extras, entities, thin HTML", () => {
 
   test("Parsoid infobox: nested area/pop, unlinked English, UTC +3, no cite junk", () => {
     const html = `<html><head><title>Kenya</title></head><body>
-      <div class="shortdescription" data-mw='{"parts":[{"template":{"params":{"1":{"wt":"Country in East Africa"}}}}]}'>Country in East Africa</div>
+      <div class="shortdescription" data-mw='{"parts":[{"template":{"params":{"1":{"wt":"Country in \
+East Africa"}}}}]}'>Country in East Africa</div>
       <table class="infobox ib-country">
         <tr><th scope="row" class="infobox-label">Capital<div class="ib-country-largest">and largest city</div></th>
           <td><a href="/wiki/Nairobi">Nairobi</a></td></tr>
         <tr><th>Official languages</th><td><ul><li><a href="/wiki/Swahili_language">Swahili</a></li>
-          <li>English<sup class="reference"><a href="#cite_note-1"><span class="cite-bracket">[</span>1<span class="cite-bracket">]</span></a></sup></li></ul></td></tr>
+          <li>English<sup class="reference"><a href="#cite_note-1"><span \
+class="cite-bracket">[</span>1<span class="cite-bracket">]</span></a></sup></li></ul></td></tr>
         <tr><th>Area</th></tr>
         <tr><th>• Total</th><td>580,367 km<sup>2</sup> (224,081 sq mi)</td></tr>
         <tr><th>Population</th></tr>

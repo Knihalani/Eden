@@ -303,15 +303,20 @@ export function formatHoldoutResults(run: CombinedRun): string {
     `**Bun:** ${run.bun}`,
     `**API under test:** ${run.api_under_test} (\`respondToHook\` / \`memoryHookResponse\` + \`openMemory\`)`,
     `**k:** ${run.k}`,
-    `**Pre-registered expect:** ${run.pre_registered_expect} (per-case FAIL in holdout-fixture.json; M2.4 tools-fixture expect FAIL)`,
+    `**Pre-registered expect:** ${run.pre_registered_expect} (per-case FAIL in holdout-fixture.json; ` +
+      `M2.4 tools-fixture expect FAIL)`,
     `**Overall:** ${run.overall}`,
     `**Gate 1:** WIN ${g.WIN} / LOSS ${g.LOSS} / FAIL ${g.FAIL}`,
-    "**No-memory control:** `EDEN_MEMORY=0`. M35.2 (2026-09-22) off arm: `additionalContext` empty on all 8 Gate 1 + AMA cases. Gate 1 WIN is on vs off (needles present only when memory is on). See `SAVINGS.md`.",
+    "**No-memory control:** `EDEN_MEMORY=0`. M35.2 (2026-09-22) off arm: `additionalContext` empty on " +
+      "all 8 Gate 1 + AMA cases. Gate 1 WIN is on vs off (needles present only when memory is on). See " +
+      "`SAVINGS.md`.",
     `**M48.1:** Live coding holdout re-run after M16–M47 (${run.date}). Same inject API. Ranker not retuned.`,
     "",
-    "No BrainMemory column. No cortex-off column. Not LoCoMo 92. Not k=40. Not hay. Not bakeoff rec5. Ranker not tuned. Dual-API forbidden. inject path only.",
+    "No BrainMemory column. No cortex-off column. Not LoCoMo 92. Not k=40. Not hay. Not bakeoff rec5. " +
+      "Ranker not tuned. Dual-API forbidden. inject path only.",
     "",
-    "Gate 1 acceptance: coding-holdout on inject path; commit surfaces test rule; ADR survives paraphrase; Node 16→18 newest wins without deleting “CI”; tools persist.",
+    "Gate 1 acceptance: coding-holdout on inject path; commit surfaces test rule; ADR survives " +
+      "paraphrase; Node 16→18 newest wins without deleting “CI”; tools persist.",
     "",
     "## Gate 1 coding-holdout (inject)",
     "",
@@ -336,13 +341,16 @@ export function formatHoldoutResults(run: CombinedRun): string {
     const hits = r.inject_hits.length ? r.inject_hits.join("; ") : "—";
     const miss = r.inject_miss.length ? r.inject_miss.join("; ") : "—";
     lines.push(
-      `| ${r.id} | ${r.verdict} | ${toolGate1(r)} | ${r.post_tool_stored ? "yes" : "no"} | ${r.jsonl_n_after_observe} | ${mdCell(hits)} | ${mdCell(miss)} |`,
+      `| ${r.id} | ${r.verdict} | ${toolGate1(r)} | ${r.post_tool_stored ? "yes" : "no"} | ` +
+        `${r.jsonl_n_after_observe} | ${mdCell(hits)} | ${mdCell(miss)} |`,
     );
   }
   lines.push("");
   if (run.overall === "PASS") {
     lines.push(
-      "True verdict on this tree: every Gate 1 gold needle and every M2.4 gold needle was in inject/additionalContext. Pre-registered expect was FAIL; this is not a forced FAIL. Ranker not tuned.",
+      "True verdict on this tree: every Gate 1 gold needle and every M2.4 gold needle was in " +
+        "inject/additionalContext. Pre-registered expect was FAIL; this is not a forced FAIL. Ranker not " +
+        "tuned.",
     );
   } else {
     const losses = [
@@ -350,7 +358,8 @@ export function formatHoldoutResults(run: CombinedRun): string {
       ...run.tools.rows.filter((r) => r.verdict === "FAIL").map((r) => r.id),
     ];
     lines.push(
-      `Honest overall FAIL. Missed: ${losses.join(", ") || "—"}. Losses feed M10, not a silent ranker retune from this file.`,
+      `Honest overall FAIL. Missed: ${losses.join(", ") || "—"}. Losses feed M10, not a silent ranker ` +
+        `retune from this file.`,
     );
   }
   lines.push("");
@@ -362,7 +371,8 @@ export function formatHoldoutResults(run: CombinedRun): string {
   lines.push("```");
   lines.push("");
   lines.push(
-    "Paste this table into this file. Score additionalContext only. Do not add a BrainMemory column. Do not set k=40. Do not retune `src/index.ts` ranking.",
+    "Paste this table into this file. Score additionalContext only. Do not add a BrainMemory column. Do " +
+      "not set k=40. Do not retune `src/index.ts` ranking.",
   );
   lines.push("");
   return lines.join("\n");
@@ -389,7 +399,9 @@ function patchToolsMd(toolsMdPath: string, toolsRun: ToolsHoldoutRun): void {
   const replacement = [
     "## RESULTS",
     "",
-    `Copied from \`TOOLS-RESULTS.md\` after \`bun benchmarks/memory-holdout/run-tools.ts\` on ${toolsRun.date} (bun ${toolsRun.bun}). k = default. Pre-registered expect was FAIL; M2.2 had landed.`,
+    `Copied from \`TOOLS-RESULTS.md\` after \`bun benchmarks/memory-holdout/run-tools.ts\` on ` +
+      `${toolsRun.date} (bun ${toolsRun.bun}). k = default. Pre-registered expect was FAIL; M2.2 had ` +
+      `landed.`,
     "",
     paste,
     "",
@@ -417,6 +429,7 @@ if (import.meta.main) {
     ...run.tools.rows.map((r) => `${r.id}\t${r.verdict}\t${toolGate1(r)}`),
   ].join("\n");
   process.stdout.write(
-    `\n${table}\n overall=${run.overall} gate1=WIN ${run.gate1_counts.WIN} / LOSS ${run.gate1_counts.LOSS} / FAIL ${run.gate1_counts.FAIL}\n`,
+    `\n${table}\n overall=${run.overall} gate1=WIN ${run.gate1_counts.WIN} / LOSS ` +
+      `${run.gate1_counts.LOSS} / FAIL ${run.gate1_counts.FAIL}\n`,
   );
 }

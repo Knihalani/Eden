@@ -435,7 +435,9 @@ async function ensureCompact(want: Set<string>): Promise<CompactTraj[]> {
 function trajNote(traj: CompactTraj): { role: string; content: string }[] {
   const raw = {
     role: "user",
-    content: `Colleague trajectory ${traj.id} in ${traj.environment || traj.domain}. Goal: ${traj.goal || "(none)"}. Outcome: ${traj.outcome || "unknown"}. Start: ${traj.start_url || ""}.`,
+    content:
+      `Colleague trajectory ${traj.id} in ${traj.environment || traj.domain}. Goal: ` +
+      `${traj.goal || "(none)"}. Outcome: ${traj.outcome || "unknown"}. Start: ${traj.start_url || ""}.`,
   };
   const stripped = omitExperienceTree(raw);
   if (stripped && typeof stripped === "object" && !Array.isArray(stripped)) {
@@ -661,7 +663,8 @@ function readerPrompt(question: string, packet: string): { role: string; content
     {
       role: "system",
       content:
-        "You answer LongMemEval-V2 questions using only the Eden Memory packet. If the packet does not contain enough evidence, answer UNKNOWN. Output only \\boxed{final answer} with no analysis.",
+        "You answer LongMemEval-V2 questions using only the Eden Memory packet. If the packet does not " +
+        "contain enough evidence, answer UNKNOWN. Output only \\boxed{final answer} with no analysis.",
     },
     {
       role: "user",
@@ -749,15 +752,25 @@ export function formatResults(args: {
   const experienceFiles = args.experience_files ?? args.domains.reduce((n, d) => n + (d.experience_files || 0), 0);
   const filesLine =
     experienceFiles > 0
-      ? `1. **Files exist.** \`putExperience\` wrote ${experienceFiles} trajectory files (\`experience/*.jsonl\`, AX \`tree\`, not extractDurable). Inject is silent \`[episode]\` slices (k≤${kCap()}), not a file-walking coding-agent memory controller. Still **${args.v.overall}** vs RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`
-      : `1. **Files exist.** ExperienceStore landed (M23); inject is silent \`[episode]\` slices (M24). This ingest must write \`experience/*.jsonl\` via \`putExperience\` — empty files here is a runner bug, not "No files" product. Still **${args.v.overall}** vs RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
+      ? `1. **Files exist.** \`putExperience\` wrote ${experienceFiles} trajectory files ` +
+        `(\`experience/*.jsonl\`, AX \`tree\`, not extractDurable). ` +
+        `Inject is silent \`[episode]\` slices (k≤${kCap()}), ` +
+        `not a file-walking coding-agent memory controller. Still **${args.v.overall}** vs RAG ${RAG_SMALL} ` +
+        `and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`
+      : `1. **Files exist.** ExperienceStore landed (M23); inject is silent \`[episode]\` slices (M24). ` +
+        `This ingest must write \`experience/*.jsonl\` via \`putExperience\` — empty files here is a runner ` +
+        `bug, not "No files" product. Still **${args.v.overall}** vs RAG ${RAG_SMALL} and AgentRunbook-C ` +
+        `${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
   const overallWhy =
     args.v.overall === "WIN"
-      ? `Acc ${pct(accPct)} meets RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Plan §9.2 SOTA agent-trajectory memory only at ≥ ${AGENTRUNBOOK_C_SMALL}.`
-      : `Overall WIN only if both rows WIN. Target first ≥ RAG ${RAG_SMALL}, then AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
+      ? `Acc ${pct(accPct)} meets RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Plan §9.2 ` +
+        `SOTA agent-trajectory memory only at ≥ ${AGENTRUNBOOK_C_SMALL}.`
+      : `Overall WIN only if both rows WIN. Target first ≥ RAG ${RAG_SMALL}, then AgentRunbook-C ` +
+        `${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
   const readerProbe = args.reader_ok
     ? "NIM answered."
-    : `NIM unavailable (${args.reader_note}). Probe does not skip remaining questions; each row still goes to the per-question reader. HTTP 504 scores that row incorrect and CONTINUE.`;
+    : `NIM unavailable (${args.reader_note}). Probe does not skip remaining questions; each row still ` +
+      `goes to the per-question reader. HTTP 504 scores that row incorrect and CONTINUE.`;
   return (
     `# M26 LME-V2 Small RESULTS
 
@@ -767,13 +780,22 @@ export function formatResults(args: {
 **M37 recert:** ${args.date} — live n=${args.n} after M16–M36; trajectory SOTA only if acc ≥ ${AGENTRUNBOOK_C_SMALL}
 **Report:** §11.1
 **Bun:** ${args.bun}
-**API under test:** \`openMemory\` inject (\`src/index.ts\`). Ingest = \`putExperience\` (AX \`tree\` on \`{dir}/experience/*.jsonl\`) + optional short observe notes (goal/outcome/url only, \`omitExperienceTree\`) + \`mem.sleep()\`. Query = \`inject([{role:"user",content:question}])\`. Packet = \`${MEMORY_MARK}\`.
-**Reader:** NVIDIA NIM \`${args.nim_model}\` at \`NVIDIA_BASE_URL\` (key from gitignored \`.env\`, not printed). Probe: ${args.reader_ok ? "ok" : `unavailable (${args.reader_note})`}. Probe failure does not skip the question loop.
-**k:** product default ${kCap()} (\`EDEN_MEMORY_CAP\`). **JSONL store cap:** product default ${storeCap()} (\`EDEN_MEMORY_STORE_CAP\`) — not raised as a fake haystack.
-**Experience disk cap:** \`${EXPERIENCE_BYTES_ENV}\` (this runner sets ${LME_EXPERIENCE_BYTES} bytes if unset/tight; default 32MiB may evict 200 traj files).
+**API under test:** \`openMemory\` inject (\`src/index.ts\`). Ingest = \`putExperience\` (AX \
+\`tree\` on \`{dir}/experience/*.jsonl\`) + optional short observe notes (goal/outcome/url only, \
+\`omitExperienceTree\`) + \`mem.sleep()\`. Query = \`inject([{role:"user",content:question}])\`. \
+Packet = \`${MEMORY_MARK}\`.
+**Reader:** NVIDIA NIM \`${args.nim_model}\` at \`NVIDIA_BASE_URL\` (key from gitignored \`.env\`, \
+not printed). Probe: ${args.reader_ok ? "ok" : `unavailable (${args.reader_note})`}. Probe failure \
+does not skip the question loop.
+**k:** product default ${kCap()} (\`EDEN_MEMORY_CAP\`). **JSONL store cap:** product default \
+${storeCap()} (\`EDEN_MEMORY_STORE_CAP\`) — not raised as a fake haystack.
+**Experience disk cap:** \`${EXPERIENCE_BYTES_ENV}\` (this runner sets ${LME_EXPERIENCE_BYTES} \
+bytes if unset/tight; default 32MiB may evict 200 traj files).
 **Chat-only:** no \`[procedure]\` mint. No \`memory_search\`. No BrainMemory.
 
-Official Small: 100-trajectory haystack ~25M tokens, 451 questions. HuggingFace \`xiaowu0162/longmemeval-v2\`. M26 re-exam is after ExperienceStore files + silent slice inject (M23–M25). Official close is live n=451 — do not copy M15 **${M15_LOCK.acc_pct}%** into this acc cell.
+Official Small: 100-trajectory haystack ~25M tokens, 451 questions. HuggingFace \
+\`xiaowu0162/longmemeval-v2\`. M26 re-exam is after ExperienceStore files + silent slice inject (M23–M25). \
+Official close is live n=451 — do not copy M15 **${M15_LOCK.acc_pct}%** into this acc cell.
 
 ## Headline
 
@@ -784,20 +806,27 @@ Official Small: 100-trajectory haystack ~25M tokens, 451 questions. HuggingFace 
 | **acc** | **${pct(accPct)}%** |
 | inject p50 / p95 | ${pct(percentile(args.inject, 50))} / ${pct(percentile(args.inject, 95))} ms |
 | reader p50 / p95 | ${pct(percentile(args.reader, 50))} / ${pct(percentile(args.reader, 95))} ms |
-| query (inject+reader) p50 / p95 / mean | ${pct(percentile(args.query, 50))} / ${pct(percentile(args.query, 95))} / ${pct(mean(args.query))} ms |
+| query (inject+reader) p50 / p95 / mean | ${pct(percentile(args.query, 50))} / \
+${pct(percentile(args.query, 95))} / ${pct(mean(args.query))} ms |
 | empty packets | ${args.packet_empty} / ${args.n} (${emptyHonesty}) |
-| gold_in_packet hit / phrase-match denom | ${args.gold_in_packet.hit} / ${args.gold_in_packet.n} of ${args.n} (${goldRate}; ${goldNa} N/A llm/mc — not a sample) |
+| gold_in_packet hit / phrase-match denom | ${args.gold_in_packet.hit} / ${args.gold_in_packet.n} \
+of ${args.n} (${goldRate}; ${goldNa} N/A llm/mc — not a sample) |
 | reader answered | ${args.reader_answered} / ${args.n} (${readerFail} HTTP errors scored incorrect) |
 
 ## vs M15 / diagnostic (Report §11.1)
 
 | baseline | n | acc | gold_in_packet | empty packets |
 |---|---:|---:|---|---|
-| M15.2 official Small | ${M15_LOCK.n} | ${M15_LOCK.acc_pct}% | ${M15_LOCK.gold_hit} / ${M15_LOCK.gold_n} phrase-match (${M15_LOCK.gold_na} N/A) | ${M15_LOCK.packet_empty} / ${M15_LOCK.n} (junk always-on then) |
+| M15.2 official Small | ${M15_LOCK.n} | ${M15_LOCK.acc_pct}% | ${M15_LOCK.gold_hit} / \
+${M15_LOCK.gold_n} phrase-match (${M15_LOCK.gold_na} N/A) | ${M15_LOCK.packet_empty} / \
+${M15_LOCK.n} (junk always-on then) |
 | diagnostic | ${DIAGNOSTIC_200.n} | ${DIAGNOSTIC_200.acc_pct}% | — | — |
-| this run (M26) | ${args.n} | ${pct(accPct)}% | ${args.gold_in_packet.hit} / ${args.gold_in_packet.n} phrase-match | ${args.packet_empty} / ${args.n} |
+| this run (M26) | ${args.n} | ${pct(accPct)}% | ${args.gold_in_packet.hit} / \
+${args.gold_in_packet.n} phrase-match | ${args.packet_empty} / ${args.n} |
 
-Compare explicitly: this run vs M15 official **${M15_LOCK.acc_pct}% @${M15_LOCK.n}** and the **${DIAGNOSTIC_200.acc_pct}% @${DIAGNOSTIC_200.n}** diagnostic. Official close is n=451 only. Do not treat the diagnostic as Small.
+Compare explicitly: this run vs M15 official **${M15_LOCK.acc_pct}% @${M15_LOCK.n}** and the \
+**${DIAGNOSTIC_200.acc_pct}% @${DIAGNOSTIC_200.n}** diagnostic. Official close is n=451 only. Do \
+not treat the diagnostic as Small.
 
 ## Verdict
 
@@ -806,23 +835,36 @@ Compare explicitly: this run vs M15 official **${M15_LOCK.acc_pct}% @${M15_LOCK.
 | RAG query→slice | ${RAG_SMALL} | ${pct(accPct)} | **${args.v.vs_rag}** |
 | AgentRunbook-C | ${AGENTRUNBOOK_C_SMALL} | ${pct(accPct)} | **${args.v.vs_agentrunbook_c}** |
 
-**Overall: ${args.v.overall}.** Do not invent ${AGENTRUNBOOK_C_SMALL}. Verdict is vs published RAG ${RAG_SMALL} / AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}, not vs M15 ${M15_LOCK.acc_pct}%. ${overallWhy}
+**Overall: ${args.v.overall}.** Do not invent ${AGENTRUNBOOK_C_SMALL}. Verdict is vs published RAG \
+${RAG_SMALL} / AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}, not vs M15 ${M15_LOCK.acc_pct}%. ${overallWhy}
 
 ## Honesty (do not green-wash)
 
-**gold_in_packet denominator.** ${args.gold_in_packet.hit}/${args.gold_in_packet.n} is **not** a ${args.gold_in_packet.n}-question sample of n=${args.n}. \`goldInPacket\` only scores phrase-match \`eval_function\`s (\`norm_phrase_set_match\` + \`norm_phrase_set_match_ordered\`). llm/mc are N/A (null), not skipped. All ${args.n} questions were queried; ${goldNa} llm_*/mc_* rows are N/A.
+**gold_in_packet denominator.** ${args.gold_in_packet.hit}/${args.gold_in_packet.n} is **not** a \
+${args.gold_in_packet.n}-question sample of n=${args.n}. \`goldInPacket\` only scores phrase-match \
+\`eval_function\`s (\`norm_phrase_set_match\` + \`norm_phrase_set_match_ordered\`). llm/mc are N/A \
+(null), not skipped. All ${args.n} questions were queried; ${goldNa} llm_*/mc_* rows are N/A.
 
-**empty packets ${args.packet_empty}/${args.n}.** ${emptyHonesty}. Retrieval honesty is gold_in_packet hit / phrase-match denominator, not empty-packet count. 0 empty does not prove junk always-on.
+**empty packets ${args.packet_empty}/${args.n}.** ${emptyHonesty}. Retrieval honesty is \
+gold_in_packet hit / phrase-match denominator, not empty-packet count. 0 empty does not prove junk always-on.
 
-**screenshots skipped (named).** Official Small includes HF \`trajectory_screenshots\` (~7GB remainder) and 29 question images (\`errors-gotchas\`). This run is text-only. Do not treat ${pct(accPct)}% as comparable to AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} on multimodal gotchas.
+**screenshots skipped (named).** Official Small includes HF \`trajectory_screenshots\` (~7GB \
+remainder) and 29 question images (\`errors-gotchas\`). This run is text-only. Do not treat \
+${pct(accPct)}% as comparable to AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} on multimodal gotchas.
 
 **backbone.** NVIDIA NIM \`${args.nim_model}\`. Not 4o-mini. Not BrainMemory.
 
-**reader errors.** ${args.reader_answered}/${args.n} NIM answered. ${readerFail}/${args.n} scored incorrect after reader HTTP errors. Acc is still ${args.n_correct}/${args.n}.
+**reader errors.** ${args.reader_answered}/${args.n} NIM answered. ${readerFail}/${args.n} scored \
+incorrect after reader HTTP errors. Acc is still ${args.n_correct}/${args.n}.
 
 ## M25 screenshot policy (2026-09-20)
 
-The 29 \`errors-gotchas\` questions are multimodal. Policy: **skipped (named LOSS)** — HF \`trajectory_screenshots\` (~7GB remainder) and the 29 question images were not downloaded, not stored, and not replayed by sleep. If a host supplies alt-text/captions, those may be stored as text; this run did not ingest screenshots. Sleep (M25) replays experience **text files** into gists/how-to; files remain. That is not AgentRunbook-C **${AGENTRUNBOOK_C_SMALL}**. Do not treat any current acc as comparable to ${AGENTRUNBOOK_C_SMALL} on multimodal gotchas (Report §4.12).
+The 29 \`errors-gotchas\` questions are multimodal. Policy: **skipped (named LOSS)** — HF \
+\`trajectory_screenshots\` (~7GB remainder) and the 29 question images were not downloaded, not \
+stored, and not replayed by sleep. If a host supplies alt-text/captions, those may be stored as \
+text; this run did not ingest screenshots. Sleep (M25) replays experience **text files** into \
+gists/how-to; files remain. That is not AgentRunbook-C **${AGENTRUNBOOK_C_SMALL}**. \
+Do not treat any current acc as comparable to ${AGENTRUNBOOK_C_SMALL} on multimodal gotchas (Report §4.12).
 
 ## M26.3 latency
 
@@ -830,11 +872,13 @@ Live-run inject (this file) vs filed clocks. **Different fixtures — do not col
 
 | clock | inject p50 | inject p95 | fixture |
 |---|---:|---:|---|
-| this LME run | ${pct(percentile(args.inject, 50))} | ${pct(percentile(args.inject, 95))} | ExperienceStore files + short JSONL notes; in-process inject |
+| this LME run | ${pct(percentile(args.inject, 50))} | ${pct(percentile(args.inject, 95))} | \
+ExperienceStore files + short JSONL notes; in-process inject |
 | M15 LME | 82 | 286 | 2000 JSONL records (observe-only; no experience files) |
 | M6.4 | 0.048 | 0.133 | 5-message fixture, N=80 (\`BASELINE.md\`) |
 
-Wrap inject is in-process \`AgentMemory.inject\`, not a 60ms CLI. M6.4 remains the small-store baseline. LME p95 is haystack retrieve, not a CLI gate.
+Wrap inject is in-process \`AgentMemory.inject\`, not a 60ms CLI. \
+M6.4 remains the small-store baseline. LME p95 is haystack retrieve, not a CLI gate.
 
 ## What was actually ingested
 
@@ -846,8 +890,11 @@ ${args.ingested.what_ran}
 | unique Small traj ids | ${args.ingested.unique_traj} (2 shared 100-traj haystacks: web + enterprise) |
 | screenshots | **${args.ingested.screenshots}** (HF trajectory_screenshots + 29 question images not used) |
 | official haystack size | ${args.ingested.full_tokens_claimed} — **not ingested** |
-| store after ingest | JSONL notes are short (goal/outcome/url); cap ${storeCap()} is not the haystack. Experience files: see domain table. Disk cap \`${EXPERIENCE_BYTES_ENV}\`=${LME_EXPERIENCE_BYTES} (raised if tight) |
-| truncation | accessibility_tree ${TREE_CAP} chars, thought ${THOUGHT_CAP}, action ${ACTION_CAP}, states/traj ≤ ${STATE_CAP} |
+| store after ingest | JSONL notes are short (goal/outcome/url); cap ${storeCap()} is not the \
+haystack. Experience files: see domain table. Disk cap \
+\`${EXPERIENCE_BYTES_ENV}\`=${LME_EXPERIENCE_BYTES} (raised if tight) |
+| truncation | accessibility_tree ${TREE_CAP} chars, thought ${THOUGHT_CAP}, action ${ACTION_CAP}, \
+states/traj ≤ ${STATE_CAP} |
 
 | domain | traj found | states kept | chars kept | jsonl / cap | experience files | ingest |
 |---|---|---|---|---|---|---|
@@ -862,11 +909,14 @@ ${typeRows}
 ## Diagnosis (why ${args.v.overall})
 
 ${filesLine}
-2. **Screenshots skipped (named).** Gotchas (n=29) are multimodal; this run is text-only. That is not AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}.
-3. **Truncation.** accessibility_tree ${TREE_CAP} chars, thought ${THOUGHT_CAP}, action ${ACTION_CAP}, states/traj ≤ ${STATE_CAP}. Official Small ~25M tokens not ingested.
+2. **Screenshots skipped (named).** Gotchas (n=29) are multimodal; this run is text-only. That is \
+not AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}.
+3. **Truncation.** accessibility_tree ${TREE_CAP} chars, thought ${THOUGHT_CAP}, action \
+${ACTION_CAP}, states/traj ≤ ${STATE_CAP}. Official Small ~25M tokens not ingested.
 4. **k.** Product default ${kCap()} (\`EDEN_MEMORY_CAP\`). Silent slices add a small extra budget; not k=40 MCC.
 5. **Backbone.** NVIDIA NIM \`${args.nim_model}\`. Not 4o-mini. Not BrainMemory.
-6. **Chat-only / no \`memory_search\`.** Reader sees only the inject packet. Store cap ${storeCap()} still evicts JSONL; experience disk cap is distinct (\`EDEN_EXPERIENCE_BYTES\`).
+6. **Chat-only / no \`memory_search\`.** Reader sees only the inject packet. Store cap \
+${storeCap()} still evicts JSONL; experience disk cap is distinct (\`EDEN_EXPERIENCE_BYTES\`).
 7. **Reader probe:** ${readerProbe}
 
 ## How to re-run
@@ -875,7 +925,8 @@ ${filesLine}
 bun benchmarks/lme-v2/run.ts
 \`\`\`
 
-Data cache: \`benchmarks/lme-v2/.data/\` (gitignored). Do not retune \`src/index.ts\` from this number. Schema is this file + \`last-run.json\`, not M15.1 MAB JSON. Smoke (\`LME_LIMIT\`) ≠ official.
+Data cache: \`benchmarks/lme-v2/.data/\` (gitignored). Do not retune \`src/index.ts\` from this \
+number. Schema is this file + \`last-run.json\`, not M15.1 MAB JSON. Smoke (\`LME_LIMIT\`) ≠ official.
 
 ## M15 lock appendix (${M15_LOCK.date})
 
@@ -982,7 +1033,8 @@ async function main() {
 
   const conc = readerConcurrency();
   console.log(
-    `inject done n=${pending.length}; per-question reader pool ${conc} (HTTP 504 scores that row incorrect and CONTINUE)`,
+    `inject done n=${pending.length}; per-question reader pool ${conc} (HTTP 504 scores that row ` +
+      `incorrect and CONTINUE)`,
   );
   let scored = 0;
   const rows: Row[] = await mapPool(pending, conc, async (p) => {
@@ -1073,8 +1125,12 @@ async function main() {
   const ingestedWhat = [
     `Downloaded official \`questions.jsonl\` + \`haystacks/lme_v2_small.json\` + trajectories text.`,
     `Did **not** download screenshot tarballs (~7GB dataset remainder).`,
-    `Kept only the ${want.size} unique Small-tier trajectory ids, truncated per-state text, then \`putExperience\` (AX \`tree\` on \`experience/*.jsonl\`) + short observe notes (goal/outcome/url only, \`omitExperienceTree\`) + \`mem.sleep()\`.`,
-    `JSONL store cap ${storeCap()} (\`EDEN_MEMORY_STORE_CAP\`) is **not** raised as a fake haystack. Experience disk cap \`${EXPERIENCE_BYTES_ENV}\`=${ensureExperienceBudget()} (default 32MiB may evict 200 traj files).`,
+    `Kept only the ${want.size} unique Small-tier trajectory ids, truncated per-state text, then ` +
+      `\`putExperience\` (AX \`tree\` on \`experience/*.jsonl\`) + short observe notes (goal/outcome/url ` +
+      `only, \`omitExperienceTree\`) + \`mem.sleep()\`.`,
+    `JSONL store cap ${storeCap()} (\`EDEN_MEMORY_STORE_CAP\`) is **not** raised as a fake haystack. ` +
+      `Experience disk cap \`${EXPERIENCE_BYTES_ENV}\`=${ensureExperienceBudget()} (default 32MiB may ` +
+      `evict 200 traj files).`,
     compact.length < want.size
       ? `Missing ${want.size - compact.length} trajectories from the JSONL stream.`
       : `All ${want.size} unique Small traj ids were present in trajectories.jsonl.`,

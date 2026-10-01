@@ -549,7 +549,10 @@ export function silenceNotes(opts: SilenceNotesOpts): string {
     lines.push("## Remain-silent measure");
     lines.push("");
     lines.push(
-      `Dated ${opts.date}. Count of Harbor trials whose wrap inject packet was **empty** vs **junk** vs on-cue. Harbor trajectories do not contain \`${MEMORY_MARK.trim()}\` — counts come from wrap \`${INJECT_LOG_ENV}\` JSONL. **Do not implement the omit gate here** — that is M38. Silent inject stays always-on; this wave only measures.`,
+      `Dated ${opts.date}. Count of Harbor trials whose wrap inject packet was **empty** vs **junk** vs ` +
+        `on-cue. Harbor trajectories do not contain \`${MEMORY_MARK.trim()}\` — counts come from wrap ` +
+        `\`${INJECT_LOG_ENV}\` JSONL. **Do not implement the omit gate here** — that is M38. Silent inject ` +
+        `stays always-on; this wave only measures.`,
     );
     lines.push("");
     lines.push("| arm | n_trials | empty | junk | on_cue | no_inject | n_injects |");
@@ -558,7 +561,10 @@ export function silenceNotes(opts: SilenceNotesOpts): string {
     lines.push(`| on (inject) ${fmtCount(on)}`);
     lines.push("");
     lines.push(
-      "empty = no `Eden Memory:` packet (off-arm identity, or on-arm with nothing to inject). junk = packet present and notes share no contentful tokens with this-turn cue (leftover sqlite/Clerk/postgres/CircleCI/diet on an openssl cue). no_inject = trial had no wrap chat (tmux died before first inject) — not an empty packet.",
+      "empty = no `Eden Memory:` packet (off-arm identity, or on-arm with nothing to inject). junk = " +
+        "packet present and notes share no contentful tokens with this-turn cue (leftover " +
+        "sqlite/Clerk/postgres/CircleCI/diet on an openssl cue). no_inject = trial had no wrap chat (tmux " +
+        "died before first inject) — not an empty packet.",
     );
     const lost = opts.accuracy_pp != null && opts.accuracy_pp < 0;
     if (on.junk > 0 || lost) {
@@ -573,6 +579,9 @@ export function silenceNotes(opts: SilenceNotesOpts): string {
     lines.push("");
     return lines.join("\n");
   } catch {
-    return `## Remain-silent measure\n\nDated ${opts.date}. Count unavailable (fail-open). Omit gate is M38; not implemented here.\n`;
+    return (
+      `## Remain-silent measure\n\nDated ${opts.date}. Count unavailable (fail-open). Omit gate is M38; ` +
+      `not implemented here.\n`
+    );
   }
 }

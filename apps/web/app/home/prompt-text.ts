@@ -20,13 +20,17 @@ export function envHasSecrets(env: PromptEnv) {
   return env.key !== PLACEHOLDER_ENV.key || env.org !== PLACEHOLDER_ENV.org;
 }
 
-const INSTRUCTIONS = `You are editing an existing agent project. Wrap its tools with Eden. Do not start a new app. Do not rewrite the agent. Do not change what any tool does.
+const INSTRUCTIONS = `You are editing an existing agent project. Wrap its tools with Eden. Do not start a new app. Do \
+not rewrite the agent. Do not change what any tool does.
 
-Eden compiles repeating tool sequences. A human approves a compiled tool before it goes live. Until then the original tools keep running.
+Eden compiles repeating tool sequences. A human approves a compiled tool before it goes live. Until \
+then the original tools keep running.
 
 ## Goal
 
-Find the tools object this agent already passes to its model runtime (generateText, streamText, Agent, bind_tools, or equivalent). Wrap that object once at startup. Pass the wrapped object everywhere the original was passed.
+Find the tools object this agent already passes to its model runtime (generateText, streamText, \
+Agent, bind_tools, or equivalent). Wrap that object once at startup. Pass the wrapped object \
+everywhere the original was passed.
 
 ## JavaScript / TypeScript
 
@@ -40,7 +44,9 @@ const { wrapTools } = eden({
 
 export const tools = wrapTools(existingTools)
 
-Wrap reads EDEN_API_KEY from the environment. It does not read EDEN_BASE_URL — pass that as baseUrl. Tools may be functions or { description, parameters, execute }. Keep descriptions, schemas, and execute bodies. Wrap the registry; do not wrap inside execute.
+Wrap reads EDEN_API_KEY from the environment. It does not read EDEN_BASE_URL — pass that as \
+baseUrl. Tools may be functions or { description, parameters, execute }. Keep descriptions, schemas,\
+ and execute bodies. Wrap the registry; do not wrap inside execute.
 
 ## Python
 
@@ -50,7 +56,8 @@ from eden import wrap_tools
 
 tools = wrap_tools(existing_tools)
 
-wrap_tools reads EDEN_API_KEY and EDEN_BASE_URL from the environment. existing_tools is a dict of name -> callable(args).
+wrap_tools reads EDEN_API_KEY and EDEN_BASE_URL from the environment. existing_tools is a dict of \
+name -> callable(args).
 
 ## Rules
 

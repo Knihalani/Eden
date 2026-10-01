@@ -12,7 +12,8 @@ const cues: any[] = await Bun.file(process.env.CUES ?? "fixture/cues.json").json
 const live = mems.filter((m) => !m.superseded_by);
 const scopes = [...new Set(cues.map((c) => c.scope))];
 const root = mkdtempSync(
-  "/private/tmp/claude-501/-Users-kaiavnihalani-Downloads-Eden/af5ec543-ea72-43a6-b1e5-cbb5004cc31b/scratchpad/nim/tmp-m0-",
+  "/private/tmp/claude-501/-Users-kaiavnihalani-Downloads-Eden/af5ec543-ea72-43a6-b1e5-cbb5004cc31b/scratchpad/nim/" +
+    "tmp-m0-",
 );
 const stores: Record<string, any> = {},
   textToId: Record<string, Map<string, string>> = {};

@@ -209,7 +209,8 @@ describe("ingest journal", () => {
     const fat = new Database(fixture);
     fat.exec(`
       CREATE TABLE intern (id INTEGER PRIMARY KEY, s TEXT NOT NULL UNIQUE);
-      CREATE TABLE evidence (id INTEGER PRIMARY KEY, h TEXT NOT NULL UNIQUE, t TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 1);
+      CREATE TABLE evidence (id INTEGER PRIMARY KEY, h TEXT NOT NULL UNIQUE, t TEXT NOT NULL, n \
+INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE nodes (
         id INTEGER PRIMARY KEY,
         sid INTEGER NOT NULL,
@@ -232,7 +233,8 @@ describe("ingest journal", () => {
         ttl_days INTEGER
       ) WITHOUT ROWID;
       CREATE TABLE frontier (url TEXT PRIMARY KEY, next_fetch INTEGER, from_url TEXT);
-      CREATE TABLE host_prior (host TEXT PRIMARY KEY, kept INTEGER NOT NULL DEFAULT 0, skipped INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE host_prior (host TEXT PRIMARY KEY, kept INTEGER NOT NULL DEFAULT 0, skipped \
+INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE mh_band (band TEXT PRIMARY KEY, url TEXT);
       CREATE TABLE seen_digest (url TEXT PRIMARY KEY, digest TEXT);
       CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
@@ -392,7 +394,8 @@ describe("ingest journal", () => {
         ttl_days INTEGER
       ) WITHOUT ROWID;
       CREATE TABLE frontier (url TEXT PRIMARY KEY, next_fetch INTEGER, from_url TEXT);
-      CREATE TABLE host_prior (host TEXT PRIMARY KEY, kept INTEGER NOT NULL DEFAULT 0, skipped INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE host_prior (host TEXT PRIMARY KEY, kept INTEGER NOT NULL DEFAULT 0, skipped \
+INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE mh_band (band TEXT PRIMARY KEY, url TEXT);
       CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
     `);
@@ -453,7 +456,8 @@ describe("ingest journal", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-url-intern-"));
     const s = openStore(dir);
     const long =
-      "https://stackoverflow.com/questions/12345678/how-to-parse-json-with-jq-on-the-command-line-without-loading-the-entire-file";
+      "https://stackoverflow.com/questions/12345678/" +
+      "how-to-parse-json-with-jq-on-the-command-line-without-loading-the-entire-file";
     const httpSlash = "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd";
     const qhash = "https://example.org/path/page?format=json&limit=200#frag";
     s.enqueue([long, httpSlash, qhash, "https://example.org/queued"], "https://example.org/feed");
@@ -514,7 +518,8 @@ describe("ingest journal", () => {
     const leftover = new Database(join(dir, "graph.sqlite"));
     leftover.exec(`
       CREATE TABLE intern (id INTEGER PRIMARY KEY, s TEXT NOT NULL UNIQUE);
-      CREATE TABLE evidence (id INTEGER PRIMARY KEY, h TEXT NOT NULL UNIQUE, t TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 1);
+      CREATE TABLE evidence (id INTEGER PRIMARY KEY, h TEXT NOT NULL UNIQUE, t TEXT NOT NULL, n \
+INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE nodes (
         id INTEGER PRIMARY KEY,
         sid INTEGER NOT NULL,

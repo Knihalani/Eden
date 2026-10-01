@@ -68,7 +68,8 @@ describe("handleMcp initialize", () => {
 
   async function addTool(name: string, whenToUse: string, steps: unknown = [], workspaceId = "ws_local") {
     await db.run(
-      `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, uses_count, published)
+      `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, \
+uses_count, published)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [name, workspaceId, name, whenToUse, "on", JSON.stringify(steps), "[]", name, 0, 1],
     );
@@ -249,7 +250,8 @@ describe("handleMcp initialize", () => {
   test("dispatch still matches a 7th live tool — the old list cap must not starve it", async () => {
     for (let i = 0; i < 6; i++) {
       await db.run(
-        `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, uses_count, published)
+        `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, \
+uses_count, published)
          VALUES (?,?,?,?,?,?,?,?,?,?)`,
         [`hot_${i}`, "ws_local", `hot_${i}`, "noise", "on", "[]", "[]", `hot_${i}`, 99, 1],
       );

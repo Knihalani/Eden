@@ -178,9 +178,12 @@ try {
   const walBytes = post.walBytes;
   const persistScope =
     post.walBytes > 0
-      ? `JSONL+WAL after close (${post.wals.map((w) => `${w.name}=${w.bytes}B`).join(", ")}; jsonl=${post.jsonlBytes}B; pre-close wal=${pre.walBytes}B/${pre.walN} lines)`
+      ? `JSONL+WAL after close (${post.wals.map((w) => `${w.name}=${w.bytes}B`).join(", ")}; ` +
+        `jsonl=${post.jsonlBytes}B; pre-close wal=${pre.walBytes}B/${pre.walN} lines)`
       : pre.walBytes > 0
-        ? `JSONL-only after close() compact (WAL unlinked). Pre-close ${pre.wals.map((w) => w.name).join(",") || "wal"}=${pre.walBytes}B / ${pre.walN} lines; jsonl was ${pre.jsonlBytes}B / n=${pre.jsonlN}. Table bytes are post-close JSONL ${post.jsonlBytes}B.`
+        ? `JSONL-only after close() compact (WAL unlinked). Pre-close ` +
+          `${pre.wals.map((w) => w.name).join(",") || "wal"}=${pre.walBytes}B / ${pre.walN} lines; jsonl was ` +
+          `${pre.jsonlBytes}B / n=${pre.jsonlN}. Table bytes are post-close JSONL ${post.jsonlBytes}B.`
         : "JSONL-only (no .wal beside memories.jsonl before or after close)";
   const bytes = post.jsonlBytes + post.walBytes;
 
@@ -250,17 +253,21 @@ try {
         `EXPERIENCE_SLICE_TOKEN_CAP=${EXPERIENCE_SLICE_TOKEN_CAP} (re-export of src/experience-retrieve.ts).`,
     );
     console.log(
-      `pre-close: jsonl ${pre.jsonlBytes}B n=${pre.jsonlN}; wal ${pre.walBytes}B n=${pre.walN}; query=${pre.query ? "yes" : "NO"}`,
+      `pre-close: jsonl ${pre.jsonlBytes}B n=${pre.jsonlN}; wal ${pre.walBytes}B n=${pre.walN}; ` +
+        `query=${pre.query ? "yes" : "NO"}`,
     );
     console.log(
-      `post-close: jsonl ${post.jsonlBytes}B n=${post.jsonlN}; wal ${post.walBytes}B n=${post.walN}; query=${post.query ? "yes" : "NO"}`,
+      `post-close: jsonl ${post.jsonlBytes}B n=${post.jsonlN}; wal ${post.walBytes}B n=${post.walN}; ` +
+        `query=${post.query ? "yes" : "NO"}`,
     );
     console.log(
-      `m34.1-3 at measure: WAL suffix ${MEMORY_WAL_SUFFIX}, compact at ${MEMORY_WAL_COMPACT_LINES} lines or close(); M34.3 packet constants present; retrieve score loop is relevant() in src/index.ts`,
+      `m34.1-3 at measure: WAL suffix ${MEMORY_WAL_SUFFIX}, compact at ${MEMORY_WAL_COMPACT_LINES} lines ` +
+        `or close(); M34.3 packet constants present; retrieve score loop is relevant() in src/index.ts`,
     );
     console.log(`fail-open: catch → pass-through (forced probe ${forced === 1 ? "ok" : "FAIL"})`);
     console.log(
-      `snapshots held: M1.4 p50 ${ms(M14.p50)} / p95 ${ms(M14.p95)}; M6.4 p50 ${ms(M64.p50)} / p95 ${ms(M64.p95)} (not overwritten by this run)`,
+      `snapshots held: M1.4 p50 ${ms(M14.p50)} / p95 ${ms(M14.p95)}; M6.4 p50 ${ms(M64.p50)} / p95 ` +
+        `${ms(M64.p95)} (not overwritten by this run)`,
     );
     console.log();
     console.log(value);
@@ -332,7 +339,8 @@ function measure2kStore(): void {
     console.log(`N: ${N_2K} injects after the store exists (seed wall ${ms(seedMs)} ms is not in p50/p95)`);
     console.log(`k: default (EDEN_MEMORY_CAP unset → 6; chat band 6–10)`);
     console.log(
-      `store: ${STORE_2K} distinct facts via openMemory.observe; EDEN_MEMORY_STORE_CAP unset (default 2000); EDEN_KNOW=0`,
+      `store: ${STORE_2K} distinct facts via openMemory.observe; EDEN_MEMORY_STORE_CAP unset (default ` +
+        `2000); EDEN_KNOW=0`,
     );
     console.log(`cue: ${CUE_2K}`);
     console.log(`seeded JSONL n: ${seeded.jsonlN} (${seeded.jsonlBytes} B)`);
@@ -340,7 +348,8 @@ function measure2kStore(): void {
     console.log(`swallows during timed injects: ${happySwallows}`);
     console.log(`fail-open: catch → pass-through (5-row forced probe above; 2k happy swallows ${happySwallows})`);
     console.log(
-      `compare: dated M34 5-row p50 ${ms(M34.p50)} / p95 ${ms(M34.p95)} (JSONL n=${M34.jsonlN}). This is not that fixture.`,
+      `compare: dated M34 5-row p50 ${ms(M34.p50)} / p95 ${ms(M34.p95)} (JSONL n=${M34.jsonlN}). This is ` +
+        `not that fixture.`,
     );
     console.log(`latency p50 vs M34 5-row: ${p50v}`);
     console.log(`latency p95 vs M34 5-row: ${p95v}`);
@@ -355,7 +364,8 @@ function measure2kStore(): void {
         `| JSONL n (seeded) | ${M34.jsonlN} | ${seeded.jsonlN} | ${deltaInt(seeded.jsonlN - M34.jsonlN)} |`,
         `| JSONL n (after timed injects) | ${M34.jsonlN} | ${post.jsonlN} | ${deltaInt(post.jsonlN - M34.jsonlN)} |`,
         `| swallows (timed injects) | 0 | ${happySwallows} | ${deltaInt(happySwallows)} |`,
-        `| min / max (ms) | 0.498 / 12.826 | ${ms(times[0]!)} / ${ms(times[times.length - 1]!)} | ${deltaMs(times[0]! - 0.498)} / ${deltaMs(times[times.length - 1]! - 12.826)} |`,
+        `| min / max (ms) | 0.498 / 12.826 | ${ms(times[0]!)} / ${ms(times[times.length - 1]!)} | ` +
+          `${deltaMs(times[0]! - 0.498)} / ${deltaMs(times[times.length - 1]! - 12.826)} |`,
       ].join("\n"),
     );
     if (seeded.jsonlN < 1900) {

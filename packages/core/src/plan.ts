@@ -277,7 +277,8 @@ export function mcpInstructions(
   const text = [
     "Eden compiles repeated tool sequences into single calls.",
     "tools/list is an empty catalog.",
-    "POST tools/dispatch with the conversation messages to receive at most one schema when the transcript matches a live program, or an empty list when nothing matches.",
+    "POST tools/dispatch with the conversation messages to receive at most one schema when the " +
+      "transcript matches a live program, or an empty list when nothing matches.",
   ].join(" ");
   return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
 }
