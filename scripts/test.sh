@@ -37,6 +37,24 @@ echo "test dirs:" $dirs
 echo "src tests:" $src_tests
 echo "script tests:" $script_tests
 
+# EDEN_TEST_SHARD=k/N runs the k-th of N slices of the test files (bun test --shard), so CI can
+# spread the suite over parallel jobs. The python tests run in slice 1 only. Read here, before
+# the EDEN_* variables are cleared below.
+shard=""
+run_python=1
+if [ -n "${EDEN_TEST_SHARD:-}" ]; then
+  case "$EDEN_TEST_SHARD" in
+    [1-9]*/[1-9]*) ;;
+    *)
+      echo "EDEN_TEST_SHARD must look like k/N, got: $EDEN_TEST_SHARD" >&2
+      exit 1
+      ;;
+  esac
+  shard="--shard=$EDEN_TEST_SHARD"
+  [ "${EDEN_TEST_SHARD%%/*}" = "1" ] || run_python=0
+  echo "test shard: $EDEN_TEST_SHARD"
+fi
+
 # Quarantined test files are skipped, not deleted: each one has a tracking
 # issue in scripts/test-quarantine.txt, and un-quarantining is deleting its
 # line. Tests quarantined individually use test.failing() in their own file.
@@ -66,7 +84,7 @@ echo "test HOME: $HOME"
 # Python SDK tests live under packages/sdk-py. bun's discovery only finds
 # *.test.ts, so run them here when python3 exists; environments without
 # python3 skip quietly and stay green.
-if command -v python3 >/dev/null 2>&1; then
+if [ "$run_python" = 1 ] && command -v python3 >/dev/null 2>&1; then
   echo "python tests: packages/sdk-py"
   python3 -m unittest discover -s packages/sdk-py/tests || {
     echo "python tests failed" >&2
@@ -77,4 +95,4 @@ fi
 # Not exec: the EXIT trap has to run to remove the throwaway HOME. set -e still
 # makes bun's exit status the script's.
 # shellcheck disable=SC2086 # word splitting is intended: one argument per dir/file
-bun test "$@" $ignore $dirs $src_tests $script_tests
+bun test "$@" $shard $ignore $dirs $src_tests $script_tests
