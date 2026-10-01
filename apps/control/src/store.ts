@@ -252,7 +252,8 @@ export class Store {
     const tools = this.tools()
       .map((t) => `${t.id}:${t.state}:${t.updated_at}`)
       .join(",");
-    return `${this.tracesCount()}|${this.liveCount()}|${this.receiptsCount()}|${this.lastHeartbeat()}|${cands}|${tools}`;
+    const counts = `${this.tracesCount()}|${this.liveCount()}|${this.receiptsCount()}|${this.lastHeartbeat()}`;
+    return `${counts}|${cands}|${tools}`;
   }
 
   traces(): StretchTrace[] {
