@@ -8,6 +8,7 @@ Next steps:
   1. Start wrap:                  eden wrap
   2. Point the agent at wrap:     OPENAI_BASE_URL=http://127.0.0.1:8788/v1
      Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth, not OpenAI.
+     Memory needs that key to be wrap's own, or the Eden key sent as x-eden-api-key.
      Claude Code hooks are already installed by this command.
      Memory is on by default (EDEN_MEMORY). Import history: eden memory import <path>
      Custom agent SDK:            POST /v1/wrap then POST /v1/ingest
