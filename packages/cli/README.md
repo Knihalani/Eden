@@ -17,7 +17,7 @@ eden compile --traces <dir>
 
 Hosted wrap: https://useeden.vercel.app — `POST /v1/signup`, then `eden login --url https://useeden.vercel.app --key <key>`.
 
-Point an agent at `OPENAI_BASE_URL=http://127.0.0.1:8788/v1` (local wrap) or the hosted `/v1`. Keep `OPENAI_API_KEY` as the model key. An Eden key is wrap auth, not OpenAI.
+Point an agent at `OPENAI_BASE_URL=http://127.0.0.1:8788/v1` (local wrap) or the hosted `/v1`. Keep `OPENAI_API_KEY` as the model key. An Eden key is wrap auth, not OpenAI. The hosted `/v1` refuses a chat call without your own provider key; it never pays for model calls.
 
 ## Memory
 
