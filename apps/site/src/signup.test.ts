@@ -154,6 +154,30 @@ describe("signup", () => {
     }
   });
 
+  test("behind a trusted proxy that appends to x-forwarded-for, the last hop is the client (#91)", async () => {
+    // nginx's default appends the address it saw; whatever the caller put first is its own claim.
+    const spoofed = (n: number) =>
+      siteFetch(
+        new Request("http://127.0.0.1:8787/v1/signup", {
+          method: "POST",
+          headers: {
+            host: "127.0.0.1:8787",
+            "content-type": "application/json",
+            "x-forwarded-for": `${ipBase}45.${n}, ${ipBase}44.1`,
+          },
+          body: "{}",
+        }),
+        "10.0.0.1",
+      );
+    process.env.EDEN_TRUST_PROXY = "1";
+    try {
+      for (let i = 0; i < 5; i++) expect((await spoofed(i)).status).toBe(200);
+      expect((await spoofed(5)).status).toBe(429);
+    } finally {
+      delete process.env.EDEN_TRUST_PROXY;
+    }
+  });
+
   test("the limit applies again in a later window (#91)", async () => {
     const ip = `${ipBase}43.1`;
     // The first signup opens the server's database; this address then used up a window two hours ago.
