@@ -19,7 +19,7 @@ type Row = {
   seq: number;
 };
 
-const STATUS_OBJECT =
+export const STATUS_OBJECT =
   /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i;
 const SKIP_SUBJ = new Set([
   "it",
