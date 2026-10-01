@@ -187,29 +187,28 @@ export function wetTalkBearing(text: string): boolean {
   );
 }
 
+const CAPITAL_FACT =
+  /\bcapital of\b|\bis the capital\b|\bwas the capital of\b|\bcapital city of\b|\bofficial language\b|\bthe currency of\b/i;
+
+const TOOL_KIND_FACT =
+  /\bis an?\s+(?:incredibly\s+|fast\s+|open[- ]source\s+|high[- ]level\s+)*(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework)\b/i;
+
+const USED_FOR_FACT =
+  /\bis\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\b/i;
+
 /** Typed-fact pages worth a WET keep: not “any long English”, not first-800 “capital of ” only. */
 export function wetFactBearing(text: string): boolean {
   const head = text.slice(0, 12_000);
-  if (
-    /\bcapital of\b|\bis the capital\b|\bwas the capital of\b|\bcapital city of\b|\bofficial language\b|\bthe currency of\b/i.test(
-      head,
-    )
-  ) {
+  if (CAPITAL_FACT.test(head)) {
     return true;
   }
   if (/\bis a country in\b|\bnational capitals?\b|\bISO\s*3166(?:-1)?\b/i.test(head)) return true;
   if (/\bis a (?:city|company|university|protocol|standard|language)\b/i.test(head)) return true;
-  if (
-    /\bis an?\s+(?:incredibly\s+|fast\s+|open[- ]source\s+|high[- ]level\s+)*(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework)\b/i.test(
-      head,
-    )
-  ) {
+  if (TOOL_KIND_FACT.test(head)) {
     return true;
   }
   if (
-    /\bis\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\b/i.test(
-      head,
-    ) ||
+    USED_FOR_FACT.test(head) ||
     /\bis\s+(?:the\s+)?(?:recommended|standard|usual|preferred|common)\s+(?:way|tool|method)\s+(?:to|for)\b/i.test(head)
   ) {
     return true;
