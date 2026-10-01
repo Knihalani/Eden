@@ -360,9 +360,10 @@ function renderMarkdown(
   lines.push("");
   lines.push(`Generated: ${meta.when}`);
   lines.push(`Host: \`${meta.host}\``);
-  lines.push(
-    `Mode: ${meta.fast ? "**--fast** (reduced repeats/stretches — treat as indicative)" : "full (modest stretch counts)"}`,
-  );
+  const mode = meta.fast
+    ? "**--fast** (reduced repeats/stretches — treat as indicative)"
+    : "full (modest stretch counts)";
+  lines.push(`Mode: ${mode}`);
   lines.push(
     `Design: ${meta.repeats} A/A pairs × ${meta.stretches} stretches/session (scenario-specific; see runner), \`CAMPAIGN_THINK_MS=${process.env.CAMPAIGN_THINK_MS}\`.`,
   );

@@ -118,6 +118,12 @@ async function main() {
     process.exitCode = 1;
   }
 
+  const tableRows = rows
+    .map(
+      (r) =>
+        `| ${r.timeoutMs} | ${r.writes} | ${r.notified} | ${r.deopt ? "deopt-claim" : "complete"} | ${r.wallMs.toFixed(0)} |`,
+    )
+    .join("\n");
   const md = `# Timeout default (Wave 4.4)
 
 Measured ${new Date().toISOString()} on this machine. Gated: exactly-once on every sweep cell.
@@ -132,7 +138,7 @@ A compiled stretch of 4 such tools is ~${(dist.p99 * 4).toFixed(0)} ms p99. The 
 
 | timeout_ms | writes | notified | class | wall_ms |
 |---|---|---|---|---|
-${rows.map((r) => `| ${r.timeoutMs} | ${r.writes} | ${r.notified} | ${r.deopt ? "deopt-claim" : "complete"} | ${r.wallMs.toFixed(0)} |`).join("\n")}
+${tableRows}
 
 Deopt-claim (timeout < slow) is **correctness-WIN**: applyCredit once, email not guessed. Completing (timeout > slow) is **turns-WIN**: the compiled run finishes.
 

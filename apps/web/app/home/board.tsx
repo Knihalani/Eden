@@ -301,9 +301,9 @@ function RunChart({ series, dcSeries = [] }: { series: DayPoint[]; dcSeries?: Dc
     cur.push(`${point.x},${point.y}`);
   }
   if (cur.length > 1) dcLines.push(cur.join(" "));
-  const dcAria = dcMeasured
-    ? ` DC%: ${dcSeries.map((point) => `${point.label} ${point.measured ? `${Math.round(point.dcPct)}%` : "not measured"}`).join(", ")}.`
-    : "";
+  const dcPoint = (point: (typeof dcSeries)[number]) =>
+    `${point.label} ${point.measured ? `${Math.round(point.dcPct)}%` : "not measured"}`;
+  const dcAria = dcMeasured ? ` DC%: ${dcSeries.map(dcPoint).join(", ")}.` : "";
 
   return (
     <svg

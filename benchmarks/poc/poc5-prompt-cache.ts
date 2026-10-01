@@ -23,11 +23,21 @@ header("POC 5 — prompt-cache-native serving");
 
 // ── (a) stability of the real emitter under churning usage ─────────────────
 type Row = { name: string; uses_count: number; when_to_use?: string };
-const names = Array.from(
-  { length: 12 },
-  (_, i) =>
-    `github_${["issue_triage", "pr_checks", "ci_status", "release_notes", "flaky_hunt", "dep_audit", "changelog", "assign_sweep", "stale_prs", "review_queue", "label_sync", "milestone_report"][i]!}`,
-);
+const TOOL_SUFFIXES = [
+  "issue_triage",
+  "pr_checks",
+  "ci_status",
+  "release_notes",
+  "flaky_hunt",
+  "dep_audit",
+  "changelog",
+  "assign_sweep",
+  "stale_prs",
+  "review_queue",
+  "label_sync",
+  "milestone_report",
+];
+const names = Array.from({ length: 12 }, (_, i) => `github_${TOOL_SUFFIXES[i]!}`);
 const rnd = mulberry32(42);
 let tools: Row[] = names.map((n) => ({ name: n, uses_count: Math.floor(rnd() * 50) }));
 

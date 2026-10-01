@@ -353,6 +353,8 @@ function Graph({
       {layout.nodes.map((n) => {
         const failed = fail === n.id || fail === n.tool;
         const held = blocked.includes(n.id);
+        const nodeKind = n.kind === "tool" ? (n.write ? "write" : "read") : n.kind;
+        const stateLabel = failed ? ", failed" : held ? ", blocked" : drop.includes(n.id) ? ", removed" : "";
         return (
           <li
             key={n.id}
@@ -372,7 +374,7 @@ function Graph({
               data-blocked={held ? "true" : undefined}
               data-drag={drag === n.id ? "true" : undefined}
               aria-pressed={selected === n.id}
-              aria-label={`${n.label}, ${n.kind === "tool" ? (n.write ? "write" : "read") : n.kind}${failed ? ", failed" : held ? ", blocked" : drop.includes(n.id) ? ", removed" : ""}`}
+              aria-label={`${n.label}, ${nodeKind}${stateLabel}`}
               onClick={() => onSelect(n.id)}
               onKeyDown={(event) => {
                 if (
