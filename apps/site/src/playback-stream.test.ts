@@ -17,7 +17,6 @@ import { drainPrefetches, prefetchCounters, resetPrefetchCounters } from "./cach
 
 const SLOW_MS = 180;
 const FAST_MS = 8;
-const NEXT_MS = 120;
 
 const step = (over: Partial<CompiledStep> & { id: string }): CompiledStep => ({
   kind: "cloud_http",
@@ -31,11 +30,22 @@ function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function barrierWall(slow: number, fast: number, next: number): Promise<number> {
-  const t0 = performance.now();
-  await Promise.all([delay(slow), delay(fast)]);
-  await delay(next);
-  return performance.now() - t0;
+/** A promise the test settles by hand, so step order never rests on timer margins (#81). */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
+/** True if `p` settles within `ms`. A guard against hanging, not a timing assertion. */
+async function settlesWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<boolean>((r) => (timer = setTimeout(() => r(false), ms)));
+  try {
+    return await Promise.race([p.then(() => true), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function insertTool(
@@ -67,7 +77,7 @@ describe("first-wave streaming", () => {
     else process.env.EDEN_SCHED = prevSched;
   });
 
-  test("wave-1 bind/prefetch starts before the last wave-0 member finishes; server_ms beats the barrier", async () => {
+  test("wave-1 prefetch starts while slow wave-0 is in flight; next is fetched once", async () => {
     const db = await dbP;
     const steps: CompiledStep[] = [
       step({ id: "slow", url: "https://x.test/forge/21/comments" }),
@@ -79,18 +89,29 @@ describe("first-wave streaming", () => {
     expect(waves[1]).toEqual(["next"]);
 
     const tool = await insertTool(db, "t_stream_overlap", steps);
-    const delays: Record<string, number> = { slow: SLOW_MS, fast: FAST_MS, next: NEXT_MS };
+    // `slow` stays in flight until the test releases it; nothing here waits on a timer.
+    const slow = deferred();
+    const nextFetching = deferred();
+    const fetches: string[] = [];
     setPlaybackFetchGate(async ({ id }) => {
-      const ms = delays[id];
-      if (ms) await delay(ms);
+      fetches.push(id);
+      if (id === "slow") await slow.promise;
+      if (id === "next") nextFetching.resolve();
     });
     resetPrefetchCounters();
     const probe = installPlaybackStreamProbe();
 
-    const barrierMs = await barrierWall(SLOW_MS, FAST_MS, NEXT_MS);
-    const receipt = await playTool(db, tool, {});
+    const played = playTool(db, tool, {});
+    // `next` needs only `fast`, so its fetch must start while `slow` is still held.
+    // Behind a wave-0 barrier it would wait for `slow`, and this guard would expire.
+    const nextFetchedWhileSlowHeld = await settlesWithin(nextFetching.promise, 2_000);
+    const slowStillRunning = !probe.stepDone.some((m) => m.id === "slow");
+    slow.resolve();
+    const receipt = await played;
     await drainPrefetches();
 
+    expect(nextFetchedWhileSlowHeld).toBe(true);
+    expect(slowStillRunning).toBe(true);
     expect(receipt.ok).toBe(true);
     expect(receipt.steps_ok).toBe(3);
     expect(receipt.steps_attempted).toBe(3);
@@ -107,32 +128,12 @@ describe("first-wave streaming", () => {
     expect(fastDone).toBeDefined();
     expect(nextBind).toBeDefined();
     expect(fastDone!.t).toBeLessThan(slowDone!.t);
-    // The meter: wave-1 bind started while the slow wave-0 GET was still in flight.
     expect(nextBind!.t).toBeLessThan(slowDone!.t);
 
-    const hiddenMs = slowDone!.t - nextBind!.t;
-    expect(hiddenMs).toBeGreaterThan(SLOW_MS * 0.4);
-
-    // Prefetch of `next` must actually have launched (not just a bind mark).
+    // The prefetch did the work: official wave-1 reused it instead of fetching `next`
+    // again after `slow`. That is why a streamed run beats the barrier's slow + next.
     expect(prefetchCounters.started).toBeGreaterThanOrEqual(1);
-
-    // Barrier would pay slow+next serially; streaming hides next behind slow.
-    expect(receipt.server_ms).toBeLessThan(barrierMs);
-    expect(receipt.server_ms).toBeLessThan(SLOW_MS + NEXT_MS - 40);
-
-    // Stash numbers on the receipt object for the run log (assertion messages).
-    expect(receipt.server_ms).toBeGreaterThan(0);
-    console.log(
-      JSON.stringify({
-        overlap: {
-          server_ms: receipt.server_ms,
-          barrier_ms: Math.round(barrierMs),
-          hidden_ms: Math.round(hiddenMs),
-          next_bind_before_slow_ms: Math.round(slowDone!.t - nextBind!.t),
-          fast_done_before_slow_ms: Math.round(slowDone!.t - fastDone!.t),
-        },
-      }),
-    );
+    expect(fetches.filter((id) => id === "next")).toEqual(["next"]);
   });
 
   test("a next-wave bind that needs both wave-0 members waits for the slow one", async () => {
