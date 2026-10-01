@@ -325,7 +325,7 @@ describe("M45 subagent share", () => {
         await parent.sleep({ session: "wrap-a" });
         parent.close();
 
-        const env = {
+        const env: Record<string, string | undefined> = {
           ...process.env,
           EDEN_MEMORY: "on",
           EDEN_MEMORY_DIR: dir,
@@ -571,7 +571,7 @@ describe("M45 subagent share", () => {
         parent.observe([{ role: "user", content: SQLITE }]);
         await parent.sleep({ session: "wrap-a" });
         parent.close();
-        const env = {
+        const env: Record<string, string | undefined> = {
           ...process.env,
           EDEN_MEMORY: "on",
           EDEN_MEMORY_DIR: dir,

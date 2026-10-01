@@ -131,7 +131,7 @@ describe("2k store accuracy and speed", () => {
       expect(pkt).toMatch(/Clerk/);
       const clerk = mem.memories().find((r) => /Clerk/i.test(r.text));
       expect(clerk).toBeTruthy();
-      expect(clerk!.tags.some((t) => t === "the" || t === "is" || t === "in")).toBe(false);
+      expect(clerk!.tags!.some((t) => t === "the" || t === "is" || t === "in")).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

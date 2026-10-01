@@ -111,7 +111,7 @@ describe("M3 inject retrieve then encode", () => {
       const injected = mem.inject([{ role: "assistant", content: "working" }]);
       expect(memorySystemText(injected)).not.toMatch(/Pacific/i);
       expect(cueFor([{ role: "assistant", content: "working" }])).toBe("");
-      const pathsOnly = mem.inject([{ role: "assistant", content: "working" }], ["src/lib/auth.ts"]);
+      const pathsOnly = mem.inject([{ role: "assistant", content: "working" }]);
       expect(memorySystemText(pathsOnly)).not.toMatch(/Pacific/i);
       expect(memorySystemText(pathsOnly)).not.toMatch(/auth\.ts/i);
     });

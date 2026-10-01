@@ -238,7 +238,7 @@ describe("M44 project identity", () => {
       }
     `;
     const spawn = (mode: "encode" | "inject") => {
-      const env = {
+      const env: Record<string, string | undefined> = {
         ...process.env,
         EDEN_MEMORY: "on",
         EDEN_MEMORY_DIR: dir,

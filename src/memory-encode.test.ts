@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openMemory } from "./index";
+import { openMemory, type MemoryRecord } from "./index";
 
 function withMem(fn: (mem: ReturnType<typeof openMemory>) => void): void {
   const dir = mkdtempSync(join(tmpdir(), "eden-m21-"));
@@ -108,7 +108,7 @@ describe("M2.1 extractDurable stores agent language", () => {
       expect(blob).toMatch(/password is \[REDACTED\]/i);
       expect(blob).toMatch(/Clerk/i);
       for (const r of mem.memories()) {
-        expect(JSON.stringify(r.ctx ?? {})).not.toContain("hunter2secret99");
+        expect(JSON.stringify((r as MemoryRecord & { ctx?: unknown }).ctx ?? {})).not.toContain("hunter2secret99");
       }
     });
   });
