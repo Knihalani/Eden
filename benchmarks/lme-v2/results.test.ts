@@ -435,7 +435,9 @@ describe("M26.1 runner honesty — smoke ≠ official, files ingest, no skip-all
     expect(src).toMatch(/RESULTS_SMOKE_PATH/);
     expect(src).toMatch(/const outPath = resultsPathFor\(n\)/);
     expect(src).toMatch(/if \(shouldWriteLastRun\(n\)\)/);
-    expect(src).not.toMatch(/writeFileSync\(LAST_RUN_PATH[\s\S]{0,80}LME_LIMIT \? join\(HOLD_DIR, "RESULTS\.smoke\.md"\) : RESULTS_PATH/);
+    expect(src).not.toMatch(
+      /writeFileSync\(\s*LAST_RUN_PATH[\s\S]{0,160}LME_LIMIT\s*\?\s*join\(\s*HOLD_DIR,\s*"RESULTS\.smoke\.md",?\s*\)\s*:\s*RESULTS_PATH/,
+    );
     expect(src).toMatch(/part:\s*"M26",/);
     expect(src).not.toMatch(/part:\s*"M15\.2"/);
   });

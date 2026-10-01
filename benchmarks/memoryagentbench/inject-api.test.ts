@@ -69,7 +69,7 @@ describe("M1.1 inject API freeze", () => {
     const proxy = readFileSync(join(ROOT, "packages/wrap/src/proxy.ts"), "utf8");
     const proxyLive = proxy.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
     expect(proxyLive).toMatch(/injectBodyThenObserveTools\(\s*processMemory\(\)/);
-    expect(proxyLive).not.toMatch(/processMemory\(\)\.injectBody/);
+    expect(proxyLive).not.toMatch(/processMemory\(\)\s*\.injectBody/);
     expect(proxyLive.match(/injectBodyThenObserveTools\(\s*processMemory\(\)/g)?.length).toBeGreaterThanOrEqual(2);
 
     const know = readFileSync(join(ROOT, "packages/wrap/src/know-inject.ts"), "utf8");
