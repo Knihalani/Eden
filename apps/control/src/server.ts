@@ -156,6 +156,9 @@ export function createHandler(opts: ServerOpts) {
     throw new Error("eden control needs a token: pass --key, set EDEN_API_KEY, run eden login, or use --dev");
   }
   const wrapState = createState({ apiKey: token });
+  // A chat caller that is not the operator gets this run state instead (#89). wrapState's usage
+  // and model output are stamped onto the operator's next recorded trace, which compile reads.
+  const guestState = createState({ apiKey: token });
   const ctx: ApiCtx = {
     store: opts.store,
     registry: opts.registry,
@@ -223,7 +226,7 @@ export function createHandler(opts: ServerOpts) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401, headers: corsHeaders(req) });
       }
       return handleChatCompletions(req, {
-        state: wrapState,
+        state: caller.operator ? wrapState : guestState,
         upstream: opts.upstream,
         // Non-empty for a provider key, so the OPENAI_API_KEY fallback is never reached.
         upstreamKey: caller.ownKey ?? opts.upstreamKey,
@@ -239,7 +242,7 @@ export function createHandler(opts: ServerOpts) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401 });
       }
       return handleAnthropicMessages(req, {
-        state: wrapState,
+        state: caller.operator ? wrapState : guestState,
         getPrograms: () => (caller.operator ? opts.store.livePrograms() : []),
         upstreamKey: caller.ownKey,
         memory: caller.operator,

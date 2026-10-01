@@ -21,11 +21,6 @@ export type ProxyOpts = {
   memory?: boolean;
 };
 
-/** The body with memory injected and the request observed, unless the caller gets no memory. */
-function withMemory(opts: ProxyOpts, body: Record<string, unknown>): Record<string, unknown> {
-  return opts.memory === false ? body : injectBodyThenObserveTools(processMemory(), body);
-}
-
 export function corsOrigin(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
   if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin)) {
@@ -183,7 +178,12 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
               }
               next.chat_template_kwargs = prev;
               return next;
-            })(url, stripUpstreamPlaceFields(withMemory(opts, body)));
+            })(
+              url,
+              stripUpstreamPlaceFields(
+                opts.memory === false ? body : injectBodyThenObserveTools(processMemory(), body),
+              ),
+            );
             const prev = tuned.stream_options;
             const so =
               prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
@@ -209,6 +209,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
         : body.tools,
     body.tools,
   );
+  const outgoing = { ...body, stream: false, tools: injected };
   const steeredBody = ((url: string, body: Record<string, unknown>) => {
     if (!/nvidia\.com/i.test(url)) return body;
     const model = String(body.model || "");
@@ -226,7 +227,10 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     }
     next.chat_template_kwargs = prev;
     return next;
-  })(url, stripUpstreamPlaceFields(withMemory(opts, { ...body, stream: false, tools: injected })));
+  })(
+    url,
+    stripUpstreamPlaceFields(opts.memory === false ? outgoing : injectBodyThenObserveTools(processMemory(), outgoing)),
+  );
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {
