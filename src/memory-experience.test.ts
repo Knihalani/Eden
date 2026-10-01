@@ -489,7 +489,7 @@ describe("M23.3 fail-open ENOENT + inject pass-through", () => {
     });
   });
 
-  test("wrap OpenAI tool window, hook PostToolUse, Anthropic tool_result do not throw on missing experience", async () => {
+  test("wrap OpenAI tool window, hook PostToolUse, Anthropic tool_result: no throw on missing experience", async () => {
     const dir = tmpDir("eden-m233-hosts-");
     try {
       await withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on" }, () => {

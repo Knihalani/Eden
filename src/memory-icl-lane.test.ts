@@ -140,7 +140,7 @@ describe("M19.2 chat fact cue does not pull ICL shots", () => {
 });
 
 describe("M39.3 ICL gold survives near-dup on the product path", () => {
-  test("observe 100 near-dup label: 28 + gold label: 7; classify cue keeps label: 7; chat cue does not pull ICL", () => {
+  test("observe 100 near-dup label: 28 + gold label: 7; classify cue keeps label: 7; chat cue skips ICL", () => {
     withMem((mem) => {
       mem.quiet(() => {
         for (let i = 0; i < 100; i++) {

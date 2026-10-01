@@ -256,7 +256,7 @@ describe("M47.4 harmed id absent next cue", () => {
     }
   });
 
-  test("inject throw pass-through; dropHarmed throw and missing dir are not 403; torn file does not throw", async () => {
+  test("inject throw pass-through; dropHarmed throw, missing dir are not 403; torn file does not throw", async () => {
     await withSession("eden-m47-fail-", SESSION, async (mem, dir) => {
       mem.observe(user(SQLITE));
       const list = user(SQLITE_Q);

@@ -401,7 +401,7 @@ describe("M25.2 Dead-end stays episodic — exit ≠ 0 does not mint a procedure
 });
 
 describe("M25.4 Corrupt file fail-open — torn jsonl does not throw out of sleep", () => {
-  test("good traj + experience/bad.jsonl torn JSON: sleep does not throw; inject returns array; good gist appears", async () => {
+  test("good traj + torn experience/bad.jsonl: sleep survives; inject returns array; good gist shows", async () => {
     const session = "s-m25-corrupt";
     await withMem(
       "eden-m25-corrupt-",
@@ -635,7 +635,7 @@ describe("M25 named promoteExperienceHowTo — sleep must call the export, not a
 });
 
 describe("M25 wrap/hook: sleep then inject; experience files remain; pytest how-to", () => {
-  test("OpenAI injectBodyThenObserveTools pytest → sleep: file remains, how-to exists, inject has no memory_search", async () => {
+  test("OpenAI injectBodyThenObserveTools pytest → sleep: file stays, how-to exists, no memory_search", async () => {
     await withMem("eden-m25-wrap-oa-", async (mem, dir) => {
       injectBodyThenObserveTools(mem, { messages: pytestWindow() });
       const before = experienceJsonlFiles(dir);
