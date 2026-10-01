@@ -310,18 +310,31 @@ function providerKeyRequired(): Response {
   );
 }
 
+let warnedNoClientAddress = false;
+
 /**
  * The client address the signup rate limit counts (#91). x-real-ip and x-forwarded-for say
- * whatever the caller sent, so they count only behind a proxy that overwrites them: Vercel's, or
- * one the operator vouches for with EDEN_TRUST_PROXY=1. Otherwise the socket address (`peer`,
- * which local.ts passes), and with neither, one bucket that every caller shares.
+ * whatever the caller sent, so they count only behind a proxy that sets them: Vercel's, or one
+ * the operator vouches for with EDEN_TRUST_PROXY=1. Of x-forwarded-for, the last hop: a proxy
+ * that appends (nginx's default) leaves the caller's own claims in front of it. Otherwise the
+ * socket address (`peer`, which local.ts passes), and with neither, one bucket that every
+ * caller shares, which is logged once.
  */
 function signupClientAddress(req: Request, peer?: string): string {
   if (process.env.VERCEL || process.env.EDEN_TRUST_PROXY === "1") {
-    const forwarded = req.headers.get("x-real-ip")?.trim() || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    const hops = (req.headers.get("x-forwarded-for") || "").split(",").map((h) => h.trim());
+    const forwarded = req.headers.get("x-real-ip")?.trim() || hops.filter(Boolean).pop();
     if (forwarded) return forwarded;
   }
-  return peer?.trim() || "unknown";
+  if (peer?.trim()) return peer.trim();
+  if (!warnedNoClientAddress) {
+    warnedNoClientAddress = true;
+    console.warn(
+      "eden site: the signup rate limit sees no client address, so every signup shares one bucket. " +
+        "Behind a proxy that sets x-real-ip or x-forwarded-for, set EDEN_TRUST_PROXY=1.",
+    );
+  }
+  return "unknown";
 }
 
 /** Wrap auth: x-eden-api-key, a wrap-shaped Bearer, or the HTML session cookie. */
