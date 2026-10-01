@@ -56,10 +56,7 @@ export default function IsolationPage() {
 
         <h3 id="iso-limits-analogue">Analogue</h3>
         <p className="iso-note">{ISO_ANALOGUE_NOTE}</p>
-        <ClaimTable
-          rows={fromPins(ISO_ANALOGUE_ROWS)}
-          caption="Kind analogue — not a live Claude Code invoice."
-        />
+        <ClaimTable rows={fromPins(ISO_ANALOGUE_ROWS)} caption="Kind analogue — not a live Claude Code invoice." />
 
         <h3 id="iso-limits-retired">Retired</h3>
         <p className="iso-note">{ISO_RETIRED_NOTE}</p>
@@ -118,8 +115,7 @@ export default function IsolationPage() {
       <section className="iso-section" aria-labelledby="iso-owasp">
         <h2 id="iso-owasp">OWASP MCP Top 10</h2>
         <p className="iso-note">
-          v0.1 beta. Each row names Eden’s control, then the honest gap. MCP08 is the
-          audit export.
+          v0.1 beta. Each row names Eden’s control, then the honest gap. MCP08 is the audit export.
         </p>
         <ol className="iso-owasp">
           {OWASP_ROWS.map((row) => (
@@ -141,12 +137,11 @@ export default function IsolationPage() {
 
       <footer className="iso-end">
         <p>
-          Export the log from a laptop:{" "}
-          <span className="iso-cmd">eden audit review --format jsonl</span>
+          Export the log from a laptop: <span className="iso-cmd">eden audit review --format jsonl</span>
           {" · "}
           <span className="iso-cmd">eden audit export --format jsonl</span>
           {" · "}
-          <span className="iso-cmd">eden audit verify {'<file>'}</span>
+          <span className="iso-cmd">eden audit verify {"<file>"}</span>
           {" · "}
           <span className="iso-cmd">eden claims</span>
         </p>

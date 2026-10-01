@@ -22,11 +22,7 @@ const PROTOCOL_MD = join(HERE, "PROTOCOL.md");
 const M15_EVIDENCE = join(HERE, "M15-EVIDENCE.md");
 const FIXTURE = join(HERE, "fixtures", "bad-protocol.example.json");
 const FIXTURE_NESTED = join(HERE, "fixtures", "bad-protocol-nested.example.json");
-const FIXTURE_OVERALL_NO_AVGS = join(
-  HERE,
-  "fixtures",
-  "bad-table3-overall-no-avgs.example.json",
-);
+const FIXTURE_OVERALL_NO_AVGS = join(HERE, "fixtures", "bad-table3-overall-no-avgs.example.json");
 
 const TABLE3_COMPETENCIES = ["AR", "TTL", "LRU", "SF"] as const;
 
@@ -87,9 +83,7 @@ function protocolBlob(cfg: MabProtocolCfg | Record<string, unknown>): string {
  * Memorable 454/454 is a fixture-completion exam, not MemoryAgentBench Table 3.
  * Throws on Table 3 + 454/454, or Table 3 + memorable 454.
  */
-export function assertNotMemorableTable3(
-  cfg: MabProtocolCfg | Record<string, unknown>,
-): void {
+export function assertNotMemorableTable3(cfg: MabProtocolCfg | Record<string, unknown>): void {
   const exam = typeof cfg.exam === "string" ? cfg.exam : undefined;
   if (!claimsTable3(exam)) return;
   const blob = protocolBlob(cfg);
@@ -104,9 +98,7 @@ export function assertNotMemorableTable3(
  * GraphRAG EventQA is banned as Table 3 (§0 / M18.4).
  * A note that says "not GraphRAG" is allowed. Using GraphRAG as retrieve/method is not.
  */
-export function assertNotGraphRagEventQA(
-  cfg: MabProtocolCfg | Record<string, unknown>,
-): void {
+export function assertNotGraphRagEventQA(cfg: MabProtocolCfg | Record<string, unknown>): void {
   const exam = typeof cfg.exam === "string" ? cfg.exam : undefined;
   if (!claimsTable3(exam)) return;
   const rec = cfg as Record<string, unknown>;
@@ -115,8 +107,7 @@ export function assertNotGraphRagEventQA(
     .join(" ");
   const rest = methodish.replace(/\b(?:do\s+)?not\s+graphrag\b/gi, "");
   const usesGraphRag = /\bgraphrag\b/i.test(rest) || /\bgraph[-_]?rag\b/i.test(rest);
-  const eventqa =
-    /eventqa/i.test(protocolBlob(cfg)) || rec.eventqa != null || rec.eventqa_length != null;
+  const eventqa = /eventqa/i.test(protocolBlob(cfg)) || rec.eventqa != null || rec.eventqa_length != null;
   if (usesGraphRag && eventqa) {
     throw new Error("GraphRAG EventQA cannot be published as Table 3");
   }
@@ -133,9 +124,7 @@ export function assertMabProtocol(cfg: MabProtocolCfg): void {
   }
   const eventqa = parseLength(cfg.eventqa);
   if (eventqa !== 534_000) {
-    errors.push(
-      `EventQA ${cfg.eventqa ?? "missing"} is forbidden (must be 534k / 534000, not 64k / 64000)`,
-    );
+    errors.push(`EventQA ${cfg.eventqa ?? "missing"} is forbidden (must be 534k / 534000, not 64k / 64000)`);
   }
   const fc = parseLength(cfg.fc);
   if (cfg.fc !== undefined && fc !== 262_000) {
@@ -159,18 +148,10 @@ export function runnerToCfg(raw: Record<string, unknown>): MabProtocolCfg {
   return {
     exam: typeof raw.exam === "string" ? raw.exam : undefined,
     k: typeof raw.k === "number" ? raw.k : undefined,
-    eventqa:
-      (raw.eventqa as number | string | undefined) ??
-      (raw.eventqa_length as number | string | undefined),
-    fc:
-      (raw.fc as number | string | undefined) ??
-      (raw.fc_length as number | string | undefined),
-    sh:
-      (raw.sh as number | string | undefined) ??
-      (raw.sh_length as number | string | undefined),
-    mh:
-      (raw.mh as number | string | undefined) ??
-      (raw.mh_length as number | string | undefined),
+    eventqa: (raw.eventqa as number | string | undefined) ?? (raw.eventqa_length as number | string | undefined),
+    fc: (raw.fc as number | string | undefined) ?? (raw.fc_length as number | string | undefined),
+    sh: (raw.sh as number | string | undefined) ?? (raw.sh_length as number | string | undefined),
+    mh: (raw.mh as number | string | undefined) ?? (raw.mh_length as number | string | undefined),
     labelStrip:
       typeof raw.labelStrip === "boolean"
         ? raw.labelStrip
@@ -184,18 +165,9 @@ export function runnerToCfg(raw: Record<string, unknown>): MabProtocolCfg {
         : typeof raw.memorable_score === "number" || typeof raw.memorable_score === "string"
           ? raw.memorable_score
           : undefined,
-    method:
-      typeof raw.method === "string"
-        ? raw.method
-        : raw.method != null
-          ? JSON.stringify(raw.method)
-          : undefined,
+    method: typeof raw.method === "string" ? raw.method : raw.method != null ? JSON.stringify(raw.method) : undefined,
     retrieve:
-      typeof raw.retrieve === "string"
-        ? raw.retrieve
-        : raw.retrieve != null
-          ? JSON.stringify(raw.retrieve)
-          : undefined,
+      typeof raw.retrieve === "string" ? raw.retrieve : raw.retrieve != null ? JSON.stringify(raw.retrieve) : undefined,
   };
 }
 
@@ -261,9 +233,7 @@ export function claimsTable3Overall(src: string | Record<string, unknown>): bool
   return /table\s*3/i.test(text) && /\boverall\b/i.test(text);
 }
 
-export function missingTable3CompetencyAvgs(
-  src: string | Record<string, unknown>,
-): string[] {
+export function missingTable3CompetencyAvgs(src: string | Record<string, unknown>): string[] {
   const text = asBlob(src);
   return TABLE3_COMPETENCIES.filter((c) => {
     // Word-in-file is not an avg: "AR hops" must not satisfy AR.
@@ -278,10 +248,7 @@ export function missingTable3CompetencyAvgs(
  * Table 3 overall is the mean of AR / TTL / LRU / SF.
  * Throws if a claim publishes overall without all four competency averages.
  */
-export function assertTable3OverallHasFourAvgs(
-  src: string | Record<string, unknown>,
-  label = "RESULTS",
-): void {
+export function assertTable3OverallHasFourAvgs(src: string | Record<string, unknown>, label = "RESULTS"): void {
   if (!claimsTable3Overall(src)) return;
   const missing = missingTable3CompetencyAvgs(src);
   if (missing.length) {
@@ -334,9 +301,7 @@ describe("MAB Table 3 protocol sheet (Gate 0)", () => {
   });
 
   test("B: Table 3 + k=40 + EventQA 64000 fails", () => {
-    expect(() =>
-      assertMabProtocol({ exam: "Table 3", k: 40, eventqa: 64000 }),
-    ).toThrow();
+    expect(() => assertMabProtocol({ exam: "Table 3", k: 40, eventqa: 64000 })).toThrow();
   });
 
   test("C: example fixture is rejected by assertMabProtocol", () => {
@@ -352,8 +317,7 @@ describe("MAB Table 3 protocol sheet (Gate 0)", () => {
 describe("later runner 64k / k=40 must fail protocol", () => {
   test("example and bad-protocol JSON claiming Table 3 is rejected (nested too)", () => {
     const files = walkFiles(HERE).filter(
-      (p) =>
-        p.endsWith(".json") && isExampleFixture(p) && !isOverallWithoutAvgsFixture(p),
+      (p) => p.endsWith(".json") && isExampleFixture(p) && !isOverallWithoutAvgsFixture(p),
     );
     expect(files.some((p) => p === FIXTURE)).toBe(true);
     expect(files.some((p) => p === FIXTURE_NESTED)).toBe(true);
@@ -375,9 +339,7 @@ describe("later runner 64k / k=40 must fail protocol", () => {
     const files: string[] = [];
     for (const p of walkFiles(HERE)) {
       const liveJson =
-        (p.endsWith(".json") || p.endsWith(".run.json")) &&
-        !isExampleFixture(p) &&
-        !isAuditorExemptDoc(p);
+        (p.endsWith(".json") || p.endsWith(".run.json")) && !isExampleFixture(p) && !isAuditorExemptDoc(p);
       if (liveJson) files.push(p);
     }
     for (const p of files) {
@@ -418,24 +380,14 @@ describe("later runner 64k / k=40 must fail protocol", () => {
 describe("M15.4 protocol auditor", () => {
   test("k=40 cannot be published as MCC / Table 3", () => {
     expect(() => assertMabProtocol({ exam: "MCC", k: 40, eventqa: 534000 })).toThrow(/k=40/);
-    expect(() =>
-      assertMabProtocol({ exam: "Table 3 MCC", k: 40, eventqa: "534k" }),
-    ).toThrow();
-    expect(() =>
-      assertMabProtocol({ exam: "Table 3", k: 40, eventqa: 534000 }),
-    ).toThrow(/k=40/);
+    expect(() => assertMabProtocol({ exam: "Table 3 MCC", k: 40, eventqa: "534k" })).toThrow();
+    expect(() => assertMabProtocol({ exam: "Table 3", k: 40, eventqa: 534000 })).toThrow(/k=40/);
   });
 
   test("EventQA 64k / 64000 cannot be published as Table 3", () => {
-    expect(() =>
-      assertMabProtocol({ exam: "Table 3", k: 10, eventqa: 64000 }),
-    ).toThrow(/64k|64000|534/);
-    expect(() =>
-      assertMabProtocol({ exam: "Table 3", k: 10, eventqa: "64k" }),
-    ).toThrow();
-    expect(() =>
-      assertMabProtocol({ exam: "MCC", k: 10, eventqa: 64_000 }),
-    ).toThrow();
+    expect(() => assertMabProtocol({ exam: "Table 3", k: 10, eventqa: 64000 })).toThrow(/64k|64000|534/);
+    expect(() => assertMabProtocol({ exam: "Table 3", k: 10, eventqa: "64k" })).toThrow();
+    expect(() => assertMabProtocol({ exam: "MCC", k: 10, eventqa: 64_000 })).toThrow();
   });
 
   test("labelStrip true cannot be published as Table 3", () => {
@@ -453,9 +405,7 @@ describe("M15.4 protocol auditor", () => {
   });
 
   test("M15.1 inject config is green (k=10, official lengths, no label strip)", () => {
-    const raw = JSON.parse(
-      readFileSync(join(HERE, "table3-inject.config.json"), "utf8"),
-    ) as Record<string, unknown>;
+    const raw = JSON.parse(readFileSync(join(HERE, "table3-inject.config.json"), "utf8")) as Record<string, unknown>;
     const cfg = runnerToCfg(raw);
     expect(cfg.exam).toMatch(/Table 3/i);
     expect(cfg.k).toBe(10);
@@ -505,21 +455,14 @@ describe("M15.4 protocol auditor", () => {
         claim: "Memorable 454/454",
       }),
     ).toThrow(/454/);
-    expect(() =>
-      assertNotMemorableTable3({ exam: "Table 3", memorable: 454 }),
-    ).toThrow();
-    expect(() =>
-      assertNotMemorableTable3({ exam: "Table 3", k: 10, eventqa: 534000 }),
-    ).not.toThrow();
+    expect(() => assertNotMemorableTable3({ exam: "Table 3", memorable: 454 })).toThrow();
+    expect(() => assertNotMemorableTable3({ exam: "Table 3", k: 10, eventqa: 534000 })).not.toThrow();
   });
 });
 
 describe("M16.1 Table 3 overall requires four competency avgs", () => {
   test("fixture claiming Table 3 overall without AR/TTL/LRU/SF is rejected", () => {
-    const raw = JSON.parse(readFileSync(FIXTURE_OVERALL_NO_AVGS, "utf8")) as Record<
-      string,
-      unknown
-    >;
+    const raw = JSON.parse(readFileSync(FIXTURE_OVERALL_NO_AVGS, "utf8")) as Record<string, unknown>;
     expect(basename(FIXTURE_OVERALL_NO_AVGS)).toMatch(/example/);
     expect(raw.exam).toBe("Table 3");
     expect(raw.overall).toBe(30.0);
@@ -553,9 +496,7 @@ describe("M16.1 Table 3 overall requires four competency avgs", () => {
   });
 
   test("live RESULTS/*.md claiming Table 3 overall must publish AR / TTL / LRU / SF", () => {
-    const files = walkFiles(BENCHMARKS).filter(
-      (p) => isResultsMd(p) && !isExampleFixture(p) && !isAuditorExemptDoc(p),
-    );
+    const files = walkFiles(BENCHMARKS).filter((p) => isResultsMd(p) && !isExampleFixture(p) && !isAuditorExemptDoc(p));
     expect(files.some((p) => basename(p) === "TABLE3-RESULTS.md")).toBe(true);
     for (const p of files) {
       const src = readFileSync(p, "utf8");
@@ -591,14 +532,10 @@ describe("M16.1 Table 3 overall requires four competency avgs", () => {
 
   test("prose AR hops / SF assemble is not a Table 3 competency avg", () => {
     expect(() =>
-      assertTable3OverallHasFourAvgs(
-        "Table 3 overall 99.0. ICL index is never called from AR hops or SF assembly.",
-      ),
+      assertTable3OverallHasFourAvgs("Table 3 overall 99.0. ICL index is never called from AR hops or SF assembly."),
     ).toThrow(/four competency avgs/);
     expect(
-      missingTable3CompetencyAvgs(
-        "Table 3 overall 99.0. ICL index is never called from AR hops or SF assembly.",
-      ),
+      missingTable3CompetencyAvgs("Table 3 overall 99.0. ICL index is never called from AR hops or SF assembly."),
     ).toEqual(["AR", "TTL", "LRU", "SF"]);
   });
 
@@ -717,9 +654,7 @@ function isStoredLabelStripCode(src: string): boolean {
     /re\.sub(?:n)?\s*\(\s*(?:r|rf|fr|R)?(?:'''|"""|['"])[^'"]*label:[^'"]*(?:'''|"""|['"])\s*,\s*(?:'''|"""|['"])(?:'''|"""|['"])/.test(
       code,
     );
-  const pyOnStore =
-    pyEmpty &&
-    /\b(?:packet|shot|haystack|text|blob|memory|content|pending)\b/.test(code);
+  const pyOnStore = pyEmpty && /\b(?:packet|shot|haystack|text|blob|memory|content|pending)\b/.test(code);
   return jsEmpty || pyEmpty || pyOnStore;
 }
 
@@ -774,9 +709,7 @@ describe("M18.4 GraphRAG EventQA banned", () => {
   });
 
   test("live product retrieve is not a GraphRAG implementation", () => {
-    const files = ["index.ts", "chunk-store.ts", "chunk-retrieve.ts"].map((n) =>
-      join(ROOT, "src", n),
-    );
+    const files = ["index.ts", "chunk-store.ts", "chunk-retrieve.ts"].map((n) => join(ROOT, "src", n));
     expect(existsSync(files[0]!)).toBe(true);
     for (const p of files) {
       if (!existsSync(p)) continue;
@@ -785,9 +718,7 @@ describe("M18.4 GraphRAG EventQA banned", () => {
   });
 
   test("table3-inject.config.json still EventQA 534000, k=10, no labelStrip, openMemory inject", () => {
-    const raw = JSON.parse(
-      readFileSync(join(HERE, "table3-inject.config.json"), "utf8"),
-    ) as Record<string, unknown>;
+    const raw = JSON.parse(readFileSync(join(HERE, "table3-inject.config.json"), "utf8")) as Record<string, unknown>;
     const cfg = runnerToCfg(raw);
     expect(cfg.exam).toMatch(/Table 3/i);
     expect(cfg.k).toBe(10);
@@ -828,25 +759,16 @@ describe("M18.4 GraphRAG EventQA banned", () => {
         note: "not GraphRAG",
       }),
     ).not.toThrow();
-    expect(() =>
-      assertNotGraphRagEventQA({ exam: "LoCoMo-10", method: "GraphRAG", eventqa: 534000 }),
-    ).not.toThrow();
+    expect(() => assertNotGraphRagEventQA({ exam: "LoCoMo-10", method: "GraphRAG", eventqa: 534000 })).not.toThrow();
   });
 });
 
 const FIXTURE_LABEL_STRIP = join(HERE, "fixtures", "bad-label-strip.example.ts");
-const LIVE_LABEL_RUNNERS = [
-  "inject-bridge.ts",
-  "inject-agent.py",
-  "run-table3-inject.py",
-  "atoms.ts",
-] as const;
+const LIVE_LABEL_RUNNERS = ["inject-bridge.ts", "inject-agent.py", "run-table3-inject.py", "atoms.ts"] as const;
 const ICL_SHOT = "The movie was great. label: 28";
 
 function extractIclComplete(py: string): string {
-  const m = py.match(
-    /def _icl_complete\s*\(\s*text\s*,\s*agent\s*\)\s*:[\s\S]*?(?=\n(?:def |class |_[A-Z]))/,
-  );
+  const m = py.match(/def _icl_complete\s*\(\s*text\s*,\s*agent\s*\)\s*:[\s\S]*?(?=\n(?:def |class |_[A-Z]))/);
   return m?.[0] ?? "";
 }
 
@@ -875,9 +797,9 @@ describe("M19.4 label-strip auditor", () => {
 
   test("assertNoStoredLabelStrip allows comments and response-only normalize", () => {
     const commented = [
-      "// shot.replace(/label:\\s*\\d+/gi, \"\")",
+      '// shot.replace(/label:\\s*\\d+/gi, "")',
       "# re.sub(r'label:\\s*\\d+', '', text)",
-      "/* text.replace(/label:\\s*\\S+/gi, \"\") */",
+      '/* text.replace(/label:\\s*\\S+/gi, "") */',
       "const k = 10;",
     ].join("\n");
     expect(() => assertNoStoredLabelStrip(commented, "comments")).not.toThrow();
@@ -906,9 +828,7 @@ def _icl_complete(text, agent):
     expect(badLabelStrip.k).toBe(10);
     expect(parseLength(badLabelStrip.eventqa)).toBe(534000);
     expect(() => assertMabProtocol(badLabelStrip)).toThrow(/label/);
-    expect(() => assertNoStoredLabelStrip(src, basename(FIXTURE_LABEL_STRIP))).toThrow(
-      /stored shots/,
-    );
+    expect(() => assertNoStoredLabelStrip(src, basename(FIXTURE_LABEL_STRIP))).toThrow(/stored shots/);
     expect(() => assertNotStoredLabelStrip(src)).toThrow(/label/);
     expect(src).toContain('shot.replace(/label:\\s*\\d+/gi, "")');
   });
@@ -941,10 +861,7 @@ def _icl_complete(text, agent):
       assertNotStoredLabelStrip(src);
     }
     const cfg = runnerToCfg(
-      JSON.parse(readFileSync(join(HERE, "table3-inject.config.json"), "utf8")) as Record<
-        string,
-        unknown
-      >,
+      JSON.parse(readFileSync(join(HERE, "table3-inject.config.json"), "utf8")) as Record<string, unknown>,
     );
     expect(cfg.labelStrip).toBe(false);
     expect(readFileSync(PROTOCOL_MD, "utf8")).toMatch(/no `label:` strip/);
@@ -1093,9 +1010,7 @@ function leafScore(src: string, id: string): number | undefined {
 
 /** First-column competency / overall score. `FAIL/missing` is a score cell, not a frozen number. */
 function competencyCell(src: string, label: string): string {
-  const m = src.match(
-    new RegExp(`^\\|\\s*\\*{0,2}${label}\\*{0,2}\\s*\\|\\s*([^|]+)\\|`, "im"),
-  );
+  const m = src.match(new RegExp(`^\\|\\s*\\*{0,2}${label}\\*{0,2}\\s*\\|\\s*([^|]+)\\|`, "im"));
   return m?.[1]?.replace(/\*/g, "").trim() ?? "";
 }
 
@@ -1172,11 +1087,7 @@ export function sotaClaimsWithoutBars(table3: string, lme: string): string[] {
   const miniYes =
     labeledYesNo(table3, "4o-mini Table 3 SOTA") === "yes" ||
     bareSotaClaim(table3, /4o-mini(?:\s+Table\s*3)?\s+SOTA|SOTA memory agent/i).length > 0;
-  const miniBar =
-    four &&
-    avgs.overall != null &&
-    avgs.overall > 41.6 &&
-    readerIs4oMini(table3);
+  const miniBar = four && avgs.overall != null && avgs.overall > 41.6 && readerIs4oMini(table3);
   if (miniYes && !miniBar) bad.push("4o-mini Table 3 SOTA");
 
   const fcSh = leafScore(table3, "fc_sh");
@@ -1206,10 +1117,7 @@ function lmeAcc(src: string): number | undefined {
 }
 
 function lmeCount(src: string, label: "n" | "correct"): number | undefined {
-  const re =
-    label === "n"
-      ? /\|\s*n\s*\|\s*\*\*(\d+)\*\*/
-      : /\|\s*correct\s*\|\s*(\d+)\s*\|/;
+  const re = label === "n" ? /\|\s*n\s*\|\s*\*\*(\d+)\*\*/ : /\|\s*correct\s*\|\s*(\d+)\s*\|/;
   const m = src.match(re);
   return m ? Number(m[1]) : undefined;
 }

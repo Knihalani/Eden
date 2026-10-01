@@ -117,7 +117,12 @@ describe("helix compile + runProgram", () => {
   });
 
   test("retry / tree / unique / sort / reduce / barcode compile; noise is empty", async () => {
-    const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>>; wantLoop?: boolean }> = [
+    const cases: Array<{
+      name: string;
+      factory: () => World;
+      goals: Array<Record<string, unknown>>;
+      wantLoop?: boolean;
+    }> = [
       { name: "retry", factory: createRateLimitRetry, goals: [...IMAGE_TAGS].map((tag) => ({ tag })) },
       { name: "tree", factory: createFsTree, goals: [...TREES].map((tree) => ({ tree })), wantLoop: true },
       { name: "unique", factory: createDedupeMail, goals: [...INBOXES].map((inbox) => ({ inbox })), wantLoop: true },
@@ -130,13 +135,20 @@ describe("helix compile + runProgram", () => {
       const { programs, refusals } = compileTraces(traces);
       const p = programs[0];
       expect(p, `${c.name}: ${refusals.map((r) => r.reason).join("|")}`).toBeTruthy();
-      if (c.wantLoop) expect(p!.steps.some((s) => s.kind === "loop"), `${c.name} loop`).toBe(true);
+      if (c.wantLoop)
+        expect(
+          p!.steps.some((s) => s.kind === "loop"),
+          `${c.name} loop`,
+        ).toBe(true);
       const w = c.factory();
       w.beginStretch?.();
       await runProgram(p!, c.goals[0]!, { registry: registryFrom(w.tools()), checkEnvelope: false });
       expect(w.check([c.goals[0]!]), `${c.name} check`).toEqual([]);
     }
-    const noise = await recordN(createHelixNoise, [...NOISE_IDS].map((id) => ({ id })));
+    const noise = await recordN(
+      createHelixNoise,
+      [...NOISE_IDS].map((id) => ({ id })),
+    );
     const empty = compileTraces(noise);
     expect(empty.programs).toEqual([]);
   });
@@ -151,59 +163,51 @@ describe("helix compile + runProgram", () => {
 });
 
 describe("helix goLive", () => {
-  test(
-    "launch / offset / barcode goLive PASS; wrap serve turns===1",
-    async () => {
-      const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
-        { name: "launch-pad", factory: createLaunchPad, goals: SITES.map((s) => ({ site: s.site, env: s.env })) },
-        { name: "gitlab-offset", factory: createGitlabOffset, goals: [...PROJECTS].map((project) => ({ project })) },
-        { name: "barcode-lots", factory: createBarcodeLots, goals: [...WAVES].map((wave) => ({ wave })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`helix-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program).not.toBeNull();
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`helix-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+  test("launch / offset / barcode goLive PASS; wrap serve turns===1", async () => {
+    const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
+      { name: "launch-pad", factory: createLaunchPad, goals: SITES.map((s) => ({ site: s.site, env: s.env })) },
+      { name: "gitlab-offset", factory: createGitlabOffset, goals: [...PROJECTS].map((project) => ({ project })) },
+      { name: "barcode-lots", factory: createBarcodeLots, goals: [...WAVES].map((wave) => ({ wave })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`helix-live-${c.name}-${i}`, i));
       }
-    },
-    90_000,
-  );
+      const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program).not.toBeNull();
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`helix-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+    }
+  }, 90_000);
 
-  test(
-    "retry / tree / unique / sort / reduce goLive PASS; wrap serve turns===1",
-    async () => {
-      const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
-        { name: "rate-limit-retry", factory: createRateLimitRetry, goals: [...IMAGE_TAGS].map((tag) => ({ tag })) },
-        { name: "fs-tree", factory: createFsTree, goals: [...TREES].map((tree) => ({ tree })) },
-        { name: "dedupe-mail", factory: createDedupeMail, goals: [...INBOXES].map((inbox) => ({ inbox })) },
-        { name: "prio-queue", factory: createPrioQueue, goals: [...QUEUES].map((queue) => ({ queue })) },
-        { name: "ledger-settle", factory: createLedgerSettle, goals: [...BATCHES].map((batch) => ({ batch })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`helix-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program).not.toBeNull();
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`helix-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+  test("retry / tree / unique / sort / reduce goLive PASS; wrap serve turns===1", async () => {
+    const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>> }> = [
+      { name: "rate-limit-retry", factory: createRateLimitRetry, goals: [...IMAGE_TAGS].map((tag) => ({ tag })) },
+      { name: "fs-tree", factory: createFsTree, goals: [...TREES].map((tree) => ({ tree })) },
+      { name: "dedupe-mail", factory: createDedupeMail, goals: [...INBOXES].map((inbox) => ({ inbox })) },
+      { name: "prio-queue", factory: createPrioQueue, goals: [...QUEUES].map((queue) => ({ queue })) },
+      { name: "ledger-settle", factory: createLedgerSettle, goals: [...BATCHES].map((batch) => ({ batch })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`helix-live-${c.name}-${i}`, i));
       }
-    },
-    120_000,
-  );
+      const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program).not.toBeNull();
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`helix-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns, `${c.name} turns=${fin.turns}`).toBe(1);
+    }
+  }, 120_000);
 });

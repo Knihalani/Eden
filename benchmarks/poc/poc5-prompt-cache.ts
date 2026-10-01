@@ -23,7 +23,11 @@ header("POC 5 — prompt-cache-native serving");
 
 // ── (a) stability of the real emitter under churning usage ─────────────────
 type Row = { name: string; uses_count: number; when_to_use?: string };
-const names = Array.from({ length: 12 }, (_, i) => `github_${["issue_triage", "pr_checks", "ci_status", "release_notes", "flaky_hunt", "dep_audit", "changelog", "assign_sweep", "stale_prs", "review_queue", "label_sync", "milestone_report"][i]!}`);
+const names = Array.from(
+  { length: 12 },
+  (_, i) =>
+    `github_${["issue_triage", "pr_checks", "ci_status", "release_notes", "flaky_hunt", "dep_audit", "changelog", "assign_sweep", "stale_prs", "review_queue", "label_sync", "milestone_report"][i]!}`,
+);
 const rnd = mulberry32(42);
 let tools: Row[] = names.map((n) => ({ name: n, uses_count: Math.floor(rnd() * 50) }));
 
@@ -99,4 +103,6 @@ printRow("session input spend — today (alphabetical)", `$${today.toFixed(4)} /
 printRow("session input spend — proposed (+breakpoints)", `$${proposed.toFixed(4)} / session`);
 printRow("speedup naive → proposed", `${(naive / proposed).toFixed(1)}x`);
 printRow("speedup today → proposed", `${(today / proposed).toFixed(1)}x`);
-console.log("\nVERDICT: WIN — pinned order holds the cache across turns; an append-only breakpoint makes every old token bill at 10%.");
+console.log(
+  "\nVERDICT: WIN — pinned order holds the cache across turns; an append-only breakpoint makes every old token bill at 10%.",
+);

@@ -24,7 +24,10 @@ const STEPS: CompiledStep[] = Array.from({ length: 8 }, (_, i) => ({
   name: `fetch_${i}`,
   method: "GET",
   commute: true,
-  url: i === 0 ? `https://api.github.com/repos/o/r/pulls/{{issue}}` : `https://api.github.com/repos/o/r/objs/${i}?base={{s0.id}}`,
+  url:
+    i === 0
+      ? `https://api.github.com/repos/o/r/pulls/{{issue}}`
+      : `https://api.github.com/repos/o/r/objs/${i}?base={{s0.id}}`,
 }));
 
 const stepsJson = JSON.stringify(STEPS);
@@ -63,7 +66,10 @@ const N = 20_000;
     for (let j = 0; j < N; j++) currentPerCall();
     samples.push(nowMs() - t);
   }
-  printRow("TODAY  parse+buildDag+layers per call", `${median(samples).toFixed(1)} ms / ${N} calls  (${(median(samples) / N * 1e6).toFixed(0)} ns/call)`);
+  printRow(
+    "TODAY  parse+buildDag+layers per call",
+    `${median(samples).toFixed(1)} ms / ${N} calls  (${((median(samples) / N) * 1e6).toFixed(0)} ns/call)`,
+  );
 }
 {
   const samples: number[] = [];
@@ -83,7 +89,10 @@ const N = 20_000;
   const t2 = nowMs();
   for (let i = 0; i < 100; i++) proposedPerCall();
   const batchNew = Math.max(nowMs() - t2, 0.001);
-  printRow("batched run (MAX_BATCH_ISSUES=100)", `today ${batchToday.toFixed(2)} ms vs proposed ${batchNew.toFixed(3)} ms`);
+  printRow(
+    "batched run (MAX_BATCH_ISSUES=100)",
+    `today ${batchToday.toFixed(2)} ms vs proposed ${batchNew.toFixed(3)} ms`,
+  );
 }
 
 console.log("");
@@ -131,7 +140,10 @@ for (const rtt of [0.5, 5]) {
   t = nowMs();
   for (let i = 0; i < 50; i++) await dbRoundTrip(rtt); // every step pays RTT twice? no: one SELECT
   const dbOnly = ((nowMs() - t) / 50) * M;
-  printRow(`hit latency @${rtt}ms RTT (M=${M})`, `today(modeled) ${dbOnly.toFixed(0)} ms → LRU ${withLru.toFixed(2)} ms`);
+  printRow(
+    `hit latency @${rtt}ms RTT (M=${M})`,
+    `today(modeled) ${dbOnly.toFixed(0)} ms → LRU ${withLru.toFixed(2)} ms`,
+  );
 }
 console.log("\nVERDICT: WIN — per-call graph work eliminated; hot hits drop from network-latency to sub-microsecond.");
 parsesPerRequestToday();

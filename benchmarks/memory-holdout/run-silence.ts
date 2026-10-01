@@ -133,14 +133,16 @@ export function silenceFixtureIssues(fix: SilenceFixture): string[] {
   if (fix.part !== "M38.3") issues.push(`part ${fix.part} !== M38.3`);
   if (!ISO_DATE.test(fix.dated_registered ?? "")) issues.push("dated_registered must be YYYY-MM-DD");
   if (fix.dated_registered !== "2026-09-24") issues.push(`dated_registered ${fix.dated_registered} !== 2026-09-24`);
-  if (fix.api_under_test !== "openMemory.inject") issues.push(`api_under_test ${fix.api_under_test} !== openMemory.inject`);
+  if (fix.api_under_test !== "openMemory.inject")
+    issues.push(`api_under_test ${fix.api_under_test} !== openMemory.inject`);
   if (fix.k !== "default") issues.push(`k ${fix.k} !== default`);
   if (fix.k_default !== 6) issues.push(`k_default ${fix.k_default} !== 6`);
   if (fix.materiality !== 0.01) issues.push(`materiality ${fix.materiality} !== 0.01 (ROADMAP §4.9; do not retune)`);
   if (fix.know !== "EDEN_KNOW=0") issues.push("know must stay EDEN_KNOW=0");
   if (fix.backbone !== "N/A") issues.push("backbone must stay N/A (no LLM reader)");
   if (fix.off !== "EDEN_MEMORY=0") issues.push("off must stay EDEN_MEMORY=0");
-  if (!fix.seed_liveness?.cue?.trim() || fix.seed_liveness.needle !== "sqlite") issues.push("seed_liveness must be a sqlite setup cue, not a scored row");
+  if (!fix.seed_liveness?.cue?.trim() || fix.seed_liveness.needle !== "sqlite")
+    issues.push("seed_liveness must be a sqlite setup cue, not a scored row");
   const product = fix.product ?? [];
   for (const name of ["openMemory", "inject", "injectBody"]) {
     if (!product.includes(name)) issues.push(`product missing ${name}`);
@@ -150,15 +152,18 @@ export function silenceFixtureIssues(fix: SilenceFixture): string[] {
   for (const id of REQUIRED_CASE_IDS) if (!ids.has(id)) issues.push(`missing case ${id}`);
   for (const c of fix.cases ?? []) {
     const raw = c as SilenceCase & Record<string, unknown>;
-    if ("verdict" in raw || "delta_bytes" in raw || "packet_bytes" in raw) issues.push(`${c.id}: fixture must not hold measured fields`);
+    if ("verdict" in raw || "delta_bytes" in raw || "packet_bytes" in raw)
+      issues.push(`${c.id}: fixture must not hold measured fields`);
     if (c.expect !== "OMIT") issues.push(`${c.id}: expect ${c.expect} not OMIT`);
     if (!c.cue?.trim()) issues.push(`${c.id}: cue empty`);
     if (!Array.isArray(c.arms) || c.arms.length !== 2) issues.push(`${c.id}: arms must be a pair`);
     else if (c.arms.some((a) => a !== "on" && a !== "off")) issues.push(`${c.id}: arm not on|off`);
     if (c.store === "sqlite-clerk") {
       const seed = c.seed ?? [];
-      if (!seed.some((s) => /sqlite/i.test(s)) || !seed.some((s) => /Clerk/.test(s))) issues.push(`${c.id}: seed must include sqlite and Clerk`);
-      if (!(c.leftover_needles ?? []).includes("sqlite") || !(c.leftover_needles ?? []).includes("Clerk")) issues.push(`${c.id}: leftover needles must name sqlite and Clerk`);
+      if (!seed.some((s) => /sqlite/i.test(s)) || !seed.some((s) => /Clerk/.test(s)))
+        issues.push(`${c.id}: seed must include sqlite and Clerk`);
+      if (!(c.leftover_needles ?? []).includes("sqlite") || !(c.leftover_needles ?? []).includes("Clerk"))
+        issues.push(`${c.id}: leftover needles must name sqlite and Clerk`);
     } else if (c.store !== "empty") issues.push(`${c.id}: store ${c.store} not empty|sqlite-clerk`);
   }
   const times = fix.cases?.find((c) => c.id === "seeded-times");
@@ -227,7 +232,9 @@ function systemTexts(list: unknown[]): string[] {
 }
 
 function memoryPacket(list: unknown[]): string {
-  return systemTexts(list).filter((s) => s.includes(MEMORY_MARK)).join("\n");
+  return systemTexts(list)
+    .filter((s) => s.includes(MEMORY_MARK))
+    .join("\n");
 }
 
 function byteLen(s: string): number {
@@ -292,9 +299,10 @@ function probeArm(dir: string, arm: Arm, cue: string, needles: string[]): Probe 
     const body = { model: "gpt-4o", messages };
     const out = mem.injectBody(body);
     mem.close();
-    const list = out && typeof out === "object" && Array.isArray((out as { messages?: unknown[] }).messages)
-      ? (out as { messages: unknown[] }).messages
-      : [];
+    const list =
+      out && typeof out === "object" && Array.isArray((out as { messages?: unknown[] }).messages)
+        ? (out as { messages: unknown[] }).messages
+        : [];
     const packet = memoryPacket(list);
     const added = systemTexts(list).join("\n");
     const body_identity = out === body;
@@ -306,10 +314,12 @@ function probeArm(dir: string, arm: Arm, cue: string, needles: string[]): Probe 
       body_packet_text: packet,
     };
   });
-  const body_agrees = bodyProbe.body_identity === injectProbe.identity
-    && bodyProbe.body_omitted === injectProbe.omitted
-    && bodyProbe.body_packet_bytes === injectProbe.packet_bytes
-    && leftoversOf(bodyProbe.body_packet_text, needles).join("|") === leftoversOf(injectProbe.packet_text, needles).join("|");
+  const body_agrees =
+    bodyProbe.body_identity === injectProbe.identity &&
+    bodyProbe.body_omitted === injectProbe.omitted &&
+    bodyProbe.body_packet_bytes === injectProbe.packet_bytes &&
+    leftoversOf(bodyProbe.body_packet_text, needles).join("|") ===
+      leftoversOf(injectProbe.packet_text, needles).join("|");
   return { arm, ...injectProbe, ...bodyProbe, body_agrees };
 }
 
@@ -363,33 +373,55 @@ function onArmOmitted(row: { baseline: Probe; probe: Probe }): boolean | null {
   return null;
 }
 
-function judge(row: Omit<SilenceRow, "verdict" | "note" | "omitted_on"> & { seed_expected: number; store: string }): { verdict: SilenceRow["verdict"]; note: string; omitted_on: boolean | null } {
+function judge(row: Omit<SilenceRow, "verdict" | "note" | "omitted_on"> & { seed_expected: number; store: string }): {
+  verdict: SilenceRow["verdict"];
+  note: string;
+  omitted_on: boolean | null;
+} {
   const notes: string[] = [];
   const omitted_on = onArmOmitted(row);
-  if (row.store !== "empty" && !row.seed_ok) notes.push(`seed store_n ${row.store_n} < ${row.seed_expected}; refusing a silence claim`);
-  if (row.store !== "empty" && !row.seed_live) notes.push("related sqlite cue did not inject sqlite; silent rows are FAIL (dead store)");
-  if (row.baseline.consent !== "off" && row.baseline.arm === "off") notes.push(`baseline consent ${row.baseline.consent} !== off`);
+  if (row.store !== "empty" && !row.seed_ok)
+    notes.push(`seed store_n ${row.store_n} < ${row.seed_expected}; refusing a silence claim`);
+  if (row.store !== "empty" && !row.seed_live)
+    notes.push("related sqlite cue did not inject sqlite; silent rows are FAIL (dead store)");
+  if (row.baseline.consent !== "off" && row.baseline.arm === "off")
+    notes.push(`baseline consent ${row.baseline.consent} !== off`);
   if (row.probe.arm === "on" && row.probe.consent !== "on") notes.push(`probe consent ${row.probe.consent} !== on`);
   if (row.probe.arm === "off" && row.probe.consent !== "off") notes.push(`probe consent ${row.probe.consent} !== off`);
   if (row.baseline.k !== 6 || row.probe.k !== 6) notes.push(`k ${row.baseline.k}/${row.probe.k} !== 6`);
-  if (!row.baseline.body_agrees) notes.push(`injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`);
-  if (!row.probe.body_agrees) notes.push(`injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} disagrees with inject ${row.probe.packet_bytes} B`);
-  const setupBad = notes.some((n) => n.startsWith("seed") || n.startsWith("related") || n.startsWith("baseline consent") || n.startsWith("probe consent") || n.startsWith("k "));
+  if (!row.baseline.body_agrees)
+    notes.push(
+      `injectBody baseline packet ${row.baseline.body_packet_bytes} B identity ${row.baseline.body_identity} disagrees with inject ${row.baseline.packet_bytes} B`,
+    );
+  if (!row.probe.body_agrees)
+    notes.push(
+      `injectBody probe packet ${row.probe.body_packet_bytes} B identity ${row.probe.body_identity} disagrees with inject ${row.probe.packet_bytes} B`,
+    );
+  const setupBad = notes.some(
+    (n) =>
+      n.startsWith("seed") ||
+      n.startsWith("related") ||
+      n.startsWith("baseline consent") ||
+      n.startsWith("probe consent") ||
+      n.startsWith("k "),
+  );
   const bothOmitted = row.baseline.omitted && row.probe.omitted && row.baseline.body_omitted && row.probe.body_omitted;
   const onOk = omitted_on === null ? bothOmitted : omitted_on === true;
-  const silent = row.delta_approx_0
-    && row.body_delta_bytes === 0
-    && bothOmitted
-    && onOk
-    && row.leftover.length === 0
-    && row.body_leftover.length === 0
-    && row.baseline.body_agrees
-    && row.probe.body_agrees;
+  const silent =
+    row.delta_approx_0 &&
+    row.body_delta_bytes === 0 &&
+    bothOmitted &&
+    onOk &&
+    row.leftover.length === 0 &&
+    row.body_leftover.length === 0 &&
+    row.baseline.body_agrees &&
+    row.probe.body_agrees;
   if (setupBad) return { verdict: "FAIL", note: notes.join("; "), omitted_on };
   if (silent) return { verdict: "WIN", note: notes.join("; "), omitted_on };
   if (row.leftover.length) notes.push(`LOSS leftover ${row.leftover.join(", ")} in inject packet`);
   if (row.body_leftover.length) notes.push(`LOSS leftover ${row.body_leftover.join(", ")} in injectBody packet`);
-  if (!row.delta_approx_0 || row.body_delta_bytes !== 0) notes.push(`LOSS packet Δ inject ${row.delta_bytes} B / injectBody ${row.body_delta_bytes} B`);
+  if (!row.delta_approx_0 || row.body_delta_bytes !== 0)
+    notes.push(`LOSS packet Δ inject ${row.delta_bytes} B / injectBody ${row.body_delta_bytes} B`);
   if (omitted_on === false) notes.push("LOSS on-arm packet not omitted (Eden Memory: present)");
   if (omitted_on === null && !bothOmitted) notes.push("LOSS A/A packet not omitted");
   if (!row.probe.body_agrees || !row.baseline.body_agrees) notes.push("LOSS injectBody disagrees with inject");
@@ -415,7 +447,12 @@ export function runSilence(opts: { out?: string } = {}): SilenceRun {
           const dir = seedDir(c.seed ?? []);
           const n = storeCount(dir);
           const live = probeSeed(cloneDir(dir), fix.seed_liveness.cue, fix.seed_liveness.needle);
-          seedLiveness = { cue: fix.seed_liveness.cue, packet_bytes: live.bytes, sqlite: live.hit, preview: preview(live.text) };
+          seedLiveness = {
+            cue: fix.seed_liveness.cue,
+            packet_bytes: live.bytes,
+            sqlite: live.hit,
+            preview: preview(live.text),
+          };
           seeded = { dir, n, live: live.hit };
         }
         template = seeded.dir;
@@ -452,10 +489,18 @@ export function runSilence(opts: { out?: string } = {}): SilenceRun {
       };
       const judged = judge({ ...partial, seed_expected: seedExpected, store: c.store });
       rows.push({ ...partial, ...judged });
-      if (!baseline.body_agrees) bugs.push(`${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / omitted ${baseline.body_omitted} vs inject ${baseline.packet_bytes} B / omitted ${baseline.omitted}`);
-      if (!probe.body_agrees) bugs.push(`${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / omitted ${probe.body_omitted} vs inject ${probe.packet_bytes} B / omitted ${probe.omitted}`);
+      if (!baseline.body_agrees)
+        bugs.push(
+          `${c.id} baseline: injectBody packet ${baseline.body_packet_bytes} B / omitted ${baseline.body_omitted} vs inject ${baseline.packet_bytes} B / omitted ${baseline.omitted}`,
+        );
+      if (!probe.body_agrees)
+        bugs.push(
+          `${c.id} probe: injectBody packet ${probe.body_packet_bytes} B / omitted ${probe.body_omitted} vs inject ${probe.packet_bytes} B / omitted ${probe.omitted}`,
+        );
       if (body_leftover.length && leftover.join("|") !== body_leftover.join("|")) {
-        bugs.push(`${c.id}: injectBody leftover [${body_leftover.join(", ")}] vs inject leftover [${leftover.join(", ")}]`);
+        bugs.push(
+          `${c.id}: injectBody leftover [${body_leftover.join(", ")}] vs inject leftover [${leftover.join(", ")}]`,
+        );
       }
     }
   } finally {
@@ -503,21 +548,40 @@ function preview(text: string): string {
 
 export function formatSilence(run: SilenceRun): string {
   const byId = (id: string) => run.rows.find((r) => r.id === id);
-  const line = (r: SilenceRow | undefined) => r
-    ? `${r.verdict} · omitted on-arm ${omittedCell(r.omitted_on)} · ${armBytes(r, "off")} B off → ${armBytes(r, "on")} B on · Δ ${r.delta_bytes} B · leftover ${r.leftover.length ? r.leftover.join(", ") : "none"}`
-    : "missing";
-  const rows = run.rows.map((r) => `| ${r.id} | ${omittedCell(r.omitted_on)} | ${armBytes(r, "off")} | ${armBytes(r, "on")} | ${r.delta_bytes} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} | ${r.verdict} |`).join("\n");
-  const bodyRows = run.rows.map((r) => `| ${r.id} | ${yn(r.baseline.body_agrees && r.probe.body_agrees)} | ${r.baseline.body_packet_bytes} | ${r.probe.body_packet_bytes} | ${r.body_delta_bytes} | ${r.body_leftover.length ? cell(r.body_leftover.join(", ")) : "—"} | ${yn(r.probe.arm === "on" ? r.probe.body_omitted : r.baseline.body_omitted && r.probe.body_omitted)} |`).join("\n");
-  const notes = run.rows.filter((r) => r.note).map((r) => `- **${r.id}:** ${cell(r.note)}`).join("\n");
-  const packets = run.rows.filter((r) => r.probe.packet_text || r.baseline.packet_text).map((r) => {
-    const parts = [`### ${r.id}`];
-    if (r.baseline.packet_text) parts.push(`- baseline: ${cell(preview(r.baseline.packet_text))}`);
-    if (r.probe.packet_text) parts.push(`- probe: ${cell(preview(r.probe.packet_text))}`);
-    return parts.join("\n");
-  }).join("\n\n");
+  const line = (r: SilenceRow | undefined) =>
+    r
+      ? `${r.verdict} · omitted on-arm ${omittedCell(r.omitted_on)} · ${armBytes(r, "off")} B off → ${armBytes(r, "on")} B on · Δ ${r.delta_bytes} B · leftover ${r.leftover.length ? r.leftover.join(", ") : "none"}`
+      : "missing";
+  const rows = run.rows
+    .map(
+      (r) =>
+        `| ${r.id} | ${omittedCell(r.omitted_on)} | ${armBytes(r, "off")} | ${armBytes(r, "on")} | ${r.delta_bytes} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} | ${r.verdict} |`,
+    )
+    .join("\n");
+  const bodyRows = run.rows
+    .map(
+      (r) =>
+        `| ${r.id} | ${yn(r.baseline.body_agrees && r.probe.body_agrees)} | ${r.baseline.body_packet_bytes} | ${r.probe.body_packet_bytes} | ${r.body_delta_bytes} | ${r.body_leftover.length ? cell(r.body_leftover.join(", ")) : "—"} | ${yn(r.probe.arm === "on" ? r.probe.body_omitted : r.baseline.body_omitted && r.probe.body_omitted)} |`,
+    )
+    .join("\n");
+  const notes = run.rows
+    .filter((r) => r.note)
+    .map((r) => `- **${r.id}:** ${cell(r.note)}`)
+    .join("\n");
+  const packets = run.rows
+    .filter((r) => r.probe.packet_text || r.baseline.packet_text)
+    .map((r) => {
+      const parts = [`### ${r.id}`];
+      if (r.baseline.packet_text) parts.push(`- baseline: ${cell(preview(r.baseline.packet_text))}`);
+      if (r.probe.packet_text) parts.push(`- probe: ${cell(preview(r.probe.packet_text))}`);
+      return parts.join("\n");
+    })
+    .join("\n\n");
   const aa = byId("aa-off");
   const wall = aa ? (aa.probe.wall_ms - aa.baseline.wall_ms).toFixed(3) : "n/a";
-  const bugs = run.bugs.length ? run.bugs.map((b) => `- ${cell(b)}`).join("\n") : "- None on this run. injectBody packet bytes, omit, and identity matched inject on every arm.";
+  const bugs = run.bugs.length
+    ? run.bugs.map((b) => `- ${cell(b)}`).join("\n")
+    : "- None on this run. injectBody packet bytes, omit, and identity matched inject on every arm.";
   const wins = run.rows.filter((r) => r.verdict === "WIN").map((r) => r.id);
   const losses = run.rows.filter((r) => r.verdict === "LOSS").map((r) => r.id);
   const fails = run.rows.filter((r) => r.verdict === "FAIL").map((r) => r.id);
@@ -619,6 +683,11 @@ export function formatSilence(run: SilenceRun): string {
 if (import.meta.main) {
   const run = runSilence({ out: SILENCE_PATH });
   process.stdout.write(formatSilence(run));
-  const summary = run.rows.map((r) => `${r.id}\t${r.verdict}\tΔ${r.delta_bytes}\tomitted=${r.omitted_on === null ? "n/a" : r.omitted_on ? "yes" : "no"}`).join("\n");
+  const summary = run.rows
+    .map(
+      (r) =>
+        `${r.id}\t${r.verdict}\tΔ${r.delta_bytes}\tomitted=${r.omitted_on === null ? "n/a" : r.omitted_on ? "yes" : "no"}`,
+    )
+    .join("\n");
   console.error(`\n${summary}`);
 }

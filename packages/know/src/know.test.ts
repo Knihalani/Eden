@@ -1,6 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import { robotsAllows, robotsCrawlDelaySec, robotsSitemaps, robotsTxtForHttpStatus, sitemapLocs, parseSitemap } from "./robots";
-import { htmlToText, httpBody, jsonLdBlocks, looksLikeCode, persistable, qualityHost, qualityUrlSql, skipHost, triplesFromPage, decodeEntities, wikiCapitalTable, wikiActionApiUrl, wikiCapitalFromWikitext, wikiNeedsApiFallback, applyWikiApiFallback } from "./extract";
+import {
+  robotsAllows,
+  robotsCrawlDelaySec,
+  robotsSitemaps,
+  robotsTxtForHttpStatus,
+  sitemapLocs,
+  parseSitemap,
+} from "./robots";
+import {
+  htmlToText,
+  httpBody,
+  jsonLdBlocks,
+  looksLikeCode,
+  persistable,
+  qualityHost,
+  qualityUrlSql,
+  skipHost,
+  triplesFromPage,
+  decodeEntities,
+  wikiCapitalTable,
+  wikiActionApiUrl,
+  wikiCapitalFromWikitext,
+  wikiNeedsApiFallback,
+  applyWikiApiFallback,
+} from "./extract";
 import { cheapSkip } from "./gate";
 import { feedLinks } from "./feeds";
 import { parseCdxLine } from "./cdx";
@@ -51,19 +74,17 @@ describe("robots RFC 9309", () => {
     expect(robotsAllows("User-agent: *\nDisallow: /*.json$\n", "Edenbot", "/x.json")).toBe(false);
     expect(robotsAllows("User-agent: *\nDisallow: /*.json$\n", "Edenbot", "/x.json.html")).toBe(true);
     expect(robotsAllows("User-agent: *\nDisallow: /this/*/exactly$\n", "Edenbot", "/this/foo/exactly")).toBe(false);
-    expect(robotsAllows("User-agent: *\nDisallow: /\nUser-agent: Edenbot\nAllow: /\n", "Edenbot", "/wiki/Kenya")).toBe(true);
+    expect(robotsAllows("User-agent: *\nDisallow: /\nUser-agent: Edenbot\nAllow: /\n", "Edenbot", "/wiki/Kenya")).toBe(
+      true,
+    );
     expect(robotsAllows("User-agent: OtherBot\nDisallow: /\nUser-agent: *\nAllow: /\n", "Edenbot", "/x")).toBe(true);
   });
   test("sitemaps", () => {
-    expect(robotsSitemaps("Sitemap: https://example.org/sitemap.xml\n")).toEqual([
-      "https://example.org/sitemap.xml",
-    ]);
+    expect(robotsSitemaps("Sitemap: https://example.org/sitemap.xml\n")).toEqual(["https://example.org/sitemap.xml"]);
     expect(sitemapLocs("<urlset><url><loc>https://example.org/a</loc></url></urlset>")).toEqual([
       "https://example.org/a",
     ]);
-    const idx = parseSitemap(
-      `<sitemapindex><sitemap><loc>https://example.org/s1.xml</loc></sitemap></sitemapindex>`,
-    );
+    const idx = parseSitemap(`<sitemapindex><sitemap><loc>https://example.org/s1.xml</loc></sitemap></sitemapindex>`);
     expect(idx.kind).toBe("index");
     expect(idx.children).toEqual(["https://example.org/s1.xml"]);
     const set = parseSitemap(
@@ -113,7 +134,9 @@ describe("extract", () => {
     const html = `<p>async function addMetadata(){ const cssRules = 1; }</p>`;
     const t = triplesFromPage("https://example.org/js", html, true);
     expect(t.every((x) => x.p !== "about" || !looksLikeCode(x.o))).toBe(true);
-    expect("unknown" in formatCard("x", [{ s: "h", p: "about", o: "async function addMetadata(){ cssRules }", e: "x" }])).toBe(true);
+    expect(
+      "unknown" in formatCard("x", [{ s: "h", p: "about", o: "async function addMetadata(){ cssRules }", e: "x" }]),
+    ).toBe(true);
   });
   test("json-ld triples", () => {
     const html = `<html><title>JSON-LD 1.1</title><script type="application/ld+json">{"@type":"TechArticle","name":"JSON-LD 1.1","description":"A JSON-based serialization for Linked Data."}</script><h1>JSON-LD 1.1</h1><p>body text for extract</p></html>`;
@@ -157,9 +180,9 @@ describe("extract", () => {
       query: { pages: [{ revisions: [{ slots: { main: { content: "| capital = [[Nairobi]]\n" } } }] }] },
     });
     const html = applyWikiApiFallback(kenya, shell, api);
-    expect(triplesFromPage(kenya, html, true).some((x) => x.s === "Kenya" && x.p === "capital" && x.o === "Nairobi")).toBe(
-      true,
-    );
+    expect(
+      triplesFromPage(kenya, html, true).some((x) => x.s === "Kenya" && x.p === "capital" && x.o === "Nairobi"),
+    ).toBe(true);
   });
   test("wikipedia capital list table", () => {
     const t = triplesFromPage(
@@ -340,7 +363,9 @@ describe("extract", () => {
       "protocol",
     );
     expect(proto).toEqual([{ s: "IANA protocol 6", p: "is", o: "TCP", e: "" }]);
-    expect(persistable("https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml", proto[0]!)).toBe(false);
+    expect(persistable("https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml", proto[0]!)).toBe(
+      false,
+    );
     const http = parseIanaXml(`<record><value>404</value><description>Not Found</description></record>`, "http");
     expect(http[0]?.s).toBe("IANA http 404");
     const media = parseIanaXml(
@@ -358,17 +383,26 @@ describe("extract", () => {
     expect(spdx).toEqual([{ s: "SPDX MIT", p: "is", o: "MIT License", e: "" }]);
     expect(persistable("https://spdx.org/licenses/licenses.json", spdx[0]!)).toBe(false);
     const whatwg = parseWhatwgDb({
-      workstreams: [{ standards: [{ name: "HTML", href: "https://html.spec.whatwg.org/multipage/", reference: "HTML" }] }],
+      workstreams: [
+        { standards: [{ name: "HTML", href: "https://html.spec.whatwg.org/multipage/", reference: "HTML" }] },
+      ],
     });
     expect(whatwg[0]?.s).toBe("WHATWG html");
     expect(whatwg[0]?.o).toContain("HTML");
     const blocks = parseUnicodeBlocks("# Blocks-16.0.0.txt\n0000..007F; Basic Latin\n0080..00FF; Latin-1 Supplement\n");
     expect(blocks[0]).toEqual({ s: "Unicode Block Basic Latin", p: "is", o: "U+0000..U+007F", e: "" });
     expect(persistable("https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt", blocks[0]!)).toBe(false);
-    const langs = parseLangSubtags("%%\nType: language\nSubtag: en\nDescription: English\n%%\nType: language\nSubtag: zxx\nDescription: No linguistic content\nScope: special\n");
+    const langs = parseLangSubtags(
+      "%%\nType: language\nSubtag: en\nDescription: English\n%%\nType: language\nSubtag: zxx\nDescription: No linguistic content\nScope: special\n",
+    );
     expect(langs).toEqual([{ s: "IANA language en", p: "is", o: "English", e: "" }]);
-    expect(persistable("https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry", langs[0]!)).toBe(false);
-    const methods = parseIanaXml(`<record><value>GET</value><description>Transfer a current representation</description></record>`, "method");
+    expect(
+      persistable("https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry", langs[0]!),
+    ).toBe(false);
+    const methods = parseIanaXml(
+      `<record><value>GET</value><description>Transfer a current representation</description></record>`,
+      "method",
+    );
     expect(methods[0]?.s).toBe("IANA method GET");
     const methodsXml = parseIanaXml(
       `<record><value>GET</value><safe>yes</safe><idempotent>yes</idempotent><xref type="rfc" data="rfc9110" section="9.3.1"/></record>`,
@@ -382,7 +416,10 @@ describe("extract", () => {
     const cs = parseIanaXml(`<record><name>UTF-8</name><preferred_alias>utf-8</preferred_alias></record>`, "charset");
     expect(cs[0]?.s).toBe("IANA charset utf-8");
     expect(persistable("https://www.iana.org/assignments/character-sets/character-sets.xml", cs[0]!)).toBe(false);
-    const hdr = parseIanaXml(`<record><name>Accept</name><status>permanent</status><description>Media types</description></record>`, "header");
+    const hdr = parseIanaXml(
+      `<record><name>Accept</name><status>permanent</status><description>Media types</description></record>`,
+      "header",
+    );
     expect(hdr[0]?.s).toBe("IANA header Accept");
     expect(hdr[0]?.o).toBe("Media types");
     const hdrXref = parseIanaXml(
@@ -442,8 +479,18 @@ describe("extract", () => {
     expect(t.some((x) => x.s === "Q1")).toBe(false);
     expect(queryShapes("capital of Kenya")).toContain("Kenya");
     expect(queryShapes("UTF-8")).toContain("IANA charset utf-8");
-    expect(keepWet({ uri: "https://spam.example/x", text: "hello world this is a long enough english page about nothing in particular here." })).toBe(false);
-    expect(keepWet({ uri: "https://www.rfc-editor.org/rfc/rfc3986.html", text: "RFC 3986 Uniform Resource Identifier Generic Syntax. This document defines the generic syntax of URI." })).toBe(true);
+    expect(
+      keepWet({
+        uri: "https://spam.example/x",
+        text: "hello world this is a long enough english page about nothing in particular here.",
+      }),
+    ).toBe(false);
+    expect(
+      keepWet({
+        uri: "https://www.rfc-editor.org/rfc/rfc3986.html",
+        text: "RFC 3986 Uniform Resource Identifier Generic Syntax. This document defines the generic syntax of URI.",
+      }),
+    ).toBe(true);
     const long =
       "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(
         4,
@@ -453,7 +500,9 @@ describe("extract", () => {
   });
   test("keepWet slice yield is the FineWeb meter (not lifetime host_prior.skipped)", () => {
     const longJunk =
-      "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(4);
+      "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(
+        4,
+      );
     expect(longJunk.length).toBeGreaterThanOrEqual(200);
     const junk = [
       ...Array.from({ length: 90 }, (_, i) => ({
@@ -519,8 +568,7 @@ describe("extract", () => {
 describe("warc", () => {
   test("parses a conversion record", () => {
     const body = "The capital of France is Paris. France is a country.";
-    const rec =
-      `WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: https://example.org/fr\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
+    const rec = `WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: https://example.org/fr\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
     const out: { uri: string; text: string }[] = [];
     pushWarc(rec, out, 5);
     expect(out[0]?.uri).toBe("https://example.org/fr");
@@ -532,7 +580,11 @@ describe("store", () => {
   test("round trip nodes and crush expiry", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    s.putNodes(
+      "https://example.org/a",
+      [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }],
+      30,
+    );
     const hits = s.search("used for JSON");
     expect(hits[0]?.s).toBe("jq");
     expect(hits[0]?.url).toBe("https://example.org/a");
@@ -549,14 +601,24 @@ describe("store", () => {
     s.putPage({ url: "https://spam.example/x", digest: "abc", chars: 10, source: "cc", ttl_days: 1, skip: "language" });
     expect((s.db.query(`SELECT COUNT(*) AS n FROM pages`).get() as { n: number }).n).toBe(0);
     expect(s.pageDigest("https://spam.example/x")).toBe("abc");
-    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    s.putNodes(
+      "https://example.org/a",
+      [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }],
+      30,
+    );
     expect(s.search("jq")[0]?.o).toMatch(/used for/);
     expect(s.search("RFC 3986").length).toBe(0);
     const posts = (s.db.query(`SELECT COUNT(*) AS n FROM post`).get() as { n: number }).n;
     expect(posts).toBeGreaterThan(0);
     s.putPage({ url: "https://spam.example/kept", digest: "zzz", chars: 10, source: "cc", ttl_days: 1 });
     expect((s.db.query(`SELECT COUNT(*) AS n FROM pages`).get() as { n: number }).n).toBe(1);
-    s.putPage({ url: "https://www.rfc-editor.org/rfc/rfc9309.html", digest: "ok", chars: 10, source: "seed", ttl_days: 1 });
+    s.putPage({
+      url: "https://www.rfc-editor.org/rfc/rfc9309.html",
+      digest: "ok",
+      chars: 10,
+      source: "seed",
+      ttl_days: 1,
+    });
     expect((s.db.query(`SELECT COUNT(*) AS n FROM pages`).get() as { n: number }).n).toBe(2);
     s.close();
     rmSync(dir, { recursive: true, force: true });
@@ -564,36 +626,71 @@ describe("store", () => {
   test("intern shares predicates", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [
-      { s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." },
-      { s: "Bun", p: "is", o: "used for running TypeScript", e: "Use Bun to run TypeScript services." },
-    ], 30);
+    s.putNodes(
+      "https://example.org/a",
+      [
+        { s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." },
+        { s: "Bun", p: "is", o: "used for running TypeScript", e: "Use Bun to run TypeScript services." },
+      ],
+      30,
+    );
     expect((s.db.query(`SELECT COUNT(*) AS n FROM intern WHERE s = 'is'`).get() as { n: number }).n).toBe(1);
     expect((s.db.query(`SELECT COUNT(*) AS n FROM lex WHERE t = 'json'`).get() as { n: number }).n).toBeGreaterThan(0);
     expect(s.schemaVersion()).toBeGreaterThanOrEqual(10);
-    expect((s.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip")).toBe(false);
+    expect((s.db.query(`PRAGMA table_info(pages)`).all() as { name: string }[]).some((c) => c.name === "skip")).toBe(
+      false,
+    );
     s.putNodes("https://example.org/dump", [{ s: "x", p: "about", o: "a long page title dump", e: "nope" }], 30);
-    expect((s.db.query(`SELECT COUNT(*) AS n FROM nodes WHERE url = 'https://example.org/dump'`).get() as { n: number }).n).toBe(0);
-    s.putNodes("https://www.rfc-editor.org/rfc/rfc9309.html", [{
-      s: "RFC 9309",
-      p: "is",
-      o: "Robots Exclusion Protocol RFC 9309 Robots Exclusion Protocol (REP) Sept",
-      e: "x",
-    }], 30);
+    expect(
+      (s.db.query(`SELECT COUNT(*) AS n FROM nodes WHERE url = 'https://example.org/dump'`).get() as { n: number }).n,
+    ).toBe(0);
+    s.putNodes(
+      "https://www.rfc-editor.org/rfc/rfc9309.html",
+      [
+        {
+          s: "RFC 9309",
+          p: "is",
+          o: "Robots Exclusion Protocol RFC 9309 Robots Exclusion Protocol (REP) Sept",
+          e: "x",
+        },
+      ],
+      30,
+    );
     expect((s.db.query(`SELECT COUNT(*) AS n FROM nodes WHERE url LIKE '%rfc9309%'`).get() as { n: number }).n).toBe(0);
-    s.putNodes("https://www.rfc-editor.org/rfc/rfc3986.html", [
-      { s: "RFC 3986", p: "is", o: "URI Generic Syntax first", e: "RFC 3986 URI Generic Syntax first" },
-    ], 30);
-    s.putNodes("https://datatracker.ietf.org/doc/html/rfc3986", [
-      { s: "RFC 3986", p: "is", o: "URI Generic Syntax other host", e: "RFC 3986 URI Generic Syntax other host" },
-    ], 30);
-    expect((s.db.query(`SELECT COUNT(*) AS n FROM nodes n JOIN intern s ON s.id = n.sid WHERE s.s = 'RFC 3986'`).get() as { n: number }).n).toBe(0);
-    s.putNodes("https://www.rfc-editor.org/rfc-index.xml", [
-      { s: "RFC 2119", p: "is", o: "Key words for use in RFCs", e: "" },
-    ], 30);
-    s.putNodes("https://www.rfc-editor.org/rfc/rfc2119.html", [
-      { s: "RFC 2119", p: "is", o: "Key words MUST SHOULD", e: "RFC 2119: Key words for use in RFCs to Indicate Requirement Levels" },
-    ], 30);
+    s.putNodes(
+      "https://www.rfc-editor.org/rfc/rfc3986.html",
+      [{ s: "RFC 3986", p: "is", o: "URI Generic Syntax first", e: "RFC 3986 URI Generic Syntax first" }],
+      30,
+    );
+    s.putNodes(
+      "https://datatracker.ietf.org/doc/html/rfc3986",
+      [{ s: "RFC 3986", p: "is", o: "URI Generic Syntax other host", e: "RFC 3986 URI Generic Syntax other host" }],
+      30,
+    );
+    expect(
+      (
+        s.db.query(`SELECT COUNT(*) AS n FROM nodes n JOIN intern s ON s.id = n.sid WHERE s.s = 'RFC 3986'`).get() as {
+          n: number;
+        }
+      ).n,
+    ).toBe(0);
+    s.putNodes(
+      "https://www.rfc-editor.org/rfc-index.xml",
+      [{ s: "RFC 2119", p: "is", o: "Key words for use in RFCs", e: "" }],
+      30,
+    );
+    s.putNodes(
+      "https://www.rfc-editor.org/rfc/rfc2119.html",
+      [
+        {
+          s: "RFC 2119",
+          p: "is",
+          o: "Key words MUST SHOULD",
+          e: "RFC 2119: Key words for use in RFCs to Indicate Requirement Levels",
+        },
+      ],
+      30,
+    );
     expect(s.search("RFC 2119").length).toBe(0);
     s.close();
     rmSync(dir, { recursive: true, force: true });
@@ -601,9 +698,11 @@ describe("store", () => {
   test("catalog aliases hit sqlite before compact", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
-    s.putNodes("https://jqlang.github.io/jq/", [
-      { s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." },
-    ], 30);
+    s.putNodes(
+      "https://jqlang.github.io/jq/",
+      [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }],
+      30,
+    );
     expect(s.search("used for JSON")[0]?.s).toBe("jq");
     s.close();
     rmSync(dir, { recursive: true, force: true });
@@ -611,21 +710,87 @@ describe("store", () => {
   test("kpk pack answers without sqlite intern", () => {
     const facts = [
       { s: "Kenya", p: "capital", o: "Nairobi", e: "The capital of Kenya is Nairobi.", url: "https://example.org/a" },
-      { s: "RFC 3986", p: "is", o: "Uniform Resource Identifier (URI): Generic Syntax", e: "", url: "https://example.org/rfc" },
+      {
+        s: "RFC 3986",
+        p: "is",
+        o: "Uniform Resource Identifier (URI): Generic Syntax",
+        e: "",
+        url: "https://example.org/rfc",
+      },
       { s: "W3C web-share", p: "is", o: "Web Share API", e: "", url: "https://example.org/w3" },
       { s: "RFC 9110", p: "obsoletes", o: "RFC 7230, RFC 7231", e: "", url: "https://example.org/rfc" },
       { s: "RFC 872", p: "is", o: "TCP-on-a-LAN", e: "", url: "https://example.org/rfc" },
-      { s: "IANA protocol 6", p: "is", o: "TCP", e: "Transmission Control", url: "https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml" },
-      { s: "IANA media application/json", p: "is", o: "JSON", e: "", url: "https://www.iana.org/assignments/media-types/media-types.xml" },
-      { s: "RFC 4627", p: "is", o: "The application/json Media Type for JavaScript Object Notation (JSON)", e: "RFC 4627: The application&#x2F;json Media Type for JavaScript Object Notation (JSON)", url: "https://www.rfc-editor.org/rfc/rfc4627.html" },
-      { s: "IANA http 404", p: "is", o: "Not Found", e: "", url: "https://www.iana.org/assignments/http-status-codes/http-status-codes.xml" },
+      {
+        s: "IANA protocol 6",
+        p: "is",
+        o: "TCP",
+        e: "Transmission Control",
+        url: "https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml",
+      },
+      {
+        s: "IANA media application/json",
+        p: "is",
+        o: "JSON",
+        e: "",
+        url: "https://www.iana.org/assignments/media-types/media-types.xml",
+      },
+      {
+        s: "RFC 4627",
+        p: "is",
+        o: "The application/json Media Type for JavaScript Object Notation (JSON)",
+        e: "RFC 4627: The application&#x2F;json Media Type for JavaScript Object Notation (JSON)",
+        url: "https://www.rfc-editor.org/rfc/rfc4627.html",
+      },
+      {
+        s: "IANA http 404",
+        p: "is",
+        o: "Not Found",
+        e: "",
+        url: "https://www.iana.org/assignments/http-status-codes/http-status-codes.xml",
+      },
       { s: "SPDX MIT", p: "is", o: "MIT License", e: "", url: "https://spdx.org/licenses/licenses.json" },
-      { s: "Unicode Block Basic Latin", p: "is", o: "U+0000..U+007F", e: "", url: "https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt" },
-      { s: "IANA language en", p: "is", o: "English", e: "", url: "https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry" },
-      { s: "IANA method GET", p: "is", o: "Transfer a current representation", e: "", url: "https://www.iana.org/assignments/http-methods/http-methods.xml" },
-      { s: "IANA scheme https", p: "is", o: "Hypertext Transfer Protocol Secure", e: "", url: "https://www.iana.org/assignments/uri-schemes/uri-schemes.xml" },
-      { s: "IANA header Accept", p: "is", o: "RFC 9110", e: "", url: "https://www.iana.org/assignments/http-fields/http-fields.xml" },
-      { s: "Unicode Script Latn", p: "is", o: "Latin", e: "", url: "https://www.unicode.org/Public/UCD/latest/ucd/PropertyValueAliases.txt" },
+      {
+        s: "Unicode Block Basic Latin",
+        p: "is",
+        o: "U+0000..U+007F",
+        e: "",
+        url: "https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt",
+      },
+      {
+        s: "IANA language en",
+        p: "is",
+        o: "English",
+        e: "",
+        url: "https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry",
+      },
+      {
+        s: "IANA method GET",
+        p: "is",
+        o: "Transfer a current representation",
+        e: "",
+        url: "https://www.iana.org/assignments/http-methods/http-methods.xml",
+      },
+      {
+        s: "IANA scheme https",
+        p: "is",
+        o: "Hypertext Transfer Protocol Secure",
+        e: "",
+        url: "https://www.iana.org/assignments/uri-schemes/uri-schemes.xml",
+      },
+      {
+        s: "IANA header Accept",
+        p: "is",
+        o: "RFC 9110",
+        e: "",
+        url: "https://www.iana.org/assignments/http-fields/http-fields.xml",
+      },
+      {
+        s: "Unicode Script Latn",
+        p: "is",
+        o: "Latin",
+        e: "",
+        url: "https://www.unicode.org/Public/UCD/latest/ucd/PropertyValueAliases.txt",
+      },
     ];
     const buf = encodePack(facts);
     const p = decodePack(buf);
@@ -639,7 +804,13 @@ describe("store", () => {
     const collide = decodePack(
       encodePack([
         { s: "SPDX JSON", p: "is", o: "JSON License", e: "", url: "https://spdx.org/licenses/licenses.json" },
-        { s: "IANA media application/json", p: "is", o: "JSON", e: "", url: "https://www.iana.org/assignments/media-types/media-types.xml" },
+        {
+          s: "IANA media application/json",
+          p: "is",
+          o: "JSON",
+          e: "",
+          url: "https://www.iana.org/assignments/media-types/media-types.xml",
+        },
       ]),
     );
     expect(collide.search("json")[0]?.s).toBe("IANA media application/json");
@@ -666,7 +837,11 @@ describe("store", () => {
   test("compact freezes the graph into a pack", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    s.putNodes(
+      "https://example.org/a",
+      [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }],
+      30,
+    );
     s.compact();
     expect((s.db.query(`SELECT COUNT(*) AS n FROM nodes`).get() as { n: number }).n).toBe(0);
     expect(s.search("jq")[0]?.s).toBe("jq");
@@ -694,7 +869,11 @@ describe("store", () => {
   test("query store ignores WAL until compact", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-wal-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    s.putNodes(
+      "https://example.org/a",
+      [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }],
+      30,
+    );
     const q = openQueryStore(dir);
     expect(q.search("jq").length).toBe(0);
     q.close?.();
@@ -709,10 +888,14 @@ describe("store", () => {
 
 describe("gate and cards", () => {
   test("junk tld", () => {
-    expect(cheapSkip("https://spam.xyz/x", "Hello world this is enough english text for the gate to look at tokens here.")).toBe("junk-host");
+    expect(
+      cheapSkip("https://spam.xyz/x", "Hello world this is enough english text for the gate to look at tokens here."),
+    ).toBe("junk-host");
   });
   test("trigram english and cdx json", () => {
-    expect(englishTrigram("The capital of Kenya is Nairobi and the standard was published after the first session.")).toBe(true);
+    expect(
+      englishTrigram("The capital of Kenya is Nairobi and the standard was published after the first session."),
+    ).toBe(true);
     const h = parseCdxLine(
       `{"url":"https://example.org/a","filename":"crawl-data/x.warc.gz","offset":"10","length":"20"}`,
     );
@@ -721,19 +904,33 @@ describe("gate and cards", () => {
   });
   test("ungrounded unknown and token cap", () => {
     expect("unknown" in formatCard("x", [])).toBe(true);
-    const ok = formatCard("capital", [{ s: "Kenya", p: "capital", o: "Nairobi", e: "The capital of Kenya is Nairobi." }]);
+    const ok = formatCard("capital", [
+      { s: "Kenya", p: "capital", o: "Nairobi", e: "The capital of Kenya is Nairobi." },
+    ]);
     expect("fact" in ok && (ok as { fact: string }).fact.includes("Nairobi")).toBe(true);
     expect("fact" in ok && (ok as { fact: string }).fact.split(/\s+/).length <= 48).toBe(true);
     expect("unknown" in formatCard("javascript cssRules", [{ s: "h", p: "about", o: "x", e: "y" }])).toBe(true);
-    expect("unknown" in formatCard("NASA", [{ s: "NASA", p: "date", o: "2022-12-07T13:25:23-05:00", e: "" }])).toBe(true);
-    expect("unknown" in formatCard("RFC 3986", [{ s: "RFC 9309", p: "is", o: "Robots Exclusion Protocol", e: "RFC 9309: Robots Exclusion Protocol" }])).toBe(true);
-    expect("fact" in formatCard("rfc3986", [{ s: "RFC 3986", p: "is", o: "URI Generic Syntax", e: "RFC 3986 URI Generic Syntax" }])).toBe(true);
-    const jsonRfc = formatCard("RFC 8259", [{
-      s: "RFC 8259",
-      p: "is",
-      o: "The JavaScript Object Notation",
-      e: "RFC 8259 - The JavaScript Object Notation (JSON) Data Interchange Format Light Dark Auto RF",
-    }]);
+    expect("unknown" in formatCard("NASA", [{ s: "NASA", p: "date", o: "2022-12-07T13:25:23-05:00", e: "" }])).toBe(
+      true,
+    );
+    expect(
+      "unknown" in
+        formatCard("RFC 3986", [
+          { s: "RFC 9309", p: "is", o: "Robots Exclusion Protocol", e: "RFC 9309: Robots Exclusion Protocol" },
+        ]),
+    ).toBe(true);
+    expect(
+      "fact" in
+        formatCard("rfc3986", [{ s: "RFC 3986", p: "is", o: "URI Generic Syntax", e: "RFC 3986 URI Generic Syntax" }]),
+    ).toBe(true);
+    const jsonRfc = formatCard("RFC 8259", [
+      {
+        s: "RFC 8259",
+        p: "is",
+        o: "The JavaScript Object Notation",
+        e: "RFC 8259 - The JavaScript Object Notation (JSON) Data Interchange Format Light Dark Auto RF",
+      },
+    ]);
     expect("fact" in jsonRfc && (jsonRfc as { fact: string }).fact.includes("JSON")).toBe(true);
   });
   test("empty query is unknown and nonzero", async () => {
@@ -810,10 +1007,28 @@ describe("know crush holdout", () => {
 
   function packedStore() {
     const facts = [
-      { s: "RFC 3986", p: "is", o: "Uniform Resource Identifier (URI): Generic Syntax", e: "", url: "https://www.rfc-editor.org/rfc/rfc3986.html" },
+      {
+        s: "RFC 3986",
+        p: "is",
+        o: "Uniform Resource Identifier (URI): Generic Syntax",
+        e: "",
+        url: "https://www.rfc-editor.org/rfc/rfc3986.html",
+      },
       { s: "RFC 9110", p: "is", o: "HTTP Semantics", e: "", url: "https://www.rfc-editor.org/rfc/rfc9110.html" },
-      { s: "IANA media application/json", p: "is", o: "JSON", e: "", url: "https://www.iana.org/assignments/media-types/media-types.xml" },
-      { s: "RFC 4627", p: "is", o: "The application/json Media Type for JavaScript Object Notation (JSON)", e: "RFC 4627: The application&#x2F;json Media Type for JavaScript Object Notation (JSON)", url: "https://www.rfc-editor.org/rfc/rfc4627.html" },
+      {
+        s: "IANA media application/json",
+        p: "is",
+        o: "JSON",
+        e: "",
+        url: "https://www.iana.org/assignments/media-types/media-types.xml",
+      },
+      {
+        s: "RFC 4627",
+        p: "is",
+        o: "The application/json Media Type for JavaScript Object Notation (JSON)",
+        e: "RFC 4627: The application&#x2F;json Media Type for JavaScript Object Notation (JSON)",
+        url: "https://www.rfc-editor.org/rfc/rfc4627.html",
+      },
       { s: "SPDX MIT", p: "is", o: "MIT License", e: "", url: "https://spdx.org/licenses/licenses.json" },
       { s: "W3C web-share", p: "is", o: "Web Share API", e: "", url: "https://www.w3.org/TR/web-share/" },
     ];
@@ -825,12 +1040,14 @@ describe("know crush holdout", () => {
   test("decodes numeric entities", () => {
     expect(decodeEntities("application&#x2F;json")).toBe("application/json");
     expect(decodeEntities("a&#47;b &amp; c")).toBe("a/b & c");
-    const card = formatCard("RFC 4627", [{
-      s: "RFC 4627",
-      p: "is",
-      o: "The application&#x2F;json Media Type for JSON",
-      e: "RFC 4627: The application&#x2F;json Media Type for JSON",
-    }]);
+    const card = formatCard("RFC 4627", [
+      {
+        s: "RFC 4627",
+        p: "is",
+        o: "The application&#x2F;json Media Type for JSON",
+        e: "RFC 4627: The application&#x2F;json Media Type for JSON",
+      },
+    ]);
     expect("fact" in card && !(card as { fact: string }).fact.includes("&#x")).toBe(true);
     expect("fact" in card && (card as { fact: string }).fact.includes("application/json")).toBe(true);
   });

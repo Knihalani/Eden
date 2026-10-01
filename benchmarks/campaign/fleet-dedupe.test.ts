@@ -47,14 +47,14 @@ describe("rotation: fleet-dedupe", () => {
     const execs: Record<string, number> = {};
     const prog = readOnlyFetchProgram();
     const arming = createArmingStore();
-    const a = wrapTools(
-      fetchTools(execs),
-      createState({ programs: [prog], arming, sessionId: "a" }),
-    ) as Record<string, ToolDef>;
-    const b = wrapTools(
-      fetchTools(execs),
-      createState({ programs: [prog], arming, sessionId: "b" }),
-    ) as Record<string, ToolDef>;
+    const a = wrapTools(fetchTools(execs), createState({ programs: [prog], arming, sessionId: "a" })) as Record<
+      string,
+      ToolDef
+    >;
+    const b = wrapTools(fetchTools(execs), createState({ programs: [prog], arming, sessionId: "b" })) as Record<
+      string,
+      ToolDef
+    >;
     const script = [
       { tool: "fetchIssue", args: { id: "E-1" } },
       { tool: "fetchComments", args: { id: "E-1" } },

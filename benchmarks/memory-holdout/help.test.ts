@@ -66,12 +66,18 @@ describe("M47.4 HELP ledger", () => {
 
   test("counted rows name wrap and hook and the required cases", () => {
     const md = readFileSync(HELP, "utf8");
-    const table = md.split("\n").filter((l) => l.includes("|")).join("\n");
+    const table = md
+      .split("\n")
+      .filter((l) => l.includes("|"))
+      .join("\n");
     expect(table).toMatch(/\bwrap\b/i);
     expect(table).toMatch(/\bhook\b/i);
     const names = classRows(md).map((r) => r.caseName);
     for (const id of CASES) {
-      expect(names.some((n) => caseHit(n, id)), id).toBe(true);
+      expect(
+        names.some((n) => caseHit(n, id)),
+        id,
+      ).toBe(true);
     }
   });
 

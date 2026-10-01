@@ -17,9 +17,44 @@ import {
   wikiNeedsApiFallback,
   type HtmlScan,
 } from "./extract";
-import { ingestWetSlice, lastWetFetch, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath, type WetFetchMeter } from "./cc";
-import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum, expensiveLaneDue, shardCount, shardOwns } from "./defaults";
-import { fetchRobots, liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, liveWikiRandomBatch, sitemapFrontier } from "./live";
+import {
+  ingestWetSlice,
+  lastWetFetch,
+  latestCrawlId,
+  newsWarcPath,
+  rankFrontierUrls,
+  wetPath,
+  type WetFetchMeter,
+} from "./cc";
+import {
+  DEFAULT_CC,
+  DEFAULT_CC_SLICES,
+  DEFAULT_CDX,
+  DEFAULT_LIVE,
+  DEFAULT_NEWS,
+  DEFAULT_QUALITY,
+  DEFAULT_RECRAWL,
+  DEFAULT_WIKI,
+  DEFAULT_WIKI_GROW,
+  DEFAULT_WET_EVERY,
+  LIVE_CONCURRENCY,
+  LIVE_PER_HOST,
+  CATALOG_REFRESH_MS,
+  compactDue,
+  envNum,
+  expensiveLaneDue,
+  shardCount,
+  shardOwns,
+} from "./defaults";
+import {
+  fetchRobots,
+  liveGet,
+  liveGetStream,
+  liveWikiApi,
+  liveWikiApiBatch,
+  liveWikiRandomBatch,
+  sitemapFrontier,
+} from "./live";
 import { feedLinks } from "./feeds";
 import { FEED_URLS, SEED_URLS, WIKI_TOPIC_URLS } from "./seed";
 import { cheapSkip } from "./gate";
@@ -82,7 +117,14 @@ function commitPage(
   const ttlArg: TtlHints = { source, ...hints };
   if (why) {
     store.bumpHost(url, false);
-    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, ttlArg), skip: why });
+    store.putPage({
+      url,
+      digest: d,
+      chars: text.length,
+      source,
+      ttl_days: ttlDaysOnSkip(url, text, ttlArg),
+      skip: why,
+    });
     return { nodes: 0, skipped: 1 };
   }
   if (store.pageDigest(url) === d) {
@@ -112,7 +154,14 @@ function commitPage(
   const triples = triplesFromPage(url, isHtml ? htmlOrText : text, isHtml, scan);
   if (!triples.length) {
     store.bumpHost(url, false);
-    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, ttlArg), skip: "no-hot" });
+    store.putPage({
+      url,
+      digest: d,
+      chars: text.length,
+      source,
+      ttl_days: ttlDaysOnSkip(url, text, ttlArg),
+      skip: "no-hot",
+    });
     return { nodes: 0, skipped: 1 };
   }
   const ttl = ttlDaysFor(url, text, ttlArg);
@@ -192,7 +241,12 @@ function commitCcRecords(
 }
 
 /** One or more WET files from the latest crawl. `slices` walks consecutive wet.paths entries. Fetches in parallel; commits serially. */
-export async function tickCc(store: KnowStore, limit: number, pathIndex = 0, slices = DEFAULT_CC_SLICES): Promise<TickStats> {
+export async function tickCc(
+  store: KnowStore,
+  limit: number,
+  pathIndex = 0,
+  slices = DEFAULT_CC_SLICES,
+): Promise<TickStats> {
   const n = Math.max(1, Math.min(6, slices | 0));
   const got = await Promise.all(Array.from({ length: n }, (_, i) => collectCcSlice(store, limit, pathIndex + i)));
   const acc: TickStats = { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
@@ -226,7 +280,11 @@ async function collectNewsRecords(
   }
 }
 
-function commitNewsRecords(store: KnowStore, recs: Awaited<ReturnType<typeof ingestWetSlice>>, url?: string): TickStats {
+function commitNewsRecords(
+  store: KnowStore,
+  recs: Awaited<ReturnType<typeof ingestWetSlice>>,
+  url?: string,
+): TickStats {
   return store.crawlBatch(() => {
     if (url) store.setMeta("cc_news", url);
     let skipped = 0;
@@ -253,8 +311,8 @@ export async function tickFeeds(store: KnowStore, n = FEED_URLS.length): Promise
   const stored = Number(store.getMeta("feed_idx") || 0);
   // A corrupt feed_idx would index no feed and be written back unchanged, so it would never recover.
   const idx = Number.isInteger(stored) && stored >= 0 ? stored : 0;
-  const urls = Array.from({ length: n }, (_, i) => FEED_URLS[(idx + i) % FEED_URLS.length]).filter(
-    (u): u is string => Boolean(u),
+  const urls = Array.from({ length: n }, (_, i) => FEED_URLS[(idx + i) % FEED_URLS.length]).filter((u): u is string =>
+    Boolean(u),
   );
   const got = await mapPool(urls, Math.min(4, urls.length), async (url) => ({ url, got: await liveGet(url) }));
   let feeds = 0;
@@ -271,7 +329,7 @@ export async function tickFeeds(store: KnowStore, n = FEED_URLS.length): Promise
 async function ingestWikiApiPages(store: KnowStore, urls: string[], source: string): Promise<TickStats> {
   const acc = emptyTick();
   const due = urls.filter((u) => shardOwns(u) && !store.pageFresh(u) && wikiActionApiUrl(u));
-  for (let i = 0; i < due.length; ) {
+  for (let i = 0; i < due.length;) {
     const chunk = due.slice(i, i + 50);
     i += chunk.length;
     const pages = await liveWikiApiBatch(chunk);
@@ -433,7 +491,14 @@ function skipGather(url: string, source: string): Gather {
   return { url, source, digest: "", chars: 0, triples: [], links: [], ok: true, notModified: true };
 }
 
-function commitCatalog(store: KnowStore, url: string, source: string, digestHex: string, chars: number, triples: Triple[]): TickStats {
+function commitCatalog(
+  store: KnowStore,
+  url: string,
+  source: string,
+  digestHex: string,
+  chars: number,
+  triples: Triple[],
+): TickStats {
   if (store.pageDigest(url) === digestHex) return emptyTick();
   if (!triples.length) return { ...emptyTick(), skipped: 1 };
   const before = (store.db.query(`SELECT COUNT(*) AS n FROM nodes`).get() as { n: number }).n;
@@ -446,7 +511,12 @@ function commitCatalog(store: KnowStore, url: string, source: string, digestHex:
 }
 
 function applyGather(store: KnowStore, g: Gather): TickStats {
-  if (g.links.length) enqueueRanked(store, g.links.filter((u) => !skipHost(u)), g.url);
+  if (g.links.length)
+    enqueueRanked(
+      store,
+      g.links.filter((u) => !skipHost(u)),
+      g.url,
+    );
   if (g.notModified) return emptyTick();
   if (!g.ok) return { ...emptyTick(), skipped: 1 };
   return commitCatalog(store, g.url, g.source, g.digest, g.chars, g.triples);
@@ -482,12 +552,7 @@ async function gatherRfcIndex() {
   };
 }
 
-async function gatherJsonCatalog(
-  url: string,
-  source: string,
-  parse: (json: unknown) => Triple[],
-  timeoutMs = 20_000,
-) {
+async function gatherJsonCatalog(url: string, source: string, parse: (json: unknown) => Triple[], timeoutMs = 20_000) {
   const got = await liveGet(url, { timeoutMs, accept: "application/json" });
   if (!got.ok) return { url, source, digest: "", chars: 0, triples: [] as Triple[], links: [] as string[], ok: false };
   let json: unknown;
@@ -551,7 +616,15 @@ async function gatherW3() {
     url = nextW3Page(pages[pages.length - 1]);
   }
   if (!pages.length) {
-    return { url: W3_CATALOG_URL, source: "w3-catalog", digest: "", chars: 0, triples: [] as Triple[], links: [] as string[], ok: false };
+    return {
+      url: W3_CATALOG_URL,
+      source: "w3-catalog",
+      digest: "",
+      chars: 0,
+      triples: [] as Triple[],
+      links: [] as string[],
+      ok: false,
+    };
   }
   const blob = raw.join("\n");
   return {
@@ -581,7 +654,15 @@ async function gatherIetf() {
     url = nextRelatedPage(pages[pages.length - 1]);
   }
   if (!pages.length) {
-    return { url: IETF_UPDATES_CATALOG, source: "ietf-related", digest: "", chars: 0, triples: [] as Triple[], links: [] as string[], ok: false };
+    return {
+      url: IETF_UPDATES_CATALOG,
+      source: "ietf-related",
+      digest: "",
+      chars: 0,
+      triples: [] as Triple[],
+      links: [] as string[],
+      ok: false,
+    };
   }
   const blob = raw.join("\n");
   return {
@@ -651,7 +732,12 @@ export async function tickIana(store: KnowStore): Promise<TickStats> {
     }),
   );
   for (const { reg, got, triples } of fetched) {
-    if (got.links.length) enqueueRanked(store, got.links.filter((u) => !skipHost(u)), reg.url);
+    if (got.links.length)
+      enqueueRanked(
+        store,
+        got.links.filter((u) => !skipHost(u)),
+        reg.url,
+      );
     if (!got.ok) {
       acc.skipped++;
       continue;
@@ -682,10 +768,7 @@ export async function tickLangTags(store: KnowStore): Promise<TickStats> {
 }
 
 export async function tickWikidata(store: KnowStore): Promise<TickStats> {
-  return applyGather(
-    store,
-    await gatherJsonCatalog(WIKIDATA_SPARQL_URL, "wikidata", parseWikidataCapitals, 45_000),
-  );
+  return applyGather(store, await gatherJsonCatalog(WIKIDATA_SPARQL_URL, "wikidata", parseWikidataCapitals, 45_000));
 }
 
 export async function tickScripts(store: KnowStore): Promise<TickStats> {
@@ -814,10 +897,14 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
   live += fromWiki.live;
   skipped += fromWiki.skipped;
   nodes += fromWiki.nodes;
-  const fetchedPages = await mapPool(restTodo, Math.min(LIVE_CONCURRENCY, Math.max(1, restTodo.length)), async (url) => {
-    const got = await liveGet(url, { ifModifiedSinceMs: store.pageFetched(url) });
-    return { url, got };
-  });
+  const fetchedPages = await mapPool(
+    restTodo,
+    Math.min(LIVE_CONCURRENCY, Math.max(1, restTodo.length)),
+    async (url) => {
+      const got = await liveGet(url, { ifModifiedSinceMs: store.pageFetched(url) });
+      return { url, got };
+    },
+  );
   for (const { url, got } of fetchedPages) {
     if (!got.ok) {
       skipped++;
@@ -934,11 +1021,16 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const wetLane = Promise.all([
       doCdx ? collectCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX)) : Promise.resolve(null),
       doWet
-        ? Promise.all(Array.from({ length: sliceN }, (_, i) => collectCcSlice(store, opts?.cc ?? DEFAULT_CC, ccIdx + i)))
+        ? Promise.all(
+            Array.from({ length: sliceN }, (_, i) => collectCcSlice(store, opts?.cc ?? DEFAULT_CC, ccIdx + i)),
+          )
         : Promise.resolve([]),
       doNews
         ? collectNewsRecords(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0))
-        : Promise.resolve({ recs: [] as Awaited<ReturnType<typeof ingestWetSlice>>, url: undefined as string | undefined }),
+        : Promise.resolve({
+            recs: [] as Awaited<ReturnType<typeof ingestWetSlice>>,
+            url: undefined as string | undefined,
+          }),
     ]);
     const caps = await tickCapitals(store);
     const due = (url: string) => catalogDue(store, url);
@@ -948,11 +1040,21 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
       due(W3_CATALOG_URL) ? gatherW3() : skipGather(W3_CATALOG_URL, "w3-catalog"),
       due(IETF_UPDATES_CATALOG) ? gatherIetf() : skipGather(IETF_UPDATES_CATALOG, "ietf-related"),
       ianaDue ? gatherIana() : IANA_REGISTRIES.map((r) => skipGather(r.url, "iana")),
-      due(SPDX_LICENSE_URL) ? gatherJsonCatalog(SPDX_LICENSE_URL, "spdx", parseSpdxLicenses) : skipGather(SPDX_LICENSE_URL, "spdx"),
-      due(WHATWG_DB_URL) ? gatherJsonCatalog(WHATWG_DB_URL, "whatwg", parseWhatwgDb) : skipGather(WHATWG_DB_URL, "whatwg"),
-      due(UNICODE_BLOCKS_URL) ? gatherTextCatalog(UNICODE_BLOCKS_URL, "unicode", parseUnicodeBlocks) : skipGather(UNICODE_BLOCKS_URL, "unicode"),
-      due(LANG_SUBTAG_URL) ? gatherTextCatalog(LANG_SUBTAG_URL, "langtags", parseLangSubtags, 45_000) : skipGather(LANG_SUBTAG_URL, "langtags"),
-      due(UNICODE_SCRIPTS_URL) ? gatherTextCatalog(UNICODE_SCRIPTS_URL, "scripts", parseUnicodeScripts) : skipGather(UNICODE_SCRIPTS_URL, "scripts"),
+      due(SPDX_LICENSE_URL)
+        ? gatherJsonCatalog(SPDX_LICENSE_URL, "spdx", parseSpdxLicenses)
+        : skipGather(SPDX_LICENSE_URL, "spdx"),
+      due(WHATWG_DB_URL)
+        ? gatherJsonCatalog(WHATWG_DB_URL, "whatwg", parseWhatwgDb)
+        : skipGather(WHATWG_DB_URL, "whatwg"),
+      due(UNICODE_BLOCKS_URL)
+        ? gatherTextCatalog(UNICODE_BLOCKS_URL, "unicode", parseUnicodeBlocks)
+        : skipGather(UNICODE_BLOCKS_URL, "unicode"),
+      due(LANG_SUBTAG_URL)
+        ? gatherTextCatalog(LANG_SUBTAG_URL, "langtags", parseLangSubtags, 45_000)
+        : skipGather(LANG_SUBTAG_URL, "langtags"),
+      due(UNICODE_SCRIPTS_URL)
+        ? gatherTextCatalog(UNICODE_SCRIPTS_URL, "scripts", parseUnicodeScripts)
+        : skipGather(UNICODE_SCRIPTS_URL, "scripts"),
       skipGather(WIKIDATA_SPARQL_URL, "wikidata"),
       tickWikiBatch(store, envNum("EDEN_KNOW_WIKI", DEFAULT_WIKI)),
     ]);
@@ -978,7 +1080,18 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const q = await tickQuality(store, envNum("EDEN_KNOW_QUALITY", DEFAULT_QUALITY));
     const f = await tickFeeds(store);
     const b = await tickLive(store, opts?.live ?? DEFAULT_LIVE);
-    console.log(JSON.stringify({ cc: 0, news: 0, live: b.live, feeds: f.feeds, cdx: 0, nodes: b.nodes, skipped: b.skipped, phase: "live" }));
+    console.log(
+      JSON.stringify({
+        cc: 0,
+        news: 0,
+        live: b.live,
+        feeds: f.feeds,
+        cdx: 0,
+        nodes: b.nodes,
+        skipped: b.skipped,
+        phase: "live",
+      }),
+    );
     const [cdxGot, wetGot, newsGot] = await wetLane;
     const x = cdxGot ? commitCdx(store, cdxGot) : emptyTick();
     const a: TickStats = { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
@@ -1026,8 +1139,32 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
       live: b.live + q.live + wikiB.live + idx.live + w3.live + rel.live + extraLive + wd.live + caps.live,
       feeds: f.feeds,
       cdx: x.cdx,
-      nodes: a.nodes + b.nodes + x.nodes + q.nodes + wikiB.nodes + idx.nodes + w3.nodes + rel.nodes + extraNodes + wd.nodes + caps.nodes + news.nodes,
-      skipped: a.skipped + b.skipped + x.skipped + q.skipped + wikiB.skipped + idx.skipped + w3.skipped + rel.skipped + extraSkip + wd.skipped + caps.skipped + news.skipped,
+      nodes:
+        a.nodes +
+        b.nodes +
+        x.nodes +
+        q.nodes +
+        wikiB.nodes +
+        idx.nodes +
+        w3.nodes +
+        rel.nodes +
+        extraNodes +
+        wd.nodes +
+        caps.nodes +
+        news.nodes,
+      skipped:
+        a.skipped +
+        b.skipped +
+        x.skipped +
+        q.skipped +
+        wikiB.skipped +
+        idx.skipped +
+        w3.skipped +
+        rel.skipped +
+        extraSkip +
+        wd.skipped +
+        caps.skipped +
+        news.skipped,
       counts,
     };
   } finally {

@@ -77,7 +77,8 @@ function boundFields(s: Step): [string, Binding][] {
   return [];
 }
 
-const readOnlyOf = (s: Step): boolean | "unknown" => (s.kind === "tool" && s.readOnly !== undefined ? s.readOnly : "unknown");
+const readOnlyOf = (s: Step): boolean | "unknown" =>
+  s.kind === "tool" && s.readOnly !== undefined ? s.readOnly : "unknown";
 
 function describeBinding(b: Binding): string {
   switch (b.kind) {
@@ -96,7 +97,8 @@ function diffContract(oldC: StretchProgram["contract"], newC: StretchProgram["co
   const changes: string[] = [];
   if (!oldC || !newC) return changes;
   if (oldC.witnesses !== newC.witnesses) changes.push(`witnesses ${oldC.witnesses} -> ${newC.witnesses}`);
-  if (oldC.minLlmReduction !== newC.minLlmReduction) changes.push(`minLlmReduction ${oldC.minLlmReduction} -> ${newC.minLlmReduction}`);
+  if (oldC.minLlmReduction !== newC.minLlmReduction)
+    changes.push(`minLlmReduction ${oldC.minLlmReduction} -> ${newC.minLlmReduction}`);
   if (oldC.allowExact !== newC.allowExact) changes.push(`allowExact ${oldC.allowExact} -> ${newC.allowExact}`);
   if (!eq(oldC.envelope ?? null, newC.envelope ?? null)) changes.push("envelope changed");
   return changes;
@@ -173,8 +175,7 @@ export function diffPrograms(oldP: StretchProgram, newP: StretchProgram): Progra
     }
   }
 
-  diff.contract_changes =
-    oldP?.contract && newP?.contract ? diffContract(oldP.contract, newP.contract) : [];
+  diff.contract_changes = oldP?.contract && newP?.contract ? diffContract(oldP.contract, newP.contract) : [];
   diff.contract_changed = diff.contract_changes.length > 0;
   return diff;
 }

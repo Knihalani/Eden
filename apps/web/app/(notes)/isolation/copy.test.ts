@@ -58,12 +58,8 @@ test("published limits name every PUBLIC_CLAIMS limit, plus analogue and retired
   expect(iso).toMatch(/\| Name \| Kind \| Source \|/);
   expect(iso.indexOf("### Limits")).toBeLessThan(iso.indexOf("### Analogue"));
   expect(iso.indexOf("### Analogue")).toBeLessThan(iso.indexOf("### Retired"));
-  expect(LIMIT_CLAIMS.find((r) => r.id === "oblivious-long")?.test).toBe(
-    "benchmarks/campaign/OBLIVIOUS-LONG.md",
-  );
-  expect(LIMIT_CLAIMS.find((r) => r.id === "replica-host-drop")?.test).toBe(
-    "benchmarks/campaign/HOST-DROP.md",
-  );
+  expect(LIMIT_CLAIMS.find((r) => r.id === "oblivious-long")?.test).toBe("benchmarks/campaign/OBLIVIOUS-LONG.md");
+  expect(LIMIT_CLAIMS.find((r) => r.id === "replica-host-drop")?.test).toBe("benchmarks/campaign/HOST-DROP.md");
 });
 
 test("OWASP maps all ten MCP ids with a control and a gap", () => {
@@ -119,9 +115,9 @@ test("each isolation claim is the sentence the page prints, not a placeholder", 
   expect(ISOLATION_CLAIMS[0]?.claim).toBe(
     "Two workspaces that record the same public-API sequence keep their own cluster rows.",
   );
-  expect(ISOLATION_CLAIMS.some((row) => row.claim === "Compiled tools stay scoped to the workspace that recorded them.")).toBe(
-    true,
-  );
+  expect(
+    ISOLATION_CLAIMS.some((row) => row.claim === "Compiled tools stay scoped to the workspace that recorded them."),
+  ).toBe(true);
 });
 
 function filesUnder(dir: string): string[] {
@@ -215,10 +211,7 @@ test("isolation docs and /isolation point at the pack; pool cadence is named", (
 });
 
 test("landing and /proof never mention SOC 2", () => {
-  const roots = [
-    join(ROOT, "apps/web/app/(marketing)"),
-    join(ROOT, "apps/web/app/(notes)/proof"),
-  ];
+  const roots = [join(ROOT, "apps/web/app/(marketing)"), join(ROOT, "apps/web/app/(notes)/proof")];
   const hits: string[] = [];
   for (const dir of roots) {
     for (const file of filesUnder(dir)) {
@@ -250,4 +243,3 @@ test("live /pack binder is graphite notes, eight controls, not a cert", () => {
   ]);
   expect(PACK_MD).toMatch(/\/pack/);
 });
-

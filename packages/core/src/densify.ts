@@ -22,7 +22,7 @@ function foldRepeatedLines(text: string): string {
   if (!text.includes("\n")) return text;
   const lines = text.split("\n");
   const out: string[] = [];
-  for (let i = 0; i < lines.length; ) {
+  for (let i = 0; i < lines.length;) {
     const line = lines[i]!;
     let n = 1;
     while (i + n < lines.length && lines[i + n] === line) n++;
@@ -51,7 +51,12 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function sortKeys(obj: Record<string, unknown>, ancestors: WeakSet<object>, depth: number, version: 1 | 2): Record<string, unknown> {
+function sortKeys(
+  obj: Record<string, unknown>,
+  ancestors: WeakSet<object>,
+  depth: number,
+  version: 1 | 2,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(obj).sort()) {
     out[k] = densifyWalk(obj[k], ancestors, depth + 1, version);
@@ -234,9 +239,7 @@ function isInternTable(e: unknown): e is unknown[] {
   return Array.isArray(e) && e.length >= 1;
 }
 
-function isColumnar(
-  value: Record<string, unknown>,
-): value is { keys: string[]; rows: unknown[][]; d?: unknown[] } {
+function isColumnar(value: Record<string, unknown>): value is { keys: string[]; rows: unknown[][]; d?: unknown[] } {
   const names = Object.keys(value);
   if (!names.includes("keys") || !names.includes("rows")) return false;
   for (const n of names) {
@@ -287,7 +290,10 @@ export function jsonBytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
 }
 
-export function densifyPayload(value: unknown, opts: { rawBytes?: number } = {}): {
+export function densifyPayload(
+  value: unknown,
+  opts: { rawBytes?: number } = {},
+): {
   densified: unknown;
   raw_bytes: number;
   densified_bytes: number;

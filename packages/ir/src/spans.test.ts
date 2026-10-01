@@ -31,18 +31,19 @@ describe("tracesMatchSpans", () => {
 
   test("false when a span id is missing from traces", () => {
     expect(
-      tracesMatchSpans([{ id: "a", spanId: "wf-1", agentId: "orch" }], [
-        { spanId: "wf-1", agentId: "orch", name: "invoke_workflow" },
-        { spanId: "ag-intake", parentSpanId: "wf-1", agentId: "intake", name: "invoke_agent" },
-      ]),
+      tracesMatchSpans(
+        [{ id: "a", spanId: "wf-1", agentId: "orch" }],
+        [
+          { spanId: "wf-1", agentId: "orch", name: "invoke_workflow" },
+          { spanId: "ag-intake", parentSpanId: "wf-1", agentId: "intake", name: "invoke_agent" },
+        ],
+      ),
     ).toBe(false);
   });
 
   test("false when span names do not match invoke_workflow / invoke_agent", () => {
     const parent = { id: "run-parent", spanId: "wf-1", spanName: "chat", agentId: "orch" };
-    expect(
-      tracesMatchSpans([parent], [{ spanId: "wf-1", agentId: "orch", name: "invoke_workflow" }]),
-    ).toBe(false);
+    expect(tracesMatchSpans([parent], [{ spanId: "wf-1", agentId: "orch", name: "invoke_workflow" }])).toBe(false);
   });
 
   test("empty spans match empty traces only", () => {

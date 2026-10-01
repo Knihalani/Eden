@@ -68,7 +68,9 @@ System: Try The Hangover (2009)
     const got = atomize(movies);
     expect(got.kind).toBe("recsys");
     expect(got.atoms.length).toBeGreaterThan(0);
-    expect(got.atoms.some((a) => /Superbad \(2007\)/.test(a.text) && /Forgetting Sarah Marshall/.test(a.text))).toBe(true);
+    expect(got.atoms.some((a) => /Superbad \(2007\)/.test(a.text) && /Forgetting Sarah Marshall/.test(a.text))).toBe(
+      true,
+    );
     expect(got.atoms.map((a) => a.session)).not.toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(got.atoms.every((a) => !/^\d+\.\s+Superbad/.test(a.text) || got.atoms.length < 8)).toBe(true);
   });

@@ -65,8 +65,7 @@ export function remainingBudget(args: {
   const spentCents = predicted.cents > 0 && actual.cents >= predicted.cents;
   const spent = spentLlm || spentMs || spentCents;
   // Same gate as today's guard: remainingTimeout < 0 does not count as timeout pressure.
-  const timeoutPressure =
-    predicted.ms > 0 && remainingTimeoutMs >= 0 && predicted.ms > remainingTimeoutMs;
+  const timeoutPressure = predicted.ms > 0 && remainingTimeoutMs >= 0 && predicted.ms > remainingTimeoutMs;
   const overflow: ForecastOverflow = spentLlm
     ? "llmCalls"
     : spentCents
@@ -96,8 +95,7 @@ export function forecastCopy(view: ForecastView): string {
   if (view.overflow === "timeout") {
     return `predicted ms=${view.predicted.ms} remainingTimeoutMs=${view.remainingTimeoutMs}`;
   }
-  const dim: keyof ForecastSpend =
-    view.overflow === "ms" || view.overflow === "cents" ? view.overflow : "llmCalls";
+  const dim: keyof ForecastSpend = view.overflow === "ms" || view.overflow === "cents" ? view.overflow : "llmCalls";
   return `predicted ${dim}=${view.predicted[dim]} actual=${view.actual[dim]}`;
 }
 

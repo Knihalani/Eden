@@ -3,11 +3,7 @@ import type { StretchTrace } from "@eden/ir";
 import { compileTraces } from "./index";
 import { registryFrom, runProgram } from "@eden/runtime";
 
-function trace(
-  id: string,
-  events: StretchTrace["events"],
-  input: Record<string, unknown>,
-): StretchTrace {
+function trace(id: string, events: StretchTrace["events"], input: Record<string, unknown>): StretchTrace {
   return {
     id,
     events,
@@ -79,7 +75,9 @@ describe("horizon shapes", () => {
     const { programs, refusals } = compileTraces(traces);
     expect(refusals.filter((r) => r.code === "unbound_foreach" || r.code === "read_set_mismatch")).toEqual([]);
     const p = programs.find((q) =>
-      q.steps.some((s) => s.kind === "loop" && s.body.some((id) => q.steps.some((x) => x.id === id && x.kind === "loop"))),
+      q.steps.some(
+        (s) => s.kind === "loop" && s.body.some((id) => q.steps.some((x) => x.id === id && x.kind === "loop")),
+      ),
     );
     expect(p).toBeDefined();
     const inner = p!.steps.find((s) => s.kind === "loop" && s.id.includes("inner"));
@@ -87,9 +85,7 @@ describe("horizon shapes", () => {
     const bodyId = inner && inner.kind === "loop" ? inner.body[0] : undefined;
     const restart = p!.steps.find((s) => s.id === bodyId && s.kind === "tool");
     expect(restart && restart.kind === "tool" && restart.tool === "restartPod").toBe(true);
-    const outer = p!.steps.find(
-      (s) => s.kind === "loop" && inner && s.body.includes(inner.id),
-    );
+    const outer = p!.steps.find((s) => s.kind === "loop" && inner && s.body.includes(inner.id));
     expect(outer && outer.kind === "loop").toBe(true);
     const ns = restart && restart.kind === "tool" ? restart.args.ns : undefined;
     const name = restart && restart.kind === "tool" ? restart.args.name : undefined;
@@ -443,7 +439,12 @@ describe("horizon shapes", () => {
       return trace(
         `amb-${i}`,
         [
-          { name: "listIssues", args: { repo: `r-${i}` }, result: { data: { edges }, also: { edges: also } }, ok: true },
+          {
+            name: "listIssues",
+            args: { repo: `r-${i}` },
+            result: { data: { edges }, also: { edges: also } },
+            ok: true,
+          },
           ...edges.map((e) => ({
             name: "updateIssue",
             args: { id: e.node.id },
@@ -570,9 +571,7 @@ describe("horizon shapes", () => {
       );
     });
     const { programs, refusals } = compileTraces(traces);
-    const create = programs
-      .flatMap((q) => q.steps)
-      .find((s) => s.kind === "tool" && s.tool === "createUser");
+    const create = programs.flatMap((q) => q.steps).find((s) => s.kind === "tool" && s.tool === "createUser");
     const body = create && create.kind === "tool" ? create.args.body : undefined;
     expect(body?.kind === "transform" && body.fn === "template").toBe(false);
     expect(refusals.some((r) => r.code === "underdetermined_write") || !create).toBe(true);
@@ -661,6 +660,8 @@ describe("horizon shapes", () => {
     });
     const refused = compileTraces(strings);
     expect(refused.programs.filter((p) => p.steps.some((s) => s.kind === "loop"))).toHaveLength(0);
-    expect(refused.refusals.find((r) => r.code === "read_set_mismatch" && r.readSet === 12 && r.repeats === 6)).toBeDefined();
+    expect(
+      refused.refusals.find((r) => r.code === "read_set_mismatch" && r.readSet === 12 && r.repeats === 6),
+    ).toBeDefined();
   });
 });

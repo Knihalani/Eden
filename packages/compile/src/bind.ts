@@ -311,7 +311,9 @@ function buildJsonSkeleton(values: unknown[], flats: Map<string, unknown>[]): st
     if (!objs.every((v) => typeof v === "string")) return null;
     const strs = objs as string[];
     const ranked = [...flats[0]!]
-      .filter(([path, v]) => typeof v === "string" && path && (v as string).length >= 2 && strs[0]!.includes(v as string))
+      .filter(
+        ([path, v]) => typeof v === "string" && path && (v as string).length >= 2 && strs[0]!.includes(v as string),
+      )
       .sort((a, b) => (b[1] as string).length - (a[1] as string).length);
     let chosen: string | null = null;
     for (const [path, v] of ranked) {
@@ -357,11 +359,13 @@ function tryTemplate(
     const ok = strs.every((s, j) => render(expr, inputRecord(inputFlats[j]!)) === s);
     if (ok) return { kind: "transform", fn: "template", expr, of: { kind: "input", path: "" } };
   }
-  const priorHits = [...(priorFlats[0] ?? [])].flatMap((step) =>
-    [...step.flat]
-      .filter(([, v]) => typeof v === "string" && (v as string).length >= 2 && base.includes(v as string))
-      .map(([path, v]) => ({ step, path, v: v as string })),
-  ).sort((a, b) => b.v.length - a.v.length);
+  const priorHits = [...(priorFlats[0] ?? [])]
+    .flatMap((step) =>
+      [...step.flat]
+        .filter(([, v]) => typeof v === "string" && (v as string).length >= 2 && base.includes(v as string))
+        .map(([path, v]) => ({ step, path, v: v as string })),
+    )
+    .sort((a, b) => b.v.length - a.v.length);
   for (const { step, path, v } of priorHits) {
     const expr = base.split(v).join(`{${path || "$"}}`);
     if (expr === base || !expr.includes("{")) continue;
@@ -380,9 +384,7 @@ function tryTemplate(
   return null;
 }
 
-export type BindResult =
-  | { ok: true; binding: Binding }
-  | { ok: false; reason: string; trap92?: boolean };
+export type BindResult = { ok: true; binding: Binding } | { ok: false; reason: string; trap92?: boolean };
 
 /**
  * Events bucketed by tool name, memoised per trace.
@@ -507,11 +509,7 @@ export function bindContext(traces: StretchTrace[], priorIds: string[]): BindCon
   return ctx;
 }
 
-export function bindSlot(
-  values: unknown[],
-  ctx: BindContext,
-  opts: BindOpts,
-): BindResult {
+export function bindSlot(values: unknown[], ctx: BindContext, opts: BindOpts): BindResult {
   if (!values.length) return { ok: false, reason: "empty slot" };
   const { inputFlats, priors } = ctx;
   const render: Render = opts.shell ? interpolateShell : interpolateSlots;
@@ -672,9 +670,10 @@ function templateRecord(of: Binding, t: StretchTrace, priorIds: string[]): Recor
   // Mixed object templates interpolate against input ∪ one prior. Extra input
   // keys are unused by interpolateSlots; prior keys win on collision so a
   // getOrg.orgId is not shadowed by a leftover input.orgId.
-  const input = t.input && typeof t.input === "object" && !Array.isArray(t.input)
-    ? (t.input as Record<string, unknown>)
-    : inputRecord(flattenCached(t.input ?? {}));
+  const input =
+    t.input && typeof t.input === "object" && !Array.isArray(t.input)
+      ? (t.input as Record<string, unknown>)
+      : inputRecord(flattenCached(t.input ?? {}));
   return { ...input, ...rec };
 }
 
@@ -871,11 +870,7 @@ export function remapBinding(b: Binding, nameToId: Map<string, string>): Binding
   return b;
 }
 
-export function tryTemplateForTest(
-  values: unknown[],
-  traces: StretchTrace[],
-  priorIds: string[],
-): Binding | null {
+export function tryTemplateForTest(values: unknown[], traces: StretchTrace[], priorIds: string[]): Binding | null {
   const inputFlats = traces.map((t) => flatten(t.input ?? {}));
   return tryTemplate(values, inputFlats, priorFlats(traces, priorIds), interpolateSlots);
 }

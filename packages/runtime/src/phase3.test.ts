@@ -48,8 +48,14 @@ describe("M1: branch stepsRun accounting", () => {
     let calls = 0;
     const reg = registryFrom({
       check: async () => ({ go: true }),
-      act_a: async () => { calls++; return 1; },
-      act_b: async () => { calls++; return 2; },
+      act_a: async () => {
+        calls++;
+        return 1;
+      },
+      act_b: async () => {
+        calls++;
+        return 2;
+      },
     });
     const res = await runProgram(prog, {}, { registry: reg });
     expect(calls).toBe(2);
@@ -64,9 +70,7 @@ describe("M1: branch stepsRun accounting", () => {
 
 describe("M2: composedRegistry", () => {
   function subProgram(): StretchProgram {
-    return linearProgram([
-      { id: "s0", tool: "inner_only" },
-    ]);
+    return linearProgram([{ id: "s0", tool: "inner_only" }]);
   }
 
   test("honors a dedicated sub.registry instead of silently sharing base tools", async () => {

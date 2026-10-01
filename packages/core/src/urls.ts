@@ -9,7 +9,10 @@ function demacroPath(s: string): string {
   // tool compiled from a recorded /commits/{sha} shape. Numeric-looking
   // macros keep the short substitute the issue/pull shapes expect.
   return s.replace(/\$\{?[A-Za-z_][\w]*\}?/g, (m) => {
-    const name = m.replace(/^\$\{?/, "").replace(/\}$/, "").toLowerCase();
+    const name = m
+      .replace(/^\$\{?/, "")
+      .replace(/\}$/, "")
+      .toLowerCase();
     return /sha|commit|hash|digest|rev/.test(name) ? "abcde12345" : "12";
   });
 }

@@ -117,10 +117,7 @@ describe("hosted MCP initialize W=100 (in-process handleMcp)", () => {
   test(
     "W=100 initialize mixed protocolVersion — none throw, none 500, all a spoken version",
     async () => {
-      const r = await probeMcpInitialize(
-        (body) => handleMcp(db, "ws_local", body, "http://x"),
-        HOSTED_DISPATCH_W,
-      );
+      const r = await probeMcpInitialize((body) => handleMcp(db, "ws_local", body, "http://x"), HOSTED_DISPATCH_W);
       expect(r.thrown).toBe(0);
       expect(r.ok).toBe(HOSTED_DISPATCH_W);
       expect(r.anomalies).toEqual([]);

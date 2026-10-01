@@ -12,13 +12,7 @@
  *   bun run bench:jit-soak
  */
 import type { StretchProgram } from "@eden/ir";
-import {
-  rankPrograms,
-  selectSurfacePrograms,
-  steerToolCalls,
-  surfaceMode,
-  type OpenAiToolCall,
-} from "@eden/wrap";
+import { rankPrograms, selectSurfacePrograms, steerToolCalls, surfaceMode, type OpenAiToolCall } from "@eden/wrap";
 import { linearProgram } from "./struggle-harness";
 import { Session } from "./session";
 import { DESK_IDS, blockSeed, createDesk } from "./worlds";
@@ -147,14 +141,7 @@ async function compileDesk(): Promise<StretchProgram | null> {
 
 function fixtureTurns(): SoakTurn[] {
   const turns: SoakTurn[] = [];
-  const ghProse = [
-    "Look at",
-    "Fetch",
-    "Summarize reviews on",
-    "Open",
-    "Read",
-    "Check",
-  ];
+  const ghProse = ["Look at", "Fetch", "Summarize reviews on", "Open", "Read", "Check"];
   for (const prose of ghProse) {
     for (const extra of ["and summarize the reviews", "for the author", "please"]) {
       turns.push({
@@ -287,9 +274,7 @@ export async function runJitSoak(opts: { compileCampaign?: boolean } = {}): Prom
   const pass = reasons.length === 0;
   const defaultMayFlip = pass;
   const jitDefault = pass ? "jit" : "all";
-  const why = pass
-    ? "soak green"
-    : "soak not green";
+  const why = pass ? "soak green" : "soak not green";
 
   const lines = [
     `precision=${precision.toFixed(3)} n=${n} hits=${hits} misses=${misses}`,

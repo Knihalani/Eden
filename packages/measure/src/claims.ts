@@ -167,7 +167,8 @@ export const PUBLIC_CLAIMS: PublicClaim[] = [
     id: "cert-bounds",
     kind: "limit",
     name: "certification bounds",
-    statement: "Soak go-live 11/14 rounds. The 3 misses are witness-efficiency, not quoted as certified savings. UNCERTIFIED is never a win.",
+    statement:
+      "Soak go-live 11/14 rounds. The 3 misses are witness-efficiency, not quoted as certified savings. UNCERTIFIED is never a win.",
     printed: "11/14 soak certified",
     file: "benchmarks/campaign/WITNESS-ECON.md",
     source: "campaign",

@@ -18,7 +18,10 @@ export type LiveReceipt = {
   events?: Array<Omit<TraceEvent, "args" | "ok"> & Partial<Pick<TraceEvent, "args" | "ok">>>;
 };
 
-function isCleanInDistribution(program: StretchProgram, receipt: LiveReceipt): receipt is LiveReceipt & {
+function isCleanInDistribution(
+  program: StretchProgram,
+  receipt: LiveReceipt,
+): receipt is LiveReceipt & {
   ok: true;
   input: Record<string, unknown>;
 } {

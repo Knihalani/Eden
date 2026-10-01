@@ -105,7 +105,13 @@ describe("receipt token-class payload", () => {
         description: "isle",
         inputSchema: { type: "object" },
         steps: [
-          { id: "i", kind: "island", input: { kind: "literal", value: 1 }, system: "x", outputSchema: { type: "object" } },
+          {
+            id: "i",
+            kind: "island",
+            input: { kind: "literal", value: 1 },
+            system: "x",
+            outputSchema: { type: "object" },
+          },
         ],
         returns: { kind: "from", step: "i", path: "" },
         contract: { witnesses: 0, minLlmReduction: 2, allowExact: true },

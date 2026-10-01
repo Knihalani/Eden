@@ -142,7 +142,11 @@ describe("request validation", () => {
     );
     expect(missing.status).toBe(400);
     const unknown = await siteFetch(
-      new Request("http://127.0.0.1/v1/play", { method: "POST", headers: AUTH, body: JSON.stringify({ name: "nope" }) }),
+      new Request("http://127.0.0.1/v1/play", {
+        method: "POST",
+        headers: AUTH,
+        body: JSON.stringify({ name: "nope" }),
+      }),
     );
     expect(unknown.status).toBe(404);
   });

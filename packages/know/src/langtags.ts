@@ -13,7 +13,10 @@ export function parseLangSubtags(text: string): Triple[] {
     if (!/Type:\s*language\b/i.test(chunk)) continue;
     if (/Scope:\s*(collection|macrolanguage|special)/i.test(chunk)) continue;
     const sub = chunk.match(/Subtag:\s*([a-z]{2})\b/i)?.[1]?.toLowerCase();
-    const desc = chunk.match(/Description:\s*([^\n]+)/i)?.[1]?.replace(/\s+/g, " ").trim();
+    const desc = chunk
+      .match(/Description:\s*([^\n]+)/i)?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim();
     if (!sub || !desc || desc.length < 2 || seen.has(sub)) continue;
     if (/private use|reserved/i.test(desc)) continue;
     if (!LANG_KEEP.has(sub)) continue;

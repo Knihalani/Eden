@@ -13,7 +13,12 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { respondToHook, type HookIn } from "../../packages/cli/src/hook";
-import { applyHookOutput, modelVisibleText, type AppliedHook, type HookResponse } from "../../packages/cli/src/transcript-diff";
+import {
+  applyHookOutput,
+  modelVisibleText,
+  type AppliedHook,
+  type HookResponse,
+} from "../../packages/cli/src/transcript-diff";
 import { nativeTextOf } from "../../packages/cli/src/shapes";
 import { appendLedgerRow } from "../../packages/cli/src/remainder";
 import type { LiveTool } from "../../packages/cli/src/transparent";
@@ -322,7 +327,9 @@ export async function runObliviousStretch(opts: StretchOpts): Promise<StretchRes
         tool_response: original,
       } as HookIn)) as HookResponse;
 
-      const applied = forceDrop ? applySilentDrop(call.tool, original, post) : applyHookOutput(call.tool, original, post);
+      const applied = forceDrop
+        ? applySilentDrop(call.tool, original, post)
+        : applyHookOutput(call.tool, original, post);
       if (applied.droppedRewrite) {
         droppedRewrites++;
         const hit = liveTools.find((t) => (t.sequence ?? [])[0] === call.tool) ?? liveTools[0];
@@ -341,10 +348,14 @@ export async function runObliviousStretch(opts: StretchOpts): Promise<StretchRes
       if (forceDrop && vis.includes(SENTINEL_MARK)) {
         violations.push(`${call.tool}: silent-drop failed — sentinel still in visible original`);
       }
-      if (!combined.includes(SENTINEL_MARK) && post?.hookSpecificOutput?.updatedToolOutput !== undefined && !applied.additionalContext) {
+      if (
+        !combined.includes(SENTINEL_MARK) &&
+        post?.hookSpecificOutput?.updatedToolOutput !== undefined &&
+        !applied.additionalContext
+      ) {
         violations.push(`${call.tool}: additionalContext missing after drop`);
       }
-        steps.push({
+      steps.push({
         tool: call.tool,
         denied: false,
         executed: true,
@@ -432,7 +443,11 @@ function relPct(ctrl: number, trt: number): number {
   return ((trt - ctrl) / ctrl) * 100;
 }
 
-export function writeSilentDropMd(out: ScenarioOut, unique?: { rawCents: number; edenCents: number; denies: number }, path = join(import.meta.dir, "SILENT-DROP.md")): void {
+export function writeSilentDropMd(
+  out: ScenarioOut,
+  unique?: { rawCents: number; edenCents: number; denies: number },
+  path = join(import.meta.dir, "SILENT-DROP.md"),
+): void {
   const cents = out.decisions.cents;
   const turns = out.decisions.turns;
   const wall = out.decisions.wall_ms;
@@ -502,7 +517,10 @@ async function main(): Promise<void> {
   console.log("\n[red-team] unique sequence — no live program, exact parity, zero denies");
   const uniqRaw = await runCountedStretch({ arm: "raw", calls: uniqueCalls(), liveTools: [] });
   const uniqEden = await runCountedStretch({ arm: "eden", calls: uniqueCalls(), liveTools: [], forceDrop: true });
-  const uniqOk = uniqRaw.stats.cents === uniqEden.stats.cents && uniqEden.denies === 0 && uniqRaw.stats.turns === uniqEden.stats.turns;
+  const uniqOk =
+    uniqRaw.stats.cents === uniqEden.stats.cents &&
+    uniqEden.denies === 0 &&
+    uniqRaw.stats.turns === uniqEden.stats.turns;
   console.log(
     `  raw cents=${uniqRaw.stats.cents} eden cents=${uniqEden.stats.cents} denies=${uniqEden.denies} ${uniqOk ? "OK" : "FAIL"}`,
   );

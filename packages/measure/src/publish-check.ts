@@ -62,14 +62,15 @@ export function scanPublicText(file: string, text: string): PublishFinding[] {
     ) {
       findings.push({ file, line: n, rule: "analogue-as-win", excerpt: l.trim() });
     }
-    if (
-      /oblivious-long/i.test(l) &&
-      /\bWIN\b/i.test(l) &&
-      !/not a win|limit|loss|retired/i.test(l)
-    ) {
+    if (/oblivious-long/i.test(l) && /\bWIN\b/i.test(l) && !/not a win|limit|loss|retired/i.test(l)) {
       findings.push({ file, line: n, rule: "oblivious-as-win", excerpt: l.trim() });
     }
-    if (/host-drop/i.test(l) && /live Claude Code/i.test(l) && /ack/i.test(l) && !/cannot|never|limit|replica-only/i.test(l)) {
+    if (
+      /host-drop/i.test(l) &&
+      /live Claude Code/i.test(l) &&
+      /ack/i.test(l) &&
+      !/cannot|never|limit|replica-only/i.test(l)
+    ) {
       findings.push({ file, line: n, rule: "replica-drop-as-live-ack", excerpt: l.trim() });
     }
     if (

@@ -35,12 +35,12 @@ const M14 = {
   happy: 0,
   forced: 1,
   min: 0.059,
-  max: 5.790,
+  max: 5.79,
 };
 /** Dated M6.4 snapshot from BASELINE.md (2026-09-17). Comparison target for M34. */
-const M64 = { p50: 0.048, p95: 0.133, bytes: 1009, jsonlN: 5, happy: 0, forced: 1, min: 0.030, max: 5.575 };
+const M64 = { p50: 0.048, p95: 0.133, bytes: 1009, jsonlN: 5, happy: 0, forced: 1, min: 0.03, max: 5.575 };
 /** Dated M34 snapshot from BASELINE.md (2026-09-22). 5-row fixture. Comparison target for M49.2. */
-const M34 = { p50: 0.590, p95: 1.016, jsonlN: 5 };
+const M34 = { p50: 0.59, p95: 1.016, jsonlN: 5 };
 /** Honest store size. Matches `EDEN_MEMORY_STORE_CAP` default. Not raised. */
 const STORE_2K = 2000;
 const N_2K = 80;
@@ -56,7 +56,8 @@ const QUERY = "What timezone is Kai in?";
 function pct(sorted: number[], p: number): number {
   if (!sorted.length) return 0;
   const i = (p / 100) * (sorted.length - 1);
-  const lo = Math.floor(i), hi = Math.ceil(i);
+  const lo = Math.floor(i),
+    hi = Math.ceil(i);
   if (lo === hi) return sorted[lo]!;
   return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (i - lo);
 }
@@ -78,7 +79,10 @@ function vsLatency(cur: number, base: number): "WIN" | "parity" | "slower" {
   return "slower";
 }
 
-function overallLatency(p50v: "WIN" | "parity" | "slower", p95v: "WIN" | "parity" | "slower"): "WIN" | "parity" | "slower" {
+function overallLatency(
+  p50v: "WIN" | "parity" | "slower",
+  p95v: "WIN" | "parity" | "slower",
+): "WIN" | "parity" | "slower" {
   if (p50v === "slower" || p95v === "slower") return "slower";
   if (p50v === "WIN" || p95v === "WIN") return "WIN";
   return "parity";
@@ -95,7 +99,10 @@ function deltaInt(n: number): string {
   return `${n > 0 ? "+" : ""}${n}`;
 }
 
-function diskSnapshot(dir: string, jsonl: string): {
+function diskSnapshot(
+  dir: string,
+  jsonl: string,
+): {
   jsonlBytes: number;
   jsonlN: number;
   wals: { name: string; bytes: number }[];
@@ -169,11 +176,12 @@ try {
   const queryStored = post.query || pre.query;
   const wals = post.wals;
   const walBytes = post.walBytes;
-  const persistScope = post.walBytes > 0
-    ? `JSONL+WAL after close (${post.wals.map((w) => `${w.name}=${w.bytes}B`).join(", ")}; jsonl=${post.jsonlBytes}B; pre-close wal=${pre.walBytes}B/${pre.walN} lines)`
-    : pre.walBytes > 0
-      ? `JSONL-only after close() compact (WAL unlinked). Pre-close ${pre.wals.map((w) => w.name).join(",") || "wal"}=${pre.walBytes}B / ${pre.walN} lines; jsonl was ${pre.jsonlBytes}B / n=${pre.jsonlN}. Table bytes are post-close JSONL ${post.jsonlBytes}B.`
-      : "JSONL-only (no .wal beside memories.jsonl before or after close)";
+  const persistScope =
+    post.walBytes > 0
+      ? `JSONL+WAL after close (${post.wals.map((w) => `${w.name}=${w.bytes}B`).join(", ")}; jsonl=${post.jsonlBytes}B; pre-close wal=${pre.walBytes}B/${pre.walN} lines)`
+      : pre.walBytes > 0
+        ? `JSONL-only after close() compact (WAL unlinked). Pre-close ${pre.wals.map((w) => w.name).join(",") || "wal"}=${pre.walBytes}B / ${pre.walN} lines; jsonl was ${pre.jsonlBytes}B / n=${pre.jsonlN}. Table bytes are post-close JSONL ${post.jsonlBytes}B.`
+        : "JSONL-only (no .wal beside memories.jsonl before or after close)";
   const bytes = post.jsonlBytes + post.walBytes;
 
   const probeDir = mkdtempSync(join(tmpdir(), "eden-m34-probe-"));
@@ -191,7 +199,7 @@ try {
     times.sort((a, b) => a - b);
     const p50 = pct(times, 50);
     const p95 = pct(times, 95);
-    const bunVer = typeof Bun !== "undefined" ? Bun.version : process.versions.bun ?? "?";
+    const bunVer = typeof Bun !== "undefined" ? Bun.version : (process.versions.bun ?? "?");
     const p50v = vsLatency(p50, M64.p50);
     const p95v = vsLatency(p95, M64.p95);
     const latency = overallLatency(p50v, p95v);
@@ -233,12 +241,22 @@ try {
     console.log(`jsonl bytes: ${jsonlBytes}`);
     console.log(`wal bytes: ${walBytes}`);
     console.log(`query turn stored: ${queryStored ? "yes" : "NO"} (JSONL n=${jsonlN}; M6.4 store-all n=${M64.jsonlN})`);
-    console.log(`packet budget: M34.3 src/index.ts PACKET_CHAT_K_MIN=${PACKET_CHAT_K_MIN} PACKET_CHAT_K_MAX=${PACKET_CHAT_K_MAX} PACKET_CHAT_K_DEFAULT=${PACKET_CHAT_K_DEFAULT} (EDEN_MEMORY_CAP unset → ${PACKET_CHAT_K_DEFAULT}). PROCEDURE_TOKEN_CAP=${PROCEDURE_TOKEN_CAP}. EXPERIENCE_SLICE_TOKEN_CAP=${EXPERIENCE_SLICE_TOKEN_CAP} (re-export of src/experience-retrieve.ts).`);
-    console.log(`pre-close: jsonl ${pre.jsonlBytes}B n=${pre.jsonlN}; wal ${pre.walBytes}B n=${pre.walN}; query=${pre.query ? "yes" : "NO"}`);
-    console.log(`post-close: jsonl ${post.jsonlBytes}B n=${post.jsonlN}; wal ${post.walBytes}B n=${post.walN}; query=${post.query ? "yes" : "NO"}`);
-    console.log(`m34.1-3 at measure: WAL suffix ${MEMORY_WAL_SUFFIX}, compact at ${MEMORY_WAL_COMPACT_LINES} lines or close(); M34.3 packet constants present; retrieve score loop is relevant() in src/index.ts`);
+    console.log(
+      `packet budget: M34.3 src/index.ts PACKET_CHAT_K_MIN=${PACKET_CHAT_K_MIN} PACKET_CHAT_K_MAX=${PACKET_CHAT_K_MAX} PACKET_CHAT_K_DEFAULT=${PACKET_CHAT_K_DEFAULT} (EDEN_MEMORY_CAP unset → ${PACKET_CHAT_K_DEFAULT}). PROCEDURE_TOKEN_CAP=${PROCEDURE_TOKEN_CAP}. EXPERIENCE_SLICE_TOKEN_CAP=${EXPERIENCE_SLICE_TOKEN_CAP} (re-export of src/experience-retrieve.ts).`,
+    );
+    console.log(
+      `pre-close: jsonl ${pre.jsonlBytes}B n=${pre.jsonlN}; wal ${pre.walBytes}B n=${pre.walN}; query=${pre.query ? "yes" : "NO"}`,
+    );
+    console.log(
+      `post-close: jsonl ${post.jsonlBytes}B n=${post.jsonlN}; wal ${post.walBytes}B n=${post.walN}; query=${post.query ? "yes" : "NO"}`,
+    );
+    console.log(
+      `m34.1-3 at measure: WAL suffix ${MEMORY_WAL_SUFFIX}, compact at ${MEMORY_WAL_COMPACT_LINES} lines or close(); M34.3 packet constants present; retrieve score loop is relevant() in src/index.ts`,
+    );
     console.log(`fail-open: catch → pass-through (forced probe ${forced === 1 ? "ok" : "FAIL"})`);
-    console.log(`snapshots held: M1.4 p50 ${ms(M14.p50)} / p95 ${ms(M14.p95)}; M6.4 p50 ${ms(M64.p50)} / p95 ${ms(M64.p95)} (not overwritten by this run)`);
+    console.log(
+      `snapshots held: M1.4 p50 ${ms(M14.p50)} / p95 ${ms(M14.p95)}; M6.4 p50 ${ms(M64.p50)} / p95 ${ms(M64.p95)} (not overwritten by this run)`,
+    );
     console.log();
     console.log(value);
     console.log();
@@ -294,7 +312,7 @@ function measure2kStore(): void {
     times.sort((a, b) => a - b);
     const p50 = pct(times, 50);
     const p95 = pct(times, 95);
-    const bunVer = typeof Bun !== "undefined" ? Bun.version : process.versions.bun ?? "?";
+    const bunVer = typeof Bun !== "undefined" ? Bun.version : (process.versions.bun ?? "?");
     const p50v = vsLatency(p50, M34.p50);
     const p95v = vsLatency(p95, M34.p95);
     const latency = overallLatency(p50v, p95v);
@@ -308,27 +326,33 @@ function measure2kStore(): void {
     console.log(`script: bun benchmarks/memoryagentbench/baseline-measure.ts`);
     console.log(`N: ${N_2K} injects after the store exists (seed wall ${ms(seedMs)} ms is not in p50/p95)`);
     console.log(`k: default (EDEN_MEMORY_CAP unset → 6; chat band 6–10)`);
-    console.log(`store: ${STORE_2K} distinct facts via openMemory.observe; EDEN_MEMORY_STORE_CAP unset (default 2000); EDEN_KNOW=0`);
+    console.log(
+      `store: ${STORE_2K} distinct facts via openMemory.observe; EDEN_MEMORY_STORE_CAP unset (default 2000); EDEN_KNOW=0`,
+    );
     console.log(`cue: ${CUE_2K}`);
     console.log(`seeded JSONL n: ${seeded.jsonlN} (${seeded.jsonlBytes} B)`);
     console.log(`post-inject JSONL n: ${post.jsonlN} (${post.jsonlBytes} B)`);
     console.log(`swallows during timed injects: ${happySwallows}`);
     console.log(`fail-open: catch → pass-through (5-row forced probe above; 2k happy swallows ${happySwallows})`);
-    console.log(`compare: dated M34 5-row p50 ${ms(M34.p50)} / p95 ${ms(M34.p95)} (JSONL n=${M34.jsonlN}). This is not that fixture.`);
+    console.log(
+      `compare: dated M34 5-row p50 ${ms(M34.p50)} / p95 ${ms(M34.p95)} (JSONL n=${M34.jsonlN}). This is not that fixture.`,
+    );
     console.log(`latency p50 vs M34 5-row: ${p50v}`);
     console.log(`latency p95 vs M34 5-row: ${p95v}`);
     console.log(`latency vs M34 5-row p50/p95: ${latency}`);
     console.log();
-    console.log([
-      `| metric | M34 (5-row) | M49.2 (2k-store) | delta |`,
-      `|---|---|---|---|`,
-      `| inject p50 (ms) | ${ms(M34.p50)} | ${ms(p50)} | ${deltaMs(p50 - M34.p50)} |`,
-      `| inject p95 (ms) | ${ms(M34.p95)} | ${ms(p95)} | ${deltaMs(p95 - M34.p95)} |`,
-      `| JSONL n (seeded) | ${M34.jsonlN} | ${seeded.jsonlN} | ${deltaInt(seeded.jsonlN - M34.jsonlN)} |`,
-      `| JSONL n (after timed injects) | ${M34.jsonlN} | ${post.jsonlN} | ${deltaInt(post.jsonlN - M34.jsonlN)} |`,
-      `| swallows (timed injects) | 0 | ${happySwallows} | ${deltaInt(happySwallows)} |`,
-      `| min / max (ms) | 0.498 / 12.826 | ${ms(times[0]!)} / ${ms(times[times.length - 1]!)} | ${deltaMs(times[0]! - 0.498)} / ${deltaMs(times[times.length - 1]! - 12.826)} |`,
-    ].join("\n"));
+    console.log(
+      [
+        `| metric | M34 (5-row) | M49.2 (2k-store) | delta |`,
+        `|---|---|---|---|`,
+        `| inject p50 (ms) | ${ms(M34.p50)} | ${ms(p50)} | ${deltaMs(p50 - M34.p50)} |`,
+        `| inject p95 (ms) | ${ms(M34.p95)} | ${ms(p95)} | ${deltaMs(p95 - M34.p95)} |`,
+        `| JSONL n (seeded) | ${M34.jsonlN} | ${seeded.jsonlN} | ${deltaInt(seeded.jsonlN - M34.jsonlN)} |`,
+        `| JSONL n (after timed injects) | ${M34.jsonlN} | ${post.jsonlN} | ${deltaInt(post.jsonlN - M34.jsonlN)} |`,
+        `| swallows (timed injects) | 0 | ${happySwallows} | ${deltaInt(happySwallows)} |`,
+        `| min / max (ms) | 0.498 / 12.826 | ${ms(times[0]!)} / ${ms(times[times.length - 1]!)} | ${deltaMs(times[0]! - 0.498)} / ${deltaMs(times[times.length - 1]! - 12.826)} |`,
+      ].join("\n"),
+    );
     if (seeded.jsonlN < 1900) {
       console.error(`M49.2 FAIL: seeded JSONL n=${seeded.jsonlN}, want ~${STORE_2K}`);
       process.exitCode = 1;

@@ -35,7 +35,10 @@ export function shouldSkipResultsGate(name: string, src: string): boolean {
   if (!lock) return false;
   const discloses =
     /protocol/i.test(src) &&
-    (/\bk\s*=\s*10\b/.test(src) || /official lengths/i.test(src) || /534k/.test(src) || /EDEN_MEMORY\s*=\s*0/.test(src));
+    (/\bk\s*=\s*10\b/.test(src) ||
+      /official lengths/i.test(src) ||
+      /534k/.test(src) ||
+      /EDEN_MEMORY\s*=\s*0/.test(src));
   return discloses;
 }
 
@@ -46,7 +49,10 @@ function withoutControlDenials(src: string): string {
     .replace(/\bno\s+EDEN_MEMORY\s*=\s*["']?0\b/gi, " ")
     .replace(/\bnot\s+(?:an?\s+)?EDEN_MEMORY\s*=\s*["']?0\b/gi, " ")
     .replace(/\b(?:never|without|absent|missing)\s+(?:an?\s+)?EDEN_MEMORY\s*=\s*["']?0\b/gi, " ")
-    .replace(/\b(?:did|does|do|has|have|had)\s+not\s+(?:run|include|have|use|name|record)\b[^.\n]{0,24}?\bEDEN_MEMORY\s*=\s*["']?0\b/gi, " ")
+    .replace(
+      /\b(?:did|does|do|has|have|had)\s+not\s+(?:run|include|have|use|name|record)\b[^.\n]{0,24}?\bEDEN_MEMORY\s*=\s*["']?0\b/gi,
+      " ",
+    )
     .replace(/\bwithout\s+(?:an?\s+)?(?:EDEN_MEMORY\s*=\s*["']?0|off(?:\s+arm)?|no-memory(?:\s+control)?)\b/gi, " ")
     .replace(/\bno\s+off(?:\s+arm)?\b/gi, " ")
     .replace(/\b(?:absent|missing)\s+(?:an?\s+)?off(?:\s+arm)?\b/gi, " ")
@@ -193,8 +199,10 @@ export function classRowIssues(src: string): string[] {
   const rows = classRows(src);
   if (!rows.length) issues.push("counted table missing (header must include class and control)");
   for (const row of rows) {
-    if (!CLASSES.has(row.klass)) issues.push(`line ${row.line}: class ${row.klass || "∅"} is not helped|no-lift|harmed`);
-    if (!namesNoMemoryControl(row.control)) issues.push(`line ${row.line}: ${row.caseName || "row"} has no no-memory control`);
+    if (!CLASSES.has(row.klass))
+      issues.push(`line ${row.line}: class ${row.klass || "∅"} is not helped|no-lift|harmed`);
+    if (!namesNoMemoryControl(row.control))
+      issues.push(`line ${row.line}: ${row.caseName || "row"} has no no-memory control`);
     if (row.klass === "helped" && /memorable|mem0|locomo|454\s*\/\s*454/i.test(row.caseName)) {
       issues.push(`line ${row.line}: ${row.caseName} cannot be helped`);
     }
@@ -261,22 +269,27 @@ describe("M35.2 savings control gate", () => {
     expect(hasBannedProductColumn("No BrainMemory column. No cortex-off column.\n")).toBe(false);
   });
 
-  test.skipIf(!HAS_SMOKE_RESULTS)("scanner sees product RESULTS and skips the autopsy plus the M15 evidence lock", () => {
-    const names = productResultsFiles().map(rel).sort();
-    expect(names).toContain("benchmarks/memory-holdout/RESULTS.md");
-    expect(names).toContain("benchmarks/memory-holdout/TOOLS-RESULTS.md");
-    expect(names).toContain("benchmarks/memoryagentbench/TABLE3-RESULTS.md");
-    expect(names).toContain("benchmarks/lme-v2/RESULTS.md");
-    expect(names).toContain("benchmarks/lme-v2/RESULTS.smoke.md");
-    expect(names).toContain("benchmarks/terminal-bench/RESULTS.md");
-    expect(names.some((n) => n.endsWith("SOTA-GAP-REPORT.md"))).toBe(false);
-    expect(names.some((n) => n.endsWith("M15-EVIDENCE.md"))).toBe(false);
-    const autopsy = readFileSync(join(BENCH, "memoryagentbench/SOTA-GAP-REPORT.md"), "utf8");
-    expect(shouldSkipResultsGate("SOTA-GAP-REPORT.md", autopsy)).toBe(true);
-    const lock = readFileSync(join(BENCH, "memoryagentbench/M15-EVIDENCE.md"), "utf8");
-    expect(shouldSkipResultsGate("M15-EVIDENCE.md", lock)).toBe(true);
-    expect(shouldSkipResultsGate("RESULTS.md", readFileSync(join(import.meta.dir, "RESULTS.md"), "utf8"))).toBe(false);
-  });
+  test.skipIf(!HAS_SMOKE_RESULTS)(
+    "scanner sees product RESULTS and skips the autopsy plus the M15 evidence lock",
+    () => {
+      const names = productResultsFiles().map(rel).sort();
+      expect(names).toContain("benchmarks/memory-holdout/RESULTS.md");
+      expect(names).toContain("benchmarks/memory-holdout/TOOLS-RESULTS.md");
+      expect(names).toContain("benchmarks/memoryagentbench/TABLE3-RESULTS.md");
+      expect(names).toContain("benchmarks/lme-v2/RESULTS.md");
+      expect(names).toContain("benchmarks/lme-v2/RESULTS.smoke.md");
+      expect(names).toContain("benchmarks/terminal-bench/RESULTS.md");
+      expect(names.some((n) => n.endsWith("SOTA-GAP-REPORT.md"))).toBe(false);
+      expect(names.some((n) => n.endsWith("M15-EVIDENCE.md"))).toBe(false);
+      const autopsy = readFileSync(join(BENCH, "memoryagentbench/SOTA-GAP-REPORT.md"), "utf8");
+      expect(shouldSkipResultsGate("SOTA-GAP-REPORT.md", autopsy)).toBe(true);
+      const lock = readFileSync(join(BENCH, "memoryagentbench/M15-EVIDENCE.md"), "utf8");
+      expect(shouldSkipResultsGate("M15-EVIDENCE.md", lock)).toBe(true);
+      expect(shouldSkipResultsGate("RESULTS.md", readFileSync(join(import.meta.dir, "RESULTS.md"), "utf8"))).toBe(
+        false,
+      );
+    },
+  );
 
   test("SAVINGS.md is dated, names EDEN_MEMORY=0, and totals match the counted table", () => {
     expect(existsSync(SAVINGS)).toBe(true);

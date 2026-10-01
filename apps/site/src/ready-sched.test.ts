@@ -60,7 +60,13 @@ describe("EDEN_SCHED=ready", () => {
       step({ id: "i2", url: "https://x.test/forge/3/reviews?ref=1" }),
       step({ id: "i3", url: "https://x.test/forge/3/actions/runs?run_id=1" }),
       // Write fed by root; a read depends only on the write.
-      step({ id: "w0", method: "POST", commute: false, url: "https://x.test/shop/1/orders", bind: { b: "{{root.state}}" } }),
+      step({
+        id: "w0",
+        method: "POST",
+        commute: false,
+        url: "https://x.test/shop/1/orders",
+        bind: { b: "{{root.state}}" },
+      }),
       step({ id: "dep", url: "https://x.test/forge/3/status?pr=1" }),
     ]);
     const receipt = await playTool(db, tool, {});

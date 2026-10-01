@@ -114,7 +114,10 @@ function asRec(v: unknown): Rec {
 }
 
 function injectEmpty(ctx: string): boolean {
-  const t = ctx.replace(/Eden Memory:\s*/gi, "").replace(/^[-•]\s*/gm, "").trim();
+  const t = ctx
+    .replace(/Eden Memory:\s*/gi, "")
+    .replace(/^[-•]\s*/gm, "")
+    .trim();
   return !t;
 }
 
@@ -128,7 +131,12 @@ export function holdoutFixtureIssues(fix: HoldoutFixture): string[] {
   if (fix.api_under_test !== "hook-inject") issues.push(`api_under_test ${fix.api_under_test} !== hook-inject`);
   if (fix.k !== "default") issues.push(`k ${fix.k} !== default`);
   if (fix.k_default != null && fix.k_default === 40) issues.push("k_default must not be 40");
-  if (!Array.isArray(fix.product) || !fix.product.includes("respondToHook") || !fix.product.includes("memoryHookResponse") || !fix.product.includes("openMemory")) {
+  if (
+    !Array.isArray(fix.product) ||
+    !fix.product.includes("respondToHook") ||
+    !fix.product.includes("memoryHookResponse") ||
+    !fix.product.includes("openMemory")
+  ) {
     issues.push("product must list respondToHook, memoryHookResponse, openMemory");
   }
   if (fix.expect !== "PASS" && fix.expect !== "FAIL") issues.push(`expect ${fix.expect} not PASS|FAIL`);
@@ -136,11 +144,14 @@ export function holdoutFixtureIssues(fix: HoldoutFixture): string[] {
   for (const id of REQUIRED_CASE_IDS) if (!ids.has(id)) issues.push(`missing case ${id}`);
   for (const c of fix.cases ?? []) {
     if (!c.id) issues.push("case missing id");
-    if (c.expect && c.expect !== "PASS" && c.expect !== "FAIL") issues.push(`${c.id}: expect ${c.expect} not PASS|FAIL`);
+    if (c.expect && c.expect !== "PASS" && c.expect !== "FAIL")
+      issues.push(`${c.id}: expect ${c.expect} not PASS|FAIL`);
     if (!Array.isArray(c.gold_needles) || !c.gold_needles.length) issues.push(`${c.id}: gold_needles empty`);
     if (!c.cue || c.cue.hook_event_name !== "UserPromptSubmit") issues.push(`${c.id}: cue must be UserPromptSubmit`);
     if (!Array.isArray(c.observe) || !c.observe.length) issues.push(`${c.id}: observe empty`);
-    const okEv = c.observe.every((e) => e.hook_event_name === "UserPromptSubmit" || e.hook_event_name === "PostToolUse");
+    const okEv = c.observe.every(
+      (e) => e.hook_event_name === "UserPromptSubmit" || e.hook_event_name === "PostToolUse",
+    );
     if (!okEv) issues.push(`${c.id}: observe events must be UserPromptSubmit or PostToolUse`);
     const sid = c.session_id || c.cue.session_id;
     if (!sid) issues.push(`${c.id}: session_id required`);
@@ -185,7 +196,8 @@ function scoreRow(c: HoldoutCase, ctx: string, storedHits: string[], afterObserv
     else if (staleHit.length) notes.push(`stale still in packet: ${staleHit.join("; ")}`);
     else notes.push("stale Node 16 absent from inject");
   }
-  if (c.keep_needles?.length) notes.push(keepHit.length ? `CI kept (${keepHit.join("; ")})` : "CI not in inject (not required)");
+  if (c.keep_needles?.length)
+    notes.push(keepHit.length ? `CI kept (${keepHit.join("; ")})` : "CI not in inject (not required)");
   if (empty) notes.push("inject empty");
 
   return {
@@ -223,7 +235,13 @@ export async function runHoldoutCase(c: HoldoutCase): Promise<HoldoutRow> {
       const afterObserve = jsonlBody(memDir, session);
       const storedAfter = hitsIn(afterObserve, c.gold_needles);
       const memAfter = openMemory({ dir: memDir, session });
-      const fromObject = hitsIn(memAfter.memories().map((m) => m.text).join("\n"), c.gold_needles);
+      const fromObject = hitsIn(
+        memAfter
+          .memories()
+          .map((m) => m.text)
+          .join("\n"),
+        c.gold_needles,
+      );
       const storedHits = [...new Set([...storedAfter.hit, ...fromObject.hit])];
       const cueOut = await respondToHook(c.cue);
       const ctx = additionalContextOf(asRec(cueOut));
@@ -308,20 +326,29 @@ export function formatHoldoutResults(run: CombinedRun): string {
   lines.push("");
   lines.push("## M2.4 tool-trace (re-run)");
   lines.push("");
-  lines.push(`**Tools overall:** ${run.tools.overall}. PostToolUse stored: ${run.tools.post_tool_stored ? "yes" : "no"}.`);
+  lines.push(
+    `**Tools overall:** ${run.tools.overall}. PostToolUse stored: ${run.tools.post_tool_stored ? "yes" : "no"}.`,
+  );
   lines.push("");
   lines.push("| case | verdict | gate1 | stored after observe | JSONL n after observe | inject hits | inject miss |");
   lines.push("|---|---|---|---|---|---|---|");
   for (const r of run.tools.rows) {
     const hits = r.inject_hits.length ? r.inject_hits.join("; ") : "—";
     const miss = r.inject_miss.length ? r.inject_miss.join("; ") : "—";
-    lines.push(`| ${r.id} | ${r.verdict} | ${toolGate1(r)} | ${r.post_tool_stored ? "yes" : "no"} | ${r.jsonl_n_after_observe} | ${mdCell(hits)} | ${mdCell(miss)} |`);
+    lines.push(
+      `| ${r.id} | ${r.verdict} | ${toolGate1(r)} | ${r.post_tool_stored ? "yes" : "no"} | ${r.jsonl_n_after_observe} | ${mdCell(hits)} | ${mdCell(miss)} |`,
+    );
   }
   lines.push("");
   if (run.overall === "PASS") {
-    lines.push("True verdict on this tree: every Gate 1 gold needle and every M2.4 gold needle was in inject/additionalContext. Pre-registered expect was FAIL; this is not a forced FAIL. Ranker not tuned.");
+    lines.push(
+      "True verdict on this tree: every Gate 1 gold needle and every M2.4 gold needle was in inject/additionalContext. Pre-registered expect was FAIL; this is not a forced FAIL. Ranker not tuned.",
+    );
   } else {
-    const losses = [...run.rows.filter((r) => r.verdict === "FAIL").map((r) => r.id), ...run.tools.rows.filter((r) => r.verdict === "FAIL").map((r) => r.id)];
+    const losses = [
+      ...run.rows.filter((r) => r.verdict === "FAIL").map((r) => r.id),
+      ...run.tools.rows.filter((r) => r.verdict === "FAIL").map((r) => r.id),
+    ];
     lines.push(
       `Honest overall FAIL. Missed: ${losses.join(", ") || "—"}. Losses feed M10, not a silent ranker retune from this file.`,
     );
@@ -334,7 +361,9 @@ export function formatHoldoutResults(run: CombinedRun): string {
   lines.push("bun benchmarks/memory-holdout/run-tools.ts");
   lines.push("```");
   lines.push("");
-  lines.push("Paste this table into this file. Score additionalContext only. Do not add a BrainMemory column. Do not set k=40. Do not retune `src/index.ts` ranking.");
+  lines.push(
+    "Paste this table into this file. Score additionalContext only. Do not add a BrainMemory column. Do not set k=40. Do not retune `src/index.ts` ranking.",
+  );
   lines.push("");
   return lines.join("\n");
 }
@@ -387,5 +416,7 @@ if (import.meta.main) {
     ...run.rows.map((r) => `${r.id}\t${r.verdict}\t${r.gate1}`),
     ...run.tools.rows.map((r) => `${r.id}\t${r.verdict}\t${toolGate1(r)}`),
   ].join("\n");
-  process.stdout.write(`\n${table}\n overall=${run.overall} gate1=WIN ${run.gate1_counts.WIN} / LOSS ${run.gate1_counts.LOSS} / FAIL ${run.gate1_counts.FAIL}\n`);
+  process.stdout.write(
+    `\n${table}\n overall=${run.overall} gate1=WIN ${run.gate1_counts.WIN} / LOSS ${run.gate1_counts.LOSS} / FAIL ${run.gate1_counts.FAIL}\n`,
+  );
 }

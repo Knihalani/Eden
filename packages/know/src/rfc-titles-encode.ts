@@ -133,7 +133,16 @@ for (const r of rows) {
 }
 if (bad) throw new Error(`reconstruct ${bad}`);
 
-const parts = [u16le(packVocab.length), u16le(vocab.length), u16le(max), u16le(bits.length), bits, pfc(vocab), Uint8Array.from(counts), Uint8Array.from(stream)];
+const parts = [
+  u16le(packVocab.length),
+  u16le(vocab.length),
+  u16le(max),
+  u16le(bits.length),
+  bits,
+  pfc(vocab),
+  Uint8Array.from(counts),
+  Uint8Array.from(stream),
+];
 let innerLen = 0;
 for (const p of parts) innerLen += p.length;
 const inner = new Uint8Array(innerLen);

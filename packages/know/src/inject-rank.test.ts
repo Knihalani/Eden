@@ -10,24 +10,114 @@ import { needleRank, needlesFromText, rankNeedles, techniqueNeedleFromText, tech
 
 const FACTS = [
   { s: "RFC 35", p: "is", o: "Network Meeting", e: "", url: "https://www.rfc-editor.org/rfc/rfc35.html" },
-  { s: "RFC 3986", p: "is", o: "Uniform Resource Identifier (URI): Generic Syntax", e: "", url: "https://www.rfc-editor.org/rfc/rfc3986.html" },
+  {
+    s: "RFC 3986",
+    p: "is",
+    o: "Uniform Resource Identifier (URI): Generic Syntax",
+    e: "",
+    url: "https://www.rfc-editor.org/rfc/rfc3986.html",
+  },
   { s: "RFC 9110", p: "is", o: "HTTP Semantics", e: "", url: "https://www.rfc-editor.org/rfc/rfc9110.html" },
-  { s: "RFC 4627", p: "is", o: "The application/json Media Type for JavaScript Object Notation (JSON)", e: "RFC 4627: The application&#x2F;json Media Type for JavaScript Object Notation (JSON)", url: "https://www.rfc-editor.org/rfc/rfc4627.html" },
-  { s: "IANA media application/json", p: "is", o: "JSON", e: "", url: "https://www.iana.org/assignments/media-types/media-types.xml" },
-  { s: "IANA method GET", p: "is", o: "safe, idempotent, RFC 9110", e: "", url: "https://www.iana.org/assignments/http-methods/http-methods.xml" },
-  { s: "IANA http 404", p: "is", o: "Not Found", e: "", url: "https://www.iana.org/assignments/http-status-codes/http-status-codes.xml" },
-  { s: "IANA protocol 6", p: "is", o: "TCP", e: "", url: "https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml" },
-  { s: "IANA header Accept", p: "is", o: "Media types", e: "", url: "https://www.iana.org/assignments/http-fields/http-fields.xml" },
-  { s: "IANA header Content-Type", p: "is", o: "Media type of the payload", e: "", url: "https://www.iana.org/assignments/http-fields/http-fields.xml" },
-  { s: "IANA charset utf-8", p: "is", o: "UTF-8", e: "", url: "https://www.iana.org/assignments/character-sets/character-sets.xml" },
-  { s: "IANA scheme https", p: "is", o: "Hypertext Transfer Protocol Secure", e: "", url: "https://www.iana.org/assignments/uri-schemes/uri-schemes.xml" },
-  { s: "IANA dns AAAA", p: "is", o: "IP6 Address", e: "", url: "https://www.iana.org/assignments/dns-parameters/dns-parameters.xml" },
-  { s: "United Kingdom", p: "capital", o: "London", e: "capital of United Kingdom is London", url: "https://en.wikipedia.org/wiki/United_Kingdom" },
-  { s: "Kenya", p: "capital", o: "Nairobi", e: "capital of Kenya is Nairobi", url: "https://en.wikipedia.org/wiki/Kenya" },
-  { s: "IANA well-known change-password", p: "is", o: "Change Password", e: "", url: "https://www.iana.org/assignments/well-known-uris/well-known-uris.xml" },
+  {
+    s: "RFC 4627",
+    p: "is",
+    o: "The application/json Media Type for JavaScript Object Notation (JSON)",
+    e: "RFC 4627: The application&#x2F;json Media Type for JavaScript Object Notation (JSON)",
+    url: "https://www.rfc-editor.org/rfc/rfc4627.html",
+  },
+  {
+    s: "IANA media application/json",
+    p: "is",
+    o: "JSON",
+    e: "",
+    url: "https://www.iana.org/assignments/media-types/media-types.xml",
+  },
+  {
+    s: "IANA method GET",
+    p: "is",
+    o: "safe, idempotent, RFC 9110",
+    e: "",
+    url: "https://www.iana.org/assignments/http-methods/http-methods.xml",
+  },
+  {
+    s: "IANA http 404",
+    p: "is",
+    o: "Not Found",
+    e: "",
+    url: "https://www.iana.org/assignments/http-status-codes/http-status-codes.xml",
+  },
+  {
+    s: "IANA protocol 6",
+    p: "is",
+    o: "TCP",
+    e: "",
+    url: "https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xml",
+  },
+  {
+    s: "IANA header Accept",
+    p: "is",
+    o: "Media types",
+    e: "",
+    url: "https://www.iana.org/assignments/http-fields/http-fields.xml",
+  },
+  {
+    s: "IANA header Content-Type",
+    p: "is",
+    o: "Media type of the payload",
+    e: "",
+    url: "https://www.iana.org/assignments/http-fields/http-fields.xml",
+  },
+  {
+    s: "IANA charset utf-8",
+    p: "is",
+    o: "UTF-8",
+    e: "",
+    url: "https://www.iana.org/assignments/character-sets/character-sets.xml",
+  },
+  {
+    s: "IANA scheme https",
+    p: "is",
+    o: "Hypertext Transfer Protocol Secure",
+    e: "",
+    url: "https://www.iana.org/assignments/uri-schemes/uri-schemes.xml",
+  },
+  {
+    s: "IANA dns AAAA",
+    p: "is",
+    o: "IP6 Address",
+    e: "",
+    url: "https://www.iana.org/assignments/dns-parameters/dns-parameters.xml",
+  },
+  {
+    s: "United Kingdom",
+    p: "capital",
+    o: "London",
+    e: "capital of United Kingdom is London",
+    url: "https://en.wikipedia.org/wiki/United_Kingdom",
+  },
+  {
+    s: "Kenya",
+    p: "capital",
+    o: "Nairobi",
+    e: "capital of Kenya is Nairobi",
+    url: "https://en.wikipedia.org/wiki/Kenya",
+  },
+  {
+    s: "IANA well-known change-password",
+    p: "is",
+    o: "Change Password",
+    e: "",
+    url: "https://www.iana.org/assignments/well-known-uris/well-known-uris.xml",
+  },
   { s: "SPDX MIT", p: "is", o: "MIT License", e: "", url: "https://spdx.org/licenses/licenses.json" },
   { s: "SPDX Apache-2.0", p: "is", o: "Apache License 2.0", e: "", url: "https://spdx.org/licenses/licenses.json" },
-  { s: "SPDX CC-BY-4.0", p: "is", o: "Creative Commons Attribution 4.0 International", e: "", url: "https://spdx.org/licenses/licenses.json" },
+  {
+    s: "SPDX CC-BY-4.0",
+    p: "is",
+    o: "Creative Commons Attribution 4.0 International",
+    e: "",
+    url: "https://spdx.org/licenses/licenses.json",
+  },
   { s: "W3C web-share", p: "is", o: "Web Share API", e: "", url: "https://www.w3.org/TR/web-share/" },
   { s: "WHATWG html", p: "is", o: "HTML", e: "", url: "https://html.spec.whatwg.org/multipage/" },
   {
@@ -108,7 +198,7 @@ describe("needle rank", () => {
   test("names the packed row: charset param, SPDX header, URI scheme, DNS, well-known, possessive", () => {
     expect(needlesFromText("charset=utf-8")).toContain("UTF-8");
     expect(needlesFromText("charset=utf8")).toContain("UTF-8");
-    expect(needlesFromText("charset=\"UTF-8\"")).toContain("UTF-8");
+    expect(needlesFromText('charset="UTF-8"')).toContain("UTF-8");
     expect(needlesFromText("SPDX-License-Identifier: MIT")).toContain("MIT");
     expect(needlesFromText("SPDX-License-Identifier: MIT")).not.toContain("SPDX");
     expect(needlesFromText("SPDX-License-Identifier: Apache-2.0")).toContain("Apache-2.0");
@@ -183,15 +273,15 @@ describe("cards", () => {
     expect(fact(formatCard("capital of Kenya", [{ s: "Kenya", p: "capital", o: "Nairobi", e: "" }]))).toBe(
       "The capital of Kenya is Nairobi.",
     );
-    expect(
-      fact(formatCard("English", [{ s: "English", p: "is", o: "an official language of Kenya", e: "" }])),
-    ).toBe("English is an official language of Kenya.");
+    expect(fact(formatCard("English", [{ s: "English", p: "is", o: "an official language of Kenya", e: "" }]))).toBe(
+      "English is an official language of Kenya.",
+    );
+    expect(fact(formatCard("Kenya", [{ s: "Kenya", p: "is", o: "a unitary presidential republic", e: "" }]))).toBe(
+      "Kenya is a unitary presidential republic.",
+    );
     expect(
       fact(formatCard("Kenya", [{ s: "Kenya", p: "is", o: "a unitary presidential republic", e: "" }])),
-    ).toBe("Kenya is a unitary presidential republic.");
-    expect(fact(formatCard("Kenya", [{ s: "Kenya", p: "is", o: "a unitary presidential republic", e: "" }]))).not.toMatch(
-      /^The Kenya is /,
-    );
+    ).not.toMatch(/^The Kenya is /);
     expect(
       fact(
         formatCard("capital of Netherlands", [
@@ -202,7 +292,12 @@ describe("cards", () => {
     expect(
       fact(
         formatCard("capital of United States", [
-          { s: "United States", p: "capital", o: "Washington, D.C.", e: "capital of United States is Washington, D.C." },
+          {
+            s: "United States",
+            p: "capital",
+            o: "Washington, D.C.",
+            e: "capital of United States is Washington, D.C.",
+          },
         ]),
       ),
     ).toBe("The capital of the United States is Washington, D.C.");
@@ -259,9 +354,9 @@ describe("cards", () => {
   });
 
   test("area-only RFC card upgrades to the stored title", () => {
-    expect(
-      fact(formatCard("RFC 9000", [{ s: "RFC 9000", p: "is", o: "HTTP", e: "" }])),
-    ).toBe("RFC 9000 is an HTTP RFC.");
+    expect(fact(formatCard("RFC 9000", [{ s: "RFC 9000", p: "is", o: "HTTP", e: "" }]))).toBe(
+      "RFC 9000 is an HTTP RFC.",
+    );
     expect(
       fact(
         formatCard("RFC 9000", [
@@ -307,7 +402,12 @@ describe("cards", () => {
     expect(fact(cc)).toBe("CC-BY-4.0 is Creative Commons Attribution 4.0 International.");
     expect(fact(cc)).not.toMatch(/unknown/);
     const json = formatCard("application/json", [
-      { s: "RFC 4627", p: "is", o: "The application/json Media Type for JSON", e: "RFC 4627: The application&#x2F;json Media Type for JSON" },
+      {
+        s: "RFC 4627",
+        p: "is",
+        o: "The application/json Media Type for JSON",
+        e: "RFC 4627: The application&#x2F;json Media Type for JSON",
+      },
       { s: "IANA media application/json", p: "is", o: "JSON", e: "" },
     ]);
     expect(fact(json)).toBe("application/json is a JSON media type.");
@@ -357,17 +457,21 @@ describe("injectFromText ranking", () => {
         "RFC 8259 obsoletes RFC 4627.",
       );
       expect(fact(injectFromText("RFC 4627 and application/json", store))).toBe("RFC 8259 obsoletes RFC 4627.");
-      expect(injectFromText("/.well-known/change-password", {
-        search(q: string) {
-          if (/change-password/i.test(q)) {
-            return [{ s: "IANA well-known change-password", p: "is", o: "Change Password", e: "", url: "" }];
-          }
-          return [];
-        },
-      })).toBeUndefined();
+      expect(
+        injectFromText("/.well-known/change-password", {
+          search(q: string) {
+            if (/change-password/i.test(q)) {
+              return [{ s: "IANA well-known change-password", p: "is", o: "Change Password", e: "", url: "" }];
+            }
+            return [];
+          },
+        }),
+      ).toBeUndefined();
 
       expect(injectFromText("no fact shaped tokens here at all", store)).toBeUndefined();
-      expect(injectFromText("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store)).toBeUndefined();
+      expect(
+        injectFromText("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store),
+      ).toBeUndefined();
       expect(injectFromText("Follow HTTP Semantics when writing the handler.", store)).toBeUndefined();
       expect(injectFromText("Please refactor the auth middleware and add a log line.", store)).toBeUndefined();
       expect(techniqueNeedleFromText("what's the best way to filter JSON on the command line")).toBe(
@@ -382,7 +486,9 @@ describe("injectFromText ranking", () => {
       expect(fact(injectFromText("what's the best way to filter JSON on the command line", store))).not.toMatch(
         /media type/i,
       );
-      expect(fact(injectFromText("what's the best way to filter JSON on the command line", store))).not.toMatch(/^python /i);
+      expect(fact(injectFromText("what's the best way to filter JSON on the command line", store))).not.toMatch(
+        /^python /i,
+      );
       expect(injectFromText("use jq to filter JSON on the command line", store)).toBeUndefined();
       expect(fact(injectFromText("what should I use for running TypeScript", store))).toBe(
         "Bun is used for running TypeScript services.",
@@ -417,7 +523,9 @@ describe("injectFromText ranking", () => {
       expect(fact(knowQuery("charset=utf-8", store))).toBe("UTF-8 is a charset.");
       expect(fact(knowQuery("utf8", store))).toBe("UTF-8 is a charset.");
       expect(fact(knowQuery("SPDX-License-Identifier: Apache-2.0", store))).toMatch(/Apache-2\.0/);
-      expect(fact(knowQuery("SPDX CC-BY-4.0", store))).toBe("CC-BY-4.0 is Creative Commons Attribution 4.0 International.");
+      expect(fact(knowQuery("SPDX CC-BY-4.0", store))).toBe(
+        "CC-BY-4.0 is Creative Commons Attribution 4.0 International.",
+      );
       expect(fact(knowQuery("https://example.com/path", store))).toMatch(/^https is /);
       expect(fact(knowQuery("AAAA", store))).toBe("AAAA is an IP6 Address record.");
       expect("unknown" in knowQuery("charset=utf-8 xyzzy-not-a-token", store)).toBe(true);
@@ -427,9 +535,9 @@ describe("injectFromText ranking", () => {
       expect(fact(knowQuery("Uniform Resource Identifier", store))).toContain("RFC 3986");
       expect(fact(knowQuery("MIT License", store))).toBe("MIT is an SPDX license.");
       expect(fact(knowQuery("Not Found", store))).toBe("HTTP 404 is Not Found.");
-      expect("unknown" in knowQuery("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store)).toBe(
-        true,
-      );
+      expect(
+        "unknown" in knowQuery("Follow the Uniform Resource Identifier generic syntax when parsing URLs", store),
+      ).toBe(true);
     } finally {
       store.close();
       rmSync(dir, { recursive: true, force: true });

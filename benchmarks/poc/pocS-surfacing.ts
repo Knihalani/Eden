@@ -29,7 +29,11 @@ const N_TOOLS = 6;
 
 header("POC S — surfacing economics (40-turn session, 4 relevant turns)");
 
-function cost(schemaTokPerTurn: number, oneTimeReadTok = 0, executedTurns = RELEVANT_TURNS): { spend: number; decisions: number } {
+function cost(
+  schemaTokPerTurn: number,
+  oneTimeReadTok = 0,
+  executedTurns = RELEVANT_TURNS,
+): { spend: number; decisions: number } {
   let spend = oneTimeReadTok * P;
   for (let t = 0; t < TURNS; t++) spend += schemaTokPerTurn * P;
   // Every relevant turn where a schema was present costs one choice; the
@@ -45,12 +49,21 @@ const transparent = cost(0, 0);
 
 printRow("A  MCP catalog (always in context)", `$${mcp.spend.toFixed(5)} · ${mcp.decisions} model decisions`);
 printRow("B  JIT single-schema injection", `$${jit.spend.toFixed(5)} · ${jit.decisions} model decisions`);
-printRow("C  Filesystem manifest (eden.tools.md)", `$${manifest.spend.toFixed(5)} · ${manifest.decisions} model decisions (+1 file read)`);
+printRow(
+  "C  Filesystem manifest (eden.tools.md)",
+  `$${manifest.spend.toFixed(5)} · ${manifest.decisions} model decisions (+1 file read)`,
+);
 printRow("D  Transparent execution", `$${transparent.spend.toFixed(5)} · 0 model decisions`);
 
 console.log("");
-printRow("schema-token tax vs A", `B −${Math.round((1 - jit.spend / mcp.spend) * 100)}% · C −${Math.round((1 - manifest.spend / mcp.spend) * 100)}% · D −100%`);
-printRow("loop suppression bonus (D only)", "calls 2..N of each stretch never happen: −8× LLM round trips on covered stretches");
+printRow(
+  "schema-token tax vs A",
+  `B −${Math.round((1 - jit.spend / mcp.spend) * 100)}% · C −${Math.round((1 - manifest.spend / mcp.spend) * 100)}% · D −100%`,
+);
+printRow(
+  "loop suppression bonus (D only)",
+  "calls 2..N of each stretch never happen: −8× LLM round trips on covered stretches",
+);
 
 console.log(`
 VERDICT: WIN for C+D as primary surfaces — D removes both the token tax and

@@ -10,7 +10,11 @@ import { envHasSecrets, setupPrompt, type PromptEnv } from "./prompt-text";
 export function SetupPrompt({ placeholders }: { placeholders: PromptEnv }) {
   return (
     <section className="account-stage account-stage-prompt">
-      <AccountCopy title="Copy this into your agent" lead="Paste it into the agent you already run. After it wraps, requests show up on Home." wide />
+      <AccountCopy
+        title="Copy this into your agent"
+        lead="Paste it into the agent you already run. After it wraps, requests show up on Home."
+        wide
+      />
       <SetupBlock placeholders={placeholders} />
       <p className="setup-next">
         <Link href={HOME} prefetch={true}>

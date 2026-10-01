@@ -206,7 +206,8 @@ export function toolPage(store: Store, id: string, token?: string): string {
   const c = store.candidate(id);
   const live = store.tool(id);
   const program = live?.program || c?.program;
-  if (!program && !c?.refusal) return layout("Tool", `<p class="empty">Unknown tool.</p>`, "/live", token, "", servingOf(store.tools()));
+  if (!program && !c?.refusal)
+    return layout("Tool", `<p class="empty">Unknown tool.</p>`, "/live", token, "", servingOf(store.tools()));
   const steps = (program?.steps ?? [])
     .map((s) => {
       if (s.kind === "tool") return `<div class="step">${esc(s.id)} · ${esc(s.tool)}</div>`;
@@ -219,11 +220,15 @@ export function toolPage(store: Store, id: string, token?: string): string {
   const body = `
     <h1>${esc(program?.name || "Refused stretch")}</h1>
     <p class="lede">${esc(program?.description || c?.refusal?.reason || "")}</p>
-    ${m ? `<div class="nums">
+    ${
+      m
+        ? `<div class="nums">
       <div><b>${m.tokensMeasured && m.tokensSaved != null ? fmtAbs(m.tokensSaved) : "—"}</b><span>tokens saved</span></div>
       <div><b>${m.timeMeasured && m.timeSavedMs != null ? fmtAbs(m.timeSavedMs) : "—"}</b><span>ms saved</span></div>
       <div><b>${((m.skipRateAfter ?? 0) * 100).toFixed(0)}%</b><span>skips after</span></div>
-    </div>` : ""}
+    </div>`
+        : ""
+    }
     <div class="graph">${steps || `<p class="bad">${esc(c?.refusal?.reason || "")}</p>`}</div>
     <div class="row">
       ${c && c.verdict === "PASS" ? `<button onclick="post('/v1/tools/${esc(id)}/approve')">Approve</button>` : ""}

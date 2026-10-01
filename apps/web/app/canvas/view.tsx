@@ -9,7 +9,14 @@ import { isCheckName, isMutating } from "@eden/ir/names";
 import { eq } from "@eden/ir";
 import { approveTool, dismissRequest, pauseTool, promoteTool, resumeTool, type BindEdit } from "./actions";
 import { tokensCertLine } from "./cert";
-import { approveContractLines, envelopeValueRows, liveCanaryLine, liveStretchLine, pinIslandsOffer, tipLine } from "./contract";
+import {
+  approveContractLines,
+  envelopeValueRows,
+  liveCanaryLine,
+  liveStretchLine,
+  pinIslandsOffer,
+  tipLine,
+} from "./contract";
 import { DISMISS_CONFIRM_MS, confirmExpired, dismissButtonLabel } from "./dismiss";
 import { emptyPanelCopy, failLabel, handoffContractLine, originLine, receiptPostmortem } from "./fail";
 import {
@@ -100,7 +107,11 @@ function kindLabel(step: Step): string {
   return isMutating(step.tool) ? "write" : "read";
 }
 
-function collectBind(program: StretchProgram, paths: Record<string, string>, sources: Record<string, string>): BindEdit[] {
+function collectBind(
+  program: StretchProgram,
+  paths: Record<string, string>,
+  sources: Record<string, string>,
+): BindEdit[] {
   const out: BindEdit[] = [];
   for (const step of graphSteps(program)) {
     for (const row of bindLines(step)) {
@@ -134,7 +145,10 @@ export function CanvasView({ model }: { model: CanvasModel }) {
             skipped: model.receipt?.skipped,
             memoized: model.receipt?.tokenClass === "memoized",
             transparent: model.receipt?.tokenClass === "transparent",
-            compiledRan: model.mode === "live" && model.receipt?.tokenClass !== "transparent" && model.receipt?.tokenClass !== "frontier",
+            compiledRan:
+              model.mode === "live" &&
+              model.receipt?.tokenClass !== "transparent" &&
+              model.receipt?.tokenClass !== "frontier",
           })
         : null,
     [program, model.receipt?.skipped, model.receipt?.tokenClass, model.mode],
@@ -194,9 +208,7 @@ export function CanvasView({ model }: { model: CanvasModel }) {
             onDrag={setDrag}
           />
         ) : (
-          <p className="canvas-empty">
-            {model.refusal || "No method yet. Wrap more runs, then come back."}
-          </p>
+          <p className="canvas-empty">{model.refusal || "No method yet. Wrap more runs, then come back."}</p>
         )}
         <aside className="canvas-panel" aria-label="Step" aria-live="polite">
           {selectedStep ? <span className="sr-only">Selected step: {selectedStep.id}.</span> : null}
@@ -222,7 +234,9 @@ export function CanvasView({ model }: { model: CanvasModel }) {
               onSource={(field, from) => setSources((cur) => ({ ...cur, [field]: from }))}
               dropped={drop.includes(selectedStep.id)}
               onDrop={(on) =>
-                setDrop((cur) => (on ? [...new Set([...cur, selectedStep.id])] : cur.filter((id) => id !== selectedStep.id)))
+                setDrop((cur) =>
+                  on ? [...new Set([...cur, selectedStep.id])] : cur.filter((id) => id !== selectedStep.id),
+                )
               }
             />
           ) : (
@@ -340,51 +354,60 @@ function Graph({
         const failed = fail === n.id || fail === n.tool;
         const held = blocked.includes(n.id);
         return (
-          <li key={n.id} className="canvas-node-wrap" style={{ left: n.x + pad, top: n.y + pad, width: NODE_W, height: NODE_H }}>
-          <button
-            type="button"
-            className="canvas-node"
-            draggable
-            data-kind={n.kind}
-            data-token-class={n.tokenClass}
-            data-write={n.write ? "true" : undefined}
-            data-on={selected === n.id ? "true" : undefined}
-            data-drop={drop.includes(n.id) ? "true" : undefined}
-            data-fail={failed ? "true" : undefined}
-            data-blocked={held ? "true" : undefined}
-            data-drag={drag === n.id ? "true" : undefined}
-            aria-pressed={selected === n.id}
-            aria-label={`${n.label}, ${n.kind === "tool" ? (n.write ? "write" : "read") : n.kind}${failed ? ", failed" : held ? ", blocked" : drop.includes(n.id) ? ", removed" : ""}`}
-            onClick={() => onSelect(n.id)}
-            onKeyDown={(event) => {
-              if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "ArrowDown" && event.key !== "ArrowUp") {
-                return;
-              }
-              event.preventDefault();
-              const ids = layout.nodes.map((node) => node.id);
-              const index = ids.indexOf(n.id);
-              const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
-              const next = ids[(index + delta + ids.length) % ids.length];
-              if (!next) return;
-              onSelect(next);
-              const root = event.currentTarget.closest(".canvas-graph");
-              const target = root?.querySelector(`[data-step="${next}"]`);
-              if (target instanceof HTMLElement) target.focus();
-            }}
-            data-step={n.id}
-            onDragStart={(ev) => {
-              ev.dataTransfer.setData("text/eden-step", n.id);
-              ev.dataTransfer.effectAllowed = "link";
-              onDrag(n.id);
-            }}
-            onDragEnd={() => onDrag(null)}
+          <li
+            key={n.id}
+            className="canvas-node-wrap"
+            style={{ left: n.x + pad, top: n.y + pad, width: NODE_W, height: NODE_H }}
           >
-            <span className="canvas-node-kind">
-              {n.kind === "tool" ? (n.write ? "write" : "read") : n.label}
-              {failed ? " · failed" : held ? " · blocked" : drop.includes(n.id) ? " · removed" : ""}
-            </span>
-            <span className="canvas-node-name">{n.label}</span>
-          </button>
+            <button
+              type="button"
+              className="canvas-node"
+              draggable
+              data-kind={n.kind}
+              data-token-class={n.tokenClass}
+              data-write={n.write ? "true" : undefined}
+              data-on={selected === n.id ? "true" : undefined}
+              data-drop={drop.includes(n.id) ? "true" : undefined}
+              data-fail={failed ? "true" : undefined}
+              data-blocked={held ? "true" : undefined}
+              data-drag={drag === n.id ? "true" : undefined}
+              aria-pressed={selected === n.id}
+              aria-label={`${n.label}, ${n.kind === "tool" ? (n.write ? "write" : "read") : n.kind}${failed ? ", failed" : held ? ", blocked" : drop.includes(n.id) ? ", removed" : ""}`}
+              onClick={() => onSelect(n.id)}
+              onKeyDown={(event) => {
+                if (
+                  event.key !== "ArrowRight" &&
+                  event.key !== "ArrowLeft" &&
+                  event.key !== "ArrowDown" &&
+                  event.key !== "ArrowUp"
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                const ids = layout.nodes.map((node) => node.id);
+                const index = ids.indexOf(n.id);
+                const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+                const next = ids[(index + delta + ids.length) % ids.length];
+                if (!next) return;
+                onSelect(next);
+                const root = event.currentTarget.closest(".canvas-graph");
+                const target = root?.querySelector(`[data-step="${next}"]`);
+                if (target instanceof HTMLElement) target.focus();
+              }}
+              data-step={n.id}
+              onDragStart={(ev) => {
+                ev.dataTransfer.setData("text/eden-step", n.id);
+                ev.dataTransfer.effectAllowed = "link";
+                onDrag(n.id);
+              }}
+              onDragEnd={() => onDrag(null)}
+            >
+              <span className="canvas-node-kind">
+                {n.kind === "tool" ? (n.write ? "write" : "read") : n.label}
+                {failed ? " · failed" : held ? " · blocked" : drop.includes(n.id) ? " · removed" : ""}
+              </span>
+              <span className="canvas-node-name">{n.label}</span>
+            </button>
           </li>
         );
       })}
@@ -439,7 +462,10 @@ function NodeDetail({
   const witnessed = witnessLines(step);
   const check = isPinnedCheck(step);
   const provider =
-    promptTokens != null && completionTokens != null && Number.isFinite(promptTokens) && Number.isFinite(completionTokens)
+    promptTokens != null &&
+    completionTokens != null &&
+    Number.isFinite(promptTokens) &&
+    Number.isFinite(completionTokens)
       ? { prompt: promptTokens, completion: completionTokens }
       : undefined;
   const ledger = tokenClasses ? tokenClassLedgerReconcileLine(tokenClasses, provider) : null;
@@ -552,9 +578,7 @@ function NodeDetail({
         </ul>
       ) : null}
       {blocked.length ? <p className="canvas-k">Downstream blocked: {blocked.join(", ")}</p> : null}
-      {stripped.length ? (
-        <p className="canvas-k">Stripped from the method: {stripped.join(", ")}</p>
-      ) : null}
+      {stripped.length ? <p className="canvas-k">Stripped from the method: {stripped.join(", ")}</p> : null}
       {!check ? (
         <label className="canvas-drop">
           <input type="checkbox" checked={dropped} onChange={(e) => onDrop(e.target.checked)} />
@@ -619,9 +643,7 @@ function ApproveStrip({
   };
 
   const m = model.manifest;
-  const writes = model.program
-    ? graphSteps(model.program).filter((s) => s.kind === "tool" && isMutating(s.tool))
-    : [];
+  const writes = model.program ? graphSteps(model.program).filter((s) => s.kind === "tool" && isMutating(s.tool)) : [];
   const contract = approveContractLines(model);
   const envRows = envelopeValueRows(model.program?.contract.envelope, dropValues);
   const pin = pinIslandsOffer(model.program);
@@ -633,28 +655,30 @@ function ApproveStrip({
         ))}
         {envRows.length ? (
           <ul className="canvas-env">
-            <li className="canvas-env-lead">Witnessed values. Drop extras to tighten. The last value of a key stays.</li>
+            <li className="canvas-env-lead">
+              Witnessed values. Drop extras to tighten. The last value of a key stays.
+            </li>
             {envRows.map((row, i) => (
-                <li key={`${row.path}:${i}`}>
-                  <span>{row.text}</span>
-                  {row.canDrop ? (
-                    <button
-                      type="button"
-                      className="canvas-quiet canvas-env-drop"
-                      disabled={pending}
-                      onClick={() =>
-                        setDropValues((cur) =>
-                          row.dropped
-                            ? cur.filter((d) => !(d.path === row.path && eq(d.value, row.value)))
-                            : [...cur, { path: row.path, value: row.value }],
-                        )
-                      }
-                    >
-                      {row.dropped ? "Keep" : "Drop"}
-                    </button>
-                  ) : null}
-                </li>
-              ))}
+              <li key={`${row.path}:${i}`}>
+                <span>{row.text}</span>
+                {row.canDrop ? (
+                  <button
+                    type="button"
+                    className="canvas-quiet canvas-env-drop"
+                    disabled={pending}
+                    onClick={() =>
+                      setDropValues((cur) =>
+                        row.dropped
+                          ? cur.filter((d) => !(d.path === row.path && eq(d.value, row.value)))
+                          : [...cur, { path: row.path, value: row.value }],
+                      )
+                    }
+                  >
+                    {row.dropped ? "Keep" : "Drop"}
+                  </button>
+                ) : null}
+              </li>
+            ))}
           </ul>
         ) : null}
         <p>
@@ -681,7 +705,9 @@ function ApproveStrip({
             disabled={pending}
             onChange={(event) => setServeWrites(event.target.checked)}
           />
-          <span>Serve Write results into the last tool output. Off unless you check this — and the host env allows it.</span>
+          <span>
+            Serve Write results into the last tool output. Off unless you check this — and the host env allows it.
+          </span>
         </label>
       ) : null}
       {pin.show ? (
@@ -767,7 +793,7 @@ function LiveStrip({
   const stretch = liveStretchLine(model, words);
   const postmortem = rec
     ? receiptPostmortem(rec, { budgetMs: model.program?.budget?.ms, drift: model.drift, stretchWords: words })
-    : model.fail?.stretch ?? "";
+    : (model.fail?.stretch ?? "");
   const canary = liveCanaryLine(model);
   return (
     <footer className="canvas-ship">
@@ -783,7 +809,13 @@ function LiveStrip({
       </div>
       <div className="canvas-ship-actions">
         {live ? (
-          <button type="button" className="canvas-quiet" disabled={pending} onClick={onPause} aria-label="Pause this live tool">
+          <button
+            type="button"
+            className="canvas-quiet"
+            disabled={pending}
+            onClick={onPause}
+            aria-label="Pause this live tool"
+          >
             {pending ? "Working…" : "Pause"}
           </button>
         ) : (

@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { diagnoseHonesty, renderHonestyLetter, honestyShape, honestyWidth, HONESTY_MIN_STEPS, HONESTY_MIN_SUPPORT } from "./honesty";
+import {
+  diagnoseHonesty,
+  renderHonestyLetter,
+  honestyShape,
+  honestyWidth,
+  HONESTY_MIN_STEPS,
+  HONESTY_MIN_SUPPORT,
+} from "./honesty";
 import type { StretchTrace } from "./types";
 
 function trace(id: string, names: string[], input: Record<string, unknown> = {}): StretchTrace {
@@ -41,7 +48,9 @@ describe("honesty diagnosis", () => {
   });
 
   test("unique-work: 12 distinct sequences names Unique work with the count", () => {
-    const traces = Array.from({ length: 12 }, (_, i) => trace(`u${i}`, ["alpha", "beta", `uniq${i}`], { id: `id${i}` }));
+    const traces = Array.from({ length: 12 }, (_, i) =>
+      trace(`u${i}`, ["alpha", "beta", `uniq${i}`], { id: `id${i}` }),
+    );
     const f = diagnoseHonesty(traces);
     const ent = f.find((x) => x.code === "high_entropy");
     expect(ent).toBeDefined();

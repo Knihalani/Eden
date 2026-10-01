@@ -46,11 +46,7 @@ export type CwdHopProbe = {
   batchDecision: unknown;
 };
 
-function claudePostToolBatch(
-  session: string,
-  filePath: string,
-  extra?: { id?: string; mixedOther?: string },
-) {
+function claudePostToolBatch(session: string, filePath: string, extra?: { id?: string; mixedOther?: string }) {
   const id = extra?.id;
   const withId = (rec: Record<string, unknown>) => (id ? { ...rec, id } : rec);
   const other = extra?.mixedOther;

@@ -18,11 +18,13 @@ function slugOf(std: Std): string | undefined {
   } catch {
     /* */
   }
-  return (std.name || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40) || undefined;
+  return (
+    (std.name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40) || undefined
+  );
 }
 
 export function parseWhatwgDb(json: unknown): Triple[] {

@@ -214,9 +214,11 @@ describe("national capitals table yield", () => {
     expect(byCountry.Australia).toBe("Canberra");
     expect(caps.some((x) => x.s === "West Germany" && x.o === "Bonn")).toBe(true);
     expect(caps.some((x) => /melbourne|sydney/i.test(x.s) || /melbourne|sydney/i.test(x.o))).toBe(false);
-    expect(caps.some((x) => x.s === "Nairobi" || x.s === "Paris" || x.s === "Tokyo" || x.s === "Canberra" || x.s === "Berlin")).toBe(
-      false,
-    );
+    expect(
+      caps.some(
+        (x) => x.s === "Nairobi" || x.s === "Paris" || x.s === "Tokyo" || x.s === "Canberra" || x.s === "Berlin",
+      ),
+    ).toBe(false);
     const countries = new Set(caps.map((x) => x.s));
     expect(countries.has("Kenya")).toBe(true);
     expect(countries.has("France")).toBe(true);
@@ -332,7 +334,13 @@ When servers process a request they must validate the URI.
     expect(t.some((x) => x.s === "RFC 2396" && x.p === "is" && /obsoleted by RFC 3986/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "RFC 1738" && x.p === "is" && /updated by RFC 3986/i.test(x.o))).toBe(true);
     expect(t.some((x) => /when server|status of this memo|this document specifies/i.test(x.o))).toBe(false);
-    expect(t.every((x) => persistable("https://www.rfc-editor.org/rfc/rfc3986.html", x) === (x.p === "obsoletes" || x.p === "updates" || x.p === "id" || /^(obsoleted|updated) by\b/i.test(x.o)))).toBe(true);
+    expect(
+      t.every(
+        (x) =>
+          persistable("https://www.rfc-editor.org/rfc/rfc3986.html", x) ===
+          (x.p === "obsoletes" || x.p === "updates" || x.p === "id" || /^(obsoleted|updated) by\b/i.test(x.o)),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -439,8 +447,7 @@ describe("keepWet FineWeb meter", () => {
   });
 
   test("wikipedia encyclopedia drops; casino wiki-mirrors still drop", () => {
-    const filler =
-      "The protocol is used by agents and origin servers around the world for everyday work. ";
+    const filler = "The protocol is used by agents and origin servers around the world for everyday work. ";
     const kenya = `The capital of Kenya is Nairobi and the city hosts the government. ${filler.repeat(3)}`;
     const long =
       "This is a long enough english page about nothing in particular, just filler text for a junk host that the old length floor would have admitted. ".repeat(
@@ -455,8 +462,7 @@ describe("keepWet FineWeb meter", () => {
   });
 
   test("Gopher quality drops repetition and casino; fact-bearing quality English is kept", () => {
-    const filler =
-      "The protocol is used by agents and origin servers around the world for everyday work. ";
+    const filler = "The protocol is used by agents and origin servers around the world for everyday work. ";
     const rfc = `RFC 9110: HTTP Semantics. This document defines HTTP semantics. ${filler.repeat(3)}`;
     const media = `The IANA media type application/json is JSON. ${filler.repeat(3)}`;
     const spdx = `Projects declare SPDX-License-Identifier: MIT when they publish source. ${filler.repeat(3)}`;
@@ -513,11 +519,23 @@ describe("keepWet FineWeb meter", () => {
 
   test("bench WET_SAMPLES kept/scanned plus extras: catalog in, junk out, fact pages in", () => {
     const wetSamples = [
-      { uri: "https://www.rfc-editor.org/rfc/rfc3986.html", text: "RFC 3986 Uniform Resource Identifier (URI): Generic Syntax. " + "word ".repeat(40) },
-      { uri: "https://en.wikipedia.org/wiki/Kenya", text: "The capital of Kenya is Nairobi. Kenya is a country in East Africa and the city hosts the government for the republic." },
+      {
+        uri: "https://www.rfc-editor.org/rfc/rfc3986.html",
+        text: "RFC 3986 Uniform Resource Identifier (URI): Generic Syntax. " + "word ".repeat(40),
+      },
+      {
+        uri: "https://en.wikipedia.org/wiki/Kenya",
+        text: "The capital of Kenya is Nairobi. Kenya is a country in East Africa and the city hosts the government for the republic.",
+      },
       { uri: "https://spam.example/clickbait", text: "buy now!!! cheap cheap cheap " + "CLICK ".repeat(80) },
-      { uri: "https://blog.example/essay", text: "The capital of France is Paris. A long travel essay about wine. " + "word ".repeat(40) },
-      { uri: "https://www.iana.org/assignments/media-types/application/json", text: "application/json JSON " + "word ".repeat(40) },
+      {
+        uri: "https://blog.example/essay",
+        text: "The capital of France is Paris. A long travel essay about wine. " + "word ".repeat(40),
+      },
+      {
+        uri: "https://www.iana.org/assignments/media-types/application/json",
+        text: "application/json JSON " + "word ".repeat(40),
+      },
       { uri: "https://example.org/x", text: "short" },
     ];
     const keptBench = wetSamples.filter((r) => keepWet(r));
@@ -530,8 +548,14 @@ describe("keepWet FineWeb meter", () => {
     const filler = "Agents and origin servers use this every day when they speak HTTP. ";
     const extra = [
       { uri: "https://dev.example/rfc9110", text: `RFC 9110: HTTP Semantics. ${filler.repeat(4)}` },
-      { uri: "https://dev.example/json", text: `Send application/json in the Content-Type header. ${filler.repeat(4)}` },
-      { uri: "https://casino.example/play", text: `bahis casino slot gacor ${filler.repeat(4)} RFC 9110: HTTP Semantics.` },
+      {
+        uri: "https://dev.example/json",
+        text: `Send application/json in the Content-Type header. ${filler.repeat(4)}`,
+      },
+      {
+        uri: "https://casino.example/play",
+        text: `bahis casino slot gacor ${filler.repeat(4)} RFC 9110: HTTP Semantics.`,
+      },
     ];
     expect(extra.filter((r) => keepWet(r)).map((r) => r.uri)).toEqual([
       "https://dev.example/rfc9110",
@@ -667,7 +691,7 @@ describe("Link rel=alternate + HTTP Link", () => {
 
   test("WARC Link header is folded into the body as rel=alternate", () => {
     const raw =
-      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nLink: <https://www.rfc-editor.org/rfc/rfc3986.xml>; rel=\"alternate\"; type=\"application/rfc+xml\"\r\n\r\n<html>ok</html>";
+      'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nLink: <https://www.rfc-editor.org/rfc/rfc3986.xml>; rel="alternate"; type="application/rfc+xml"\r\n\r\n<html>ok</html>';
     const body = httpBody(raw);
     expect(body).toContain('rel="alternate"');
     expect(body).toContain("rfc3986.xml");
@@ -723,7 +747,9 @@ describe("infobox extras, definition lists, WET harvest", () => {
     expect(t.filter((x) => x.s === "Bun" && /runtime/i.test(x.o)).every((x) => persistable(bun, x))).toBe(false);
     const lead = softwareLeadIs(bun, html, "Bun is a fast JavaScript runtime.");
     expect(lead).toBeUndefined();
-    expect(softwareLeadIs("https://github.com/random-user/hello", html, "Hello world this is a long enough english page.")).toBeUndefined();
+    expect(
+      softwareLeadIs("https://github.com/random-user/hello", html, "Hello world this is a long enough english page."),
+    ).toBeUndefined();
     const py = triplesFromPage(
       "https://docs.python.org/3/",
       "Python is a programming language. The standard library covers http and json.",
@@ -738,9 +764,9 @@ describe("infobox extras, definition lists, WET harvest", () => {
       "jq is used for filtering JSON on the command line. Use Bun to run TypeScript services. " +
       "Cargo is the recommended way to build Rust packages from a crate.";
     const t = triplesFromPage(url, text, false);
-    expect(techniquesFromProse(text).some((x) => x.s === "jq" && x.o === "used for filtering JSON on the command line")).toBe(
-      true,
-    );
+    expect(
+      techniquesFromProse(text).some((x) => x.s === "jq" && x.o === "used for filtering JSON on the command line"),
+    ).toBe(true);
     expect(t.some((x) => x.s === "jq" && x.p === "is" && x.o === "used for filtering JSON on the command line")).toBe(
       true,
     );
@@ -752,15 +778,11 @@ describe("infobox extras, definition lists, WET harvest", () => {
 
   test("wiki template pipes, official-name echoes, and URL objects are not persistable", () => {
     const wiki = "https://en.wikipedia.org/wiki/Hop_Bottom,_Pennsylvania";
-    expect(
-      persistable(wiki, { s: "Hop Bottom, Pennsylvania", p: "is", o: "a |leader_title =", e: "" }),
-    ).toBe(false);
+    expect(persistable(wiki, { s: "Hop Bottom, Pennsylvania", p: "is", o: "a |leader_title =", e: "" })).toBe(false);
     expect(
       persistable(wiki, { s: "Hop Bottom", p: "is", o: "the official name of Hop Bottom, Pennsylvania", e: "" }),
     ).toBe(false);
-    expect(
-      persistable(wiki, { s: "| image_skyline =", p: "is", o: "the motto of Myangad, Khovd", e: "" }),
-    ).toBe(false);
+    expect(persistable(wiki, { s: "| image_skyline =", p: "is", o: "the motto of Myangad, Khovd", e: "" })).toBe(false);
     expect(
       persistable(wiki, {
         s: "Edward Tsang",
@@ -769,21 +791,20 @@ describe("infobox extras, definition lists, WET harvest", () => {
         e: "",
       }),
     ).toBe(false);
-    expect(
-      persistable(KENYA, { s: "Republic of Kenya", p: "is", o: "the official name of Kenya", e: "" }),
-    ).toBe(false);
+    expect(persistable(KENYA, { s: "Republic of Kenya", p: "is", o: "the official name of Kenya", e: "" })).toBe(false);
     expect(
       persistable(wiki, { s: "Unincorporated community", p: "is", o: "the official name of Coalton, Kentucky", e: "" }),
     ).toBe(false);
+    expect(persistable(wiki, { s: "Latin", p: "is", o: "the motto of HMS Achates (H12)", e: "" })).toBe(false);
     expect(
-      persistable(wiki, { s: "Latin", p: "is", o: "the motto of HMS Achates (H12)", e: "" }),
+      persistable(wiki, {
+        s: "Platanoussa",
+        p: "is",
+        o: "situated on the eastern slope of the [[Xerovouni]] mountain",
+        e: "",
+      }),
     ).toBe(false);
-    expect(
-      persistable(wiki, { s: "Platanoussa", p: "is", o: "situated on the eastern slope of the [[Xerovouni]] mountain", e: "" }),
-    ).toBe(false);
-    expect(
-      persistable(wiki, { s: "{{Unbulleted list", p: "is", o: "the currency of France", e: "" }),
-    ).toBe(false);
+    expect(persistable(wiki, { s: "{{Unbulleted list", p: "is", o: "the currency of France", e: "" })).toBe(false);
     const html = `<table class="infobox"><tr><th>Official name</th><td>Hop Bottom, Pennsylvania</td></tr>
       <tr><th>Motto</th><td>|leader_title = Mayor</td></tr>
       <tr><th>Motto language</th><td>Latin</td></tr>

@@ -23,7 +23,6 @@ import { fireOblivious, linearProgram } from "./struggle-harness";
 process.env.CAMPAIGN_THINK_MS = "1";
 const TIMEOUT = 120_000;
 
-
 describe("struggle: capacity bounds", () => {
   test(
     "P1: 80 concurrent distinct-input stretches — eviction must not duplicate tail executions",
@@ -206,7 +205,10 @@ describe("struggle: capacity bounds", () => {
       // Three oblivious stretches so the arming budget pressure is real.
       await Promise.all(
         ["L-1", "L-2"].map((id) =>
-          fireOblivious(wrapped, sequence.map((name) => ({ tool: name, args: name === "lookup" ? { id, text: "t" } : { id } }))),
+          fireOblivious(
+            wrapped,
+            sequence.map((name) => ({ tool: name, args: name === "lookup" ? { id, text: "t" } : { id } })),
+          ),
         ),
       );
 
@@ -341,7 +343,14 @@ describe("struggle: degradation", () => {
         steps,
         returns: { kind: "from", step: "emailCustomer", path: "" },
         contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-        manifest: { llmReduction: 3, latencyReduction: 1, costReduction: 1, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
+        manifest: {
+          llmReduction: 3,
+          latencyReduction: 1,
+          costReduction: 1,
+          skipRateBefore: 0,
+          skipRateAfter: 0,
+          nShadow: 3,
+        },
       }) as StretchProgram;
       const state = createState({ programs: [prog], island: failingIsland });
       const wrapped = wrapTools(tools, state) as Record<string, ToolDef>;

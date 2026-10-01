@@ -125,32 +125,36 @@ describe("holdout worlds: compileTraces", () => {
   test(
     "crm / calendar / payments: 4 recorded stretches produce ≥1 program",
     async () => {
-      const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>>; seq: string[] }> = [
-        {
-          name: "crm",
-          factory: createCrm,
-          goals: [...CRM_IDS].map((leadId) => ({ leadId })),
-          seq: ["getLead", "enrichCompany", "createDeal", "assignOwner", "notifySlack"],
-        },
-        {
-          name: "calendar",
-          factory: createCalendar,
-          goals: CAL_SLOTS.map((s) => ({ when: s.when, title: s.title })),
-          seq: ["listBusy", "createEvent", "sendInvite", "addReminder"],
-        },
-        {
-          name: "payments",
-          factory: createPayments,
-          goals: [...PAY_EMAILS].map((email) => ({ email })),
-          seq: ["getCustomer", "createInvoice", "createCharge", "sendReceipt"],
-        },
-      ];
+      const cases: Array<{ name: string; factory: () => World; goals: Array<Record<string, unknown>>; seq: string[] }> =
+        [
+          {
+            name: "crm",
+            factory: createCrm,
+            goals: [...CRM_IDS].map((leadId) => ({ leadId })),
+            seq: ["getLead", "enrichCompany", "createDeal", "assignOwner", "notifySlack"],
+          },
+          {
+            name: "calendar",
+            factory: createCalendar,
+            goals: CAL_SLOTS.map((s) => ({ when: s.when, title: s.title })),
+            seq: ["listBusy", "createEvent", "sendInvite", "addReminder"],
+          },
+          {
+            name: "payments",
+            factory: createPayments,
+            goals: [...PAY_EMAILS].map((email) => ({ email })),
+            seq: ["getCustomer", "createInvoice", "createCharge", "sendReceipt"],
+          },
+        ];
       for (const c of cases) {
         const traces = await recordN(c.factory, c.goals, 4);
         expect(traces.every((t) => t.complete)).toBe(true);
         const r = compileTraces(traces);
         console.log(
-          `holdout compile ${c.name}: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 3).join("; ")}`,
+          `holdout compile ${c.name}: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+            .map((x) => x.code ?? x.reason)
+            .slice(0, 3)
+            .join("; ")}`,
         );
         expect(r.programs.length, `${c.name} should compile ≥1 program`).toBeGreaterThanOrEqual(1);
         expect(r.programs[0]!.sequence).toEqual(c.seq);
@@ -176,7 +180,10 @@ describe("holdout worlds: compileTraces", () => {
       const r = compileTraces(traces);
       const looped = r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"));
       console.log(
-        `holdout compile cart: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals.map((x) => x.code ?? x.reason).slice(0, 4).join("; ")}`,
+        `holdout compile cart: programs=${r.programs.length} loops=${looped.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} refusals=${r.refusals
+          .map((x) => x.code ?? x.reason)
+          .slice(0, 4)
+          .join("; ")}`,
       );
       // Compiler already binds loop items on sku/qty (LOOP_ITEM_FIELDS). Pin the loop.
       expect(looped.length).toBeGreaterThanOrEqual(1);
@@ -264,41 +271,37 @@ describe("holdout worlds: check() catches duplicated mutation", () => {
 });
 
 describe("holdout worlds: compileTraces → shadow goLive", () => {
-  test(
-    "crm / calendar / payments / cart goLive PASS with a certified program",
-    async () => {
-      const cases: Array<{
-        name: string;
-        factory: () => World;
-        goals: Array<Record<string, unknown>>;
-      }> = [
-        { name: "crm", factory: createCrm, goals: [...CRM_IDS].map((leadId) => ({ leadId })) },
-        { name: "calendar", factory: createCalendar, goals: CAL_SLOTS.map((s) => ({ when: s.when, title: s.title })) },
-        { name: "payments", factory: createPayments, goals: [...PAY_EMAILS].map((email) => ({ email })) },
-        { name: "cart", factory: createCart, goals: [...CART_IDS].map((cart) => ({ cart })) },
-      ];
-      for (const c of cases) {
-        const s = new Session([[c.name, c.factory]], true);
-        for (let i = 0; i < 13; i++) {
-          await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`holdout-live-${c.name}-${i}`, i));
-        }
-        const r = await s.goLive(c.name, {
-          compile: 9,
-          holdout: 3,
-          sandbox: c.factory,
-          maxGram: 26,
-        });
-        expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
-        expect(r.program, `${c.name} program`).not.toBeNull();
-        expect(r.program!.manifest?.certified).toBe(true);
-        const live = new Session([[c.name, c.factory]], true);
-        live.addPrograms([r.program!]);
-        await live.stretch(c.name, c.goals[0]!, blockSeed(`holdout-serve-${c.name}`, 99));
-        const fin = live.finish();
-        expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
-        expect(fin.turns).toBe(1);
+  test("crm / calendar / payments / cart goLive PASS with a certified program", async () => {
+    const cases: Array<{
+      name: string;
+      factory: () => World;
+      goals: Array<Record<string, unknown>>;
+    }> = [
+      { name: "crm", factory: createCrm, goals: [...CRM_IDS].map((leadId) => ({ leadId })) },
+      { name: "calendar", factory: createCalendar, goals: CAL_SLOTS.map((s) => ({ when: s.when, title: s.title })) },
+      { name: "payments", factory: createPayments, goals: [...PAY_EMAILS].map((email) => ({ email })) },
+      { name: "cart", factory: createCart, goals: [...CART_IDS].map((cart) => ({ cart })) },
+    ];
+    for (const c of cases) {
+      const s = new Session([[c.name, c.factory]], true);
+      for (let i = 0; i < 13; i++) {
+        await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`holdout-live-${c.name}-${i}`, i));
       }
-    },
-    60_000,
-  );
+      const r = await s.goLive(c.name, {
+        compile: 9,
+        holdout: 3,
+        sandbox: c.factory,
+        maxGram: 26,
+      });
+      expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
+      expect(r.program, `${c.name} program`).not.toBeNull();
+      expect(r.program!.manifest?.certified).toBe(true);
+      const live = new Session([[c.name, c.factory]], true);
+      live.addPrograms([r.program!]);
+      await live.stretch(c.name, c.goals[0]!, blockSeed(`holdout-serve-${c.name}`, 99));
+      const fin = live.finish();
+      expect(fin.violations, `${c.name} wrap serve ${fin.violations.join("; ")}`).toEqual([]);
+      expect(fin.turns).toBe(1);
+    }
+  }, 60_000);
 });

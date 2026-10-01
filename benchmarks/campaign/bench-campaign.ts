@@ -62,7 +62,8 @@ async function prelive(
     await s.stretch("w", g, blockSeed(`prelive-${i}-${JSON.stringify(g)}`, i));
   }
   const r = await s.goLive("w", { compile: Math.max(3, count - 3), holdout: 3, sandbox: factory, maxGram: 26 });
-  if (r.program == null) notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
+  if (r.program == null)
+    notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
   return { program: r.program, notes };
 }
 
@@ -151,8 +152,7 @@ async function main() {
         tasks: ["t0", "t1", "t2", "t3"],
         repeats: FAST ? 2 : 3,
         run,
-        aa: async (which, task, repeat) =>
-          run("raw", task, which === "a" ? repeat : repeat + 17),
+        aa: async (which, task, repeat) => run("raw", task, which === "a" ? repeat : repeat + 17),
       }),
     );
   }
@@ -180,11 +180,36 @@ async function main() {
   }
 
   /* --- 3..6. long lifecycle scenarios ---------------------------------- */
-  const longDefs: Array<{ key: string; label: string; world: [string, WorldFactory]; pool: Array<Record<string, unknown>> }> = [
-    { key: "long-desk", label: "linear mutating stretch, sloppy-agent noise", world: ["desk", createDesk], pool: deskPool() }, // locked print: 1.36× turns, 1.16× wall, 1.31× cheaper (p=0.016)
-    { key: "long-orders", label: "fan-out inventory loop then refund pipeline", world: ["orders", createOrders], pool: ordersPool() }, // locked print: 1.19× turns, 1.12× wall, 1.19× cheaper (p=0.016)
-    { key: "long-etl", label: "read fan-out with fat payloads into one report", world: ["etl", () => createEtl(8)], pool: etlPool() }, // locked print: 1.43× turns, 1.28× wall, 1.36× cheaper (p=0.016)
-    { key: "long-incident", label: "flaky searches, retries, mutating tail", world: ["incident", () => createIncident(0.12)], pool: incidentPool() }, // locked print: 1.35× turns, 1.13× wall, 1.32× cheaper (p=0.016)
+  const longDefs: Array<{
+    key: string;
+    label: string;
+    world: [string, WorldFactory];
+    pool: Array<Record<string, unknown>>;
+  }> = [
+    {
+      key: "long-desk",
+      label: "linear mutating stretch, sloppy-agent noise",
+      world: ["desk", createDesk],
+      pool: deskPool(),
+    }, // locked print: 1.36× turns, 1.16× wall, 1.31× cheaper (p=0.016)
+    {
+      key: "long-orders",
+      label: "fan-out inventory loop then refund pipeline",
+      world: ["orders", createOrders],
+      pool: ordersPool(),
+    }, // locked print: 1.19× turns, 1.12× wall, 1.19× cheaper (p=0.016)
+    {
+      key: "long-etl",
+      label: "read fan-out with fat payloads into one report",
+      world: ["etl", () => createEtl(8)],
+      pool: etlPool(),
+    }, // locked print: 1.43× turns, 1.28× wall, 1.36× cheaper (p=0.016)
+    {
+      key: "long-incident",
+      label: "flaky searches, retries, mutating tail",
+      world: ["incident", () => createIncident(0.12)],
+      pool: incidentPool(),
+    }, // locked print: 1.35× turns, 1.13× wall, 1.32× cheaper (p=0.016)
   ];
   for (let si = 0; si < longDefs.length; si++) {
     const d = longDefs[si]!;
@@ -267,7 +292,8 @@ async function main() {
       const s = new Session([["thrash", () => createThrash(cycles)]], arm === "eden");
       if (arm === "eden") {
         // Enforcement is opt-in by design; this scenario measures what it saves.
-        for (const [, slot] of (s as unknown as { slots: Map<string, { state?: { opts: Record<string, unknown> } }> }).slots) {
+        for (const [, slot] of (s as unknown as { slots: Map<string, { state?: { opts: Record<string, unknown> } }> })
+          .slots) {
           if (slot.state) slot.state.opts.enforce = true;
         }
       }

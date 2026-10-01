@@ -76,11 +76,15 @@ export function createK8sNested(): World {
     async *script(goal) {
       const cluster = String(goal.cluster);
       const listed = yield { tool: "listNs", args: { cluster } };
-      const nss = ((listed.value as { namespaces?: Array<{ name?: string }> })?.namespaces ?? []) as Array<{ name?: string }>;
+      const nss = ((listed.value as { namespaces?: Array<{ name?: string }> })?.namespaces ?? []) as Array<{
+        name?: string;
+      }>;
       for (const row of nss) {
         const ns = String(row.name);
         const podsListed = yield { tool: "listPods", args: { ns } };
-        const pods = ((podsListed.value as { pods?: Array<{ name?: string }> })?.pods ?? []) as Array<{ name?: string }>;
+        const pods = ((podsListed.value as { pods?: Array<{ name?: string }> })?.pods ?? []) as Array<{
+          name?: string;
+        }>;
         for (const pod of pods) yield { tool: "patchPod", args: { ns, name: pod.name } };
       }
       yield { tool: "verifyCluster", args: { cluster } };
@@ -150,7 +154,9 @@ export function createEmailDrip(): World {
     async *script(goal) {
       const campaign = String(goal.campaign);
       const listed = yield { tool: "listSubscribers", args: { campaign } };
-      const subs = ((listed.value as { subs?: Array<{ email?: string; segment?: string; tz?: string; timezone?: string }> })?.subs ?? []) as Array<{
+      const subs = ((
+        listed.value as { subs?: Array<{ email?: string; segment?: string; tz?: string; timezone?: string }> }
+      )?.subs ?? []) as Array<{
         email?: string;
         segment?: string;
         tz?: string;
@@ -224,7 +230,8 @@ export function createS3Restore(): World {
     async *script(goal) {
       const bucket = String(goal.bucket);
       const listed = yield { tool: "listVersions", args: { bucket } };
-      const versions = ((listed.value as { versions?: Array<{ key?: string; versionId?: string }> })?.versions ?? []) as Array<{
+      const versions = ((listed.value as { versions?: Array<{ key?: string; versionId?: string }> })?.versions ??
+        []) as Array<{
         key?: string;
         versionId?: string;
       }>;
@@ -248,7 +255,17 @@ export function createS3Restore(): World {
   };
 }
 
-export const SEV_ALERTS = ["al-100", "al-101", "al-102", "al-110", "al-111", "al-112", "al-120", "al-121", "al-122"] as const;
+export const SEV_ALERTS = [
+  "al-100",
+  "al-101",
+  "al-102",
+  "al-110",
+  "al-111",
+  "al-112",
+  "al-120",
+  "al-121",
+  "al-122",
+] as const;
 export function sevFor(alert: string): "p0" | "p1" | "p2" {
   const n = Number(String(alert).replace(/\D/g, "")) || 0;
   const r = n % 10;
@@ -408,7 +425,11 @@ export function createDelta(): World {
       const desired = yield { tool: "listDesired", args: { wave } };
       const current = yield { tool: "listCurrent", args: { wave } };
       const want = ((desired.value as { items?: Array<{ id?: string }> })?.items ?? []) as Array<{ id?: string }>;
-      const have = new Set((((current.value as { items?: Array<{ id?: string }> })?.items ?? []) as Array<{ id?: string }>).map((x) => String(x.id)));
+      const have = new Set(
+        (((current.value as { items?: Array<{ id?: string }> })?.items ?? []) as Array<{ id?: string }>).map((x) =>
+          String(x.id),
+        ),
+      );
       for (const it of want) {
         const id = String(it.id);
         if (have.has(id)) continue;
@@ -479,7 +500,9 @@ export function createDeepBill(): World {
     async *script(goal) {
       const account = String(goal.account);
       const got = yield { tool: "getAccount", args: { account } };
-      const token = String((got.value as { org?: { billing?: { card?: { token?: string } } } })?.org?.billing?.card?.token ?? "");
+      const token = String(
+        (got.value as { org?: { billing?: { card?: { token?: string } } } })?.org?.billing?.card?.token ?? "",
+      );
       yield { tool: "chargeCard", args: { token } };
       yield { tool: "chargeCapture", args: { token } };
       yield { tool: "sendReceipt", args: { account } };

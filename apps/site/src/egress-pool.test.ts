@@ -9,10 +9,13 @@ function listen(opts: {
   onRequest?: (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void;
   onConnection?: (socket: Socket) => void;
 }): Promise<{ srv: Server; port: number }> {
-  const srv = createServer(opts.onRequest ?? ((_req, res) => {
-    res.writeHead(200);
-    res.end("ok");
-  }));
+  const srv = createServer(
+    opts.onRequest ??
+      ((_req, res) => {
+        res.writeHead(200);
+        res.end("ok");
+      }),
+  );
   if (opts.onConnection) srv.on("connection", opts.onConnection);
   return new Promise((resolve) =>
     srv.listen(0, "127.0.0.1", () => resolve({ srv, port: (srv.address() as { port: number }).port })),

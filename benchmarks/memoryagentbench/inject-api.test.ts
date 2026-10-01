@@ -33,13 +33,18 @@ function walkMarkdown(dir: string): string[] {
 }
 
 function brainMemoryImportLines(src: string): string[] {
-  return foldImports(src).split("\n").filter((line) => {
-    const t = line.trim();
-    if (!t || t.startsWith("//") || t.startsWith("#") || t.startsWith("*")) return false;
-    const js = /import\s*(?:type\s+)?(?:\{[^}]*\bBrainMemory\b[^}]*\}|\bBrainMemory\b)\s*from\s*['"][^'"]*brain-memory/.test(line);
-    const py = /\bfrom\s+\S*brain[_-]memory\S*\s+import\s+[^\n]*\bBrainMemory\b/.test(line);
-    return js || py;
-  });
+  return foldImports(src)
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (!t || t.startsWith("//") || t.startsWith("#") || t.startsWith("*")) return false;
+      const js =
+        /import\s*(?:type\s+)?(?:\{[^}]*\bBrainMemory\b[^}]*\}|\bBrainMemory\b)\s*from\s*['"][^'"]*brain-memory/.test(
+          line,
+        );
+      const py = /\bfrom\s+\S*brain[_-]memory\S*\s+import\s+[^\n]*\bBrainMemory\b/.test(line);
+      return js || py;
+    });
 }
 
 describe("M1.1 inject API freeze", () => {

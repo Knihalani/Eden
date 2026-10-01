@@ -82,7 +82,7 @@ export function compactLeader(i = shardIndex(), n = shardCount()): boolean {
   if (process.env.EDEN_KNOW_COMPACT === "0") return false;
   if (process.env.EDEN_KNOW_COMPACT === "1") return true;
   if (n <= 1) return true;
-  return (((i % n) + n) % n) === 0;
+  return ((i % n) + n) % n === 0;
 }
 /** Consecutive latest-crawl WET files per tick (abort-early makes 2 cheap). */
 export const DEFAULT_CC_SLICES = 2;

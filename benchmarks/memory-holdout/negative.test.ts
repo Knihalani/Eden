@@ -25,20 +25,22 @@ afterAll(() => rmSync(REPORT_DIR, { recursive: true, force: true }));
 
 function honest(row: NegativeRow): boolean {
   if (row.verdict === "Δ≈0") {
-    return row.delta_bytes === 0
-      && row.body_delta_bytes === 0
-      && row.baseline.packet_bytes === 0
-      && row.probe.packet_bytes === 0
-      && row.baseline.body_packet_bytes === 0
-      && row.probe.body_packet_bytes === 0
-      && row.leftover.length === 0
-      && row.body_leftover.length === 0
-      && row.baseline.identity
-      && row.probe.identity
-      && row.baseline.body_identity
-      && row.probe.body_identity
-      && row.baseline.added_system_bytes === 0
-      && row.probe.added_system_bytes === 0;
+    return (
+      row.delta_bytes === 0 &&
+      row.body_delta_bytes === 0 &&
+      row.baseline.packet_bytes === 0 &&
+      row.probe.packet_bytes === 0 &&
+      row.baseline.body_packet_bytes === 0 &&
+      row.probe.body_packet_bytes === 0 &&
+      row.leftover.length === 0 &&
+      row.body_leftover.length === 0 &&
+      row.baseline.identity &&
+      row.probe.identity &&
+      row.baseline.body_identity &&
+      row.probe.body_identity &&
+      row.baseline.added_system_bytes === 0 &&
+      row.probe.added_system_bytes === 0
+    );
   }
   if (row.verdict === "LOSS") return row.expect === "MEASURE";
   return row.verdict === "FAIL";

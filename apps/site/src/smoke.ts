@@ -155,7 +155,10 @@ await check("MCP handshake is an empty catalog; dispatch matches a live tool", a
       }),
     })
   ).json()) as { result?: { tools?: Array<{ name: string }> } };
-  expect((dispatch.result?.tools ?? []).length === 1, `dispatch expected 1, got ${JSON.stringify(dispatch).slice(0, 200)}`);
+  expect(
+    (dispatch.result?.tools ?? []).length === 1,
+    `dispatch expected 1, got ${JSON.stringify(dispatch).slice(0, 200)}`,
+  );
 });
 
 await check("play runs the compiled tool against the in-process forge", async () => {

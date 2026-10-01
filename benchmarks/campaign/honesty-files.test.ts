@@ -8,7 +8,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { claimById, PUBLIC_CLAIMS, renderClaimsListing, WAVE_21_CATCHERS, WAVE_22_CATCHERS } from "@eden/measure";
 import { surfaceMode } from "@eden/wrap";
-import { LIMIT_CLAIMS, ISO_ANALOGUE_ROWS, ISO_LIMIT_ROWS, ISO_RETIRED_ROWS } from "../../apps/web/app/(notes)/isolation/copy";
+import {
+  LIMIT_CLAIMS,
+  ISO_ANALOGUE_ROWS,
+  ISO_LIMIT_ROWS,
+  ISO_RETIRED_ROWS,
+} from "../../apps/web/app/(notes)/isolation/copy";
 
 const ROOT = join(import.meta.dir, "../..");
 
@@ -81,9 +86,9 @@ describe("Wave 21.3 proof cases chrome", () => {
     const page = read("apps/web/app/(notes)/proof/page.tsx");
     expect(page).toContain("fromFixtures(FIXTURES)");
     expect(page).toContain("Fixture verticals");
-    expect(page).not.toContain("<h2 id=\"proof-cases\">Case studies</h2>");
+    expect(page).not.toContain('<h2 id="proof-cases">Case studies</h2>');
     expect(page).toContain("ClaimTable");
-    expect(page).toContain("tag: \"fixture\"");
+    expect(page).toContain('tag: "fixture"');
     expect(page).toContain("row.vertical");
     expect(page).not.toContain("iso-owasp");
     expect(page).toContain("CLASS_KEY");

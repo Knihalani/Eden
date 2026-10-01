@@ -135,7 +135,10 @@ async function drain() {
   if (ex(runsDir)) {
     for (const f of rd(runsDir)) {
       if (!f.endsWith(".jsonl") || f.endsWith(".sent.jsonl")) continue;
-      appendFileSync(outbox, JSON.stringify({ run_id: f.replace(/\.jsonl$/, ""), kind: "stretch_end", ts: Date.now() }) + "\n");
+      appendFileSync(
+        outbox,
+        JSON.stringify({ run_id: f.replace(/\.jsonl$/, ""), kind: "stretch_end", ts: Date.now() }) + "\n",
+      );
     }
   }
   const proc = Bun.spawn(["bun", CLI, "drain"], {
@@ -174,12 +177,15 @@ function scoreWork(work: string, gold: Record<number, Awaited<ReturnType<typeof 
     if (Number(row.reviews) === g.review_count) reviewHits++;
     if (String(row.status || "") === g.status_state) statusHits++;
   }
-  const report = phase === 3 && existsSync(join(work, "REPORT.md")) ? readFileSync(join(work, "REPORT.md"), "utf8") : "";
+  const report =
+    phase === 3 && existsSync(join(work, "REPORT.md")) ? readFileSync(join(work, "REPORT.md"), "utf8") : "";
   const git = Bun.spawnSync(["git", "log", "--oneline"], { cwd: work });
   const gitOut = Buffer.isBuffer(git.stdout) ? git.stdout.toString("utf8") : String(git.stdout || "");
   const commits = gitOut.trim().split("\n").filter(Boolean).length;
   const hasPkg = existsSync(join(work, "package.json"));
-  const hasTest = readdirSync(work, { recursive: true }).some((f) => String(f).endsWith(".test.ts") || String(f).endsWith(".test.js"));
+  const hasTest = readdirSync(work, { recursive: true }).some(
+    (f) => String(f).endsWith(".test.ts") || String(f).endsWith(".test.js"),
+  );
   return {
     rows: rows.length,
     expected: expectN.length,
@@ -245,7 +251,7 @@ async function runClaude(opts: {
   writeFileSync(join(dir, "stdout.jsonl"), stdout);
   writeFileSync(join(dir, "stderr.txt"), stderr);
   const parsed = parseStream(stdout);
-  const usage = ((parsed.result?.usage || {}) as Record<string, number>);
+  const usage = (parsed.result?.usage || {}) as Record<string, number>;
   const mcp_calls = Object.entries(parsed.tool_names)
     .filter(([k]) => k.startsWith("mcp__eden__"))
     .reduce((a, [, n]) => a + n, 0);
@@ -266,7 +272,16 @@ async function runClaude(opts: {
     gh_bash_calls: parsed.tool_names.Bash || 0,
   };
   writeFileSync(join(dir, "summary.json"), JSON.stringify(summary, null, 2));
-  console.log(JSON.stringify({ arm: opts.arm, task: opts.task, wall_ms, cost: summary.cost_usd, tools: parsed.tool_names, err: summary.is_error }));
+  console.log(
+    JSON.stringify({
+      arm: opts.arm,
+      task: opts.task,
+      wall_ms,
+      cost: summary.cost_usd,
+      tools: parsed.tool_names,
+      err: summary.is_error,
+    }),
+  );
   if (opts.arm === "with") await drain();
   return summary;
 }
@@ -380,8 +395,12 @@ try {
   const tasks = ["t1-build", "t2-extend", "t3-report"] as const;
   for (const [i, id] of tasks.entries()) {
     if (resume && i === 0 && existsSync(join(OUT, "sessions/with-t1-build/summary.json"))) {
-      const without = JSON.parse(readFileSync(join(OUT, "sessions/without-t1-build/summary.json"), "utf8")) as ClaudeSummary;
-      const withEden = JSON.parse(readFileSync(join(OUT, "sessions/with-t1-build/summary.json"), "utf8")) as ClaudeSummary;
+      const without = JSON.parse(
+        readFileSync(join(OUT, "sessions/without-t1-build/summary.json"), "utf8"),
+      ) as ClaudeSummary;
+      const withEden = JSON.parse(
+        readFileSync(join(OUT, "sessions/with-t1-build/summary.json"), "utf8"),
+      ) as ClaudeSummary;
       scored.push({
         id,
         without,

@@ -106,9 +106,10 @@ describe("hard bench oracle", () => {
 
   test("a rewritten copula counts by its value: current passes, superseded is stale, unknown is false", () => {
     const copula = /^The (.+?) is (?:now )?(.+)\.$/;
-    const says = (stale: boolean) => world.statements.find((x) => {
-      return x.text.match(copula)?.[2] === x.value && oracle.isStale(x) === stale;
-    })!;
+    const says = (stale: boolean) =>
+      world.statements.find((x) => {
+        return x.text.match(copula)?.[2] === x.value && oracle.isStale(x) === stale;
+      })!;
     const score = (s: Statement, value: string) => {
       const c: HardCase = { ...named, needs: [s.slot] };
       return oracle.score(c, [`- The ${s.text.match(copula)![1]} is ${value}.`], true).fails;

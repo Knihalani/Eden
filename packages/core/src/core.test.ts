@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { densifyPayload, densifyValue, undensifyValue, cellsEqual } from "../src/densify";
 import { modelFacing, prRowFromFacts, bundleJson, CI_STATE } from "../src/compact";
 import { parseNamedCli, extractNamedCliCalls, isMutatingGh, isMutatingCurl } from "../src/named-cli";
-import { parameterizeUrl, compileStepUrl, resolveTemplate, githubRestFromCli, commandMatchesToolUrls } from "../src/urls";
+import {
+  parameterizeUrl,
+  compileStepUrl,
+  resolveTemplate,
+  githubRestFromCli,
+  commandMatchesToolUrls,
+} from "../src/urls";
 import {
   cutIslands,
   fingerprintIsland,
@@ -109,9 +115,9 @@ describe("densify", () => {
   });
 
   test("resolveTemplate fills params and prior-step binds", () => {
-    expect(
-      resolveTemplate("{origin}/issues/{{s1.number}}", { origin: "https://x" }, { s1: { number: 12 } }),
-    ).toBe("https://x/issues/12");
+    expect(resolveTemplate("{origin}/issues/{{s1.number}}", { origin: "https://x" }, { s1: { number: 12 } })).toBe(
+      "https://x/issues/12",
+    );
   });
 
   test("modelFacing returns facts not full bodies", () => {
@@ -188,9 +194,21 @@ describe("islands", () => {
     const events = [
       ev({ name: "Read", args: { file_path: "src/app.ts" } }),
       ev({ name: "Edit", args: { file_path: "src/app.ts", old_string: "a".repeat(500), new_string: "b".repeat(500) } }),
-      ev({ name: "Bash", command: "gh pr view 12 --json title,body", args: { command: "gh pr view 12 --json title,body" } }),
-      ev({ name: "Bash", command: "curl https://api.github.com/repos/acme/app/issues/12/comments", args: { command: "curl https://api.github.com/repos/acme/app/issues/12/comments" } }),
-      ev({ name: "Bash", command: "gh api repos/acme/app/commits/abc/status", args: { command: "gh api repos/acme/app/commits/abc/status" } }),
+      ev({
+        name: "Bash",
+        command: "gh pr view 12 --json title,body",
+        args: { command: "gh pr view 12 --json title,body" },
+      }),
+      ev({
+        name: "Bash",
+        command: "curl https://api.github.com/repos/acme/app/issues/12/comments",
+        args: { command: "curl https://api.github.com/repos/acme/app/issues/12/comments" },
+      }),
+      ev({
+        name: "Bash",
+        command: "gh api repos/acme/app/commits/abc/status",
+        args: { command: "gh api repos/acme/app/commits/abc/status" },
+      }),
       ev({ name: "Edit", args: { file_path: "src/app.ts", old_string: "c".repeat(500), new_string: "d".repeat(500) } }),
     ];
     const islands = cutIslands(events);
@@ -241,7 +259,11 @@ describe("islands", () => {
     const islands = cutIslands([
       ev({ name: "TaskCreate", args: { description: "x" } }),
       ev({ name: "TaskCreate", args: { description: "y" } }),
-      ev({ name: "Bash", command: "gh api repos/KaiavN/Eden/pulls/12", args: { command: "gh api repos/KaiavN/Eden/pulls/12" } }),
+      ev({
+        name: "Bash",
+        command: "gh api repos/KaiavN/Eden/pulls/12",
+        args: { command: "gh api repos/KaiavN/Eden/pulls/12" },
+      }),
     ]);
     expect(islands.every((island) => island.every((s) => s.name !== "TaskCreate"))).toBe(true);
   });
@@ -265,8 +287,16 @@ describe("islands", () => {
 
   test("git log is not compiled into a GitHub island", () => {
     const islands = cutIslands([
-      ev({ name: "Bash", command: "gh api repos/KaiavN/Eden/pulls/12", args: { command: "gh api repos/KaiavN/Eden/pulls/12" } }),
-      ev({ name: "Bash", command: "gh api repos/KaiavN/Eden/pulls/12/reviews", args: { command: "gh api repos/KaiavN/Eden/pulls/12/reviews" } }),
+      ev({
+        name: "Bash",
+        command: "gh api repos/KaiavN/Eden/pulls/12",
+        args: { command: "gh api repos/KaiavN/Eden/pulls/12" },
+      }),
+      ev({
+        name: "Bash",
+        command: "gh api repos/KaiavN/Eden/pulls/12/reviews",
+        args: { command: "gh api repos/KaiavN/Eden/pulls/12/reviews" },
+      }),
       ev({ name: "Bash", command: "git log --oneline", args: { command: "git log --oneline" } }),
     ]);
     expect(islands.length).toBeGreaterThan(0);
@@ -290,12 +320,28 @@ describe("islands", () => {
 
   test("commute-safe GET order still fingerprints equal", () => {
     const a = cutIslands([
-      ev({ name: "Bash", command: "curl https://api.github.com/a", args: { command: "curl https://api.github.com/a" } }),
-      ev({ name: "Bash", command: "curl https://api.github.com/b", args: { command: "curl https://api.github.com/b" } }),
+      ev({
+        name: "Bash",
+        command: "curl https://api.github.com/a",
+        args: { command: "curl https://api.github.com/a" },
+      }),
+      ev({
+        name: "Bash",
+        command: "curl https://api.github.com/b",
+        args: { command: "curl https://api.github.com/b" },
+      }),
     ]);
     const b = cutIslands([
-      ev({ name: "Bash", command: "curl https://api.github.com/b", args: { command: "curl https://api.github.com/b" } }),
-      ev({ name: "Bash", command: "curl https://api.github.com/a", args: { command: "curl https://api.github.com/a" } }),
+      ev({
+        name: "Bash",
+        command: "curl https://api.github.com/b",
+        args: { command: "curl https://api.github.com/b" },
+      }),
+      ev({
+        name: "Bash",
+        command: "curl https://api.github.com/a",
+        args: { command: "curl https://api.github.com/a" },
+      }),
     ]);
     expect(fingerprintIsland(a[0]!)).toBe(fingerprintIsland(b[0]!));
   });
@@ -303,7 +349,11 @@ describe("islands", () => {
   test("required_k is 1 when first is a named gh verb", () => {
     const islands = cutIslands([
       ev({ name: "Bash", command: "gh pr view 1", args: { command: "gh pr view 1" } }),
-      ev({ name: "Bash", command: "curl https://api.github.com/x", args: { command: "curl https://api.github.com/x" } }),
+      ev({
+        name: "Bash",
+        command: "curl https://api.github.com/x",
+        args: { command: "curl https://api.github.com/x" },
+      }),
     ]);
     expect(requiredK(islands[0]!)).toBe(1);
   });
@@ -326,7 +376,11 @@ describe("islands", () => {
 
   test("heuristicName for pull+reviews+status is github_pr_bundle", () => {
     const islands = cutIslands([
-      ev({ name: "Bash", command: "gh api repos/KaiavN/Eden/pulls/12", args: { command: "gh api repos/KaiavN/Eden/pulls/12" } }),
+      ev({
+        name: "Bash",
+        command: "gh api repos/KaiavN/Eden/pulls/12",
+        args: { command: "gh api repos/KaiavN/Eden/pulls/12" },
+      }),
       ev({
         name: "Bash",
         command: "gh api repos/KaiavN/Eden/pulls/12/reviews",
@@ -343,7 +397,11 @@ describe("islands", () => {
 
   test("probe + loop does not duplicate parameterized pull URLs", () => {
     const islands = cutIslands([
-      ev({ name: "Bash", command: "gh api repos/KaiavN/Eden/pulls/170", args: { command: "gh api repos/KaiavN/Eden/pulls/170" } }),
+      ev({
+        name: "Bash",
+        command: "gh api repos/KaiavN/Eden/pulls/170",
+        args: { command: "gh api repos/KaiavN/Eden/pulls/170" },
+      }),
       ev({
         name: "Bash",
         command:
@@ -362,7 +420,11 @@ describe("islands", () => {
 
   test("heuristicName prefers bundle when files and reviews are both present", () => {
     const islands = cutIslands([
-      ev({ name: "Bash", command: "gh api repos/KaiavN/Eden/pulls/12", args: { command: "gh api repos/KaiavN/Eden/pulls/12" } }),
+      ev({
+        name: "Bash",
+        command: "gh api repos/KaiavN/Eden/pulls/12",
+        args: { command: "gh api repos/KaiavN/Eden/pulls/12" },
+      }),
       ev({
         name: "Bash",
         command: "gh api repos/KaiavN/Eden/pulls/12/reviews",
@@ -451,7 +513,7 @@ describe("fulfill wrap", () => {
     expect(r.command).toContain("170 169 168");
     expect(r.command).toContain("cat ");
     expect(r.command).toContain(".ec");
-    expect(r.command).toContain("[ \"$_fail\" = 0 ]");
+    expect(r.command).toContain('[ "$_fail" = 0 ]');
     expect(r.command).not.toContain("fulfill");
     expect(r.command).not.toContain("suffix-must-survive");
     const wrapped = "echo start; " + cmd + "; echo suffix-must-survive";
@@ -502,7 +564,8 @@ describe("fulfill wrap", () => {
   });
 
   test("playFor wins over parallel when a live tool exists", () => {
-    const cmd = "for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n; gh api repos/KaiavN/Eden/pulls/$n/reviews; done";
+    const cmd =
+      "for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n; gh api repos/KaiavN/Eden/pulls/$n/reviews; done";
     const r = rewriteBash(cmd, {
       playFor: (kind, issues) => (kind === "bundle" ? `eden play github_pr_bundle --issues ${issues.join(",")}` : null),
     });
@@ -558,8 +621,7 @@ describe("fulfill wrap", () => {
   });
 
   test("fulfillBin rewrites the first gh loop and keeps prefix/suffix", () => {
-    const cmd =
-      "echo start; for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > raw/pull-$n.json; done; echo end";
+    const cmd = "echo start; for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > raw/pull-$n.json; done; echo end";
     const r = rewriteBash(cmd, { fulfillBin: "bun cli.ts fulfill" });
     expect(r.kind).toBe("fulfill");
     expect(r.command).toContain("echo start");
@@ -613,11 +675,7 @@ describe("plan + mcp ranking", () => {
       "RAW=/tmp/shipstat-raw; mkdir -p $RAW; for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > $RAW/pull-$n.json; done";
     const plan = planFromBash(cmd);
     expect(plan?.pullOut).toBe("/tmp/shipstat-raw/pull-$n.json");
-    expect(
-      planFromBash(
-        "for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > $RAW/pull-$n.json; done",
-      ),
-    ).toBeNull();
+    expect(planFromBash("for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > $RAW/pull-$n.json; done")).toBeNull();
   });
 
   test("planFromBash reads GraphQL owner/name and does not rewrite redirected graphql", () => {
@@ -630,7 +688,7 @@ describe("plan + mcp ranking", () => {
     expect(plan?.status).toBe(true);
     expect(
       planFromBash(
-        "for n in 170 169; do gh api graphql -f query='query { repository(owner:\"KaiavN\", name:\"Eden\") { pullRequest(number: 1) { title } } }' > raw/$n.json; done",
+        'for n in 170 169; do gh api graphql -f query=\'query { repository(owner:"KaiavN", name:"Eden") { pullRequest(number: 1) { title } } }\' > raw/$n.json; done',
       ),
     ).toBeNull();
   });
@@ -767,8 +825,16 @@ describe("domain-general compilation (no vendor knowledge)", () => {
   test("an unfamiliar CLI loop cuts a runner island named by its shape", () => {
     const islands = cutIslands(
       [
-        ev({ name: "Bash", command: "kubectl get pods --namespace prod", args: { command: "kubectl get pods --namespace prod" } }),
-        ev({ name: "Bash", command: "kubectl get svc --namespace prod", args: { command: "kubectl get svc --namespace prod" } }),
+        ev({
+          name: "Bash",
+          command: "kubectl get pods --namespace prod",
+          args: { command: "kubectl get pods --namespace prod" },
+        }),
+        ev({
+          name: "Bash",
+          command: "kubectl get svc --namespace prod",
+          args: { command: "kubectl get svc --namespace prod" },
+        }),
       ],
       { allowRunnerOnly: true },
     );
@@ -794,7 +860,11 @@ describe("domain-general compilation (no vendor knowledge)", () => {
 
   test("a generic for-loop decomposes into per-item shell steps (G8)", () => {
     const events = [
-      ev({ name: "Bash", command: "for ns in dev stage prod; do kubectl get pods -n $ns; done", args: { command: "for ns in dev stage prod; do kubectl get pods -n $ns; done" } }),
+      ev({
+        name: "Bash",
+        command: "for ns in dev stage prod; do kubectl get pods -n $ns; done",
+        args: { command: "for ns in dev stage prod; do kubectl get pods -n $ns; done" },
+      }),
     ];
     const islands = cutIslands(events, { allowRunnerOnly: true });
     expect(islands.length).toBe(1);
@@ -807,7 +877,15 @@ describe("domain-general compilation (no vendor knowledge)", () => {
 
   test("a cloud for-loop over an arbitrary API compiles generically (G8)", () => {
     const events = [
-      ev({ name: "Bash", command: "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done", args: { command: "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done" } }),
+      ev({
+        name: "Bash",
+        command:
+          "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done",
+        args: {
+          command:
+            "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done",
+        },
+      }),
     ];
     const islands = cutIslands(events);
     expect(islands.length).toBe(1);
@@ -819,7 +897,11 @@ describe("domain-general compilation (no vendor knowledge)", () => {
   test("session plumbing never joins an island", () => {
     const events = [
       ev({ name: "Bash", command: "ls -la", args: { command: "ls -la" } }),
-      ev({ name: "Bash", command: "stripe invoices list --limit 10", args: { command: "stripe invoices list --limit 10" } }),
+      ev({
+        name: "Bash",
+        command: "stripe invoices list --limit 10",
+        args: { command: "stripe invoices list --limit 10" },
+      }),
       ev({ name: "Bash", command: "echo done", args: { command: "echo done" } }),
     ];
     const islands = cutIslands(events, { allowRunnerOnly: true });
@@ -973,7 +1055,8 @@ describe("any-workflow compile", () => {
   });
 
   test("playFor rewrites a curl loop when the callback matches", () => {
-    const cmd = "for n in 11 12; do curl http://127.0.0.1:8801/shop/orders/$n; curl http://127.0.0.1:8801/shop/orders/$n/items; done";
+    const cmd =
+      "for n in 11 12; do curl http://127.0.0.1:8801/shop/orders/$n; curl http://127.0.0.1:8801/shop/orders/$n/items; done";
     const r = rewriteBash(cmd, {
       playFor: (_kind, issues) => `eden play shop_orders --ids ${issues.join(",")}`,
     });
@@ -1087,12 +1170,9 @@ describe("what may be reordered, and what may not", () => {
   test("layers still reports a dependency that can never be satisfied", () => {
     expect(() => layers([{ id: "A", deps: ["ghost"] } as never])).toThrow(/unresolvable step deps/);
     expect(() => layers([{ id: "A", deps: ["A"] } as never])).toThrow(/unresolvable step deps/);
-    expect(() =>
-      layers([
-        { id: "A", deps: ["B"] } as never,
-        { id: "B", deps: ["A"] } as never,
-      ]),
-    ).toThrow(/unresolvable step deps/);
+    expect(() => layers([{ id: "A", deps: ["B"] } as never, { id: "B", deps: ["A"] } as never])).toThrow(
+      /unresolvable step deps/,
+    );
   });
 
   test("layers groups independent steps into one wave and keeps chains ordered", () => {
@@ -1134,12 +1214,12 @@ describe("URL shapes match at segment boundaries", () => {
     // `repos/o/repo-two/pulls/{id}`. Steering on that similarity sends the
     // agent to a tool that fetches a different repository. A prefix now has
     // to end where a path segment ends.
-    expect(
-      commandMatchesToolUrls("gh api repos/o/rep", ["https://api.github.com/repos/o/repo-two/pulls/1"]),
-    ).toBe(false);
-    expect(
-      commandMatchesToolUrls("gh api repos/o/repo-two/pulls/1", ["https://api.github.com/repos/o/rep"]),
-    ).toBe(false);
+    expect(commandMatchesToolUrls("gh api repos/o/rep", ["https://api.github.com/repos/o/repo-two/pulls/1"])).toBe(
+      false,
+    );
+    expect(commandMatchesToolUrls("gh api repos/o/repo-two/pulls/1", ["https://api.github.com/repos/o/rep"])).toBe(
+      false,
+    );
   });
 
   test("an exact shape still matches", () => {

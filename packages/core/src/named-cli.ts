@@ -14,20 +14,7 @@ const NAMED: Record<string, { subs: string[]; rewrite?: string }> = {
   curl: { subs: [], rewrite: "curl" },
 };
 
-const GENERIC = new Set([
-  "ls",
-  "cat",
-  "cd",
-  "pwd",
-  "echo",
-  "head",
-  "tail",
-  "true",
-  "false",
-  "sleep",
-  "which",
-  "env",
-]);
+const GENERIC = new Set(["ls", "cat", "cd", "pwd", "echo", "head", "tail", "true", "false", "sleep", "which", "env"]);
 
 export function parseNamedCli(command: string): ParsedCli | null {
   const parts = tokenize(command);
@@ -49,7 +36,13 @@ export function parseNamedCli(command: string): ParsedCli | null {
     // and toStepFromParsed, having no URL to work from, then re-scanned the
     // whole command and picked the *first* one, so the second endpoint
     // vanished from the mined island.
-    return { family: "curl", subcommand: "get", flags: unique(flags), positionals: url ? [url] : [], rewrite_host: host };
+    return {
+      family: "curl",
+      subcommand: "get",
+      flags: unique(flags),
+      positionals: url ? [url] : [],
+      rewrite_host: host,
+    };
   }
   const spec = NAMED[bin];
   if (!spec) return null;
@@ -209,8 +202,34 @@ function segmentIsMutatingGh(command: string, at: number): boolean {
  * write that looks like nothing at all to the HTTP-verb heuristics.
  */
 const GH_MUTATING_VERBS: Record<string, Set<string>> = {
-  pr: new Set(["close", "comment", "create", "edit", "lock", "merge", "pin", "ready", "reopen", "revert", "transfer", "unlock", "unpin"]),
-  issue: new Set(["close", "comment", "create", "delete", "edit", "lock", "pin", "reopen", "transfer", "unlock", "unpin"]),
+  pr: new Set([
+    "close",
+    "comment",
+    "create",
+    "edit",
+    "lock",
+    "merge",
+    "pin",
+    "ready",
+    "reopen",
+    "revert",
+    "transfer",
+    "unlock",
+    "unpin",
+  ]),
+  issue: new Set([
+    "close",
+    "comment",
+    "create",
+    "delete",
+    "edit",
+    "lock",
+    "pin",
+    "reopen",
+    "transfer",
+    "unlock",
+    "unpin",
+  ]),
   repo: new Set(["archive", "create", "delete", "edit", "rename", "star", "unarchive", "unstar"]),
   run: new Set(["cancel", "rerun", "delete"]),
   release: new Set(["create", "delete", "edit", "upload", "unarchive"]),
@@ -297,4 +316,3 @@ export function isMutatingCurl(command: string): boolean {
   // a POST.
   return CURL_BODY_FLAG.test(command);
 }
-

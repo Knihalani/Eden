@@ -251,7 +251,14 @@ export type TraceEvent = {
   sharedAcross?: number;
 };
 
-export const SIGNAL_KINDS = ["repeat_ngram", "fail_streak", "budget", "low_gain", "evidence_gap", "repeat_visits"] as const;
+export const SIGNAL_KINDS = [
+  "repeat_ngram",
+  "fail_streak",
+  "budget",
+  "low_gain",
+  "evidence_gap",
+  "repeat_visits",
+] as const;
 export type SignalKind = (typeof SIGNAL_KINDS)[number];
 
 /** Wall / LLM snapshot. Token fields are omitted until wrap scraped `usage`. */

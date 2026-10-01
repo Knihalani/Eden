@@ -82,7 +82,12 @@ describe("handleMcp initialize", () => {
 
   test("returns a dispatch hint, not a dump of live tool names", async () => {
     await addTool("github_pr_bundle", "issues csv → JSON rows. One call for all PRs.", GH_STEPS);
-    const res = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize" }, "http://x")) as InitResult;
+    const res = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      "http://x",
+    )) as InitResult;
     expect(res.result.protocolVersion).toBe("2025-03-26");
     expect(res.result.instructions).toBeDefined();
     expect(res.result.instructions).toMatch(/tools\/dispatch/);
@@ -92,13 +97,23 @@ describe("handleMcp initialize", () => {
   test("does not leak another workspace's tools into the hint", async () => {
     await addTool("github_pr_bundle", "mine", GH_STEPS);
     await addTool("other_secret_tool", "not yours", GH_STEPS, "ws_other");
-    const res = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize" }, "http://x")) as InitResult;
+    const res = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      "http://x",
+    )) as InitResult;
     expect(res.result.instructions).not.toContain("other_secret_tool");
     expect(res.result.instructions).not.toContain("github_pr_bundle");
   });
 
   test("initialize still succeeds with no tools at all", async () => {
-    const res = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize" }, "http://x")) as InitResult;
+    const res = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      "http://x",
+    )) as InitResult;
     expect(res.result.serverInfo).toEqual({ name: "eden", version: "0.1.0" });
     expect(res.result.instructions).toContain("None are live");
   });
@@ -174,7 +189,12 @@ describe("handleMcp initialize", () => {
   test("the catalog is empty; dispatch returns the one match", async () => {
     await addTool("alpha_rows", "ids csv → alpha_rows");
     await addTool("github_pr_bundle", "issues csv → JSON rows", GH_STEPS);
-    const init = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize" }, "http://x")) as InitResult;
+    const init = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      "http://x",
+    )) as InitResult;
     const list = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 2, method: "tools/list" }, "http://x")) as {
       result: { tools: Array<{ name: string; defer_loading?: boolean }> };
     };
@@ -290,7 +310,9 @@ describe("handleMcp initialize", () => {
     ];
     const programs = rows.map(toolRowToProgram);
     const viaDispatch = dispatchPrograms(GH_MESSAGE, programs).map((p) => p.name);
-    const viaJit = selectSurfacePrograms({ mode: "jit", live: programs, messages: GH_MESSAGE }).surface.map((p) => p.name);
+    const viaJit = selectSurfacePrograms({ mode: "jit", live: programs, messages: GH_MESSAGE }).surface.map(
+      (p) => p.name,
+    );
     expect(viaDispatch).toEqual(viaJit);
     expect(viaDispatch).toEqual(["github_pr_bundle"]);
   });
@@ -356,7 +378,12 @@ describe("handleMcp initialize", () => {
     };
     let res: unknown;
     try {
-      res = await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "tools/dispatch", params: hostile }, "http://x");
+      res = await handleMcp(
+        db,
+        "ws_local",
+        { jsonrpc: "2.0", id: 1, method: "tools/dispatch", params: hostile },
+        "http://x",
+      );
     } catch (err) {
       throw new Error(`dispatch threw: ${(err as Error).message}`);
     }
@@ -416,12 +443,16 @@ describe("DELETE /mcp terminates the session cleanly", () => {
   });
 
   test("answers 202 accepted, not a non-JSON error", async () => {
-    const res = await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }));
+    const res = await handleFetch(
+      new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }),
+    );
     expect(res.status).toBe(202);
   });
 
   test("POST still reaches the JSON-RPC handler afterwards", async () => {
-    await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }));
+    await handleFetch(
+      new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }),
+    );
     const res = await handleFetch(
       new Request("http://127.0.0.1:8787/mcp", {
         method: "POST",

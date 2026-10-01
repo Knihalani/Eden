@@ -34,7 +34,10 @@ const NOISE_TOOLS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "g
 
 export function createNoise(): World {
   const done: Record<string, number> = {};
-  const toolDefs = (): Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> => {
+  const toolDefs = (): Record<
+    string,
+    { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }
+  > => {
     const out: Record<string, { description: string; execute: (a: Record<string, unknown>) => Promise<unknown> }> = {};
     for (const name of NOISE_TOOLS) {
       out[name] = {
@@ -125,7 +128,8 @@ export function createCreative(): World {
       for (const g of doneGoals) occ.set(String(g.id), (occ.get(String(g.id)) ?? 0) + 1);
       const bad: string[] = [];
       for (const [id, n] of occ) {
-        if ((published[id] ?? 0) > n) bad.push(`creative:${id}: published ${(published[id] ?? 0)}x across ${n} stretch(es)`);
+        if ((published[id] ?? 0) > n)
+          bad.push(`creative:${id}: published ${published[id] ?? 0}x across ${n} stretch(es)`);
       }
       return bad;
     },
@@ -173,7 +177,7 @@ export function createMicro(): World {
       for (const g of doneGoals) occ.set(String(g.id), (occ.get(String(g.id)) ?? 0) + 1);
       const bad: string[] = [];
       for (const [id, n] of occ) {
-        if ((flags[id] ?? 0) > n) bad.push(`micro:${id}: flag set ${(flags[id] ?? 0)}x across ${n} stretch(es)`);
+        if ((flags[id] ?? 0) > n) bad.push(`micro:${id}: flag set ${flags[id] ?? 0}x across ${n} stretch(es)`);
       }
       return bad;
     },
@@ -308,7 +312,9 @@ export function createChaos(): World {
             attempts[String(q)] = (attempts[String(q)] ?? 0) + 1;
             await Bun.sleep(25);
             if (attempts[String(q)]! % 3 !== 0) throw new Error("upstream timeout");
-            return { events: Array.from({ length: 12 }, (_, i) => ({ lvl: i % 4 ? "info" : "error", msg: `${q} ${i}` })) };
+            return {
+              events: Array.from({ length: 12 }, (_, i) => ({ lvl: i % 4 ? "info" : "error", msg: `${q} ${i}` })),
+            };
           },
         },
         groupErrors: {
@@ -358,7 +364,10 @@ export function createChaos(): World {
         if (!logs.ok) logs = yield { tool: "searchLogs", args: { q: key, key } };
         if (!logs.ok) logs = yield { tool: "searchLogs", args: { q: key, key } }; // three tries, then give up
         if (!logs.ok) return;
-        const grouped = yield { tool: "groupErrors", args: { events: (logs.value as { events?: unknown[] }).events ?? [] } };
+        const grouped = yield {
+          tool: "groupErrors",
+          args: { events: (logs.value as { events?: unknown[] }).events ?? [] },
+        };
         yield { tool: "fetchTrace", args: { signature: (grouped.value as { signature?: string }).signature } };
         yield { tool: "diagnose", args: {} };
         yield { tool: "fileIncident", args: { key } };
@@ -373,8 +382,8 @@ export function createChaos(): World {
         for (const g of doneGoals) occ.set(String(g.key), (occ.get(String(g.key)) ?? 0) + 1);
         const bad: string[] = [];
         for (const [k, n] of occ) {
-          if ((filed[k] ?? 0) > n) bad.push(`chaos:${k}: filed ${(filed[k] ?? 0)}x across ${n} stretch(es)`);
-          if ((paged[k] ?? 0) > n) bad.push(`chaos:${k}: paged ${(paged[k] ?? 0)}x across ${n} stretch(es)`);
+          if ((filed[k] ?? 0) > n) bad.push(`chaos:${k}: filed ${filed[k] ?? 0}x across ${n} stretch(es)`);
+          if ((paged[k] ?? 0) > n) bad.push(`chaos:${k}: paged ${paged[k] ?? 0}x across ${n} stretch(es)`);
         }
         return bad;
       },

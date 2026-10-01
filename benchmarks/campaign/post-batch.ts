@@ -137,7 +137,10 @@ export async function probePostBatchRemainder(): Promise<PostBatchProbe> {
     return await withLiveHookd(async ({ pre, warm }) => {
       executeWrite();
       const batch = await curlAsClaude(warm, claudePostToolBatch("campaign-batch", filePath));
-      const grep = await curlAsClaude(pre, claudePreToolUse("campaign-batch", "Grep", { pattern: "TODO", path: filePath }));
+      const grep = await curlAsClaude(
+        pre,
+        claudePreToolUse("campaign-batch", "Grep", { pattern: "TODO", path: filePath }),
+      );
       const write = await curlAsClaude(pre, claudePreToolUse("campaign-batch", "Write", { file_path: filePath }));
       const writeDenied = denied(write);
       if (!writeDenied) executeWrite();
@@ -159,7 +162,9 @@ export async function probePostBatchRemainder(): Promise<PostBatchProbe> {
 }
 
 /** Unique-work / empty live catalog: hookd PreToolUse must not deny. */
-export async function probeHookdNoArm(live: unknown[]): Promise<{ grepDenied: boolean; writeDenied: boolean; via: "curl" }> {
+export async function probeHookdNoArm(
+  live: unknown[],
+): Promise<{ grepDenied: boolean; writeDenied: boolean; via: "curl" }> {
   const prevHome = process.env.EDEN_HOME;
   const prevSteer = process.env.EDEN_STEER_HOOKS;
   const home = join(import.meta.dir, `../../.tmp-eden-campaign-postbatch-noop`);
@@ -172,7 +177,10 @@ export async function probeHookdNoArm(live: unknown[]): Promise<{ grepDenied: bo
   try {
     return await withLiveHookd(async ({ pre, warm }) => {
       await curlAsClaude(warm, claudePostToolBatch("campaign-unique", filePath));
-      const grep = await curlAsClaude(pre, claudePreToolUse("campaign-unique", "Grep", { pattern: "TODO", path: filePath }));
+      const grep = await curlAsClaude(
+        pre,
+        claudePreToolUse("campaign-unique", "Grep", { pattern: "TODO", path: filePath }),
+      );
       const write = await curlAsClaude(pre, claudePreToolUse("campaign-unique", "Write", { file_path: filePath }));
       return { grepDenied: denied(grep), writeDenied: denied(write), via: "curl" };
     });

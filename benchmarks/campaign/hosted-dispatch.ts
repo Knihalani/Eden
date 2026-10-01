@@ -6,7 +6,14 @@
  * "connection" (MCP Streamable HTTP analog), then wrapTools on that session
  * of the multi-tenant store. Exactly-once writes. Zero unpinned anomalies.
  */
-import { createArmingStore, createState, sharedAcrossLine, wrapTools, type ArmingStore, type ToolDef } from "@eden/wrap";
+import {
+  createArmingStore,
+  createState,
+  sharedAcrossLine,
+  wrapTools,
+  type ArmingStore,
+  type ToolDef,
+} from "@eden/wrap";
 import type { StretchProgram } from "@eden/ir";
 import { fireOblivious, linearProgram } from "./struggle-harness";
 import { fetchTools, readOnlyFetchProgram } from "./fleet-dedupe";

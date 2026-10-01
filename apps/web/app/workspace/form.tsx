@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useAuth,
-  useOrganization,
-  useOrganizationCreationDefaults,
-  useOrganizationList,
-} from "@clerk/nextjs";
+import { useAuth, useOrganization, useOrganizationCreationDefaults, useOrganizationList } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
@@ -16,11 +11,16 @@ import { inviteToWorkspace } from "./actions";
 export function WorkspaceForm() {
   const { isLoaded, orgId } = useAuth(SEE_PENDING);
   const { organization } = useOrganization();
-  const { createOrganization, setActive, userMemberships, userInvitations, isLoaded: listLoaded } =
-    useOrganizationList({
-      userMemberships: { infinite: true },
-      userInvitations: { infinite: true },
-    });
+  const {
+    createOrganization,
+    setActive,
+    userMemberships,
+    userInvitations,
+    isLoaded: listLoaded,
+  } = useOrganizationList({
+    userMemberships: { infinite: true },
+    userInvitations: { infinite: true },
+  });
   const { data: defaults } = useOrganizationCreationDefaults();
   const router = useRouter();
   const [name, setName] = useState("");
@@ -116,11 +116,7 @@ export function WorkspaceForm() {
   if (orgId && organization) {
     return (
       <section className="account-stage">
-        <AccountCopy
-          title={organization.name}
-          lead="Invite someone, or go to Home."
-          wide
-        />
+        <AccountCopy title={organization.name} lead="Invite someone, or go to Home." wide />
         <div className="account-door" id="account-door">
           <Link href={destAfterWorkspace("continue")} className="account-enter">
             Continue

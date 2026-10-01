@@ -142,7 +142,10 @@ function pickDispatchRow(rows: ToolRow[], params?: Record<string, unknown>): Too
   return picked[0] ? rows.find((r) => r.name === picked[0]!.name || r.id === picked[0]!.id) : undefined;
 }
 
-export function dispatchResult(rows: ToolRow[], params?: Record<string, unknown>): { tools: ReturnType<typeof mcpToolSchema>[] } {
+export function dispatchResult(
+  rows: ToolRow[],
+  params?: Record<string, unknown>,
+): { tools: ReturnType<typeof mcpToolSchema>[] } {
   try {
     const hit = pickDispatchRow(rows, params);
     return { tools: hit ? [mcpToolSchema(hit)] : [] };
@@ -152,7 +155,10 @@ export function dispatchResult(rows: ToolRow[], params?: Record<string, unknown>
 }
 
 /** Same OpenAI function schema local wrap POST /v1/dispatch returns. MCP keeps inputSchema. */
-export function wrapDispatchResult(rows: ToolRow[], params?: Record<string, unknown>): { tools: ReturnType<typeof compiledSchema>[] } {
+export function wrapDispatchResult(
+  rows: ToolRow[],
+  params?: Record<string, unknown>,
+): { tools: ReturnType<typeof compiledSchema>[] } {
   try {
     const hit = pickDispatchRow(rows, params);
     return { tools: hit ? [compiledSchema(toolRowToProgram(hit))] : [] };
@@ -261,26 +267,25 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
     const ids = String(args.issues || args.ids || args.issue || "")
       .split(/[,\s]+/)
       .filter(Boolean);
-    const prRows = receipt.rows?.length
-      ? receipt.rows
-      : prRowsFromFacts(receipt.facts, ids);
-    const generic =
-      prRows.length
-        ? null
-        : ids.length
-          ? ids
-              .map((n, i) => {
-                const facts =
-                  receipt.facts && typeof receipt.facts === "object" && Array.isArray((receipt.facts as { rows?: unknown }).rows)
-                    ? (receipt.facts as { rows: unknown[] }).rows[i]
-                    : receipt.facts;
-                return compactRowFromFacts(facts, n);
-              })
-              .filter((r): r is Record<string, unknown> => r !== null)
-          : (() => {
-              const row = compactRowFromFacts(receipt.facts, args.issue);
-              return row ? [row] : [];
-            })();
+    const prRows = receipt.rows?.length ? receipt.rows : prRowsFromFacts(receipt.facts, ids);
+    const generic = prRows.length
+      ? null
+      : ids.length
+        ? ids
+            .map((n, i) => {
+              const facts =
+                receipt.facts &&
+                typeof receipt.facts === "object" &&
+                Array.isArray((receipt.facts as { rows?: unknown }).rows)
+                  ? (receipt.facts as { rows: unknown[] }).rows[i]
+                  : receipt.facts;
+              return compactRowFromFacts(facts, n);
+            })
+            .filter((r): r is Record<string, unknown> => r !== null)
+        : (() => {
+            const row = compactRowFromFacts(receipt.facts, args.issue);
+            return row ? [row] : [];
+          })();
     const text = prRows.length
       ? bundleJson(prRows).trimEnd()
       : generic?.length

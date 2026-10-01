@@ -1,6 +1,14 @@
 import { wrapFetch } from "@/lib/wrap";
 import { edenKey } from "../lib/eden-key";
-import { hashStretch, TOKEN_CLASSES, refusalCopy, type Manifest, type RefusalCode, type StretchProgram, type TokenClass } from "@eden/ir";
+import {
+  hashStretch,
+  TOKEN_CLASSES,
+  refusalCopy,
+  type Manifest,
+  type RefusalCode,
+  type StretchProgram,
+  type TokenClass,
+} from "@eden/ir";
 import { asTokenClasses, stretchSentence, stretchWords, type StretchWord } from "@eden/measure";
 import { programDecor } from "./contract";
 import { classifyFail, siblingStatus } from "./fail";
@@ -20,7 +28,9 @@ function asRecord(v: unknown): Record<string, unknown> | null {
 }
 
 /** Null / missing offset stays omitted. Real 0 is call 0. `Number(null)` is 0 and must not leak. */
-export function canvasOrigin(originRec: Record<string, unknown> | null): { mode: string; firstWarningAt?: number } | undefined {
+export function canvasOrigin(
+  originRec: Record<string, unknown> | null,
+): { mode: string; firstWarningAt?: number } | undefined {
   if (!originRec) return undefined;
   const mode = typeof originRec.mode === "string" && originRec.mode !== "happy" ? originRec.mode : undefined;
   if (!mode) return undefined;
@@ -91,13 +101,18 @@ export function liveFailFromReceipt(
             ? (newest.tokenClass as TokenClass)
             : undefined,
         tokenClasses: asTokenClasses(newest.tokenClasses) ?? undefined,
-        prompt_tokens: typeof newest.prompt_tokens === "number" && Number.isFinite(newest.prompt_tokens) ? newest.prompt_tokens : undefined,
+        prompt_tokens:
+          typeof newest.prompt_tokens === "number" && Number.isFinite(newest.prompt_tokens)
+            ? newest.prompt_tokens
+            : undefined,
         completion_tokens:
           typeof newest.completion_tokens === "number" && Number.isFinite(newest.completion_tokens)
             ? newest.completion_tokens
             : undefined,
         cached_tokens:
-          typeof newest.cached_tokens === "number" && Number.isFinite(newest.cached_tokens) ? newest.cached_tokens : undefined,
+          typeof newest.cached_tokens === "number" && Number.isFinite(newest.cached_tokens)
+            ? newest.cached_tokens
+            : undefined,
         cache_write_tokens:
           typeof newest.cache_write_tokens === "number" && Number.isFinite(newest.cache_write_tokens)
             ? newest.cache_write_tokens
@@ -110,11 +125,16 @@ export function liveFailFromReceipt(
         timeSavedMs: typeof newest.timeSavedMs === "number" ? newest.timeSavedMs : null,
         ms: typeof newest.ms === "number" ? newest.ms : undefined,
         llm_calls: typeof newest.llm_calls === "number" ? newest.llm_calls : undefined,
-        cache_hits: typeof newest.cache_hits === "number" && Number.isFinite(newest.cache_hits) ? newest.cache_hits : undefined,
+        cache_hits:
+          typeof newest.cache_hits === "number" && Number.isFinite(newest.cache_hits) ? newest.cache_hits : undefined,
         cache_lookups:
-          typeof newest.cache_lookups === "number" && Number.isFinite(newest.cache_lookups) ? newest.cache_lookups : undefined,
+          typeof newest.cache_lookups === "number" && Number.isFinite(newest.cache_lookups)
+            ? newest.cache_lookups
+            : undefined,
         cache_hit_rate:
-          typeof newest.cache_hit_rate === "number" && Number.isFinite(newest.cache_hit_rate) ? newest.cache_hit_rate : undefined,
+          typeof newest.cache_hit_rate === "number" && Number.isFinite(newest.cache_hit_rate)
+            ? newest.cache_hit_rate
+            : undefined,
       }
     : null;
   const lastOk = newest?.ok === 1 || newest?.ok === true ? 1 : newest?.ok === 0 || newest?.ok === false ? 0 : null;
@@ -136,10 +156,7 @@ export function liveFailFromReceipt(
   return { receipt, lastOk, fail, stretchWords: words };
 }
 
-export type LoadCanvasResult =
-  | { status: "ok"; model: CanvasModel }
-  | { status: "miss" }
-  | { status: "error" };
+export type LoadCanvasResult = { status: "ok"; model: CanvasModel } | { status: "miss" } | { status: "error" };
 
 export async function loadCanvas(mode: "request" | "live", id: string): Promise<LoadCanvasResult> {
   try {
@@ -153,7 +170,7 @@ export async function loadCanvas(mode: "request" | "live", id: string): Promise<
       const tool = asRecord(await res.json());
       if (!tool) return { status: "miss" };
       const program = (tool.program as StretchProgram) ?? null;
-      const pinned = typeof tool.version === "string" ? tool.version : program?.version ?? "";
+      const pinned = typeof tool.version === "string" ? tool.version : (program?.version ?? "");
       let liveVersion: string | undefined;
       if (tool.state === "live") {
         liveVersion = typeof tool.version === "string" ? tool.version : program?.version;

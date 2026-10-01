@@ -128,7 +128,9 @@ export function createCdnPurge(): World {
     async *script(goal) {
       const zone = String(goal.zone);
       const listed = yield { tool: "listRoutes", args: { zone } };
-      const routes = ((listed.value as { routes?: Array<{ path?: string }> })?.routes ?? []) as Array<{ path?: string }>;
+      const routes = ((listed.value as { routes?: Array<{ path?: string }> })?.routes ?? []) as Array<{
+        path?: string;
+      }>;
       for (const row of routes) yield { tool: "purgePath", args: { path: row.path } };
       yield { tool: "flushEdge", args: { zone } };
     },

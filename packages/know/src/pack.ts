@@ -510,7 +510,8 @@ function brotliSection(raw: Uint8Array): Uint8Array {
   if (raw.byteLength < BROTLI_MIN) return raw;
   try {
     const params: Record<number, number> = { [zlibConstants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY };
-    if (zlibConstants.BROTLI_PARAM_SIZE_HINT !== undefined) params[zlibConstants.BROTLI_PARAM_SIZE_HINT] = raw.byteLength;
+    if (zlibConstants.BROTLI_PARAM_SIZE_HINT !== undefined)
+      params[zlibConstants.BROTLI_PARAM_SIZE_HINT] = raw.byteLength;
     if (zlibConstants.BROTLI_PARAM_LGWIN !== undefined) params[zlibConstants.BROTLI_PARAM_LGWIN] = 24;
     const c = new Uint8Array(brotliCompressSync(raw, { params }));
     const w = new Writer();
@@ -1258,7 +1259,7 @@ function decodeDestI16(buf: Uint8Array, n: number): number[] {
   const out = new Array<number>(n);
   for (let i = 0; i < n; i++) {
     const v = (buf[i * 2] ?? 0) | ((buf[i * 2 + 1] ?? 0) << 8);
-    out[i] = v << 16 >> 16;
+    out[i] = (v << 16) >> 16;
   }
   return out;
 }
@@ -1471,11 +1472,7 @@ function encodeWordDict(titles: string[]): Uint8Array {
   if (vocab.length >= 65536) return vbyte;
   const u16 = frame(seq(1));
   const delta = frame(seq(2));
-  return u16.length <= vbyte.length && u16.length <= delta.length
-    ? u16
-    : delta.length <= vbyte.length
-      ? delta
-      : vbyte;
+  return u16.length <= vbyte.length && u16.length <= delta.length ? u16 : delta.length <= vbyte.length ? delta : vbyte;
 }
 
 function decodeWordDict(buf: Uint8Array, withPackFlag = true): string[] {
@@ -2618,11 +2615,7 @@ function encodeMtBody(strs: string[], withStem: boolean, remKind: "auto" | "nul"
   if (typed * 2 < n) return EMPTY_U8;
   if (withStem && !stemmed) return EMPTY_U8;
   const remEnc =
-    remKind === "nul"
-      ? encodeNulList(rems)
-      : remKind === "fc"
-        ? encodeFc01(rems, 128)
-        : encodeCatList(rems);
+    remKind === "nul" ? encodeNulList(rems) : remKind === "fc" ? encodeFc01(rems, 128) : encodeCatList(rems);
   const treeR = encodeU8U16Rle(trees);
   const regR = encodeU8U16Rle(regs);
   if (!treeR.byteLength || !regR.byteLength) return EMPTY_U8;
@@ -2716,7 +2709,7 @@ function decodeMt02(buf: Uint8Array): string[] {
     else if (reg === 2) rest = `prs.${rest}`;
     else if (reg === 3) rest = `x${rest}`;
     if (hp[i >> 3]! & (1 << (i & 7))) {
-      const nib = pi < nPlus ? ((pi & 1) ? (pnib[pi >> 1]! >> 4) & 15 : pnib[pi >> 1]! & 15) : 0;
+      const nib = pi < nPlus ? (pi & 1 ? (pnib[pi >> 1]! >> 4) & 15 : pnib[pi >> 1]! & 15) : 0;
       pi++;
       if (nib === 15) rest += `+${otherPlus[oi++] ?? ""}`;
       else if (nib > 0 && MEDIA_PLUS[nib - 1]) rest += `+${MEDIA_PLUS[nib - 1]}`;
@@ -2818,7 +2811,9 @@ function encodeCatIds02(media: string[], spdx: string[], scheme: string[], slugs
   return w.finish();
 }
 
-function decodeCatIds(buf: Uint8Array): { media: string[]; spdx: string[]; scheme: string[]; slugs: string[] } | undefined {
+function decodeCatIds(
+  buf: Uint8Array,
+): { media: string[]; spdx: string[]; scheme: string[]; slugs: string[] } | undefined {
   if (buf.byteLength < 12) return;
   const mag = TD.decode(buf.subarray(0, 4));
   const r = new Reader(new DataView(buf.buffer, buf.byteOffset, buf.byteLength), 4, buf.byteLength);
@@ -3462,8 +3457,7 @@ export class KnowPack {
       claimAliases(claimed, this.extractId(this.sid[i]!), this.extractId(this.oid[i]!), this.sid[i]!);
     }
     if (this.cat.peeled) {
-      const claimId = (s: string, id: number) =>
-        claimAliases(claimed, s, this.objOverOf(id, s), id);
+      const claimId = (s: string, id: number) => claimAliases(claimed, s, this.objOverOf(id, s), id);
       for (let i = 0; i < this.media.length; i++) {
         const id = packId(KIND_MEDIA, i);
         claimId(`IANA media ${this.media[i]}`, id);
@@ -3710,7 +3704,14 @@ export class KnowPack {
 
   private packedN() {
     this.ensureRfcColumn();
-    return this.sid.length + this.rfcCount + this.edgeCount() + this.catFacts().length + this.capList.length + this.wikiList.length;
+    return (
+      this.sid.length +
+      this.rfcCount +
+      this.edgeCount() +
+      this.catFacts().length +
+      this.capList.length +
+      this.wikiList.length
+    );
   }
 
   private catFacts(): PackFact[] {
@@ -3942,7 +3943,7 @@ export class KnowPack {
     return catalogObjectSynth(this.extractId(this.sid[i]!), pred) ?? "";
   }
 
-    locate(s: string): number {
+  locate(s: string): number {
     const trimmed = s.trim();
     const hit = (id: number) => (this.typedLive(id) ? id : 0);
     const rfcHit = (n: number) => (this.rfcLive(n) || this.bySid.has(tagRfc(n)) ? tagRfc(n) : 0);
@@ -4015,7 +4016,8 @@ export class KnowPack {
         if (tagged) return tagged;
       }
     }
-    const scheme = ianaScheme(trimmed) || (/^[a-z][a-z0-9+.-]{1,24}$/.test(trimmed) ? trimmed.toLowerCase() : undefined);
+    const scheme =
+      ianaScheme(trimmed) || (/^[a-z][a-z0-9+.-]{1,24}$/.test(trimmed) ? trimmed.toLowerCase() : undefined);
     if (scheme) {
       const i = this.schemeLoc.get(scheme);
       if (i !== undefined) {
@@ -4113,7 +4115,13 @@ export class KnowPack {
     if (hi !== undefined) {
       const h = this.cat.headers[hi]!;
       const s = `IANA header ${h}`;
-      return { s, p: "is", o: this.cat.headerOver.get(h) ?? catalogObjectSynth(s) ?? `HTTP field ${h}`, e: "", url: "" };
+      return {
+        s,
+        p: "is",
+        o: this.cat.headerOver.get(h) ?? catalogObjectSynth(s) ?? `HTTP field ${h}`,
+        e: "",
+        url: "",
+      };
     }
     const dns = ianaDns(shape) ?? shape.toUpperCase();
     const di = this.dnsLoc.get(dns) ?? this.dnsLoc.get(shape) ?? this.dnsLoc.get(shape.toLowerCase());
@@ -4166,7 +4174,9 @@ export class KnowPack {
       return ix.map((i) => hits[i]!);
     };
     const keep = (h: PackFact) =>
-      h.p !== "about" && h.p !== "date" && (h.p === "is" && /^RFC\s+\d/i.test(h.s) ? h.o.length <= 192 : h.o.length <= 72);
+      h.p !== "about" &&
+      h.p !== "date" &&
+      (h.p === "is" && /^RFC\s+\d/i.test(h.s) ? h.o.length <= 192 : h.o.length <= 72);
     for (const shape of shapes) {
       if (this.closedCapitals) {
         const cap = capHit(shape);
@@ -4194,7 +4204,8 @@ export class KnowPack {
       const sid = this.locate(shape);
       if (sid) {
         const found =
-          idKind(sid) === KIND_RFC && (this.rfcSec || this.rfcBits || this.rfcImplicit || this.rfcObs.length || this.rfcUpd.length)
+          idKind(sid) === KIND_RFC &&
+          (this.rfcSec || this.rfcBits || this.rfcImplicit || this.rfcObs.length || this.rfcUpd.length)
             ? this.rfcFacts(idPayload(sid)).filter(keep)
             : this.bySid.has(sid)
               ? (this.bySid.get(sid) || []).map((i) => this.factAt(i)).filter(keep)
@@ -4402,7 +4413,23 @@ function takeId(
   pfc.add(s);
 }
 
-const RFC_GIST_STOP = new Set(["the", "a", "an", "of", "for", "and", "to", "in", "on", "with", "from", "by", "as", "at", "or"]);
+const RFC_GIST_STOP = new Set([
+  "the",
+  "a",
+  "an",
+  "of",
+  "for",
+  "and",
+  "to",
+  "in",
+  "on",
+  "with",
+  "from",
+  "by",
+  "as",
+  "at",
+  "or",
+]);
 
 /** Pack RFC titles as content words. Search/cards keep URI/HTTP; intern entropy drops. */
 export function rfcTitleGist(o: string, n = 6): string {
@@ -4618,9 +4645,7 @@ function suffixArray(s: Uint8Array): Int32Array {
     for (let i = 1; i < m; i++) {
       const a = sa[i - 1]!;
       const b = sa[i]!;
-      const diff =
-        rnk[a] !== rnk[b] ||
-        (a + k < m ? rnk[a + k]! : -1) !== (b + k < m ? rnk[b + k]! : -1);
+      const diff = rnk[a] !== rnk[b] || (a + k < m ? rnk[a + k]! : -1) !== (b + k < m ? rnk[b + k]! : -1);
       if (diff) classes++;
       nrnk[b] = classes - 1;
     }
@@ -5113,7 +5138,10 @@ function stripTitleAcronyms(t: string): string {
     const words = t.slice(0, m.index).split(/\s+/).filter(Boolean);
     const k = acr.length;
     if (k < 2 || words.length < k) continue;
-    const ini = words.slice(-k).map((w) => w[0]!).join("");
+    const ini = words
+      .slice(-k)
+      .map((w) => w[0]!)
+      .join("");
     if (ini !== acr) continue;
     out += t.slice(last, m.index);
     last = m.index + m[0].length;
@@ -5539,7 +5567,7 @@ function encodeRt13From(p: RtPrep): Uint8Array {
   if (!lens[0] || maxBits > 24) return EMPTY_U8;
   let nTok = 0;
   for (const ps of seqs) nTok += ps.length + 1;
-  const payload = new Uint8Array(((nTok * 32) + 7) >> 3);
+  const payload = new Uint8Array((nTok * 32 + 7) >> 3);
   let bit = 0;
   for (const ps of seqs) {
     for (const part of ps) {
@@ -5570,9 +5598,9 @@ const RT13_HEAD = new WeakMap<
   { vocab: string[]; order: number[]; trie: HuffTrie; pay: Uint8Array; nbit: number; n: number }
 >();
 
-function rt13Head(buf: Uint8Array):
-  | { vocab: string[]; order: number[]; trie: HuffTrie; pay: Uint8Array; nbit: number; n: number }
-  | undefined {
+function rt13Head(
+  buf: Uint8Array,
+): { vocab: string[]; order: number[]; trie: HuffTrie; pay: Uint8Array; nbit: number; n: number } | undefined {
   const hit = RT13_HEAD.get(buf);
   if (hit) return hit;
   if (buf.byteLength < 16 || TD.decode(buf.subarray(0, 4)) !== "RT13") return;
@@ -5692,7 +5720,7 @@ function encodeRp12(titles: string[]): Uint8Array {
     left.push(a);
     right.push(b);
     const next: number[] = [];
-    for (let i = 0; i < seq.length; ) {
+    for (let i = 0; i < seq.length;) {
       if (i + 1 < seq.length && seq[i] === a && seq[i + 1] === b) {
         next.push(id);
         i += 2;
@@ -5995,7 +6023,7 @@ function encodeTitleRepair(titles: string[]): Uint8Array {
     if (id > 0xfffe) break;
     rules.push(a, b);
     const next: number[] = [];
-    for (let i = 0; i < seq.length; ) {
+    for (let i = 0; i < seq.length;) {
       if (i + 1 < seq.length && seq[i] === a && seq[i + 1] === b) {
         next.push(id);
         i += 2;
@@ -6367,7 +6395,10 @@ function encodeEg11(obs: Map<number, number[]>, upd: Map<number, number[]>): Uin
   return w.finish();
 }
 
-function decodeEg11(r: Reader, buf: Uint8Array): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
+function decodeEg11(
+  r: Reader,
+  buf: Uint8Array,
+): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
   const obsSingle = r.u8() === 1;
   const obsSrcKind = r.u8();
   const obsSrcK = r.u8();
@@ -6482,7 +6513,10 @@ function encodeEg12(obs: Map<number, number[]>, upd: Map<number, number[]>): Uin
   return w.finish();
 }
 
-function decodeEg12(r: Reader, buf: Uint8Array): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
+function decodeEg12(
+  r: Reader,
+  buf: Uint8Array,
+): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
   const nObs = r.vbyte();
   const oLen = r.vbyte();
   const oBuf = buf.subarray(r.off, r.off + oLen);
@@ -6732,7 +6766,10 @@ function encodeEg14(obs: Map<number, number[]>, upd: Map<number, number[]>): Uin
   return w.finish();
 }
 
-function decodeEg14(r: Reader, buf: Uint8Array): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
+function decodeEg14(
+  r: Reader,
+  buf: Uint8Array,
+): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
   const oLen = r.vbyte();
   const oBuf = buf.subarray(r.off, r.off + oLen);
   r.off += oLen;
@@ -6816,7 +6853,10 @@ function encodeEg16(obs: Map<number, number[]>, upd: Map<number, number[]>): Uin
   return w.finish();
 }
 
-function decodeEg16(r: Reader, buf: Uint8Array): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
+function decodeEg16(
+  r: Reader,
+  buf: Uint8Array,
+): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
   const oLen = r.vbyte();
   const oBuf = buf.subarray(r.off, r.off + oLen);
   r.off += oLen;
@@ -6859,7 +6899,10 @@ function encodeEg17(obs: Map<number, number[]>, upd: Map<number, number[]>): Uin
   return w.finish();
 }
 
-function decodeEg17(r: Reader, buf: Uint8Array): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
+function decodeEg17(
+  r: Reader,
+  buf: Uint8Array,
+): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
   const srcKind = r.u8();
   const srcK = r.u8();
   const nObs = r.vbyte();
@@ -6896,7 +6939,11 @@ function decodeEg17(r: Reader, buf: Uint8Array): { obs: { src: number; dests: nu
       else by.set(e.src, e.dests.slice());
     }
   }
-  for (const [src, dests] of by) by.set(src, [...new Set(dests)].sort((a, b) => a - b));
+  for (const [src, dests] of by)
+    by.set(
+      src,
+      [...new Set(dests)].sort((a, b) => a - b),
+    );
   const obsOut = [...by.keys()].sort((a, b) => a - b).map((src) => ({ src, dests: by.get(src)! }));
   return { obs: obsOut, upd: uBuf.byteLength ? decodePairDelta(uBuf) : [] };
 }
@@ -7172,7 +7219,12 @@ function encodeEg19DestRice(
   const list = w.finish();
   const base = univ.length + 1;
   const efU = univ.length ? (univ.length - 1) * base + (univ.length - 1) + 1 : 1;
-  return wrapEg19(1, list, encodeRankStream(rankPairIds(obs, rank, base), efU, pick), encodeRankStream(rankPairIds(upd, rank, base), efU, pick));
+  return wrapEg19(
+    1,
+    list,
+    encodeRankStream(rankPairIds(obs, rank, base), efU, pick),
+    encodeRankStream(rankPairIds(upd, rank, base), efU, pick),
+  );
 }
 
 function decodeEg19(
@@ -7220,7 +7272,10 @@ function isEgMagic(m: string): boolean {
   );
 }
 
-function decodeEg13(r: Reader, buf: Uint8Array): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
+function decodeEg13(
+  r: Reader,
+  buf: Uint8Array,
+): { obs: { src: number; dests: number[] }[]; upd: { src: number; dests: number[] }[] } {
   const mode = r.u8();
   if (mode === 0) {
     const oLen = r.vbyte();
@@ -7368,12 +7423,7 @@ function decodeRfcNumsCompact(buf: Uint8Array): { max: number; bits: Uint8Array;
   return decodeRfcBitset(r, buf);
 }
 
-function encodeRi09(
-  implicit: boolean,
-  nums: number[],
-  overlay: Uint8Array,
-  edges: Uint8Array,
-): Uint8Array {
+function encodeRi09(implicit: boolean, nums: number[], overlay: Uint8Array, edges: Uint8Array): Uint8Array {
   const w = new Writer();
   w.utf8("RI09");
   w.u8(implicit ? 1 : 0);
@@ -7428,7 +7478,19 @@ function decodeRi09(buf: Uint8Array): RfcCol {
   if (!titlesComplete) {
     titlesComplete = !implicit && ((titleIdx && titleIdx.nTitle === count) || overlay.size === count);
   }
-  return { bits, max, count, overlay, obs: [], upd: [], edgeRaw: buf.subarray(r.off), implicit, titlesComplete, titleIdx, titleRaw };
+  return {
+    bits,
+    max,
+    count,
+    overlay,
+    obs: [],
+    upd: [],
+    edgeRaw: buf.subarray(r.off),
+    implicit,
+    titlesComplete,
+    titleIdx,
+    titleRaw,
+  };
 }
 
 function shippedRt11(): Uint8Array | undefined {
@@ -7446,19 +7508,9 @@ function encodeTitleSection(rows: { n: number; title: string }[]): Uint8Array {
   const nulW = new Writer();
   nulW.utf8("NT08");
   nulW.bytes(TE.encode(titles.join("\0")));
-  const bodies = [
-    nulW.finish(),
-    encodeRt12(titles),
-    encodeSn08(titles),
-    encodeTitlePfcSorted(titles),
-  ];
+  const bodies = [nulW.finish(), encodeRt12(titles), encodeSn08(titles), encodeTitlePfcSorted(titles)];
   if (titles.length <= 128) {
-    bodies.push(
-      encodeRp12(titles),
-      encodeTitleWordDict(titles),
-      encodeTitleFsst(titles),
-      encodeTitleRepair(titles),
-    );
+    bodies.push(encodeRp12(titles), encodeTitleWordDict(titles), encodeTitleFsst(titles), encodeTitleRepair(titles));
   }
   let best = bodies[0]!;
   for (const b of bodies) {
@@ -7668,7 +7720,10 @@ const AREA_RULES: [number, RegExp][] = [
   [1, /\bmail\b|\bsmtp\b|\bimap\b|\bpop3?\b|\bemail\b|\bmime\b|message format/],
   [2, /\bdns\b|domain name|resource record|\bedns\b/],
   [8, /\buri\b|\burl\b|\burn\b|\biri\b|uniform resource/],
-  [4, /\btls\b|\bssl\b|\bipsec\b|\bdtls\b|\bssh\b|\boauth\b|\bjose\b|\bpkix\b|certificat|\bauth|\bcrypt|\bhmac\b|\bsecurity\b|x\.?509/],
+  [
+    4,
+    /\btls\b|\bssl\b|\bipsec\b|\bdtls\b|\bssh\b|\boauth\b|\bjose\b|\bpkix\b|certificat|\bauth|\bcrypt|\bhmac\b|\bsecurity\b|x\.?509/,
+  ],
   [9, /\brtp\b|\bsip\b|\bwebrtc\b|real[- ]?time|\brtsp\b|\bsdp\b/],
   [6, /\btcp\b|\budp\b|\bsctp\b|\btransport\b|congestion/],
   [7, /\bipv[46]\b|\bicmp\b|internet protocol|\bip\b/],
@@ -7769,9 +7824,7 @@ function encodeHoa1(titles: string[]): Uint8Array {
       freq.set(p, (freq.get(p) ?? 0) + 1);
     }
   }
-  const extra = [...freq.keys()].sort(
-    (a, b) => freq.get(b)! - freq.get(a)! || (a < b ? -1 : a > b ? 1 : 0),
-  );
+  const extra = [...freq.keys()].sort((a, b) => freq.get(b)! - freq.get(a)! || (a < b ? -1 : a > b ? 1 : 0));
   const extraId = new Map(extra.map((t, i) => [t, areaN + 1 + i]));
   const idOf = (p: string) => {
     const ai = (RFC_AREAS as readonly string[]).indexOf(p);
@@ -7866,7 +7919,10 @@ function encodeHo13(rows: { n: number; title: string }[]): Uint8Array {
   const g = encodeHotRaw(gold);
   w.vbyte(g.length);
   w.bytes(g);
-  writeIsoSrc(w, shorts.map((r) => r.n));
+  writeIsoSrc(
+    w,
+    shorts.map((r) => r.n),
+  );
   w.bytes(encodeNt08(shorts.map((r) => r.title)));
   return w.finish();
 }
@@ -7892,7 +7948,12 @@ function hotOverlayVariants(rows: { n: number; title: string }[]): { name: strin
   if (ho13.byteLength) {
     const m = decodeHotOverlay(ho13);
     let ok = m.size === rows.length;
-    if (ok) for (const r of rows) if (m.get(r.n) !== r.title) { ok = false; break; }
+    if (ok)
+      for (const r of rows)
+        if (m.get(r.n) !== r.title) {
+          ok = false;
+          break;
+        }
     if (ok) out.push({ name: "ho13", buf: ho13 });
   }
   return out;
@@ -8018,8 +8079,7 @@ export function overlayFromPackPayload(buf: Uint8Array): Map<number, string> {
   const slice = buf.subarray(r.off, r.off + n);
   const rest = buf.subarray(r.off + n);
   const compressed =
-    slice.byteLength > 0 &&
-    (isBr08(slice) || isZstdFrame(slice) || !!(flags & KPK9_BR) || !!(flags & KPK9_ZSTD));
+    slice.byteLength > 0 && (isBr08(slice) || isZstdFrame(slice) || !!(flags & KPK9_BR) || !!(flags & KPK9_ZSTD));
   const kg = compressed ? unzipRfcSlice(slice, flags) : slice;
   const extra = peelHotRest(rest);
   if (kg.byteLength >= 4 && TD.decode(kg.subarray(0, 4)) === "KG17") {
@@ -8187,11 +8247,7 @@ function pairsMatchCapitalOf(pairs: { s: string; o: string }[]): boolean {
   return true;
 }
 
-function catKg16Ready(
-  parts: Array<Uint8Array | undefined>,
-  closedBits: number,
-  capClosed: boolean,
-): boolean {
+function catKg16Ready(parts: Array<Uint8Array | undefined>, closedBits: number, capClosed: boolean): boolean {
   if (!capClosed || (closedBits & CLOSED_ALL_CATS) !== CLOSED_ALL_CATS) return false;
   for (let tag = 1; tag <= KG11_TAG_MAX; tag++) {
     if (tag === T_CLOSED || tag === T_CAP_COL) continue;
@@ -8301,10 +8357,15 @@ function mergeEdgeEx(
     if (prev) prev.push(e.dest);
     else by.set(e.src, [e.dest]);
   }
-  return [...by.keys()].sort((a, b) => a - b).map((src) => ({ src, dests: [...new Set(by.get(src)!)].sort((a, b) => a - b) }));
+  return [...by.keys()]
+    .sort((a, b) => a - b)
+    .map((src) => ({ src, dests: [...new Set(by.get(src)!)].sort((a, b) => a - b) }));
 }
 
-function obsRankIds(obs: Map<number, number[]>, missing: number[]): { ids: number[]; ex: { src: number; dest: number }[]; base: number } {
+function obsRankIds(
+  obs: Map<number, number[]>,
+  missing: number[],
+): { ids: number[]; ex: { src: number; dest: number }[]; base: number } {
   const rank = new Map<number, number>();
   for (let i = 0; i < missing.length; i++) rank.set(missing[i]!, i);
   const base = missing.length + 1;
@@ -8321,7 +8382,10 @@ function obsRankIds(obs: Map<number, number[]>, missing: number[]): { ids: numbe
   return { ids, ex, base };
 }
 
-function encodeObsSdr(obs: Map<number, number[]>, missing: number[]): { body: Uint8Array; ex: { src: number; dest: number }[] } {
+function encodeObsSdr(
+  obs: Map<number, number[]>,
+  missing: number[],
+): { body: Uint8Array; ex: { src: number; dest: number }[] } {
   const rank = new Map<number, number>();
   for (let i = 0; i < missing.length; i++) rank.set(missing[i]!, i);
   const srcs = [...obs.keys()].sort((a, b) => a - b);
@@ -8345,7 +8409,11 @@ function encodeObsSdr(obs: Map<number, number[]>, missing: number[]): { body: Ui
   return { body: w.finish(), ex };
 }
 
-function decodeObsSdr(r: Reader, missing: number[], ex: { src: number; dest: number }[]): { src: number; dests: number[] }[] {
+function decodeObsSdr(
+  r: Reader,
+  missing: number[],
+  ex: { src: number; dest: number }[],
+): { src: number; dests: number[] }[] {
   const n = r.vbyte();
   const by = new Map<number, number[]>();
   let prev = 0;
@@ -8366,7 +8434,10 @@ function decodeObsSdr(r: Reader, missing: number[], ex: { src: number; dest: num
   return [...by.keys()].sort((a, b) => a - b).map((src) => ({ src, dests: by.get(src)! }));
 }
 
-function obsDeltaIds(obs: Map<number, number[]>, max: number): { ids: number[]; ex: { src: number; dest: number }[]; base: number } {
+function obsDeltaIds(
+  obs: Map<number, number[]>,
+  max: number,
+): { ids: number[]; ex: { src: number; dest: number }[]; base: number } {
   const base = max + 1;
   const ids: number[] = [];
   const ex: { src: number; dest: number }[] = [];
@@ -8402,7 +8473,7 @@ function fillColdFromArea(overlay: Map<number, string>, nums: ArrayLike<number>,
   } else {
     const sparse = decodeAreaSparse(areaBuf);
     if (sparse && sparse.length === nCold) areas = sparse;
-    else if (!nCold || areaBuf.byteLength === ((nCold + 1) >> 1)) areas = decodeNibbleCol(areaBuf, nCold);
+    else if (!nCold || areaBuf.byteLength === (nCold + 1) >> 1) areas = decodeNibbleCol(areaBuf, nCold);
   }
   if (!areas) return false;
   let ai = 0;
@@ -8854,7 +8925,12 @@ function encodeImplied(E: number[], implied: number[]): Uint8Array {
     return w.finish();
   }
   let all = implied.length === E.length;
-  if (all) for (let i = 0; i < E.length; i++) if (implied[i] !== E[i]) { all = false; break; }
+  if (all)
+    for (let i = 0; i < E.length; i++)
+      if (implied[i] !== E[i]) {
+        all = false;
+        break;
+      }
   if (all) {
     w.u8(IMP_ALL);
     return w.finish();
@@ -9013,34 +9089,183 @@ function decodeKg14(buf: Uint8Array, flags: number, extraEdges?: Uint8Array): Kn
   return knowFromTlv(kg12RfcCol(g), g.catRaw, flags);
 }
 
-
 /**
  * Closed-universe IETF title morphemes. Decoder-side codec dictionary —
  * the words, not an RFC→title map. Token streams live in graph.kpk.
  */
 const IETF_MORPHEMES: readonly string[] = [
-  "Protocol", "Internet", "Network", "IPv6", "IP", "HTTP", "TCP", "UDP", "TLS", "DNS",
-  "MIME", "SMTP", "SIP", "RTP", "IPsec", "BGP", "OSPF", "MPLS", "LDAP", "SNMP",
-  "FTP", "NTP", "URI", "URL", "IRI", "XML", "JSON", "HTML", "UTF", "ASCII",
-  "for", "of", "and", "the", "in", "to", "A", "The", "with", "on",
-  "Extension", "Mechanisms", "Management", "Architecture", "Requirements", "Framework",
-  "Specification", "Version", "Security", "Authentication", "Authorization",
-  "Message", "Format", "Transfer", "Control", "Service", "Services", "Data", "Packet",
-  "Routing", "Address", "Addresses", "Domain", "Name", "Names", "System", "Resource",
-  "Identifier", "Identifiers", "Generic", "Syntax", "Semantics", "Header", "Headers",
-  "Field", "Fields", "Status", "Code", "Codes", "Media", "Type", "Types", "Charset",
-  "Encoding", "Compression", "Congestion", "Transport", "Layer", "Application",
-  "Session", "Connection", "Multicast", "Unicast", "IPv4", "ICMPv6", "DHCP", "PPP",
-  "Ethernet", "Wireless", "Mobile", "Host", "Hosts", "Server", "Client", "Proxy",
-  "Cache", "Caching", "Cookie", "Cookies", "Web", "Socket", "Sockets", "Stream",
-  "Datagram", "Payload", "Options", "Option", "Parameter", "Parameters", "Profile",
-  "Profiles", "Information", "Model", "Models", "Object", "Notation", "Language",
-  "Description", "Interface", "Interfaces", "Configuration", "Discovery", "Negotiation",
-  "Key", "Keys", "Certificate", "Certificates", "Public", "Private", "Cryptographic",
-  "Hash", "HMAC", "AES", "SHA", "PKI", "X", "509", "SASL", "OAuth", "JOSE",
-  "Realtime", "Time", "Clock", "Timestamp", "Zone", "File", "Directory", "Path",
-  "Computation", "Element", "Communication", "Usage", "Updates", "Update", "Obsoletes",
-  "Standard", "Track", "Best", "Current", "Practice", "Experimental", "Informational",
+  "Protocol",
+  "Internet",
+  "Network",
+  "IPv6",
+  "IP",
+  "HTTP",
+  "TCP",
+  "UDP",
+  "TLS",
+  "DNS",
+  "MIME",
+  "SMTP",
+  "SIP",
+  "RTP",
+  "IPsec",
+  "BGP",
+  "OSPF",
+  "MPLS",
+  "LDAP",
+  "SNMP",
+  "FTP",
+  "NTP",
+  "URI",
+  "URL",
+  "IRI",
+  "XML",
+  "JSON",
+  "HTML",
+  "UTF",
+  "ASCII",
+  "for",
+  "of",
+  "and",
+  "the",
+  "in",
+  "to",
+  "A",
+  "The",
+  "with",
+  "on",
+  "Extension",
+  "Mechanisms",
+  "Management",
+  "Architecture",
+  "Requirements",
+  "Framework",
+  "Specification",
+  "Version",
+  "Security",
+  "Authentication",
+  "Authorization",
+  "Message",
+  "Format",
+  "Transfer",
+  "Control",
+  "Service",
+  "Services",
+  "Data",
+  "Packet",
+  "Routing",
+  "Address",
+  "Addresses",
+  "Domain",
+  "Name",
+  "Names",
+  "System",
+  "Resource",
+  "Identifier",
+  "Identifiers",
+  "Generic",
+  "Syntax",
+  "Semantics",
+  "Header",
+  "Headers",
+  "Field",
+  "Fields",
+  "Status",
+  "Code",
+  "Codes",
+  "Media",
+  "Type",
+  "Types",
+  "Charset",
+  "Encoding",
+  "Compression",
+  "Congestion",
+  "Transport",
+  "Layer",
+  "Application",
+  "Session",
+  "Connection",
+  "Multicast",
+  "Unicast",
+  "IPv4",
+  "ICMPv6",
+  "DHCP",
+  "PPP",
+  "Ethernet",
+  "Wireless",
+  "Mobile",
+  "Host",
+  "Hosts",
+  "Server",
+  "Client",
+  "Proxy",
+  "Cache",
+  "Caching",
+  "Cookie",
+  "Cookies",
+  "Web",
+  "Socket",
+  "Sockets",
+  "Stream",
+  "Datagram",
+  "Payload",
+  "Options",
+  "Option",
+  "Parameter",
+  "Parameters",
+  "Profile",
+  "Profiles",
+  "Information",
+  "Model",
+  "Models",
+  "Object",
+  "Notation",
+  "Language",
+  "Description",
+  "Interface",
+  "Interfaces",
+  "Configuration",
+  "Discovery",
+  "Negotiation",
+  "Key",
+  "Keys",
+  "Certificate",
+  "Certificates",
+  "Public",
+  "Private",
+  "Cryptographic",
+  "Hash",
+  "HMAC",
+  "AES",
+  "SHA",
+  "PKI",
+  "X",
+  "509",
+  "SASL",
+  "OAuth",
+  "JOSE",
+  "Realtime",
+  "Time",
+  "Clock",
+  "Timestamp",
+  "Zone",
+  "File",
+  "Directory",
+  "Path",
+  "Computation",
+  "Element",
+  "Communication",
+  "Usage",
+  "Updates",
+  "Update",
+  "Obsoletes",
+  "Standard",
+  "Track",
+  "Best",
+  "Current",
+  "Practice",
+  "Experimental",
+  "Informational",
 ];
 
 const IETF_MORPHEME_ID = new Map(IETF_MORPHEMES.map((w, i) => [w, i + 1]));
@@ -9062,9 +9287,7 @@ function encodeTm15(titles: string[]): Uint8Array {
       freq.set(p, (freq.get(p) ?? 0) + 1);
     }
   }
-  const extra = [...freq.keys()].sort(
-    (a, b) => freq.get(b)! - freq.get(a)! || (a < b ? -1 : a > b ? 1 : 0),
-  );
+  const extra = [...freq.keys()].sort((a, b) => freq.get(b)! - freq.get(a)! || (a < b ? -1 : a > b ? 1 : 0));
   const extraId = new Map(extra.map((t, i) => [t, IETF_MORPHEMES.length + 1 + i]));
   const w = new Writer();
   w.utf8("TM15");
@@ -9383,7 +9606,8 @@ function frameKg(kg: Uint8Array, rest: Uint8Array = EMPTY_U8): Uint8Array {
     try {
       const params: Record<number, number> = {};
       if (zlibConstants.ZSTD_c_compressionLevel !== undefined) params[zlibConstants.ZSTD_c_compressionLevel] = 22;
-      if (kg.byteLength >= 2048 && zlibConstants.ZSTD_c_windowLog !== undefined) params[zlibConstants.ZSTD_c_windowLog] = 23;
+      if (kg.byteLength >= 2048 && zlibConstants.ZSTD_c_windowLog !== undefined)
+        params[zlibConstants.ZSTD_c_windowLog] = 23;
       const z =
         Object.keys(params).length > 0
           ? new Uint8Array(zstdCompressSync(kg, { params }))
@@ -9477,7 +9701,28 @@ function decodeRfcColumn(buf: Uint8Array): RfcCol {
     if (head === "OM09") {
       overlay = decodeOm09Map(buf.subarray(r.off, r.off + nOrLen));
       r.off += nOrLen;
-      } else if (head === "NT08" || head === "WD08" || head === "RT07" || head === "WD04" || head === "WD03" || head === "TP08" || head === "FS09" || head === "RP09" || head === "BV09" || head === "RT11" || head === "RT12" || head === "RT13" || head === "RT14" || head === "LC14" || head === "AT11" || head === "TM11" || head === "TL11" || head === "RP12" || head === "SN08" || head === "BW13") {
+    } else if (
+      head === "NT08" ||
+      head === "WD08" ||
+      head === "RT07" ||
+      head === "WD04" ||
+      head === "WD03" ||
+      head === "TP08" ||
+      head === "FS09" ||
+      head === "RP09" ||
+      head === "BV09" ||
+      head === "RT11" ||
+      head === "RT12" ||
+      head === "RT13" ||
+      head === "RT14" ||
+      head === "LC14" ||
+      head === "AT11" ||
+      head === "TM11" ||
+      head === "TL11" ||
+      head === "RP12" ||
+      head === "SN08" ||
+      head === "BW13"
+    ) {
       const titles = decodeTitleBody(buf.subarray(r.off, r.off + nOrLen));
       r.off += nOrLen;
       overlay = overlayFromTitles(bitsToNums(bits, max, count), titles);
@@ -9529,8 +9774,7 @@ function buildTypedFacts(facts: PackFact[]) {
   const rel = new Set<string>();
   const wk = new Set<string>();
   const pfc = new Set<string>();
-  const take = (s: string) =>
-    takeId(s, slugs, lists, media, spdx, scheme, whatwg, block, method, rel, wk, pfc);
+  const take = (s: string) => takeId(s, slugs, lists, media, spdx, scheme, whatwg, block, method, rel, wk, pfc);
   for (const f of kept) {
     take(f.s);
     if (!omittedCatalogObject(f.s, f.p, f.o)) take(f.o);
@@ -9596,7 +9840,14 @@ function buildTypedFacts(facts: PackFact[]) {
 
 function aliasPri(id: number): number {
   const k = idKind(id);
-  if (k === KIND_MEDIA || k === KIND_METHOD || k === KIND_HTTP || k === KIND_PROTO || k === KIND_SCHEME || k === KIND_SPDX) {
+  if (
+    k === KIND_MEDIA ||
+    k === KIND_METHOD ||
+    k === KIND_HTTP ||
+    k === KIND_PROTO ||
+    k === KIND_SCHEME ||
+    k === KIND_SPDX
+  ) {
     return 0;
   }
   if (k === KIND_LANG || k === KIND_RFC) return 2;
@@ -9754,7 +10005,11 @@ function readSidGroups(
       const idx = orig[i]!;
       const local = locals[i]!;
       sid[idx] = remap
-        ? remapKpk3Id(((local >>> 0) & 0x3fffffff | (kind === 1 ? RFC_TAG : kind === 2 ? W3C_TAG : kind === 3 ? LIST_TAG : 0)) >>> 0)
+        ? remapKpk3Id(
+            (((local >>> 0) & 0x3fffffff) |
+              (kind === 1 ? RFC_TAG : kind === 2 ? W3C_TAG : kind === 3 ? LIST_TAG : 0)) >>>
+              0,
+          )
         : packId(kind, local);
       pid[idx] = p;
       origAll.push(idx);
@@ -9948,8 +10203,7 @@ function decodeCapIso(buf: Uint8Array): { s: string; o: string }[] {
     const bits = buf.subarray(r.off, r.off + blen);
     r.off += blen;
     const extraLen = r.vbyte();
-    const extra =
-      extraLen && r.off + extraLen <= r.end ? decodeCapCol(buf.subarray(r.off, r.off + extraLen)) : [];
+    const extra = extraLen && r.off + extraLen <= r.end ? decodeCapCol(buf.subarray(r.off, r.off + extraLen)) : [];
     const out: { s: string; o: string }[] = [];
     for (let i = 0; i < uni.length; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) out.push({ s: uni[i]!, o: CAPITAL_OF[uni[i]!] ?? "" });
@@ -9978,8 +10232,7 @@ function decodeCapIso(buf: Uint8Array): { s: string; o: string }[] {
     for (let i = 0; i < n && r.off + 2 <= r.end; i++) codes.push(r.utf8(2));
   }
   const extraLen = r.vbyte();
-  const extra =
-    extraLen && r.off + extraLen <= r.end ? decodeCapCol(buf.subarray(r.off, r.off + extraLen)) : [];
+  const extra = extraLen && r.off + extraLen <= r.end ? decodeCapCol(buf.subarray(r.off, r.off + extraLen)) : [];
   const out: { s: string; o: string }[] = [];
   for (const code of codes) {
     const s = ISO2_TO_NAME!.get(code);
@@ -9998,7 +10251,10 @@ function decodeCapCol(buf: Uint8Array): { s: string; o: string }[] {
 
 function writeBakeoff(report: Record<string, number | string>) {
   try {
-    writeFileSync(new URL("../../../.gauntlet/refs/pack-bakeoff.json", import.meta.url), `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync(
+      new URL("../../../.gauntlet/refs/pack-bakeoff.json", import.meta.url),
+      `${JSON.stringify(report, null, 2)}\n`,
+    );
   } catch {
     /* */
   }
@@ -10026,7 +10282,8 @@ function tightInner(raw: Uint8Array): Uint8Array {
   };
   try {
     const params: Record<number, number> = { [zlibConstants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY };
-    if (zlibConstants.BROTLI_PARAM_SIZE_HINT !== undefined) params[zlibConstants.BROTLI_PARAM_SIZE_HINT] = raw.byteLength;
+    if (zlibConstants.BROTLI_PARAM_SIZE_HINT !== undefined)
+      params[zlibConstants.BROTLI_PARAM_SIZE_HINT] = raw.byteLength;
     if (zlibConstants.BROTLI_PARAM_LGWIN !== undefined) params[zlibConstants.BROTLI_PARAM_LGWIN] = 24;
     const c = new Uint8Array(brotliCompressSync(raw, { params }));
     const w = new Writer();
@@ -10263,9 +10520,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
     if (!packableFact(f.s, pred, f.o)) continue;
     rest.push(f);
   }
-  const rfcIs = [...rfcMap.entries()]
-    .map(([n, title]) => ({ n, title }))
-    .sort((a, b) => a.n - b.n);
+  const rfcIs = [...rfcMap.entries()].map(([n, title]) => ({ n, title })).sort((a, b) => a.n - b.n);
 
   const headerSet = new Set<string>();
   const headerOver = new Map<string, string>();
@@ -10430,11 +10685,20 @@ export function encodePack(facts: PackFact[]): Uint8Array {
 
   const t = buildTypedFacts(leftoverForTyped);
   const {
-    kept, slugList: leftoverSlugs, listOf, listVals,
-    mediaList: leftoverMedia, spdxList: leftoverSpdx,
-    schemeList: leftoverScheme, whatwgList: leftoverWhatwg,
-    blockList: leftoverBlock, methodList: leftoverMethod,
-    relList: leftoverRel, wkList: leftoverWk, strs, idOf,
+    kept,
+    slugList: leftoverSlugs,
+    listOf,
+    listVals,
+    mediaList: leftoverMedia,
+    spdxList: leftoverSpdx,
+    schemeList: leftoverScheme,
+    whatwgList: leftoverWhatwg,
+    blockList: leftoverBlock,
+    methodList: leftoverMethod,
+    relList: leftoverRel,
+    wkList: leftoverWk,
+    strs,
+    idOf,
   } = t;
   const slugList = [...new Set([...slugSet, ...leftoverSlugs])].sort();
   const slugOf = new Map(slugList.map((s, i) => [s, i]));
@@ -10606,7 +10870,10 @@ export function encodePack(facts: PackFact[]): Uint8Array {
   let headerMode: "exact" | "extra" | "subset" | "mixed" | "open" = closeMode(6, headerList, closed.headers);
   if (headerMode === "exact") {
     headerMode = "subset";
-  } else if (headerMode === "open" && (isSubsetOf(headerList, closed.headers) || sameSorted(headerList, closed.headers))) {
+  } else if (
+    headerMode === "open" &&
+    (isSubsetOf(headerList, closed.headers) || sameSorted(headerList, closed.headers))
+  ) {
     closedBits |= 1 << 6;
     headerMode = "subset";
   } else if (headerMode === "open") {
@@ -10619,9 +10886,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
   let dnsMode = closeMode(7, dnsNames, closed.dns);
   if (dnsMode !== "open") {
     const closedSet = new Set(closed.dns);
-    const closedOk = dnsNames.every(
-      (n) => !closedSet.has(n) || (DNS_OBJECT[n] ?? "") === (dnsMap.get(n) ?? ""),
-    );
+    const closedOk = dnsNames.every((n) => !closedSet.has(n) || (DNS_OBJECT[n] ?? "") === (dnsMap.get(n) ?? ""));
     if (!closedOk) {
       closedBits &= ~(1 << 7);
       dnsMode = "open";
@@ -10651,8 +10916,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
 
   const mediaStore =
     mediaMode === "subset" ? [] : mediaMode === "extra" ? extrasOf(mediaList, closed.media) : mediaList;
-  const spdxStore =
-    spdxMode === "subset" ? [] : spdxMode === "extra" ? extrasOf(spdxList, closed.spdx) : spdxList;
+  const spdxStore = spdxMode === "subset" ? [] : spdxMode === "extra" ? extrasOf(spdxList, closed.spdx) : spdxList;
   const schemeStore =
     schemeMode === "subset" ? [] : schemeMode === "extra" ? extrasOf(schemeList, closed.scheme) : schemeList;
   const slugStore =
@@ -10683,13 +10947,10 @@ export function encodePack(facts: PackFact[]): Uint8Array {
     putList(T_HEADER, headerList);
   }
   {
-    const dnsNameStore =
-      dnsMode === "exact" ? [] : dnsMode === "extra" ? extrasOf(dnsNames, closed.dns) : dnsNames;
+    const dnsNameStore = dnsMode === "exact" ? [] : dnsMode === "extra" ? extrasOf(dnsNames, closed.dns) : dnsNames;
     const dnsObjStore = dnsNameStore.map((n) => dnsMap.get(n) ?? "");
     const dnsObjNeeded =
-      dnsMode === "open"
-        ? !dnsDefault
-        : dnsObjStore.some((o, i) => (DNS_OBJECT[dnsNameStore[i]!] ?? "") !== o);
+      dnsMode === "open" ? !dnsDefault : dnsObjStore.some((o, i) => (DNS_OBJECT[dnsNameStore[i]!] ?? "") !== o);
     if (dnsNameStore.length) putCat(T_DNS_N, encodeCatList(dnsNameStore));
     if (dnsObjNeeded && dnsObjStore.length) putCat(T_DNS_O, encodeCatList(dnsObjStore));
   }
@@ -10810,7 +11071,10 @@ export function encodePack(facts: PackFact[]): Uint8Array {
     bake.got_n = decodePack(best.pack).nTriples;
     bake.hot16_n = hot.length;
     const ho12 = hot.length
-      ? wrapHo12(hot.map((r) => r.n), encodeNt08(hot.map((r) => r.title)))
+      ? wrapHo12(
+          hot.map((r) => r.n),
+          encodeNt08(hot.map((r) => r.title)),
+        )
       : EMPTY_U8;
     const edgeVars: { name: string; buf: Uint8Array }[] = [
       { name: "EG14", buf: edges14 },
@@ -11020,7 +11284,8 @@ export function encodePack(facts: PackFact[]): Uint8Array {
         const where = inK ? "dump" : "rest";
         for (const rest of restCands) {
           take17(`KG17+${edgeName}+EG14+${idName}+${where}+closecaps`, frameKpk9(kg17.raw, rest, KPK9_CAPS), kg17.mode);
-          if (br !== kg17.raw) take17(`KG17+${edgeName}+EG14+${idName}+${where}+br+closecaps`, frameKpk9(br, rest, KPK9_CAPS), kg17.mode);
+          if (br !== kg17.raw)
+            take17(`KG17+${edgeName}+EG14+${idName}+${where}+br+closecaps`, frameKpk9(br, rest, KPK9_CAPS), kg17.mode);
           take17(`KG17+${edgeName}+EG14+${idName}+${where}+frame+closecaps`, frameKg(kg17.raw, rest), kg17.mode);
         }
       }
@@ -11106,20 +11371,20 @@ export function encodePack(facts: PackFact[]): Uint8Array {
   bake.framing = String(bake.winner).includes("HOTSET")
     ? "hotset"
     : String(bake.winner).startsWith("KG17")
-    ? "kg17"
-    : String(bake.winner).startsWith("KG16")
-    ? "kg16"
-    : String(bake.winner).startsWith("KG15")
-    ? "kg15"
-    : String(bake.winner).startsWith("KG14")
-    ? "kg14"
-    : String(bake.winner).startsWith("KG13")
-      ? "kg13"
-      : String(bake.winner).startsWith("KG12")
-        ? "kg12"
-        : String(bake.winner).startsWith("KG11")
-          ? "kg11"
-          : "ri09";
+      ? "kg17"
+      : String(bake.winner).startsWith("KG16")
+        ? "kg16"
+        : String(bake.winner).startsWith("KG15")
+          ? "kg15"
+          : String(bake.winner).startsWith("KG14")
+            ? "kg14"
+            : String(bake.winner).startsWith("KG13")
+              ? "kg13"
+              : String(bake.winner).startsWith("KG12")
+                ? "kg12"
+                : String(bake.winner).startsWith("KG11")
+                  ? "kg11"
+                  : "ri09";
   bake.pack_bytes = pack.byteLength;
   bake.encode_ms = Date.now() - t0;
   bake.lc14 = String(bake.winner).includes("LC14") ? 1 : 0;
@@ -11469,7 +11734,24 @@ function decodeKpk4(buf: Uint8Array): KnowPack {
       bloom = new Uint8Array(buf.buffer, buf.byteOffset + postOff + pr.off, n).slice();
     }
   }
-  return new KnowPack(strs, slugs, rfcLists, loc, slugLoc, sid, pid, oid, evid, urlid, evidText, post, media, spdx, alias, bloom);
+  return new KnowPack(
+    strs,
+    slugs,
+    rfcLists,
+    loc,
+    slugLoc,
+    sid,
+    pid,
+    oid,
+    evid,
+    urlid,
+    evidText,
+    post,
+    media,
+    spdx,
+    alias,
+    bloom,
+  );
 }
 
 function decodeKpk5(buf: Uint8Array): KnowPack {
@@ -11579,8 +11861,28 @@ function decodeKpk5(buf: Uint8Array): KnowPack {
     }
   }
   return new KnowPack(
-    strs, slugs, rfcLists, loc, slugLoc, sid, pid, oid, evid, urlid, evidText, post,
-    media, spdx, alias, bloom, scheme, whatwg, blocks, methods, rels, wks,
+    strs,
+    slugs,
+    rfcLists,
+    loc,
+    slugLoc,
+    sid,
+    pid,
+    oid,
+    evid,
+    urlid,
+    evidText,
+    post,
+    media,
+    spdx,
+    alias,
+    bloom,
+    scheme,
+    whatwg,
+    blocks,
+    methods,
+    rels,
+    wks,
   );
 }
 
@@ -11705,8 +12007,29 @@ function decodeKpk7(buf: Uint8Array): KnowPack {
     }
   }
   return new KnowPack(
-    strs, slugs, rfcLists, loc, slugLoc, sid, pid, oid, evid, urlid, evidText, post,
-    media, spdx, alias, bloom, scheme, whatwg, blocks, methods, rels, wks, rfc,
+    strs,
+    slugs,
+    rfcLists,
+    loc,
+    slugLoc,
+    sid,
+    pid,
+    oid,
+    evid,
+    urlid,
+    evidText,
+    post,
+    media,
+    spdx,
+    alias,
+    bloom,
+    scheme,
+    whatwg,
+    blocks,
+    methods,
+    rels,
+    wks,
+    rfc,
   );
 }
 
@@ -11775,11 +12098,17 @@ function knowFromTlv(rfc: RfcCol | undefined, catRaw: Uint8Array, flags: number)
     return b && b.byteLength ? decodeIntern(b) : [];
   };
   const closedOr = (bit: number, tag: number, uni: string[] | undefined) =>
-    (closedBits & (1 << bit)) && uni ? uni : pfc(tag);
-  const closedSelect = (bit: number, tag: number, uni: string[] | undefined, combExtra?: string[], keep?: readonly string[]) => {
+    closedBits & (1 << bit) && uni ? uni : pfc(tag);
+  const closedSelect = (
+    bit: number,
+    tag: number,
+    uni: string[] | undefined,
+    combExtra?: string[],
+    keep?: readonly string[],
+  ) => {
     const raw = sec.get(tag);
     const keepList = keep && keep.length ? [...keep].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)) : undefined;
-    if ((closedBits & (1 << bit)) && uni) {
+    if (closedBits & (1 << bit) && uni) {
       if (raw && raw.byteLength) {
         const sub = decodeSubsetBits(raw, uni);
         if (sub) {
@@ -11814,10 +12143,9 @@ function knowFromTlv(rfc: RfcCol | undefined, catRaw: Uint8Array, flags: number)
   const headers = closedSelect(6, T_HEADER, c?.headers, undefined, HEADER_LIST);
   const extraDns = pfc(T_DNS_N);
   const extraDnsObj = pfc(T_DNS_O);
-  const dns =
-    (closedBits & (1 << 7)) && c ? (extraDns.length ? mergeSortedUnique(c.dns, extraDns) : c.dns) : extraDns;
+  const dns = closedBits & (1 << 7) && c ? (extraDns.length ? mergeSortedUnique(c.dns, extraDns) : c.dns) : extraDns;
   const dnsObj = (() => {
-    if (!((closedBits & (1 << 7)) && c)) return extraDnsObj;
+    if (!(closedBits & (1 << 7) && c)) return extraDnsObj;
     const extraOf = new Map(extraDns.map((n, i) => [n, extraDnsObj[i] ?? ""]));
     return dns.map((n) => (extraOf.has(n) ? extraOf.get(n)! : (DNS_OBJECT[n] ?? "")));
   })();
@@ -11825,14 +12153,14 @@ function knowFromTlv(rfc: RfcCol | undefined, catRaw: Uint8Array, flags: number)
   const langs = closedSelect(9, T_LANG, c?.langs);
   const scripts = closedOr(10, T_SCRIPT, c?.scripts);
   const trip = decodeTripBuf(sec.get(T_TRIP) ?? EMPTY_U8);
-  const protoBits =
-    (closedBits & (1 << 12)) && c ? c.protoBits.slice() : (sec.get(T_PROTO) ?? null);
-  const httpBits =
-    (closedBits & (1 << 13)) && c ? c.httpBits.slice() : (sec.get(T_HTTP) ?? null);
+  const protoBits = closedBits & (1 << 12) && c ? c.protoBits.slice() : (sec.get(T_PROTO) ?? null);
+  const httpBits = closedBits & (1 << 13) && c ? c.httpBits.slice() : (sec.get(T_HTTP) ?? null);
   const objOver = sec.get(T_OVER) ? decodeIdOver(sec.get(T_OVER)!) : new Map<number, string>();
   const protoOver = sec.get(T_PROTO_N) ? decodeProtoNames(sec.get(T_PROTO_N)!) : new Map<number, string>();
   for (const [id, o] of protoOver) objOver.set(id, o);
-  const methodOver = sec.get(T_METHOD_META) ? decodeMethodMeta(sec.get(T_METHOD_META)!, methods) : new Map<number, string>();
+  const methodOver = sec.get(T_METHOD_META)
+    ? decodeMethodMeta(sec.get(T_METHOD_META)!, methods)
+    : new Map<number, string>();
   for (const [id, o] of methodOver) objOver.set(id, o);
   const headerOver = (() => {
     const b = sec.get(T_HEADER_OVER);
@@ -11857,13 +12185,34 @@ function knowFromTlv(rfc: RfcCol | undefined, catRaw: Uint8Array, flags: number)
     capitals: sec.get(T_CAP_COL) && sec.get(T_CAP_COL)!.byteLength ? decodeCapCol(sec.get(T_CAP_COL)!) : [],
     wiki: sec.get(T_WIKI) && sec.get(T_WIKI)!.byteLength ? decodeWiki(sec.get(T_WIKI)!) : [],
   };
-  const packedPost = sec.get(T_POST) && sec.get(T_POST)!.byteLength ? decodePostIndex(sec.get(T_POST)!) : new Map<string, number[]>();
+  const packedPost =
+    sec.get(T_POST) && sec.get(T_POST)!.byteLength ? decodePostIndex(sec.get(T_POST)!) : new Map<string, number[]>();
   return new KnowPack(
-    strs, slugs, rfcLists, new Map(), locTable(slugs),
-    trip.sid, trip.pid, trip.oid, trip.evid, trip.urlid,
-    [""], packedPost,
-    media, spdx, new Map(), null, scheme, whatwg, blocks, methods, rels, wks,
-    rfc, cat, (flags & KPK9_CAPS) !== 0,
+    strs,
+    slugs,
+    rfcLists,
+    new Map(),
+    locTable(slugs),
+    trip.sid,
+    trip.pid,
+    trip.oid,
+    trip.evid,
+    trip.urlid,
+    [""],
+    packedPost,
+    media,
+    spdx,
+    new Map(),
+    null,
+    scheme,
+    whatwg,
+    blocks,
+    methods,
+    rels,
+    wks,
+    rfc,
+    cat,
+    (flags & KPK9_CAPS) !== 0,
   );
 }
 
@@ -11986,11 +12335,7 @@ function decodeKpk9(buf: Uint8Array): KnowPack {
     if (head === "KG16") {
       const g = parseKg16(rfcRaw);
       if (!g) return knowFromTlv(undefined, EMPTY_U8, flags);
-      return knowFromTlv(
-        kg12RfcCol(mergeKgOverlay(g, extra)),
-        g.catRaw,
-        flags | (g.closedCaps ? KPK9_CAPS : 0),
-      );
+      return knowFromTlv(kg12RfcCol(mergeKgOverlay(g, extra)), g.catRaw, flags | (g.closedCaps ? KPK9_CAPS : 0));
     }
     if (head === "KG17") {
       return decodeKg17(rfcRaw, flags, extra);
@@ -12036,7 +12381,7 @@ function decodeKpk9(buf: Uint8Array): KnowPack {
     if (kgHead === "KG14") return decodeKg14(rfcRaw, flags);
     if (kgHead === "KG12" || kgHead === "KG13") return decodeKg12(rfcRaw, flags);
     const rfc = rfcRaw.byteLength ? decodeRfcColumn(rfcRaw) : undefined;
-    if (rfc && (flags & KPK9_EDGES)) rfc.edgeSidecar = true;
+    if (rfc && flags & KPK9_EDGES) rfc.edgeSidecar = true;
     return knowFromTlv(rfc, EMPTY_U8, flags);
   }
   if (rest.byteLength) {
@@ -12075,11 +12420,31 @@ function decodeKpk9(buf: Uint8Array): KnowPack {
       wiki: [],
     };
     return new KnowPack(
-      [], c.w3c, [], new Map(), locTable(c.w3c),
-      [], [], [], [], [],
-      [""], new Map(),
-      c.media, c.spdx, new Map(), null, c.scheme, c.whatwg, c.blocks, c.methods, [], c.wellknown,
-      rfc, cat, (flags & KPK9_CAPS) !== 0,
+      [],
+      c.w3c,
+      [],
+      new Map(),
+      locTable(c.w3c),
+      [],
+      [],
+      [],
+      [],
+      [],
+      [""],
+      new Map(),
+      c.media,
+      c.spdx,
+      new Map(),
+      null,
+      c.scheme,
+      c.whatwg,
+      c.blocks,
+      c.methods,
+      [],
+      c.wellknown,
+      rfc,
+      cat,
+      (flags & KPK9_CAPS) !== 0,
     );
   }
   const catRaw = unwrapResidual(flags, rest);

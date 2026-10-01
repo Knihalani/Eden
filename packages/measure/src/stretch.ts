@@ -14,9 +14,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function reasonOf(row: Record<string, unknown>): string {
   return (
-    (typeof row.reason === "string" && row.reason) ||
-    (typeof row.deoptReason === "string" && row.deoptReason) ||
-    ""
+    (typeof row.reason === "string" && row.reason) || (typeof row.deoptReason === "string" && row.deoptReason) || ""
   );
 }
 

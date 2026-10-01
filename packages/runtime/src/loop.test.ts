@@ -5,7 +5,9 @@ import { runProgram } from "./execute";
 type Call = { tool: string; args: Record<string, unknown> };
 
 /** Records call order and concurrency so tests can assert on both. */
-function registry(opts: { delayMs?: number; results?: Record<string, (args: Record<string, unknown>) => unknown> } = {}) {
+function registry(
+  opts: { delayMs?: number; results?: Record<string, (args: Record<string, unknown>) => unknown> } = {},
+) {
   const calls: Call[] = [];
   let inFlight = 0;
   let peak = 0;
@@ -68,10 +70,14 @@ describe("parallel loops", () => {
     const N = 12;
     const parallel = registry({ delayMs: 25, results: listOf(N) });
     const pt0 = performance.now();
-    const out = await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: parallel.registry,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      loopProgram("fetchDetails", N),
+      { q: "x" },
+      {
+        registry: parallel.registry,
+        checkEnvelope: false,
+      },
+    );
     const parallelMs = performance.now() - pt0;
     expect((out.value as unknown[]).length).toBe(N);
     expect(parallel.peakConcurrency).toBeGreaterThan(1);
@@ -83,10 +89,14 @@ describe("parallel loops", () => {
     // cancels the load out, because both halves pay it.
     const sequential = registry({ delayMs: 25, results: listOf(N) });
     const st0 = performance.now();
-    await runProgram(loopProgram("postComment", N), { q: "x" }, {
-      registry: sequential.registry,
-      checkEnvelope: false,
-    });
+    await runProgram(
+      loopProgram("postComment", N),
+      { q: "x" },
+      {
+        registry: sequential.registry,
+        checkEnvelope: false,
+      },
+    );
     const sequentialMs = performance.now() - st0;
     expect(sequential.peakConcurrency).toBe(1);
     // Width 8 over 12 items is two waves against twelve, so ~3x. Assert half
@@ -125,32 +135,44 @@ describe("parallel loops", () => {
   test("parallel: false forces sequential even for a read-only body", async () => {
     const N = 6;
     const r = registry({ delayMs: 5, results: listOf(N) });
-    await runProgram(loopProgram("fetchDetails", N, { parallel: false } as Partial<Step>), { q: "x" }, {
-      registry: r.registry,
-      checkEnvelope: false,
-    });
+    await runProgram(
+      loopProgram("fetchDetails", N, { parallel: false } as Partial<Step>),
+      { q: "x" },
+      {
+        registry: r.registry,
+        checkEnvelope: false,
+      },
+    );
     expect(r.peakConcurrency).toBe(1);
   });
 
   test("loopConcurrency: 1 restores the old behaviour exactly", async () => {
     const N = 6;
     const r = registry({ delayMs: 2, results: listOf(N) });
-    await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: r.registry,
-      checkEnvelope: false,
-      loopConcurrency: 1,
-    });
+    await runProgram(
+      loopProgram("fetchDetails", N),
+      { q: "x" },
+      {
+        registry: r.registry,
+        checkEnvelope: false,
+        loopConcurrency: 1,
+      },
+    );
     expect(r.peakConcurrency).toBe(1);
   });
 
   test("concurrency is bounded by the configured width", async () => {
     const N = 40;
     const r = registry({ delayMs: 15, results: listOf(N) });
-    await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: r.registry,
-      checkEnvelope: false,
-      loopConcurrency: 4,
-    });
+    await runProgram(
+      loopProgram("fetchDetails", N),
+      { q: "x" },
+      {
+        registry: r.registry,
+        checkEnvelope: false,
+        loopConcurrency: 4,
+      },
+    );
     expect(r.peakConcurrency).toBeLessThanOrEqual(4);
     expect(r.peakConcurrency).toBeGreaterThan(1);
   });
@@ -175,10 +197,14 @@ describe("parallel loops", () => {
         return r.registry.execute(tool, args);
       },
     };
-    const out = await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: slow,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      loopProgram("fetchDetails", N),
+      { q: "x" },
+      {
+        registry: slow,
+        checkEnvelope: false,
+      },
+    );
     expect(out.value).toEqual(Array.from({ length: N }, (_, i) => ({ of: `I-${i}` })));
   });
 
@@ -191,10 +217,14 @@ describe("parallel loops", () => {
         return { of: args.id };
       },
     };
-    const out = await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: slow,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      loopProgram("fetchDetails", N),
+      { q: "x" },
+      {
+        registry: slow,
+        checkEnvelope: false,
+      },
+    );
     expect(out.stats.toolCalls).toEqual(["listItems", ...Array.from({ length: N }, () => "fetchDetails")]);
   });
 
@@ -235,7 +265,7 @@ describe("parallel loops", () => {
   test("parallel and sequential runs agree exactly", async () => {
     const N = 10;
     // Seeded jitter — outcomes must not depend on Math.random races.
-    let s = 0xC0FFEE >>> 0;
+    let s = 0xc0ffee >>> 0;
     const rand = () => {
       s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
       return s / 0x100000000;
@@ -247,16 +277,24 @@ describe("parallel loops", () => {
         return { of: args.id, n: Number(String(args.id).split("-")[1]) * 2 };
       },
     });
-    const seq = await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: make(),
-      checkEnvelope: false,
-      loopConcurrency: 1,
-    });
-    const par = await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: make(),
-      checkEnvelope: false,
-      loopConcurrency: 8,
-    });
+    const seq = await runProgram(
+      loopProgram("fetchDetails", N),
+      { q: "x" },
+      {
+        registry: make(),
+        checkEnvelope: false,
+        loopConcurrency: 1,
+      },
+    );
+    const par = await runProgram(
+      loopProgram("fetchDetails", N),
+      { q: "x" },
+      {
+        registry: make(),
+        checkEnvelope: false,
+        loopConcurrency: 8,
+      },
+    );
     expect(par.value).toEqual(seq.value);
     expect(par.stats.toolCalls).toEqual(seq.stats.toolCalls);
   });
@@ -284,10 +322,14 @@ describe("parallel loops", () => {
 
   test("an empty loop yields an empty array", async () => {
     const r = registry({ results: listOf(0) });
-    const out = await runProgram(loopProgram("fetchDetails", 0), { q: "x" }, {
-      registry: r.registry,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      loopProgram("fetchDetails", 0),
+      { q: "x" },
+      {
+        registry: r.registry,
+        checkEnvelope: false,
+      },
+    );
     expect(out.value).toEqual([]);
   });
 });
@@ -572,20 +614,24 @@ describe("three-field object items", () => {
       contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
       manifest: null,
     } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
-    const out = await runProgram(p, { cart: "C1" }, {
-      registry: {
-        async execute(tool: string, args: Record<string, unknown>) {
-          if (tool === "listBins") return { items };
-          if (tool === "restockLine") {
-            seen.push({ ...args });
-            return { restocked: true };
-          }
-          return { shipped: true };
+    const out = await runProgram(
+      p,
+      { cart: "C1" },
+      {
+        registry: {
+          async execute(tool: string, args: Record<string, unknown>) {
+            if (tool === "listBins") return { items };
+            if (tool === "restockLine") {
+              seen.push({ ...args });
+              return { restocked: true };
+            }
+            return { shipped: true };
+          },
+          has: () => true,
         },
-        has: () => true,
+        checkEnvelope: false,
       },
-      checkEnvelope: false,
-    });
+    );
     expect(out.value).toEqual({ shipped: true });
     expect(seen).toEqual(items);
   });
@@ -632,35 +678,43 @@ describe("poll-until loops", () => {
   test("repeats the body until ready is true, then runs the following tool", async () => {
     let n = 0;
     const seen: string[] = [];
-    const out = await runProgram(pollProgram(5), { deploy: "d1" }, {
-      registry: {
-        async execute(tool: string, args: Record<string, unknown>) {
-          seen.push(tool);
-          if (tool === "getRollout") {
-            n++;
-            return { deploy: args.deploy, ready: n >= 3 };
-          }
-          return { verified: true };
+    const out = await runProgram(
+      pollProgram(5),
+      { deploy: "d1" },
+      {
+        registry: {
+          async execute(tool: string, args: Record<string, unknown>) {
+            seen.push(tool);
+            if (tool === "getRollout") {
+              n++;
+              return { deploy: args.deploy, ready: n >= 3 };
+            }
+            return { verified: true };
+          },
+          has: () => true,
         },
-        has: () => true,
+        checkEnvelope: false,
       },
-      checkEnvelope: false,
-    });
+    );
     expect(out.value).toEqual({ verified: true });
     expect(seen).toEqual(["getRollout", "getRollout", "getRollout", "verifyRollout"]);
   });
 
   test("deopts when ready never becomes true before maxIters", async () => {
     await expect(
-      runProgram(pollProgram(3), { deploy: "d1" }, {
-        registry: {
-          async execute() {
-            return { ready: false };
+      runProgram(
+        pollProgram(3),
+        { deploy: "d1" },
+        {
+          registry: {
+            async execute() {
+              return { ready: false };
+            },
+            has: () => true,
           },
-          has: () => true,
+          checkEnvelope: false,
         },
-        checkEnvelope: false,
-      }),
+      ),
     ).rejects.toThrow(/exceeded maxIters/);
   });
 
@@ -668,23 +722,27 @@ describe("poll-until loops", () => {
     let inFlight = 0;
     let peak = 0;
     let n = 0;
-    await runProgram(pollProgram(5), { deploy: "d1" }, {
-      registry: {
-        async execute(tool: string) {
-          if (tool === "getRollout") {
-            inFlight++;
-            peak = Math.max(peak, inFlight);
-            await Bun.sleep(8);
-            inFlight--;
-            n++;
-            return { ready: n >= 3 };
-          }
-          return { verified: true };
+    await runProgram(
+      pollProgram(5),
+      { deploy: "d1" },
+      {
+        registry: {
+          async execute(tool: string) {
+            if (tool === "getRollout") {
+              inFlight++;
+              peak = Math.max(peak, inFlight);
+              await Bun.sleep(8);
+              inFlight--;
+              n++;
+              return { ready: n >= 3 };
+            }
+            return { verified: true };
+          },
+          has: () => true,
         },
-        has: () => true,
+        checkEnvelope: false,
       },
-      checkEnvelope: false,
-    });
+    );
     expect(peak).toBe(1);
   });
 
@@ -724,20 +782,24 @@ describe("poll-until loops", () => {
       contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
       manifest: null,
     } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
-    const out = await runProgram(p, { tag: "img-0" }, {
-      registry: {
-        async execute(tool: string) {
-          if (tool === "pushImage") {
-            n++;
-            if (n < 3) throw new Error("429 rate limited");
-            return { pushed: true, tag: "img-0" };
-          }
-          return { released: true };
+    const out = await runProgram(
+      p,
+      { tag: "img-0" },
+      {
+        registry: {
+          async execute(tool: string) {
+            if (tool === "pushImage") {
+              n++;
+              if (n < 3) throw new Error("429 rate limited");
+              return { pushed: true, tag: "img-0" };
+            }
+            return { released: true };
+          },
+          has: () => true,
         },
-        has: () => true,
+        checkEnvelope: false,
       },
-      checkEnvelope: false,
-    });
+    );
     expect(n).toBe(3);
     expect(out.value).toEqual({ released: true });
   });
@@ -745,10 +807,7 @@ describe("poll-until loops", () => {
 
 describe("nested loop-item paths", () => {
   test("updateIssue receives node.id and node.title from each edge", async () => {
-    const edges = [
-      { node: { id: "I-1", title: "one" } },
-      { node: { id: "I-2", title: "two" } },
-    ];
+    const edges = [{ node: { id: "I-1", title: "one" } }, { node: { id: "I-2", title: "two" } }];
     const seen: Array<Record<string, unknown>> = [];
     const p = withVersion({
       id: "p_relay",
@@ -785,20 +844,24 @@ describe("nested loop-item paths", () => {
       contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
       manifest: null,
     } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
-    const out = await runProgram(p, { repo: "acme" }, {
-      registry: {
-        async execute(tool: string, args: Record<string, unknown>) {
-          if (tool === "listIssues") return { edges };
-          if (tool === "updateIssue") {
-            seen.push({ ...args });
-            return { updated: true };
-          }
-          return { published: true };
+    const out = await runProgram(
+      p,
+      { repo: "acme" },
+      {
+        registry: {
+          async execute(tool: string, args: Record<string, unknown>) {
+            if (tool === "listIssues") return { edges };
+            if (tool === "updateIssue") {
+              seen.push({ ...args });
+              return { updated: true };
+            }
+            return { published: true };
+          },
+          has: () => true,
         },
-        has: () => true,
+        checkEnvelope: false,
       },
-      checkEnvelope: false,
-    });
+    );
     expect(out.value).toEqual({ published: true });
     expect(seen).toEqual([
       { id: "I-1", title: "one" },

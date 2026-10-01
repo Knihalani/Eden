@@ -26,13 +26,16 @@ function asEvent(raw: unknown): StretchTrace["events"][number] | null {
   const rec = raw as Record<string, unknown>;
   const name = typeof rec.name === "string" ? rec.name : "";
   if (!name) return null;
-  const args = rec.args && typeof rec.args === "object" && !Array.isArray(rec.args) ? (rec.args as Record<string, unknown>) : {};
+  const args =
+    rec.args && typeof rec.args === "object" && !Array.isArray(rec.args) ? (rec.args as Record<string, unknown>) : {};
   return {
     name,
     args,
     ok: rec.ok !== false,
     ...(rec.result !== undefined ? { result: rec.result } : {}),
-    ...(typeof rec.duration_ms === "number" && Number.isFinite(rec.duration_ms) ? { duration_ms: rec.duration_ms } : {}),
+    ...(typeof rec.duration_ms === "number" && Number.isFinite(rec.duration_ms)
+      ? { duration_ms: rec.duration_ms }
+      : {}),
     ...(rec.skipped === true ? { skipped: true } : {}),
   };
 }
@@ -41,8 +44,13 @@ function asEvent(raw: unknown): StretchTrace["events"][number] | null {
 export function asCanaryTraces(raw: unknown[]): StretchTrace[] {
   return raw.map((item, i) => {
     const rec = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-    const events = Array.isArray(rec.events) ? rec.events.map(asEvent).filter((e): e is NonNullable<typeof e> => e != null) : [];
-    const input = rec.input && typeof rec.input === "object" && !Array.isArray(rec.input) ? (rec.input as Record<string, unknown>) : {};
+    const events = Array.isArray(rec.events)
+      ? rec.events.map(asEvent).filter((e): e is NonNullable<typeof e> => e != null)
+      : [];
+    const input =
+      rec.input && typeof rec.input === "object" && !Array.isArray(rec.input)
+        ? (rec.input as Record<string, unknown>)
+        : {};
     return {
       id: typeof rec.id === "string" && rec.id ? rec.id : `canary-${i}`,
       events,

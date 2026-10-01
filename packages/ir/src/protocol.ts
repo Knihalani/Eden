@@ -22,9 +22,7 @@ export function protocolHeaders(): Record<string, string> {
   return { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) };
 }
 
-export type ProtocolGate =
-  | { ok: true }
-  | { ok: false; status: 426; reason: string };
+export type ProtocolGate = { ok: true } | { ok: false; status: 426; reason: string };
 
 /** Optional response header when a known-older integer client is still allowed. */
 export const PROTOCOL_SKEW_HEADER = "x-eden-protocol-skew";

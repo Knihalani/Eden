@@ -113,7 +113,12 @@ export function upsertMultiSession(existing: string, section: string): string {
       }
     }
     const next = [...lines.slice(0, start), ...block.split("\n"), "", ...lines.slice(end)];
-    return next.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "") + "\n";
+    return (
+      next
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .replace(/\s+$/, "") + "\n"
+    );
   }
   const base = text.replace(/\s+$/, "");
   return (base ? `${base}\n\n` : "") + block + "\n";

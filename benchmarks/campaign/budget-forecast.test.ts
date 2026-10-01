@@ -30,7 +30,9 @@ describe("rotation: budget-forecast (Wave 15.1)", () => {
 
   test("unique-work halt count 0 under enforce + huge unrelated live budget", async () => {
     const probe = await uniqueWorkHaltCount({ enforce: true });
-    console.log(`unique-work budget_halt=${probe.budgetHalts} calls=${probe.calls} reasons=${probe.reasons.join(",") || "none"}`);
+    console.log(
+      `unique-work budget_halt=${probe.budgetHalts} calls=${probe.calls} reasons=${probe.reasons.join(",") || "none"}`,
+    );
     expect(probe.calls).toBe(4);
     expect(probe.budgetHalts).toBe(0);
   });

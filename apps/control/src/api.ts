@@ -1,7 +1,38 @@
 import { timingSafeEqual } from "node:crypto";
-import type { Binding, IslandCaller, ProgramDiff, Refusal, StretchProgram, StretchTrace, TraceEvent, ToolRegistry } from "@eden/ir";
-import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, diffPrograms, redact, dropEnvelopeValue, whenToUseOf, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER } from "@eden/ir";
-import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, dispatchPrograms, dispatchMessages, compiledSchema, extractInput, type WrapState } from "@eden/wrap";
+import type {
+  Binding,
+  IslandCaller,
+  ProgramDiff,
+  Refusal,
+  StretchProgram,
+  StretchTrace,
+  TraceEvent,
+  ToolRegistry,
+} from "@eden/ir";
+import {
+  withVersion,
+  isCheckName,
+  validateProgram,
+  canonicalize,
+  minLlmReductionOf,
+  diffPrograms,
+  redact,
+  dropEnvelopeValue,
+  whenToUseOf,
+  EDEN_PROTOCOL_VERSION,
+  PROTOCOL_HEADER,
+} from "@eden/ir";
+import {
+  wrapTimeoutMs,
+  attachChatUsage,
+  peekChatUsage,
+  resetUsage,
+  dispatchPrograms,
+  dispatchMessages,
+  compiledSchema,
+  extractInput,
+  type WrapState,
+} from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
 import { inheritLiveTool } from "./inherit-live";
 import { canApprove, registryCovers, replayRegistry, shadowProgram, uncoveredTools } from "@eden/shadow";
@@ -12,13 +43,7 @@ import { EMPTY_DIGEST, renderDigestText, type DigestInput } from "@eden/measure"
 import { cacheHitPctFromReceipts } from "../../../packages/cli/src/digest";
 import { dcWindowFromReceipts, parseDayCount } from "./dc-window";
 import { isRefreshCandidate, maybeQueueRefresh, refreshCandidateId } from "./refresh";
-import {
-  executeLiveRun,
-  parseCron,
-  parseNow,
-  parseScheduleInput,
-  tickDueSchedules,
-} from "./schedule";
+import { executeLiveRun, parseCron, parseNow, parseScheduleInput, tickDueSchedules } from "./schedule";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
@@ -261,7 +286,9 @@ function shadowCandidate(ctx: ApiCtx, program: StretchProgram) {
 async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: number }> {
   const keepRefresh = ctx.store.candidates().filter((c) => isRefreshCandidate(c.id));
   ctx.store.clearCandidates();
-  const compiled = compileTraces(ctx.store.traces(), { minLlmReduction: minLlmReductionOf(Number(process.env.EDEN_MIN_LLM_REDUCTION)) });
+  const compiled = compileTraces(ctx.store.traces(), {
+    minLlmReduction: minLlmReductionOf(Number(process.env.EDEN_MIN_LLM_REDUCTION)),
+  });
   for (const program of compiled.programs) {
     let verdict: "PASS" | "FAIL" | "INCONCLUSIVE" | "pending" = "pending";
     let manifest = program.manifest;
@@ -278,7 +305,10 @@ async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: nu
         refusal = { sequence: program.sequence ?? [], reason: sh.reasons[0]! };
       }
     } else {
-      refusal = { sequence: program.sequence ?? [], reason: "no wrap registry — start eden wrap to replay this stretch" };
+      refusal = {
+        sequence: program.sequence ?? [],
+        reason: "no wrap registry — start eden wrap to replay this stretch",
+      };
     }
     ctx.store.putCandidate({
       id: program.id,
@@ -292,7 +322,10 @@ async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: nu
   }
   for (const refusal of compiled.refusals) {
     ctx.store.putCandidate({
-      id: `ref_${createHash("sha256").update(canonicalize({ sequence: refusal.sequence, reason: refusal.reason })).digest("hex").slice(0, 12)}`,
+      id: `ref_${createHash("sha256")
+        .update(canonicalize({ sequence: refusal.sequence, reason: refusal.reason }))
+        .digest("hex")
+        .slice(0, 12)}`,
       sequence: refusal.sequence,
       program: null,
       refusal,
@@ -371,7 +404,9 @@ async function shipCandidate(
     /** Org id from x-eden-org, or omitted → "operator". Never a person name. */
     approvedBy?: string | null;
   },
-): Promise<{ ok: true; program: StretchProgram } | { ok: false; status: number; error: string; extra?: Record<string, unknown> }> {
+): Promise<
+  { ok: true; program: StretchProgram } | { ok: false; status: number; error: string; extra?: Record<string, unknown> }
+> {
   if (!c.program) return { ok: false, status: 409, error: c.refusal?.reason || "refused" };
   if (c.verdict !== "PASS") {
     const error =
@@ -400,7 +435,9 @@ async function shipCandidate(
   if (edits?.forceIsland?.length) next.forceIsland = edits.forceIsland;
   if (edits?.pinAssert?.length) next.pinAssert = edits.pinAssert;
   if (edits?.bind?.length) next.bind = edits.bind;
-  const structural = Boolean(next.drop?.length || next.forceIsland?.length || next.pinAssert?.length || next.bind?.length);
+  const structural = Boolean(
+    next.drop?.length || next.forceIsland?.length || next.pinAssert?.length || next.bind?.length,
+  );
   edits = next.name || structural ? next : undefined;
   if (edits?.name) program = { ...program, name: edits.name };
   if (edits?.bind?.length) {
@@ -459,16 +496,22 @@ async function shipCandidate(
     };
   }
   if (structural && !ctx.registry && !ctx.sandboxFor) {
-    return { ok: false, status: 409, error: "dropping or rewriting a step needs the wrap agent connected so Eden can re-check the stretch" };
+    return {
+      ok: false,
+      status: 409,
+      error: "dropping or rewriting a step needs the wrap agent connected so Eden can re-check the stretch",
+    };
   }
   if (structural && (ctx.registry || ctx.sandboxFor)) {
     program = withVersion({ ...program, version: undefined });
     const sh = await shadowCandidate(ctx, program);
-    if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow after edit did not pass", extra: { shadow: sh } };
+    if (sh.verdict !== "PASS")
+      return { ok: false, status: 409, error: "re-shadow after edit did not pass", extra: { shadow: sh } };
     program = { ...program, manifest: sh.manifest };
   } else if (ctx.registry && registryCovers(ctx.registry, program) && ctx.store.tracesCount() >= 3) {
     const sh = await shadowCandidate(ctx, program);
-    if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow on approve did not pass", extra: { shadow: sh } };
+    if (sh.verdict !== "PASS")
+      return { ok: false, status: 409, error: "re-shadow on approve did not pass", extra: { shadow: sh } };
     program = { ...program, manifest: sh.manifest };
   }
   const drops = Array.isArray(opts?.dropValues) ? opts.dropValues : [];
@@ -576,10 +619,7 @@ function digestFromStore(store: Store): DigestInput {
  * Shared by POST /v1/traces and POST /v1/ingest so ingest cannot skip compile
  * or Approve on its own — maybeAutoApprove still requires EDEN_AUTO_APPROVE=1.
  */
-async function commitTraces(
-  ctx: ApiCtx,
-  list: StretchTrace[],
-): Promise<{ accepted: number; duplicates: number }> {
+async function commitTraces(ctx: ApiCtx, list: StretchTrace[]): Promise<{ accepted: number; duplicates: number }> {
   return ctx.store.enqueue(async () => {
     let accepted = 0;
     let duplicates = 0;
@@ -664,11 +704,7 @@ function takeIngest(store: object, runId: string): BufferedRun | undefined {
 
 function asTraceEvent(raw: Record<string, unknown>): TraceEvent {
   const name =
-    typeof raw.name === "string" && raw.name
-      ? raw.name
-      : typeof raw.event_id === "string"
-        ? raw.event_id
-        : "";
+    typeof raw.name === "string" && raw.name ? raw.name : typeof raw.event_id === "string" ? raw.event_id : "";
   const args =
     raw.args && typeof raw.args === "object" && !Array.isArray(raw.args)
       ? (redact(raw.args) as Record<string, unknown>)
@@ -698,10 +734,7 @@ function stretchFromBuffer(runId: string, row: BufferedRun): StretchTrace | null
 }
 
 function findToolByName(store: Store, name: string): LiveTool | undefined {
-  return (
-    store.tool(name) ??
-    store.tools().find((t) => t.id === name || t.name === name || t.program.name === name)
-  );
+  return store.tool(name) ?? store.tools().find((t) => t.id === name || t.name === name || t.program.name === name);
 }
 
 /**
@@ -756,11 +789,7 @@ async function runNamedLive(
 }
 
 /** Chat without a model key: play the compiled tool or fail-open. */
-export async function playCompiled(
-  ctx: ApiCtx,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
+export async function playCompiled(ctx: ApiCtx, name: string, args: Record<string, unknown>): Promise<unknown> {
   const found = findWrapTool(ctx.store, name);
   if (!found || !ctx.registry) return null;
   const ran = await runNamedLive(ctx, found, args);
@@ -906,7 +935,8 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       connected: Date.now() - ctx.store.lastHeartbeat() < 30_000,
       sig: ctx.store.inboxSig(),
       candidates: ctx.store.candidates(),
-      live: ctx.store.tools()
+      live: ctx.store
+        .tools()
         .filter((t) => t.state === "live" || t.state === "paused")
         .map((t) => {
           const stats = ctx.store.receiptStats(t.id);
@@ -1011,15 +1041,17 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     }
     const found =
       (body.toolId ? ctx.store.tool(body.toolId) : undefined) ??
-      ctx.store.tools().find(
-        (t) =>
-          t.id === body.toolId ||
-          t.name === body.toolId ||
-          t.program.name === body.toolId ||
-          t.id === body.program?.id ||
-          t.name === body.program?.name ||
-          t.program.name === body.program?.name,
-      );
+      ctx.store
+        .tools()
+        .find(
+          (t) =>
+            t.id === body.toolId ||
+            t.name === body.toolId ||
+            t.program.name === body.toolId ||
+            t.id === body.program?.id ||
+            t.name === body.program?.name ||
+            t.program.name === body.program?.name,
+        );
     if (!found) return json({ error: "not live" }, 404);
     if (found.state === "paused") return json({ error: "paused", program: found.name }, 409);
     if (found.state !== "live") return json({ error: "not live", state: found.state }, 409);
@@ -1027,7 +1059,7 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     const registry = ctx.registry;
     if (!registry) return json({ error: "no registry" }, 409);
     const q = Number(url.searchParams.get("timeout"));
-    const timeoutMs = wrapTimeoutMs(Number.isFinite(q) && q > 0 ? q : body.timeoutMs ?? body.timeout);
+    const timeoutMs = wrapTimeoutMs(Number.isFinite(q) && q > 0 ? q : (body.timeoutMs ?? body.timeout));
     const ran = await executeLiveRun({
       store: ctx.store,
       tool: live,
@@ -1043,7 +1075,14 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     if (ran.status === "deopt") {
       void maybeQueueRefresh(ctx, live.id).catch(() => undefined);
       return json(
-        { error: "deopt", reason: ran.reason, deopt: true, early: ran.early, stepsRun: ran.stepsRun, program: live.name },
+        {
+          error: "deopt",
+          reason: ran.reason,
+          deopt: true,
+          early: ran.early,
+          stepsRun: ran.stepsRun,
+          program: live.name,
+        },
         409,
       );
     }
@@ -1109,7 +1148,14 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     if (ran.status === "ok") return json({ ok: true, value: ran.value, stats: ran.stats });
     if (ran.status === "deopt") {
       return json(
-        { error: "deopt", reason: ran.reason, deopt: true, early: ran.early, stepsRun: ran.stepsRun, program: found.name },
+        {
+          error: "deopt",
+          reason: ran.reason,
+          deopt: true,
+          early: ran.early,
+          stepsRun: ran.stepsRun,
+          program: found.name,
+        },
         409,
       );
     }
@@ -1159,8 +1205,7 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       const parsed = await readJson(req);
       if (!parsed.ok) return parsed.res;
       const body = parsed.value;
-      const params =
-        body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+      const params = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
       const picked = dispatchPrograms(dispatchMessages(params), ctx.store.livePrograms()).slice(0, 1);
       const tools = picked.map(compiledSchema).slice(0, 1);
       return json({ tools });
@@ -1208,7 +1253,9 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     }
     const existing = ctx.store.scheduleFor(t.id);
     const inputJson =
-      body.input && typeof body.input === "object" && !Array.isArray(body.input) ? JSON.stringify(body.input) : existing?.input ?? null;
+      body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? JSON.stringify(body.input)
+        : (existing?.input ?? null);
     ctx.store.putSchedule({
       id: existing?.id ?? crypto.randomUUID(),
       tool_id: t.id,

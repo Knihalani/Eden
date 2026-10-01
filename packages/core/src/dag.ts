@@ -102,10 +102,6 @@ export function layers(nodes: DagNode[]): DagNode[][] {
   return out;
 }
 
-export function billableMs(opts: {
-  server_ms: number;
-  steps_attempted: number;
-  densified_bytes: number;
-}): number {
+export function billableMs(opts: { server_ms: number; steps_attempted: number; densified_bytes: number }): number {
   return Math.max(0, Math.round(opts.server_ms + 25 * opts.steps_attempted + opts.densified_bytes / 200));
 }

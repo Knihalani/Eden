@@ -42,11 +42,11 @@ describe("ingest uniqueness constraints", () => {
     await db.run(
       `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
        VALUES ('a', 'ws_a', 'same', 'x', 'draft', '[]', '[]', 'fp')`,
-      );
+    );
     await db.run(
       `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
        VALUES ('b', 'ws_b', 'same', 'x', 'draft', '[]', '[]', 'fp')`,
-      );
+    );
     const n = (await db.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool`))?.c;
     expect(n).toBe(2); // one per workspace — tenancy preserved
   });

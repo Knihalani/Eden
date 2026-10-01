@@ -1,12 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { EdenDb } from "./db";
-import {
-  dropResult,
-  isMutatingMethod,
-  publicResultKey,
-  resultCacheKey,
-  type ResultCacheIdentity,
-} from "./cache";
+import { dropResult, isMutatingMethod, publicResultKey, resultCacheKey, type ResultCacheIdentity } from "./cache";
 import { maybeRecompile, type MaybeRecompileInput } from "./canary";
 import { canaryWorkspaceDeps } from "./canary-bind";
 
@@ -153,7 +147,13 @@ export function keysToDrop(body: WebhookInvalidateBody): string[] {
   const step = asStep(body.step, body.method);
   const bound = asBound(body.bound);
 
-  if (toolId && step && urls.length && !isMutatingMethod(step.method) && (step.method || "GET").toUpperCase() === "GET") {
+  if (
+    toolId &&
+    step &&
+    urls.length &&
+    !isMutatingMethod(step.method) &&
+    (step.method || "GET").toUpperCase() === "GET"
+  ) {
     for (const url of urls) {
       const publicId = { toolId, step, url, bound };
       named.add(publicResultKey(publicId));
@@ -215,7 +215,10 @@ export async function invalidateFromWebhook(
   if (toolId) {
     try {
       const row = workspaceId
-        ? await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = ? AND workspace_id = ?`, [toolId, workspaceId])
+        ? await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = ? AND workspace_id = ?`, [
+            toolId,
+            workspaceId,
+          ])
         : await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = ?`, [toolId]);
       live = row?.state ?? null;
     } catch {

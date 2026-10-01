@@ -57,10 +57,7 @@ function childPath(path: string, k: string): string {
  */
 const flattenCache = new WeakMap<object, Array<[string, unknown]>>();
 
-export function flatten(
-  value: unknown,
-  opts: { maxDepth?: number; maxArray?: number } = {},
-): Map<string, unknown> {
+export function flatten(value: unknown, opts: { maxDepth?: number; maxArray?: number } = {}): Map<string, unknown> {
   const custom = opts.maxDepth != null || opts.maxArray != null;
   const cached = !custom && value && typeof value === "object" ? flattenCache.get(value) : undefined;
   if (cached) return new Map(cached);

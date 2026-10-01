@@ -13,7 +13,8 @@ function walkSource(dir: string): string[] {
     if (ent.name === "node_modules") continue;
     const next = join(dir, ent.name);
     if (ent.isDirectory()) out.push(...walkSource(next));
-    else if (ent.isFile() && (ent.name.endsWith(".ts") || ent.name.endsWith(".json") || ent.name.endsWith(".md"))) out.push(next);
+    else if (ent.isFile() && (ent.name.endsWith(".ts") || ent.name.endsWith(".json") || ent.name.endsWith(".md")))
+      out.push(next);
   }
   return out;
 }
@@ -74,7 +75,11 @@ describe("M2.4 tool-trace holdout fixture", () => {
         const js = /import\s*(?:type\s+)?(?:\{[^}]*\bBrainMemory\b[^}]*\}|\bBrainMemory\b)\s*from/.test(line);
         if (js && !line.includes("not-product")) offenders.push(`${file}: ${t}`);
         if (file.endsWith(".test.ts")) continue;
-        if ((line.includes("cortex: false") || line.includes("cortex:false")) && !line.includes("not-product") && !/ban|not a published|must not|no `cortex: false`|as a published column/i.test(line)) {
+        if (
+          (line.includes("cortex: false") || line.includes("cortex:false")) &&
+          !line.includes("not-product") &&
+          !/ban|not a published|must not|no `cortex: false`|as a published column/i.test(line)
+        ) {
           offenders.push(`${file}: ${t}`);
         }
       }

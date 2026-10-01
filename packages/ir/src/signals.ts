@@ -139,8 +139,14 @@ export function valueOverlap(a: unknown, b: unknown): number {
     const ca = canonicalize(a);
     const cb = canonicalize(b);
     if (ca === cb) return 1;
-    const ta = ca.replace(/[{}\[\]",:]/g, " ").split(/\s+/).filter(Boolean);
-    const tb = cb.replace(/[{}\[\]",:]/g, " ").split(/\s+/).filter(Boolean);
+    const ta = ca
+      .replace(/[{}\[\]",:]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    const tb = cb
+      .replace(/[{}\[\]",:]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
     // Different shapes with no tokens at all — {} vs [] — are different
     // values, not a perfect overlap. Everything-tokenless used to score 1.
     if (!ta.length && !tb.length) return 0;
@@ -365,37 +371,37 @@ export function takeSignals(
   // non-overlapping). NGRAM_MIN * NGRAM_REPEAT_AT would be 4 and miss
   // three-in-a-row. Reads need one extra cycle; the loop still no-ops until then.
   if (names.length >= NGRAM_MIN + NGRAM_REPEAT_AT - 1) {
-  const maxN = Math.min(NGRAM_MAX, names.length);
-  for (let n = maxN; n >= NGRAM_MIN; n--) {
-    const start = names.length - n;
-    const ngram = names.slice(start);
-    const repeatAt = ngram.every((g) => isReadName(g)) ? READ_NGRAM_REPEAT_AT : NGRAM_REPEAT_AT;
-    if (gramCount(names, start, n, repeatAt) < repeatAt) continue;
-    // A repeated n-gram whose newest occurrence produced new information is a
-    // loop that is still paying its way — polling that just watched CI flip
-    // pending → success, pagination pulling the next page. Suppress the
-    // warning this cycle; it is not added to `seen`, so the first *stalled*
-    // repeat (identical args, identical result) still warns, one cycle later.
-    // Without this the guard hard-stopped productive polls exactly like
-    // thrash, and thrash with consecutive identical calls (an [A,A] n-gram)
-    // slipped past the guard's size>=2 check in the other direction.
-    const prior = priorOccurrence(names, ngram, start);
-    if (prior >= 0) {
-      let progressed = false;
-      for (let k = 0; k < n; k++) {
-        if (repeatProgress(live[prior + k]!.e, live[start + k]!.e)) {
-          progressed = true;
-          break;
+    const maxN = Math.min(NGRAM_MAX, names.length);
+    for (let n = maxN; n >= NGRAM_MIN; n--) {
+      const start = names.length - n;
+      const ngram = names.slice(start);
+      const repeatAt = ngram.every((g) => isReadName(g)) ? READ_NGRAM_REPEAT_AT : NGRAM_REPEAT_AT;
+      if (gramCount(names, start, n, repeatAt) < repeatAt) continue;
+      // A repeated n-gram whose newest occurrence produced new information is a
+      // loop that is still paying its way — polling that just watched CI flip
+      // pending → success, pagination pulling the next page. Suppress the
+      // warning this cycle; it is not added to `seen`, so the first *stalled*
+      // repeat (identical args, identical result) still warns, one cycle later.
+      // Without this the guard hard-stopped productive polls exactly like
+      // thrash, and thrash with consecutive identical calls (an [A,A] n-gram)
+      // slipped past the guard's size>=2 check in the other direction.
+      const prior = priorOccurrence(names, ngram, start);
+      if (prior >= 0) {
+        let progressed = false;
+        for (let k = 0; k < n; k++) {
+          if (repeatProgress(live[prior + k]!.e, live[start + k]!.e)) {
+            progressed = true;
+            break;
+          }
         }
+        if (progressed) continue;
       }
-      if (progressed) continue;
+      const key = `repeat_ngram:${ngram.join("\0")}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fresh.push(withBudget("repeat_ngram", at, `repeated ${ngram.join(" → ")}`, budget, { n: ngram.length, ngram }));
+      break;
     }
-    const key = `repeat_ngram:${ngram.join("\0")}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    fresh.push(withBudget("repeat_ngram", at, `repeated ${ngram.join(" → ")}`, budget, { n: ngram.length, ngram }));
-    break;
-  }
   }
 
   const gain = lowGainHit(events, live);
@@ -404,7 +410,10 @@ export function takeSignals(
     if (!seen.has(key)) {
       seen.add(key);
       fresh.push(
-        withBudget("low_gain", gain.at, "consecutive tool results added nothing", budget, { n: gain.n, gain: gain.gain }),
+        withBudget("low_gain", gain.at, "consecutive tool results added nothing", budget, {
+          n: gain.n,
+          gain: gain.gain,
+        }),
       );
     }
   }
@@ -426,38 +435,49 @@ export function takeSignals(
   // honoured by killAfterWarning.
   const visits = new Map<string, TraceEvent[]>();
   if (live.length >= VISIT_STALL_RUN) {
-  for (const { e } of live) {
-    if (!e.ok || e.result === undefined) continue;
-    const list = visits.get(e.name);
-    if (list) list.push(e);
-    else visits.set(e.name, [e]);
-  }
-  for (const [tool, list] of visits) {
-    if (list.length < VISIT_STALL_RUN) continue;
-    const window = list.slice(-VISIT_STALL_RUN);
-    let worst = 1;
-    for (let i = 1; i < window.length; i++) {
-      worst = Math.min(worst, valueOverlap(window[i - 1]!.result, window[i]!.result));
+    for (const { e } of live) {
+      if (!e.ok || e.result === undefined) continue;
+      const list = visits.get(e.name);
+      if (list) list.push(e);
+      else visits.set(e.name, [e]);
     }
-    if (worst < VISIT_STALL_OVERLAP) continue;
-    const key = `repeat_visits:${tool}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    fresh.push(
-      withBudget("repeat_visits", at, `${tool} returned materially the same result ${VISIT_STALL_RUN} times`, budget, {
-        n: list.length,
-        gain: worst,
-      }),
-    );
-  }
+    for (const [tool, list] of visits) {
+      if (list.length < VISIT_STALL_RUN) continue;
+      const window = list.slice(-VISIT_STALL_RUN);
+      let worst = 1;
+      for (let i = 1; i < window.length; i++) {
+        worst = Math.min(worst, valueOverlap(window[i - 1]!.result, window[i]!.result));
+      }
+      if (worst < VISIT_STALL_OVERLAP) continue;
+      const key = `repeat_visits:${tool}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fresh.push(
+        withBudget(
+          "repeat_visits",
+          at,
+          `${tool} returned materially the same result ${VISIT_STALL_RUN} times`,
+          budget,
+          {
+            n: list.length,
+            gain: worst,
+          },
+        ),
+      );
+    }
   }
 
-  const book = required.length || ledger ? (ledger ?? evidenceLedger(events, required)) : { required: [], present: [], absent: [], failed: [] };
+  const book =
+    required.length || ledger
+      ? (ledger ?? evidenceLedger(events, required))
+      : { required: [], present: [], absent: [], failed: [] };
   if (book.absent.length) {
     const key = `evidence_gap:${book.absent.join(",")}`;
     if (!seen.has(key)) {
       seen.add(key);
-      fresh.push(withBudget("evidence_gap", at, `missing ${book.absent.join(", ")}`, budget, { n: book.absent.length }));
+      fresh.push(
+        withBudget("evidence_gap", at, `missing ${book.absent.join(", ")}`, budget, { n: book.absent.length }),
+      );
     }
   }
 

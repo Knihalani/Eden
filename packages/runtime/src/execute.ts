@@ -554,9 +554,7 @@ export async function runProgram(
     // and any suppressed siblings must know exactly how far the run got.
     // Leaving these as plain Errors made their touched-ness unknowable, which
     // forced every downstream fallback into guessing.
-    const wrapped = new DeoptError(
-      `step failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const wrapped = new DeoptError(`step failed: ${err instanceof Error ? err.message : String(err)}`);
     // Preserve the original so semantic classifiers (e.g. shadow's
     // UnrecordedCall, meaning "this trace cannot validate the program")
     // can still recognise what actually happened through the cause chain.

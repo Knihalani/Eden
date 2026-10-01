@@ -4,12 +4,7 @@ import { createHandler } from "./server";
 import { useTempEdenHome } from "./test-home";
 import { registryFrom } from "@eden/runtime";
 import { replayRegistry } from "@eden/shadow";
-import {
-  createTicketShip,
-  runNaive,
-  toNaiveTrace,
-  WITNESS_IDS,
-} from "../../../packages/runtime/src/ticketship";
+import { createTicketShip, runNaive, toNaiveTrace, WITNESS_IDS } from "../../../packages/runtime/src/ticketship";
 import type { StretchTrace } from "@eden/ir";
 
 useTempEdenHome();
@@ -57,7 +52,10 @@ function shipWorld() {
   return { world, store, fetchHandler, auth };
 }
 
-async function approveTicketShip(fetchHandler: (req: Request) => Promise<Response>, auth: (path: string, init?: RequestInit) => Request) {
+async function approveTicketShip(
+  fetchHandler: (req: Request) => Promise<Response>,
+  auth: (path: string, init?: RequestInit) => Request,
+) {
   const traces = await naiveTraces(10);
   const posted = await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces }) }));
   expect(posted.status).toBe(200);
@@ -77,7 +75,11 @@ describe("agent contract", () => {
   test("POST /v1/wrap no auth → 401", async () => {
     const { fetchHandler } = shipWorld();
     const res = await fetchHandler(
-      new Request("http://x/v1/wrap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "x" }) }),
+      new Request("http://x/v1/wrap", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "x" }),
+      }),
     );
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error?: string };
@@ -89,7 +91,9 @@ describe("agent contract", () => {
 
   test("POST /v1/wrap unknown name → 200 {action:original}", async () => {
     const { fetchHandler, auth } = shipWorld();
-    const res = await fetchHandler(auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name: "no-such-tool", args: { id: "T-100" } }) }));
+    const res = await fetchHandler(
+      auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name: "no-such-tool", args: { id: "T-100" } }) }),
+    );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ action: "original" });
     expect(res.headers.get("x-eden-version")).toBe("1");
@@ -100,7 +104,9 @@ describe("agent contract", () => {
     const pass = await approveTicketShip(fetchHandler, auth);
     const name = pass.program!.name;
 
-    const wrapRes = await fetchHandler(auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name, args: { id: "T-100" } }) }));
+    const wrapRes = await fetchHandler(
+      auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name, args: { id: "T-100" } }) }),
+    );
     expect(wrapRes.status).toBe(200);
     const wrapBody = (await wrapRes.json()) as { action?: string; facts?: unknown };
     expect(wrapBody.action).toBe("play");
@@ -117,7 +123,9 @@ describe("agent contract", () => {
     expect(viaStringArguments.status).toBe(200);
     expect(await viaStringArguments.json()).toEqual(wrapBody);
 
-    const runRes = await fetchHandler(auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: pass.id, input: { id: "T-100" } }) }));
+    const runRes = await fetchHandler(
+      auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: pass.id, input: { id: "T-100" } }) }),
+    );
     expect(runRes.status).toBe(200);
     const runBody = (await runRes.json()) as { value?: unknown };
     expect(wrapBody.facts).toEqual(runBody.value);
@@ -125,7 +133,9 @@ describe("agent contract", () => {
 
     const first = pass.program!.sequence?.[0];
     if (first) {
-      const viaSeq = await fetchHandler(auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name: first, args: { id: "T-100" } }) }));
+      const viaSeq = await fetchHandler(
+        auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name: first, args: { id: "T-100" } }) }),
+      );
       expect(viaSeq.status).toBe(200);
       const seqBody = (await viaSeq.json()) as { action?: string; facts?: unknown };
       expect(seqBody.action).toBe("play");
@@ -161,7 +171,10 @@ describe("agent contract", () => {
     expect(store.tools().filter((t) => t.state === "live")).toHaveLength(0);
 
     const emptySeal = await fetchHandler(
-      auth("/v1/ingest", { method: "POST", body: JSON.stringify({ run_id: "empty-seal", events: [], stretch_end: true }) }),
+      auth("/v1/ingest", {
+        method: "POST",
+        body: JSON.stringify({ run_id: "empty-seal", events: [], stretch_end: true }),
+      }),
     );
     expect(emptySeal.status).toBe(202);
     expect(await emptySeal.json()).toEqual({ ok: true, accepted: 0 });
@@ -187,7 +200,9 @@ describe("agent contract", () => {
 
   test("wrap miss is original not 500; play after Approve; contract is fetchable", async () => {
     const { fetchHandler, auth } = shipWorld();
-    const miss = await fetchHandler(auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name: "lookupTicket", args: { id: "T-100" } }) }));
+    const miss = await fetchHandler(
+      auth("/v1/wrap", { method: "POST", body: JSON.stringify({ name: "lookupTicket", args: { id: "T-100" } }) }),
+    );
     expect(miss.status).toBe(200);
     expect(await miss.json()).toEqual({ action: "original" });
 
@@ -198,18 +213,36 @@ describe("agent contract", () => {
     expect(spec.status).toBe(200);
     const doc = (await spec.json()) as { paths?: Record<string, unknown>; info?: { version?: string } };
     expect(doc.info?.version).toBe("1");
-    for (const path of ["/v1/wrap", "/v1/ingest", "/v1/dispatch", "/v1/play", "/v1/wrap-run", "/v1/traces", "/v1/compile", "/v1/chat/completions", "/v1/messages", "/health"]) {
+    for (const path of [
+      "/v1/wrap",
+      "/v1/ingest",
+      "/v1/dispatch",
+      "/v1/play",
+      "/v1/wrap-run",
+      "/v1/traces",
+      "/v1/compile",
+      "/v1/chat/completions",
+      "/v1/messages",
+      "/health",
+    ]) {
       expect(doc.paths?.[path]).toBeTruthy();
     }
 
     const pass = await approveTicketShip(fetchHandler, auth);
-    const played = await fetchHandler(auth("/v1/play", { method: "POST", body: JSON.stringify({ name: pass.program!.name, args: { id: "T-100" } }) }));
+    const played = await fetchHandler(
+      auth("/v1/play", { method: "POST", body: JSON.stringify({ name: pass.program!.name, args: { id: "T-100" } }) }),
+    );
     expect(played.status).toBe(200);
     const playBody = (await played.json()) as { ok?: boolean; value?: unknown };
     expect(playBody.ok).toBe(true);
     expect(playBody.value).toEqual({ notified: true, id: "T-100" });
 
-    const dispatch = await fetchHandler(auth("/v1/dispatch", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "resolve ticket T-100" }] }) }));
+    const dispatch = await fetchHandler(
+      auth("/v1/dispatch", {
+        method: "POST",
+        body: JSON.stringify({ messages: [{ role: "user", content: "resolve ticket T-100" }] }),
+      }),
+    );
     expect(dispatch.status).toBe(200);
     const d = (await dispatch.json()) as { tools: unknown[] };
     expect(d.tools.length).toBeLessThanOrEqual(1);
@@ -239,7 +272,9 @@ describe("agent contract", () => {
         }),
       );
       expect(noKey.status).toBe(401);
-      const dev = await fetchHandler(auth("/v1/chat/completions", { method: "POST", body: JSON.stringify({ model: "m", messages: [] }) }));
+      const dev = await fetchHandler(
+        auth("/v1/chat/completions", { method: "POST", body: JSON.stringify({ model: "m", messages: [] }) }),
+      );
       expect(dev.status).toBe(200);
       const body = (await dev.json()) as {
         model?: string;

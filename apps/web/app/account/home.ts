@@ -86,11 +86,7 @@ export function destAfterWorkspace(choice: WorkspaceChoice) {
   return HOME;
 }
 
-export function continuePath(
-  sessionStatus?: string | null,
-  orgId?: string | null,
-  intent: "in" | "up" = "in",
-) {
+export function continuePath(sessionStatus?: string | null, orgId?: string | null, intent: "in" | "up" = "in") {
   if (sessionStatus === "pending" || !orgId) return WORKSPACE;
   return intent === "up" ? TOUR : HOME;
 }
@@ -155,21 +151,13 @@ export function nextSsoStep(s: SsoSnapshot): SsoStep {
   if (s.sessionStatus === "pending" || s.sessionStatus === "active" || s.sessionTask) {
     return "session";
   }
-  if (
-    !s.signInStatus ||
-    s.signInStatus === "needs_identifier" ||
-    s.signInStatus === "needs_first_factor"
-  ) {
+  if (!s.signInStatus || s.signInStatus === "needs_identifier" || s.signInStatus === "needs_first_factor") {
     return "wait";
   }
   return "fail";
 }
 
-export function goDecorated(
-  decorateUrl: (url: string) => string,
-  push: (url: string) => void,
-  dest = HOME,
-) {
+export function goDecorated(decorateUrl: (url: string) => string, push: (url: string) => void, dest = HOME) {
   const url = decorateUrl(dest);
   if (url.startsWith("http")) {
     window.location.href = url;
@@ -179,8 +167,9 @@ export function goDecorated(
 }
 
 export function fieldMessage(errors: unknown, name: string) {
-  const fields = (errors as { fields?: Record<string, { longMessage?: string; message?: string } | undefined> } | null | undefined)
-    ?.fields;
+  const fields = (
+    errors as { fields?: Record<string, { longMessage?: string; message?: string } | undefined> } | null | undefined
+  )?.fields;
   const item = fields?.[name];
   return item?.longMessage || item?.message || "";
 }

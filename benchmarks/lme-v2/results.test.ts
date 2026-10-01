@@ -18,9 +18,7 @@ function parseAccPct(src: string): number {
 }
 
 function parseVerdictRow(src: string, target: string): { published: number; run: number; verdict: "WIN" | "LOSS" } {
-  const re = new RegExp(
-    String.raw`\|\s*${target}\s*\|\s*([0-9.]+)\s*\|\s*([0-9.]+)\s*\|\s*\*\*(WIN|LOSS)\*\*`,
-  );
+  const re = new RegExp(String.raw`\|\s*${target}\s*\|\s*([0-9.]+)\s*\|\s*([0-9.]+)\s*\|\s*\*\*(WIN|LOSS)\*\*`);
   const m = src.match(re);
   if (!m) throw new Error(`RESULTS missing verdict row: ${target}`);
   return { published: Number(m[1]), run: Number(m[2]), verdict: m[3] as "WIN" | "LOSS" };
@@ -51,7 +49,8 @@ function honestyProblems(src: string): string[] {
     return problems;
   }
   if (rag.published !== RAG_SMALL) problems.push(`RAG published ${rag.published} ≠ ${RAG_SMALL}`);
-  if (ar.published !== AGENTRUNBOOK_C_SMALL) problems.push(`AgentRunbook-C published ${ar.published} ≠ ${AGENTRUNBOOK_C_SMALL}`);
+  if (ar.published !== AGENTRUNBOOK_C_SMALL)
+    problems.push(`AgentRunbook-C published ${ar.published} ≠ ${AGENTRUNBOOK_C_SMALL}`);
   if (Math.abs(rag.run - acc) > 0.05) problems.push(`RAG this-run ${rag.run} ≠ acc ${acc}`);
   if (Math.abs(ar.run - acc) > 0.05) problems.push(`AgentRunbook-C this-run ${ar.run} ≠ acc ${acc}`);
   const overallWin = /Overall: WIN/.test(src);
@@ -96,7 +95,9 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
     expect(src).toMatch(/AgentRunbook-C/);
     expect(src).toMatch(/74\.9/);
     expect(src).toMatch(/\*\*(WIN|LOSS)\*\*/);
-    expect(src).toMatch(/Overall: (WIN|LOSS)|Overall:\*\* pending live|Overall:\*\* pending|\*\*Overall:\*\* pending live|\*\*Overall:\*\* pending/);
+    expect(src).toMatch(
+      /Overall: (WIN|LOSS)|Overall:\*\* pending live|Overall:\*\* pending|\*\*Overall:\*\* pending live|\*\*Overall:\*\* pending/,
+    );
     expect(src).not.toMatch(/Do not invent 2\.7/);
     expect(src).not.toMatch(/\*\*acc\*\*[^\n]*74\.9/);
   });
@@ -132,7 +133,9 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
     expect(runner).toMatch(/29 \\`errors-gotchas\\` questions are multimodal/);
     expect(runner).toMatch(/\*\*skipped \(named LOSS\)\*\*/);
     expect(runner).toMatch(/That is not AgentRunbook-C \*\*\$\{AGENTRUNBOOK_C_SMALL\}\*\*/);
-    expect(runner).toMatch(/Do not treat any current acc as comparable to \$\{AGENTRUNBOOK_C_SMALL\} on multimodal gotchas/);
+    expect(runner).toMatch(
+      /Do not treat any current acc as comparable to \$\{AGENTRUNBOOK_C_SMALL\} on multimodal gotchas/,
+    );
   });
 
   test("runner product path is openMemory inject, not BrainMemory or memory_search", () => {
@@ -155,7 +158,7 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
       nim_model: "google/gemma-4-31b-it",
       n: 451,
       n_correct: 45,
-      acc: 0.10,
+      acc: 0.1,
       reader_ok: true,
       reader_note: "ok",
       gold_in_packet: { n: 226, hit: 100 },
@@ -179,9 +182,7 @@ describe("M26.2 LME-V2 Small RESULTS honesty", () => {
     expect(md).toMatch(/\*\*Date:\*\*\s*2026-09-20/);
     expect(md).toMatch(/\*\*ISO date:\*\*\s*2026-09-20/);
     expect(md).toMatch(/\*\*Wave:\*\*\s*M26\.2/);
-    expect(md).toContain(
-      "**M37 recert:** 2026-09-20 — live n=451 after M16–M36; trajectory SOTA only if acc ≥ 74.9",
-    );
+    expect(md).toContain("**M37 recert:** 2026-09-20 — live n=451 after M16–M36; trajectory SOTA only if acc ≥ 74.9");
     expect(md).toMatch(/§11\.1/);
     expect(md).toMatch(/\|\s*n\s*\|\s*\*\*451\*\*/);
     expect(md).toMatch(/\|\s*correct\s*\|\s*45\s*\|/);
@@ -419,7 +420,9 @@ describe("M26.4 verdict honesty — Plan §9.2", () => {
     const src = readFileSync(RUNNER, "utf8");
     expect(src).toMatch(/\| target \| published \| this run \| verdict \|/);
     expect(src).toMatch(/RAG query→slice \| \$\{RAG_SMALL\} \| \$\{pct\(accPct\)\} \| \*\*\$\{args\.v\.vs_rag\}\*\*/);
-    expect(src).toMatch(/AgentRunbook-C \| \$\{AGENTRUNBOOK_C_SMALL\} \| \$\{pct\(accPct\)\} \| \*\*\$\{args\.v\.vs_agentrunbook_c\}\*\*/);
+    expect(src).toMatch(
+      /AgentRunbook-C \| \$\{AGENTRUNBOOK_C_SMALL\} \| \$\{pct\(accPct\)\} \| \*\*\$\{args\.v\.vs_agentrunbook_c\}\*\*/,
+    );
     expect(src).toMatch(/Overall WIN only if both/);
     expect(src).not.toMatch(/\*\*No files\.\*\*/);
     expect(src).toMatch(/\*\*Files exist\.\*\*/);

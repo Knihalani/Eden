@@ -168,7 +168,9 @@ async function drain() {
 }
 
 async function listTools() {
-  return api<{ tools: Array<{ id: string; name: string; state: string; has_playback: boolean; when_to_use: string }> }>("/v1/tools");
+  return api<{ tools: Array<{ id: string; name: string; state: string; has_playback: boolean; when_to_use: string }> }>(
+    "/v1/tools",
+  );
 }
 
 async function approvePlayable() {
@@ -270,7 +272,9 @@ async function runClaude(opts: {
     ...u,
   };
   writeFileSync(join(dir, "summary.json"), JSON.stringify(summary, null, 2));
-  console.log(JSON.stringify({ label: opts.label, wall_ms, cost: u.cost_usd, tools: parsed.tool_names, error: u.is_error }));
+  console.log(
+    JSON.stringify({ label: opts.label, wall_ms, cost: u.cost_usd, tools: parsed.tool_names, error: u.is_error }),
+  );
   if (opts.withEden) await drain();
   return summary;
 }
@@ -283,10 +287,7 @@ mkdirSync(OUT, { recursive: true });
 mkdirSync(EDEN_HOME, { recursive: true });
 mkdirSync(join(EDEN_HOME, "runs"), { recursive: true });
 writeFileSync(join(OUT, "hooks.json"), JSON.stringify(hooksSettings(), null, 2));
-writeFileSync(
-  join(EDEN_HOME, "config.json"),
-  JSON.stringify({ api_key: KEY, base_url: ORIGIN }, null, 2),
-);
+writeFileSync(join(EDEN_HOME, "config.json"), JSON.stringify({ api_key: KEY, base_url: ORIGIN }, null, 2));
 
 const tokenProc = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe" });
 const ghToken = (await new Response(tokenProc.stdout).text()).trim();

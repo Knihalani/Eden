@@ -96,9 +96,7 @@ export function analyze(files: Array<{ path: string; json: Results }>, metric: k
     lines.push(
       `  mean relative ${(mean(rel) * 100).toFixed(1)}%   sd ${(stdev(rel) * 100).toFixed(1)} percentage points`,
     );
-    lines.push(
-      `  -> any per-run claim smaller than roughly ${(stdev(rel) * 100).toFixed(0)}% is inside the noise.`,
-    );
+    lines.push(`  -> any per-run claim smaller than roughly ${(stdev(rel) * 100).toFixed(0)}% is inside the noise.`);
     lines.push("");
   }
 

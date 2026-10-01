@@ -5,21 +5,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory } from "../../../src/index";
-import {
-  type MemSys,
-  type Turn,
-  bm25,
-  dateTokens,
-  formatTurn,
-  properNames,
-  rrfFuse,
-  toks,
-} from "./shared";
+import { type MemSys, type Turn, bm25, dateTokens, formatTurn, properNames, rrfFuse, toks } from "./shared";
 
 const SPEAKER_RE = /^([A-Za-z][A-Za-z0-9 /._-]{0,32}):/;
 
 function bodyOf(note: string): string {
-  return note.replace(SPEAKER_RE, "").replace(/\[[^\]]+\]/, "").trim();
+  return note
+    .replace(SPEAKER_RE, "")
+    .replace(/\[[^\]]+\]/, "")
+    .trim();
 }
 
 /* ─── 1. Associative Spreading Activation ─────────────────────────────── */
@@ -120,7 +114,9 @@ export class TcmSys implements MemSys {
       probe[Math.abs(h) % dim] += 1;
     }
     const cos = (a: number[], b: number[]) => {
-      let dp = 0, na = 0, nb = 0;
+      let dp = 0,
+        na = 0,
+        nb = 0;
       for (let i = 0; i < a.length; i++) {
         dp += a[i]! * b[i]!;
         na += a[i]! * a[i]!;
@@ -207,10 +203,7 @@ export class SchemaSys implements MemSys {
     }
     // cap profile size — keep longest (more content) lines
     for (const [sp, lines] of this.profiles) {
-      this.profiles.set(
-        sp,
-        [...lines].sort((a, b) => b.length - a.length).slice(0, 40),
-      );
+      this.profiles.set(sp, [...lines].sort((a, b) => b.length - a.length).slice(0, 40));
     }
   }
 

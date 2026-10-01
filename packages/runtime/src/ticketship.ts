@@ -167,13 +167,23 @@ export async function runNaive(
   world: TicketShipWorld,
   id: string,
   opts: { skipVerifyP?: number; seed?: number } = {},
-): Promise<{ output: unknown; stats: TicketShipStats; events: Array<{ name: string; args: Record<string, unknown>; result: unknown; ok: boolean; duration_ms?: number }> }> {
+): Promise<{
+  output: unknown;
+  stats: TicketShipStats;
+  events: Array<{ name: string; args: Record<string, unknown>; result: unknown; ok: boolean; duration_ms?: number }>;
+}> {
   const skipP = opts.skipVerifyP ?? SKIP_VERIFY_P;
   const rng = mulberry32(opts.seed ?? 1);
   const t0 = performance.now();
   const tools: string[] = [];
   const skipped: string[] = [];
-  const events: Array<{ name: string; args: Record<string, unknown>; result: unknown; ok: boolean; duration_ms?: number }> = [];
+  const events: Array<{
+    name: string;
+    args: Record<string, unknown>;
+    result: unknown;
+    ok: boolean;
+    duration_ms?: number;
+  }> = [];
   let llmCalls = 0;
 
   const call = async (name: TicketToolName, args: Record<string, unknown>) => {
@@ -211,7 +221,12 @@ export async function runNaive(
     };
   }
   const draft = await call("draftReply", { fields });
-  await call("writeRecord", { id, customer: fields.customer, issue: fields.issue, reply: (draft as { text: string }).text });
+  await call("writeRecord", {
+    id,
+    customer: fields.customer,
+    issue: fields.issue,
+    reply: (draft as { text: string }).text,
+  });
   if (rng() < skipP) skipped.push("verifyWrite");
   else await call("verifyWrite", { id });
   const output = await call("notify", { id });
@@ -234,11 +249,7 @@ export async function runNaive(
 }
 
 /** StretchTrace from a naive TicketShip run. Tokens are measured; wall clock is the synthetic fixture. */
-export function toNaiveTrace(
-  id: string,
-  ticketId: string,
-  run: Awaited<ReturnType<typeof runNaive>>,
-): StretchTrace {
+export function toNaiveTrace(id: string, ticketId: string, run: Awaited<ReturnType<typeof runNaive>>): StretchTrace {
   const llm = run.stats.llmCalls;
   return {
     id,
@@ -350,7 +361,10 @@ export function underdeterminedSiblingTraces(n = 3) {
         { name: "draftReply", args: { fields }, result: { text: "hello" }, ok: true },
         {
           name: "writeRecord",
-          args: i === 0 ? { email: details.customer, issue: fields.issue } : { id, customer: details.customer, issue: fields.issue, reply: "hello" },
+          args:
+            i === 0
+              ? { email: details.customer, issue: fields.issue }
+              : { id, customer: details.customer, issue: fields.issue, reply: "hello" },
           result: { written: true },
           ok: true,
         },

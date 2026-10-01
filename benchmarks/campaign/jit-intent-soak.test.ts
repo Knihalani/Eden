@@ -7,13 +7,7 @@ import { describe, expect, test } from "bun:test";
 import { PRECISION_BAR } from "./jit-holdout-lib";
 import { runJitIntentSoak, intentSoakTurns, PROGRAMS } from "./jit-intent-soak";
 
-const FORBIDDEN = [
-  "cus_8kQ2Lp0NaBcd",
-  "s3://analytics-prod",
-  "api.github.com",
-  "kubectl",
-  "jordan@acme.io",
-];
+const FORBIDDEN = ["cus_8kQ2Lp0NaBcd", "s3://analytics-prod", "api.github.com", "kubectl", "jordan@acme.io"];
 
 describe("Wave 22.2 JIT intent hold-out", () => {
   test("precision ≥ bar; unique-work and vague stay empty; not id/cli/url worlds", () => {

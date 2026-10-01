@@ -190,7 +190,9 @@ async function main() {
     if (v === 0 && k !== "unknown") continue;
     console.log(`  ${k.padEnd(nameWidth)}  ${v}`);
   }
-  console.log(`n=${n}  mapped=${mapped.toFixed(4)} (${mappedN}/${n})  unknown=${unknown.toFixed(4)} (${unknownN}/${n})`);
+  console.log(
+    `n=${n}  mapped=${mapped.toFixed(4)} (${mappedN}/${n})  unknown=${unknown.toFixed(4)} (${unknownN}/${n})`,
+  );
   if (unknowns.length) {
     console.log("\nunknown leftover (tighten classify from these strings):");
     for (const u of unknowns) {

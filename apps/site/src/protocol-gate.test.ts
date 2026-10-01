@@ -72,7 +72,11 @@ describe("/v1 protocol gate", () => {
     expect(matched.status).not.toBe(426);
     // Legacy client: no header at all — must keep working.
     const legacy = await handleFetch(
-      new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", headers: { host: "127.0.0.1:8787" }, body: "{}" }),
+      new Request("http://127.0.0.1:8787/v1/setup", {
+        method: "POST",
+        headers: { host: "127.0.0.1:8787" },
+        body: "{}",
+      }),
     );
     expect(legacy.status).not.toBe(426);
   });

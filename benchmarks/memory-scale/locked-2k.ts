@@ -33,7 +33,8 @@ function bullets(pkt: string): string[] {
 function pct(sorted: number[], p: number): number {
   if (!sorted.length) return 0;
   const i = (p / 100) * (sorted.length - 1);
-  const lo = Math.floor(i), hi = Math.ceil(i);
+  const lo = Math.floor(i),
+    hi = Math.ceil(i);
   if (lo === hi) return sorted[lo]!;
   return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (i - lo);
 }
@@ -93,9 +94,12 @@ try {
   const wrap = withKnowFacts({ messages: [{ role: "user", content: "what is auth" }] }) as { messages?: unknown[] };
   hit(/Clerk/i.test(packetOf(wrap.messages ?? [])));
   const hook = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what is auth" });
-  const ctx = hook && typeof hook === "object" && "hookSpecificOutput" in hook
-    ? String((hook as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput?.additionalContext ?? "")
-    : "";
+  const ctx =
+    hook && typeof hook === "object" && "hookSpecificOutput" in hook
+      ? String(
+          (hook as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput?.additionalContext ?? "",
+        )
+      : "";
   hit(/Clerk/i.test(ctx));
   const before = memoryInjectSwallows.n;
   const boom = mem.inject({ not: "array" } as unknown as unknown[]);

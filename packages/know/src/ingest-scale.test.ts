@@ -40,7 +40,8 @@ describe("ingest scale", () => {
 
   test("skip-payload keeps the same keepWet URI set as full decode", () => {
     const mix: Array<{ uri: string; text: string }> = [];
-    for (let i = 0; i < 12; i++) mix.push({ uri: `https://www.rfc-editor.org/rfc/rfc${2000 + i}.html`, text: FACT.repeat(6) });
+    for (let i = 0; i < 12; i++)
+      mix.push({ uri: `https://www.rfc-editor.org/rfc/rfc${2000 + i}.html`, text: FACT.repeat(6) });
     for (let i = 0; i < 20; i++) mix.push({ uri: `https://www.nytimes.com/story-${i}`, text: FACT.repeat(8) });
     for (let i = 0; i < 20; i++) mix.push({ uri: `https://spam.xyz/p/${i}`, text: FACT.repeat(8) });
     const blob = Buffer.concat(mix.map((m) => rec(m.uri, m.text)));
@@ -49,8 +50,14 @@ describe("ingest scale", () => {
     const skipped: WetRecord[] = [];
     const stats = emptyWarcStats();
     pushWarcBytes(new Uint8Array(blob), skipped, 10_000, (uri, _t, len) => wetHeaderSkip(uri, undefined, len), stats);
-    const keepFull = full.filter((r) => keepWet(r)).map((r) => r.uri).sort();
-    const keepSkip = skipped.filter((r) => keepWet(r)).map((r) => r.uri).sort();
+    const keepFull = full
+      .filter((r) => keepWet(r))
+      .map((r) => r.uri)
+      .sort();
+    const keepSkip = skipped
+      .filter((r) => keepWet(r))
+      .map((r) => r.uri)
+      .sort();
     expect(keepSkip).toEqual(keepFull);
     expect(keepFull.length).toBe(12);
     expect(stats.decoded).toBe(12);
@@ -72,7 +79,9 @@ describe("ingest scale", () => {
   });
 
   test("BytePipe copies less than naive concat on 200 records", () => {
-    const parts = Array.from({ length: 80 }, (_, i) => rec(`https://www.rfc-editor.org/rfc/rfc${3000 + i}.html`, FACT.repeat(4)));
+    const parts = Array.from({ length: 80 }, (_, i) =>
+      rec(`https://www.rfc-editor.org/rfc/rfc${3000 + i}.html`, FACT.repeat(4)),
+    );
     let naive = 0;
     let buf = new Uint8Array(0);
     for (const p of parts) {
@@ -184,7 +193,10 @@ describe("ingest scale", () => {
       const t0 = performance.now();
       const hot = await fetch(url, { signal: AbortSignal.timeout(1000) });
       const ms = performance.now() - t0;
-      const j = (await hot.json()) as { ok?: boolean; caps?: { cc?: number; shards?: number; wetBytes?: number; ccSlices?: number } };
+      const j = (await hot.json()) as {
+        ok?: boolean;
+        caps?: { cc?: number; shards?: number; wetBytes?: number; ccSlices?: number };
+      };
       expect(hot.ok).toBe(true);
       expect(j.ok).toBe(true);
       expect(j.caps?.cc).toBe(0);
@@ -221,7 +233,9 @@ describe("ingest scale", () => {
 
   test("Range 206 fetches a prefix; 416 falls back without changing keep set", async () => {
     const gz = gzipSync(mixBlob());
-    const keepAll = ingestWetGzip(gz, 80, undefined, 10_000).recs.map((r) => r.uri).sort();
+    const keepAll = ingestWetGzip(gz, 80, undefined, 10_000)
+      .recs.map((r) => r.uri)
+      .sort();
     const cap = Math.min(wetByteCap(), gz.byteLength);
     const port206 = 19000 + (process.pid % 3000);
     const srv206 = Bun.serve({
@@ -280,7 +294,9 @@ describe("ingest scale", () => {
     const blob = Buffer.concat(fat);
     const gz = gzipSync(blob);
     expect(gz.byteLength).toBeGreaterThan(16_384);
-    const keepAll = ingestWetGzip(gz, 80, undefined, 80).recs.map((r) => r.uri).sort();
+    const keepAll = ingestWetGzip(gz, 80, undefined, 80)
+      .recs.map((r) => r.uri)
+      .sort();
     let pulled = 0;
     const port = 19100 + (process.pid % 3000);
     const srv = Bun.serve({

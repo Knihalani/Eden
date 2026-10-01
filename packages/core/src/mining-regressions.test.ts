@@ -34,10 +34,7 @@ describe("write steps survive mining", () => {
 
   test("consecutive identical reads still collapse", () => {
     // Double-recording by hook + proxy is real and harmless for reads.
-    const events = [
-      bash("curl https://api.acme.com/v1/orders/1", 0),
-      bash("curl https://api.acme.com/v1/orders/1", 1),
-    ];
+    const events = [bash("curl https://api.acme.com/v1/orders/1", 0), bash("curl https://api.acme.com/v1/orders/1", 1)];
     expect(cleanEvents(events).length).toBe(1);
   });
 
@@ -115,8 +112,15 @@ describe("write steps survive mining", () => {
       command,
       ok: true,
     });
-    expect(cleanEvents([mk("terraform destroy -auto-approve", 0), mk("terraform destroy -auto-approve", 1)])).toHaveLength(2);
-    expect(cleanEvents([mk('psql -c "INSERT INTO ledger(amount) VALUES (100)"', 0), mk('psql -c "INSERT INTO ledger(amount) VALUES (100)"', 1)])).toHaveLength(2);
+    expect(
+      cleanEvents([mk("terraform destroy -auto-approve", 0), mk("terraform destroy -auto-approve", 1)]),
+    ).toHaveLength(2);
+    expect(
+      cleanEvents([
+        mk('psql -c "INSERT INTO ledger(amount) VALUES (100)"', 0),
+        mk('psql -c "INSERT INTO ledger(amount) VALUES (100)"', 1),
+      ]),
+    ).toHaveLength(2);
     expect(cleanEvents([mk("docker stop web", 0), mk("docker stop web", 1)])).toHaveLength(2);
     // Reads still collapse.
     expect(cleanEvents([mk("kubectl get pods -n prod", 0), mk("kubectl get pods -n prod", 1)])).toHaveLength(1);
@@ -171,6 +175,8 @@ describe("steering url matching", () => {
   });
 
   test("unrelated commands still do not match", () => {
-    expect(commandMatchesToolUrls("gh api repos/o/r/issues/3", ["https://api.github.com/repos/o/r/pulls/{issue}"])).toBe(false);
+    expect(
+      commandMatchesToolUrls("gh api repos/o/r/issues/3", ["https://api.github.com/repos/o/r/pulls/{issue}"]),
+    ).toBe(false);
   });
 });

@@ -22,9 +22,7 @@ describe("runtime bind/deopt", () => {
         name: "p",
         description: "p",
         inputSchema: { type: "object" },
-        steps: [
-          { id: "e", kind: "tool", tool: "echo", args: { x: { kind: "literal", value: 1 } } },
-        ],
+        steps: [{ id: "e", kind: "tool", tool: "echo", args: { x: { kind: "literal", value: 1 } } }],
         returns: { kind: "from", step: "e", path: "x" },
         contract: { witnesses: 1, minLlmReduction: 5, allowExact: true },
         manifest: null,
@@ -187,11 +185,15 @@ describe("TicketShip handwritten program vs naive", () => {
     const naive = await runNaive(naiveWorld, "T-100", { skipVerifyP: 0, seed: 1 });
 
     const compiledWorld = createTicketShip();
-    const compiled = await runProgram(program, { id: "T-100" }, {
-      registry: registryFrom(compiledWorld.tools),
-      island: compiledWorld.island,
-      llmCents: compiledWorld.llmCents,
-    });
+    const compiled = await runProgram(
+      program,
+      { id: "T-100" },
+      {
+        registry: registryFrom(compiledWorld.tools),
+        island: compiledWorld.island,
+        llmCents: compiledWorld.llmCents,
+      },
+    );
 
     expect(naive.stats.llmCalls).toBe(8);
     expect(compiled.stats.llmCalls).toBe(1);
@@ -227,10 +229,14 @@ describe("TicketShip handwritten program vs naive", () => {
     let compiledSkips = 0;
     for (let i = 0; i < n; i++) {
       const world = createTicketShip({ llmMs: 0 });
-      const run = await runProgram(program, { id: WITNESS_IDS[i % 3]! }, {
-        registry: registryFrom(world.tools),
-        island: world.island,
-      });
+      const run = await runProgram(
+        program,
+        { id: WITNESS_IDS[i % 3]! },
+        {
+          registry: registryFrom(world.tools),
+          island: world.island,
+        },
+      );
       if (!world.verified.has(WITNESS_IDS[i % 3]!)) compiledSkips++;
       expect(run.stats.toolCalls.filter((t) => t === "verifyWrite")).toHaveLength(1);
     }
@@ -241,11 +247,15 @@ describe("TicketShip handwritten program vs naive", () => {
     const world = createTicketShip({ llmMs: 0 });
     const program = ticketShipProgram();
     try {
-      await runProgram(program, { id: OOD_ID }, {
-        registry: registryFrom(world.tools),
-        island: world.island,
-        checkEnvelope: true,
-      });
+      await runProgram(
+        program,
+        { id: OOD_ID },
+        {
+          registry: registryFrom(world.tools),
+          island: world.island,
+          checkEnvelope: true,
+        },
+      );
       throw new Error("expected deopt");
     } catch (err) {
       expect(isDeopt(err)).toBe(true);
@@ -303,7 +313,15 @@ describe("TicketShip handwritten program vs naive", () => {
           name: "p",
           description: "p",
           inputSchema: { type: "object" },
-          steps: [{ id: "i", kind: "island", input: { kind: "literal", value: 1 }, system: "x", outputSchema: { type: "object" } }],
+          steps: [
+            {
+              id: "i",
+              kind: "island",
+              input: { kind: "literal", value: 1 },
+              system: "x",
+              outputSchema: { type: "object" },
+            },
+          ],
           returns: { kind: "from", step: "i", path: "" },
           contract: { witnesses: 1, minLlmReduction: 5, allowExact: true },
           manifest: null,

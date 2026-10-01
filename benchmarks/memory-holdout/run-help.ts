@@ -172,7 +172,10 @@ function packetFromMessages(list: unknown[]): string {
 function hookPacket(out: unknown): string {
   const ctx = additionalContextOf(asRec(out));
   if (!ctx.includes(MEMORY_MARK)) return "";
-  const blocks = ctx.split(/(?=Eden Memory:)/).map((s) => s.trim()).filter((s) => s.includes(MEMORY_MARK));
+  const blocks = ctx
+    .split(/(?=Eden Memory:)/)
+    .map((s) => s.trim())
+    .filter((s) => s.includes(MEMORY_MARK));
   const uniq: string[] = [];
   for (const b of blocks) if (!uniq.includes(b)) uniq.push(b);
   return uniq.join("\n");
@@ -182,13 +185,19 @@ function countJsonl(memDir: string): number {
   let n = 0;
   const walk = (dir: string) => {
     let ents: import("node:fs").Dirent[] = [];
-    try { ents = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    try {
+      ents = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const ent of ents) {
       const p = join(dir, ent.name);
       if (ent.isDirectory()) walk(p);
       else if (ent.name === "memories.jsonl") {
         try {
-          n += readFileSync(p, "utf8").split("\n").filter((l) => l.trim()).length;
+          n += readFileSync(p, "utf8")
+            .split("\n")
+            .filter((l) => l.trim()).length;
         } catch {}
       }
     }
@@ -218,7 +227,9 @@ function seedWrap(c: HelpCase, memDir: string): void {
   try {
     for (const prompt of c.observe) mem.observe([{ role: "user", content: prompt }]);
   } finally {
-    try { mem.close(); } catch {}
+    try {
+      mem.close();
+    } catch {}
   }
 }
 
@@ -234,7 +245,9 @@ function probeWrap(c: HelpCase, memDir: string, cue: string): string {
     const messages = Array.isArray(body.messages) ? body.messages : [];
     return packetFromMessages(messages);
   } finally {
-    try { mem.close(); } catch {}
+    try {
+      mem.close();
+    } catch {}
   }
 }
 
@@ -253,7 +266,12 @@ function preview(packet: string, needles: string[]): string {
   return text.length > 140 ? `${text.slice(0, 137)}…` : text;
 }
 
-function classify(c: HelpCase, onPacket: string, offPacket: string, live: string): { klass: Klass; on: string; off: string; delta: string; notes: string } {
+function classify(
+  c: HelpCase,
+  onPacket: string,
+  offPacket: string,
+  live: string,
+): { klass: Klass; on: string; off: string; delta: string; notes: string } {
   const onEmpty = !onPacket.trim();
   const offEmpty = !offPacket.trim();
   const same = onPacket.trim() === offPacket.trim();
@@ -296,9 +314,11 @@ function classify(c: HelpCase, onPacket: string, offPacket: string, live: string
   const junkOk = junk.hit.length === 0;
   const staleOk = stale.hit.length === 0;
 
-  if (c.stale_needles.length) notes.push(staleOk ? `${c.stale_needles.join("; ")} absent` : `stale in packet: ${stale.hit.join("; ")}`);
+  if (c.stale_needles.length)
+    notes.push(staleOk ? `${c.stale_needles.join("; ")} absent` : `stale in packet: ${stale.hit.join("; ")}`);
   if (c.junk_needles.length) notes.push(junkOk ? "chatter absent" : `junk leaked: ${junk.hit.join("; ")}`);
-  if (c.keep_needles.length) notes.push(keep.hit.length ? `kept ${keep.hit.join("; ")}` : `${c.keep_needles.join("; ")} not in inject`);
+  if (c.keep_needles.length)
+    notes.push(keep.hit.length ? `kept ${keep.hit.join("; ")}` : `${c.keep_needles.join("; ")} not in inject`);
   if (gold.miss.length) notes.push(`LOSS: gold miss ${gold.miss.join("; ")}`);
 
   const misleading = !junkOk || !staleOk || (!goldOk && !onEmpty && gold.hit.length === 0);
@@ -369,7 +389,9 @@ async function runHost(c: HelpCase, host: Host): Promise<HelpRow> {
         return host === "hook" ? probeHook(c, LIVE_CUE) : probeWrap(c, liveClone.mem, LIVE_CUE);
       });
       const hit = /sqlite/i.test(livePacket);
-      live = hit ? `store live: “${LIVE_CUE}” injected sqlite` : `store dead: “${LIVE_CUE}” missed sqlite (jsonl ${store_n})`;
+      live = hit
+        ? `store live: “${LIVE_CUE}” injected sqlite`
+        : `store dead: “${LIVE_CUE}” missed sqlite (jsonl ${store_n})`;
       rmSync(liveClone.home, { recursive: true, force: true });
     }
     const onPacket = await withEnv(armEnv("on", onClone.home, onClone.mem), async () => {
@@ -446,7 +468,9 @@ export function formatHelp(run: HelpRun): string {
     "|---|---|---|---|---|---|---|---|",
   ];
   for (const r of run.rows) {
-    lines.push(`| ${mdCell(r.id)} | ${r.host} | ${r.klass} | ${mdCell(r.on)} | ${mdCell(r.off)} | ${mdCell(r.delta)} | ${r.control} | ${mdCell(r.notes)} |`);
+    lines.push(
+      `| ${mdCell(r.id)} | ${r.host} | ${r.klass} | ${mdCell(r.on)} | ${mdCell(r.off)} | ${mdCell(r.delta)} | ${r.control} | ${mdCell(r.notes)} |`,
+    );
   }
   lines.push("");
   lines.push("## Verdict (dated)");
@@ -465,7 +489,9 @@ export function formatHelp(run: HelpRun): string {
   lines.push("System text containing `Eden Memory:` only. Empty means the product returned inject identity (no mark).");
   lines.push("");
   for (const r of run.rows) {
-    lines.push(`- **${r.id} / ${r.host}** jsonl ${r.store_n} — on: ${r.on_packet ? mdCell(r.on_packet) : "empty"} — off: ${r.off_packet ? mdCell(r.off_packet) : "empty"}`);
+    lines.push(
+      `- **${r.id} / ${r.host}** jsonl ${r.store_n} — on: ${r.on_packet ? mdCell(r.on_packet) : "empty"} — off: ${r.off_packet ? mdCell(r.off_packet) : "empty"}`,
+    );
   }
   lines.push("");
   lines.push("## Construction traps");
@@ -475,12 +501,16 @@ export function formatHelp(run: HelpRun): string {
   lines.push("- Memorable 454/454 is a fixture-completion score, not this inject exam.");
   lines.push("- Mem0 92 (LoCoMo 92) is not an Eden on-vs-off result.");
   lines.push("");
-  lines.push("No BrainMemory column. No cortex-off column. No k=40. No hay. No `memory_search`. Fail-open and silent inject stay as they are.");
+  lines.push(
+    "No BrainMemory column. No cortex-off column. No k=40. No hay. No `memory_search`. Fail-open and silent inject stay as they are.",
+  );
   lines.push("");
   lines.push("## Not in this file");
   lines.push("");
   lines.push("- Token Δ lives in `HELP-TOKENS.md` (M47.3). This ledger does not invent token numbers.");
-  lines.push("- Harmed ids omitted on the next inject is M47.2 product code (`src/memory-harmed.ts`). This file only classifies sessions.");
+  lines.push(
+    "- Harmed ids omitted on the next inject is M47.2 product code (`src/memory-harmed.ts`). This file only classifies sessions.",
+  );
   lines.push("");
   lines.push("## How to re-run");
   lines.push("");

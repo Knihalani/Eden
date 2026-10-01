@@ -47,7 +47,9 @@ function clip(value: unknown): string {
   const raw = value == null ? "" : String(value);
   const cut = raw.length > MAX_FIELD ? raw.slice(0, MAX_FIELD) : raw;
   const redacted = redact(cut);
-  return typeof redacted === "string" ? redacted.replace(/[\r\n]+/g, " ") : String(redacted ?? "").replace(/[\r\n]+/g, " ");
+  return typeof redacted === "string"
+    ? redacted.replace(/[\r\n]+/g, " ")
+    : String(redacted ?? "").replace(/[\r\n]+/g, " ");
 }
 
 /** Who Approved: the org header if present, else the unbound operator. Never invent a person. */

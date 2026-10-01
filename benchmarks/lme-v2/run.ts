@@ -204,7 +204,11 @@ function clip(s: string, n: number): string {
 function asText(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v;
-  try { return JSON.stringify(v); } catch { return String(v); }
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
 }
 
 function loadDotenv() {
@@ -270,7 +274,10 @@ function readerConcurrency(): number {
 
 function loadQuestions(): Question[] {
   requireDatasetFile(QUESTIONS_PATH, DATASET_FILENAMES.questions);
-  return readFileSync(QUESTIONS_PATH, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Question);
+  return readFileSync(QUESTIONS_PATH, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as Question);
 }
 
 function loadHaystack(): Record<string, string[]> {
@@ -304,12 +311,17 @@ function compactOne(raw: Trajectory): CompactTraj {
     const action = clip(asText(st.action), ACTION_CAP);
     const thought = clip(asText(st.thought), THOUGHT_CAP);
     const observation = clip(asText(st.accessibility_tree), TREE_CAP);
-    charsRaw += asText(st.action).length + asText(st.thought).length + asText(st.accessibility_tree).length + url.length;
+    charsRaw +=
+      asText(st.action).length + asText(st.thought).length + asText(st.accessibility_tree).length + url.length;
     charsKept += action.length + thought.length + observation.length + url.length;
     return { url, action, thought, observation };
   });
   for (const st of states.slice(STATE_CAP)) {
-    charsRaw += asText(st.action).length + asText(st.thought).length + asText(st.accessibility_tree).length + asText(st.url).length;
+    charsRaw +=
+      asText(st.action).length +
+      asText(st.thought).length +
+      asText(st.accessibility_tree).length +
+      asText(st.url).length;
   }
   return {
     id: raw.id,
@@ -375,7 +387,11 @@ async function streamCompactFrom(path: string, want: Set<string>): Promise<Compa
     if (!line) continue;
     if (!line.includes('"id"')) continue;
     let raw: Trajectory;
-    try { raw = JSON.parse(line) as Trajectory; } catch { continue; }
+    try {
+      raw = JSON.parse(line) as Trajectory;
+    } catch {
+      continue;
+    }
     if (!raw?.id || !want.has(raw.id) || have.has(raw.id)) continue;
     const c = compactOne(raw);
     rows.push(c);
@@ -424,10 +440,12 @@ function trajNote(traj: CompactTraj): { role: string; content: string }[] {
   const stripped = omitExperienceTree(raw);
   if (stripped && typeof stripped === "object" && !Array.isArray(stripped)) {
     const o = stripped as { role?: unknown; content?: unknown };
-    return [{
-      role: typeof o.role === "string" ? o.role : "user",
-      content: typeof o.content === "string" ? o.content : raw.content,
-    }];
+    return [
+      {
+        role: typeof o.role === "string" ? o.role : "user",
+        content: typeof o.content === "string" ? o.content : raw.content,
+      },
+    ];
   }
   return [raw];
 }
@@ -445,7 +463,10 @@ function experienceFilesReadable(dir: string, expectIds: string[]): boolean {
   }
 }
 
-export async function ingestDomain(dir: string, trajs: CompactTraj[]): Promise<{
+export async function ingestDomain(
+  dir: string,
+  trajs: CompactTraj[],
+): Promise<{
   records: number;
   states: number;
   chars: number;
@@ -500,29 +521,37 @@ function packetOf(injected: unknown[]): string {
   return "";
 }
 
-function nimPost(nim: { base: string; model: string; key: string }, body: string, timeoutMs: number, stream: boolean): Promise<{ status: number; text: string }> {
+function nimPost(
+  nim: { base: string; model: string; key: string },
+  body: string,
+  timeoutMs: number,
+  stream: boolean,
+): Promise<{ status: number; text: string }> {
   const url = new URL(`${nim.base}/chat/completions`);
   return new Promise((resolve, reject) => {
-    const req = https.request({
-      protocol: "https:",
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: url.pathname,
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${nim.key}`,
-        "Content-Type": "application/json",
-        Accept: stream ? "text/event-stream" : "application/json",
-        // Gemma 4 31B often needs >30s cold; poll=30 504s while poll=120 returns 200.
-        "NVCF-POLL-SECONDS": process.env.NVCF_POLL_SECONDS || "120",
-        "Content-Length": Buffer.byteLength(body),
+    const req = https.request(
+      {
+        protocol: "https:",
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: url.pathname,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${nim.key}`,
+          "Content-Type": "application/json",
+          Accept: stream ? "text/event-stream" : "application/json",
+          // Gemma 4 31B often needs >30s cold; poll=30 504s while poll=120 returns 200.
+          "NVCF-POLL-SECONDS": process.env.NVCF_POLL_SECONDS || "120",
+          "Content-Length": Buffer.byteLength(body),
+        },
+        timeout: timeoutMs,
       },
-      timeout: timeoutMs,
-    }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (c) => chunks.push(c as Buffer));
-      res.on("end", () => resolve({ status: res.statusCode || 0, text: Buffer.concat(chunks).toString("utf8") }));
-    });
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c) => chunks.push(c as Buffer));
+        res.on("end", () => resolve({ status: res.statusCode || 0, text: Buffer.concat(chunks).toString("utf8") }));
+      },
+    );
     req.on("timeout", () => {
       req.destroy();
       reject(new Error("timeout"));
@@ -610,7 +639,11 @@ async function nimChat(
   throw new Error(`NIM failed after retries (${lastErr})`);
 }
 
-async function nimProbe(nim: { base: string; model: string; key: string }): Promise<{ ok: boolean; ms: number; note: string }> {
+async function nimProbe(nim: {
+  base: string;
+  model: string;
+  key: string;
+}): Promise<{ ok: boolean; ms: number; note: string }> {
   const t0 = Date.now();
   try {
     const r = await nimChat(nim, [{ role: "user", content: "Reply with the single word pong." }], 16, 2);
@@ -627,7 +660,8 @@ function readerPrompt(question: string, packet: string): { role: string; content
   return [
     {
       role: "system",
-      content: "You answer LongMemEval-V2 questions using only the Eden Memory packet. If the packet does not contain enough evidence, answer UNKNOWN. Output only \\boxed{final answer} with no analysis.",
+      content:
+        "You answer LongMemEval-V2 questions using only the Eden Memory packet. If the packet does not contain enough evidence, answer UNKNOWN. Output only \\boxed{final answer} with no analysis.",
     },
     {
       role: "user",
@@ -655,7 +689,11 @@ function countExperienceFiles(root: string): number {
 }
 
 /** Plan §9.2: SOTA agent-trajectory memory only if acc ≥ AgentRunbook-C. Overall WIN only if both targets WIN. */
-export function verdict(accPct: number): { vs_rag: "WIN" | "LOSS"; vs_agentrunbook_c: "WIN" | "LOSS"; overall: "WIN" | "LOSS" } {
+export function verdict(accPct: number): {
+  vs_rag: "WIN" | "LOSS";
+  vs_agentrunbook_c: "WIN" | "LOSS";
+  overall: "WIN" | "LOSS";
+} {
   const vs_rag = accPct + 1e-9 >= RAG_SMALL ? "WIN" : "LOSS";
   const vs_agentrunbook_c = accPct + 1e-9 >= AGENTRUNBOOK_C_SMALL ? "WIN" : "LOSS";
   return { vs_rag, vs_agentrunbook_c, overall: vs_rag === "WIN" && vs_agentrunbook_c === "WIN" ? "WIN" : "LOSS" };
@@ -695,22 +733,26 @@ export function formatResults(args: {
   const readerFail = Math.max(0, args.n - args.reader_answered);
   const typeRows = Object.entries(args.by_type)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([t, s]) => `| ${t} | ${s.n} | ${s.correct} | ${pct(100 * s.correct / Math.max(1, s.n))} |`)
+    .map(([t, s]) => `| ${t} | ${s.n} | ${s.correct} | ${pct((100 * s.correct) / Math.max(1, s.n))} |`)
     .join("\n");
-  const domRows = args.domains.map((d) =>
-    `| ${d.domain} | ${d.traj_found}/${d.traj_ids.length} | ${d.states_kept} | ${d.chars_kept} | ${d.records_after_ingest} / ${d.store_cap} | ${d.experience_files ?? 0} | ${(d.ingest_ms / 1000).toFixed(1)}s |`
-  ).join("\n");
-  const goldRate = args.gold_in_packet.n
-    ? `${pct(100 * args.gold_in_packet.hit / args.gold_in_packet.n)}%`
-    : "n/a";
-  const emptyHonesty = "honest: files/silent slice can retrieve or miss; junk always-on is not assumed; non-empty ≠ gold";
+  const domRows = args.domains
+    .map(
+      (d) =>
+        `| ${d.domain} | ${d.traj_found}/${d.traj_ids.length} | ${d.states_kept} | ${d.chars_kept} | ${d.records_after_ingest} / ${d.store_cap} | ${d.experience_files ?? 0} | ${(d.ingest_ms / 1000).toFixed(1)}s |`,
+    )
+    .join("\n");
+  const goldRate = args.gold_in_packet.n ? `${pct((100 * args.gold_in_packet.hit) / args.gold_in_packet.n)}%` : "n/a";
+  const emptyHonesty =
+    "honest: files/silent slice can retrieve or miss; junk always-on is not assumed; non-empty ≠ gold";
   const experienceFiles = args.experience_files ?? args.domains.reduce((n, d) => n + (d.experience_files || 0), 0);
-  const filesLine = experienceFiles > 0
-    ? `1. **Files exist.** \`putExperience\` wrote ${experienceFiles} trajectory files (\`experience/*.jsonl\`, AX \`tree\`, not extractDurable). Inject is silent \`[episode]\` slices (k≤${kCap()}), not a file-walking coding-agent memory controller. Still **${args.v.overall}** vs RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`
-    : `1. **Files exist.** ExperienceStore landed (M23); inject is silent \`[episode]\` slices (M24). This ingest must write \`experience/*.jsonl\` via \`putExperience\` — empty files here is a runner bug, not "No files" product. Still **${args.v.overall}** vs RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
-  const overallWhy = args.v.overall === "WIN"
-    ? `Acc ${pct(accPct)} meets RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Plan §9.2 SOTA agent-trajectory memory only at ≥ ${AGENTRUNBOOK_C_SMALL}.`
-    : `Overall WIN only if both rows WIN. Target first ≥ RAG ${RAG_SMALL}, then AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
+  const filesLine =
+    experienceFiles > 0
+      ? `1. **Files exist.** \`putExperience\` wrote ${experienceFiles} trajectory files (\`experience/*.jsonl\`, AX \`tree\`, not extractDurable). Inject is silent \`[episode]\` slices (k≤${kCap()}), not a file-walking coding-agent memory controller. Still **${args.v.overall}** vs RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`
+      : `1. **Files exist.** ExperienceStore landed (M23); inject is silent \`[episode]\` slices (M24). This ingest must write \`experience/*.jsonl\` via \`putExperience\` — empty files here is a runner bug, not "No files" product. Still **${args.v.overall}** vs RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
+  const overallWhy =
+    args.v.overall === "WIN"
+      ? `Acc ${pct(accPct)} meets RAG ${RAG_SMALL} and AgentRunbook-C ${AGENTRUNBOOK_C_SMALL}. Plan §9.2 SOTA agent-trajectory memory only at ≥ ${AGENTRUNBOOK_C_SMALL}.`
+      : `Overall WIN only if both rows WIN. Target first ≥ RAG ${RAG_SMALL}, then AgentRunbook-C ${AGENTRUNBOOK_C_SMALL} (Plan §9.2).`;
   return `# M26 LME-V2 Small RESULTS
 
 **Date:** ${args.date}
@@ -870,11 +912,19 @@ async function main() {
     });
     memByDomain.set(domain, { dir, mem: openMemory({ dir, session: "lme-v2-small" }) });
   }
-  const experience_files = domainRuns.reduce((n, d) => n + d.experience_files, 0)
-    || [...memByDomain.values()].reduce((n, h) => n + countExperienceFiles(h.dir), 0);
+  const experience_files =
+    domainRuns.reduce((n, d) => n + d.experience_files, 0) ||
+    [...memByDomain.values()].reduce((n, h) => n + countExperienceFiles(h.dir), 0);
 
   const judge: JudgeFn = async ({ system, user }) => {
-    const r = await nimChat(nim, [{ role: "system", content: system }, { role: "user", content: user }], MAX_TOKENS_JUDGE);
+    const r = await nimChat(
+      nim,
+      [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      MAX_TOKENS_JUDGE,
+    );
     return r.text;
   };
 
@@ -892,14 +942,20 @@ async function main() {
     gold_in_packet: boolean | null;
   };
   const pending: Pending[] = [];
-  if (existsSync(DEBUG_PATH)) try { writeFileSync(DEBUG_PATH, ""); } catch {}
+  if (existsSync(DEBUG_PATH))
+    try {
+      writeFileSync(DEBUG_PATH, "");
+    } catch {}
   let i = 0;
   for (const q of questions) {
     i++;
     const handle = memByDomain.get(q.domain);
     if (!handle) throw new Error(`no memory for domain ${q.domain}`);
     const tInject = Date.now();
-    const injected = handle.mem.inject([{ role: "user", content: q.question }]) as { role?: string; content?: string }[];
+    const injected = handle.mem.inject([{ role: "user", content: q.question }]) as {
+      role?: string;
+      content?: string;
+    }[];
     const inject_ms = Date.now() - tInject;
     const packet = packetOf(injected);
     pending.push({
@@ -913,7 +969,9 @@ async function main() {
   for (const h of memByDomain.values()) h.mem.close();
 
   const conc = readerConcurrency();
-  console.log(`inject done n=${pending.length}; per-question reader pool ${conc} (HTTP 504 scores that row incorrect and CONTINUE)`);
+  console.log(
+    `inject done n=${pending.length}; per-question reader pool ${conc} (HTTP 504 scores that row incorrect and CONTINUE)`,
+  );
   let scored = 0;
   const rows: Row[] = await mapPool(pending, conc, async (p) => {
     const { q, packet, inject_ms, gold_in_packet } = p;
@@ -954,9 +1012,18 @@ async function main() {
         writeFileSync(
           DEBUG_PATH,
           JSON.stringify({
-            i: p.i, id: q.id, type: q.question_type, eval: q.eval_function.split("|")[0],
-            gold: q.answer, gold_in_packet, reader_ok, correct, boxed: boxed.slice(0, 200),
-            pred: prediction.slice(0, 240), packet_chars: packet.length, model: nim.model,
+            i: p.i,
+            id: q.id,
+            type: q.question_type,
+            eval: q.eval_function.split("|")[0],
+            gold: q.answer,
+            gold_in_packet,
+            reader_ok,
+            correct,
+            boxed: boxed.slice(0, 200),
+            pred: prediction.slice(0, 240),
+            packet_chars: packet.length,
+            model: nim.model,
           }) + "\n",
           { flag: "a" },
         );
@@ -994,7 +1061,9 @@ async function main() {
     `Did **not** download screenshot tarballs (~7GB dataset remainder).`,
     `Kept only the ${want.size} unique Small-tier trajectory ids, truncated per-state text, then \`putExperience\` (AX \`tree\` on \`experience/*.jsonl\`) + short observe notes (goal/outcome/url only, \`omitExperienceTree\`) + \`mem.sleep()\`.`,
     `JSONL store cap ${storeCap()} (\`EDEN_MEMORY_STORE_CAP\`) is **not** raised as a fake haystack. Experience disk cap \`${EXPERIENCE_BYTES_ENV}\`=${ensureExperienceBudget()} (default 32MiB may evict 200 traj files).`,
-    compact.length < want.size ? `Missing ${want.size - compact.length} trajectories from the JSONL stream.` : `All ${want.size} unique Small traj ids were present in trajectories.jsonl.`,
+    compact.length < want.size
+      ? `Missing ${want.size - compact.length} trajectories from the JSONL stream.`
+      : `All ${want.size} unique Small traj ids were present in trajectories.jsonl.`,
   ].join(" ");
 
   const payload = {
@@ -1013,12 +1082,30 @@ async function main() {
     acc,
     acc_pct: acc * 100,
     latency_ms: {
-      inject_p50: percentile(rows.map((r) => r.inject_ms), 50),
-      inject_p95: percentile(rows.map((r) => r.inject_ms), 95),
-      reader_p50: percentile(rows.map((r) => r.reader_ms), 50),
-      reader_p95: percentile(rows.map((r) => r.reader_ms), 95),
-      query_p50: percentile(rows.map((r) => r.query_ms), 50),
-      query_p95: percentile(rows.map((r) => r.query_ms), 95),
+      inject_p50: percentile(
+        rows.map((r) => r.inject_ms),
+        50,
+      ),
+      inject_p95: percentile(
+        rows.map((r) => r.inject_ms),
+        95,
+      ),
+      reader_p50: percentile(
+        rows.map((r) => r.reader_ms),
+        50,
+      ),
+      reader_p95: percentile(
+        rows.map((r) => r.reader_ms),
+        95,
+      ),
+      query_p50: percentile(
+        rows.map((r) => r.query_ms),
+        50,
+      ),
+      query_p95: percentile(
+        rows.map((r) => r.query_ms),
+        95,
+      ),
       query_mean: mean(rows.map((r) => r.query_ms)),
     },
     packet_empty: rows.filter((r) => r.packet_empty).length,
@@ -1030,11 +1117,17 @@ async function main() {
       denominator: "phrase-match evals only (all applicable of n; llm/mc N/A; not a sample)",
     },
     compare: {
-      m15_official: { n: M15_LOCK.n, acc_pct: M15_LOCK.acc_pct, gold_in_packet: `${M15_LOCK.gold_hit}/${M15_LOCK.gold_n} phrase-match`, empty: `${M15_LOCK.packet_empty}/${M15_LOCK.n}` },
+      m15_official: {
+        n: M15_LOCK.n,
+        acc_pct: M15_LOCK.acc_pct,
+        gold_in_packet: `${M15_LOCK.gold_hit}/${M15_LOCK.gold_n} phrase-match`,
+        empty: `${M15_LOCK.packet_empty}/${M15_LOCK.n}`,
+      },
       diagnostic_200: { n: DIAGNOSTIC_200.n, acc_pct: DIAGNOSTIC_200.acc_pct },
     },
     honesty: {
-      empty_packets: "honest count / n; junk always-on is not assumed after experience files + silent slice; non-empty ≠ gold",
+      empty_packets:
+        "honest count / n; junk always-on is not assumed after experience files + silent slice; non-empty ≠ gold",
       gold_denominator: "phrase-match evals only (all applicable of n; llm/mc N/A; not a sample)",
       screenshots: "skipped (named): HF trajectory_screenshots + 29 question images unused",
       backbone: nim.model,
@@ -1062,36 +1155,39 @@ async function main() {
   if (shouldWriteLastRun(n)) {
     writeFileSync(LAST_RUN_PATH, JSON.stringify(payload, null, 2));
   }
-  writeFileSync(outPath, formatResults({
-    date: payload.date,
-    bun: payload.bun,
-    nim_model: nim.model,
-    n,
-    n_correct,
-    acc,
-    reader_ok: probe.ok,
-    reader_note: probe.note.slice(0, 120),
-    gold_in_packet: {
-      n: rows.filter((r) => r.gold_in_packet != null).length,
-      hit: rows.filter((r) => r.gold_in_packet === true).length,
-    },
-    reader_answered: rows.filter((r) => r.reader_ok).length,
-    inject: rows.map((r) => r.inject_ms),
-    reader: rows.map((r) => r.reader_ms),
-    query: rows.map((r) => r.query_ms),
-    packet_empty: payload.packet_empty,
-    domains: domainRuns,
-    by_type,
-    ingested: {
-      questions: questions.length,
-      unique_traj: want.size,
-      screenshots: "skipped",
-      full_tokens_claimed: "~25M tokens",
-      what_ran: ingestedWhat,
-    },
-    v,
-    experience_files,
-  }));
+  writeFileSync(
+    outPath,
+    formatResults({
+      date: payload.date,
+      bun: payload.bun,
+      nim_model: nim.model,
+      n,
+      n_correct,
+      acc,
+      reader_ok: probe.ok,
+      reader_note: probe.note.slice(0, 120),
+      gold_in_packet: {
+        n: rows.filter((r) => r.gold_in_packet != null).length,
+        hit: rows.filter((r) => r.gold_in_packet === true).length,
+      },
+      reader_answered: rows.filter((r) => r.reader_ok).length,
+      inject: rows.map((r) => r.inject_ms),
+      reader: rows.map((r) => r.reader_ms),
+      query: rows.map((r) => r.query_ms),
+      packet_empty: payload.packet_empty,
+      domains: domainRuns,
+      by_type,
+      ingested: {
+        questions: questions.length,
+        unique_traj: want.size,
+        screenshots: "skipped",
+        full_tokens_claimed: "~25M tokens",
+        what_ran: ingestedWhat,
+      },
+      v,
+      experience_files,
+    }),
+  );
   console.log(`acc=${(acc * 100).toFixed(1)}% n=${n} ${v.overall} → ${outPath}`);
 }
 

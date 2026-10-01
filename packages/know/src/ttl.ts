@@ -212,7 +212,11 @@ function clampDays(n: number, lo: number, hi: number): number {
  * Recrawl days. Class first, then RFC 9111 hints, then unchanged backoff.
  * Heuristics and max-age never drop news below 1 day or exceed TTL_CAP.
  */
-export function pageTtl(url: string, text = "", sourceOrHints: string | TtlHints = ""): { class: PageTtlClass; days: number } {
+export function pageTtl(
+  url: string,
+  text = "",
+  sourceOrHints: string | TtlHints = "",
+): { class: PageTtlClass; days: number } {
   const h = hintsOf(sourceOrHints);
   const cls = pageClass(url, text, h.source || "");
   const floor = TTL_DAYS[cls];

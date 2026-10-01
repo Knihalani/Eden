@@ -18,9 +18,7 @@ describe("composed registries", () => {
     description: "Fetch ticket detail.",
     inputSchema: { type: "object", properties: { ticket_id: { type: "string" } }, required: ["ticket_id"] },
     sequence: ["fetchDetail"],
-    steps: [
-      { id: "fd", kind: "tool", tool: "fetchDetail", args: { ticket_id: { kind: "input", path: "ticket_id" } } },
-    ],
+    steps: [{ id: "fd", kind: "tool", tool: "fetchDetail", args: { ticket_id: { kind: "input", path: "ticket_id" } } }],
     returns: { kind: "from", step: "fd", path: "" },
     contract: { witnesses: 2, minLlmReduction: 2, allowExact: false },
     manifest: null,
@@ -84,10 +82,14 @@ describe("composed registries", () => {
     } as unknown as StretchProgram;
 
     const { reg, calls } = makeBase();
-    const out = await runProgram(parent, { ids: ["A", "B", "C"] }, {
-      registry: reg,
-      checkEnvelope: false,
-    });
+    const out = await runProgram(
+      parent,
+      { ids: ["A", "B", "C"] },
+      {
+        registry: reg,
+        checkEnvelope: false,
+      },
+    );
     expect(calls.filter((c) => c.tool === "fetchDetail").length).toBe(3);
     const results = out.value as Array<{ id: string; priority: string }>;
     expect(results.map((r) => r.id)).toEqual(["A", "B", "C"]);

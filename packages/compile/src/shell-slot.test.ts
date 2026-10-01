@@ -106,7 +106,10 @@ describe("a compiled Bash template fed by an upstream step", () => {
   test("a witness whose value the shell read as syntax is refused, not compiled", () => {
     // `ls -a ~/n1` only worked because the shell expanded the fetched `~`. Replaying
     // that would treat the value as syntax, and quoting it would not be what was witnessed.
-    for (const values of [["~/n1", "~/n2", "~/n3"], ["a*", "b*", "c*"]]) {
+    for (const values of [
+      ["~/n1", "~/n2", "~/n3"],
+      ["a*", "b*", "c*"],
+    ]) {
       const { programs, refusals } = compile("get_ticket", values, (dir) => [{ dir }, `ls -a ${dir}`]);
       expect(programs).toEqual([]);
       expect(refusals.map((r) => r.code)).toEqual(["underdetermined_command"]);

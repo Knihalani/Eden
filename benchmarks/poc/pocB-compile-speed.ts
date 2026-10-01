@@ -86,8 +86,13 @@ commandShapeKey(cmds[1]!);
       memo.set(c, k);
     }
   }
-  printRow("TODAY vs PROPOSED commandShapeKey", `${median(samples).toFixed(1)} ms → ${(nowMs() - t2).toFixed(2)} ms per pass`);
+  printRow(
+    "TODAY vs PROPOSED commandShapeKey",
+    `${median(samples).toFixed(1)} ms → ${(nowMs() - t2).toFixed(2)} ms per pass`,
+  );
 }
 
 console.log("\nWhy it matters: compile time gates the Workshop loop — candidates appear only after mining finishes.");
-console.log("VERDICT: WIN on steady-state passes (the common case: predicates re-inspect the same strings many times per event).");
+console.log(
+  "VERDICT: WIN on steady-state passes (the common case: predicates re-inspect the same strings many times per event).",
+);

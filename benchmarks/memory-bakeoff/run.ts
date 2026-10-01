@@ -27,10 +27,7 @@ const LLM_MODEL = process.env.EDEN_BAKEOFF_MODEL || "openai/gpt-4o-mini";
 const LOCOMO_PATH = process.env.LOCOMO_PATH || "/tmp/eden-mem-bakeoff/locomo10.json";
 const LOCOMO_URL = "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json";
 const SKIP_LLM =
-  process.env.EDEN_BAKEOFF_SKIP_LLM === "1" ||
-  !OPENROUTER ||
-  OPENROUTER.length < 40 ||
-  /^your_/i.test(OPENROUTER);
+  process.env.EDEN_BAKEOFF_SKIP_LLM === "1" || !OPENROUTER || OPENROUTER.length < 40 || /^your_/i.test(OPENROUTER);
 const LOCOMO_MAX_CONV = Number(process.env.EDEN_BAKEOFF_LOCOMO_CONV || "10");
 
 type Sys = {
@@ -43,10 +40,16 @@ type Sys = {
   close(): void;
 };
 
-const STOP = new Set("the of is a an on to and in for this that with from into about these then still has out how what why was are you your its our not or no".split(" "));
+const STOP = new Set(
+  "the of is a an on to and in for this that with from into about these then still has out how what why was are you your its our not or no".split(
+    " ",
+  ),
+);
 
 function toks(s: string): string[] {
-  return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).filter((w) => w.length >= 2 && !STOP.has(w));
+  return (s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? []).filter(
+    (w) => w.length >= 2 && !STOP.has(w),
+  );
 }
 
 function blob(parts: string[]): string {
@@ -58,7 +61,9 @@ function hitsWant(got: string, want: Want): boolean {
 }
 
 function goldHit(retrieved: string, answer: string): boolean {
-  const a = String(answer || "").toLowerCase().trim();
+  const a = String(answer || "")
+    .toLowerCase()
+    .trim();
   const r = retrieved.toLowerCase();
   if (!a) return false;
   if (r.includes(a)) return true;
@@ -84,7 +89,8 @@ function bm25(query: string, docs: string[], k: number): string[] {
     return m;
   });
   const q = toks(query);
-  const k1 = 1.5, b = 0.75;
+  const k1 = 1.5,
+    b = 0.75;
   const scored = docs.map((d, i) => {
     let s = 0;
     const tf = tfs[i]!;
@@ -92,15 +98,22 @@ function bm25(query: string, docs: string[], k: number): string[] {
       const n = tf.get(w) || 0;
       if (!n) continue;
       const idf = Math.log((N - (df.get(w) || 0) + 0.5) / ((df.get(w) || 0) + 0.5) + 1);
-      s += idf * (n * (k1 + 1)) / (n + k1 * (1 - b + b * (dl[i]! / avgdl)));
+      s += (idf * (n * (k1 + 1))) / (n + k1 * (1 - b + b * (dl[i]! / avgdl)));
     }
     return { d, s };
   });
-  return scored.filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, k).map((x) => x.d);
+  return scored
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, k)
+    .map((x) => x.d);
 }
 
 function sentences(text: string): string[] {
-  return text.split(/(?<=[.!\n])\s+/).map((s) => s.trim().replace(/\s+/g, " ")).filter((s) => s.length >= 8 && s.length <= 400);
+  return text
+    .split(/(?<=[.!\n])\s+/)
+    .map((s) => s.trim().replace(/\s+/g, " "))
+    .filter((s) => s.length >= 8 && s.length <= 400);
 }
 
 function injectedNotes(mem: AgentMemory, asked: string): string {
@@ -179,7 +192,12 @@ class OverlapStoreSys implements Sys {
     for (const t of texts) this.docs.push(...(sentences(t).length ? sentences(t) : t.trim() ? [t.trim()] : []));
   }
   retrieve(q: string, k = K) {
-    return this.docs.map((d) => ({ d, s: overlapScore(q, d) })).filter((x) => x.s).sort((a, b) => b.s - a.s).slice(0, k).map((x) => x.d);
+    return this.docs
+      .map((d) => ({ d, s: overlapScore(q, d) }))
+      .filter((x) => x.s)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, k)
+      .map((x) => x.d);
   }
   injectAsked(asked: string) {
     return this.retrieve(asked).join("\n");
@@ -235,7 +253,12 @@ class LlmExtractSys implements Sys {
     }
   }
   retrieve(q: string, k = K) {
-    return this.docs.map((d) => ({ d, s: overlapScore(q, d) })).filter((x) => x.s).sort((a, b) => b.s - a.s).slice(0, k).map((x) => x.d);
+    return this.docs
+      .map((d) => ({ d, s: overlapScore(q, d) }))
+      .filter((x) => x.s)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, k)
+      .map((x) => x.d);
   }
   injectAsked(asked: string) {
     return this.retrieve(asked).join("\n");
@@ -258,24 +281,31 @@ function openSys(id: string, dir: string): Sys {
 type Row = { id: string; family: string; hit: boolean };
 
 async function runPassive(ids: string[]) {
-  const out: Record<string, {
-    capture: number;
-    captureN: number;
-    byFamily: Record<string, { ok: number; n: number }>;
-    junkFp: number;
-    junkN: number;
-    storedJunk: number;
-    ingestMs: number;
-    retrieveMs: number;
-    misses: string[];
-    rows: Row[];
-  }> = {};
+  const out: Record<
+    string,
+    {
+      capture: number;
+      captureN: number;
+      byFamily: Record<string, { ok: number; n: number }>;
+      junkFp: number;
+      junkN: number;
+      storedJunk: number;
+      ingestMs: number;
+      retrieveMs: number;
+      misses: string[];
+      rows: Row[];
+    }
+  > = {};
 
   for (const id of ids) {
     const byFamily: Record<string, { ok: number; n: number }> = {};
     const rows: Row[] = [];
     const misses: string[] = [];
-    let capture = 0, ingestMs = 0, retrieveMs = 0, junkFp = 0, storedJunk = 0;
+    let capture = 0,
+      ingestMs = 0,
+      retrieveMs = 0,
+      junkFp = 0,
+      storedJunk = 0;
     for (const row of CAPTURE) {
       const dir = join(ROOT, id, row.id);
       mkdirSync(dir, { recursive: true });
@@ -304,9 +334,19 @@ async function runPassive(ids: string[]) {
       const sys = openSys(id, dir);
       await sys.ingest([j.stated]);
       const stored = blob(sys.stored());
-      if (stored.toLowerCase().includes(j.stated.slice(0, 12).toLowerCase()) || (j.stated.length >= 8 && stored.toLowerCase().includes(j.stated.toLowerCase()))) storedJunk++;
+      if (
+        stored.toLowerCase().includes(j.stated.slice(0, 12).toLowerCase()) ||
+        (j.stated.length >= 8 && stored.toLowerCase().includes(j.stated.toLowerCase()))
+      )
+        storedJunk++;
       const got = await sys.injectAsked("What time should I ping Kai about the release?");
-      if (got && (j.stated.length < 8 ? got.toLowerCase().includes(j.stated.toLowerCase()) : got.toLowerCase().includes(j.stated.slice(0, 18).toLowerCase()))) junkFp++;
+      if (
+        got &&
+        (j.stated.length < 8
+          ? got.toLowerCase().includes(j.stated.toLowerCase())
+          : got.toLowerCase().includes(j.stated.slice(0, 18).toLowerCase()))
+      )
+        junkFp++;
       sys.close();
     }
     out[id] = {
@@ -355,9 +395,15 @@ async function runLocomo(ids: string[]) {
     conversation: Record<string, unknown>;
     qa: { question: string; answer: string; category: number }[];
   }[];
-  const out: Record<string, { rec5: number; n: number; byCat: Record<string, { ok: number; n: number }>; ingestMs: number; queryMs: number }> = {};
+  const out: Record<
+    string,
+    { rec5: number; n: number; byCat: Record<string, { ok: number; n: number }>; ingestMs: number; queryMs: number }
+  > = {};
   for (const id of ids) {
-    let rec5 = 0, n = 0, ingestMs = 0, queryMs = 0;
+    let rec5 = 0,
+      n = 0,
+      ingestMs = 0,
+      queryMs = 0;
     const byCat: Record<string, { ok: number; n: number }> = {};
     for (const sample of convs) {
       const dir = join(ROOT, "locomo", id, String(sample.sample_id || Math.random()));
@@ -434,7 +480,8 @@ const report = {
     llm: SKIP_LLM ? "skipped (no live vendor key)" : LLM_MODEL,
     note: "Vendor LoCoMo/LongMemEval scores use an answerer+judge LLM. This run measures whether gold is in retrieved notes.",
   },
-  verdictHint: "Eden is a local heuristic memory for engineering chat + a packed knowledge graph. It is not a Mem0/Zep/Letta replacement.",
+  verdictHint:
+    "Eden is a local heuristic memory for engineering chat + a packed knowledge graph. It is not a Mem0/Zep/Letta replacement.",
   passive,
   locomo,
   knowInject: know,

@@ -129,12 +129,12 @@ describe("signup", () => {
     expect(html).not.toContain("Compile repeating tools");
     expect(html).toContain("Sign in");
     expect(html).toContain("/logo.webp");
-    expect(html).toContain("class=\"stage\"");
-    expect(html).toContain("class=\"stage-hit\"");
+    expect(html).toContain('class="stage"');
+    expect(html).toContain('class="stage-hit"');
     expect(html).toContain("<canvas");
     expect(html).not.toContain("room-desk");
     expect(html).not.toContain("room-sky");
-    expect(html).not.toContain("class=\"abstract\"");
+    expect(html).not.toContain('class="abstract"');
     expect(html).not.toContain("hero-mark");
     expect(html).not.toContain("hero-pin");
     expect(html).not.toContain("How it works");
@@ -150,8 +150,8 @@ describe("signup", () => {
     expect(html).not.toContain("7.7×");
     expect(html).toContain("Copy failed");
     expect(html).toContain("min-height:44px");
-    expect(html).not.toContain("href=\"/workshop\"");
-    expect(html).not.toContain("href=\"/dashboard\"");
+    expect(html).not.toContain('href="/workshop"');
+    expect(html).not.toContain('href="/dashboard"');
     expect(html).not.toContain("github.com/Knihalani");
     expect(html).not.toContain(">Source<");
     expect(html).not.toContain("(1-bind)*0.42");
@@ -327,7 +327,12 @@ describe("/v1/traces intake (CLI recorder path)", () => {
         body: JSON.stringify({
           id: `trace-${Math.random().toString(36).slice(2)}`,
           events: [
-            { name: "fetchIssue", args: { url: `https://api.github.com/x/issues/${Math.floor(Math.random() * 999)}/7` }, result: { title: "bug" }, ok: true },
+            {
+              name: "fetchIssue",
+              args: { url: `https://api.github.com/x/issues/${Math.floor(Math.random() * 999)}/7` },
+              result: { title: "bug" },
+              ok: true,
+            },
             { name: "fetchComments", args: { url: "https://api.github.com/x/comments" }, result: [], ok: true },
           ],
           input: {},

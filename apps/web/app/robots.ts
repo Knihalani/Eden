@@ -4,7 +4,11 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://eden.dev";
 
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: { userAgent: "*", allow: "/", disallow: ["/home", "/setup", "/tour", "/workspace", "/request/", "/live/", "/api/"] },
+    rules: {
+      userAgent: "*",
+      allow: "/",
+      disallow: ["/home", "/setup", "/tour", "/workspace", "/request/", "/live/", "/api/"],
+    },
     sitemap: `${siteUrl}/sitemap.xml`,
   };
 }

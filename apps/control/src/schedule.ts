@@ -246,18 +246,16 @@ export async function executeLiveRun(opts: {
 }
 
 /** Fire due rows. Caller owns enqueue / org gate. Paused never executes. */
-export async function tickDueSchedules(
-  ctx: {
-    store: Store;
-    registry: ToolRegistry;
-    island?: IslandCaller;
-    timeoutMs: number;
-    now: Date;
-    toolId?: string;
-    onOk?: (toolId: string) => void;
-    onDeopt?: (toolId: string) => void;
-  },
-): Promise<{ fired: number; paused: number; skipped: number }> {
+export async function tickDueSchedules(ctx: {
+  store: Store;
+  registry: ToolRegistry;
+  island?: IslandCaller;
+  timeoutMs: number;
+  now: Date;
+  toolId?: string;
+  onOk?: (toolId: string) => void;
+  onDeopt?: (toolId: string) => void;
+}): Promise<{ fired: number; paused: number; skipped: number }> {
   const window = tickWindow(ctx.now);
   const rows = ctx.toolId
     ? [ctx.store.scheduleFor(ctx.toolId)].filter((r): r is NonNullable<typeof r> => Boolean(r))
