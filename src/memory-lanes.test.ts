@@ -120,7 +120,7 @@ describe("M17 encode lanes (flipped M16.3 extract tax)", () => {
     expect(indexSrc).toMatch(/for \(const raw of extractDurable\(it\.text\)\)/);
     expect(indexSrc).toMatch(/function extractDurable/);
     expect(indexSrc).not.toMatch(/peelIdentitySentences/);
-    expect(indexSrc).not.toMatch(/let extractSrc = it\.text/);
+    expect(indexSrc).not.toMatch(/\blet\s+extractSrc\s*=\s*it\.text/);
     expect(indexSrc).toMatch(/lane === "icl" \|\| lane === "narrative"/);
   });
 
