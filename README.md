@@ -16,7 +16,7 @@ eden init
 
 The first `eden wrap` writes a per-install key to `~/.eden/config.json` (mode 0600), replacing an `eden_dev` that an older `eden init --dev` saved there. Every `eden` command and both SDKs read it from there; run `eden init` again after that first start to wire MCP with it. `--dev` (or `EDEN_DEV=1`) uses the public `eden_dev` key instead: tests and throwaway sittings only.
 
-Hosted wrap (no local process): [https://useeden.vercel.app](https://useeden.vercel.app) — `POST /v1/signup`, then `eden login --url https://useeden.vercel.app --key <key>` and `OPENAI_BASE_URL=https://useeden.vercel.app/v1`. An Eden key is wrap auth, not OpenAI.
+Hosted wrap (no local process): [https://useeden.vercel.app](https://useeden.vercel.app) — `POST /v1/signup`, then `eden login --url https://useeden.vercel.app --key <key>` and `OPENAI_BASE_URL=https://useeden.vercel.app/v1`. An Eden key is wrap auth, not OpenAI; your own provider key pays for model calls (see Your own agent).
 
 ## Inspect (offline)
 
@@ -68,6 +68,8 @@ export OPENAI_BASE_URL=http://127.0.0.1:8788/v1
 # JS:  import { runTool } from "@kaiavn/sdk"        — POST /v1/wrap, then /v1/ingest
 # Py:  from eden import wrap_tools                  — same contract; wrap down runs original
 ```
+
+Hosted `/v1`: send your provider key as `Authorization` (or `x-openai-api-key`) and the Eden key as `x-eden-api-key`. A chat call without a provider key gets 401 `provider_key_required`; the hosted site never pays for model calls. Self-hosting `apps/site` behind a reverse proxy: set `EDEN_TRUST_PROXY=1`, and have the proxy set `X-Real-IP` itself (nginx: `proxy_set_header X-Real-IP $remote_addr`). The signup rate limit then reads the client address from `x-real-ip`, else the last `x-forwarded-for` hop.
 
 Record through wrap. Then:
 
