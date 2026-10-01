@@ -16,7 +16,14 @@ import { HowToStore, mergeSharedPrefixHowTo, type HowTo, type HowToStep } from "
 import { memoryConsent } from "./memory-consent";
 import { scrubMemoryText } from "./memory-scrub";
 import { parseRuleTime, writeAliasTags, type MissClass } from "./memory-sota";
-import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
+import {
+  isIclExemplar,
+  isRecsysShot,
+  isToolProse,
+  objectAsserted,
+  SemanticStore,
+  STATUS_OBJECT,
+} from "./semantic-store";
 import { loadToolTraces, memoryTracesDir, type ToolTrace } from "./tool-trace";
 
 export { mergeSharedPrefix } from "./howto-store";
@@ -785,14 +792,7 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
               .trim();
             const o = cop[2]!.replace(/[.,;:!?]+$/g, "").trim();
             const p = use ? "uses" : "is";
-            if (
-              s &&
-              o &&
-              !/\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i.test(
-                o,
-              ) &&
-              !/\b(?:instead of|rather than)\b/i.test(o)
-            ) {
+            if (s && o && !STATUS_OBJECT.test(o) && !/\b(?:instead of|rather than)\b/i.test(o)) {
               try {
                 const live = store.get(s, p);
                 if (
@@ -807,12 +807,7 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
         }
         for (const f of facts) {
           try {
-            if (
-              /\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|slow|errors?|offline|unavailable)\b/i.test(
-                f.o,
-              )
-            )
-              continue;
+            if (STATUS_OBJECT.test(f.o)) continue;
             if (/\b(?:instead of|rather than)\b/i.test(f.o)) continue;
             const live = store.get(f.s, f.p);
             if (live && live.o.trim().toLowerCase() !== f.o.trim().toLowerCase()) continue;
