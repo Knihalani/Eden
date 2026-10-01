@@ -17,7 +17,7 @@ delete process.env.DATABASE_URL;
 
 const { handleFetch } = await import("./server");
 
-const server = Bun.serve({ port: 0, fetch: handleFetch });
+const server = Bun.serve({ port: 0, fetch: (req, srv) => handleFetch(req, srv.requestIP(req)?.address) });
 const base = server.url.href.replace(/\/$/, "");
 const AUTH = { authorization: "Bearer eden_dev", "content-type": "application/json" };
 
