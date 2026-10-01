@@ -441,7 +441,7 @@ function m14AssertFlake(hay: string): void {
 }
 
 describe("M14.4 wrap OpenAI + Anthropic share howto.jsonl", () => {
-  test("observe+sleep then injectBody / injectBodyThenObserveTools / withKnowFactsAnthropic see [procedure]", async () => {
+  test("observe+sleep then injectBody/injectBodyThenObserveTools/withKnowFactsAnthropic see [procedure]", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m14-wrap-"));
     const mem = openMemory({ dir });
     const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);

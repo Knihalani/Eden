@@ -88,7 +88,7 @@ describe("M33.2 dense RAG rejected", () => {
     expect(code).not.toMatch(EMBED_IMPORT);
   });
 
-  test("product inject path does not import openai/voyage/cohere embeddings, @xenova/transformers, or a dense index", () => {
+  test("product inject path imports no openai/voyage/cohere embeddings, @xenova/transformers or dense index", () => {
     for (const p of PRODUCT) {
       expect(existsSync(p), p).toBe(true);
       const src = readFileSync(p, "utf8");

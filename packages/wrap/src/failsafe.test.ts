@@ -296,7 +296,7 @@ describe("phase 1: sibling work is never lost (C3)", () => {
     expect(fetchCalls).toBe(2);
   });
 
-  test("mutating sibling under unknown state returns a structured deopt, never a silent skip or duplicate", async () => {
+  test("mutating sibling in unknown state returns a structured deopt, never a silent skip or duplicate", async () => {
     const p = threeStepProgram("c3mut", "lookup_fan", "write_report", "notify_done");
     const state = createState({ programs: [p] });
     let writes = 0;

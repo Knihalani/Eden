@@ -817,7 +817,7 @@ describe("mcp", () => {
     expect(seen["prompts/list"]).toEqual({ prompts: [] });
   });
 
-  test("resources/list is an empty catalog even when programs are live; resources/read still serves a known uri", async () => {
+  test("resources/list is empty even when programs are live; resources/read still serves a known uri", async () => {
     const program = {
       id: "p_abc",
       version: "v",
