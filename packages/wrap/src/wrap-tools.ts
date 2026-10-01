@@ -705,8 +705,8 @@ export function wrapTools<T extends ToolsIn>(
     if (state.agentId) armed.agentIds = new Set([state.agentId]);
     if (!store.insert(session, key, armed)) {
       state.capacityMisses++;
-      const detail =
-        `capacity: session full (${store.sessionSize(session)}/${store.perSessionMax}), this stretch ran ` + `raw`;
+      const size = store.sessionSize(session);
+      const detail = `capacity: session full (${size}/${store.perSessionMax}), this stretch ran raw`;
       const w = {
         kind: "budget" as const,
         at: run.events.length,
