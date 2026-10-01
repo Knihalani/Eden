@@ -50,6 +50,8 @@ export function wrapHelp(): string {
 
 Point an agent at OPENAI_BASE_URL=http://127.0.0.1:8788/v1
 Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth for /v1/wrap, not OpenAI.
+Memory and live tools serve only the operator: an agent whose OPENAI_API_KEY is the one wrap was
+started with, or that also sends the Eden key as x-eden-api-key. Any other caller gets a plain proxy.
 The Eden key is --key, EDEN_API_KEY or eden login. Without one, the first loopback start writes a
 per-install key to ~/.eden/config.json (mode 0600); eden commands and the SDKs read it there.
 A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 \
@@ -65,6 +67,7 @@ export function wrapBootLetter(origin: string, live = 0): string {
   return `Eden wrap ${base}
 OPENAI_BASE_URL=${base}/v1
 Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth, not OpenAI.
+Memory and live tools: only with wrap's own OPENAI_API_KEY, or with the Eden key as x-eden-api-key.
 A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 \
 (model: eden), not 502.
 SDK  POST ${base}/v1/wrap  then  POST ${base}/v1/ingest

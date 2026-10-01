@@ -62,6 +62,8 @@ eden wrap
 # OpenAI-compatible agents:
 export OPENAI_BASE_URL=http://127.0.0.1:8788/v1
 # keep OPENAI_API_KEY as the model key (an Eden key is wrap auth, not OpenAI)
+# memory and live tools serve only the operator: start wrap with the same OPENAI_API_KEY,
+# or send the Eden key as x-eden-api-key; any other caller gets a plain proxy
 # A compiled hit plays without a model key (model: eden). Miss fail-opens.
 # JS:  import { runTool } from "@kaiavn/sdk"        — POST /v1/wrap, then /v1/ingest
 # Py:  from eden import wrap_tools                  — same contract; wrap down runs original
