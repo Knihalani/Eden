@@ -76,7 +76,8 @@ describe("wiki grow", () => {
   });
 
   test("list page hrefs become article URLs", () => {
-    const html = `<a href="/wiki/France">France</a><a href="/wiki/File:Flag.svg">x</a><a href="/wiki/List_of_foo">list</a>`;
+    const france = `<a href="/wiki/France">France</a><a href="/wiki/File:Flag.svg">x</a>`;
+    const html = `${france}<a href="/wiki/List_of_foo">list</a>`;
     const urls = wikiGrowUrls(LIST, html);
     expect(urls).toContain("https://en.wikipedia.org/wiki/France");
     expect(urls).toContain("https://en.wikipedia.org/wiki/List_of_foo");

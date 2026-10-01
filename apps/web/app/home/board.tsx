@@ -304,13 +304,14 @@ function RunChart({ series, dcSeries = [] }: { series: DayPoint[]; dcSeries?: Dc
   const dcPoint = (point: (typeof dcSeries)[number]) =>
     `${point.label} ${point.measured ? `${Math.round(point.dcPct)}%` : "not measured"}`;
   const dcAria = dcMeasured ? ` DC%: ${dcSeries.map(dcPoint).join(", ")}.` : "";
+  const runsAria = points.map((point) => `${point.label} ${point.runs}`).join(", ");
 
   return (
     <svg
       className="home-plot"
       viewBox={`0 0 ${w} ${h}`}
       role="img"
-      aria-label={`Compiled runs, last 7 days: ${points.map((point) => `${point.label} ${point.runs}`).join(", ")}.${dcAria}`}
+      aria-label={`Compiled runs, last 7 days: ${runsAria}.${dcAria}`}
     >
       <polygon className="home-plot-area" points={area} />
       <polyline className="home-plot-line" points={line} />

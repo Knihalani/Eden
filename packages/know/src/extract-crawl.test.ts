@@ -463,10 +463,11 @@ describe("keepWet FineWeb meter", () => {
 
   test("Gopher quality drops repetition and casino; fact-bearing quality English is kept", () => {
     const filler = "The protocol is used by agents and origin servers around the world for everyday work. ";
-    const rfc = `RFC 9110: HTTP Semantics. This document defines HTTP semantics. ${filler.repeat(3)}`;
-    const media = `The IANA media type application/json is JSON. ${filler.repeat(3)}`;
-    const spdx = `Projects declare SPDX-License-Identifier: MIT when they publish source. ${filler.repeat(3)}`;
-    const iso = `Kenya uses ISO 3166-1 alpha-2 KE as its country code in trade documents. ${filler.repeat(3)}`;
+    const filler3 = filler.repeat(3);
+    const rfc = `RFC 9110: HTTP Semantics. This document defines HTTP semantics. ${filler3}`;
+    const media = `The IANA media type application/json is JSON. ${filler3}`;
+    const spdx = `Projects declare SPDX-License-Identifier: MIT when they publish source. ${filler3}`;
+    const iso = `Kenya uses ISO 3166-1 alpha-2 KE as its country code in trade documents. ${filler3}`;
     const lateRfc =
       "Chapter one covers sockets. Chapter two walks through percent-encoding. " +
       "Chapter three shows how user agents resolve a relative reference against a base. " +
@@ -479,10 +480,10 @@ describe("keepWet FineWeb meter", () => {
       "Appendix C is operator notes from a CDN that saw mixed encodings on the same host. " +
       "After more than eight hundred characters of that survey, " +
       "the author finally cites RFC 3986: Uniform Resource Identifier Generic Syntax for parsers.";
-    const capital = `Nairobi is the capital of Kenya and the city hosts the government. ${filler.repeat(3)}`;
+    const capital = `Nairobi is the capital of Kenya and the city hosts the government. ${filler3}`;
     const casino = `Best casino slots bahis win now! The capital of luck is winning tonight. ${"bahis casino slot ".repeat(20)}`;
     const thinRepeat = `The capital of France is Paris. A long travel essay about wine. ${"word ".repeat(40)}`;
-    const paywall = `The capital of Kenya is Nairobi. ${filler.repeat(3)}`;
+    const paywall = `The capital of Kenya is Nairobi. ${filler3}`;
     const spanish =
       "El capital de Francia es Paris y la historia sigue con muchas palabras espanolas sobre vino y viajes por el pais. ".repeat(
         4,
@@ -502,16 +503,18 @@ describe("keepWet FineWeb meter", () => {
     expect(keepWet({ uri: "https://www.nytimes.com/world/kenya", text: paywall })).toBe(false);
     expect(keepWet({ uri: "https://noticias.example/paris", text: spanish })).toBe(false);
     expect(keepWet({ uri: "https://example.org/x", text: "short" })).toBe(false);
-    const physics = `Quantum mechanics describes nature at atomic and subatomic scales with operators on Hilbert space. ${filler.repeat(3)}`;
+    const physics =
+      "Quantum mechanics describes nature at atomic and subatomic scales with operators on Hilbert space. " + filler3;
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Quantum_mechanics", text: physics })).toBe(false);
-    const countryOnly = `Kenya is a country in East Africa and the highlands run the length of the nation. ${filler.repeat(3)}`;
+    const countryOnly = `Kenya is a country in East Africa and the highlands run the length of the nation. ${filler3}`;
     expect(wetFactBearing(countryOnly)).toBe(true);
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: countryOnly })).toBe(false);
-    const arxiv = `We present a method. arXiv:1706.03762 Attention is all you need. ${filler.repeat(3)}`;
+    const arxiv = `We present a method. arXiv:1706.03762 Attention is all you need. ${filler3}`;
     expect(wetFactBearing(arxiv)).toBe(true);
     expect(keepWet({ uri: "https://arxiv.org/abs/1706.03762", text: arxiv })).toBe(true);
-    const company = `Acme is a company founded in 1998 with headquarters in Nairobi and offices across East Africa. ${filler.repeat(3)}`;
-    const city = `Nairobi is a city in Kenya and the highlands run the length of the nation around it. ${filler.repeat(3)}`;
+    const company =
+      "Acme is a company founded in 1998 with headquarters in Nairobi and offices across East Africa. " + filler3;
+    const city = `Nairobi is a city in Kenya and the highlands run the length of the nation around it. ${filler3}`;
     expect(wetFactBearing(company)).toBe(true);
     expect(wetFactBearing(city)).toBe(true);
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Acme", text: company })).toBe(false);
