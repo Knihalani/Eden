@@ -69,6 +69,9 @@ const SECRET_KEY =
 const SECRET_VALUE =
   /(\bsk-[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9._-]{8,}|\bAKIA[0-9A-Z]{12,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{30,})/g;
 
+const SECRET_ASSIGNMENT =
+  /([\w.-]*(?:password|passwd|secret|api[_-]?key|token|authorization|credential)[\w.-]*)\s*[:=]\s*("?)[^\s",]+/gi;
+
 function scrub(value: unknown, depth = 0): unknown {
   if (depth > 6) return value; // bounded: hostile graphs cannot recurse forever
   if (typeof value === "string") {
@@ -76,10 +79,7 @@ function scrub(value: unknown, depth = 0): unknown {
     // lastIndex state makes matches alternate), then key=value text.
     const scrubbed = value.replace(SECRET_VALUE, "[redacted]");
     return scrubbed.includes("=") || scrubbed.includes(":")
-      ? scrubbed.replace(
-          /([\w.-]*(?:password|passwd|secret|api[_-]?key|token|authorization|credential)[\w.-]*)\s*[:=]\s*("?)[^\s",]+/gi,
-          (_m, k) => `${k}: [redacted]`,
-        )
+      ? scrubbed.replace(SECRET_ASSIGNMENT, (_m, k) => `${k}: [redacted]`)
       : scrubbed;
   }
   if (Array.isArray(value)) return value.map((v) => scrub(v, depth + 1));
