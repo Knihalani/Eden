@@ -52,6 +52,7 @@ Point an agent at OPENAI_BASE_URL=http://127.0.0.1:8788/v1
 Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth for /v1/wrap, not OpenAI.
 Memory and live tools serve only the operator: an agent whose OPENAI_API_KEY is the one wrap was
 started with, or that also sends the Eden key as x-eden-api-key. Any other caller gets a plain proxy.
+If that model key is a placeholder (a local model server's), anyone who sends it counts as the operator.
 The Eden key is --key, EDEN_API_KEY or eden login. Without one, the first loopback start writes a
 per-install key to ~/.eden/config.json (mode 0600); eden commands and the SDKs read it there.
 A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 \
