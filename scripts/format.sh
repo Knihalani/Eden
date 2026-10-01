@@ -4,9 +4,7 @@
 # The whatever loop joined lines to pass a net-line-deletion rule: src/index.ts
 # went from 1,444 to 379 lines, its longest 1,001 characters. R-5 put Prettier
 # (.prettierrc.json) on the files that loop touched, so every later diff in
-# them stays reviewable, and on the repo's own scripts. Only the paths below
-# are formatted. To bring more code under the formatter, add its path here and
-# run `bun run format`.
+# them stays reviewable; its follow-up extended it to all live code.
 #
 # `prettier --check` alone lets long lines through: Prettier never breaks a
 # comment or a literal. scripts/check-line-length.ts closes that gap.
@@ -15,19 +13,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-paths=(
-  src
-  packages/cli/src
-  packages/wrap/src
-  plugins/eden-memory
-  packages/know/src/extract.ts
-  packages/know/src/inject.ts
-  packages/know/src/needles.ts
-  packages/know/src/query.ts
-  scripts
+# Every tracked JS/TS file except two trees that are history, not code under
+# development: archived/ (a retired product) and .whatever*/ (the parked
+# optimizer's benches and logs). Tracked only, so an untracked scratch file is
+# never rewritten or checked.
+files=$(
+  git ls-files -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.mjs' '*.cjs' |
+    grep -v -E '^(archived|\.whatever[^/]*)/'
 )
-# Tracked files only: an untracked scratch file is never rewritten or checked.
-files=$(git ls-files -- "${paths[@]}" | grep -E '\.(ts|tsx|mts|cts|js|mjs|cjs)$')
 prettier=node_modules/.bin/prettier
 
 # shellcheck disable=SC2086 # one argument per file; tracked paths have no spaces
