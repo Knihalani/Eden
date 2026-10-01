@@ -6,7 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # Format, types and the CLI bundle, in parallel with the test shards below.
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +22,32 @@ jobs:
       # Then typecheck: packages/* carry no build step, so tsc is the only
       # thing that ever looks at their types. Bun strips them unchecked.
       - run: bun run typecheck
+      # The published CLI is a single-file bundle; a workspace dep or Bun API
+      # that stops bundling must fail CI, not the first user's `npm i`.
+      # EDEN_SKIP_CHECKS=1: build-cli would otherwise run typecheck and the
+      # whole test suite again, which this workflow already runs.
+      - run: bash scripts/build-cli.sh
+        env:
+          EDEN_SKIP_CHECKS: "1"
+
+  # The suite in six parallel slices of its test files (EDEN_TEST_SHARD, bun
+  # test --shard). Slicing is by file, so the slowest file sets the floor:
+  # benchmarks/campaign/edge.test.ts, about four and a half minutes.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+      - run: bun install --frozen-lockfile
       # Discovers every test directory instead of naming them. The previous
       # hardcoded list had drifted to a third of the suite, omitting every
       # package under active development.
       - run: bun run test
-      # The published CLI is a single-file bundle; a workspace dep or Bun API
-      # that stops bundling must fail CI, not the first user's `npm i`.
-      - run: bash scripts/build-cli.sh
+        env:
+          EDEN_TEST_SHARD: ${{ matrix.shard }}/6
