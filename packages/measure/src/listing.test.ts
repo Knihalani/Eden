@@ -110,7 +110,7 @@ describe("claims-sourced marketplace listing", () => {
           stack.push(p);
         } else if (ent.name === "page.tsx" || ent.name === "page.ts") {
           const src = readFileSync(p, "utf8");
-          expect(src, p).not.toMatch(/Determinism Index/i);
+          expect(src, p).not.toMatch(/Determinism\s+Index/i);
         }
       }
     }
