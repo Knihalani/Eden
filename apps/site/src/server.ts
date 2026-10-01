@@ -1,4 +1,4 @@
-import { openDb, workspaceForKey, isManagedDeployment, devFallbackEnabled, hashApiKey, type EdenDb } from "./db";
+import { openDb, workspaceForKey, isManagedDeployment, hashApiKey, type EdenDb } from "./db";
 import { ingest } from "./cluster";
 import { handleMcp, liveOnTools, wrapDispatchResult, toolRowToProgram } from "./mcp";
 import { playTool } from "./playback";
@@ -294,6 +294,36 @@ function unauthorizedJson(): Response {
   );
 }
 
+/** 401 for a chat call that brought no model key of its own: the site never pays for one (#91). */
+function providerKeyRequired(): Response {
+  return Response.json(
+    {
+      error: {
+        message:
+          "Send your own model provider key as Authorization: Bearer <key> (or x-openai-api-key), " +
+          "with your Eden key in x-eden-api-key. Eden does not pay for model calls.",
+        type: "invalid_request_error",
+        code: "provider_key_required",
+      },
+    },
+    { status: 401, headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } },
+  );
+}
+
+/**
+ * The client address the signup rate limit counts (#91). x-real-ip and x-forwarded-for say
+ * whatever the caller sent, so they count only behind a proxy that overwrites them: Vercel's, or
+ * one the operator vouches for with EDEN_TRUST_PROXY=1. Otherwise the socket address (`peer`,
+ * which local.ts passes), and with neither, one bucket that every caller shares.
+ */
+function signupClientAddress(req: Request, peer?: string): string {
+  if (process.env.VERCEL || process.env.EDEN_TRUST_PROXY === "1") {
+    const forwarded = req.headers.get("x-real-ip")?.trim() || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    if (forwarded) return forwarded;
+  }
+  return peer?.trim() || "unknown";
+}
+
 /** Wrap auth: x-eden-api-key, a wrap-shaped Bearer, or the HTML session cookie. */
 export function wrapTokenFromRequest(req: Request): string {
   const named = (req.headers.get("x-eden-api-key") || req.headers.get("x-eden-key") || "").trim();
@@ -342,7 +372,8 @@ function clearSessionCookie(): string {
 
 const siteWrapState = createState({});
 
-export async function handleFetch(req: Request): Promise<Response> {
+/** `peer`: the socket address of the caller, when the server knows it (local.ts). */
+export async function handleFetch(req: Request, peer?: string): Promise<Response> {
   // Same predicate as authentication uses: auto-approve must be impossible
   // anywhere a key is actually required, not only on Vercel.
   if (isManagedDeployment() && process.env.EDEN_DEV !== "1") {
@@ -875,7 +906,7 @@ class="muted">${escapeHtml(t.state)}</span></div>
   // limited per IP so abuse costs bounded resources. The key is returned ONCE;
   // only its sha256 is stored.
   if (url.pathname === "/v1/signup" && req.method === "POST") {
-    const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const ip = signupClientAddress(req, peer);
     const RATE_LIMIT = 5;
     const WINDOW_MS = 3_600_000;
     await d.run(`CREATE TABLE IF NOT EXISTS signup_rate (ip TEXT PRIMARY KEY, hits INTEGER, window_start BIGINT)`, []);
@@ -884,7 +915,9 @@ class="muted">${escapeHtml(t.state)}</span></div>
       [ip],
     );
     const now = Date.now();
-    const hits = row && now - row.window_start < WINDOW_MS ? row.hits : 0;
+    // A window that has run out starts again now: the UPDATE below moves window_start with it.
+    const windowStart = row && now - row.window_start < WINDOW_MS ? row.window_start : now;
+    const hits = row && windowStart === row.window_start ? row.hits : 0;
     if (hits >= RATE_LIMIT) {
       return Response.json(
         {
@@ -894,7 +927,7 @@ class="muted">${escapeHtml(t.state)}</span></div>
       );
     }
     if (row) {
-      await d.run(`UPDATE signup_rate SET hits = ? WHERE ip = ?`, [hits + 1, ip]);
+      await d.run(`UPDATE signup_rate SET hits = ?, window_start = ? WHERE ip = ?`, [hits + 1, windowStart, ip]);
     } else {
       await d.run(`INSERT INTO signup_rate (ip, hits, window_start) VALUES (?, ?, ?)`, [ip, 1, now]);
     }
@@ -1350,15 +1383,12 @@ document.getElementById("wsName").value }) });
 
   if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
     if (!wsId) return unauthorizedJson();
-    // Whose model key pays (#88). A caller's own provider key is forwarded as itself; being
-    // non-empty, it also keeps handleChatCompletions from falling back to OPENAI_API_KEY.
-    // Without one, the site's key pays only for a caller authenticated as a real deployment
-    // requires. With the dev fallback on, anyone who reaches the port gets in and /v1/signup
-    // mints keys, so no key shows the caller is the operator. /v1/setup hands out eden_dev.
-    // With no site key to spend, the request goes on to wrap's usual fail-open reply.
+    // Whose model key pays (#88, #91): always the caller's own, forwarded as itself. The site's
+    // OPENAI_API_KEY is never spent on chat, on a deployment or a laptop. Anyone can mint a key at
+    // /v1/signup, and /v1/setup hands out eden_dev, so no Eden key shows who should pay. Being
+    // non-empty, ownKey also keeps handleChatCompletions from falling back to OPENAI_API_KEY.
     const ownKey = callerProviderKey(req);
-    const operatorMayPay = !devFallbackEnabled() && wrapToken !== "eden_dev";
-    if (!ownKey && process.env.OPENAI_API_KEY?.trim() && !operatorMayPay) return unauthorizedJson();
+    if (!ownKey) return providerKeyRequired();
     let programs: ReturnType<typeof toolRowToProgram>[] = [];
     try {
       programs = (await liveOnTools(d, wsId)).map(toolRowToProgram);
@@ -1368,7 +1398,7 @@ document.getElementById("wsName").value }) });
     return handleChatCompletions(req, {
       state: siteWrapState,
       upstream: process.env.OPENAI_API_BASE || "https://api.openai.com/v1",
-      upstreamKey: ownKey || process.env.OPENAI_API_KEY,
+      upstreamKey: ownKey,
       // The process memory store would be shared by every workspace here, and on a dev host by
       // every caller that gets into ws_local. The site has no operator it could belong to (#89).
       memory: false,

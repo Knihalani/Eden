@@ -7,13 +7,15 @@ import { handleFetch } from "./server";
 
 const BASE = "http://127.0.0.1:8787";
 
+/** `ip` is passed as the socket address: off Vercel the signup limit ignores forwarded headers. */
 async function signup(ip: string): Promise<string> {
   const res = await handleFetch(
     new Request(`${BASE}/v1/signup`, {
       method: "POST",
-      headers: { host: "127.0.0.1:8787", "content-type": "application/json", "x-real-ip": ip },
+      headers: { host: "127.0.0.1:8787", "content-type": "application/json" },
       body: "{}",
     }),
+    ip,
   );
   const j = (await res.json()) as { api_key?: string };
   if (!j.api_key) throw new Error(`signup failed: ${res.status}`);
