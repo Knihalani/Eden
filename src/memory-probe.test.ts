@@ -438,7 +438,12 @@ describe("M36.1 concurrent persist", () => {
         mem.close();
       `;
       const spawn = (tag: string) => {
-        const env = { ...process.env, EDEN_MEMORY: "on", EDEN_M36_DIR: dir, EDEN_M36_TAG: tag };
+        const env: Record<string, string | undefined> = {
+          ...process.env,
+          EDEN_MEMORY: "on",
+          EDEN_M36_DIR: dir,
+          EDEN_M36_TAG: tag,
+        };
         delete env.EDEN_MEMORY_STORE_CAP;
         delete env.EDEN_MEMORY_CAP;
         delete env.EDEN_MEMORY_DIR;
