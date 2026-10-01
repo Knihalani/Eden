@@ -1,5 +1,7 @@
 # R3 — Hostile review of ROADMAP, A4, A5, A6 (and their consistency with A1–A3)
 
+> **Code citations.** `file:line` references in this document point at commit `11c3101c3`, when it was written. Later commits, including R-5's reformat (#94, #97, #99), moved those lines. To read one: `git show 11c3101c3:<path>`.
+
 **Dated 2026-09-29. Status: complete.** Findings F1–F24 (S0: F1–F8), cut list, minimal viable delivery, lock table.
 
 Scope: `ROADMAP.md`, `A4-DELIVERY-CONTRACT.md`, `A5-EVALUATION.md`, `A6-TRUST-AND-SAFETY.md`, checked against A1/A2/A3, `R0-claude-code-hook-facts.md`, the code, and **real Claude Code transcripts on this machine** (367 JSONL files: 40 main sessions, 327 subagent files). Scripts: `scratchpad/review2/`.

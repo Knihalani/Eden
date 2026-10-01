@@ -1,5 +1,7 @@
 # R9 — Execution methodology: how to build, measure, roll out and land Eden memory
 
+> **Code citations.** `file:line` references in this document point at commit `11c3101c3`, when it was written. Later commits, including R-5's reformat (#94, #97, #99), moved those lines. To read one: `git show 11c3101c3:<path>`.
+
 **Dated 2026-09-29.** An input to `ROADMAP.md` (how the slices are executed, not what they build). It is evidence and recommendation, not a decision: `DECISIONS.md` keeps precedence. Inputs read: `ROADMAP.md`, `DECISIONS.md`, `A5-EVALUATION.md`, `A6-TRUST-AND-SAFETY.md` §4, `research/R0`, `R1` Addendum A, `R3` E7, `R6` §1.3 and §6; the repo's CI (`.github/workflows/test.yml`, `scripts/test.sh`), `src/memory-consent.ts`, both whatever harnesses (`.whatever/`, `.whatever-v1/`) and `git log` of the current branch.
 
 **Verification marks** used in §2 and §4:
