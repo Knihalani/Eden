@@ -158,7 +158,7 @@ export function createHandler(opts: ServerOpts) {
   const wrapState = createState({ apiKey: token });
   // A chat caller that is not the operator gets this run state instead (#89). wrapState's usage
   // and model output are stamped onto the operator's next recorded trace, which compile reads.
-  const guestState = createState({ apiKey: token });
+  const guestState = createState({});
   const ctx: ApiCtx = {
     store: opts.store,
     registry: opts.registry,
