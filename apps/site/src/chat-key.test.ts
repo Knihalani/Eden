@@ -1,7 +1,8 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
+import * as edenMem from "../../../src/index";
 
 /**
  * #88: the site's chat route passed the operator's OPENAI_API_KEY upstream for any caller a dev
@@ -218,6 +219,39 @@ async function bootLocal(port: number, extra: Record<string, string>) {
   for (let i = 0; i < 100 && !(await reachable("127.0.0.1", port)); i++) await Bun.sleep(100);
   return { proc, stop: () => proc.kill() };
 }
+
+describe("the site chat route reads and writes no process memory (#89)", () => {
+  // One process store would be shared by every workspace on a deployment, and on a dev host by
+  // every caller that gets into ws_local. The site has no operator whose memory it could be.
+  const memory = spyOn(edenMem, "processMemory");
+
+  beforeEach(() => {
+    memory.mockClear();
+  });
+
+  afterAll(() => {
+    memory.mockRestore();
+  });
+
+  test("a dev host: a caller paying with its own key, plain and streaming", async () => {
+    expect((await chat({ authorization: `Bearer ${CALLER_KEY}` })).status).toBe(200);
+    await (await chat({ authorization: `Bearer ${CALLER_KEY}` }, true)).text();
+    expect(upstreamAuth).toEqual(Array(2).fill(`Bearer ${CALLER_KEY}`));
+    expect(memory).not.toHaveBeenCalled();
+  });
+
+  test("a managed deployment: a signed-up workspace paying with its own key", async () => {
+    process.env.VERCEL = "1";
+    try {
+      const key = await signupKey();
+      expect((await chat({ authorization: `Bearer ${CALLER_KEY}`, "x-eden-api-key": key })).status).toBe(200);
+    } finally {
+      delete process.env.VERCEL;
+    }
+    expect(upstreamAuth).toEqual([`Bearer ${CALLER_KEY}`]);
+    expect(memory).not.toHaveBeenCalled();
+  });
+});
 
 describe("local.ts binds loopback unless told otherwise (#88)", () => {
   test("by default it answers on 127.0.0.1 and not on the machine's network address", async () => {
