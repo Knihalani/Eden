@@ -139,7 +139,8 @@ describe("M6.2 dual-API CI gate", () => {
     expect(constructs).toEqual([]);
   });
 
-  test("product RESULTS cannot publish a BrainMemory / cortex: false column", () => { // not-product
+  // not-product: this test forbids the column its title names.
+  test("product RESULTS cannot publish a BrainMemory / cortex: false column", () => {
     const offenders: string[] = [];
     for (const file of [...mabMarkdown(), ...holdoutResults()]) {
       offenders.push(...brainProductTableHits(file, readFileSync(file, "utf8")));
