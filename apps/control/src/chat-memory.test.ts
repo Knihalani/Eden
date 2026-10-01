@@ -161,6 +161,25 @@ describe("only the wrap's operator gets its memory and compiled tools (#89)", ()
     expect(seen.map((s) => [s.key, s.tools])).toEqual([[STRANGER, ["search"]]]);
   });
 
+  test("a caller paying with its own key leaves nothing in the operator's next trace", async () => {
+    await (await chat(STRANGER)).text();
+    await (await chat(STRANGER, { stream: true })).text();
+    await (await messages(STRANGER)).text();
+    // Wrap stamps the next trace the operator records with the chat output and usage it has seen.
+    const trace = { id: "t-operator-89", events: [{ tool: "search", args: { q: "test" } }], llmCalls: 0 };
+    const posted = await handler(
+      new Request("http://127.0.0.1:8788/v1/traces", {
+        method: "POST",
+        headers: { authorization: `Bearer ${WRAP_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({ traces: [trace] }),
+      }),
+    );
+    expect(posted.status).toBe(200);
+    const stored = store.traces().find((t) => t.id === trace.id);
+    expect(stored).toBeDefined();
+    expect([stored!.output, stored!.llmCalls, stored!.prompt_tokens]).toEqual([undefined, 0, undefined]);
+  });
+
   test("a wrong x-eden-api-key proves nothing", async () => {
     await (await chat(STRANGER, { edenKey: "eden_local_guess" })).text();
     expect(memory).not.toHaveBeenCalled();
