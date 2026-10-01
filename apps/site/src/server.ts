@@ -331,7 +331,7 @@ function signupClientAddress(req: Request, peer?: string): string {
     warnedNoClientAddress = true;
     console.warn(
       "eden site: the signup rate limit sees no client address, so every signup shares one bucket. " +
-        "Behind a proxy that sets x-real-ip or x-forwarded-for, set EDEN_TRUST_PROXY=1.",
+        "Behind a proxy that sets X-Real-IP itself (not the client's), set EDEN_TRUST_PROXY=1.",
     );
   }
   return "unknown";
