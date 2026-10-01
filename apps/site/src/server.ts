@@ -1369,6 +1369,9 @@ document.getElementById("wsName").value }) });
       state: siteWrapState,
       upstream: process.env.OPENAI_API_BASE || "https://api.openai.com/v1",
       upstreamKey: ownKey || process.env.OPENAI_API_KEY,
+      // The process memory store would be shared by every workspace here, and on a dev host by
+      // every caller that gets into ws_local. The site has no operator it could belong to (#89).
+      memory: false,
       getPrograms: () => programs,
       play: async (name, args) => {
         const tool = await findOnTool(d, wsId, name);

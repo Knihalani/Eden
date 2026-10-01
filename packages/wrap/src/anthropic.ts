@@ -14,6 +14,8 @@ export interface AnthropicProxyOpts {
   fetch?: typeof fetch;
   /** Model key for a request without x-api-key. Unset: ANTHROPIC_API_KEY. */
   upstreamKey?: string;
+  /** False: the request reads and writes no memory (see ProxyOpts.memory, #89). */
+  memory?: boolean;
 }
 
 interface AnthropicContentBlock {
@@ -233,7 +235,7 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
 
   applyCacheBreakpoints(body);
-  body = withKnowFactsAnthropic(body) as AnthropicRequest;
+  if (opts.memory !== false) body = withKnowFactsAnthropic(body) as AnthropicRequest;
 
   const fn = opts.fetch ?? fetch;
   const anthropicKey = req.headers.get("x-api-key") || opts.upstreamKey || process.env.ANTHROPIC_API_KEY || "";

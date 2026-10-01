@@ -14,7 +14,17 @@ export type ProxyOpts = {
   upstreamKey?: string;
   getPrograms?: () => StretchProgram[];
   play?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * False: the request reads and writes no memory. For a caller that is not this wrap's operator
+   * (#89), and for a server whose tenants would all share the one process store.
+   */
+  memory?: boolean;
 };
+
+/** The body with memory injected and the request observed, unless the caller gets no memory. */
+function withMemory(opts: ProxyOpts, body: Record<string, unknown>): Record<string, unknown> {
+  return opts.memory === false ? body : injectBodyThenObserveTools(processMemory(), body);
+}
 
 export function corsOrigin(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
@@ -173,7 +183,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
               }
               next.chat_template_kwargs = prev;
               return next;
-            })(url, stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), body)));
+            })(url, stripUpstreamPlaceFields(withMemory(opts, body)));
             const prev = tuned.stream_options;
             const so =
               prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
@@ -216,10 +226,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     }
     next.chat_template_kwargs = prev;
     return next;
-  })(
-    url,
-    stripUpstreamPlaceFields(injectBodyThenObserveTools(processMemory(), { ...body, stream: false, tools: injected })),
-  );
+  })(url, stripUpstreamPlaceFields(withMemory(opts, { ...body, stream: false, tools: injected })));
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {

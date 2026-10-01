@@ -91,13 +91,16 @@ function bearerToken(req: Request): string | null {
   return m ? m[1]! : null;
 }
 
-function authorized(req: Request, token?: string): boolean {
-  if (!token) return false;
-  const got = bearerToken(req);
-  if (got == null) return false;
+/** Timing-safe equality of two secrets; false when either is missing. */
+function sameSecret(got: string | null | undefined, want: string | null | undefined): boolean {
+  if (!got || !want) return false;
   const a = Buffer.from(got, "utf8");
-  const b = Buffer.from(token, "utf8");
+  const b = Buffer.from(want, "utf8");
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function authorized(req: Request, token?: string): boolean {
+  return sameSecret(bearerToken(req), token);
 }
 
 /** Local two-line enable: agent keeps OPENAI_API_KEY and only changes BASE_URL. */
@@ -106,18 +109,25 @@ function isProviderKey(key: string): boolean {
 }
 
 /**
- * Who may call the chat routes, and whose model key pays (#84). Null: nobody we know.
+ * Who may call the chat routes, whose model key pays (#84), and whether the caller is the
+ * operator (#89). Null: nobody we know.
  * - The wrap token: the operator, who can read the local key. Wrap's own model key pays.
  * - A provider key (the two-line enable): the caller's own key is the upstream key. Wrap's
  *   OPENAI_API_KEY / ANTHROPIC_API_KEY would let any local account spend the operator's key
  *   with a made-up `Bearer sk-…`.
+ * A provider-key caller is the operator only if its key is the one wrap was started with
+ * (`operatorKey`), or if it also sends the wrap token as x-eden-api-key. Any other caller gets
+ * no memory and none of the operator's compiled tools: another local account could otherwise
+ * read the operator's memory, write into it, and run its tools with a key of its own.
  */
-function chatCaller(req: Request, token?: string): { ownKey?: string } | null {
-  if (authorized(req, token)) return {};
+function chatCaller(req: Request, token?: string, operatorKey?: string): { ownKey?: string; operator: boolean } | null {
+  if (authorized(req, token)) return { operator: true };
   const allowProvider = isManagedDeployment() ? process.env.EDEN_DEV === "1" : process.env.EDEN_DEV !== "0";
   if (!allowProvider) return null;
   const got = bearerToken(req);
-  return got && isProviderKey(got) ? { ownKey: got } : null;
+  if (!got || !isProviderKey(got)) return null;
+  const edenKey = (req.headers.get("x-eden-api-key") || req.headers.get("x-eden-key") || "").trim();
+  return { ownKey: got, operator: sameSecret(got, operatorKey?.trim()) || sameSecret(edenKey, token) };
 }
 
 export function createHandler(opts: ServerOpts) {
@@ -208,7 +218,7 @@ export function createHandler(opts: ServerOpts) {
       // where the /v1/ gate lives. Unauthenticated, it was free inference on
       // the operator's upstream key for anyone who could reach the port — and
       // a text/plain POST is CORS-simple, so it needed no preflight to allow.
-      const caller = chatCaller(req, token);
+      const caller = chatCaller(req, token, opts.upstreamKey || process.env.OPENAI_API_KEY);
       if (!caller) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401, headers: corsHeaders(req) });
       }
@@ -217,20 +227,22 @@ export function createHandler(opts: ServerOpts) {
         upstream: opts.upstream,
         // Non-empty for a provider key, so the OPENAI_API_KEY fallback is never reached.
         upstreamKey: caller.ownKey ?? opts.upstreamKey,
-        getPrograms: () => opts.store.livePrograms(),
-        play: (name, args) => playCompiled(ctx, name, args),
+        memory: caller.operator,
+        getPrograms: () => (caller.operator ? opts.store.livePrograms() : []),
+        play: caller.operator ? (name, args) => playCompiled(ctx, name, args) : undefined,
       });
     }
     if (url.pathname === "/v1/messages" && req.method === "POST") {
       // Anthropic Messages API dialect (G7): same auth gate as chat/completions.
-      const caller = chatCaller(req, token);
+      const caller = chatCaller(req, token, process.env.ANTHROPIC_API_KEY);
       if (!caller) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401 });
       }
       return handleAnthropicMessages(req, {
         state: wrapState,
-        getPrograms: () => opts.store.livePrograms(),
+        getPrograms: () => (caller.operator ? opts.store.livePrograms() : []),
         upstreamKey: caller.ownKey,
+        memory: caller.operator,
       });
     }
     const api = await handleApi(req, url, ctx);
