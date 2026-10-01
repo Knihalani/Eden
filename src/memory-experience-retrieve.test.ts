@@ -351,9 +351,14 @@ describe("M24.3 gold_in_packet Change-request (q25-shaped)", () => {
     const dir = tmpDir("eden-m24-secret-");
     try {
       mkdirSync(join(dir, EXPERIENCE_DIRNAME), { recursive: true });
+      const secretRow = JSON.stringify({
+        url: "https://example.test/change-request",
+        tree: `heading ${GOLD} token sk-LIVESECRET99999999`,
+        t: 1,
+      });
       writeFileSync(
         join(dir, EXPERIENCE_DIRNAME, "secret-raw.jsonl"),
-        `${JSON.stringify({ id: "secret-raw" })}\n${JSON.stringify({ url: "https://example.test/change-request", tree: `heading ${GOLD} token sk-LIVESECRET99999999`, t: 1 })}\n`,
+        `${JSON.stringify({ id: "secret-raw" })}\n${secretRow}\n`,
         "utf8",
       );
       const hits = retrieveExperience(dir, Q25_CUE);

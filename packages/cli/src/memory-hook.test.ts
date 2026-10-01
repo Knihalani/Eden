@@ -92,10 +92,11 @@ describe("passive memory hooks", () => {
     const trans = join(memDir, "t.jsonl");
     rmSync(memDir, { recursive: true, force: true });
     mkdirSync(memDir, { recursive: true });
-    writeFileSync(
-      trans,
-      `${JSON.stringify({ type: "user", message: { role: "user", content: "Always run bun test before you push." } })}\n`,
-    );
+    const userLine = JSON.stringify({
+      type: "user",
+      message: { role: "user", content: "Always run bun test before you push." },
+    });
+    writeFileSync(trans, `${userLine}\n`);
     process.env.EDEN_MEMORY_DIR = memDir;
     const stop = memoryHookResponse({ hook_event_name: "Stop", transcript_path: trans });
     expect(stop).toBeNull();
