@@ -23,7 +23,10 @@ export interface SubProgramEntry {
   timeoutMs?: number;
 }
 
-/** Sub-program timeout: explicit, then env, then a generous default. The old hard 30s truncated any longer legitimate sub-program into a mid-parent deopt. */
+/**
+ * Sub-program timeout: explicit, then env, then a generous default. The old hard 30s truncated any
+ * longer legitimate sub-program into a mid-parent deopt.
+ */
 function subTimeoutMs(explicit?: number): number {
   if (explicit && explicit > 0) return Math.min(600_000, explicit);
   const env = Number(process.env.EDEN_SUB_TIMEOUT_MS);

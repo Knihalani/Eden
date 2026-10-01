@@ -145,7 +145,8 @@ export function summarize(
             ? ` mde=${d.mde.toFixed(1)}`
             : "";
       console.log(
-        `  ${m.padEnd(8)} ${d.verdict.padEnd(18)} ctrl=${d.controlMean.toFixed(1)} trt=${d.treatmentMean.toFixed(1)} Δ=${rel}% (${ratio}x) p=${d.p.toFixed(4)} n=${d.blocks}` +
+        `  ${m.padEnd(8)} ${d.verdict.padEnd(18)} ctrl=${d.controlMean.toFixed(1)} ` +
+          `trt=${d.treatmentMean.toFixed(1)} Δ=${rel}% (${ratio}x) p=${d.p.toFixed(4)} n=${d.blocks}` +
           mdeStr +
           (d.selfCheck ? ` A/A=${d.selfCheck.status}` : ""),
       );

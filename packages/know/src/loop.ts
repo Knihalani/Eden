@@ -240,7 +240,10 @@ function commitCcRecords(
   });
 }
 
-/** One or more WET files from the latest crawl. `slices` walks consecutive wet.paths entries. Fetches in parallel; commits serially. */
+/**
+ * One or more WET files from the latest crawl. `slices` walks consecutive wet.paths entries.
+ * Fetches in parallel; commits serially.
+ */
 export async function tickCc(
   store: KnowStore,
   limit: number,

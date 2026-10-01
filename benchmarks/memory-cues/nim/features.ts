@@ -12,7 +12,8 @@ const live = mems.filter((m) => !m.superseded_by);
 const docsA = live.map((d) => ({ ...d, aliases: aliases[d.id] ?? [] }));
 const bm = new BM25F(live, false),
   bmA = new BM25F(docsA, true);
-// A2 §2.3 cap: keep an alias phrase only if every token it adds stays rare (df over text+aliases <= ALIAS_DF_CAP) — no fat postings from expansion
+// A2 §2.3 cap: keep an alias phrase only if every token it adds stays rare
+// (df over text+aliases <= ALIAS_DF_CAP) — no fat postings from expansion
 const ALIAS_DF_CAP = Number(process.env.ALIAS_DF_CAP ?? 6);
 const docsC = docsA.map((d) => ({
   ...d,

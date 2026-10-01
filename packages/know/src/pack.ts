@@ -8103,7 +8103,10 @@ function packCarriesHotTitles(pack: Uint8Array, want: { n: number; title: string
   return true;
 }
 
-/** KG12/KG13: nums + hot title overlay + 4-bit area column (cold only) + EG10/EG11 + catalog bitmask. Lengths are vbyte (legacy u32 still decodes). */
+/**
+ * KG12/KG13: nums + hot title overlay + 4-bit area column (cold only) + EG10/EG11 + catalog bitmask.
+ * Lengths are vbyte (legacy u32 still decodes).
+ */
 function encodeAs15(ids: number[], sparse = false): Uint8Array {
   let nonNet = 0;
   for (const id of ids) if ((id & 15) !== 15) nonNet++;

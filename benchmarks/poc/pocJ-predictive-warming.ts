@@ -12,7 +12,9 @@
  *
  * Method: simulate 30 days of id-access streams per workspace archetype with
  * real Zipf/Markov structure; compare cache hit rates for:
- *   A) no warming            B) today: last-6 recency     C) proposed: score = α·recency + (1−α)·frequency, warmed top-6
+ *   A) no warming
+ *   B) today: last-6 recency
+ *   C) proposed: score = α·recency + (1−α)·frequency, warmed top-6
  */
 import { header, printRow, mulberry32 } from "./lib.ts";
 

@@ -14,7 +14,8 @@ const TIMEOUT = 30_000;
 
 describe("rotation: cwd-relative remainder hop (Wave 17.1)", () => {
   test("pre-registered expect is a cwd-hop world, not a retune of post-batch", () => {
-    // expect: cwd-hop relative ./a.ts arms; abs claims; disagreeing id refuses; mixed-file takes head; ../other does not; not post-batch.
+    // expect: cwd-hop relative ./a.ts arms; abs claims; disagreeing id refuses; mixed-file takes head;
+    // ../other does not; not post-batch.
     console.log(`expect: ${EXPECT}`);
     expect(EXPECT).toContain("cwd-hop");
     expect(EXPECT).toContain("./a.ts");
@@ -42,7 +43,9 @@ describe("rotation: cwd-relative remainder hop (Wave 17.1)", () => {
       expect(r.traversalClaim).toBe(0);
       expect(r.traversalAbsClaim).toBe(1);
       console.log(
-        `cwd-hop: relative_vs_abs_claim=${r.relativeVsAbsClaim} same_string=${r.sameStringRelativeClaim} disagreeing_id=${r.disagreeingIdClaim} mixed_head=${r.mixedHeadClaim} mixed_other=${r.mixedOtherClaim} traversal=${r.traversalClaim} traversal_abs=${r.traversalAbsClaim}`,
+        `cwd-hop: relative_vs_abs_claim=${r.relativeVsAbsClaim} same_string=${r.sameStringRelativeClaim} ` +
+          `disagreeing_id=${r.disagreeingIdClaim} mixed_head=${r.mixedHeadClaim} ` +
+          `mixed_other=${r.mixedOtherClaim} traversal=${r.traversalClaim} traversal_abs=${r.traversalAbsClaim}`,
       );
     },
     TIMEOUT,

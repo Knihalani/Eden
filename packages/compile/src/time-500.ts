@@ -96,7 +96,9 @@ emit(`synth2000_over_500x=${(cold2000Med / Math.max(cold500Med, 0.01)).toFixed(2
 const b = etlWidth(80, 18);
 const etl = compileTraces(b);
 emit(
-  `etl80x18 default programs=${etl.programs.length} refusals=${etl.refusals.length} seqLens=${etl.programs.map((p) => p.sequence?.length).join(",")} unbound=${etl.refusals.filter((r) => r.reason.includes("without a bindable foreach")).length}`,
+  `etl80x18 default programs=${etl.programs.length} refusals=${etl.refusals.length} ` +
+    `seqLens=${etl.programs.map((p) => p.sequence?.length).join(",")} ` +
+    `unbound=${etl.refusals.filter((r) => r.reason.includes("without a bindable foreach")).length}`,
 );
 
 writeCapture("time-500.txt", lines.join("\n"));

@@ -45,7 +45,10 @@ export const WRAP_INJECT = "packages/wrap handleChatCompletions → injectBodyTh
 export const NIM_BASE = "https://integrate.api.nvidia.com/v1";
 export const NIM_MODEL = "google/gemma-4-31b-it";
 export const DEFAULT_WRAP_PORT = 18788;
-/** Live wrap listen port. Prefer 18788; leftover listeners are killed, else a free port is written into Harbor config. */
+/**
+ * Live wrap listen port. Prefer 18788; leftover listeners are killed, else a free port is written
+ * into Harbor config.
+ */
 let wrapPort = DEFAULT_WRAP_PORT;
 function wrapOrigin(): string {
   return `http://127.0.0.1:${wrapPort}`;
@@ -1082,10 +1085,14 @@ export function renderResults(r: RunReport): string {
   const tokOff = r.off.tokens.measured;
   const tokOn = r.on.tokens.measured;
   lines.push(
-    `| tokens prompt | ${tokOff ? fmtN(r.off.tokens.prompt) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.prompt) : "n/a"} | ${tokOff && tokOn ? fmtN(r.on.tokens.prompt - r.off.tokens.prompt) : "n/a"} |`,
+    `| tokens prompt | ${tokOff ? fmtN(r.off.tokens.prompt) : "n/a"} ` +
+      `| ${tokOn ? fmtN(r.on.tokens.prompt) : "n/a"} ` +
+      `| ${tokOff && tokOn ? fmtN(r.on.tokens.prompt - r.off.tokens.prompt) : "n/a"} |`,
   );
   lines.push(
-    `| tokens completion | ${tokOff ? fmtN(r.off.tokens.completion) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.completion) : "n/a"} | ${tokOff && tokOn ? fmtN(r.on.tokens.completion - r.off.tokens.completion) : "n/a"} |`,
+    `| tokens completion | ${tokOff ? fmtN(r.off.tokens.completion) : "n/a"} ` +
+      `| ${tokOn ? fmtN(r.on.tokens.completion) : "n/a"} ` +
+      `| ${tokOff && tokOn ? fmtN(r.on.tokens.completion - r.off.tokens.completion) : "n/a"} |`,
   );
   lines.push(
     `| tokens total | ${tokOff ? fmtN(r.off.tokens.total) : "n/a"} | ${tokOn ? fmtN(r.on.tokens.total) : "n/a"} | ${fmtN(r.delta.tokens_total)} |`,

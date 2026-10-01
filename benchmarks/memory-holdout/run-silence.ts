@@ -550,18 +550,25 @@ export function formatSilence(run: SilenceRun): string {
   const byId = (id: string) => run.rows.find((r) => r.id === id);
   const line = (r: SilenceRow | undefined) =>
     r
-      ? `${r.verdict} · omitted on-arm ${omittedCell(r.omitted_on)} · ${armBytes(r, "off")} B off → ${armBytes(r, "on")} B on · Δ ${r.delta_bytes} B · leftover ${r.leftover.length ? r.leftover.join(", ") : "none"}`
+      ? `${r.verdict} · omitted on-arm ${omittedCell(r.omitted_on)} · ${armBytes(r, "off")} B off ` +
+        `→ ${armBytes(r, "on")} B on · Δ ${r.delta_bytes} B · ` +
+        `leftover ${r.leftover.length ? r.leftover.join(", ") : "none"}`
       : "missing";
   const rows = run.rows
     .map(
       (r) =>
-        `| ${r.id} | ${omittedCell(r.omitted_on)} | ${armBytes(r, "off")} | ${armBytes(r, "on")} | ${r.delta_bytes} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} | ${r.verdict} |`,
+        `| ${r.id} | ${omittedCell(r.omitted_on)} | ${armBytes(r, "off")} | ${armBytes(r, "on")} ` +
+        `| ${r.delta_bytes} | ${r.leftover.length ? cell(r.leftover.join(", ")) : "—"} | ${r.verdict} |`,
     )
     .join("\n");
   const bodyRows = run.rows
     .map(
       (r) =>
-        `| ${r.id} | ${yn(r.baseline.body_agrees && r.probe.body_agrees)} | ${r.baseline.body_packet_bytes} | ${r.probe.body_packet_bytes} | ${r.body_delta_bytes} | ${r.body_leftover.length ? cell(r.body_leftover.join(", ")) : "—"} | ${yn(r.probe.arm === "on" ? r.probe.body_omitted : r.baseline.body_omitted && r.probe.body_omitted)} |`,
+        `| ${r.id} | ${yn(r.baseline.body_agrees && r.probe.body_agrees)} | ${r.baseline.body_packet_bytes} ` +
+        `| ${r.probe.body_packet_bytes} | ${r.body_delta_bytes} ` +
+        `| ${r.body_leftover.length ? cell(r.body_leftover.join(", ")) : "—"} ` +
+        `| ${yn(r.probe.arm === "on" ? r.probe.body_omitted : r.baseline.body_omitted && r.probe.body_omitted)} ` +
+        `|`,
     )
     .join("\n");
   const notes = run.rows

@@ -19,7 +19,8 @@ import { compileTraces, inheritWidth, type WidthInheritReceipt } from "@eden/com
 
 /**
  * Pre-registered Wave 10 rotation verdict. Recorded before the run.
- * expect: mined width 10; 2 width-7 receipts OOD; 3rd inherits; 4th width-7 inDistribution; bad receipt does not inherit
+ * expect: mined width 10; 2 width-7 receipts OOD; 3rd inherits; 4th width-7 inDistribution;
+ * bad receipt does not inherit
  */
 export const EXPECT =
   "mined at width 10; 2 clean width-7 receipts stay OOD; 3rd inherits; 4th width-7 stretch inDistribution; bad receipt does not inherit";

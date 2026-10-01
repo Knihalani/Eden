@@ -229,10 +229,12 @@ describe("moonshot worlds: compileTraces", () => {
       expect(traces.every((t) => t.complete)).toBe(true);
       const r = compileTraces(traces);
       console.log(
-        `moonshot compile tenant: programs=${r.programs.length} seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals
-          .map((x) => x.code ?? x.reason)
-          .slice(0, 3)
-          .join("; ")}`,
+        `moonshot compile tenant: programs=${r.programs.length} ` +
+          `seqs=${r.programs.map((p) => p.sequence.join("→")).join(" | ") || "(none)"} ` +
+          `env=${JSON.stringify(Object.keys(r.programs[0]?.contract.envelope?.inputs ?? {}))} refusals=${r.refusals
+            .map((x) => x.code ?? x.reason)
+            .slice(0, 3)
+            .join("; ")}`,
       );
       expect(r.programs.length, "tenant should compile ≥1 program").toBeGreaterThanOrEqual(1);
       expect(r.programs[0]!.sequence.length).toBeGreaterThanOrEqual(5);

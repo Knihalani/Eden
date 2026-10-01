@@ -15,7 +15,10 @@ export function stem(w: string): string {
   return w;
 }
 
-/** Content tokens: compound identifiers kept whole (next.config.ts, @acme/cli, err_require_esm) AND split into parts. */
+/**
+ * Content tokens: compound identifiers kept whole (next.config.ts, @acme/cli, err_require_esm)
+ * AND split into parts.
+ */
 export function toks(s: string): string[] {
   const t = s.toLowerCase().replace(/[’']/g, "");
   const out: string[] = [];

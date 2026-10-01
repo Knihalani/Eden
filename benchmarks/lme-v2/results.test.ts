@@ -24,7 +24,10 @@ function parseVerdictRow(src: string, target: string): { published: number; run:
   return { published: Number(m[1]), run: Number(m[2]), verdict: m[3] as "WIN" | "LOSS" };
 }
 
-/** Fail if RESULTS claims Overall WIN without acc ≥ 42.8, claims 74.9 without acc ≥ 74.9, or uses BrainMemory as the product column. */
+/**
+ * Fail if RESULTS claims Overall WIN without acc ≥ 42.8, claims 74.9 without acc ≥ 74.9,
+ * or uses BrainMemory as the product column.
+ */
 function honestyProblems(src: string): string[] {
   const problems: string[] = [];
   if (/\|\s*BrainMemory\s*\|/i.test(src)) problems.push("BrainMemory product column");

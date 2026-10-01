@@ -1,5 +1,6 @@
 // Minimal Model2Vec static-embedding inference in Bun/TS.
-// BERT WordPiece tokenizer (BertNormalizer lowercase+strip accents, BertPreTokenizer) -> row lookup -> mean -> L2 normalize.
+// BERT WordPiece tokenizer (BertNormalizer lowercase+strip accents, BertPreTokenizer)
+// -> row lookup -> mean -> L2 normalize.
 // Reads vocab.txt (fast) and mmaps model.safetensors (float32 "embeddings").
 import { readFileSync } from "node:fs";
 
