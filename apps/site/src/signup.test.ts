@@ -12,14 +12,15 @@ import { hashApiKey, openDb } from "./db";
 const SERVER_MOD = `./server?bust=signup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 /** One sqlite file for this module's memoized server — unique so shuffle cannot collide. */
 const DB_FILE = join(tmpdir(), `eden-signup-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-let handleFetch: (req: Request) => Promise<Response>;
+let handleFetch: (req: Request, peer?: string) => Promise<Response>;
 
-async function siteFetch(req: Request): Promise<Response> {
+/** `peer` is the socket address, as local.ts passes it. */
+async function siteFetch(req: Request, peer?: string): Promise<Response> {
   if (!handleFetch) {
     process.env.EDEN_DB = DB_FILE;
     ({ handleFetch } = await import(SERVER_MOD));
   }
-  return handleFetch(req);
+  return handleFetch(req, peer);
 }
 
 /**
@@ -61,6 +62,7 @@ describe("signup", () => {
         },
         body: JSON.stringify(name ? { name } : {}),
       }),
+      ip,
     );
   }
 
@@ -114,6 +116,52 @@ describe("signup", () => {
     expect(body.error).toContain("Too many");
     // A different IP is unaffected.
     expect((await signup(`${ipBase}3.4`)).status).toBe(200);
+  });
+
+  test("a forwarded address counts only behind a proxy that sets it (#91)", async () => {
+    // Off Vercel, x-real-ip and x-forwarded-for are whatever the caller sent. Six signups from
+    // one socket address, each claiming a new forwarded address, are still one address.
+    const peer = `${ipBase}40.1`;
+    const forged = (n: number) =>
+      siteFetch(
+        new Request("http://127.0.0.1:8787/v1/signup", {
+          method: "POST",
+          headers: {
+            host: "127.0.0.1:8787",
+            "content-type": "application/json",
+            "x-real-ip": `${ipBase}41.${n}`,
+            "x-forwarded-for": `${ipBase}42.${n}`,
+          },
+          body: "{}",
+        }),
+        peer,
+      );
+    for (let i = 0; i < 5; i++) expect((await forged(i)).status).toBe(200);
+    expect((await forged(5)).status).toBe(429);
+    // Behind Vercel, whose proxy overwrites them, or a proxy the operator vouches for, the
+    // forwarded address is the client.
+    process.env.VERCEL = "1";
+    try {
+      expect((await forged(6)).status).toBe(200);
+    } finally {
+      delete process.env.VERCEL;
+    }
+    process.env.EDEN_TRUST_PROXY = "1";
+    try {
+      expect((await forged(7)).status).toBe(200);
+    } finally {
+      delete process.env.EDEN_TRUST_PROXY;
+    }
+  });
+
+  test("the limit applies again in a later window (#91)", async () => {
+    const ip = `${ipBase}43.1`;
+    // The first signup opens the server's database; this address then used up a window two hours ago.
+    expect((await signup(`${ipBase}43.2`)).status).toBe(200);
+    const d = await openDb(DB_FILE);
+    await d.run(`INSERT INTO signup_rate (ip, hits, window_start) VALUES (?, ?, ?)`, [ip, 5, Date.now() - 7_200_000]);
+    for (let i = 0; i < 5; i++) expect((await signup(ip)).status).toBe(200);
+    expect((await signup(ip)).status).toBe(429);
   });
 
   test("signup page and landing render for signed-out visitors", async () => {
@@ -365,7 +413,7 @@ describe("/v1/traces intake (CLI recorder path)", () => {
     void api_key;
   });
 
-  test("chat miss with a signup key fail-opens HTTP 200 and does not forward the key", async () => {
+  test("a signup key with no provider key of its own is refused before any upstream call (#91)", async () => {
     const prev = process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     try {
@@ -383,11 +431,10 @@ describe("/v1/traces intake (CLI recorder path)", () => {
           body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: "hi" }] }),
         }),
       );
-      expect(chat.status).toBe(200);
-      const body = (await chat.json()) as { model?: string; fail_open?: boolean; error?: { message?: string } };
-      expect(body.model).toBe("eden");
-      expect(body.fail_open).toBe(true);
-      expect(JSON.stringify(body)).not.toMatch(/Incorrect API key/i);
+      expect(chat.status).toBe(401);
+      const body = (await chat.json()) as { error?: { code?: string; message?: string } };
+      expect(body.error?.code).toBe("provider_key_required");
+      expect(body.error?.message).toMatch(/x-eden-api-key/);
     } finally {
       if (prev === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = prev;
@@ -402,5 +449,6 @@ async function signup(ip: string, name: string): Promise<Response> {
       headers: { host: "127.0.0.1:8787", "content-type": "application/json", "x-real-ip": ip },
       body: JSON.stringify({ name }),
     }),
+    ip,
   );
 }
