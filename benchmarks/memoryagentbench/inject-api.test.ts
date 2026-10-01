@@ -93,12 +93,16 @@ describe("M1.1 inject API freeze", () => {
     for (const file of walkSource(MAB)) {
       if (file.endsWith("inject-api.test.ts")) continue;
       const src = readFileSync(file, "utf8");
-      for (const line of src.split("\n")) {
-        if (!line.includes("cortex: false") && !line.includes("cortex:false")) continue;
+      const lines = src.split("\n");
+      lines.forEach((line, i) => {
+        if (!line.includes("cortex: false") && !line.includes("cortex:false")) return;
         const t = line.trim();
-        if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*")) continue;
-        if (!line.includes("not-product")) offenders.push(`${relative(ROOT, file)}: ${t}`);
-      }
+        if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*")) return;
+        // The marker sits on the line itself or, like eslint-disable-next-line, in a comment just above.
+        const above = lines[i - 1]?.trim() ?? "";
+        const marked = line.includes("not-product") || (above.startsWith("//") && above.includes("not-product"));
+        if (!marked) offenders.push(`${relative(ROOT, file)}: ${t}`);
+      });
     }
     expect(offenders).toEqual([]);
   });
