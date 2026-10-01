@@ -561,7 +561,7 @@ describe("M16.1 Table 3 overall requires four competency avgs", () => {
     expect(() => assertTable3OverallHasFourAvgs(t3, "TABLE3-RESULTS.md")).not.toThrow();
   });
 
-  test("M15-EVIDENCE.md exists, matches PROTOCOL, NIM backbone, overall 30.0, four avgs, inject not BrainMemory", () => {
+  test("M15-EVIDENCE.md exists, matches PROTOCOL, NIM backbone, overall 30.0, 4 avgs, inject not BrainMemory", () => {
     expect(existsSync(M15_EVIDENCE)).toBe(true);
     const src = readFileSync(M15_EVIDENCE, "utf8");
 
