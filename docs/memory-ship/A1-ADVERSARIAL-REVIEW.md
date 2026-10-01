@@ -1,5 +1,7 @@
 # A1 — Adversarial review of `docs/memory-ship/EDEN-MEMORY.md`
 
+> **Code citations.** `file:line` references in this document point at commit `11c3101c3`, when it was written. Later commits, including R-5's reformat (#94, #97, #99), moved those lines. To read one: `git show 11c3101c3:<path>`.
+
 > **Precedence note (v2, 2026-09-29):** [DECISIONS.md](DECISIONS.md) and [A4 v2](A4-DELIVERY-CONTRACT.md) supersede this appendix wherever they differ. Examples: the ledger is per context window, `resume` never resets it, scope follows R5 §9, and only slot facts supersede by key.
 
 **Dated 2026-09-29.** Part of the memory-ship set; the index is `ROADMAP.md` and the normative design is `A4-DELIVERY-CONTRACT.md`. Hostile by design. Every verdict below cites code. "Repro" means I ran it against the working tree (scratch dirs only; no repo files modified). Line numbers are from the working tree at the time of review.

@@ -1,5 +1,7 @@
 # Eden Memory — Execution methodology
 
+> **Code citations.** `file:line` references in this document point at commit `11c3101c3`, when it was written. Later commits, including R-5's reformat (#94, #97, #99), moved those lines. To read one: `git show 11c3101c3:<path>`.
+
 **Dated 2026-09-29.** How the ROADMAP is built, verified, shipped and rolled back.
 
 - `DECISIONS.md` decides **what**; `ROADMAP.md` decides the **order**; this file decides **how**.
