@@ -474,5 +474,44 @@
       "/compact: PreCompact, SubagentStop of the internal compaction agent (agent_type ''), SessionStart(compact), PostCompact",
       "resume: InstructionsLoaded(session_start) before SessionStart(resume)"
     ]
-  }
+  },
+  "sequences": {
+    "tool-and-subagent-run": [
+      "InstructionsLoaded|main|session_start",
+      "SessionStart|main|startup",
+      "UserPromptSubmit|main",
+      "PreToolUse|main|Read",
+      "PostToolUse|main|Read",
+      "PostToolBatch|main",
+      "PreToolUse|main|Bash",
+      "PostToolUse|main|Bash",
+      "PreToolUse|main|Bash",
+      "PostToolUse|main|Bash",
+      "PostToolBatch|main",
+      "PreToolUse|main|Bash",
+      "PostToolUseFailure|main|Bash",
+      "PostToolBatch|main",
+      "PreToolUse|main|Agent",
+      "SubagentStart|subagent",
+      "PreToolUse|subagent|Read",
+      "PostToolUse|subagent|Read",
+      "PostToolBatch|subagent",
+      "SubagentStop|subagent",
+      "PostToolUse|main|Agent",
+      "PostToolBatch|main",
+      "Stop|main",
+      "SessionEnd|main"
+    ],
+    "resume-then-compact": [
+      "InstructionsLoaded|main|session_start",
+      "SessionStart|main|resume",
+      "InstructionsLoaded|main|session_start",
+      "PreCompact|main|manual",
+      "SubagentStop|internal-agent",
+      "SessionStart|main|compact",
+      "PostCompact|main|manual",
+      "SessionEnd|main"
+    ]
+  },
+  "sequences_note": "Each session's events in the order the probe's files were written (mtime, ns); keys as in `shapes`."
 }
