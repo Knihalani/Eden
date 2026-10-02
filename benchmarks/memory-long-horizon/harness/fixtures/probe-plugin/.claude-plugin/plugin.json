@@ -1,0 +1,1 @@
+{ "name": "probe", "version": "0.0.1", "description": "Harness self-test probe: records every hook payload and answers as PROBE_MODE says" }
