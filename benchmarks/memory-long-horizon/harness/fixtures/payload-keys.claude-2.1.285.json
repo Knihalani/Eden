@@ -1,0 +1,478 @@
+{
+  "source": "Payloads captured by a probe plugin that registers every hook event, from two headless `claude -p` sessions (Claude Code 2.1.285, 2026-10-02): a tool, parallel Bash, failing Bash and Explore-subagent session, then `/compact` on `--resume`. Key names and value formats only; no values.",
+  "claude_code_version": "2.1.285",
+  "shapes": {
+    "InstructionsLoaded|main|session_start": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "hook_event_name",
+        "file_path",
+        "memory_type",
+        "load_reason"
+      ]
+    },
+    "SessionStart|main|startup": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "hook_event_name",
+        "source"
+      ]
+    },
+    "UserPromptSubmit|main": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "hook_event_name",
+        "prompt"
+      ]
+    },
+    "PreToolUse|main|Read": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_use_id"
+      ],
+      "tool_input": [
+        "file_path"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PostToolUse|main|Read": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_response",
+        "tool_use_id",
+        "duration_ms"
+      ],
+      "tool_input": [
+        "file_path"
+      ],
+      "tool_response": [
+        "type",
+        "file"
+      ],
+      "tool_response.file": [
+        "filePath",
+        "content",
+        "numLines",
+        "startLine",
+        "totalLines"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PostToolBatch|main": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_calls"
+      ],
+      "tool_calls[]": [
+        "tool_name",
+        "tool_input",
+        "tool_use_id",
+        "tool_response"
+      ],
+      "tool_calls[].tool_response": [
+        "string"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PreToolUse|main|Bash": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_use_id"
+      ],
+      "tool_input": [
+        "command",
+        "description"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PostToolUse|main|Bash": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_response",
+        "tool_use_id",
+        "duration_ms"
+      ],
+      "tool_input": [
+        "command",
+        "description"
+      ],
+      "tool_response": [
+        "stdout",
+        "stderr",
+        "interrupted",
+        "isImage",
+        "noOutputExpected"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PostToolUseFailure|main|Bash": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_use_id",
+        "error",
+        "is_interrupt",
+        "duration_ms"
+      ],
+      "tool_input": [
+        "command",
+        "description"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PreToolUse|main|Agent": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_use_id"
+      ],
+      "tool_input": [
+        "description",
+        "prompt",
+        "subagent_type",
+        "run_in_background"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "SubagentStart|subagent": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "agent_id",
+        "agent_type",
+        "hook_event_name"
+      ]
+    },
+    "PreToolUse|subagent|Read": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "agent_id",
+        "agent_type",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_use_id"
+      ],
+      "tool_input": [
+        "file_path"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PostToolUse|subagent|Read": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "agent_id",
+        "agent_type",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_response",
+        "tool_use_id",
+        "duration_ms"
+      ],
+      "tool_input": [
+        "file_path"
+      ],
+      "tool_response": [
+        "type",
+        "file"
+      ],
+      "tool_response.file": [
+        "filePath",
+        "content",
+        "numLines",
+        "startLine",
+        "totalLines"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PostToolBatch|subagent": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "agent_id",
+        "agent_type",
+        "effort",
+        "hook_event_name",
+        "tool_calls"
+      ],
+      "tool_calls[]": [
+        "tool_name",
+        "tool_input",
+        "tool_use_id",
+        "tool_response"
+      ],
+      "tool_calls[].tool_response": [
+        "string"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "SubagentStop|subagent": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "agent_id",
+        "agent_type",
+        "effort",
+        "hook_event_name",
+        "stop_hook_active",
+        "agent_transcript_path",
+        "last_assistant_message",
+        "background_tasks",
+        "session_crons"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "PostToolUse|main|Agent": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "tool_name",
+        "tool_input",
+        "tool_response",
+        "tool_use_id",
+        "duration_ms"
+      ],
+      "tool_input": [
+        "description",
+        "prompt",
+        "subagent_type",
+        "run_in_background"
+      ],
+      "tool_response": [
+        "status",
+        "prompt",
+        "agentId",
+        "agentType",
+        "harnessNoteCount",
+        "harnessTailCount",
+        "harnessSectionHash",
+        "content",
+        "resolvedModel",
+        "totalDurationMs",
+        "totalTokens",
+        "totalToolUseCount",
+        "usage",
+        "toolStats"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "Stop|main": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "effort",
+        "hook_event_name",
+        "stop_hook_active",
+        "last_assistant_message",
+        "background_tasks",
+        "session_crons"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "SessionEnd|main": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "hook_event_name",
+        "reason"
+      ]
+    },
+    "SessionStart|main|resume": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "hook_event_name",
+        "source",
+        "seconds_since_last_response",
+        "context_tokens",
+        "prompt_cache_likely_expired",
+        "estimated_cache_write_usd"
+      ]
+    },
+    "PreCompact|main|manual": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "hook_event_name",
+        "trigger",
+        "custom_instructions"
+      ]
+    },
+    "SubagentStop|internal-agent": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "permission_mode",
+        "agent_id",
+        "agent_type",
+        "effort",
+        "hook_event_name",
+        "stop_hook_active",
+        "agent_transcript_path",
+        "last_assistant_message",
+        "background_tasks",
+        "session_crons"
+      ],
+      "effort": [
+        "level"
+      ]
+    },
+    "SessionStart|main|compact": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "hook_event_name",
+        "source",
+        "model"
+      ]
+    },
+    "PostCompact|main|manual": {
+      "keys": [
+        "session_id",
+        "transcript_path",
+        "cwd",
+        "prompt_id",
+        "hook_event_name",
+        "trigger",
+        "compact_summary"
+      ]
+    }
+  },
+  "formats": {
+    "prompt_id": "uuid v4",
+    "tool_use_id": "^toolu_01[A-Za-z0-9]{22}$",
+    "agent_id": "^a[0-9a-f]{16}$",
+    "transcript_path": "<home>/.claude/projects/<cwd with every non-alphanumeric character replaced by '-'>/<session_id>.jsonl",
+    "agent_transcript_path": "<home>/.claude/projects/<slug>/<session_id>/subagents/agent-<agent_id>.jsonl",
+    "PostToolBatch.tool_calls[].tool_response": "the serialized tool_result content: Read gives line-numbered text, Bash gives stdout, a failed Bash gives the PostToolUseFailure error string ('Exit code 1'), Agent gives a content-block array",
+    "event_order": [
+      "startup: InstructionsLoaded(session_start) before SessionStart(startup)",
+      "tool call: PreToolUse, then PostToolUse or PostToolUseFailure, then one PostToolBatch per batch",
+      "Agent call: PreToolUse(Agent), SubagentStart, the subagent's own tool events, SubagentStop, PostToolUse(Agent), PostToolBatch",
+      "/compact: PreCompact, SubagentStop of the internal compaction agent (agent_type ''), SessionStart(compact), PostCompact",
+      "resume: InstructionsLoaded(session_start) before SessionStart(resume)"
+    ]
+  }
+}
