@@ -75,6 +75,20 @@ describe("what hook answers do", () => {
     expect(lines.indexOf(attachments[2]!)).toBeGreaterThan(result);
   });
 
+  test("a Stop hook's context is not saved: its continuation is not simulated, only logged", async () => {
+    const probe = probeWorld({ mode: "context" });
+    const session = await started(probe);
+    await session.prompt("hello");
+    await session.main.assistant("hi");
+    await session.stop();
+    const stop = probe.world.log.find((record) => record.event === "Stop")!;
+    expect(stop.invocations[0]!.outcome.additionalContext).toBe("probe saw Stop");
+    const events = readLines(session.transcriptPath)
+      .filter((line) => line.type === "attachment")
+      .map((line) => (line.attachment as { hookEvent: string }).hookEvent);
+    expect(events).not.toContain("Stop");
+  });
+
   test("a declined ask stops the call: no PostToolUse, and the result is Claude Code's rejection", async () => {
     const probe = probeWorld({ mode: "ask", askAnswer: "decline" });
     const session = await started(probe);
@@ -141,6 +155,36 @@ describe("conversation structure", () => {
     const child = run.launch.agentId;
     expect(order.indexOf(`SubagentStart@${child}`)).toBeLessThan(order.indexOf("PostToolUse@main"));
     expect(order.indexOf(`SubagentStop@${child}`)).toBeGreaterThan(order.indexOf("Stop@main"));
+  });
+
+  test("SubagentStop reports the session's other running background subagents", async () => {
+    const probe = probeWorld();
+    const session = await started(probe);
+    await session.prompt("two scans");
+    const spec = (task: string) => ({ agentType: "Explore", description: task, task, background: true, report: "ok" });
+    const first = (await session.subagent(spec("first scan"), async () => {}))!;
+    const second = (await session.subagent(spec("second scan"), async () => {}))!;
+    await session.completeBackground(first, async () => {});
+    const stop = probe.world.log.find((record) => record.event === "SubagentStop")!;
+    expect(stop.payload.background_tasks).toEqual([
+      {
+        id: second.launch.agentId,
+        type: "subagent",
+        status: "running",
+        description: "second scan",
+        agent_type: "Explore",
+      },
+    ]);
+  });
+
+  test("after compaction, prompts of the compacted conversation are no longer rewind targets", async () => {
+    const probe = probeWorld();
+    const session = await started(probe);
+    await session.prompt("before compaction");
+    await session.compact("auto", "Summary.");
+    await expect(session.rewind(0, "edited")).rejects.toThrow("no human prompt #0");
+    await session.prompt("after compaction");
+    expect(await session.rewind(0, "edited after")).toBe(true);
   });
 
   test("compaction writes the boundary and summary, and its events come in the captured order", async () => {

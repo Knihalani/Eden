@@ -210,9 +210,9 @@ describe("processes (target 3)", () => {
       expect(home).toBe(probe.world.home);
       expect(edenHome).toBe(join(probe.world.home, ".eden"));
       expect(memoryDir).toBe(join(probe.world.home, ".eden", "memory"));
-      const plugin = loadPlugin(PROBE_PLUGIN);
-      const env = hookEnv({ home: probe.world.home, projectDir: probe.world.projectDir, plugin });
-      expect(Object.keys(env).sort()).toEqual([
+      // What the process saw, less the variables the shell itself sets (PWD, SHLVL, _, OLDPWD).
+      const shell = new Set(["PWD", "SHLVL", "_", "OLDPWD"]);
+      expect(entry!.envNames.filter((name) => !shell.has(name))).toEqual([
         "CLAUDE_PLUGIN_DATA",
         "CLAUDE_PLUGIN_ROOT",
         "CLAUDE_PROJECT_DIR",
@@ -221,6 +221,8 @@ describe("processes (target 3)", () => {
         "HOME",
         "LANG",
         "PATH",
+        "PROBE_MODE",
+        "PROBE_OUT",
         "TMPDIR",
       ]);
     } finally {

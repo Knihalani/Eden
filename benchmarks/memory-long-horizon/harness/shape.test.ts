@@ -109,10 +109,11 @@ describe("script structure", () => {
     }
   });
 
-  test("a rewind targets a human prompt already on the branch", () => {
-    for (const script of scripts) {
+  test("a rewind targets a human prompt on the branch since the last compaction", () => {
+    for (const script of [...scripts, canonicalSession()]) {
       let onBranch = 0;
       for (const step of script.steps) {
+        if (step.kind === "compact") onBranch = 0;
         if (step.kind === "rewind") {
           expect(step.index).toBeGreaterThanOrEqual(0);
           expect(step.index).toBeLessThan(onBranch);
@@ -148,11 +149,17 @@ describe("the canonical replay session", () => {
     expect(Object.entries(features).filter(([, present]) => !present)).toEqual([]);
   });
 
-  test("keeps R6's proportions at its small scale", () => {
+  test("keeps R6's proportions, inside the pre-registered bands, at its small scale", () => {
     const s = shapeStats(script);
-    expect(s.humanPrompts).toBe(6);
-    expect(s.subagentWindows).toBe(8);
-    expect(s.nonHumanSubmits).toBe(8);
+    expect({ human: s.humanPrompts, nonHuman: s.nonHumanSubmits, subagents: s.subagentWindows }).toEqual({
+      human: 6,
+      nonHuman: 10,
+      subagents: 8,
+    });
+    expect(s.nonHumanSubmits / s.humanPrompts).toBeGreaterThanOrEqual(1.5);
+    expect(s.nonHumanSubmits / s.humanPrompts).toBeLessThanOrEqual(1.9);
+    expect(s.subagentWindows).toBeGreaterThanOrEqual(6.5);
+    expect(s.subagentWindows).toBeLessThanOrEqual(9.5);
     expect(CANONICAL_SHAPE.toolScale).toBeLessThan(1);
   });
 });

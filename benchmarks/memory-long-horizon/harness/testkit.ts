@@ -28,6 +28,8 @@ export interface Recorded {
   payload: Record<string, unknown>;
   /** cwd, CLAUDE_PLUGIN_ROOT, CLAUDE_PROJECT_DIR, HOME, EDEN_HOME, EDEN_MEMORY_DIR, as the process saw them. */
   env: string[];
+  /** The names of every environment variable the process saw, sorted. */
+  envNames: string[];
   /** The transcript as it was when the hook ran (PROBE_SNAPSHOT=1). */
   transcript?: string;
 }
@@ -65,6 +67,9 @@ function readRecorded(out: string): Recorded[] {
         env: readFileSync(join(out, `${pid}.env`), "utf8")
           .split("\n")
           .slice(0, 6),
+        envNames: readFileSync(join(out, `${pid}.envnames`), "utf8")
+          .split("\n")
+          .filter(Boolean),
         transcript: existsSync(snapshot) ? readFileSync(snapshot, "utf8") : undefined,
       };
     });

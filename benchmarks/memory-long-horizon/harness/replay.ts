@@ -115,25 +115,21 @@ function summarize(options: ReplayOptions, world: SimWorld, skipped: number): Re
 }
 
 /**
- * A digest of what the simulator did and what the hooks answered, with the run directory taken out of
- * every path: the event sequence in dispatch order, each payload, and each invocation's exit code and
- * reading. Two runs of
- * the same script in fresh processes must give the same digest.
+ * A digest of the event sequence in dispatch order, each payload with the run directory taken out of every
+ * path, and each invocation's exit code. Two runs of one script in fresh processes, from any run directory,
+ * must give the same digest. What hooks print is left out: it may vary with the plugin under test (the
+ * summary counts contexts separately), and it reaches the digest only through what it changes, such as a
+ * blocked prompt.
  */
 export function digest(log: readonly EventRecord[], runDir: string): string {
   const hash = createHash("sha256");
   for (const record of log) {
-    const answers = record.invocations.map((invocation: Invocation) => [
-      invocation.exitCode,
-      invocation.outcome.output,
-      invocation.outcome.additionalContext !== undefined,
-      invocation.outcome.blocked,
-    ]);
+    const exitCodes = record.invocations.map((invocation: Invocation) => invocation.exitCode);
     // The run directory appears as itself and, inside `transcript_path`, as part of the project slug.
     const payload = JSON.stringify(record.payload)
       .replaceAll(runDir, "<run>")
       .replaceAll(projectSlug(runDir), "<run-slug>");
-    hash.update(`${record.event}\t${record.window}\t${payload}\t${JSON.stringify(answers)}\n`);
+    hash.update(`${record.event}\t${record.window}\t${payload}\t${JSON.stringify(exitCodes)}\n`);
   }
   return hash.digest("hex");
 }
@@ -151,7 +147,8 @@ function percentiles(values: number[]): { p50: number; p99: number; max: number 
   return { p50: round(at(0.5)), p99: round(at(0.99)), max: round(sorted.at(-1)!) };
 }
 
-function listFiles(dir: string): string[] {
+/** Every file under `dir`, recursively; none when it does not exist. */
+export function listFiles(dir: string): string[] {
   try {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
       entry.isDirectory() ? listFiles(join(dir, entry.name)) : [join(dir, entry.name)],
