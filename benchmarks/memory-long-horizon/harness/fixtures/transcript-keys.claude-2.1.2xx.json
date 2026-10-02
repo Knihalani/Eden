@@ -1,0 +1,573 @@
+{
+  "source": "Key names of each transcript line kind, from this machine's Claude Code transcripts (~/.claude/projects, main and subagent files) on 2026-10-02. Keys only; no values. `all_keys` is every top-level key seen on the kind; `nested` lists the keys seen inside `message`, `attachment`, `origin` and `compactMetadata`.",
+  "claude_code_versions": [
+    "2.1.239",
+    "2.1.259",
+    "2.1.260",
+    "2.1.266",
+    "2.1.284"
+  ],
+  "kinds": {
+    "user/typed": {
+      "lines": 195,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug",
+        "turnOrigin",
+        "turnPosition"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ],
+        "origin": [
+          "kind"
+        ]
+      }
+    },
+    "user/queued": {
+      "lines": 2,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ],
+        "origin": [
+          "kind"
+        ]
+      }
+    },
+    "user/task-notification": {
+      "lines": 335,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "queueSkipAttachments",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug",
+        "turnOrigin",
+        "turnPosition",
+        "queueTranscriptOnly"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ],
+        "origin": [
+          "kind",
+          "producer"
+        ]
+      }
+    },
+    "user/peer": {
+      "lines": 65,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "isMeta",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "turnOrigin",
+        "queueSkipAttachments",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug",
+        "turnPosition"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ],
+        "origin": [
+          "kind",
+          "from",
+          "senderTaskId",
+          "body",
+          "handback",
+          "name"
+        ]
+      }
+    },
+    "assistant/text": {
+      "lines": 1683,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "message",
+        "apiBlockIndex",
+        "requestId",
+        "type",
+        "uuid",
+        "timestamp",
+        "advisorModel",
+        "effort",
+        "perTurnEffort",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "session_id",
+        "slug",
+        "serverClassifierRequest",
+        "attributionSkill",
+        "apiErrorIsTransient",
+        "error",
+        "isApiErrorMessage",
+        "apiErrorStatus",
+        "truncatedAfterOutput",
+        "errorDetails",
+        "healsDistinctCarrier",
+        "apiError",
+        "attributionPlugin",
+        "attributionMcpServer",
+        "attributionMcpTool"
+      ],
+      "nested": {
+        "message": [
+          "model",
+          "id",
+          "type",
+          "role",
+          "content",
+          "container",
+          "stop_reason",
+          "stop_sequence",
+          "stop_details",
+          "usage",
+          "input_transformations",
+          "diagnostics",
+          "context_management"
+        ]
+      }
+    },
+    "assistant/tool_use": {
+      "lines": 4376,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "message",
+        "wireToolInputs",
+        "apiBlockIndex",
+        "requestId",
+        "type",
+        "uuid",
+        "timestamp",
+        "advisorModel",
+        "effort",
+        "perTurnEffort",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "session_id",
+        "slug",
+        "attributionMcpServer",
+        "attributionMcpTool",
+        "wireIngestContext",
+        "serverClassifierRequest",
+        "attributionSkill",
+        "attributionPlugin"
+      ],
+      "nested": {
+        "message": [
+          "model",
+          "id",
+          "type",
+          "role",
+          "content",
+          "container",
+          "stop_reason",
+          "stop_sequence",
+          "stop_details",
+          "usage",
+          "input_transformations",
+          "diagnostics",
+          "context_management"
+        ]
+      }
+    },
+    "user/tool-result": {
+      "lines": 4375,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "toolUseResult",
+        "sourceToolAssistantUUID",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "session_id",
+        "slug",
+        "toolDenialKind",
+        "classifierMetaLines",
+        "serverClassifierContext"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ]
+      }
+    },
+    "user/compact-summary": {
+      "lines": 3,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "isVisibleInTranscriptOnly",
+        "isCompactSummary",
+        "uuid",
+        "timestamp",
+        "turnPosition",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug",
+        "turnOrigin",
+        "session_id"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ]
+      }
+    },
+    "system/compact_boundary": {
+      "lines": 3,
+      "all_keys": [
+        "parentUuid",
+        "logicalParentUuid",
+        "isSidechain",
+        "type",
+        "subtype",
+        "content",
+        "isMeta",
+        "timestamp",
+        "uuid",
+        "level",
+        "compactMetadata",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug"
+      ],
+      "nested": {
+        "compactMetadata": [
+          "trigger",
+          "preTokens",
+          "durationMs",
+          "preservedSegment",
+          "preservedMessages",
+          "postTokens",
+          "cumulativeDroppedTokens",
+          "preCompactDiscoveredTools"
+        ]
+      }
+    },
+    "attachment/hook_additional_context": {
+      "lines": 362,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "attachment",
+        "type",
+        "uuid",
+        "timestamp",
+        "rendered",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "session_id",
+        "slug",
+        "renderedRole"
+      ],
+      "nested": {
+        "attachment": [
+          "type",
+          "content",
+          "hookName",
+          "toolUseID",
+          "hookEvent"
+        ]
+      }
+    },
+    "attachment/queued_command": {
+      "lines": 152,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "attachment",
+        "type",
+        "uuid",
+        "timestamp",
+        "session_id",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug",
+        "rendered",
+        "renderedInHumanTurn"
+      ],
+      "nested": {
+        "attachment": [
+          "type",
+          "prompt",
+          "commandMode",
+          "timestamp",
+          "source_uuid",
+          "usage",
+          "origin",
+          "isMeta"
+        ]
+      }
+    },
+    "sidechain/user/task-prompt": {
+      "lines": 361,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "agentId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug",
+        "isMeta"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ]
+      }
+    },
+    "sidechain/assistant/text": {
+      "lines": 3279,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "agentId",
+        "message",
+        "apiBlockIndex",
+        "requestId",
+        "attributionAgent",
+        "type",
+        "uuid",
+        "timestamp",
+        "advisorModel",
+        "effort",
+        "perTurnEffort",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "attributionSkill",
+        "slug",
+        "attributionPlugin",
+        "error",
+        "isApiErrorMessage",
+        "apiErrorStatus",
+        "attributionMcpServer",
+        "attributionMcpTool",
+        "serverClassifierRequest",
+        "apiErrorIsTransient",
+        "errorDetails",
+        "healsDistinctCarrier"
+      ],
+      "nested": {
+        "message": [
+          "model",
+          "id",
+          "type",
+          "role",
+          "content",
+          "container",
+          "stop_reason",
+          "stop_sequence",
+          "stop_details",
+          "usage",
+          "input_transformations",
+          "diagnostics",
+          "context_management"
+        ]
+      }
+    },
+    "sidechain/assistant/tool_use": {
+      "lines": 30847,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "agentId",
+        "message",
+        "wireToolInputs",
+        "apiBlockIndex",
+        "requestId",
+        "attributionAgent",
+        "type",
+        "uuid",
+        "timestamp",
+        "advisorModel",
+        "effort",
+        "perTurnEffort",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "attributionSkill",
+        "slug",
+        "wireIngestContext",
+        "attributionPlugin",
+        "attributionMcpServer",
+        "attributionMcpTool",
+        "serverClassifierRequest"
+      ],
+      "nested": {
+        "message": [
+          "model",
+          "id",
+          "type",
+          "role",
+          "content",
+          "container",
+          "stop_reason",
+          "stop_sequence",
+          "stop_details",
+          "usage",
+          "input_transformations",
+          "diagnostics",
+          "context_management"
+        ]
+      }
+    },
+    "sidechain/user/tool-result": {
+      "lines": 30853,
+      "all_keys": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "agentId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "sourceToolAssistantUUID",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "toolUseResult",
+        "slug",
+        "toolDenialKind",
+        "classifierMetaLines",
+        "serverClassifierContext",
+        "classifierBoundary"
+      ],
+      "nested": {
+        "message": [
+          "role",
+          "content"
+        ]
+      }
+    }
+  }
+}
