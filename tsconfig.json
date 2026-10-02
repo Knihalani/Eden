@@ -13,6 +13,7 @@
     "apps/control/src",
     "apps/site/src",
     "benchmarks/memory-scale",
+    "benchmarks/memory-long-horizon",
     "scripts",
     "src"
   ],
