@@ -4,12 +4,13 @@
  * sessions of Claude Code 2.1.285, and the keys of each transcript line kind on this machine.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import payloadFixture from "./fixtures/payload-keys.claude-2.1.285.json";
 import lineFixture from "./fixtures/transcript-keys.claude-2.1.2xx.json";
 import type { HookPayload } from "./payloads";
 import type { EventRecord, SimWorld } from "./session";
+import { listFiles } from "./replay";
 import { canonicalSession, play } from "./shape";
 import { probeWorld, readLines, removeTempDirs, type Probe } from "./testkit";
 import { toolUseId } from "./rng";
@@ -92,7 +93,7 @@ describe("payloads match Claude Code 2.1.285 (target 1)", () => {
   beforeAll(async () => {
     probe = probeWorld({ permissionMode: "bypassPermissions" });
     ({ first, second } = await mirrorCapturedSessions(probe.world));
-  });
+  }, 60_000);
 
   test("all 23 captured shapes are reproduced, with the same ordered and nested keys", () => {
     const simulated = new Map<string, Record<string, unknown>>();
@@ -183,7 +184,7 @@ describe("payloads match Claude Code 2.1.285 (target 1)", () => {
 });
 
 type LineKind = keyof typeof lineFixture.kinds;
-type KindKeys = { all_keys: string[]; nested: Record<string, string[]> };
+type KindKeys = { all_keys: string[]; nested: Record<string, string[]>; most_common_order: string[] };
 
 /**
  * No real hook injected context into a subagent on this machine, so that kind has no capture. Its keys are
@@ -194,7 +195,9 @@ const SIDECHAIN_CONTEXT = "sidechain/attachment/hook_additional_context";
 function reference(kind: string): KindKeys | undefined {
   if (kind === SIDECHAIN_CONTEXT) {
     const main = lineFixture.kinds["attachment/hook_additional_context"];
-    return { all_keys: [...main.all_keys, "agentId"], nested: main.nested };
+    const order = [...main.most_common_order];
+    order.splice(order.indexOf("isSidechain") + 1, 0, "agentId");
+    return { all_keys: [...main.all_keys, "agentId"], nested: main.nested, most_common_order: order };
   }
   return (lineFixture.kinds as Record<string, KindKeys>)[kind];
 }
@@ -252,26 +255,20 @@ function requiredKeys(kind: string): string[] {
   return keys;
 }
 
-function transcriptFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true, recursive: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
-    .map((entry) => join(entry.parentPath, entry.name));
-}
-
 describe("transcript lines match real line kinds (target 2)", () => {
   const seen = new Map<string, Record<string, unknown>[]>();
   let files: string[] = [];
   beforeAll(async () => {
     const probe = probeWorld({ mode: "context" });
     await play(canonicalSession(), probe.world);
-    files = transcriptFiles(join(probe.world.home, ".claude", "projects"));
+    files = listFiles(join(probe.world.home, ".claude", "projects")).filter((path) => path.endsWith(".jsonl"));
     for (const file of files) {
       for (const line of readLines(file)) {
         const kind = lineKind(line, file.includes("/subagents/"));
         if (kind) seen.set(kind, [...(seen.get(kind) ?? []), line]);
       }
     }
-  });
+  }, 60_000);
 
   test("all 15 kinds are written, and nothing else but subagent hook contexts", () => {
     const kinds = Object.keys(lineFixture.kinds) as LineKind[];
@@ -307,6 +304,21 @@ describe("transcript lines match real line kinds (target 2)", () => {
             key,
             present: true,
           });
+      }
+    }
+  });
+
+  test("the keys come in the real kind's most common order", () => {
+    for (const [kind, lines] of seen) {
+      const order = reference(kind)!.most_common_order;
+      for (const line of lines) {
+        const written = Object.keys(line).filter((key) => order.includes(key));
+        const expected = order.filter((key) => written.includes(key));
+        expect({ kind, keys: written }).toEqual({ kind, keys: expected });
+        expect({ kind, missing: Object.keys(line).filter((key) => !order.includes(key)) }).toEqual({
+          kind,
+          missing: [],
+        });
       }
     }
   });

@@ -7,7 +7,7 @@
  * windows and 1.7 non-human submits per main window. How those split into parts is modelled, not measured;
  * each choice is named where it is made. Prompt and file text is synthetic: no real prompt is ever used.
  */
-import { Rng, toolUseId, type Knot } from "./rng";
+import { hashString, Rng, toolUseId, type Knot } from "./rng";
 import {
   BASE_CONTEXT_TOKENS,
   notificationText,
@@ -127,10 +127,10 @@ export const R6_SHAPE: ShapeParams = {
     [0.9, 150],
     [1, 600],
   ],
-  subagentsPerTurn: 1.65,
+  subagentsPerTurn: 1.58,
   subagentTurnShare: 0.35,
   backgroundShare: 0.88,
-  peersPerTurn: 0.25,
+  peersPerTurn: 0.31,
   midTurnShare: 0.2,
   rewindShare: 0.27,
   resumeShare: 0.15,
@@ -217,13 +217,16 @@ class Generator {
     const summary = this.text(4_000, "summary");
     this.steps.push({ kind: "compact", trigger: "auto", summary, atTokens: Math.round(this.context) });
     this.context = BASE_CONTEXT_TOKENS + tokensOf(summary);
+    // As in the simulator, prompts of the compacted conversation are no longer rewind targets.
+    this.contextBefore.splice(0);
   }
 
   private prompt(turn: number, rewind: boolean): void {
     const text = this.rng.chance(this.p.chatterShare) ? "continue" : this.task();
-    if (rewind) {
-      // Only prompts on the branch can be rewound to; a mid-turn prompt is not one (it has no prompt line).
-      const onBranch = this.contextBefore.length;
+    // Only prompts on the branch since the last compaction can be rewound to; a mid-turn prompt is not one
+    // (it has no prompt line). With none, the rewind does not happen.
+    const onBranch = this.contextBefore.length;
+    if (rewind && onBranch > 0) {
       const index = this.rng.int(Math.max(0, onBranch - 2), onBranch - 1);
       this.context = this.contextBefore[index]!;
       this.contextBefore.splice(index);
@@ -387,7 +390,7 @@ const WORDS = [
 
 /** Deterministic synthetic text of about `chars` characters, from the key alone. */
 export function filler(key: string, chars: number): string {
-  const rng = new Rng([...key].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261));
+  const rng = new Rng(hashString(key));
   const lines: string[] = [];
   let size = 0;
   while (size < chars) {
@@ -535,11 +538,12 @@ export async function play(script: SessionScript, world: SimWorld): Promise<Play
 }
 
 /**
- * The gate's session (P0.0a target 5): R6's shape with every feature switched on, scaled down so a CI run
- * spawns about 130 hook processes. Seed 2043 is the one of the first 3,000 whose script has every feature
- * with the ratios nearest R6's (8 subagent windows; 8 non-human submits for 6 human prompts).
+ * The gate's session (P0.0a target 5): R6's shape with every feature switched on, scaled down for CI.
+ * The seed rule: among seeds 1–3,000 whose script has every feature, the one nearest R6's ratios, scored
+ * |non-human ÷ human − 1.7| / 1.7 + |subagent windows − 8.2| / 8.2 (ties: fewer tool calls). That is 1937:
+ * 10 non-human submits for 6 human prompts, 8 subagent windows, 55 tool calls.
  */
-export const CANONICAL_SEED = 2043;
+export const CANONICAL_SEED = 1937;
 export const CANONICAL_SHAPE: Partial<ShapeParams> = {
   humanPrompts: [
     [0, 6],

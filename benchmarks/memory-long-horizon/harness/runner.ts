@@ -147,6 +147,8 @@ const EXIT_2_BLOCKS = new Set<HookEvent>([
   "PreCompact",
 ]);
 
+const PERMISSION_DECISIONS: readonly unknown[] = ["allow", "deny", "ask", "defer"];
+
 const DECISION_BLOCKS = new Set<HookEvent>(["UserPromptSubmit", "PostToolBatch", "Stop", "SubagentStop", "PreCompact"]);
 
 export function interpretOutput(
@@ -204,8 +206,6 @@ function readJson(event: HookEvent, json: Record<string, unknown>): Partial<Hook
   }
   return read;
 }
-
-const PERMISSION_DECISIONS: readonly unknown[] = ["allow", "deny", "ask", "defer"];
 
 /** Seconds before Claude Code cancels a command hook (hooks reference, "Common fields"). */
 export function timeoutSeconds(event: HookEvent, handler: HookHandler): number {

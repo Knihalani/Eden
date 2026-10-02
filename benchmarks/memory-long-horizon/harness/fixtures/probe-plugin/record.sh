@@ -14,6 +14,7 @@ payload="$PROBE_OUT/$$.json"
 cat > "$payload"
 printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$PWD" "$CLAUDE_PLUGIN_ROOT" "$CLAUDE_PROJECT_DIR" "$HOME" "$EDEN_HOME" \
   "$EDEN_MEMORY_DIR" > "$PROBE_OUT/$$.env"
+env | sed 's/=.*//' | sort > "$PROBE_OUT/$$.envnames"
 event=$(sed -n 's/.*"hook_event_name":"\([A-Za-z]*\)".*/\1/p' "$payload")
 if [ "${PROBE_SNAPSHOT:-}" = 1 ]; then
   transcript=$(sed -n 's/.*"transcript_path":"\([^"]*\)".*/\1/p' "$payload")
