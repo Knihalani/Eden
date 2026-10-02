@@ -90,6 +90,13 @@ export class Rng {
   }
 }
 
+/** FNV-1a over a string's UTF-16 code units, from `basis`: a stable seed for a named stream. */
+export function hashString(text: string, basis = 2166136261): number {
+  let hash = basis >>> 0;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619) >>> 0;
+  return hash;
+}
+
 /** A random (version 4) UUID, as Claude Code uses for `prompt_id`, `session_id` and transcript `uuid`s. */
 export function uuidV4(rng: Rng): string {
   const h = rng.hex(32).split("");

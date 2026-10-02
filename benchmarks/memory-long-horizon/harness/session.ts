@@ -10,8 +10,13 @@
  * - events are serialized, except a parallel batch of concurrency-safe calls (Read), whose PreToolUse and
  *   PostToolUse hooks run concurrently, as Claude Code runs them;
  * - a background subagent launches in one step and completes in a later one (`completeBackground`), so it is
- *   in Stop's `background_tasks` in between; its events do not interleave with the main thread's;
- * - time is a simulated clock; context size is estimated at 4 characters per token.
+ *   in `background_tasks` in between; its events do not interleave with the main thread's;
+ * - a hook cannot keep the agent going: Stop and SubagentStop continuations (exit 2, `decision: "block"`,
+ *   `additionalContext`) and a PostToolBatch block are recorded in the event log but not acted on;
+ * - time is a simulated clock; context size is estimated at 4 characters per token of conversation text, with
+ *   the run directory counted as a fixed placeholder. Hook-injected context is not counted: a hook's answer
+ *   acts on the session only through control flow (a block, a denial) and the transcript, so a plugin whose
+ *   text varies between runs cannot change the payloads that follow, nor can where a run lives.
  */
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -39,7 +44,7 @@ import {
   type PermissionMode,
   type SessionEndReason,
 } from "./payloads";
-import { agentId, projectSlug, Rng, toolUseId, uuidV4 } from "./rng";
+import { agentId, hashString, projectSlug, Rng, toolUseId, uuidV4 } from "./rng";
 import { HookRunner, hookEnv, type Invocation, type Plugin } from "./runner";
 import { agentCall, toolResultContent, type AgentLaunch, type ToolCall } from "./tools";
 import { Transcript, type OriginKind, type Usage } from "./transcript";
@@ -153,16 +158,18 @@ export class SimWorld {
     this.clock += Math.round(ms);
   }
 
+  /** The token estimate of text the model sees, with the run directory counted as a fixed placeholder. */
+  tokens(text: string): number {
+    return tokensOf(text.replaceAll(this.runDir, "<run>"));
+  }
+
   transcriptPath(sessionId: string): string {
     return join(this.home, ".claude", "projects", projectSlug(this.projectDir), `${sessionId}.jsonl`);
   }
 
-  /** A transcript whose line uuids come from their own stream, seeded by the file's name. */
+  /** A transcript whose line uuids come from their own stream, seeded by its session and window, not its path. */
   transcript(path: string, sessionId: string, agentId?: string): Transcript {
-    const seed = [...path.slice(this.runDir.length)].reduce(
-      (h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0,
-      this.options.seed >>> 0,
-    );
+    const seed = hashString(`${sessionId}/${agentId ?? "main"}`, this.options.seed);
     const envelope = { sessionId, cwd: this.projectDir, version: CLAUDE_CODE_VERSION, gitBranch: "main" };
     const eager = this.options.flush === "eager";
     return new Transcript(path, envelope, new Rng(seed), () => this.now(), { agentId, eager });
@@ -236,7 +243,7 @@ export class Window {
 
   /** Counts a line's model-visible text into the context estimate, and remembers the size after it. */
   record(uuid: string, text: string): void {
-    this.contextTokens += tokensOf(text);
+    this.contextTokens += this.session.world.tokens(text);
     this.tokensAt.set(uuid, this.contextTokens);
   }
 
@@ -255,7 +262,7 @@ export class Window {
       input_tokens: 4,
       cache_creation_input_tokens: Math.max(0, this.contextTokens - this.reportedTokens),
       cache_read_input_tokens: this.reportedTokens,
-      output_tokens: tokensOf(outputText),
+      output_tokens: this.session.world.tokens(outputText),
     };
     this.reportedTokens = this.contextTokens;
     return usage;
@@ -475,17 +482,21 @@ export class SimSession {
   }
 
   async stop(): Promise<void> {
-    const backgroundTasks: BackgroundTask[] = this.background.map((run) => ({
+    const stop = { lastAssistantMessage: this.main.lastText, backgroundTasks: this.backgroundTasks() };
+    await this.dispatch(stopPayload(this.ctx(), stop), this.main);
+    this.world.advance(1_000);
+    this.endStep();
+  }
+
+  /** The session's running background subagents, as Stop and SubagentStop report them (parent-scoped). */
+  private backgroundTasks(): BackgroundTask[] {
+    return this.background.map((run) => ({
       id: run.launch.agentId,
       type: "subagent",
       status: "running",
       description: run.launch.description,
       agent_type: run.launch.subagentType,
     }));
-    const payload = stopPayload(this.ctx(), { lastAssistantMessage: this.main.lastText, backgroundTasks });
-    this.attach(this.main, "Stop", await this.dispatch(payload, this.main), "Stop");
-    this.world.advance(1_000);
-    this.endStep();
   }
 
   /**
@@ -517,7 +528,7 @@ export class SimSession {
       return null;
     }
 
-    const childPath = join(this.transcriptPath.slice(0, -".jsonl".length), "subagents", `agent-${id}.jsonl`);
+    const childPath = this.subagentTranscriptPath(id);
     const child = new Window(this, this.open(this.world.transcript(childPath, this.sessionId, id)), {
       id,
       type: spec.agentType,
@@ -558,16 +569,17 @@ export class SimSession {
     const pre = await this.dispatch(preCompactPayload(this.ctx(), trigger, customInstructions), this.main);
     if (pre.some((invocation) => invocation.outcome.blocked)) return false;
     const compactor = { id: agentId(this.world.ids), type: "" };
-    const compactorPath = join(
-      this.transcriptPath.slice(0, -".jsonl".length),
-      "subagents",
-      `agent-${compactor.id}.jsonl`,
-    );
-    const stop = { lastAssistantMessage: summary, agentTranscriptPath: compactorPath };
+    const stop = {
+      lastAssistantMessage: summary,
+      agentTranscriptPath: this.subagentTranscriptPath(compactor.id),
+      backgroundTasks: this.backgroundTasks(),
+    };
     await this.world.dispatch(subagentStopPayload(this.ctx(compactor), stop), compactor.id);
     const preTokens = this.main.tokens;
     this.main.resetTokens(BASE_CONTEXT_TOKENS);
-    this.main.transcript.compactBoundary(trigger, preTokens, BASE_CONTEXT_TOKENS + tokensOf(summary), 30_000);
+    // Prompts of the compacted conversation are no longer rewind targets (our reading; unverified).
+    this.humanPrompts.splice(0);
+    this.main.transcript.compactBoundary(trigger, preTokens, BASE_CONTEXT_TOKENS + this.world.tokens(summary), 30_000);
     this.main.record(this.main.transcript.compactSummary(summary, this.promptId), summary);
     this.world.advance(30_000);
     const started = await this.dispatch(sessionStartPayload(this.ctx(), "compact", { model: MODEL }), this.main);
@@ -615,8 +627,15 @@ export class SimSession {
       const context = invocation.outcome.additionalContext;
       if (context === undefined) continue;
       const id = event === "UserPromptSubmit" ? `hook-${window.transcript.uuid()}` : toolUseID;
-      window.record(window.transcript.hookContext(event, event, id, context), context);
+      // Recorded with no text: the estimate leaves hook output out (see the header), but a rewind may
+      // branch from this line.
+      window.record(window.transcript.hookContext(event, event, id, context), "");
     }
+  }
+
+  /** `<session>/subagents/agent-<id>.jsonl`, next to the main transcript (R0 F27). */
+  private subagentTranscriptPath(id: string): string {
+    return join(this.transcriptPath.slice(0, -".jsonl".length), "subagents", `agent-${id}.jsonl`);
   }
 
   private nextPrompt(): { promptId: string; permissionMode: PermissionMode } {
@@ -657,9 +676,12 @@ export class SimSession {
     const startedAt = this.world.timeMs;
     await body(run.window);
     await run.window.assistant(run.launch.report);
-    const stop = { lastAssistantMessage: run.launch.report, agentTranscriptPath: run.window.transcript.path };
-    const invocations = await this.dispatch(subagentStopPayload(run.window.ctx(), stop), run.window);
-    this.attach(run.window, "SubagentStop", invocations, "SubagentStop");
+    const stop = {
+      lastAssistantMessage: run.launch.report,
+      agentTranscriptPath: run.window.transcript.path,
+      backgroundTasks: this.backgroundTasks(),
+    };
+    await this.dispatch(subagentStopPayload(run.window.ctx(), stop), run.window);
     this.endStep();
     const launch = { ...run.launch, toolUses: run.window.toolCalls, tokens: run.window.tokens };
     return { ...run, launch, call: agentCall(run.call.id, launch, this.world.timeMs - startedAt) };

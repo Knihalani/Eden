@@ -219,7 +219,7 @@ export class Transcript {
     }));
   }
 
-  /** `promptId` is absent when compaction runs before the process's first prompt (after a resume). */
+  /** `promptId` is absent when auto compaction runs before a resumed process's first prompt. */
   compactSummary(summary: string, promptId: string | undefined): string {
     const content =
       "This session is being continued from a previous conversation that ran out of context. " +
