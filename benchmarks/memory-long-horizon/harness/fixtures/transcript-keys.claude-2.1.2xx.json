@@ -39,7 +39,25 @@
         "origin": [
           "kind"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "user/queued": {
       "lines": 2,
@@ -69,7 +87,25 @@
         "origin": [
           "kind"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "user/task-notification": {
       "lines": 335,
@@ -105,7 +141,26 @@
           "kind",
           "producer"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "queueSkipAttachments",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "user/peer": {
       "lines": 65,
@@ -145,7 +200,29 @@
           "handback",
           "name"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "isMeta",
+        "uuid",
+        "timestamp",
+        "permissionMode",
+        "origin",
+        "promptSource",
+        "turnOrigin",
+        "turnPosition",
+        "queueSkipAttachments",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "assistant/text": {
       "lines": 1683,
@@ -199,7 +276,28 @@
           "diagnostics",
           "context_management"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "message",
+        "serverClassifierRequest",
+        "apiBlockIndex",
+        "requestId",
+        "type",
+        "uuid",
+        "timestamp",
+        "advisorModel",
+        "effort",
+        "perTurnEffort",
+        "session_id",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "assistant/tool_use": {
       "lines": 4376,
@@ -247,7 +345,24 @@
           "diagnostics",
           "context_management"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "message",
+        "apiBlockIndex",
+        "type",
+        "uuid",
+        "timestamp",
+        "effort",
+        "session_id",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "user/tool-result": {
       "lines": 4375,
@@ -278,7 +393,25 @@
           "role",
           "content"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "toolUseResult",
+        "sourceToolAssistantUUID",
+        "session_id",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "user/compact-summary": {
       "lines": 3,
@@ -308,7 +441,26 @@
           "role",
           "content"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "type",
+        "message",
+        "isVisibleInTranscriptOnly",
+        "isCompactSummary",
+        "uuid",
+        "timestamp",
+        "turnPosition",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug"
+      ]
     },
     "system/compact_boundary": {
       "lines": 3,
@@ -343,7 +495,26 @@
           "cumulativeDroppedTokens",
           "preCompactDiscoveredTools"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "logicalParentUuid",
+        "isSidechain",
+        "type",
+        "subtype",
+        "content",
+        "level",
+        "compactMetadata",
+        "uuid",
+        "timestamp",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch",
+        "slug"
+      ]
     },
     "attachment/hook_additional_context": {
       "lines": 362,
@@ -373,7 +544,22 @@
           "toolUseID",
           "hookEvent"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "attachment",
+        "type",
+        "uuid",
+        "timestamp",
+        "rendered",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "attachment/queued_command": {
       "lines": 152,
@@ -406,7 +592,24 @@
           "origin",
           "isMeta"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "attachment",
+        "type",
+        "uuid",
+        "timestamp",
+        "rendered",
+        "renderedInHumanTurn",
+        "session_id",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "sidechain/user/task-prompt": {
       "lines": 361,
@@ -433,7 +636,23 @@
           "role",
           "content"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "agentId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "sidechain/assistant/text": {
       "lines": 3279,
@@ -486,7 +705,25 @@
           "diagnostics",
           "context_management"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "agentId",
+        "message",
+        "apiBlockIndex",
+        "attributionAgent",
+        "type",
+        "uuid",
+        "timestamp",
+        "effort",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "sidechain/assistant/tool_use": {
       "lines": 30847,
@@ -535,7 +772,25 @@
           "diagnostics",
           "context_management"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "agentId",
+        "message",
+        "apiBlockIndex",
+        "attributionAgent",
+        "type",
+        "uuid",
+        "timestamp",
+        "effort",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     },
     "sidechain/user/tool-result": {
       "lines": 30853,
@@ -567,7 +822,27 @@
           "role",
           "content"
         ]
-      }
+      },
+      "most_common_order": [
+        "parentUuid",
+        "isSidechain",
+        "promptId",
+        "agentId",
+        "type",
+        "message",
+        "uuid",
+        "timestamp",
+        "toolUseResult",
+        "sourceToolAssistantUUID",
+        "userType",
+        "entrypoint",
+        "cwd",
+        "sessionId",
+        "version",
+        "gitBranch"
+      ]
     }
-  }
+  },
+  "claude_code_versions_note": "The five Claude Code versions with the most lines of these kinds in the snapshot, not every version seen.",
+  "most_common_order_note": "Per kind, the most frequent ordered key list; other lines of the kind add or drop keys around it."
 }
