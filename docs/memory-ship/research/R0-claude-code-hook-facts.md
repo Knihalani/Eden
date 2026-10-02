@@ -44,6 +44,17 @@
 | F29 | The FileChanged matcher is a literal filename in the working directory; arbitrary files need `watchPaths` (absolute), and each return **replaces** the list | `hooks.md:2859, 2922` | Citation watching returns the full `watchPaths` list every time |
 | F30 | Common field `prompt_id` (v2.1.196+); UserPromptSubmit has **no origin field**; pasted text arrives expanded between `<pasted_content id=…>` markers when paste marking is on | `hooks.md:737, 1337` | Idempotent `hturn`; non-human detection is textual; exact paste stripping |
 
+### Added 2026-10-02 from real payloads (P0.0a probe capture)
+
+A probe plugin that registers every event recorded the payloads of two headless Claude Code 2.1.285 sessions: a Read, two Bash calls in one message, a failing Bash call and an Explore subagent; then `--resume` and `/compact`. The key lists are in `benchmarks/memory-long-horizon/harness/fixtures/payload-keys.claude-2.1.285.json`.
+
+| # | Fact | Evidence | Design consequence |
+|---|---|---|---|
+| F31 | Field order and presence: `prompt_id` appears once the process has had a prompt (absent on SessionStart(startup/resume) and the InstructionsLoaded before them, present on SessionEnd, PreCompact, SessionStart(compact)); `permission_mode` on UserPromptSubmit and the tool-context events; `effort` on the tool-context events only; `agent_id`/`agent_type` after `permission_mode` in a subagent | 23 captured shapes | Encoders must not assume `prompt_id` on SessionStart |
+| F32 | `/compact` fires PreCompact, then **SubagentStop for an internal compaction agent** (`agent_type: ""`, an `agent_transcript_path` with no file), then SessionStart(compact) (with `model`), then PostCompact | resume-then-compact sequence | SubagentStop handlers (D25 fold, P1.2) must skip `agent_type: ""`; SessionStart(compact) runs **before** PostCompact sees `compact_summary` |
+| F33 | Two Bash calls in one assistant message run one after the other: PreToolUse, PostToolUse, PreToolUse, PostToolUse, then one PostToolBatch. The transcript writes one assistant line per `tool_use` block | debug log `tool_dispatch_start/end` | Concurrent PostToolUse (F11) is for concurrency-safe tools such as Read |
+| F34 | A peer message is a transcript `user` line with `isMeta: true`, `origin.kind: "peer"`, text opening `Another Claude session sent a message:` then `<agent-message from="…">`; its `queued_command` form starts with `<agent-message`. The UserPromptSubmit `prompt` for it was **not** captured | this machine's transcripts | D24's prefix test is right for the queued form; check the live payload before relying on it for idle peer messages |
+
 ## Corrections this forces in the design
 
 1. **Resume is not a reset** (F5). Replayed packets are still in context after `--resume`, so the ledger survives resume. `clear` and `compact` reset; for `fork`, copy the parent ledger.
