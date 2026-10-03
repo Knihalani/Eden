@@ -56,36 +56,36 @@ Each metric is computed per arm from the harness's **oracle files** (§3) and Ed
 - The FIR gate is a point estimate on ≥ 300 real negatives with the interval printed. It is called certified only when the upper bound is ≤ 5% (≈ 460 negatives at an observed 3%).
 
 **A/A noise floors** (P0.0b, 2026-10-03; [report](reports/P0.0b.md)).
-- **Setup.** Today's `plugins/eden-memory` against itself, every run in fresh processes (`harness/aa.ts`, harness at `8ed6fa4dd`):
-  - the world scenario (`harness/world.ts`) at seeds 1, 2 and 3, three runs each;
-  - the latency soak (`replay.ts --soak 1000`), three runs.
-- **The floor** is the largest spread (max − min) between the runs of one seed. For `need_miss` it is also the most cues whose outcome flips between two runs of a seed. p99 floors come from the soak, the only workload with ≥ 1,000 samples per point.
-- **Why today's plugin is noisy.** Every seed's three runs fired the identical event sequence (same digest), so the spread is the plugin's own: its row ids come from `process.pid % 36` (#98, P0.3).
-- **What the rule requires.** No tolerance may be tighter than its floor, so until an A/A re-run after P0.3 shows a smaller floor:
-  - for `redundant_rate`, `need_miss_rate` and `p99`, the floor is the effective tolerance;
-  - a slice that needs a finer comparison uses the paired per-cue test above.
+- **Setup.** Today's `plugins/eden-memory` against itself, every run in fresh processes (`harness/aa.ts`, harness code at `b4b11bfff`):
+  - the world scenario (`harness/world.ts`) at seeds 1, 2 and 3, ten runs each;
+  - the latency soak (`replay.ts --soak 1000`), four runs.
+- **The floor** is the largest spread (max − min) between the runs of one seed. For `need_miss` it is also the most cues whose outcome flips between two runs of a seed: the discordant pairs a McNemar test counts. p99 floors come from the soak, the only workload with ≥ 1,000 samples per point.
+- **Every floor is a lower bound.** A range only grows with more runs. The first A/A, three runs per seed, gave narrower ranges (`redundant_rate` 2.42 pp, `false_rate` 0.03 pp, Stop p99 80.7 ms); these ten-run ranges are wider, and more runs could widen them again.
+- **Why today's plugin is noisy.** Every seed's runs fired the identical event sequence (one digest per seed), so the spread comes from the plugin. The likely cause is its pid-derived row ids (#98, P0.3); this A/A does not prove the mechanism.
+- **What the rule requires.** No tolerance may be tighter than its floor. Where the table says **no**, a single-run comparison against today's plugin cannot detect a change of the tolerance's size. Such a slice compares by the paired per-cue test above, over several fresh runs per side, and uses these ranges only to size it. Re-run this A/A after P0.3.
 
-| Metric | Values per run (seed 1 · 2 · 3) | Noise floor | Tolerance | Tolerance ≥ floor? |
+| Metric | Range over 10 runs (seed 1 · 2 · 3) | Noise floor (lower bound) | Tolerance | Tolerance ≥ floor? |
 |---|---|---|---|---|
-| `stale_rate` | 4.4 4.6 4.4 · 12.7 7.1 8.6 · 1.5 1.5 1.6 % | 5.58 pp | hard gate 0 | today's plugin is not at the gate |
-| `redundant_rate` | 48.4 49.4 47.8 · 35.5 33.0 35.2 · 56.0 57.3 57.8 % | 2.42 pp | +1 pp | **no** |
-| `need_miss_rate` (6 cues per run) | 4 3 4 · 4 4 4 · 5 5 4 missed | 1 cue; 3 cues flip between two runs | +1 cue (long-horizon) | **no** (paired) |
-| `false_rate` | 100 100 100 · 100 100 100 · 98.85 98.84 98.86 % | 0.03 pp | +0.5 pp | yes |
-| silence, non-human submits | 13 12 12 /71 · 16 16 16 /58 · 18 16 13 /77 | 6.49 pp | hard gate 0 | today's plugin is not at the gate |
-| silence, `ack` turns | 0 0 0 /1 · 0 0 0 /1 · 0 0 0 /3 | 0 | hard gate 0 | yes |
-| `packet_rate` | 18 17 18 /36 · 22 21 21 /39 · 25 26 26 /47 | 2.78 pp | — | — |
-| `tokens_per_epoch` p99 | 1764 1845 1827 · 1188 1211 1211 · 1192 1135 1175 | 81 tokens | ≤ 6k (gate) | — |
-| `guard_recall` / `guard_precision` | 0/1 every run / no `ask` | 0 / n/a | — | — |
-| `secret_bytes` | 0 every run | 0 | hard gate 0 | yes |
-| `poison_hits` | 3 every run | 0 | hard gate 0 | today's plugin is not at the gate |
-| `p99_hook_ms` UserPromptSubmit (n = 1,000) | 376.5 412.5 433.5 | 57.0 ms | +10 ms | **no** |
-| `p99_hook_ms` PostToolUse (n = 971) | 237.3 299.6 245.3 | 62.3 ms | +10 ms | **no** |
-| `p99_hook_ms` Stop (n = 1,000) | 1373.4 1347.0 1427.7 | 80.7 ms | +10 ms | **no** |
+| `stale_rate` | 4.12–4.76 · 7.34–12.84 · 1.44–1.56 % | 5.50 pp | hard gate 0 | today's plugin is not at the gate |
+| `redundant_rate` | 45.24–51.58 · 31.13–36.21 · 55.81–59.38 % | 6.34 pp | +1 pp | **no** |
+| `need_miss_rate` (6 cues per run) | 2–4 · 4–4 · 4–5 missed | 2 cues; 3 cues flip between two runs | +1 cue (long-horizon) | **no** |
+| `false_rate` | 98.15–100 · 100–100 · 98.82–98.88 % | 1.85 pp | +0.5 pp | **no** |
+| silence, non-human submits | 12–19 /71 · 15–17 /58 · 14–20 /77 | 9.86 pp | hard gate 0 | today's plugin is not at the gate |
+| silence, `ack` turns | 0 /1 · 0 /1 · 0 /3 in every run | 0 | hard gate 0 | yes |
+| `packet_rate` | 17–18 /36 · 21–22 /39 · 25–26 /47 | 2.78 pp | — | — |
+| `tokens_per_epoch` p99 | 1747–1994 · 1104–1211 · 1152–1235 | 247 tokens | ≤ 6k (gate) | — |
+| `guard_recall` / `guard_precision` | 0/1 in every run / no `ask` | 0 / n/a | — | — |
+| `secret_bytes` | 0 in every run | 0 | hard gate 0 | yes |
+| `poison_hits` | 3 in every run | 0 | hard gate 0 | today's plugin is not at the gate |
+| `p99_hook_ms` UserPromptSubmit (n = 1,000) | 386.0–460.7 ms | 74.7 ms | +10 ms | **no** |
+| `p99_hook_ms` PostToolUse (n = 971) | 292.0–353.2 ms | 61.2 ms | +10 ms | **no** |
+| `p99_hook_ms` Stop (n = 1,000) | 1272.5–1656.4 ms | 383.9 ms | +10 ms | **no** |
 
 Not measured by this A/A, so no floor yet:
 - silence on real negatives (P0.0d);
 - `abort_rate` (P0.8);
 - `restate_rate` (dogfood);
+- `poison_hits` on pins (P0.4, P2.1);
 - p99 at points today's plugin does not register (PreToolUse, PostToolBatch, SubagentStart).
 
 **Ship rule** (R3 F20):
