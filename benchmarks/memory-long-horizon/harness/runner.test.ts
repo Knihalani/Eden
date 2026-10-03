@@ -151,12 +151,13 @@ describe("processes (target 3)", () => {
     const invocations = probe.world.log.flatMap((record) => record.invocations);
     expect(invocations).toHaveLength(7);
     expect(new Set(invocations.map((invocation) => invocation.pid)).size).toBe(7);
-    expect(
-      probe
-        .recorded()
-        .map((entry) => entry.pid)
-        .sort(),
-    ).toEqual(invocations.map((i) => i.pid).sort());
+    // Each process recorded one payload under its own pid. That pid is the hook script's: on Linux, dash forks
+    // it from the spawned `sh -c` (pid + 1), while macOS's sh execs it, so the two sets are not compared.
+    const recorded = probe.recorded();
+    expect(recorded).toHaveLength(7);
+    expect(new Set(recorded.map((entry) => entry.pid)).size).toBe(7);
+    const sent = probe.world.log.map((record) => JSON.stringify(record.payload)).sort();
+    expect(recorded.map((entry) => entry.raw).sort()).toEqual(sent);
   });
 
   test("a parallel batch of n Reads fires n PostToolUse processes that overlap in time", async () => {
