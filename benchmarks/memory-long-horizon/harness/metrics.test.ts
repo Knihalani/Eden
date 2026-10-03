@@ -127,7 +127,7 @@ describe("stale, redundant, need_miss and false on Submit packets", () => {
     ]);
   });
 
-  test("a value the window states for another scope neither makes a scoped bullet redundant nor meets a need", async () => {
+  test("a value stated for another scope is neither redundant nor meets a need", async () => {
     const world = demo([submit("check the cli db", "- packages/cli database: postgres")]);
     const session = await started(world);
     const sets = [
