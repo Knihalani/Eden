@@ -157,7 +157,7 @@ export function checkScenario(scenario: Required<Scenario>): void {
     for (const step of script.steps) {
       if (step.kind === "repo") oracle.apply(step.sets, "repo", at());
       if (step.kind !== "prompt" && step.kind !== "rewind" && step.kind !== "queued-prompt") continue;
-      checkCue(step.cue, oracle);
+      checkCue(step.cue, oracle, scenario.world.scopes);
       oracle.apply(step.sets ?? [], "user", at());
       for (const need of step.cue.needs) {
         const { key, scope } = parseItemId(need);
