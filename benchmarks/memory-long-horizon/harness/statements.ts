@@ -84,12 +84,12 @@ export function statementsIn(text: string, subjects: readonly Subject[], scopes:
   for (const sentence of sentencesOf(text.toLowerCase())) {
     for (const subject of subjects) {
       const named = names(sentence, subject);
-      for (const segment of sentence.split(" · ")) {
+      for (const { segment, start } of segmentsOf(sentence)) {
         for (const [value, phrases] of Object.entries(subject.values)) {
           if (!named && !subject.standalone?.includes(value)) continue;
           const at = phrases.flatMap((phrase) => assertedAt(segment, phrase.toLowerCase()))[0];
           if (at === undefined) continue;
-          const scope = scopeAt(segment, at, scopes) ?? scopeAt(sentence, sentence.indexOf(segment) + at, scopes);
+          const scope = scopeOf(sentence, start + at, scopes);
           const statement: Statement = { key: subject.key, value, ...(scope === undefined ? {} : { scope }) };
           found.set(JSON.stringify(statement), statement);
         }
@@ -99,15 +99,16 @@ export function statementsIn(text: string, subjects: readonly Subject[], scopes:
   return [...found.values()];
 }
 
-/** Which sentences may count: those naming none of the world's `scopes`, or naming one of `accept`. */
+/** Which statements may count: those about none of the world's `scopes`, or about one of `accept`. */
 export interface ScopeFilter {
   scopes: readonly string[];
   accept: readonly string[];
 }
 
 /**
- * Whether `text` (already lowercase) states that `subject` has `value`. With a filter, a sentence that names
- * another scope does not count ("apps/web uses postgres" does not state the cli's database).
+ * Whether `text` (already lowercase) states that `subject` has `value`. With a filter, a statement about another
+ * scope does not count ("apps/web uses postgres" does not state the cli's database). Each occurrence is about the
+ * scope `statementsIn` would give it, so one sentence can state different values for different scopes.
  */
 export function statesValue(lower: string, subject: Subject, value: string, where?: ScopeFilter): boolean {
   for (const phrase of subject.values[value] ?? []) {
@@ -116,8 +117,8 @@ export function statesValue(lower: string, subject: Subject, value: string, wher
       if (!assertedAt(sentence.text, phrase.toLowerCase()).includes(at - sentence.start)) continue;
       if (!subject.standalone?.includes(value) && !names(sentence.text, subject)) continue;
       if (!where) return true;
-      const named = scopesNamed(sentence.text, where.scopes);
-      if (!named.length || named.some((item) => where.accept.includes(item.scope))) return true;
+      const scope = scopeOf(sentence.text, at - sentence.start, where.scopes);
+      if (scope === undefined || where.accept.includes(scope)) return true;
     }
   }
   return false;
@@ -184,4 +185,20 @@ export function mentions(text: string, subject: Subject): boolean {
 function scopeAt(text: string, at: number, scopes: readonly string[]): string | undefined {
   const named = scopesNamed(text, scopes);
   return named.filter((item) => item.at <= at).at(-1)?.scope ?? named[0]?.scope;
+}
+
+/** A sentence's ` · ` segments (A4's two-scope bullet), each with its offset in the sentence. */
+function segmentsOf(sentence: string): { segment: string; start: number }[] {
+  let start = 0;
+  return sentence.split(" · ").map((segment) => {
+    const at = start;
+    start += segment.length + " · ".length;
+    return { segment, start: at };
+  });
+}
+
+/** The scope of a statement at `at` in `sentence`: decided in its own segment, else in the whole sentence. */
+function scopeOf(sentence: string, at: number, scopes: readonly string[]): string | undefined {
+  const { segment, start } = segmentsOf(sentence).findLast((part) => part.start <= at)!;
+  return scopeAt(segment, at - start, scopes) ?? scopeAt(sentence, at, scopes);
 }
