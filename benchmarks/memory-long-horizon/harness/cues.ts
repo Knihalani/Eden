@@ -35,7 +35,15 @@ export function plainCue(scope = "", mode?: Cue["mode"]): Cue {
   return { needs: [], allowed: [], scope, ...(mode ? { mode } : {}) };
 }
 
-/** Throws unless every item the cue names belongs to a subject of the world. */
-export function checkCue(cue: Cue, oracle: Oracle): void {
-  for (const id of [...cue.needs, ...cue.allowed]) oracle.subject(parseItemId(id).key);
+/** Throws unless the cue's scope and every item it names (subject and scope) belong to the world. */
+export function checkCue(cue: Cue, oracle: Oracle, scopes: readonly string[]): void {
+  const known = (scope: string, what: string) => {
+    if (!scopes.includes(scope)) throw new Error(`${what} names scope "${scope}", which is not in the world`);
+  };
+  known(cue.scope, "a cue");
+  for (const id of [...cue.needs, ...cue.allowed]) {
+    const { key, scope } = parseItemId(id);
+    oracle.subject(key);
+    known(scope, id);
+  }
 }

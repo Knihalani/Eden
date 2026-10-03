@@ -127,6 +127,32 @@ describe("stale, redundant, need_miss and false on Submit packets", () => {
     ]);
   });
 
+  test("a value the window states for another scope neither makes a scoped bullet redundant nor meets a need", async () => {
+    const world = demo([submit("check the cli db", "- packages/cli database: postgres")]);
+    const session = await started(world);
+    const sets = [
+      { key: "db.engine", scope: "apps/web", value: "postgres" },
+      { key: "db.engine", scope: "packages/cli", value: "sqlite" },
+    ];
+    await session.prompt("In apps/web the database is postgres. The cli is fine.", "typed", {
+      cue: plainCue(""),
+      sets,
+    });
+    const dbCli = itemId("db.engine", "packages/cli");
+    await session.prompt("check the cli db", "typed", { cue: cue("packages/cli", [dbCli]) });
+    await session.prompt("packages/cli runs sqlite as its database. check the cli db", "typed", {
+      cue: cue("packages/cli", [dbCli]),
+    });
+    const metrics = computeMetrics(world, DEMO_WORLD);
+    // Cue 2: the packet says postgres for the cli (stale), only apps/web's sentence says postgres (not
+    // redundant), and nothing states the cli's sqlite (missed). Cue 3: the prompt itself states it (met); the
+    // bullet is now redundant because cue 2's copy of it is in the window.
+    expect(metrics.cues.slice(1).map(({ missed, stale, redundant }) => ({ missed, stale, redundant }))).toEqual([
+      { missed: true, stale: 1, redundant: 0 },
+      { missed: false, stale: 1, redundant: 1 },
+    ]);
+  });
+
   test("a need for an item that holds no value is an annotation error, not a miss", async () => {
     const world = demo([]);
     const session = await started(world);
@@ -271,7 +297,12 @@ describe("the statistics", () => {
     const world = demo([]);
     await started(world);
     const metrics = computeMetrics(world, DEMO_WORLD);
-    expect(Object.keys(metrics.not_measured).sort()).toEqual(["abort_rate", "restate_rate", "silence.real_negatives"]);
+    expect(Object.keys(metrics.not_measured).sort()).toEqual([
+      "abort_rate",
+      "poison_hits.pins",
+      "restate_rate",
+      "silence.real_negatives",
+    ]);
     expect(metrics.p99_hook_ms.SessionStart).toMatchObject({ n: 1 });
   });
 });

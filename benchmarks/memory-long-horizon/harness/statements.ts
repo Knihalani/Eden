@@ -99,14 +99,25 @@ export function statementsIn(text: string, subjects: readonly Subject[], scopes:
   return [...found.values()];
 }
 
-/** Whether `text` (already lowercase) states that `subject` has `value` somewhere, in any scope. */
-export function statesValue(lower: string, subject: Subject, value: string): boolean {
+/** Which sentences may count: those naming none of the world's `scopes`, or naming one of `accept`. */
+export interface ScopeFilter {
+  scopes: readonly string[];
+  accept: readonly string[];
+}
+
+/**
+ * Whether `text` (already lowercase) states that `subject` has `value`. With a filter, a sentence that names
+ * another scope does not count ("apps/web uses postgres" does not state the cli's database).
+ */
+export function statesValue(lower: string, subject: Subject, value: string, where?: ScopeFilter): boolean {
   for (const phrase of subject.values[value] ?? []) {
     for (const at of occurrences(lower, phrase.toLowerCase())) {
       const sentence = sentenceAround(lower, at);
-      if (assertedAt(sentence.text, phrase.toLowerCase()).includes(at - sentence.start)) {
-        if (subject.standalone?.includes(value) || names(sentence.text, subject)) return true;
-      }
+      if (!assertedAt(sentence.text, phrase.toLowerCase()).includes(at - sentence.start)) continue;
+      if (!subject.standalone?.includes(value) && !names(sentence.text, subject)) continue;
+      if (!where) return true;
+      const named = scopesNamed(sentence.text, where.scopes);
+      if (!named.length || named.some((item) => where.accept.includes(item.scope))) return true;
     }
   }
   return false;
