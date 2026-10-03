@@ -55,6 +55,14 @@ A probe plugin that registers every event recorded the payloads of two headless 
 | F33 | Two Bash calls in one assistant message run one after the other: PreToolUse, PostToolUse, PreToolUse, PostToolUse, then one PostToolBatch. The transcript writes one assistant line per `tool_use` block | debug log `tool_dispatch_start/end` | Concurrent PostToolUse (F11) is for concurrency-safe tools such as Read |
 | F34 | A peer message is a transcript `user` line with `isMeta: true`, `origin.kind: "peer"`, text opening `Another Claude session sent a message:` then `<agent-message from="…">`; its `queued_command` form starts with `<agent-message`. The UserPromptSubmit `prompt` for it was **not** captured | this machine's transcripts | D24's prefix test is right for the queued form; check the live payload before relying on it for idle peer messages |
 
+### Added 2026-10-03 from real sessions (P0.0b end-to-end check)
+
+Two headless Claude Code 2.1.285 sessions in a project whose `CLAUDE.md` held a marker (`ZEBRA-7731`). Each subagent was asked, with no tools, to list every token of that shape in its context; its task text never contained the marker (checked in its transcript).
+
+| # | Fact | Evidence | Design consequence |
+|---|---|---|---|
+| F35 | A **general-purpose** subagent's context holds the project's `CLAUDE.md`; **Explore** and **Plan** subagents' contexts do not. **No InstructionsLoaded fires inside any of them**: the probe saw one, `session_start`, for the main thread only | sessions `d43429be-…` (general-purpose reported the marker) and `9f8d15cb-…` (Explore and Plan reported only the example token); one trial each, the subagent's own report | D27's per-window shadow set cannot come from InstructionsLoaded inside a subagent: by type, a general-purpose window starts with the parent's instruction files, Explore and Plan with none. The harness's simulated window follows this |
+
 ## Corrections this forces in the design
 
 1. **Resume is not a reset** (F5). Replayed packets are still in context after `--resume`, so the ledger survives resume. `clear` and `compact` reset; for `fork`, copy the parent ledger.

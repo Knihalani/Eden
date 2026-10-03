@@ -70,6 +70,13 @@ export const DECLINED =
   "the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how " +
   "to proceed.";
 
+/**
+ * Subagent types whose context omits the project's instruction files. Observed in Claude Code 2.1.285 on
+ * 2026-10-03, one headless session each, from the subagent's own report of a marker placed in CLAUDE.md: a
+ * general-purpose subagent saw it, Explore and Plan subagents did not. No InstructionsLoaded fired inside any.
+ */
+const OMITS_INSTRUCTIONS = new Set(["Explore", "Plan"]);
+
 /** Tools Claude Code runs concurrently within one batch; the others run one after another. */
 const CONCURRENT_TOOLS = new Set(["Read"]);
 
@@ -648,6 +655,9 @@ export class SimSession {
       type: spec.agentType,
     });
     child.scope = this.main.scope;
+    if (!OMITS_INSTRUCTIONS.has(spec.agentType)) {
+      for (const [path, text] of this.main.seen.instructionFiles) child.seen.loadInstructions(path, text);
+    }
     const meta = { agentType: spec.agentType, description: spec.description, toolUseId: call.id, spawnDepth: 1 };
     writeFileSync(childPath.replace(/\.jsonl$/, ".meta.json"), JSON.stringify(meta));
     child.record(child.transcript.taskPrompt(spec.task, this.promptIdOrThrow()), spec.task);
