@@ -133,6 +133,19 @@ export class Oracle {
     return removed;
   }
 
+  /**
+   * The values `key` holds at `scope` and below it, each at the scope that sets it: where an unscoped
+   * statement in a turn at `scope` can be true when `scope` itself holds no value.
+   */
+  within(key: string, scope: string, seq: number): Truth[] {
+    const scopes = new Set(this.entries.filter((entry) => entry.key === key).map((entry) => entry.scope));
+    const below = [...scopes].filter((candidate) => !scope || candidate === scope || candidate.startsWith(`${scope}/`));
+    return below.flatMap((candidate) => {
+      const value = this.latest(key, candidate, seq)?.value;
+      return value ? [{ scope: candidate, value }] : [];
+    });
+  }
+
   write(path: string): void {
     writeFileSync(path, this.entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
   }
