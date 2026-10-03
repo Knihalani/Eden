@@ -55,6 +55,39 @@ Each metric is computed per arm from the harness's **oracle files** (§3) and Ed
 - For **sampled** metrics, a regression counts only if a paired test rejects at 95% or the point estimate crosses a hard gate.
 - The FIR gate is a point estimate on ≥ 300 real negatives with the interval printed. It is called certified only when the upper bound is ≤ 5% (≈ 460 negatives at an observed 3%).
 
+**A/A noise floors** (P0.0b, 2026-10-03; [report](reports/P0.0b.md)).
+- **Setup.** Today's `plugins/eden-memory` against itself, every run in fresh processes (`harness/aa.ts`, harness at `8ed6fa4dd`):
+  - the world scenario (`harness/world.ts`) at seeds 1, 2 and 3, three runs each;
+  - the latency soak (`replay.ts --soak 1000`), three runs.
+- **The floor** is the largest spread (max − min) between the runs of one seed. For `need_miss` it is also the most cues whose outcome flips between two runs of a seed. p99 floors come from the soak, the only workload with ≥ 1,000 samples per point.
+- **Why today's plugin is noisy.** Every seed's three runs fired the identical event sequence (same digest), so the spread is the plugin's own: its row ids come from `process.pid % 36` (#98, P0.3).
+- **What the rule requires.** No tolerance may be tighter than its floor, so until an A/A re-run after P0.3 shows a smaller floor:
+  - for `redundant_rate`, `need_miss_rate` and `p99`, the floor is the effective tolerance;
+  - a slice that needs a finer comparison uses the paired per-cue test above.
+
+| Metric | Values per run (seed 1 · 2 · 3) | Noise floor | Tolerance | Tolerance ≥ floor? |
+|---|---|---|---|---|
+| `stale_rate` | 4.4 4.6 4.4 · 12.7 7.1 8.6 · 1.5 1.5 1.6 % | 5.58 pp | hard gate 0 | today's plugin is not at the gate |
+| `redundant_rate` | 48.4 49.4 47.8 · 35.5 33.0 35.2 · 56.0 57.3 57.8 % | 2.42 pp | +1 pp | **no** |
+| `need_miss_rate` (6 cues per run) | 4 3 4 · 4 4 4 · 5 5 4 missed | 1 cue; 3 cues flip between two runs | +1 cue (long-horizon) | **no** (paired) |
+| `false_rate` | 100 100 100 · 100 100 100 · 98.85 98.84 98.86 % | 0.03 pp | +0.5 pp | yes |
+| silence, non-human submits | 13 12 12 /71 · 16 16 16 /58 · 18 16 13 /77 | 6.49 pp | hard gate 0 | today's plugin is not at the gate |
+| silence, `ack` turns | 0 0 0 /1 · 0 0 0 /1 · 0 0 0 /3 | 0 | hard gate 0 | yes |
+| `packet_rate` | 18 17 18 /36 · 22 21 21 /39 · 25 26 26 /47 | 2.78 pp | — | — |
+| `tokens_per_epoch` p99 | 1764 1845 1827 · 1188 1211 1211 · 1192 1135 1175 | 81 tokens | ≤ 6k (gate) | — |
+| `guard_recall` / `guard_precision` | 0/1 every run / no `ask` | 0 / n/a | — | — |
+| `secret_bytes` | 0 every run | 0 | hard gate 0 | yes |
+| `poison_hits` | 3 every run | 0 | hard gate 0 | today's plugin is not at the gate |
+| `p99_hook_ms` UserPromptSubmit (n = 1,000) | 376.5 412.5 433.5 | 57.0 ms | +10 ms | **no** |
+| `p99_hook_ms` PostToolUse (n = 971) | 237.3 299.6 245.3 | 62.3 ms | +10 ms | **no** |
+| `p99_hook_ms` Stop (n = 1,000) | 1373.4 1347.0 1427.7 | 80.7 ms | +10 ms | **no** |
+
+Not measured by this A/A, so no floor yet:
+- silence on real negatives (P0.0d);
+- `abort_rate` (P0.8);
+- `restate_rate` (dogfood);
+- p99 at points today's plugin does not register (PreToolUse, PostToolBatch, SubagentStart).
+
 **Ship rule** (R3 F20):
 - Fixtures are deterministic. Seeds only vary the long-horizon schedule generator (3 seeds).
 - A slice ships if its **pre-registered** target moves by its stated delta and no other metric regresses beyond this tolerance:
@@ -76,9 +109,9 @@ Each metric is computed per arm from the harness's **oracle files** (§3) and Ed
 1. **Claude-shaped events.** SessionStart / UserPromptSubmit / PostToolBatch / PostToolUseFailure / PreToolUse (incl. `PreToolUse(Agent)`) / SubagentStart / SubagentStop / Stop / PreCompact / PostCompact / InstructionsLoaded payloads, exactly as in R0, including `permission_mode`, and with no task prompt on SubagentStart.
 2. **Process per event** (fresh `bun`), including concurrent PostToolUse bursts.
 3. **Real transcript format**: attachments (`hook_additional_context`), `parentUuid` branches (rewinds), `compact_boundary`, subagent transcripts, task-notification submits, queued prompts. The schema is copied from R6 §1.1.
-4. **World oracle** (`oracle.jsonl`): the true value of every slot and policy over time, including silent repo changes (lockfile swap, dependency removal).
-5. **Simulated context window**: the harness tracks exactly what the model would see on the current branch.
-6. **Annotated cues**: every scripted human prompt carries `needs` and `allowed`.
+4. **World oracle** (`oracle.jsonl`): the true value of every slot and policy over time, including silent repo changes (lockfile swap, dependency removal). Built in P0.0b: `harness/oracle.ts`.
+5. **Simulated context window**: the harness tracks exactly what the model would see on the current branch. Built in P0.0b: `harness/window.ts`. A general-purpose subagent's window starts with the parent's instruction files; Explore and Plan windows start without them (R0 F35).
+6. **Annotated cues**: every scripted human prompt carries `needs` and `allowed`. Built in P0.0b: `harness/cues.ts`. The metrics of §2 are computed from these files only (`harness/metrics.ts`, whose header says how each definition is read).
 7. **Real-negative set**: ≥ 300 prompts drawn from logged human prompts (scrubbed) plus the R1 hard negatives. Kept out of git if drawn from private transcripts.
 8. **Session shape from R6**: sessions of 1–24 human prompts (median 3); about 8 subagent windows per main window; about 1.7 non-human submits per human submit; a rewind in 27% of sessions; compaction around 600k tokens.
 
