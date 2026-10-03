@@ -139,6 +139,19 @@ describe("what a window states", () => {
     expect(statesValue(window, subject("pkg.manager"), "pnpm", cli)).toBe(true);
   });
 
+  test("in a sentence naming two scopes, each value counts only for its own", () => {
+    const db = subject("db.engine");
+    const auth = subject("auth.provider");
+    const cli = { scopes, accept: ["packages/cli"] };
+    const both = "in apps/web the database is postgres, and in packages/cli it is sqlite.";
+    expect(statesValue(both, db, "postgres", cli)).toBe(false);
+    expect(statesValue(both, db, "sqlite", cli)).toBe(true);
+    const fanOut = "auth — apps/web: clerk · packages/cli: none";
+    expect(statesValue(fanOut, auth, "Clerk", cli)).toBe(false);
+    expect(statesValue(fanOut, auth, "none", cli)).toBe(true);
+    expect(statesValue(fanOut, auth, "Clerk", { scopes, accept: ["apps/web"] })).toBe(true);
+  });
+
   test("a subject is mentioned by a word or by a value that names it alone", () => {
     expect(mentions("fix the failing test in apps/web/src/auth.ts", subject("auth.provider"))).toBe(true);
     expect(mentions("bump pnpm", subject("pkg.manager"))).toBe(true);
