@@ -16,7 +16,10 @@
  * - time is a simulated clock; context size is estimated at 4 characters per token of conversation text, with
  *   the run directory counted as a fixed placeholder. Hook-injected context is not counted: a hook's answer
  *   acts on the session only through control flow (a block, a denial) and the transcript, so a plugin whose
- *   text varies between runs cannot change the payloads that follow, nor can where a run lives.
+ *   text varies between runs cannot change the payloads that follow, nor can where a run lives. Every value
+ *   built from the estimate leaves it out: SessionStart(resume) `context_tokens` and
+ *   `estimated_cache_write_usd`, the Agent result's `totalTokens`, a task notification's
+ *   `<subagent_tokens>`, `message.usage`, and `compactMetadata.preTokens`.
  */
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
