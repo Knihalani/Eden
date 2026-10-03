@@ -10,7 +10,7 @@ import payloadFixture from "./fixtures/payload-keys.claude-2.1.285.json";
 import lineFixture from "./fixtures/transcript-keys.claude-2.1.2xx.json";
 import type { HookPayload } from "./payloads";
 import type { EventRecord, SimWorld } from "./session";
-import { listFiles } from "./replay";
+import { listFiles } from "./metrics";
 import { canonicalSession, play } from "./shape";
 import { probeWorld, readLines, removeTempDirs, type Probe } from "./testkit";
 import { toolUseId } from "./rng";

@@ -1,27 +1,34 @@
 #!/usr/bin/env bun
 /**
- * Replays one R6-shaped session through a plugin's hooks, every hook in its own process, and prints a JSON
- * summary: events per point, exit codes, latency, contexts, transcript size, and a digest of the event log
- * that two runs of the same script must share.
+ * Replays R6-shaped sessions through a plugin's hooks, every hook in its own process, and prints a JSON
+ * summary: events per point, exit codes, latency, contexts, transcript size, a digest of the event log that
+ * two runs of the same script must share, and the A5 §2 metrics (metrics.ts).
  *
- *   bun benchmarks/memory-long-horizon/harness/replay.ts [--canonical | --seed N] [--plugin DIR] [--out DIR]
- *       [--flush lagging|eager]
+ *   bun benchmarks/memory-long-horizon/harness/replay.ts [--canonical | --seed N | --world N | --soak TURNS]
+ *       [--plugin DIR] [--out DIR] [--flush lagging|eager]
+ *
+ * `--seed N` plays one generated session; `--world N` plays the world scenario of seed N (world.ts), several
+ * sessions in one repo, with its oracle and annotated cues; `--soak TURNS` plays the latency soak (shape.ts).
  *
  * Defaults: the canonical session, `plugins/eden-memory` from this tree, a temporary run directory that is
- * removed afterwards (`--out` keeps it, with `script.json` and `events.jsonl`).
+ * removed afterwards. `--out` keeps it, with `scenario.json`, `events.jsonl` and the oracle files under
+ * `oracle/` (`oracle.jsonl`, `cues.jsonl`, `deliveries.jsonl`).
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { computeMetrics, latencyByPoint, listFiles, type Corpus, type Latency, type Metrics } from "./metrics";
 import { projectSlug } from "./rng";
 import { loadPlugin, type Invocation } from "./runner";
 import { SimWorld, type EventRecord } from "./session";
-import { canonicalSession, generateSession, play, shapeStats, type SessionScript } from "./shape";
+import { canonicalSession, generateSession, shapeStats, soakSession } from "./shape";
+import { generateWorldScenario, playScenario, sessionScenario, type Scenario } from "./world";
 
 export interface ReplaySummary {
   seed: number;
   plugin: string;
+  sessions: number;
   steps: number;
   skippedSteps: number;
   shape: {
@@ -41,13 +48,14 @@ export interface ReplaySummary {
   failOpen: { nonZeroExit: number; timedOut: number; withStderr: number; rejectedOutput: number };
   contexts: number;
   blocked: number;
-  msByPoint: Record<string, { p50: number; p99: number; max: number }>;
+  msByPoint: Record<string, Latency>;
   transcript: { files: number; lines: number; bytes: number };
   digest: string;
+  metrics: Metrics;
 }
 
 export interface ReplayOptions {
-  script: SessionScript;
+  scenario: Scenario;
   pluginDir: string;
   runDir: string;
   flush?: "lagging" | "eager";
@@ -56,40 +64,43 @@ export interface ReplayOptions {
 
 export async function replay(options: ReplayOptions): Promise<{ summary: ReplaySummary; world: SimWorld }> {
   const plugin = loadPlugin(options.pluginDir);
+  const { scenario } = options;
   const world = new SimWorld({
     runDir: options.runDir,
     plugin,
-    seed: options.script.seed,
+    seed: scenario.seed,
     flush: options.flush,
     env: options.env,
+    projectFiles: scenario.world?.projectFiles,
+    subjects: scenario.world?.subjects,
+    initialTruth: scenario.world?.initialTruth,
   });
-  const result = await play(options.script, world);
-  return { summary: summarize(options, world, result.skipped), world };
+  const results = await playScenario(scenario, world);
+  const skipped = results.reduce((n, result) => n + result.skipped, 0);
+  return { summary: summarize(scenario, world, skipped), world };
 }
 
-function summarize(options: ReplayOptions, world: SimWorld, skipped: number): ReplaySummary {
+/** A run without a world still has scopes to read packets by: the root. */
+const NO_WORLD: Corpus = { scopes: [""], secrets: [], poison: [] };
+
+function summarize(scenario: Scenario, world: SimWorld, skipped: number): ReplaySummary {
   const invocations = world.log.flatMap((record) => record.invocations);
-  const byPoint = new Map<string, number[]>();
-  for (const record of world.log) {
-    for (const invocation of record.invocations) {
-      const list = byPoint.get(record.event) ?? [];
-      list.push(invocation.endedAt - invocation.startedAt);
-      byPoint.set(record.event, list);
-    }
-  }
   const transcripts = listFiles(join(world.home, ".claude", "projects")).filter((path) => path.endsWith(".jsonl"));
-  const stats = shapeStats(options.script);
+  const stats = scenario.sessions.map(shapeStats);
+  const total = (field: "humanPrompts" | "nonHumanSubmits" | "subagentWindows" | "rewinds" | "compactions") =>
+    stats.reduce((n, session) => n + session[field], 0);
   return {
-    seed: options.script.seed,
+    seed: scenario.seed,
     plugin: world.options.plugin.name,
-    steps: options.script.steps.length,
+    sessions: scenario.sessions.length,
+    steps: scenario.sessions.reduce((n, session) => n + session.steps.length, 0),
     skippedSteps: skipped,
     shape: {
-      humanPrompts: stats.humanPrompts,
-      nonHumanSubmits: stats.nonHumanSubmits,
-      subagentWindows: stats.subagentWindows,
-      rewinds: stats.rewinds,
-      compactions: stats.compactions,
+      humanPrompts: total("humanPrompts"),
+      nonHumanSubmits: total("nonHumanSubmits"),
+      subagentWindows: total("subagentWindows"),
+      rewinds: total("rewinds"),
+      compactions: total("compactions"),
     },
     events: world.log.length,
     eventsByPoint: countBy(world.log.map((record) => record.event)),
@@ -104,14 +115,27 @@ function summarize(options: ReplayOptions, world: SimWorld, skipped: number): Re
     },
     contexts: invocations.filter((invocation) => invocation.outcome.additionalContext !== undefined).length,
     blocked: invocations.filter((invocation) => invocation.outcome.blocked).length,
-    msByPoint: Object.fromEntries([...byPoint].map(([point, ms]) => [point, percentiles(ms)])),
+    msByPoint: latencyByPoint(world),
     transcript: {
       files: transcripts.length,
       lines: transcripts.reduce((n, path) => n + readFileSync(path, "utf8").split("\n").filter(Boolean).length, 0),
       bytes: transcripts.reduce((n, path) => n + statSync(path).size, 0),
     },
     digest: digest(world.log, world.runDir),
+    metrics: computeMetrics(world, scenario.world ?? NO_WORLD),
   };
+}
+
+/** The oracle files of a run (A5 §3): the truth timeline, the annotated cues, and what the model received. */
+function writeOracleFiles(world: SimWorld, dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  const lines = (rows: readonly unknown[]) => rows.map((row) => JSON.stringify(row)).join("\n") + "\n";
+  world.oracle.write(join(dir, "oracle.jsonl"));
+  writeFileSync(
+    join(dir, "cues.jsonl"),
+    lines(world.cues.map(({ seen: _seen, ...cue }, index) => ({ index, ...cue }))),
+  );
+  writeFileSync(join(dir, "deliveries.jsonl"), lines(world.deliveries.map(({ seen: _seen, ...delivery }) => delivery)));
 }
 
 /**
@@ -140,42 +164,33 @@ function countBy(values: readonly string[]): Record<string, number> {
   return out;
 }
 
-function percentiles(values: number[]): { p50: number; p99: number; max: number } {
-  const sorted = [...values].sort((a, b) => a - b);
-  const at = (p: number) => sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)]!;
-  const round = (ms: number) => Math.round(ms * 10) / 10;
-  return { p50: round(at(0.5)), p99: round(at(0.99)), max: round(sorted.at(-1)!) };
-}
-
-/** Every file under `dir`, recursively; none when it does not exist. */
-export function listFiles(dir: string): string[] {
-  try {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory() ? listFiles(join(dir, entry.name)) : [join(dir, entry.name)],
-    );
-  } catch {
-    return [];
-  }
-}
-
 function argument(args: string[], name: string): string | undefined {
   const at = args.indexOf(name);
   return at >= 0 ? args[at + 1] : undefined;
 }
 
-async function main(args: string[]): Promise<void> {
+function scenarioOf(args: string[]): Scenario {
+  const world = argument(args, "--world");
+  if (world !== undefined) return generateWorldScenario(Number(world));
+  const soak = argument(args, "--soak");
+  if (soak !== undefined) return sessionScenario(soakSession(Number(soak)));
   const seed = argument(args, "--seed");
-  const script = seed === undefined ? canonicalSession() : generateSession(Number(seed));
+  return sessionScenario(seed === undefined ? canonicalSession() : generateSession(Number(seed)));
+}
+
+async function main(args: string[]): Promise<void> {
+  const scenario = scenarioOf(args);
   const pluginDir = resolve(argument(args, "--plugin") ?? join(import.meta.dir, "../../../plugins/eden-memory"));
   const out = argument(args, "--out");
   const flush = argument(args, "--flush") === "eager" ? "eager" : "lagging";
   const runDir = out ? resolve(out) : mkdtempSync(join(tmpdir(), "eden-replay-"));
   mkdirSync(runDir, { recursive: true });
   try {
-    const { summary, world } = await replay({ script, pluginDir, runDir, flush });
+    const { summary, world } = await replay({ scenario, pluginDir, runDir, flush });
     if (out) {
-      writeFileSync(join(runDir, "script.json"), JSON.stringify(script, null, 2));
+      writeFileSync(join(runDir, "scenario.json"), JSON.stringify(scenario, null, 2));
       writeFileSync(join(runDir, "events.jsonl"), world.log.map((record) => JSON.stringify(record)).join("\n") + "\n");
+      writeOracleFiles(world, join(runDir, "oracle"));
     }
     console.log(JSON.stringify(summary, null, 2));
   } finally {
