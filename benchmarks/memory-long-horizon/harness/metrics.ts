@@ -7,14 +7,16 @@
  * - A packet is one delivered context; its bullets are its `- ` lines (statements.ts).
  * - `stale`: a bullet states a value that is not the oracle's value for that item at that event, in the scope
  *   the bullet names, else the packet header's, else the scope of the window's turn. When the bullet names no
- *   scope and the turn's scope holds no value of that item, the bullet is about whichever scope below it holds
- *   the value (a SessionStart packet at the root saying "auth is Clerk" while apps/web uses Clerk). An item
- *   that holds no value counts as a different value.
+ *   scope and no value of that item was ever set at the turn's scope or above it, the bullet is about whichever
+ *   scope below it holds the value (a SessionStart packet at the root saying "auth is Clerk" while apps/web uses
+ *   Clerk). An item that holds no value counts as a different value.
  * - `redundant`: the window already holds the bullet's content (normalized), or states every value the bullet
- *   states (in any scope: the model reads the value, not our label). The window is the one the packet lands
- *   in, as it was before this event's contexts.
+ *   states, in a sentence that names that value's scope or no scope at all (a bullet that names no scope is
+ *   matched in any sentence). The window is the one the packet lands in, as it was before this event's
+ *   contexts.
  * - `need_miss`: an annotated cue with needs, where a needed item's current value is neither stated by a bullet
- *   of its packet nor already in its window (in any scope, as for `redundant`).
+ *   of its packet nor already in its window, in a sentence that names the needed scope, the scope that sets
+ *   the value, or no scope.
  * - `false`: a bullet of an annotated packet that states no item in the cue's `needs ∪ allowed`.
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -92,6 +94,7 @@ export interface Metrics {
 
 export const NOT_MEASURED: Record<string, string> = {
   "silence.real_negatives": "P0.0d: the real-negative set",
+  "poison_hits.pins": "P0.4 / P2.1: a pin is known only from Eden's store format; packets are counted",
   abort_rate: "P0.8: budget aborts are known only from Eden's wide events",
   restate_rate: "dogfood only (A5 §5)",
 };
@@ -226,14 +229,19 @@ class Judge {
     const stated = bullets.some((bullet) =>
       bullet.stated.some((statement) => statement.item === item && statement.value === truth.value),
     );
-    return stated || statesValue(this.lowerOf(record.seen), this.oracle.subject(key), truth.value);
+    const where = { scopes: this.corpus.scopes, accept: [scope, truth.scope] };
+    return stated || statesValue(this.lowerOf(record.seen), this.oracle.subject(key), truth.value, where);
   }
 
   private redundant(content: string, statements: readonly Statement[], seen: WindowSnapshot): boolean {
     if (containsNormalized(this.normalizedOf(seen), normalize(content))) return true;
     if (!statements.length) return false;
     const lower = this.lowerOf(seen);
-    return statements.every((statement) => statesValue(lower, this.oracle.subject(statement.key), statement.value));
+    return statements.every((statement) => {
+      const where =
+        statement.scope === undefined ? undefined : { scopes: this.corpus.scopes, accept: [statement.scope] };
+      return statesValue(lower, this.oracle.subject(statement.key), statement.value, where);
+    });
   }
 
   /** An item as the oracle defines it then: `pkg.manager@apps/web` is `pkg.manager@` while only the root sets it. */
@@ -360,7 +368,9 @@ export function latencyByPoint(world: SimWorld): Record<string, Latency> {
   const byPoint = new Map<string, number[]>();
   for (const record of world.log) {
     for (const invocation of record.invocations) {
-      byPoint.set(record.event, [...(byPoint.get(record.event) ?? []), invocation.endedAt - invocation.startedAt]);
+      const samples = byPoint.get(record.event) ?? [];
+      samples.push(invocation.endedAt - invocation.startedAt);
+      byPoint.set(record.event, samples);
     }
   }
   return Object.fromEntries([...byPoint].map(([point, ms]) => [point, latency(ms)]));
@@ -403,7 +413,7 @@ function sum<T>(items: readonly T[], value: (item: T) => number): number {
   return items.reduce((n, item) => n + value(item), 0);
 }
 
-function countBy(values: readonly string[]): Record<string, number> {
+export function countBy(values: readonly string[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const value of values) out[value] = (out[value] ?? 0) + 1;
   return out;

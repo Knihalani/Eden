@@ -134,9 +134,9 @@ async function main(args: string[]): Promise<void> {
     for (let i = 0; i < runs; i++) {
       const run = replayOnce(["--world", String(seed), "--plugin", plugin]);
       world[seed].push(run);
-      const m = run.metrics;
+      const { stale_rate: stale, need_miss_rate: needMiss } = run.metrics;
       console.error(
-        `world ${seed} run ${i + 1}: ${run.seconds}s stale ${percent(m.stale_rate)} need_miss ${percent(m.need_miss_rate)}`,
+        `world ${seed} run ${i + 1}: ${run.seconds}s stale ${percent(stale)} need_miss ${percent(needMiss)}`,
       );
     }
   }

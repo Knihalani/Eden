@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { computeMetrics, latencyByPoint, listFiles, type Corpus, type Latency, type Metrics } from "./metrics";
+import { computeMetrics, countBy, latencyByPoint, listFiles, type Corpus, type Latency, type Metrics } from "./metrics";
 import { projectSlug } from "./rng";
 import { loadPlugin, type Invocation } from "./runner";
 import { SimWorld, type EventRecord } from "./session";
@@ -156,12 +156,6 @@ export function digest(log: readonly EventRecord[], runDir: string): string {
     hash.update(`${record.event}\t${record.window}\t${payload}\t${JSON.stringify(exitCodes)}\n`);
   }
   return hash.digest("hex");
-}
-
-function countBy(values: readonly string[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const value of values) out[value] = (out[value] ?? 0) + 1;
-  return out;
 }
 
 function argument(args: string[], name: string): string | undefined {

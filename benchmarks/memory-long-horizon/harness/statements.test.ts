@@ -128,6 +128,17 @@ describe("what a window states", () => {
     expect(statesValue("we dropped redis.", subject("cache.store"), "Redis")).toBe(false);
   });
 
+  test("with a scope filter, a sentence that names another scope does not count", () => {
+    const db = subject("db.engine");
+    const window = "in apps/web the database is postgres. we use pnpm.";
+    const cli = { scopes, accept: ["packages/cli"] };
+    expect(statesValue(window, db, "postgres")).toBe(true);
+    expect(statesValue(window, db, "postgres", cli)).toBe(false);
+    expect(statesValue(window, db, "postgres", { scopes, accept: ["apps/web"] })).toBe(true);
+    // A sentence that names no scope counts for any scope.
+    expect(statesValue(window, subject("pkg.manager"), "pnpm", cli)).toBe(true);
+  });
+
   test("a subject is mentioned by a word or by a value that names it alone", () => {
     expect(mentions("fix the failing test in apps/web/src/auth.ts", subject("auth.provider"))).toBe(true);
     expect(mentions("bump pnpm", subject("pkg.manager"))).toBe(true);

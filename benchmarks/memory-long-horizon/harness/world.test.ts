@@ -76,6 +76,12 @@ describe("generating a scenario", () => {
     expect(() => generateWorldScenario(1, DEMO_WORLD, [{ text: "x", scope: "", needs: ["test.runner@"] }])).toThrow(
       "no subject test.runner",
     );
+    expect(() =>
+      generateWorldScenario(1, DEMO_WORLD, [{ text: "x", scope: "", allowed: ["auth.provider@apps/wbe"] }]),
+    ).toThrow('auth.provider@apps/wbe names scope "apps/wbe", which is not in the world');
+    expect(() => generateWorldScenario(1, DEMO_WORLD, [{ text: "x", scope: "apps" }])).toThrow(
+      'a cue names scope "apps"',
+    );
   });
 });
 
