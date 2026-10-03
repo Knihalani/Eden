@@ -6,7 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { plainCue, type Cue } from "./cues";
-import { computeMetrics, rate, wilson } from "./metrics";
+import { computeMetrics, judgeDeliveries, rate, wilson } from "./metrics";
 import { itemId } from "./oracle";
 import { tokensOf, type SimSession } from "./session";
 import { play } from "./shape";
@@ -105,6 +105,26 @@ describe("stale, redundant, need_miss and false on Submit packets", () => {
     expect(metrics.bulletsByPoint).toEqual({ UserPromptSubmit: 5, PostToolBatch: 1 });
     // Only "node 20" on the cli cue states an item outside needs ∪ allowed (node.version@, by cascade).
     expect(metrics.false_rate).toEqual(rate(1, 5));
+  });
+
+  test("a bullet that names no scope, in a turn whose scope holds no value, is about the scope that does", async () => {
+    const world = demo([
+      { event: "SessionStart", when: '"source":"startup"', context: "- Auth is Clerk.\n- Auth is Auth0." },
+    ]);
+    const first = await started(world);
+    await first.prompt("apps/web uses Clerk for auth", "typed", {
+      cue: plainCue("apps/web"),
+      sets: [{ key: "auth.provider", scope: "apps/web", value: "Clerk" }],
+    });
+    await first.end();
+    await started(world);
+    // The second session's SessionStart packet. The root holds no auth; apps/web holds Clerk; nothing holds Auth0.
+    const packet = judgeDeliveries(world, DEMO_WORLD).at(-1);
+    expect(packet!.delivery.event).toBe("SessionStart");
+    expect(packet!.bullets.map(({ stale, stated }) => ({ stale, items: stated.map((s) => s.item) }))).toEqual([
+      { stale: false, items: [AUTH_WEB] },
+      { stale: true, items: ["auth.provider@"] },
+    ]);
   });
 
   test("a need for an item that holds no value is an annotation error, not a miss", async () => {
