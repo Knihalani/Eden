@@ -1,12 +1,15 @@
 /** Shared setup for the harness self-tests: temporary run directories and the probe plugin. */
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HookEvent } from "./payloads";
 import { loadPlugin } from "./runner";
 import { SimWorld, type WorldOptions } from "./session";
 
 /** Records every hook payload; answers as PROBE_MODE says (fixtures/probe-plugin/record.sh). */
 export const PROBE_PLUGIN = join(import.meta.dir, "fixtures", "probe-plugin");
+/** Answers each hook from a table (fixtures/scripted-plugin/answer.ts). */
+export const SCRIPTED_PLUGIN = join(import.meta.dir, "fixtures", "scripted-plugin");
 
 const made: string[] = [];
 
@@ -73,6 +76,23 @@ function readRecorded(out: string): Recorded[] {
         transcript: existsSync(snapshot) ? readFileSync(snapshot, "utf8") : undefined,
       };
     });
+}
+
+/** One row of the scripted plugin's table: the first row whose event matches and whose `when` is in the payload. */
+export interface Answer {
+  event: HookEvent;
+  when: string;
+  context?: string;
+  decision?: "ask" | "allow" | "deny";
+}
+
+/** A world whose hooks answer from `answers`, so a test knows every packet in advance. */
+export function scriptedWorld(answers: Answer[], options: Partial<Omit<WorldOptions, "runDir" | "plugin">> = {}) {
+  const runDir = tempDir("eden-scripted");
+  const table = join(runDir, "answers.json");
+  writeFileSync(table, JSON.stringify(answers));
+  const env = { SCRIPTED_ANSWERS: table, ...options.env };
+  return new SimWorld({ seed: 11, ...options, runDir, plugin: loadPlugin(SCRIPTED_PLUGIN), env });
 }
 
 /** Every line of a JSONL file, parsed. */
