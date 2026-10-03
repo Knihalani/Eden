@@ -83,6 +83,21 @@ describe("the truth over time", () => {
   });
 });
 
+test("the values held at a scope and below it, each where it is set", () => {
+  const oracle = new Oracle(SUBJECTS);
+  oracle.apply([{ key: "auth.provider", scope: "apps/web", value: "Clerk" }], "user", at(1));
+  oracle.apply([{ key: "auth.provider", scope: "packages/cli", value: "Auth0" }], "user", at(2));
+  oracle.apply([{ key: "auth.provider", scope: "packages/cli", value: null }], "user", at(3));
+  expect(oracle.within("auth.provider", "", 2)).toEqual([
+    { scope: "apps/web", value: "Clerk" },
+    { scope: "packages/cli", value: "Auth0" },
+  ]);
+  expect(oracle.within("auth.provider", "", 3)).toEqual([{ scope: "apps/web", value: "Clerk" }]);
+  expect(oracle.within("auth.provider", "apps", 3)).toEqual([{ scope: "apps/web", value: "Clerk" }]);
+  expect(oracle.within("auth.provider", "packages", 3)).toEqual([]);
+  expect(oracle.within("auth.provider", "apps/web", 3)).toEqual([{ scope: "apps/web", value: "Clerk" }]);
+});
+
 describe("a rewind takes back what the abandoned prompts said", () => {
   test("the value before them returns, including a repo change made in between", () => {
     const oracle = new Oracle(SUBJECTS);

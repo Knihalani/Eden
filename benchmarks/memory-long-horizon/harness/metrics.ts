@@ -6,12 +6,15 @@
  * How each definition is read (A5 §2):
  * - A packet is one delivered context; its bullets are its `- ` lines (statements.ts).
  * - `stale`: a bullet states a value that is not the oracle's value for that item at that event, in the scope
- *   the bullet names, else the packet header's, else the scope of the window's turn. An item that holds no
- *   value then counts as a different value.
+ *   the bullet names, else the packet header's, else the scope of the window's turn. When the bullet names no
+ *   scope and the turn's scope holds no value of that item, the bullet is about whichever scope below it holds
+ *   the value (a SessionStart packet at the root saying "auth is Clerk" while apps/web uses Clerk). An item
+ *   that holds no value counts as a different value.
  * - `redundant`: the window already holds the bullet's content (normalized), or states every value the bullet
- *   states. The window is the one the packet lands in, as it was before this event's contexts.
+ *   states (in any scope: the model reads the value, not our label). The window is the one the packet lands
+ *   in, as it was before this event's contexts.
  * - `need_miss`: an annotated cue with needs, where a needed item's current value is neither stated by a bullet
- *   of its packet nor already in its window.
+ *   of its packet nor already in its window (in any scope, as for `redundant`).
  * - `false`: a bullet of an annotated packet that states no item in the cue's `needs ∪ allowed`.
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -171,11 +174,7 @@ class Judge {
     const bullets = bulletsOf(delivery.content).map((bullet): JudgedBullet => {
       const content = bulletContent(bullet);
       const statements = statementsIn(content, this.oracle.subjects, this.corpus.scopes);
-      const stated = statements.map((statement) => {
-        const truth = this.oracle.truth(statement.key, statement.scope ?? fallback, delivery.seq);
-        const item = itemId(statement.key, truth?.scope ?? statement.scope ?? fallback);
-        return { item, value: statement.value, stale: truth?.value !== statement.value };
-      });
+      const stated = statements.map((statement) => this.stated(statement, fallback, delivery.seq));
       return {
         text: bullet,
         stated,
@@ -202,6 +201,18 @@ class Judge {
       stale: count(bullets, (bullet) => bullet.stale),
       redundant: count(bullets, (bullet) => bullet.redundant),
     };
+  }
+
+  /** A statement read against the truth at its scope (see the header for an unscoped one). */
+  private stated(statement: Statement, fallback: string, seq: number): Stated {
+    const { key, value } = statement;
+    const scope = statement.scope ?? fallback;
+    const truth = this.oracle.truth(key, scope, seq);
+    if (truth === undefined && statement.scope === undefined) {
+      const holder = this.oracle.within(key, scope, seq).find((candidate) => candidate.value === value);
+      if (holder) return { item: itemId(key, holder.scope), value, stale: false };
+    }
+    return { item: itemId(key, truth?.scope ?? scope), value, stale: truth?.value !== value };
   }
 
   /** A need is met when a bullet of the cue's packet states the item's current value, or the window does. */

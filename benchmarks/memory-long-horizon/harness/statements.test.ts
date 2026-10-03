@@ -108,6 +108,14 @@ describe("what a text states", () => {
     ]);
     expect(scopesNamed("myapps/web-old", scopes)).toEqual([]);
   });
+
+  test("a scope written with spaces, as today's gists write it, is still named", () => {
+    expect(states("in apps web the auth provider is Auth0")).toEqual([
+      { key: "auth.provider", value: "Auth0", scope: "apps/web" },
+    ]);
+    expect(scopesNamed("packages cli has no auth", scopes)).toEqual([{ scope: "packages/cli", at: 0 }]);
+    expect(scopesNamed("the apps webpack config", scopes)).toEqual([]);
+  });
 });
 
 describe("what a window states", () => {

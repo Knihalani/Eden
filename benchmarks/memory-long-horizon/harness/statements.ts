@@ -58,13 +58,19 @@ export function containsNormalized(normalized: string, part: string): boolean {
   return part.length > 0 && ` ${normalized} `.includes(` ${part} `);
 }
 
-/** The scopes a text names (a scope path, alone or as the start of a file path), in order of appearance. */
+/**
+ * The scopes a text names, in order of appearance: a scope path, alone or as the start of a file path. Its
+ * segments may also be separated by spaces (`apps web`), as today's hook writes them in its gists.
+ */
 export function scopesNamed(text: string, scopes: readonly string[]): { scope: string; at: number }[] {
   const lower = text.toLowerCase();
   const found: { scope: string; at: number }[] = [];
   for (const scope of scopes) {
     if (!scope) continue;
-    for (const at of occurrences(lower, scope.toLowerCase(), /[a-z0-9_-]/)) found.push({ scope, at });
+    const path = scope.toLowerCase().split("/").map(escapeRegExp).join("(?:/|\\s+)");
+    for (const match of lower.matchAll(new RegExp(`(?<![a-z0-9])${path}(?![a-z0-9_-])`, "g"))) {
+      found.push({ scope, at: match.index });
+    }
   }
   // A longer scope at the same place wins (`apps/web/app` over `apps/web`).
   return found
@@ -106,13 +112,17 @@ export function statesValue(lower: string, subject: Subject, value: string): boo
   return false;
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Positions of `phrase` in `segment` that are not in a historic or negated context. */
 function assertedAt(segment: string, phrase: string): number[] {
   return occurrences(segment, phrase).filter((at) => !HISTORIC.test(segment.slice(0, at)));
 }
 
-/** Where `phrase` occurs as whole words (`after` is what may not follow a match; letters and digits by default). */
-function occurrences(text: string, phrase: string, after = /[a-z0-9]/): number[] {
+/** Where `phrase` occurs as whole words. */
+function occurrences(text: string, phrase: string): number[] {
   const out: number[] = [];
   if (!phrase) return out;
   const wordStart = /[a-z0-9]/.test(phrase[0]!);
@@ -121,7 +131,7 @@ function occurrences(text: string, phrase: string, after = /[a-z0-9]/): number[]
     const before = text[at - 1];
     const next = text[at + phrase.length];
     if (wordStart && before !== undefined && /[a-z0-9]/.test(before)) continue;
-    if (wordEnd && next !== undefined && after.test(next)) continue;
+    if (wordEnd && next !== undefined && /[a-z0-9]/.test(next)) continue;
     out.push(at);
   }
   return out;
