@@ -64,6 +64,11 @@ export class SimulatedWindow {
     this.instructions.set(path, text);
   }
 
+  /** The loaded instruction files, by path. */
+  get instructionFiles(): ReadonlyMap<string, string> {
+    return this.instructions;
+  }
+
   snapshot(): WindowSnapshot {
     return new WindowSnapshot(this.entries.slice(), new Map(this.instructions));
   }

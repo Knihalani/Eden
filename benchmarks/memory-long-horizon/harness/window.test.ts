@@ -139,6 +139,19 @@ describe("what the main window holds", () => {
     expect(text(session)).not.toContain("probe saw SubagentStart");
     expect(text(session)).toContain("done");
   });
+
+  test("a general-purpose subagent's window holds the instruction files; Explore and Plan windows do not", async () => {
+    const probe = probeWorld({ mode: "context" });
+    const session = await started(probe);
+    await session.prompt("delegate");
+    const childText = async (agentType: string) => {
+      const spec = { agentType, description: "d", task: `task for ${agentType}`, background: false, report: "ok" };
+      return (await session.subagent(spec, async () => {}))!.window.seen.snapshot().text;
+    };
+    expect(await childText("general-purpose")).toStartWith("# Project");
+    expect(await childText("Explore")).not.toContain("# Project");
+    expect(await childText("Plan")).not.toContain("# Project");
+  });
 });
 
 describe("deliveries and cues find the window as it was", () => {
