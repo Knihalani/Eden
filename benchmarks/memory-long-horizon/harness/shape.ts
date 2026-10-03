@@ -6,7 +6,13 @@
  * session, context growth per human prompt, tool calls per turn including subagents, and about 8 subagent
  * windows and 1.7 non-human submits per main window. How those split into parts is modelled, not measured;
  * each choice is named where it is made. Prompt and file text is synthetic: no real prompt is ever used.
+ *
+ * Every human prompt carries its cue annotation (A5 §3.6). A generated prompt needs nothing: a "continue" after
+ * a report is an `ack` turn (A7 §2), and a task allows nothing. A world scenario (world.ts) replaces some
+ * prompts with statements and annotated cues, and adds repo changes no hook sees.
  */
+import { plainCue, type Cue } from "./cues";
+import type { Effect } from "./oracle";
 import { hashString, Rng, toolUseId, type Knot } from "./rng";
 import {
   BASE_CONTEXT_TOKENS,
@@ -14,28 +20,40 @@ import {
   peerText,
   tokensOf,
   type AgentRun,
+  type PromptNote,
   type SimSession,
   type SimWorld,
   type Window,
 } from "./session";
 import { bashCall, editCall, readCall, writeCall, type ToolCall } from "./tools";
 
-export type ToolSpec =
-  | { tool: "Read"; path: string; chars: number }
+export type ToolSpec = (
+  | { tool: "Read"; path: string; chars: number; text?: string }
   | { tool: "Edit"; path: string; oldString: string; newString: string }
   | { tool: "Write"; path: string; chars: number }
-  | { tool: "Bash"; command: string; description: string; chars: number; exitCode: number };
+  | { tool: "Bash"; command: string; description: string; chars: number; exitCode: number; text?: string }
+) & {
+  /** Policy items (`key@scope`) the call breaks: an annotated guard case (A5 `guard_recall`). */
+  violates?: string[];
+};
 
 /** A step inside a subagent window. */
 export type WindowStep = { kind: "tools"; calls: ToolSpec[] } | { kind: "assistant"; text: string };
 
+/** What a human prompt step carries besides its text: its annotation, and the truth it changes. */
+interface Said {
+  text: string;
+  cue: Cue;
+  sets?: Effect[];
+}
+
 export type Step =
   | { kind: "start" }
-  | { kind: "prompt"; text: string; source: "typed" | "queued" }
+  | ({ kind: "prompt"; source: "typed" | "queued" } & Said)
   /** Re-submit in place of the human prompt at `index` (0-based, current branch): a rewind. */
-  | { kind: "rewind"; index: number; text: string }
+  | ({ kind: "rewind"; index: number } & Said)
   /** A human prompt typed while the agent works: delivered mid-turn as a `queued_command`. */
-  | { kind: "queued-prompt"; text: string }
+  | ({ kind: "queued-prompt" } & Said)
   | WindowStep
   | {
       kind: "subagent";
@@ -46,6 +64,7 @@ export type Step =
       background: boolean;
       body: WindowStep[];
       report: string;
+      cue?: Cue;
     }
   /** A background subagent finishes (its body runs), then its notification arrives. */
   | { kind: "notify"; ref: string; delivery: "idle" | "mid-turn" }
@@ -54,7 +73,9 @@ export type Step =
   /** `atTokens`: the generator's context estimate when it compacted (A5 §3.8: around 600k). */
   | { kind: "compact"; trigger: "auto" | "manual"; summary: string; atTokens: number }
   | { kind: "end" }
-  | { kind: "resume"; gapSeconds: number };
+  | { kind: "resume"; gapSeconds: number }
+  /** A change to the repo that no hook sees: files written (null: deleted) and committed, and its truth. */
+  | { kind: "repo"; files: Record<string, string | null>; sets: Effect[] };
 
 export interface ShapeParams {
   /** R6 §2: human prompts per session, p25 1 / p50 3 / p75 7 / p90 10 / max 24. */
@@ -222,7 +243,10 @@ class Generator {
   }
 
   private prompt(turn: number, rewind: boolean): void {
-    const text = this.rng.chance(this.p.chatterShare) ? "continue" : this.task();
+    const chatter = this.rng.chance(this.p.chatterShare);
+    const text = chatter ? "continue" : this.task();
+    // Every turn ends on a report (`reply`), never a proposal, so a "continue" is an ack.
+    const cue = plainCue("", chatter ? "ack" : undefined);
     // Only prompts on the branch since the last compaction can be rewound to; a mid-turn prompt is not one
     // (it has no prompt line). With none, the rewind does not happen.
     const onBranch = this.contextBefore.length;
@@ -231,11 +255,11 @@ class Generator {
       this.context = this.contextBefore[index]!;
       this.contextBefore.splice(index);
       this.contextBefore.push(this.context);
-      this.steps.push({ kind: "rewind", index, text });
+      this.steps.push({ kind: "rewind", index, text, cue });
     } else {
       this.contextBefore.push(this.context);
       const queued = turn > 0 && this.rng.chance(this.p.queuedPromptShare);
-      this.steps.push({ kind: "prompt", text, source: queued ? "queued" : "typed" });
+      this.steps.push({ kind: "prompt", text, source: queued ? "queued" : "typed", cue });
     }
     this.context += tokensOf(text);
   }
@@ -247,7 +271,7 @@ class Generator {
   private turn(queueNext: boolean): void {
     this.work();
     if (queueNext) {
-      this.steps.push({ kind: "queued-prompt", text: this.task() });
+      this.steps.push({ kind: "queued-prompt", text: this.task(), cue: plainCue() });
       this.work();
     }
     this.steps.push({ kind: "assistant", text: this.text(300, "reply") });
@@ -442,19 +466,20 @@ export function shapeStats(script: SessionScript): ShapeStats {
   return stats;
 }
 
-/** Turns a tool spec into a call with a fresh id; the text comes from `filler`, keyed by the id. */
+/** Turns a tool spec into a call with a fresh id; the text is the spec's, else `filler`'s, keyed by the id. */
 function toolCall(world: SimWorld, spec: ToolSpec): ToolCall {
   const id = toolUseId(world.ids);
+  if (spec.violates?.length) world.violations.set(id, spec.violates);
   const at = (path: string) => `${world.projectDir}/${path}`;
   switch (spec.tool) {
     case "Read":
-      return readCall(id, at(spec.path), filler(id, spec.chars));
+      return readCall(id, at(spec.path), spec.text ?? filler(id, spec.chars));
     case "Edit":
       return editCall(id, at(spec.path), spec.oldString, spec.newString);
     case "Write":
       return writeCall(id, at(spec.path), filler(id, spec.chars));
     case "Bash":
-      return bashCall(id, spec.command, spec.description, filler(id, spec.chars), spec.exitCode);
+      return bashCall(id, spec.command, spec.description, spec.text ?? filler(id, spec.chars), spec.exitCode);
   }
 }
 
@@ -463,6 +488,10 @@ async function runWindowSteps(world: SimWorld, window: Window, steps: readonly W
     if (step.kind === "tools") await window.tools(step.calls.map((spec) => toolCall(world, spec)));
     else await window.assistant(step.text);
   }
+}
+
+function noteOf(step: Said): PromptNote {
+  return { cue: step.cue, sets: step.sets };
 }
 
 export interface PlayResult {
@@ -488,13 +517,13 @@ export async function play(script: SessionScript, world: SimWorld): Promise<Play
         await session.start();
         break;
       case "prompt":
-        answering = await session.prompt(step.text, step.source);
+        answering = await session.prompt(step.text, step.source, noteOf(step));
         break;
       case "rewind":
-        answering = await session.rewind(step.index, step.text);
+        answering = await session.rewind(step.index, step.text, noteOf(step));
         break;
       case "queued-prompt":
-        await session.queued("human", step.text);
+        await session.queued("human", step.text, noteOf(step));
         break;
       case "tools":
       case "assistant":
@@ -532,6 +561,9 @@ export async function play(script: SessionScript, world: SimWorld): Promise<Play
       case "resume":
         await session.resume(step.gapSeconds);
         break;
+      case "repo":
+        world.changeRepo(step.files, step.sets);
+        break;
     }
   }
   return { session, skipped };
@@ -563,4 +595,30 @@ export const CANONICAL_SHAPE: Partial<ShapeParams> = {
 
 export function canonicalSession(): SessionScript {
   return generateSession(CANONICAL_SEED, CANONICAL_SHAPE);
+}
+
+/**
+ * The latency soak: `turns` human prompts in one session, one tool call per turn, and no subagents, peers,
+ * rewinds or resumes, so UserPromptSubmit, PostToolUse and Stop each fire about once per turn. A5 §2 needs
+ * ≥ 1,000 samples per point for a p99. Context grows at a tenth of R6's rate, so it compacts every few hundred
+ * turns.
+ */
+export function soakSession(turns = 1_000, seed = 1): SessionScript {
+  return generateSession(seed, {
+    humanPrompts: [
+      [0, turns],
+      [1, turns],
+    ],
+    mainToolCalls: [
+      [0, 1],
+      [1, 1],
+    ],
+    subagentTurnShare: 0,
+    peersPerTurn: 0,
+    rewindShare: 0,
+    resumeShare: 0,
+    queuedPromptShare: 0,
+    midTurnPromptShare: 0,
+    growthScale: 0.1,
+  });
 }

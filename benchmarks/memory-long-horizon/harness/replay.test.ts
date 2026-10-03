@@ -6,9 +6,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { listFiles, replay, type ReplaySummary } from "./replay";
+import { listFiles } from "./metrics";
+import { replay, type ReplaySummary } from "./replay";
 import { projectSlug } from "./rng";
 import { canonicalSession } from "./shape";
+import { sessionScenario } from "./world";
 import { PROBE_PLUGIN, removeTempDirs, tempDir } from "./testkit";
 
 afterAll(removeTempDirs);
@@ -75,7 +77,8 @@ describe("with a deterministic plugin, a run is reproducible to the byte", () =>
     const out = join(runDir, "probe-out");
     mkdirSync(out);
     const env = { PROBE_OUT: out, PROBE_MODE: "context" };
-    const { summary, world } = await replay({ script: canonicalSession(), pluginDir: PROBE_PLUGIN, runDir, env });
+    const scenario = sessionScenario(canonicalSession());
+    const { summary, world } = await replay({ scenario, pluginDir: PROBE_PLUGIN, runDir, env });
     const portable = (text: string) =>
       text.replaceAll(world.runDir, "<run>").replaceAll(projectSlug(world.projectDir), "<slug>");
     const transcripts = listFiles(join(world.home, ".claude", "projects"))

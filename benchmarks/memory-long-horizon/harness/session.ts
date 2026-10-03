@@ -6,6 +6,9 @@
  * transcript as a `hook_additional_context` attachment, a blocked prompt never reaches the transcript, and a
  * denied or declined tool call does not run.
  *
+ * It also keeps the evaluation's oracle files (A5 §3.4–3.6): the world oracle, the simulated context window of
+ * every window, each annotated cue with the window at that moment, and every context the model received.
+ *
  * Simplifications, all deliberate:
  * - events are serialized, except a parallel batch of concurrency-safe calls (Read), whose PreToolUse and
  *   PostToolUse hooks run concurrently, as Claude Code runs them;
@@ -21,8 +24,10 @@
  *   `estimated_cache_write_usd`, the Agent result's `totalTokens`, a task notification's
  *   `<subagent_tokens>`, `message.usage`, and `compactMetadata.preTokens`.
  */
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Cue, CueRecord } from "./cues";
+import { Oracle, type Effect, type Subject } from "./oracle";
 import {
   instructionsLoadedPayload,
   postCompactPayload,
@@ -51,6 +56,7 @@ import { agentId, hashString, projectSlug, Rng, toolUseId, uuidV4 } from "./rng"
 import { HookRunner, hookEnv, type Invocation, type Plugin } from "./runner";
 import { agentCall, toolResultContent, type AgentLaunch, type ToolCall } from "./tools";
 import { Transcript, type OriginKind, type Usage } from "./transcript";
+import { SimulatedWindow, type WindowSnapshot } from "./window";
 
 export const CLAUDE_CODE_VERSION = "2.1.285";
 export const MODEL = "claude-opus-5-5";
@@ -96,6 +102,10 @@ export interface WorldOptions {
   /** Project files, committed on `main` before the session starts. */
   projectFiles?: Record<string, string>;
   instructions?: InstructionFile[];
+  /** The world's subjects (A5 §3.4); a run without them has an empty oracle. */
+  subjects?: readonly Subject[];
+  /** The world's truth when the run starts. */
+  initialTruth?: readonly Effect[];
 }
 
 export interface EventRecord {
@@ -106,6 +116,32 @@ export interface EventRecord {
   window: string;
   payload: HookPayload;
   invocations: Invocation[];
+  /** On UserPromptSubmit: who sent the submit, as the simulator knows it (hooks must infer it, D24). */
+  submit?: OriginKind;
+}
+
+/** A context the model received (a hook's `additionalContext`), with the window it landed in. */
+export interface Delivery {
+  /** The event that returned it. */
+  seq: number;
+  event: HookEvent;
+  sessionId: string;
+  window: string;
+  content: string;
+  /** The window just before this event's contexts arrived. */
+  seen: WindowSnapshot;
+  /** The scope the window's turn is in: its latest annotated cue's. */
+  scope: string;
+  /** Index into `SimWorld.cues`, when the packet answers an annotated cue. */
+  cue?: number;
+  /** Who sent the submit, for a UserPromptSubmit packet. */
+  submit?: OriginKind;
+}
+
+/** What a scripted human prompt brings besides its text: its annotation, and the truth it changes. */
+export interface PromptNote {
+  cue?: Cue;
+  sets?: readonly Effect[];
 }
 
 const DEFAULT_PROJECT: Record<string, string> = {
@@ -123,7 +159,13 @@ export class SimWorld {
   readonly log: EventRecord[] = [];
   /** Ids that appear in payloads; kept apart from transcript line uuids so hook output cannot shift them. */
   readonly ids: Rng;
+  readonly oracle: Oracle;
+  readonly deliveries: Delivery[] = [];
+  readonly cues: CueRecord[] = [];
+  /** Tool calls the script marks as breaking policies, by `tool_use_id` (A5 `guard_recall`). */
+  readonly violations = new Map<string, readonly string[]>();
   private readonly runner: HookRunner;
+  private readonly records = new WeakMap<Invocation[], EventRecord>();
   private clock = SIM_EPOCH;
 
   constructor(readonly options: WorldOptions) {
@@ -132,6 +174,8 @@ export class SimWorld {
     this.projectDir = join(this.runDir, "project");
     this.ids = new Rng(options.seed ^ 0x5eed1d5);
     createProject(this.projectDir, this.home, options.projectFiles ?? DEFAULT_PROJECT);
+    this.oracle = new Oracle(options.subjects ?? []);
+    this.oracle.apply(options.initialTruth ?? [], "init", this.at());
     mkdirSync(join(this.home, ".claude", "plugins", "data", options.plugin.name), { recursive: true });
     this.runner = new HookRunner({
       plugin: options.plugin,
@@ -155,6 +199,11 @@ export class SimWorld {
 
   now(): string {
     return new Date(this.clock).toISOString();
+  }
+
+  /** The position of the next event, and the time: from here on, a change to the truth holds. */
+  at(): { seq: number; t: number } {
+    return { seq: this.log.length, t: this.clock };
   }
 
   advance(ms: number): void {
@@ -190,7 +239,32 @@ export class SimWorld {
     };
     this.log.push(record);
     record.invocations = await this.runner.dispatch(payload);
+    this.records.set(record.invocations, record);
     return record.invocations;
+  }
+
+  /** The event a `dispatch` result belongs to. */
+  recordOf(invocations: Invocation[]): EventRecord {
+    const record = this.records.get(invocations);
+    if (!record) throw new Error("these invocations did not come from dispatch");
+    return record;
+  }
+
+  /**
+   * A change to the repo that no hook sees (a pull, a lockfile swap by hand): files written (or deleted,
+   * for null) and committed, and the truth it changes.
+   */
+  changeRepo(files: Readonly<Record<string, string | null>>, sets: readonly Effect[]): void {
+    for (const [path, content] of Object.entries(files)) {
+      const target = join(this.projectDir, path);
+      if (content === null) rmSync(target, { force: true });
+      else {
+        mkdirSync(join(target, ".."), { recursive: true });
+        writeFileSync(target, content);
+      }
+    }
+    commitAll(this.projectDir, this.home, "repo change", this.now());
+    this.oracle.apply(sets, "repo", this.at());
   }
 
   /** A new session (fresh `session_id` and transcript), not started yet. */
@@ -204,15 +278,20 @@ function createProject(dir: string, home: string, files: Record<string, string>)
     mkdirSync(join(dir, path, ".."), { recursive: true });
     writeFileSync(join(dir, path), content);
   }
-  const env = { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home, GIT_CONFIG_NOSYSTEM: "1" };
-  for (const args of [
-    ["init", "-q", "-b", "main"],
-    ["add", "-A"],
-    ["-c", "user.name=sim", "-c", "user.email=sim@example.invalid", "commit", "-q", "-m", "init"],
-  ]) {
-    const git = Bun.spawnSync(["git", ...args], { cwd: dir, env, stdout: "ignore", stderr: "pipe" });
-    if (git.exitCode !== 0) throw new Error(`git ${args[0]} failed: ${git.stderr.toString()}`);
-  }
+  git(dir, home, ["init", "-q", "-b", "main"]);
+  commitAll(dir, home, "init");
+}
+
+function commitAll(dir: string, home: string, message: string, date?: string): void {
+  git(dir, home, ["add", "-A"]);
+  const dates: Record<string, string> = date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {};
+  git(dir, home, ["-c", "user.name=sim", "-c", "user.email=sim@example.invalid", "commit", "-q", "-m", message], dates);
+}
+
+function git(dir: string, home: string, args: string[], extra: Record<string, string> = {}): void {
+  const env = { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home, GIT_CONFIG_NOSYSTEM: "1", ...extra };
+  const run = Bun.spawnSync(["git", ...args], { cwd: dir, env, stdout: "ignore", stderr: "pipe" });
+  if (run.exitCode !== 0) throw new Error(`git ${args[0]} failed: ${run.stderr.toString()}`);
 }
 
 /** One context window: the main thread or a subagent. Tool batches and assistant text happen here. */
@@ -220,6 +299,10 @@ export class Window {
   lastText = "";
   /** Tool calls made in this window, for an Agent call's `totalToolUseCount`. */
   toolCalls = 0;
+  /** What the model of this window sees (A5 §3.5). */
+  readonly seen = new SimulatedWindow();
+  /** The scope the window's turn is in (its latest annotated cue's), for packets that name none. */
+  scope = "";
   private contextTokens = BASE_CONTEXT_TOKENS;
   private reportedTokens = 0;
   private readonly tokensAt = new Map<string, number>();
@@ -244,19 +327,32 @@ export class Window {
     return this.session.ctx(this.agent);
   }
 
-  /** Counts a line's model-visible text into the context estimate, and remembers the size after it. */
+  /** A line the model sees: counted into the context estimate and added to the simulated window. */
   record(uuid: string, text: string): void {
     this.contextTokens += this.session.world.tokens(text);
     this.tokensAt.set(uuid, this.contextTokens);
+    this.seen.add(uuid, text);
   }
 
-  /** The context size right after a line (for rewinds); undefined for the start of the conversation. */
-  tokensAfter(uuid: string | null): number | undefined {
-    return uuid === null ? undefined : this.tokensAt.get(uuid);
+  /**
+   * A hook's context: in the simulated window, but not in the estimate (see the header), so a plugin's
+   * output never changes the payloads that follow.
+   */
+  receive(uuid: string, context: string): void {
+    this.tokensAt.set(uuid, this.contextTokens);
+    this.seen.add(uuid, context);
   }
 
-  resetTokens(tokens: number): void {
-    this.contextTokens = tokens;
+  /** The branch continues from line `uuid` (null: the start of the conversation), as after a rewind. */
+  rewindTo(uuid: string | null): void {
+    this.contextTokens = (uuid === null ? undefined : this.tokensAt.get(uuid)) ?? BASE_CONTEXT_TOKENS;
+    this.seen.rewindTo(uuid);
+  }
+
+  /** Compaction: the conversation leaves the context; its summary is recorded next. */
+  compact(): void {
+    this.contextTokens = BASE_CONTEXT_TOKENS;
+    this.seen.compact();
   }
 
   /** `message.usage` for the next assistant line: the context sent, split into cache read and creation. */
@@ -358,6 +454,8 @@ export interface SubagentSpec {
   task: string;
   background: boolean;
   report: string;
+  /** The annotation of the SubagentStart packet, if the script gives one. */
+  cue?: Cue;
 }
 
 /** A subagent the Agent tool launched. A background one completes later (`completeBackground`). */
@@ -372,7 +470,11 @@ export class SimSession {
   readonly transcriptPath: string;
   readonly main: Window;
   private promptId?: string;
-  private readonly humanPrompts: { uuid: string; parent: string | null }[] = [];
+  /**
+   * The human prompts on the current branch since the last compaction: the rewind targets. `said` holds the
+   * prompt and the queued prompts of its turn, whose stated truth a rewind past it takes back.
+   */
+  private readonly humanPrompts: { uuid: string; parent: string | null; said: string[] }[] = [];
   private readonly transcripts = new Set<Transcript>();
   /** Background subagents launched and not completed yet: Stop reports them in `background_tasks`. */
   private readonly background: AgentRun[] = [];
@@ -441,12 +543,15 @@ export class SimSession {
     this.endStep();
   }
 
-  /** A human prompt, typed or queued. False when UserPromptSubmit blocked it, which erases it. */
-  async prompt(text: string, source: "typed" | "queued" = "typed"): Promise<boolean> {
+  /**
+   * A human prompt, typed or queued. False when UserPromptSubmit blocked it, which erases it (and what it
+   * said does not become true).
+   */
+  async prompt(text: string, source: "typed" | "queued" = "typed", note: PromptNote = {}): Promise<boolean> {
     const parent = this.main.transcript.leafUuid;
     const uuid = this.main.transcript.userPrompt(text, this.nextPrompt(), source);
-    const submitted = await this.submit(uuid, parent, text);
-    if (submitted) this.humanPrompts.push({ uuid, parent });
+    const submitted = await this.submit({ uuid, parent, prompt: text, kind: "human", note });
+    if (submitted) this.humanPrompts.push({ uuid, parent, said: [uuid] });
     return submitted;
   }
 
@@ -454,34 +559,40 @@ export class SimSession {
    * The user rewinds to the human prompt at `index` on the current branch and submits `text` in its place.
    * The file stays append-only: the new prompt's parent is the old prompt's parent (R3 E3).
    */
-  async rewind(index: number, text: string): Promise<boolean> {
+  async rewind(index: number, text: string, note: PromptNote = {}): Promise<boolean> {
     const target = this.humanPrompts[index];
     if (!target) throw new Error(`no human prompt #${index} to rewind to`);
-    this.humanPrompts.splice(index);
+    const abandoned = this.humanPrompts.splice(index).flatMap((prompt) => prompt.said);
+    this.world.oracle.abandon(new Set(abandoned), this.world.at());
     this.main.transcript.branchFrom(target.parent);
-    this.main.resetTokens(this.main.tokensAfter(target.parent) ?? BASE_CONTEXT_TOKENS);
-    return this.prompt(text);
+    this.main.rewindTo(target.parent);
+    return this.prompt(text, "typed", note);
   }
 
   /** A finished background task's notification while the agent is idle: a non-human turn of its own. */
   async taskNotification(run: AgentRun): Promise<boolean> {
     const text = notificationText(run);
     const parent = this.main.transcript.leafUuid;
-    return this.submit(this.main.transcript.taskNotification(text, this.nextPrompt()), parent, text);
+    const uuid = this.main.transcript.taskNotification(text, this.nextPrompt());
+    return this.submit({ uuid, parent, prompt: text, kind: "task-notification" });
   }
 
   /** A message from another Claude session while the agent is idle. */
   async peerMessage(from: string, body: string): Promise<boolean> {
     const text = peerText(from, body);
     const parent = this.main.transcript.leafUuid;
-    return this.submit(this.main.transcript.peerMessage(text, from, this.nextPrompt()), parent, text);
+    const uuid = this.main.transcript.peerMessage(text, from, this.nextPrompt());
+    return this.submit({ uuid, parent, prompt: text, kind: "peer" });
   }
 
   /** A submit that arrives mid-turn: Claude Code records a `queued_command`, then runs UserPromptSubmit. */
-  async queued(kind: OriginKind, prompt: string): Promise<boolean> {
+  async queued(kind: OriginKind, prompt: string, note: PromptNote = {}): Promise<boolean> {
     const parent = this.main.transcript.leafUuid;
     this.nextPrompt();
-    return this.submit(this.main.transcript.queuedCommand(prompt, kind), parent, prompt);
+    const uuid = this.main.transcript.queuedCommand(prompt, kind);
+    const submitted = await this.submit({ uuid, parent, prompt, kind, note });
+    if (submitted && kind === "human") this.humanPrompts.at(-1)?.said.push(uuid);
+    return submitted;
   }
 
   async stop(): Promise<void> {
@@ -536,11 +647,13 @@ export class SimSession {
       id,
       type: spec.agentType,
     });
+    child.scope = this.main.scope;
     const meta = { agentType: spec.agentType, description: spec.description, toolUseId: call.id, spawnDepth: 1 };
     writeFileSync(childPath.replace(/\.jsonl$/, ".meta.json"), JSON.stringify(meta));
     child.record(child.transcript.taskPrompt(spec.task, this.promptIdOrThrow()), spec.task);
     const started = await this.dispatch(subagentStartPayload(child.ctx()), child);
-    this.attach(child, "SubagentStart", started, "SubagentStart");
+    const cue = spec.cue && this.noteCue(spec.cue, spec.task, started, child);
+    this.attach(child, "SubagentStart", started, "SubagentStart", { cue });
 
     const run: AgentRun = { launch, call, window: child };
     if (spec.background) {
@@ -579,7 +692,7 @@ export class SimSession {
     };
     await this.world.dispatch(subagentStopPayload(this.ctx(compactor), stop), compactor.id);
     const preTokens = this.main.tokens;
-    this.main.resetTokens(BASE_CONTEXT_TOKENS);
+    this.main.compact();
     // Prompts of the compacted conversation are no longer rewind targets (our reading; unverified).
     this.humanPrompts.splice(0);
     this.main.transcript.compactBoundary(trigger, preTokens, BASE_CONTEXT_TOKENS + this.world.tokens(summary), 30_000);
@@ -624,15 +737,26 @@ export class SimSession {
     return refusal === undefined ? call : { ...call, result: { ok: false, error: refusal, isInterrupt: false } };
   }
 
-  /** Saves each handler's `additionalContext` the way Claude Code does: an attachment after the newest line. */
-  attach(window: Window, event: HookEvent, invocations: Invocation[], toolUseID: string): void {
-    for (const invocation of invocations) {
-      const context = invocation.outcome.additionalContext;
-      if (context === undefined) continue;
+  /**
+   * Saves each handler's `additionalContext` the way Claude Code does: an attachment after the newest line.
+   * Each one is also a delivery, scored against the window as it was before this event's contexts.
+   */
+  attach(
+    window: Window,
+    event: HookEvent,
+    invocations: Invocation[],
+    toolUseID: string,
+    link: { cue?: number; submit?: OriginKind } = {},
+  ): void {
+    const contexts = invocations.flatMap((invocation) => invocation.outcome.additionalContext ?? []);
+    if (!contexts.length) return;
+    const seen = window.seen.snapshot();
+    const seq = this.world.recordOf(invocations).seq;
+    for (const content of contexts) {
       const id = event === "UserPromptSubmit" ? `hook-${window.transcript.uuid()}` : toolUseID;
-      // Recorded with no text: the estimate leaves hook output out (see the header), but a rewind may
-      // branch from this line.
-      window.record(window.transcript.hookContext(event, event, id, context), "");
+      window.receive(window.transcript.hookContext(event, event, id, content), content);
+      const at = { seq, event, sessionId: this.sessionId, window: window.name, content, seen, scope: window.scope };
+      this.world.deliveries.push({ ...at, ...link });
     }
   }
 
@@ -651,24 +775,42 @@ export class SimSession {
     return transcript;
   }
 
-  /** Runs UserPromptSubmit for the submit's line, and erases the line if a hook blocked it. */
-  private async submit(uuid: string, parent: string | null, prompt: string): Promise<boolean> {
+  /**
+   * Runs UserPromptSubmit for the submit's line, and erases the line if a hook blocked it. Otherwise what the
+   * prompt says becomes true from this event on, and its cue is recorded with the window it arrives in.
+   */
+  private async submit(submit: Submit): Promise<boolean> {
+    const { uuid, parent, prompt, kind, note = {} } = submit;
+    const t = this.world.timeMs;
     const invocations = await this.dispatch(userPromptSubmitPayload(this.ctx(), prompt), this.main);
+    const record = this.world.recordOf(invocations);
+    record.submit = kind;
     this.world.advance(2_000);
     if (invocations.some((invocation) => invocation.outcome.blocked)) {
       this.main.transcript.retractLast(uuid, parent);
       this.endStep();
       return false;
     }
+    this.world.oracle.apply(note.sets ?? [], "user", { seq: record.seq, t }, uuid);
     this.main.record(uuid, prompt);
-    this.attach(this.main, "UserPromptSubmit", invocations, "");
+    const cue = note.cue && this.noteCue(note.cue, prompt, invocations, this.main);
+    this.attach(this.main, "UserPromptSubmit", invocations, "", { cue, submit: kind });
     this.endStep();
     return true;
+  }
+
+  /** Records an annotated cue with the window as its packet finds it; the window's turn takes its scope. */
+  private noteCue(cue: Cue, text: string, invocations: Invocation[], window: Window): number {
+    window.scope = cue.scope;
+    const seq = this.world.recordOf(invocations).seq;
+    const record = { cue, text, seq, sessionId: this.sessionId, window: window.name, seen: window.seen.snapshot() };
+    return this.world.cues.push(record) - 1;
   }
 
   private async loadInstructions(reason: "session_start" | "compact"): Promise<void> {
     for (const file of this.world.options.instructions ?? DEFAULT_INSTRUCTIONS) {
       const filePath = join(this.world.projectDir, file.path);
+      this.main.seen.loadInstructions(file.path, existsSync(filePath) ? readFileSync(filePath, "utf8") : "");
       const load = { filePath, memoryType: file.memoryType, loadReason: reason };
       await this.dispatch(instructionsLoadedPayload(this.ctx(), load), this.main);
     }
@@ -707,6 +849,14 @@ export class SimSession {
 }
 
 const DEFAULT_INSTRUCTIONS: InstructionFile[] = [{ path: "CLAUDE.md", memoryType: "Project" }];
+
+interface Submit {
+  uuid: string;
+  parent: string | null;
+  prompt: string;
+  kind: OriginKind;
+  note?: PromptNote;
+}
 
 /** What UserPromptSubmit receives for a peer message; the transcript line adds Claude Code's preface. */
 export function peerText(from: string, body: string): string {
