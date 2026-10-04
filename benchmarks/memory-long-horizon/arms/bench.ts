@@ -160,7 +160,7 @@ const aliasBatch: Arm = {
     const world = run.world(spec);
     const planted = plant(run, world, memoryRows(world));
     if (!planted || planted.remembered !== planted.rows) {
-      return ["planted", "batch-decided", "kept-only-if"].map((id) => check(id, false, NOT_PLANTED));
+      return ["planted", "recall-before", "batch-decided", "kept-only-if"].map((id) => check(id, false, NOT_PLANTED));
     }
     const pool = memories();
     const ask = async (cues: readonly BenchCue[]) => {
@@ -173,10 +173,18 @@ const aliasBatch: Arm = {
     const after = await ask([...annotated, ...heldOut]);
     const of = (results: CueResult[], cues: readonly BenchCue[]) =>
       results.filter((result) => cues.includes(result.cue));
+    const annotatedBefore = recallAt4(of(before, annotated));
+    // A control: the store answers the annotated cues before the batch, so a plugin that never delivers cannot pass.
+    const control = check(
+      "recall-before",
+      annotatedBefore.k > 0,
+      `annotated recall@4 before the batch ${show(annotatedBefore)}`,
+    );
     if (!verdict) {
       const missing = "`eden memory aliases --batch FILE --json` gave no verdict in the contract's shape";
       return [
         check("planted", true, `${planted.remembered} rows`),
+        control,
         check("batch-decided", false, missing),
         check("kept-only-if", false, missing),
       ];
@@ -184,6 +192,7 @@ const aliasBatch: Arm = {
     const heldOutRecall = `${show(recallAt4(of(before, heldOut)))} → ${show(recallAt4(of(after, heldOut)))}`;
     return [
       check("planted", true, `${planted.remembered} rows`),
+      control,
       check("batch-decided", true, `kept: ${verdict.kept}; held-out paraphrase recall ${heldOutRecall}`),
       keptOnlyIf(verdict.kept, of(before, annotated), of(after, annotated)),
     ];

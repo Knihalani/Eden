@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * The arms' reference product CLI: a minimal, correct implementation of each entry-point contract an arm defines,
- * so the arm's checks are shown to be satisfiable (arms/reference.test.ts). It answers from the fixtures and from
+ * so the arm's checks are shown to be satisfiable (arms/reference-suite.ts). It answers from the fixtures and from
  * what the run left on disk; it is not Eden and keeps no memory beyond what a contract needs.
  *
  *   memory remember --jsonl -          → {"remembered": N}                         (cuebench.ts, scale.ts)

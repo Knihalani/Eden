@@ -4,7 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { FlagState } from "./kit";
+import type { ArmResult, FlagState } from "./kit";
 
 export interface StateRecord {
   state: "red" | "green";
@@ -45,10 +45,20 @@ export function statesOf(record: Record_, id: string): FlagState[] {
   return (["on", "off", "shadow"] as const).filter((state) => entry[state] !== undefined);
 }
 
-/** The failing checks a state is recorded with: [] for green; null when red has no measured set yet. */
-export function expected(record: Record_, id: string, state: FlagState): string[] | null {
-  const entry = record.arms.find((arm) => arm.id === id)?.[state];
-  if (!entry) return null;
-  if (entry.state === "green") return [];
-  return entry.failed ? [...entry.failed].sort() : null;
+/** The difference between a run and its record, in words; empty when they agree. */
+export function mismatch(result: ArmResult, record: StateRecord): string {
+  const unstable = new Set(record.unstable ?? []);
+  const stable = (ids: readonly string[]) => ids.filter((id) => !unstable.has(id)).sort();
+  const want = stable(record.state === "green" ? [] : (record.failed ?? []));
+  const got = stable(result.failed);
+  if (JSON.stringify(want) === JSON.stringify(got)) return "";
+  const unexpected = got.filter((id) => !want.includes(id));
+  const missing = want.filter((id) => !got.includes(id));
+  const detail = result.checks
+    .filter((item) => unexpected.includes(item.id) || missing.includes(item.id))
+    .map((item) => `  ${item.ok ? "now passes" : "now fails"} ${item.id}: ${item.detail}`);
+  return [
+    `${result.arm} [${result.flags}] recorded ${record.state} ${JSON.stringify(want)}, ran ${JSON.stringify(got)}`,
+    ...detail,
+  ].join("\n");
 }

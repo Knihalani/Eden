@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 /**
  * The place and scope arms (A5 §4; D3–D5, A4 §2): facts stay in the folder they are true in, cascade from the
  * root unless a folder overrides them, are visible everywhere in a single-package repo, and a turn that spans two
@@ -6,10 +5,13 @@ import { readFileSync } from "node:fs";
  *
  * Place comes from what the turn touches: each cue follows a turn that names and reads a file of its folder.
  */
+import { readFileSync } from "node:fs";
 import type { SimWorld } from "../harness/session";
 import type { WorldSpec } from "../harness/world";
 import { AUTH, DB, id, monorepo, NODE, set, singlePackage, TEST } from "./fixtures/world";
 import {
+  bulletsAt,
+  bulletsIn,
   check,
   DAY_MS,
   Driver,
@@ -21,6 +23,7 @@ import {
   quote,
   read,
   type Arm,
+  type Check,
   type Turn,
 } from "./kit";
 import { r5UnitRows } from "./scope-rows";
@@ -28,6 +31,21 @@ import { r5UnitRows } from "./scope-rows";
 /** A turn that opens a file of `scope`'s folder, so the next cue's place is that folder. */
 async function openFile(session: Driver, path: string): Promise<void> {
   await session.turn(`open ${path}`, { tools: [[read(path, `// ${path}\nexport {};\n`)]] });
+}
+
+/**
+ * A5 `scoped`'s leak: from the first cue on, no stale bullet, and no cue packet carrying the other folder's values,
+ * labelled or not (A4 §2: never siblings, outside a two-scope read set).
+ */
+function noLeak(world: SimWorld, spec: WorldSpec, from: number, cues: { web: Turn[]; cli: Turn[] }): Check {
+  const stale = bulletsIn(judged(world, spec), from).filter((bullet) => bullet.stale);
+  const carrying = (turns: Turn[], scope: string) =>
+    turns
+      .flatMap((turn) => bulletsAt(world, spec, turn.seq))
+      .filter((bullet) => bullet.stated.some((stated) => stated.item.endsWith(`@${scope}`)));
+  const leaked = [...carrying(cues.web, "packages/cli"), ...carrying(cues.cli, "apps/web")];
+  const detail = `stale: ${quote(stale)}; the other folder's values in a cue's packet: ${quote(leaked)}`;
+  return check("no-leak", stale.length === 0 && leaked.length === 0, detail);
 }
 
 /** Junk turns per session, as R6's longer sessions run. */
@@ -115,7 +133,7 @@ const scoped: Arm = {
     return [
       needCheck("web-facts", world, spec, web),
       needCheck("cli-facts", world, spec, cli),
-      noStale(world, spec, firstCue, "no-leak"),
+      noLeak(world, spec, firstCue, { web, cli }),
       check(
         "junk-on-disk",
         gone.length === 0,

@@ -4,7 +4,7 @@
  * Claude session), for the A5 `migrate` arm. It plays six sessions through that plugin, then keeps every file under
  * the memory root, with the planted secrets replaced by `{{SECRET:<shape>}}` placeholders (`{{SECRET_LOWER:…}}`
  * where the store lowercased one), and fails if any 8-character piece of a secret survives. The arm fills in fresh
- * synthetic values, so none is committed). The kinds are A5's:
+ * synthetic values, so none is committed. The kinds are A5's:
  * a normal session; two worktrees of one repo; a session with no transcript left; a corrupt last line; 5 secret
  * shapes; a 2 KB paste.
  *
