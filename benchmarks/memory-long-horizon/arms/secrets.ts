@@ -20,7 +20,12 @@ import { bash, check, Driver, edenFiles, metricsOf, needMet, pasted, type Arm } 
 
 type Shape = { name: string; value: (rng: Rng) => string; keyword?: string };
 
-const upper = (rng: Rng, n: number) => rng.base62(n * 2).replace(/[a-z0-9]/g, "").padEnd(n, "Q").slice(0, n);
+const upper = (rng: Rng, n: number) =>
+  rng
+    .base62(n * 2)
+    .replace(/[a-z0-9]/g, "")
+    .padEnd(n, "Q")
+    .slice(0, n);
 const digits = (rng: Rng, n: number) => Array.from({ length: n }, () => rng.int(0, 9)).join("");
 const b64url = (text: string) => Buffer.from(text).toString("base64url");
 
@@ -55,9 +60,13 @@ export const SHAPES: Shape[] = [
   {
     name: "private-key",
     value: (r) =>
-      ["-----BEGIN RSA " + "PRIVATE KEY-----", r.base62(64), r.base62(64), r.base62(40), "-----END RSA PRIVATE KEY-----"].join(
-        "\n",
-      ),
+      [
+        "-----BEGIN RSA " + "PRIVATE KEY-----",
+        r.base62(64),
+        r.base62(64),
+        r.base62(40),
+        "-----END RSA PRIVATE KEY-----",
+      ].join("\n"),
   },
   {
     name: "heroku",
@@ -71,7 +80,11 @@ export const SHAPES: Shape[] = [
   { name: "databricks", value: (r) => "dap" + "i" + r.hex(32) },
   { name: "doppler", value: (r) => "dp" + ".pt." + r.base62(43) },
   { name: "cloudflare", value: (r) => "cf" + "at_" + r.base62(40) },
-  { name: "password", value: (r) => `${r.base62(6)}-${r.base62(6)}-${r.base62(4)}`, keyword: "the staging password is " },
+  {
+    name: "password",
+    value: (r) => `${r.base62(6)}-${r.base62(6)}-${r.base62(4)}`,
+    keyword: "the staging password is ",
+  },
   { name: "url-userinfo", value: (r) => r.base62(16), keyword: "postgres://admin:" },
 ];
 
@@ -153,7 +166,11 @@ export const secrets: Arm = {
         .map(([key, n]) => `${key} ${n}`)
         .join(", ");
     return [
-      check("control-packs", needMet(metrics, control), `the staging database ${needMet(metrics, control) ? "packed" : "missed"}`),
+      check(
+        "control-packs",
+        needMet(metrics, control),
+        `the staging database ${needMet(metrics, control) ? "packed" : "missed"}`,
+      ),
       check(
         "secret-bytes",
         metrics.secret_bytes === 0,

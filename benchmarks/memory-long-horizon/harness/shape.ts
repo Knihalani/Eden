@@ -467,7 +467,7 @@ export function shapeStats(script: SessionScript): ShapeStats {
 }
 
 /** Turns a tool spec into a call with a fresh id; the text is the spec's, else `filler`'s, keyed by the id. */
-function toolCall(world: SimWorld, spec: ToolSpec): ToolCall {
+export function toolCall(world: SimWorld, spec: ToolSpec): ToolCall {
   const id = toolUseId(world.ids);
   if (spec.violates?.length) world.violations.set(id, spec.violates);
   const at = (path: string) => `${world.projectDir}/${path}`;
