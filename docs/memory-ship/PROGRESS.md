@@ -69,6 +69,26 @@ This is the single source of truth for what is done and what is next. `/next` re
 | P6.1 | SQLite store + FTS5 with guards | P4.2 | L | `scale-1e6` | todo | | |
 | P6.2 | Dense-arm experiment (≥ 1B embedder, warm) | P6.1 | M | D15 re-open condition | todo | | |
 
+## Follow-ups for later slices
+
+Earlier reports filed these for the slice in the first column. That slice reads its rows before planning, closes them in its PR and deletes them here. If it leaves a row open, its report says why. Follow-ups with no owning slice stay in their reports.
+
+| For | Follow-up | From |
+|---|---|---|
+| P0.1 | Run the fresh-clone check in a tree outside the repo with an empty `HOME`. The plugin's silent fallback hid the fresh-install failure; a checkout without `bun install` falls back to spawning `eden hook`, about 2.6 s per hook | [P0.−1](reports/P0.-1.md), [P0.0b](reports/P0.0b.md) |
+| P0.3 | Clear `arms.json`'s two `unstable` checks, `scoped` `junk-on-disk` and `re-eligibility` `reeligible-401` (#98): once ids are ULIDs, run both arms ≥ 20 times and make them plain checks | [P0.0c](reports/P0.0c.md) |
+| P0.3 | Honour `EDEN_NOW` (epoch ms): the arms hand hooks and the CLI the simulated clock through it | [P0.0c](reports/P0.0c.md) |
+| P0.3 | Re-run P0.0b's A/A noise floors: packets differed between identical runs, likely through #98 | [P0.0b](reports/P0.0b.md) |
+| P0.4 | Open issues #19 (memory-import stores an `sk-ant-…` key) and #42 (memory-consent). The Agent tool result is stored as the episode `The Agent tool result is [object Object]` (with P0.6) | [P0.−1](reports/P0.-1.md), [P0.0a](reports/P0.0a.md) |
+| P0.5 | A5 has no cross-repo arm. Today's gist store is global (repo A's rules reach repo B's SessionStart in `policy-recur`). D1 implies isolation, so add an arm that asserts it | [P0.0c](reports/P0.0c.md) |
+| P0.5 | EXECUTION §9 and A6 §4 disagree on how legacy sessions are mapped (R-7's session map vs a transcript's first line). Settle it in the spec; the `migrate` arm accepts either | [P0.0c](reports/P0.0c.md) |
+| P0.8 | Re-record every arm's `off` and `shadow` states in `arms.json` (`arms/run.ts --flags off`, `--flags shadow`); measure `abort_rate` | [P0.0c](reports/P0.0c.md), [P0.0b](reports/P0.0b.md) |
+| P1.1 | If P0.3 has not cleared `reeligible-401`, clear it before turning `re-eligibility` green | [P0.0c](reports/P0.0c.md) |
+| P1.3 | The simulator does not fire nested `InstructionsLoaded` (`nested_traversal`, `path_glob_match`), which the D27 shadow set needs | [P0.0a](reports/P0.0a.md) |
+| P2.3 | The simulator has no `if` filters, PermissionRequest or PermissionDenied | [P0.0a](reports/P0.0a.md) |
+| P2.5 | Claude Code 2.1.285 has no `fork` subagent type (A4 §5.3, A5 `subagent`); the harness simulates one. Say which mechanism "fork" means (perhaps SessionStart `source: fork`), or drop the clause until one is captured | [P0.0c](reports/P0.0c.md) |
+| P3.5 | Run `scoped` at full scale (4,752 and 15,840 junk turns); `arms.json` records CI scale only | [P0.0c](reports/P0.0c.md) |
+
 ## Rollout stages (EXECUTION §5)
 
 The agent flips a stage when its entry criteria and minimum soak time are met. It records the evidence in `reports/stage-<n>.md`. The circuit breaker reverts automatically.
