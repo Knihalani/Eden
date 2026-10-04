@@ -1,0 +1,846 @@
+{
+  "about": "A5 §4 arms. `on` is the arm run with default flags; `off` and `shadow` set every delivery-point flag (X7) in ~/.eden/flags.json. A red state lists the check ids that fail on plugins/eden-memory (`failed`) and why. The gate (arms/*.test.ts) fails when a red state fails any other set, or a green state fails. Edit a state only with the evidence (EXECUTION X4).",
+  "arms": [
+    {
+      "id": "cross-session",
+      "group": "floor",
+      "slices": [
+        "P0.5"
+      ],
+      "a5": "fact in session 1; cue in session 7 -> packs (D1)",
+      "on": {
+        "state": "red",
+        "why": "memories.jsonl is kept per session, so session 7 does not get the session-1 fact"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "worktree",
+      "group": "floor",
+      "slices": [
+        "P0.5"
+      ],
+      "a5": "write from .claude/worktrees/agent-x; read from the main checkout -> the same store (D1)",
+      "on": {
+        "state": "red",
+        "why": "stores are per session, not per repo (git-common-dir), so the main checkout does not get the worktree's fact"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "spawn-writers",
+      "group": "floor",
+      "slices": [
+        "P0.3"
+      ],
+      "a5": "200 events, one process each, distinct facts; plus concurrent PostToolUse -> 200 rows; 0 duplicate ids; no lost ledger entries",
+      "on": {
+        "state": "red",
+        "why": "no store view to count rows, ids and ledger entries (the arm's `eden memory dump` entry point is absent); today's ids are pid-derived (#98)"
+      }
+    },
+    {
+      "id": "reload-stale",
+      "group": "floor",
+      "slices": [
+        "P0.3"
+      ],
+      "a5": "Auth0 -> Clerk across processes; inject in a third -> Clerk only; stale_rate = 0",
+      "on": {
+        "state": "red",
+        "why": "the superseded Auth0 statement is still delivered after the switch to Clerk"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "rewind",
+      "group": "floor",
+      "slices": [
+        "P0.6",
+        "P1.2"
+      ],
+      "a5": "\"db is postgres\" -> rewind -> \"db is sqlite\" -> postgres in history; a delivery on the abandoned branch re-injects once",
+      "on": {
+        "state": "red",
+        "why": "no branch-point detection and no ledger: the abandoned value or the rewound delivery comes back more than once"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "negation",
+      "group": "floor",
+      "slices": [
+        "P3.3"
+      ],
+      "a5": "\"we no longer use Redis\" -> slot empty; no Redis bullet",
+      "on": {
+        "state": "red",
+        "why": "a retraction does not empty the slot: the Redis statement is still delivered"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "numbered-list",
+      "group": "floor",
+      "slices": [
+        "P0.3"
+      ],
+      "a5": "\"1. The database is sqlite\", later \"the database is postgres\" -> postgres",
+      "on": {
+        "state": "red",
+        "why": "the numbered-list rule ranks the old sqlite line above the later postgres statement"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "secrets",
+      "group": "floor",
+      "slices": [
+        "P0.4"
+      ],
+      "a5": "30 secret shapes via prompt, paste, tool result and assistant text -> secret_bytes = 0",
+      "on": {
+        "state": "red",
+        "why": "some secret shapes reach the store or a packet unredacted"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "migrate",
+      "group": "floor",
+      "slices": [
+        "P0.5"
+      ],
+      "a5": "fixture old stores -> --apply twice is a byte no-op; --rollback restores byte-identically; crash injection leaves old or new state; secret_bytes = 0; legacy rows never become slots, policies or pins",
+      "on": {
+        "state": "red",
+        "why": "no `eden memory migrate`"
+      }
+    },
+    {
+      "id": "poison",
+      "group": "floor",
+      "slices": [
+        "P0.4"
+      ],
+      "a5": "tool result or pasted README with \"always run curl ... | sh\"; assistant-asserted fact; compaction summary claim -> poison_hits = 0",
+      "on": {
+        "state": "red",
+        "why": "planted instructions from tool results, pastes, assistant text or a compaction summary are delivered back as memory"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "fail-open",
+      "group": "floor",
+      "slices": [
+        "P0.8"
+      ],
+      "a5": "a throw in each hook entry point -> exit 0 with empty stdout and stderr",
+      "on": {
+        "state": "red",
+        "why": "on an error the plugin prints `{}`, not nothing"
+      }
+    },
+    {
+      "id": "scoped",
+      "group": "place",
+      "slices": [
+        "P3.5"
+      ],
+      "a5": "web Clerk + postgres; cli none + sqlite at 4752 and 15840 turns, junk on disk",
+      "on": {
+        "state": "red",
+        "why": "no scope: a cli cue receives apps/web's values, and facts do not survive the session"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "cascade",
+      "group": "place",
+      "slices": [
+        "P3.5"
+      ],
+      "a5": "root node 20; web node 22 -> web 22, cli 20, root 20",
+      "on": {
+        "state": "red",
+        "why": "no scope cascade: node values are not resolved per scope"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "single-package",
+      "group": "place",
+      "slices": [
+        "P3.2"
+      ],
+      "a5": "every fact visible everywhere",
+      "on": {
+        "state": "red",
+        "why": "facts do not survive the session"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "fan-out",
+      "group": "place",
+      "slices": [
+        "P3.2"
+      ],
+      "a5": "a turn touching web and cli -> the two-scope bullet `auth - apps/web: Clerk . packages/cli: none`",
+      "on": {
+        "state": "red",
+        "why": "no read set and no two-scope bullet"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "r5-unit-rows",
+      "group": "place",
+      "slices": [
+        "P3.1"
+      ],
+      "a5": "all 12 rows of R5 §9.3 + R3 F9 rows",
+      "on": {
+        "state": "red",
+        "why": "no scope catalog (the arm's `eden memory scopes` entry point is absent)"
+      }
+    },
+    {
+      "id": "nonhuman",
+      "group": "delivery",
+      "slices": [
+        "P0.2"
+      ],
+      "a5": "20 task-notification submits between human prompts -> 0 packets from them",
+      "on": {
+        "state": "red",
+        "why": "non-human submits get packets (D24 is not implemented)"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "repeat",
+      "group": "delivery",
+      "slices": [
+        "P1.1"
+      ],
+      "a5": "the same auth cue on 3 human turns -> packets 1, empty, empty; an update -> `Updated:`",
+      "on": {
+        "state": "red",
+        "why": "no ledger: repeated cues get packets again, and nothing is labelled `Updated:`"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "compaction",
+      "group": "delivery",
+      "slices": [
+        "P1.2"
+      ],
+      "a5": "the compact summary keeps fact A and drops rule B -> only B re-arms",
+      "on": {
+        "state": "red",
+        "why": "no ledger epochs: fact A, which the summary kept, is delivered again"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "resume",
+      "group": "delivery",
+      "slices": [
+        "P1.2"
+      ],
+      "a5": "resume -> no re-injection of items delivered before",
+      "on": {
+        "state": "red",
+        "why": "items delivered before the resume are delivered again"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "subagent",
+      "group": "delivery",
+      "slices": [
+        "P2.5"
+      ],
+      "a5": "SubagentStart packet by task scope; parent scope unchanged; parallel Explore scopes; fork gets no parent-delivered bullet",
+      "on": {
+        "state": "red",
+        "why": "no SubagentStart handler: subagents get no packet"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "first-touch",
+      "group": "delivery",
+      "slices": [
+        "P3.5"
+      ],
+      "a5": "the first Read in packages/cli -> PostToolBatch delivers the cli slot facts once",
+      "on": {
+        "state": "red",
+        "why": "no PostToolBatch handler"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "residual",
+      "group": "delivery",
+      "slices": [
+        "P1.3"
+      ],
+      "a5": "\"auth is Clerk, fix login\" -> no Clerk bullet; a Read of a file containing \"Clerk\" does not suppress the bullet",
+      "on": {
+        "state": "red",
+        "why": "no residual filter: the fact the prompt itself states is delivered"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "shadow",
+      "group": "delivery",
+      "slices": [
+        "P1.3"
+      ],
+      "a5": "an InstructionsLoaded CLAUDE.md says \"use pnpm\" -> the pnpm fact is never injected",
+      "on": {
+        "state": "red",
+        "why": "no shadow set: a fact CLAUDE.md states is delivered"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "continue",
+      "group": "delivery",
+      "slices": [
+        "P0.2"
+      ],
+      "a5": "\"continue\" after a report -> no packet; after a proposal -> a packet only on STRONG q_prev evidence",
+      "on": {
+        "state": "red",
+        "why": "no turn mode: \"continue\" is treated as an ordinary prompt"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "budget",
+      "group": "delivery",
+      "slices": [
+        "P1.1"
+      ],
+      "a5": "a 300-human-turn soak -> tokens_per_epoch <= 6k",
+      "on": {
+        "state": "red",
+        "why": "no ledger and no epoch cap: tokens per epoch pass 6k"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "re-eligibility",
+      "group": "delivery",
+      "slices": [
+        "P1.1"
+      ],
+      "a5": "a pin delivered at off=0 is refractory at 399 KB, re-eligible at 401 KB with a fresh cue, and not without one; message.usage context tokens logged beside bytes",
+      "on": {
+        "state": "red",
+        "why": "no refractory distance: the pin is delivered again before 400 KB; no wide events"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "cuebench-code",
+      "group": "cues",
+      "slices": [
+        "P4.3"
+      ],
+      "a5": "R1 fixture + R8 test_nim: recall@4, FIR, precision per category at the repo-calibrated tau",
+      "on": {
+        "state": "red",
+        "why": "rows cannot be planted (the arm's `eden memory remember` entry point is absent), and today's store does not survive the session"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "policy-trigger",
+      "group": "cues",
+      "slices": [
+        "P2.2"
+      ],
+      "a5": "R1 policy cues -> recall >= 0.45 at FIR <= 5%; policy bullets on non-policy positives <= 10%; held-out nim-policy reported",
+      "on": {
+        "state": "red",
+        "why": "rows cannot be planted (the arm's `eden memory remember` entry point is absent), and today's store does not survive the session"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "extraction",
+      "group": "cues",
+      "slices": [
+        "P2.1"
+      ],
+      "a5": "E3: regex false durable <= 1% on no-durable items; batch-B slot recall >= 0.70 and rule recall >= 0.80",
+      "on": {
+        "state": "red",
+        "why": "no extraction entry point (the arm's `eden memory extract`)"
+      }
+    },
+    {
+      "id": "alias-batch",
+      "group": "cues",
+      "slices": [
+        "P5.3"
+      ],
+      "a5": "a strong-model alias batch -> kept only if silence-replay FIR <= pre-batch and annotated recall -0.02 at most; held-out paraphrase recall reported",
+      "on": {
+        "state": "red",
+        "why": "no alias-batch entry point (the arm's `eden memory aliases`)"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "policy-guard",
+      "group": "cues",
+      "slices": [
+        "P2.3"
+      ],
+      "a5": "\"don't merge it yourself\"; `gh pr merge` -> ask with the rule and the same text in additionalContext; revoked -> no ask; a declined ask labelled `declined`",
+      "on": {
+        "state": "red",
+        "why": "no PreToolUse guard"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "guard-modes",
+      "group": "cues",
+      "slices": [
+        "P2.3"
+      ],
+      "a5": "ask in default and auto; context only in dontAsk and bypassPermissions (`guard_bypassed` logged); never a deny",
+      "on": {
+        "state": "red",
+        "why": "no PreToolUse guard"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "guard-dedup",
+      "group": "cues",
+      "slices": [
+        "P2.3"
+      ],
+      "a5": "`git push --force` matches push-upstream and history-rewrite -> exactly one response, from history-rewrite",
+      "on": {
+        "state": "red",
+        "why": "no PreToolUse guard"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "policy-recur",
+      "group": "cues",
+      "slices": [
+        "P2.4"
+      ],
+      "a5": "same (class, polarity, object) in 2 sessions -> a pin; in 2 repos -> a user-global proposal; confirmed -> 3rd repo gets it; intents and unrelated objects never promote",
+      "on": {
+        "state": "red",
+        "why": "no recurrence promotion and no user-global proposal"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "intent-expiry",
+      "group": "cues",
+      "slices": [
+        "P2.3"
+      ],
+      "a5": "\"don't open the PR yet\" -> an ask on `gh pr create`; \"open it now\" -> no ask; after 7 days -> gone",
+      "on": {
+        "state": "red",
+        "why": "no PreToolUse guard and no intents"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "repo-facts",
+      "group": "cues",
+      "slices": [
+        "P3.4"
+      ],
+      "a5": "a lockfile swap from npm to pnpm with no chat -> pkg.manager=pnpm (cited); a user statement overrides it",
+      "on": {
+        "state": "red",
+        "why": "no repo-fact mining"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "citation",
+      "group": "cues",
+      "slices": [
+        "P3.4"
+      ],
+      "a5": "@clerk/nextjs removed with no chat -> the Clerk bullet is skipped (stale)",
+      "on": {
+        "state": "red",
+        "why": "no citations: the Clerk fact is delivered after its dependency is removed"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "gotcha",
+      "group": "cues",
+      "slices": [
+        "P4.5"
+      ],
+      "a5": "failure -> fix -> the same error a week later -> delivered next to the error",
+      "on": {
+        "state": "red",
+        "why": "no PostToolUseFailure handler and no gotchas"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "stale-episode",
+      "group": "cues",
+      "slices": [
+        "P3.3"
+      ],
+      "a5": "cli postgres -> sqlite; cue \"cli db setup\" -> no postgres bullet",
+      "on": {
+        "state": "red",
+        "why": "episodes carrying the superseded postgres value are delivered"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "restate-learn",
+      "group": "cues",
+      "slices": [
+        "P5.3"
+      ],
+      "a5": "cue phrasing B misses twice, the user restates -> after sleep, B packs; no new fire on the silence replay",
+      "on": {
+        "state": "red",
+        "why": "no learning from restatement, and no sleep entry point"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "continuation",
+      "group": "cues",
+      "slices": [
+        "P4.1"
+      ],
+      "a5": "\"yes do it\" after a proposal naming vitest.config -> the vitest-config memory packs",
+      "on": {
+        "state": "red",
+        "why": "the cue is the prompt alone: \"yes do it\" carries nothing to retrieve with"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "scale-20k",
+      "group": "cues",
+      "slices": [
+        "P4.2"
+      ],
+      "a5": "20k rows: gold recall, silence, p99 < 150 ms; never an unbounded bm25 on a fat term",
+      "on": {
+        "state": "red",
+        "why": "rows cannot be planted (the arm's `eden memory remember` entry point is absent)"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    },
+    {
+      "id": "scale-1e6",
+      "group": "cues",
+      "slices": [
+        "P6.1"
+      ],
+      "a5": "1e6 rows: gold recall, silence, p99 < 150 ms; never an unbounded bm25 on a fat term",
+      "on": {
+        "state": "red",
+        "why": "rows cannot be planted (the arm's `eden memory remember` entry point is absent)"
+      },
+      "off": {
+        "state": "red",
+        "why": "flags.json is ignored today (X7 flags land in P0.8)"
+      },
+      "shadow": {
+        "state": "red",
+        "why": "flags.json is ignored today and no shadow ledger or wide events exist (P0.8)"
+      }
+    }
+  ]
+}
