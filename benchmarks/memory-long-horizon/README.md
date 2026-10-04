@@ -50,5 +50,46 @@ digest that two runs of one script share, and the A5 §2 metrics). `--out` keeps
 
 Every run lives in its own directory: hooks get `HOME`, `EDEN_HOME` and `EDEN_MEMORY_DIR` inside it, and inherit
 nothing else from the caller but `PATH`, `TMPDIR` and `LANG`. The oracle files sit beside them, outside anything a
-hook is pointed at, and no product code imports the harness (`independence.test.ts`). The A5 arms come next
-(P0.0c).
+hook is pointed at, and no product code imports the harness (`independence.test.ts`).
+
+## The A5 §4 arms (`arms/`, `arms.json`, P0.0c)
+
+Each of A5 §4's 44 arms is a script played through a plugin's hooks in the simulator (or, for the fixture arms, a
+product entry point driven as a process), returning named checks. A failing check names the A5 assertion, or a
+control the assertion needs, that did not hold. `arms.json` records, per arm and flag state, whether it passes on
+today's `plugins/eden-memory` and, when not, exactly which checks fail and why.
+
+```bash
+bun benchmarks/memory-long-horizon/arms/run.ts                         # every arm, every recorded flag state
+bun benchmarks/memory-long-horizon/arms/run.ts --arm negation --flags on
+bun benchmarks/memory-long-horizon/arms/run.ts --scale full --json     # A5's full sizes (scoped's 15840 turns, …)
+```
+
+- **Flag states (X7).** `on` runs with no flag file. `off` and `shadow` write `~/.eden/flags.json` with every
+  delivery-point flag set to that value, and are judged by generic checks: `off` is identity (exit 0, nothing printed
+  at a delivery point, no context or decision, no ledger); `shadow` also writes the shadow ledger and wide events.
+- **The gate** (`arms/*.test.ts` calling `gate([...])`): CI runs every recorded state at CI scale and fails when a
+  red arm fails any other set of checks, or passes, or a green arm fails (EXECUTION X4). Update `arms.json` only
+  with the evidence of a run. A check listed as `unstable` is one today's plugin flips between identical runs.
+- **References** (`arms/reference.ts`): every arm also passes against the scripted plugin in reference mode with the
+  arm's answer table and against `arms/fixtures/reference-cli.ts`, so no arm is unsatisfiable or vacuous.
+- **Entry points the arms define**, run in the repo with the hooks' environment (each arm's header has the
+  contract): `eden memory dump --json` (spawn-writers), `eden memory remember --jsonl -` (CueBench, policy-trigger,
+  alias-batch, scale), `eden memory extract --jsonl -` (extraction), `eden memory scopes --json <path>…` (R5 rows),
+  `eden memory migrate --dry-run --json | --apply | --rollback` with `EDEN_MIGRATE_CRASH_AFTER` (migrate),
+  `eden memory aliases --batch FILE --json` (alias-batch), `eden sleep --idle --after 0` (arms after sleep).
+- **The clock.** Every arm world hands hooks and the CLI the simulated time as `EDEN_NOW` (epoch ms), so a product
+  that honours it sees the days a script skips (intent expiry, a gotcha a week later).
+
+| File | Role |
+|---|---|
+| `arms.json` | The record: per arm, its slices, A5 text, and each flag state's measured outcome |
+| `arms/kit.ts` | Checks, runs in fresh directories, flag runs and their generic checks, the scripted-user driver, the CLI call |
+| `arms/floor.ts`, `secrets.ts`, `writers.ts`, `migrate.ts` | Correctness and safety arms |
+| `arms/place.ts`, `scope-rows.ts` | Place and scope arms, and the R5 §9.3 + R3 F9 rows |
+| `arms/delivery.ts` | Delivery arms (G5) |
+| `arms/policy.ts`, `facts.ts` | Policy, guard, fact and cue arms (G1) |
+| `arms/cuebench.ts`, `bench.ts`, `extraction.ts`, `scale.ts` | Fixture arms: R1/R8 CueBench, triggers, aliases, E3, the 20k/1e6 world |
+| `arms/gate.ts`, `record.ts`, `registry.ts`, `run.ts` | The gate, the record, the arm registry, the runner |
+| `arms/reference.ts`, `fixtures/reference-cli.ts` | The references every arm passes against |
+| `arms/fixtures/world.ts`, `legacy-v1.json` | The arms' world (oracle data), and pre-P0.5 stores for `migrate` |

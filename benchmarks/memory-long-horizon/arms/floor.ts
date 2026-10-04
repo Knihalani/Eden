@@ -185,7 +185,11 @@ const rewind: Arm = {
         .filter((bullet) => states(bullet, AUTH, "Clerk"));
     const postgres = bulletsIn(packets, branch.seq).filter((bullet) => states(bullet, DB, "postgres"));
     return [
-      check("abandoned-delivery", clerkAt(abandoned).length > 0, `Clerk on the abandoned branch: ${quote(clerkAt(abandoned))}`),
+      check(
+        "abandoned-delivery",
+        clerkAt(abandoned).length > 0,
+        `Clerk on the abandoned branch: ${quote(clerkAt(abandoned))}`,
+      ),
       check("reinjects", clerkAt(again).length > 0, `Clerk on the new branch's first cue: ${quote(clerkAt(again))}`),
       check("once", clerkAt(twice).length === 0, `Clerk again on the next cue: ${quote(clerkAt(twice))}`),
       check("no-postgres", postgres.length === 0, `the abandoned postgres after the rewind: ${quote(postgres)}`),
@@ -264,11 +268,28 @@ const failOpen: Arm = {
     const codes = [...new Set(calls.map((call) => call.exitCode))];
     return [
       check("covered", missing.length === 0, `registered events never fired: ${missing.join(", ") || "none"}`),
-      check("exit-0", codes.every((code) => code === 0), `exit codes: ${codes.join(", ")}`),
-      check("empty-stdout", printed.length === 0, `${printed.length} of ${calls.length} printed, e.g. ${JSON.stringify(printed[0]?.stdout.slice(0, 80) ?? "")}`),
+      check(
+        "exit-0",
+        codes.every((code) => code === 0),
+        `exit codes: ${codes.join(", ")}`,
+      ),
+      check(
+        "empty-stdout",
+        printed.length === 0,
+        `${printed.length} of ${calls.length} printed, e.g. ${JSON.stringify(printed[0]?.stdout.slice(0, 80) ?? "")}`,
+      ),
       check("empty-stderr", errors.length === 0, `${errors.length} of ${calls.length} wrote to stderr`),
     ];
   },
 };
 
-export const FLOOR_ARMS: Arm[] = [crossSession, worktree, reloadStale, rewind, negation, numberedList, poison, failOpen];
+export const FLOOR_ARMS: Arm[] = [
+  crossSession,
+  worktree,
+  reloadStale,
+  rewind,
+  negation,
+  numberedList,
+  poison,
+  failOpen,
+];

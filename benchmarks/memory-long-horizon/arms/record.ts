@@ -11,6 +11,8 @@ export interface StateRecord {
   /** For a red state: the ids of the failing checks, sorted. */
   failed?: string[];
   why?: string;
+  /** Checks today's plugin flips between identical runs; the gate leaves them out (gate.ts). */
+  unstable?: string[];
 }
 
 export interface ArmRecord {
