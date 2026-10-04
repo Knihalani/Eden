@@ -7,7 +7,8 @@
  *
  * Defaults: every arm, every flag state the record has, `plugins/eden-memory` and the product CLI from this tree,
  * CI scale. `--reference` runs each arm against its reference instead (reference.ts), where every check must pass.
- * Exit code 1 when a run differs from what is expected (the gate's comparison: `unstable` checks are left out).
+ * Exit code 1 when a run differs from what is expected (the gate's comparison: `unstable` checks are left out), when
+ * an arm id is unknown, or when nothing ran.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,7 +53,7 @@ async function main(args: string[]): Promise<number> {
     const arm = ARMS.get(id);
     if (!arm) {
       console.error(`${id}: no such arm`);
-      continue;
+      return 1;
     }
     const states = statesOf(record, id).filter((state) => flags === "all" || state === flags);
     for (const state of states) {
@@ -73,7 +74,7 @@ async function main(args: string[]): Promise<number> {
     }
   }
   if (args.includes("--json")) console.log(JSON.stringify(results, null, 2));
-  return results.every((result) => result.matches) ? 0 : 1;
+  return results.length > 0 && results.every((result) => result.matches) ? 0 : 1;
 }
 
 if (import.meta.main) {

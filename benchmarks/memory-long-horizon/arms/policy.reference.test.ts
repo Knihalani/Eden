@@ -1,4 +1,4 @@
-/** The "policy" arms (groups.ts) against their references: every check passes in every recorded state. */
+/** The "policy" arms (groups.ts) against their references, in the CI states: every check passes. */
 import { referenceSuite } from "./reference-suite";
 
 referenceSuite("policy");
