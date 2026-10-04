@@ -104,6 +104,8 @@ export interface HookOutcome {
   /** Exit 2 on an event that can block, `decision: "block"`, or `continue: false`. */
   blocked: boolean;
   permissionDecision?: "allow" | "deny" | "ask" | "defer";
+  /** The reason that comes with a permission decision; for `ask` it is shown to the user only. */
+  permissionDecisionReason?: string;
   /** The `<hook name> hook error` notice Claude Code would show, if any. */
   error?: string;
 }
@@ -202,6 +204,9 @@ function readJson(event: HookEvent, json: Record<string, unknown>): Partial<Hook
     const decision = fields.permissionDecision;
     if (event === "PreToolUse" && PERMISSION_DECISIONS.includes(decision)) {
       read.permissionDecision = decision as HookOutcome["permissionDecision"];
+      if (typeof fields.permissionDecisionReason === "string") {
+        read.permissionDecisionReason = fields.permissionDecisionReason;
+      }
     }
   }
   return read;
@@ -225,17 +230,22 @@ export interface RunnerOptions {
 export class HookRunner {
   constructor(private readonly options: RunnerOptions) {}
 
-  /** Runs every handler that matches the payload, in parallel, each in its own process. */
-  async dispatch(payload: HookPayload): Promise<Invocation[]> {
+  /** Runs every handler that matches the payload, in parallel, each in its own process, with `env` added. */
+  async dispatch(payload: HookPayload, env: Record<string, string> = {}): Promise<Invocation[]> {
     const event = payload.hook_event_name;
     const value = matchedField(payload);
     const handlers = (this.options.plugin.hooks[event] ?? [])
       .filter((group) => matcherAccepts(group.matcher, value))
       .flatMap((group) => group.hooks);
-    return Promise.all(handlers.map((handler) => this.run(event, handler, payload)));
+    return Promise.all(handlers.map((handler) => this.run(event, handler, payload, env)));
   }
 
-  private async run(event: HookEvent, handler: HookHandler, payload: HookPayload): Promise<Invocation> {
+  private async run(
+    event: HookEvent,
+    handler: HookHandler,
+    payload: HookPayload,
+    env: Record<string, string>,
+  ): Promise<Invocation> {
     const root = this.options.plugin.root;
     const cmd = handler.args
       ? [handler.command, ...handler.args].map((part) => part.replaceAll("${CLAUDE_PLUGIN_ROOT}", root))
@@ -247,7 +257,7 @@ export class HookRunner {
     const child = Bun.spawn({
       cmd,
       cwd,
-      env: this.options.env,
+      env: { ...this.options.env, ...env },
       stdin: new TextEncoder().encode(JSON.stringify(payload)),
       stdout: "pipe",
       stderr: "pipe",
