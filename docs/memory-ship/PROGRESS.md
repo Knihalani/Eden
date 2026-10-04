@@ -21,8 +21,9 @@ This is the single source of truth for what is done and what is next. `/next` re
 | R-2 | Park the `whatever` loop (`.whatever/STOP`) | — | S | done | — | EXECUTION §1 |
 | R-6 | Agent permissions (full autonomy; see EXECUTION §1) | — | S | done | #1 | — |
 | R-7 | Snapshot `session_id → cwd` to `~/.eden/migrate/session-map.json` | — | S | done | — | EXECUTION §1 |
-| R-6b | Default branch `main`; require the `test` check on `main` | P0.−1 | S | blocked (GitHub plan: default branch done; required check needs Pro) | — | [reports/P0.-1.md](reports/P0.-1.md) |
-| R-1 | Rotate the leaked `cfat_…` token | — | — | **user** | — | — |
+| R-6b | Default branch `main`; require the `test` check on `main` | P0.−1 | S | won't do (user, 2026-10-04: no GitHub Pro; default branch done; a green `test` run stays a merge rule, not a GitHub setting) | — | [reports/P0.-1.md](reports/P0.-1.md) |
+| R-1 | Rotate the leaked `cfat_…` token | — | — | won't do (user, 2026-10-04: ignore it) | — | — |
+| R-8 | Opt in to text collection for the real-negative set (EXECUTION §8), and to every opt-in flag (`log.text`, `sleep.llm`) | — | — | done (user opted in to everything, 2026-10-04) | — | — |
 
 ## Slices
 
