@@ -69,9 +69,10 @@ bun benchmarks/memory-long-horizon/arms/run.ts --scale full --json     # A5's fu
   delivery-point flag set to that value, and are judged by generic checks: `off` is identity (exit 0, nothing printed
   at a delivery point, no context or decision, no ledger); `shadow` also writes the shadow ledger and wide events.
 - **The gate** (`arms/<group>.gate.test.ts` calling `gate("<group>")`, groups in `arms/groups.ts`): CI runs every
-  recorded state at CI scale and fails when a
-  red arm fails any other set of checks, or passes, or a green arm fails (EXECUTION X4). Update `arms.json` only
-  with the evidence of a run. A check listed as `unstable` is one today's plugin flips between identical runs.
+  arm's `on` state, and `off` and `shadow` for one cheap arm per group, at CI scale. It fails when a red state fails
+  any other set of checks, or passes, or a green state fails (EXECUTION X4). `run.ts` checks every state of every
+  arm; a slice runs it on its arms. Update `arms.json` only with the evidence of a run. A check listed as
+  `unstable` is one today's plugin flips between identical runs.
 - **References** (`arms/reference.ts`, run by `arms/<group>.reference.test.ts` and `run.ts --reference`): every arm
   also passes against the scripted plugin in reference mode with the arm's answer table and against
   `arms/fixtures/reference-cli.ts`, so no arm is unsatisfiable or vacuous.
