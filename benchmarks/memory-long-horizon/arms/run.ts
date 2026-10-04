@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { SCRIPTED_PLUGIN } from "../harness/testkit";
-import { EDEN_CLI, EDEN_PLUGIN, runArm, type ArmOptions, type ArmResult, type FlagState, type Scale } from "./kit";
+import { EDEN_CLI, EDEN_PLUGIN, runArm, type ArmOptions, type ArmResult, type Scale } from "./kit";
 import { loadRecord, mismatch, statesOf, type StateRecord } from "./record";
 import { REFERENCE_CLI, referenceFor } from "./reference";
 import { ARMS } from "./registry";
@@ -54,7 +54,7 @@ async function main(args: string[]): Promise<number> {
       console.error(`${id}: no such arm`);
       continue;
     }
-    const states = flags === "all" ? statesOf(record, id) : [flags as FlagState];
+    const states = statesOf(record, id).filter((state) => flags === "all" || state === flags);
     for (const state of states) {
       const options: ArmOptions = reference
         ? { ...referenceOptions(id), scale, flags: state }
