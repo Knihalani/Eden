@@ -33,7 +33,7 @@ This is the single source of truth for what is done and what is next. `/next` re
 | R-5 | Formatter config + reformat line-joined files (`src/index.ts`, `src/memory-sota.ts`, …); `git worktree prune` | P0.−1 | S | formatting-only diff (AST-equal or identical test results before/after); CI green | done | #94 | [reports/R-5.md](reports/R-5.md) |
 | P0.0a | Harness: Claude-shaped event + transcript simulator, process-per-event runner | R-5 | M | simulator self-tests; replays an R6-shaped session | done | #107 | [reports/P0.0a.md](reports/P0.0a.md) |
 | P0.0b | Harness: world oracle, simulated context window, annotated cues | P0.0a | M | oracle self-tests; A/A noise floors recorded in A5 | done | #108 | [reports/P0.0b.md](reports/P0.0b.md) |
-| P0.0c | Harness: every A5 §4 arm, landed **red** with asserted reasons; `arms.json` | P0.0b | L | CI checks red arms fail for their reason | in-progress (`mem/P0.0c-arms`) | | |
+| P0.0c | Harness: every A5 §4 arm, landed **red** with asserted reasons; `arms.json` | P0.0b | L | CI checks red arms fail for their reason | done | #110 | [reports/P0.0c.md](reports/P0.0c.md) |
 | P0.0d | Harness: real-negative loader + `eden eval build-negatives` (canary secrets) | P0.0a | S | canary test; CI prints `skipped: private set absent` | todo | | |
 | P0.1 | Packaging: fresh-clone check, dead tests, `eden doctor`, plugin fallback within 150 ms | P0.0c | S | fresh clone passes; doctor green | todo | | |
 | P0.2 | Stop the bleeding: non-human + ack silence, variable k, declarative wording | P0.1 | S | `nonhuman`, `continue`; R6 replay packet rate ≤ 30% | todo | | |
