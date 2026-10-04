@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to a pull request cancels the run still going on the older one, which only
+# spends minutes. Runs on main all finish: each one is a commit of main.
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Format, types and the CLI bundle, in parallel with the test shards below.
   checks:
@@ -30,9 +36,11 @@ jobs:
         env:
           EDEN_SKIP_CHECKS: "1"
 
-  # The suite in six parallel slices of its test files (EDEN_TEST_SHARD, bun
-  # test --shard). Slicing is by file, so the slowest file sets the floor:
-  # benchmarks/campaign/edge.test.ts, about four and a half minutes.
+  # The suite in six parallel slices of its test files (EDEN_TEST_SHARD).
+  # scripts/test-shard.ts deals the files out by their measured times
+  # (scripts/test-times.txt), about 160 s of tests each. Slicing is by file,
+  # so the slowest file sets the floor: benchmarks/campaign/edge.test.ts,
+  # about 135 s.
   test:
     runs-on: ubuntu-latest
     strategy:
