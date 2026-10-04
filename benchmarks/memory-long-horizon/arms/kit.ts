@@ -29,10 +29,12 @@ import { itemId, type Effect } from "../harness/oracle";
 import type { HookEvent } from "../harness/payloads";
 import { hookEnv, loadPlugin } from "../harness/runner";
 import {
+  simClock,
   SimWorld,
   type AgentRun,
   type PromptNote,
   type SessionPlace,
+  type SimClock,
   type SimSession,
   type SubagentSpec,
   type WorldOptions,
@@ -123,6 +125,8 @@ export interface WorldSetup extends Pick<WorldOptions, "permissionMode" | "askAn
 export class ArmRun {
   readonly worlds: SimWorld[] = [];
   private seed = 1;
+  /** One clock per home: the worlds that share a store see one time (a product's `EDEN_NOW` never goes back). */
+  private readonly clocks = new Map<string, SimClock>();
 
   constructor(
     readonly options: ArmOptions,
@@ -134,8 +138,11 @@ export class ArmRun {
     const { home, ...options } = setup;
     const runDir = home === undefined ? this.dir : join(this.dir, `home-${home}`);
     mkdirSync(runDir, { recursive: true });
+    const clock = this.clocks.get(runDir) ?? simClock();
+    this.clocks.set(runDir, clock);
     const world = new SimWorld({
       runDir,
+      clock,
       plugin: loadPlugin(this.options.pluginDir),
       seed: this.seed++,
       clockEnv: true,

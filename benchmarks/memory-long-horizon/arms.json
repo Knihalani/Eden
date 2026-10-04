@@ -936,7 +936,8 @@
         "failed": [
           "batch-decided",
           "kept-only-if",
-          "planted"
+          "planted",
+          "recall-before"
         ],
         "why": "`eden memory remember` does not exist, so no row is planted"
       },
@@ -1178,9 +1179,9 @@
       "on": {
         "state": "red",
         "failed": [
-          "skipped-after-removal"
+          "control-packs"
         ],
-        "why": "after @clerk/nextjs is removed, the gist 'in apps web the auth provider is Clerk' is still delivered"
+        "why": "no repo-fact mining: the Clerk fact mined from apps/web/package.json never packs (no citation exists to fail; skipped-after-removal holds only because nothing is delivered)"
       },
       "off": {
         "state": "red",

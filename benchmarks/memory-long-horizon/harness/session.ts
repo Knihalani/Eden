@@ -127,6 +127,21 @@ export interface WorldOptions {
    * sees the days a script skips. Off by default: no hook of a plain replay gets it.
    */
   clockEnv?: boolean;
+  /**
+   * The simulated clock, when worlds that share a home must share one too (a store's writers see one time). A world
+   * given none keeps its own, starting at the simulation epoch.
+   */
+  clock?: SimClock;
+}
+
+/** Simulated time in epoch milliseconds, shared by the worlds that hold it. */
+export interface SimClock {
+  ms: number;
+}
+
+/** A fresh simulated clock at the simulation epoch. */
+export function simClock(): SimClock {
+  return { ms: SIM_EPOCH };
 }
 
 /** Where a session runs: its working directory (the repo, or one of its worktrees) and that checkout's branch. */
@@ -193,10 +208,11 @@ export class SimWorld {
   readonly violations = new Map<string, readonly string[]>();
   private readonly runner: HookRunner;
   private readonly records = new WeakMap<Invocation[], EventRecord>();
-  private clock = SIM_EPOCH;
+  private readonly clock: SimClock;
 
   constructor(readonly options: WorldOptions) {
     this.runDir = realpathSync(options.runDir);
+    this.clock = options.clock ?? simClock();
     this.home = join(this.runDir, "home");
     this.projectDir = join(this.runDir, options.projectName ?? "project");
     this.ids = new Rng(options.seed ^ 0x5eed1d5);
@@ -221,20 +237,20 @@ export class SimWorld {
 
   /** Simulated time, in epoch milliseconds. */
   get timeMs(): number {
-    return this.clock;
+    return this.clock.ms;
   }
 
   now(): string {
-    return new Date(this.clock).toISOString();
+    return new Date(this.clock.ms).toISOString();
   }
 
   /** The position of the next event, and the time: from here on, a change to the truth holds. */
   at(): { seq: number; t: number } {
-    return { seq: this.log.length, t: this.clock };
+    return { seq: this.log.length, t: this.clock.ms };
   }
 
   advance(ms: number): void {
-    this.clock += Math.round(ms);
+    this.clock.ms += Math.round(ms);
   }
 
   /** The token estimate of text the model sees, with the run directory counted as a fixed placeholder. */
@@ -273,7 +289,7 @@ export class SimWorld {
       invocations: [],
     };
     this.log.push(record);
-    const clock: Record<string, string> = this.options.clockEnv ? { EDEN_NOW: String(this.clock) } : {};
+    const clock: Record<string, string> = this.options.clockEnv ? { EDEN_NOW: String(this.clock.ms) } : {};
     record.invocations = await this.runner.dispatch(payload, { ...clock, ...env });
     this.records.set(record.invocations, record);
     return record.invocations;

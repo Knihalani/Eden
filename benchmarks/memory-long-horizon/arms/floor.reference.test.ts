@@ -1,4 +1,4 @@
 /** The "floor" arms (groups.ts) against their references: every check passes in every recorded state. */
-import { referenceSuite } from "./reference";
+import { referenceSuite } from "./reference-suite";
 
 referenceSuite("floor");

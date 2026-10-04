@@ -1,28 +1,16 @@
 /**
  * The arms' references (prereg target 3): for every arm, what a plugin that does what A5 asks answers on the arm's
  * script, as a table for the scripted plugin in reference mode (harness/fixtures/scripted-plugin/answer.ts), plus the
- * reference CLI (fixtures/reference-cli.ts) for the entry points arms define. reference.test.ts runs each arm with
- * them and expects no check to fail (`referenceSuite`, run by the `<group>.reference.test.ts` files): so no arm is
- * unsatisfiable, and a silent plugin (which fails the controls) is not what passes them.
- *
- * Every arm runs `on`. `off` and `shadow` run for the first flagged arm of each group: an arm whose `on` reference
- * delivers at a delivery point also satisfies the generic flag checks, since the reference plugin's flag handling is
- * the same for every table (kit.test.ts covers those checks), so the other flag runs would add CI time and no
- * evidence. `run.ts --reference` runs every state.
+ * reference CLI (fixtures/reference-cli.ts) for the entry points arms define. reference-suite.ts runs each arm with
+ * them and expects no check to fail: so no arm is unsatisfiable, and a silent plugin (which fails the controls) is
+ * not what passes them.
  *
  * Packets are worded the way A4 §5.8 shows ("Auth provider in apps/web: Clerk", "Rule you set: …"), so the oracle's
  * reader is exercised on the target wording, not on today's.
  */
-import { afterAll, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildWorld } from "../../memory-scale/hard-world";
-import { removeTempDirs, SCRIPTED_PLUGIN, tempDir } from "../harness/testkit";
 import { isNegative, memories, nimCues, perCategory, r1Cues, type BenchCue } from "./cuebench";
-import { GROUPS } from "./groups";
-import { runArm } from "./kit";
-import { loadRecord, statesOf } from "./record";
-import { ARMS } from "./registry";
 import { ciCases } from "./scale";
 
 export interface Rule {
@@ -233,7 +221,12 @@ const TABLES: Record<string, Reference> = {
     ],
   },
   citation: {
-    answers: [submit("which auth provider does apps/web use?", "Auth provider in apps/web: Clerk (you said)")],
+    answers: [
+      submit(
+        "which auth provider does apps/web use?",
+        "Auth provider in apps/web: Clerk (cited: apps/web/package.json)",
+      ),
+    ],
   },
   gotcha: {
     answers: [
@@ -322,26 +315,4 @@ export function referenceFor(id: string): Reference {
   if (["cuebench-code", "policy-trigger", "alias-batch"].includes(id)) return benchTable(ciCues());
   if (id === "scale-20k" || id === "scale-1e6") return scaleTable();
   return { answers: [] };
-}
-
-/** Registers, for each arm of a group (groups.ts), one test per recorded state against its reference. */
-export function referenceSuite(group: string): void {
-  afterAll(removeTempDirs);
-  const record = loadRecord();
-  describe(`A5 §4 arms (${group}) against a plugin that does what A5 asks`, () => {
-    const flaggedOnce = (GROUPS[group] ?? []).find((id) => statesOf(record, id).length > 1);
-    for (const id of GROUPS[group] ?? []) {
-      for (const state of id === flaggedOnce ? statesOf(record, id) : (["on"] as const)) {
-        test(`${id} [${state}]`, async () => {
-          const reference = referenceFor(id);
-          const table = join(tempDir("eden-reference"), "answers.json");
-          writeFileSync(table, JSON.stringify(reference.answers));
-          const env = { SCRIPTED_ANSWERS: table, SCRIPTED_REFERENCE: "1", ...reference.env };
-          const options = { pluginDir: SCRIPTED_PLUGIN, cli: REFERENCE_CLI, scale: "ci" as const, flags: state, env };
-          const result = await runArm(ARMS.get(id)!, options);
-          expect(result.checks.filter((item) => !item.ok).map((item) => `${item.id}: ${item.detail}`)).toEqual([]);
-        }, 240_000);
-      }
-    }
-  });
 }

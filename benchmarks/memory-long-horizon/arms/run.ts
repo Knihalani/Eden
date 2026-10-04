@@ -7,14 +7,14 @@
  *
  * Defaults: every arm, every flag state the record has, `plugins/eden-memory` and the product CLI from this tree,
  * CI scale. `--reference` runs each arm against its reference instead (reference.ts), where every check must pass.
- * Exit code 1 when a run differs from what is expected.
+ * Exit code 1 when a run differs from what is expected (the gate's comparison: `unstable` checks are left out).
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { SCRIPTED_PLUGIN } from "../harness/testkit";
 import { EDEN_CLI, EDEN_PLUGIN, runArm, type ArmOptions, type ArmResult, type FlagState, type Scale } from "./kit";
-import { expected, loadRecord, statesOf } from "./record";
+import { loadRecord, mismatch, statesOf, type StateRecord } from "./record";
 import { REFERENCE_CLI, referenceFor } from "./reference";
 import { ARMS } from "./registry";
 
@@ -47,7 +47,7 @@ async function main(args: string[]): Promise<number> {
   const pluginDir = resolve(argument(args, "--plugin") ?? EDEN_PLUGIN);
   const scale = (argument(args, "--scale") ?? "ci") as Scale;
   const reference = args.includes("--reference");
-  const results: (ArmResult & { expected: string[] | null; matches: boolean })[] = [];
+  const results: (ArmResult & { recorded: StateRecord | null; matches: boolean })[] = [];
   for (const id of ids) {
     const arm = ARMS.get(id);
     if (!arm) {
@@ -60,13 +60,15 @@ async function main(args: string[]): Promise<number> {
         ? { ...referenceOptions(id), scale, flags: state }
         : { pluginDir, cli: EDEN_CLI, scale, flags: state };
       const result = await runArm(arm, options);
-      const want = reference ? [] : expected(record, id, state);
-      const matches = want !== null && JSON.stringify(want) === JSON.stringify(result.failed);
-      results.push({ ...result, expected: want, matches });
+      const recorded = reference
+        ? { state: "green" as const }
+        : (record.arms.find((entry) => entry.id === id)?.[state] ?? null);
+      const problem = recorded ? mismatch(result, recorded) : `${id} [${state}] is not recorded`;
+      results.push({ ...result, recorded, matches: problem === "" });
       if (!args.includes("--json")) {
-        console.log(`${matches ? "  " : "≠ "}${id} [${state}] ${(result.ms / 1000).toFixed(1)} s`);
+        console.log(`${problem ? "≠ " : "  "}${id} [${state}] ${(result.ms / 1000).toFixed(1)} s`);
         for (const item of result.checks) console.log(`    ${item.ok ? "ok  " : "FAIL"} ${item.id}: ${item.detail}`);
-        if (!matches) console.log(`    recorded: ${want === null ? "nothing" : JSON.stringify(want)}`);
+        if (problem) console.log(`    ${problem.split("\n")[0]}`);
       }
     }
   }

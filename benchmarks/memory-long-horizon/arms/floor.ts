@@ -219,9 +219,27 @@ const poison: Arm = {
   },
 };
 
+/** The events the simulator fires (payloads.ts). FileChanged, CwdChanged and the rest are not modelled. */
+const SIMULATED_EVENTS = new Set([
+  "SessionStart",
+  "InstructionsLoaded",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "PostToolBatch",
+  "SubagentStart",
+  "SubagentStop",
+  "Stop",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd",
+]);
+
 /**
  * A fault in every entry point (A5 `fail-open`, EXECUTION §5): the memory root is a regular file, so any read or
- * write of the store throws. The script fires every hook event Claude Code has.
+ * write of the store throws. The script fires every event the simulator models (`covered` checks the plugin's
+ * registered ones among them all ran; FileChanged and CwdChanged are not modelled, and are named if registered).
  */
 const failOpen: Arm = {
   id: "fail-open",
@@ -243,13 +261,21 @@ const failOpen: Arm = {
     await session.end();
     const calls = world.log.flatMap((record) => record.invocations);
     const registered = Object.keys(world.options.plugin.hooks);
-    const fired = new Set(world.log.filter((record) => record.invocations.length).map((record) => record.event));
-    const missing = registered.filter((event) => !fired.has(event as never));
+    const fired = new Set<string>(
+      world.log.filter((record) => record.invocations.length).map((record) => record.event),
+    );
+    const missing = registered.filter((event) => SIMULATED_EVENTS.has(event) && !fired.has(event));
+    const unsimulated = registered.filter((event) => !SIMULATED_EVENTS.has(event));
     const printed = calls.filter((call) => call.stdout.length > 0);
     const errors = calls.filter((call) => call.stderr.length > 0);
     const codes = [...new Set(calls.map((call) => call.exitCode))];
     return [
-      check("covered", missing.length === 0, `registered events never fired: ${missing.join(", ") || "none"}`),
+      check(
+        "covered",
+        missing.length === 0,
+        `registered events never fired: ${missing.join(", ") || "none"}; ` +
+          `registered but not simulated: ${unsimulated.join(", ") || "none"}`,
+      ),
       check(
         "exit-0",
         codes.every((code) => code === 0),
