@@ -77,6 +77,12 @@ export const DECLINED =
  */
 const OMITS_INSTRUCTIONS = new Set(["Explore", "Plan"]);
 
+/**
+ * Subagent types that start with the parent's context, its packets included (A4 §5.3: "a fork subagent inherits
+ * the parent's context"). Simulated, not captured: no real fork launch has been recorded yet.
+ */
+const INHERITS_CONTEXT = new Set(["fork"]);
+
 /** Tools Claude Code runs concurrently within one batch; the others run one after another. */
 const CONCURRENT_TOOLS = new Set(["Read"]);
 
@@ -113,6 +119,19 @@ export interface WorldOptions {
   subjects?: readonly Subject[];
   /** The world's truth when the run starts. */
   initialTruth?: readonly Effect[];
+  /** The repo's directory under the run directory (default `project`). Worlds in one run directory share a home. */
+  projectName?: string;
+  /**
+   * Hands every hook the simulated clock as `EDEN_NOW` (epoch milliseconds), so a product whose clock honours it
+   * sees the days a script skips. Off by default: no hook of a plain replay gets it.
+   */
+  clockEnv?: boolean;
+}
+
+/** Where a session runs: its working directory (the repo, or one of its worktrees) and that checkout's branch. */
+export interface SessionPlace {
+  cwd: string;
+  gitBranch: string;
 }
 
 export interface EventRecord {
@@ -178,7 +197,7 @@ export class SimWorld {
   constructor(readonly options: WorldOptions) {
     this.runDir = realpathSync(options.runDir);
     this.home = join(this.runDir, "home");
-    this.projectDir = join(this.runDir, "project");
+    this.projectDir = join(this.runDir, options.projectName ?? "project");
     this.ids = new Rng(options.seed ^ 0x5eed1d5);
     createProject(this.projectDir, this.home, options.projectFiles ?? DEFAULT_PROJECT);
     this.oracle = new Oracle(options.subjects ?? []);
@@ -222,20 +241,28 @@ export class SimWorld {
     return tokensOf(text.replaceAll(this.runDir, "<run>"));
   }
 
-  transcriptPath(sessionId: string): string {
-    return join(this.home, ".claude", "projects", projectSlug(this.projectDir), `${sessionId}.jsonl`);
+  /** The main checkout, on `main`: where a session runs unless it is started in a worktree. */
+  get mainCheckout(): SessionPlace {
+    return { cwd: this.projectDir, gitBranch: "main" };
+  }
+
+  transcriptPath(sessionId: string, cwd = this.projectDir): string {
+    return join(this.home, ".claude", "projects", projectSlug(cwd), `${sessionId}.jsonl`);
   }
 
   /** A transcript whose line uuids come from their own stream, seeded by its session and window, not its path. */
-  transcript(path: string, sessionId: string, agentId?: string): Transcript {
+  transcript(path: string, sessionId: string, agentId?: string, place = this.mainCheckout): Transcript {
     const seed = hashString(`${sessionId}/${agentId ?? "main"}`, this.options.seed);
-    const envelope = { sessionId, cwd: this.projectDir, version: CLAUDE_CODE_VERSION, gitBranch: "main" };
+    const envelope = { sessionId, cwd: place.cwd, version: CLAUDE_CODE_VERSION, gitBranch: place.gitBranch };
     const eager = this.options.flush === "eager";
     return new Transcript(path, envelope, new Rng(seed), () => this.now(), { agentId, eager });
   }
 
-  /** Runs the event's hooks. The log entry is taken at dispatch, so concurrent events keep dispatch order. */
-  async dispatch(payload: HookPayload, window: string): Promise<Invocation[]> {
+  /**
+   * Runs the event's hooks, with `env` added to their environment. The log entry is taken at dispatch, so
+   * concurrent events keep dispatch order.
+   */
+  async dispatch(payload: HookPayload, window: string, env: Record<string, string> = {}): Promise<Invocation[]> {
     const record: EventRecord = {
       seq: this.log.length,
       event: payload.hook_event_name,
@@ -245,7 +272,8 @@ export class SimWorld {
       invocations: [],
     };
     this.log.push(record);
-    record.invocations = await this.runner.dispatch(payload);
+    const clock: Record<string, string> = this.options.clockEnv ? { EDEN_NOW: String(this.clock) } : {};
+    record.invocations = await this.runner.dispatch(payload, { ...clock, ...env });
     this.records.set(record.invocations, record);
     return record.invocations;
   }
@@ -274,9 +302,19 @@ export class SimWorld {
     this.oracle.apply(sets, "repo", this.at());
   }
 
-  /** A new session (fresh `session_id` and transcript), not started yet. */
-  newSession(): SimSession {
-    return new SimSession(this, uuidV4(this.ids));
+  /** A new session (fresh `session_id` and transcript), not started yet; in the main checkout unless `place` says. */
+  newSession(place = this.mainCheckout): SimSession {
+    return new SimSession(this, uuidV4(this.ids), place);
+  }
+
+  /**
+   * A git worktree of the project on a new branch, at `rel` inside the main checkout (where Claude Code puts its
+   * own, `.claude/worktrees/<name>`), and the place a session started there runs in.
+   */
+  addWorktree(rel: string, branch: string): SessionPlace {
+    const cwd = join(this.projectDir, rel);
+    git(this.projectDir, this.home, ["worktree", "add", "-q", "-b", branch, cwd]);
+    return { cwd: realpathSync(cwd), gitBranch: branch };
   }
 }
 
@@ -489,16 +527,17 @@ export class SimSession {
   constructor(
     readonly world: SimWorld,
     readonly sessionId: string,
+    readonly place: SessionPlace = world.mainCheckout,
   ) {
-    this.transcriptPath = world.transcriptPath(sessionId);
-    this.main = new Window(this, this.open(world.transcript(this.transcriptPath, sessionId)));
+    this.transcriptPath = world.transcriptPath(sessionId, place.cwd);
+    this.main = new Window(this, this.open(world.transcript(this.transcriptPath, sessionId, undefined, place)));
   }
 
   ctx(agent?: { id: string; type: string }): EventContext {
     return {
       sessionId: this.sessionId,
       transcriptPath: this.transcriptPath,
-      cwd: this.world.projectDir,
+      cwd: this.place.cwd,
       promptId: this.promptId,
       permissionMode: this.world.permissionMode,
       effort: this.world.effort,
@@ -515,8 +554,13 @@ export class SimSession {
     return this.promptId;
   }
 
+  /** Claude Code sets `CLAUDE_PROJECT_DIR` to where the session started, which is a worktree's own directory. */
   dispatch(payload: HookPayload, window: Window): Promise<Invocation[]> {
-    return this.world.dispatch(payload, window.name);
+    return this.world.dispatch(payload, window.name, this.placeEnv());
+  }
+
+  private placeEnv(): Record<string, string> {
+    return this.place.cwd === this.world.projectDir ? {} : { CLAUDE_PROJECT_DIR: this.place.cwd };
   }
 
   /** The end of a step: its lines reach the disk (in `lagging` mode; `eager` wrote them already). */
@@ -650,12 +694,11 @@ export class SimSession {
     }
 
     const childPath = this.subagentTranscriptPath(id);
-    const child = new Window(this, this.open(this.world.transcript(childPath, this.sessionId, id)), {
-      id,
-      type: spec.agentType,
-    });
+    const transcript = this.world.transcript(childPath, this.sessionId, id, this.place);
+    const child = new Window(this, this.open(transcript), { id, type: spec.agentType });
     child.scope = this.main.scope;
-    if (!OMITS_INSTRUCTIONS.has(spec.agentType)) {
+    if (INHERITS_CONTEXT.has(spec.agentType)) child.seen.inherit(this.main.seen.snapshot());
+    else if (!OMITS_INSTRUCTIONS.has(spec.agentType)) {
       for (const [path, text] of this.main.seen.instructionFiles) child.seen.loadInstructions(path, text);
     }
     const meta = { agentType: spec.agentType, description: spec.description, toolUseId: call.id, spawnDepth: 1 };
@@ -700,7 +743,7 @@ export class SimSession {
       agentTranscriptPath: this.subagentTranscriptPath(compactor.id),
       backgroundTasks: this.backgroundTasks(),
     };
-    await this.world.dispatch(subagentStopPayload(this.ctx(compactor), stop), compactor.id);
+    await this.world.dispatch(subagentStopPayload(this.ctx(compactor), stop), compactor.id, this.placeEnv());
     const preTokens = this.main.tokens;
     this.main.compact();
     // Prompts of the compacted conversation are no longer rewind targets (our reading; unverified).
@@ -724,7 +767,7 @@ export class SimSession {
   /** `/clear`: this session ends, and a new one starts with `source: "clear"`. */
   async clear(): Promise<SimSession> {
     await this.end("clear");
-    const next = this.world.newSession();
+    const next = this.world.newSession(this.place);
     await next.start("clear");
     return next;
   }
@@ -819,7 +862,7 @@ export class SimSession {
 
   private async loadInstructions(reason: "session_start" | "compact"): Promise<void> {
     for (const file of this.world.options.instructions ?? DEFAULT_INSTRUCTIONS) {
-      const filePath = join(this.world.projectDir, file.path);
+      const filePath = join(this.place.cwd, file.path);
       this.main.seen.loadInstructions(file.path, existsSync(filePath) ? readFileSync(filePath, "utf8") : "");
       const load = { filePath, memoryType: file.memoryType, loadReason: reason };
       await this.dispatch(instructionsLoadedPayload(this.ctx(), load), this.main);
