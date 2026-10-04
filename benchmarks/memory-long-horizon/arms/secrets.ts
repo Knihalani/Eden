@@ -15,8 +15,7 @@ import { countBy } from "../harness/metrics";
 import { Rng } from "../harness/rng";
 import type { SimWorld } from "../harness/session";
 import { DB, id, monorepo, set } from "./fixtures/world";
-import { BLANK_SUMMARY } from "./floor";
-import { bash, check, Driver, edenFiles, metricsOf, needMet, pasted, type Arm } from "./kit";
+import { bash, BLANK_SUMMARY, check, Driver, edenFiles, metricsOf, needMet, pasted, type Arm } from "./kit";
 
 type Shape = { name: string; value: (rng: Rng) => string; keyword?: string };
 

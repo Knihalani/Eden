@@ -2,9 +2,13 @@
  * The arms' references (prereg target 3): for every arm, what a plugin that does what A5 asks answers on the arm's
  * script, as a table for the scripted plugin in reference mode (harness/fixtures/scripted-plugin/answer.ts), plus the
  * reference CLI (fixtures/reference-cli.ts) for the entry points arms define. reference.test.ts runs each arm with
- * them, in every recorded flag state, and expects no check to fail (`referenceSuite`, run by the
- * `<group>.reference.test.ts` files): so no arm is unsatisfiable, and a silent plugin (which fails the controls) is
- * not what passes them.
+ * them and expects no check to fail (`referenceSuite`, run by the `<group>.reference.test.ts` files): so no arm is
+ * unsatisfiable, and a silent plugin (which fails the controls) is not what passes them.
+ *
+ * Every arm runs `on`. `off` and `shadow` run for the first flagged arm of each group: an arm whose `on` reference
+ * delivers at a delivery point also satisfies the generic flag checks, since the reference plugin's flag handling is
+ * the same for every table (kit.test.ts covers those checks), so the other flag runs would add CI time and no
+ * evidence. `run.ts --reference` runs every state.
  *
  * Packets are worded the way A4 §5.8 shows ("Auth provider in apps/web: Clerk", "Rule you set: …"), so the oracle's
  * reader is exercised on the target wording, not on today's.
@@ -325,8 +329,9 @@ export function referenceSuite(group: string): void {
   afterAll(removeTempDirs);
   const record = loadRecord();
   describe(`A5 §4 arms (${group}) against a plugin that does what A5 asks`, () => {
+    const flaggedOnce = (GROUPS[group] ?? []).find((id) => statesOf(record, id).length > 1);
     for (const id of GROUPS[group] ?? []) {
-      for (const state of statesOf(record, id)) {
+      for (const state of id === flaggedOnce ? statesOf(record, id) : (["on"] as const)) {
         test(`${id} [${state}]`, async () => {
           const reference = referenceFor(id);
           const table = join(tempDir("eden-reference"), "answers.json");
