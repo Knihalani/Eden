@@ -324,7 +324,7 @@
       "a5": "web Clerk + postgres; cli none + sqlite at 4752 and 15840 turns, junk on disk",
       "on": {
         "state": "green",
-        "why": "passes at CI scale (48 junk turns): the gist store carries both folders' statements, each naming its folder. junk-on-disk is unstable: it failed in 3 of 28 runs (47 of 48 junk turns on disk); in a captured failure the lost row was one of three junk prompts of a session whose pid-derived ids shared one prefix (#98, P0.3)",
+        "why": "passes at CI scale (48 junk turns): the gist store carries both folders' statements, each naming its folder. junk-on-disk is unstable: it failed in 3 of 28 runs of the first study and its hunt, and 6 of 20 in the second (47 of 48 junk turns on disk); in a captured failure the lost row was one of three junk prompts of a session whose pid-derived ids shared one prefix (#98, P0.3)",
         "unstable": [
           "junk-on-disk"
         ]
@@ -818,7 +818,10 @@
           "refractory-399",
           "usage-logged"
         ],
-        "why": "the pin is delivered again at about 391 KB (no refractory distance), and no wide events exist to hold message.usage"
+        "why": "the pin is delivered again at about 391 KB (no refractory distance), and no wide events exist to hold message.usage. reeligible-401 is unstable: in 2 of 20 runs of the second stability study the pin was not delivered at the fresh cue (distance 412,836 and 412,857 bytes, inside the window), as today's plugin lost its row over the ~20 growth turns (#98, P0.3)",
+        "unstable": [
+          "reeligible-401"
+        ]
       },
       "off": {
         "state": "red",
