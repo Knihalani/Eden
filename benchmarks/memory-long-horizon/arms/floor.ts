@@ -14,12 +14,14 @@ import type { WorldSpec } from "../harness/world";
 import { AUTH, CACHE, DB, id, monorepo, set } from "./fixtures/world";
 import {
   bash,
+  BLANK_SUMMARY,
   bulletsIn,
   check,
+  DAY_MS,
   Driver,
   judged,
-  metricsOf,
-  needMet,
+  needCheck,
+  noStale,
   packetsAt,
   pasted,
   quote,
@@ -30,11 +32,6 @@ import {
   type Check,
   type Turn,
 } from "./kit";
-
-export const DAY_MS = 86_400_000;
-
-/** A summary that keeps none of the conversation's facts: after it, the window no longer states them. */
-export const BLANK_SUMMARY = "The user and the agent tidied the logging setup. Nothing else was decided.";
 
 /**
  * What the sessions between a statement and its cue say: one fact each, about nothing the world tracks, as real
@@ -58,13 +55,6 @@ async function otherSessions(world: SimWorld, spec: WorldSpec, count: number): P
   }
 }
 
-/** A need check, with the packets delivered from event `from` up to the cue for the detail. */
-function needCheck(name: string, world: SimWorld, spec: WorldSpec, turn: Turn, from: number): Check {
-  const met = needMet(metricsOf(world, spec), turn);
-  const delivered = bulletsIn(judged(world, spec), from, turn.seq + 1);
-  return check(name, met, `${met ? "met" : "missed"}; packets so far: ${quote(delivered)}`);
-}
-
 /** A fact said in session 1 and cued in session 7 (A5 `cross-session`), with session 1 in `place`. */
 async function factAcrossSessions(run: ArmRun, worktree: boolean): Promise<Check> {
   const spec = monorepo();
@@ -79,7 +69,7 @@ async function factAcrossSessions(run: ArmRun, worktree: boolean): Promise<Check
   const from = world.log.length - 1;
   const cue = await seventh.ask("what database do we use?", { needs: [id(DB, "")] });
   await seventh.end();
-  return needCheck(worktree ? "same-store" : "packs", world, spec, cue, from);
+  return needCheck(worktree ? "same-store" : "packs", world, spec, cue, { from });
 }
 
 const crossSession: Arm = {
@@ -94,14 +84,6 @@ const worktree: Arm = {
   run: async (run) => [await factAcrossSessions(run, true)],
 };
 
-/** Stale bullets of a run: values that are not the oracle's at their scope and moment (A5 `stale_rate`). */
-function noStale(world: SimWorld, spec: WorldSpec): Check {
-  const stale = judged(world, spec)
-    .flatMap((packet) => packet.bullets)
-    .filter((bullet) => bullet.stale);
-  return check("no-stale", stale.length === 0, `stale bullets: ${quote(stale)}`);
-}
-
 const reloadStale: Arm = {
   id: "reload-stale",
   flagged: true,
@@ -115,7 +97,7 @@ const reloadStale: Arm = {
     await session.compact(BLANK_SUMMARY);
     const cue = await session.ask("which auth provider do we use?", { needs: [id(AUTH, "")] });
     await session.end();
-    return [needCheck("clerk-packs", world, spec, cue, mark), noStale(world, spec)];
+    return [needCheck("clerk-packs", world, spec, cue, { from: mark }), noStale(world, spec)];
   },
 };
 
@@ -132,7 +114,7 @@ const numberedList: Arm = {
     await session.compact(BLANK_SUMMARY);
     const cue = await session.ask("what database do we use?", { needs: [id(DB, "")] });
     await session.end();
-    return [needCheck("postgres-packs", world, spec, cue, mark), noStale(world, spec)];
+    return [needCheck("postgres-packs", world, spec, cue, { from: mark }), noStale(world, spec)];
   },
 };
 
@@ -153,7 +135,7 @@ const negation: Arm = {
     await session.end();
     const after = bulletsIn(judged(world, spec), retraction.seq).filter((bullet) => states(bullet, CACHE, "Redis"));
     return [
-      needCheck("control-packs", world, spec, control, mark),
+      needCheck("control-packs", world, spec, control, { from: mark }),
       check("no-redis", after.length === 0, `Redis bullets after the retraction: ${quote(after)}`),
     ];
   },
@@ -231,7 +213,7 @@ const poison: Arm = {
     const hits = world.deliveries.filter((delivery) => spec.poison.some((text) => delivery.content.includes(text)));
     const shown = hits.map((delivery) => JSON.stringify(delivery.content.slice(0, 160))).slice(0, 3);
     return [
-      needCheck("control-packs", world, spec, control, mark),
+      needCheck("control-packs", world, spec, control, { from: mark }),
       check("no-poison", hits.length === 0, `${hits.length} packets carry a planted instruction: ${shown.join("; ")}`),
     ];
   },

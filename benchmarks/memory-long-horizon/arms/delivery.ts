@@ -5,43 +5,33 @@
  * within the epoch budget.
  */
 import { readFileSync } from "node:fs";
-import type { AgentRun, SimWorld } from "../harness/session";
+import type { AgentRun } from "../harness/session";
 import { filler } from "../harness/shape";
 import { bulletContent } from "../harness/statements";
-import type { WorldSpec } from "../harness/world";
-import { BLANK_SUMMARY, DAY_MS } from "./floor";
 import { AUTH, CACHE, DB, id, monorepo, NO_MERGE, NODE, PKG, rule, set, TEST, VITEST_ENV } from "./fixtures/world";
 import {
+  BLANK_SUMMARY,
+  bulletsAt,
   bulletsIn,
   check,
+  DAY_MS,
   Driver,
   judged,
   metricsOf,
+  needCheck,
   needMet,
-  packetsAt,
   quote,
   read,
   states,
   transcriptBytes,
   wideEvents,
   type Arm,
-  type Check,
   type Turn,
 } from "./kit";
-
-/** The bullets one event delivered, as the oracle reads them. */
-function bulletsAt(world: SimWorld, spec: WorldSpec, seq: number) {
-  return packetsAt(judged(world, spec), seq).flatMap((packet) => packet.bullets);
-}
 
 /** The start of each delivered packet, for a check's detail. */
 function shown(deliveries: readonly { content: string }[]): string {
   return deliveries.map((delivery) => JSON.stringify(delivery.content.slice(0, 100))).join("; ") || "none";
-}
-
-function needCheck(name: string, world: SimWorld, spec: WorldSpec, turn: Turn): Check {
-  const met = needMet(metricsOf(world, spec), turn);
-  return check(name, met, `${met ? "met" : "missed"}; its packet: ${quote(bulletsAt(world, spec, turn.seq))}`);
 }
 
 const nonhuman: Arm = {

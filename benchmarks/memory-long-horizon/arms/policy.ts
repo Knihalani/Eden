@@ -13,7 +13,6 @@ import type { PermissionMode } from "../harness/payloads";
 import type { Invocation } from "../harness/runner";
 import type { SimWorld } from "../harness/session";
 import { statementsIn } from "../harness/statements";
-import { DAY_MS } from "./floor";
 import {
   id,
   KEEP_FIXTURES,
@@ -26,7 +25,7 @@ import {
   rule,
   SUBJECTS,
 } from "./fixtures/world";
-import { bash, check, Driver, wideEvents, type Arm, type ArmRun } from "./kit";
+import { bash, check, DAY_MS, Driver, wideEvents, type Arm, type ArmRun } from "./kit";
 
 /** The PreToolUse invocations for the first call of `command`. */
 function guardOf(world: SimWorld, command: string): { toolUseId: string; calls: Invocation[] } | undefined {

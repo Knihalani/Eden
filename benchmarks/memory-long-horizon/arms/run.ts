@@ -3,15 +3,37 @@
  * Runs A5 §4 arms against a plugin and prints each run's checks, next to what `arms.json` records.
  *
  *   bun benchmarks/memory-long-horizon/arms/run.ts [--arm id,id] [--flags on|off|shadow|all]
- *       [--plugin DIR] [--scale ci|full] [--json]
+ *       [--plugin DIR | --reference] [--scale ci|full] [--json]
  *
  * Defaults: every arm, every flag state the record has, `plugins/eden-memory` and the product CLI from this tree,
- * CI scale. Exit code 1 when a run differs from the record.
+ * CI scale. `--reference` runs each arm against its reference instead (reference.ts), where every check must pass.
+ * Exit code 1 when a run differs from what is expected.
  */
-import { resolve } from "node:path";
-import { EDEN_CLI, EDEN_PLUGIN, runArm, type ArmResult, type FlagState, type Scale } from "./kit";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { SCRIPTED_PLUGIN } from "../harness/testkit";
+import { EDEN_CLI, EDEN_PLUGIN, runArm, type ArmOptions, type ArmResult, type FlagState, type Scale } from "./kit";
 import { expected, loadRecord, statesOf } from "./record";
+import { REFERENCE_CLI, referenceFor } from "./reference";
 import { ARMS } from "./registry";
+
+/** Directories holding reference tables, removed when the run ends. */
+const tables: string[] = [];
+
+/** The scripted plugin with the arm's reference table, and the reference CLI. */
+function referenceOptions(id: string): Pick<ArmOptions, "pluginDir" | "cli" | "env"> {
+  const { answers, env } = referenceFor(id);
+  const dir = mkdtempSync(join(tmpdir(), "eden-reference-"));
+  tables.push(dir);
+  const table = join(dir, "answers.json");
+  writeFileSync(table, JSON.stringify(answers));
+  return {
+    pluginDir: SCRIPTED_PLUGIN,
+    cli: REFERENCE_CLI,
+    env: { SCRIPTED_ANSWERS: table, SCRIPTED_REFERENCE: "1", ...env },
+  };
+}
 
 function argument(args: string[], name: string): string | undefined {
   const at = args.indexOf(name);
@@ -24,6 +46,7 @@ async function main(args: string[]): Promise<number> {
   const flags = argument(args, "--flags") ?? "all";
   const pluginDir = resolve(argument(args, "--plugin") ?? EDEN_PLUGIN);
   const scale = (argument(args, "--scale") ?? "ci") as Scale;
+  const reference = args.includes("--reference");
   const results: (ArmResult & { expected: string[] | null; matches: boolean })[] = [];
   for (const id of ids) {
     const arm = ARMS.get(id);
@@ -33,8 +56,11 @@ async function main(args: string[]): Promise<number> {
     }
     const states = flags === "all" ? statesOf(record, id) : [flags as FlagState];
     for (const state of states) {
-      const result = await runArm(arm, { pluginDir, cli: EDEN_CLI, scale, flags: state });
-      const want = expected(record, id, state);
+      const options: ArmOptions = reference
+        ? { ...referenceOptions(id), scale, flags: state }
+        : { pluginDir, cli: EDEN_CLI, scale, flags: state };
+      const result = await runArm(arm, options);
+      const want = reference ? [] : expected(record, id, state);
       const matches = want !== null && JSON.stringify(want) === JSON.stringify(result.failed);
       results.push({ ...result, expected: want, matches });
       if (!args.includes("--json")) {
@@ -48,4 +74,8 @@ async function main(args: string[]): Promise<number> {
   return results.every((result) => result.matches) ? 0 : 1;
 }
 
-if (import.meta.main) process.exit(await main(process.argv.slice(2)));
+if (import.meta.main) {
+  const code = await main(process.argv.slice(2));
+  for (const dir of tables) rmSync(dir, { recursive: true, force: true });
+  process.exit(code);
+}
