@@ -17,7 +17,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { plainCue, type Cue } from "../harness/cues";
-import { computeMetrics, judgeDeliveries, listFiles, type Judged, type JudgedBullet, type Metrics } from "../harness/metrics";
+import {
+  computeMetrics,
+  judgeDeliveries,
+  listFiles,
+  type Judged,
+  type JudgedBullet,
+  type Metrics,
+} from "../harness/metrics";
 import { itemId, type Effect } from "../harness/oracle";
 import type { HookEvent } from "../harness/payloads";
 import { hookEnv, loadPlugin } from "../harness/runner";
@@ -100,8 +107,10 @@ export interface ArmResult {
 
 /** What a world of an arm brings besides its spec. */
 export interface WorldSetup extends Pick<WorldOptions, "permissionMode" | "askAnswer" | "instructions"> {
-  /** The repo's directory under the run directory; worlds of one arm share a home (session.ts). */
+  /** The repo's directory under the run directory; worlds of one arm share a home (session.ts)… */
   projectName?: string;
+  /** …unless they name another: worlds with the same `home` share it, and see no other home's store. */
+  home?: string;
 }
 
 /** One run of one arm: its worlds, its product CLI calls, and the flag file they all see. */
@@ -116,8 +125,11 @@ export class ArmRun {
 
   /** A world for this run. With flags `off` or `shadow`, the flag file is written before any hook runs. */
   world(spec: WorldSpec, setup: WorldSetup = {}): SimWorld {
+    const { home, ...options } = setup;
+    const runDir = home === undefined ? this.dir : join(this.dir, `home-${home}`);
+    mkdirSync(runDir, { recursive: true });
     const world = new SimWorld({
-      runDir: this.dir,
+      runDir,
       plugin: loadPlugin(this.options.pluginDir),
       seed: this.seed++,
       clockEnv: true,
@@ -125,27 +137,41 @@ export class ArmRun {
       projectFiles: spec.projectFiles,
       subjects: spec.subjects,
       initialTruth: spec.initialTruth,
-      ...setup,
+      ...options,
     });
     if (this.options.flags !== "on") writeFlags(world.home, this.options.flags);
     this.worlds.push(world);
     return world;
   }
 
-  /** Runs the product CLI the way a user or a scheduler would: in the repo, with the hooks' environment. */
-  cli(world: SimWorld, args: string[], input = "", extra: Record<string, string> = {}): CliResult {
-    const paths = { home: world.home, projectDir: world.projectDir, plugin: world.options.plugin, extra: this.options.env };
-    const env = { ...hookEnv(paths), EDEN_NOW: String(world.timeMs), ...extra };
+  /**
+   * Runs the product CLI the way a user or a scheduler would: in the repo (or `cwd`), with the hooks' environment
+   * plus `env`, and `input` on stdin.
+   */
+  cli(world: SimWorld, args: string[], options: CliOptions = {}): CliResult {
+    const paths = {
+      home: world.home,
+      projectDir: world.projectDir,
+      plugin: world.options.plugin,
+      extra: this.options.env,
+    };
+    const env = { ...hookEnv(paths), EDEN_NOW: String(world.timeMs), ...options.env };
     const run = Bun.spawnSync([...this.options.cli, ...args], {
-      cwd: world.projectDir,
+      cwd: options.cwd ?? world.projectDir,
       env,
-      stdin: new TextEncoder().encode(input),
+      stdin: new TextEncoder().encode(options.input ?? ""),
       stdout: "pipe",
       stderr: "pipe",
       timeout: 120_000,
     });
     return { exitCode: run.exitCode, stdout: run.stdout.toString(), stderr: run.stderr.toString() };
   }
+}
+
+export interface CliOptions {
+  input?: string;
+  env?: Record<string, string>;
+  cwd?: string;
 }
 
 export interface CliResult {
@@ -241,10 +267,13 @@ export interface TurnOptions {
   tools?: ToolSpec[][];
   /** The agent's reply, which ends the turn before Stop. */
   reply?: string;
+  /** More of the agent's work after its tool batches, before the reply (subagent launches). */
+  within?: (driver: Driver) => Promise<void>;
 }
 
 /** An Agent call: the subagent type and task, and optionally its packet's annotation and a background launch. */
-export type SubagentCall = Pick<SubagentSpec, "agentType" | "task"> & Partial<SubagentSpec>;
+export type SubagentCall = Pick<SubagentSpec, "agentType" | "task"> &
+  Partial<Omit<SubagentSpec, "cue">> & { cue?: Partial<Cue> };
 
 /** A human turn as it happened: its UserPromptSubmit event and, when it was not blocked, its cue record. */
 export interface Turn {
@@ -283,6 +312,7 @@ export class Driver {
     const submitted = await submit({ cue: { ...plainCue(), ...options.cue }, sets: options.sets });
     if (submitted) {
       for (const batch of options.tools ?? []) await this.tools(batch);
+      await options.within?.(this);
       await this.session.main.assistant(options.reply ?? filler(`reply:${seq}`, 160));
       await this.session.stop();
     }
@@ -296,7 +326,13 @@ export class Driver {
   async subagent(spec: SubagentCall, body: ToolSpec[][] = []): Promise<Turn & { run: AgentRun | null }> {
     const seq = this.world.log.length;
     const cue = this.world.cues.length;
-    const full = { background: false, report: filler(`report:${seq}`, 200), description: spec.task.slice(0, 40), ...spec };
+    const full = {
+      background: false,
+      report: filler(`report:${seq}`, 200),
+      description: spec.task.slice(0, 40),
+      ...spec,
+      cue: spec.cue && { ...plainCue(), ...spec.cue },
+    };
     const run = await this.session.subagent(full, async (window) => {
       for (const batch of body) await window.tools(batch.map((item) => toolCall(this.world, item)));
     });
@@ -313,6 +349,22 @@ export class Driver {
   /** The user asks something the annotation says the turn needs (or allows). */
   ask(text: string, cue: Partial<Cue>, options: TurnOptions = {}): Promise<Turn> {
     return this.turn(text, { ...options, cue });
+  }
+
+  /**
+   * A background subagent finishes and its task notification arrives while the agent is idle: a non-human submit,
+   * answered by a short acknowledgement and Stop. Returns the submit's event position.
+   */
+  async notify(run: AgentRun, body: ToolSpec[][] = []): Promise<number> {
+    const done = await this.session.completeBackground(run, async (window) => {
+      for (const batch of body) await window.tools(batch.map((item) => toolCall(this.world, item)));
+    });
+    const seq = this.world.log.length;
+    if (await this.session.taskNotification(done)) {
+      await this.session.main.assistant("Noted the result.");
+      await this.session.stop();
+    }
+    return seq;
   }
 
   /** One batch of tool calls in the main window, outside a prompt's turn. */
@@ -369,7 +421,9 @@ export function packetsAt(packets: readonly Judged[], seq: number): Judged[] {
 /** Whether a bullet states `value` for `key` (at any scope unless one is given). */
 export function states(bullet: JudgedBullet, key: string, value: string, scope?: string): boolean {
   return bullet.stated.some(
-    (stated) => stated.value === value && (scope === undefined ? stated.item.startsWith(`${key}@`) : stated.item === itemId(key, scope)),
+    (stated) =>
+      stated.value === value &&
+      (scope === undefined ? stated.item.startsWith(`${key}@`) : stated.item === itemId(key, scope)),
   );
 }
 

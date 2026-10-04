@@ -43,7 +43,10 @@ export interface LegacyFixture {
   files: Record<string, string>;
 }
 
-const PASTE_LINES = Array.from({ length: 40 }, (_, n) => `2026-09-${String((n % 28) + 1).padStart(2, "0")} worker ${n} ok`);
+const PASTE_LINES = Array.from(
+  { length: 40 },
+  (_, n) => `2026-09-${String((n % 28) + 1).padStart(2, "0")} worker ${n} ok`,
+);
 
 /** Every 8-character piece of a secret, lowercased: what must not survive the placeholders. */
 function fragments(value: string): string[] {
@@ -100,7 +103,9 @@ async function main(): Promise<void> {
       text = text.replaceAll(value, `{{SECRET:${shape}}}`).replaceAll(value.toLowerCase(), `{{SECRET_LOWER:${shape}}}`);
     }
     if (text.includes(runDir)) throw new Error(`${path} names the run directory`);
-    const left = Object.values(secrets).find((value) => fragments(value).some((part) => text.toLowerCase().includes(part)));
+    const left = Object.values(secrets).find((value) =>
+      fragments(value).some((part) => text.toLowerCase().includes(part)),
+    );
     if (left) throw new Error(`${path} still holds part of a planted secret`);
     files[relative(memory, path)] = text;
   }

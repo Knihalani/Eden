@@ -61,14 +61,23 @@ function writerChecks(run: ArmRun, reps: Awaited<ReturnType<typeof writeFacts>>[
   const calls = reps.flatMap((rep) => rep.world.log.flatMap((record) => record.invocations));
   const failing = calls.filter((call) => call.exitCode !== 0);
   const dump = readDump(jsonOut(run.cli(reps[0]!.world, ["memory", "dump", "--json"])));
-  const exits = check("exit-0", failing.length === 0, `${failing.length} of ${calls.length} writer invocations exited non-zero`);
+  const exits = check(
+    "exit-0",
+    failing.length === 0,
+    `${failing.length} of ${calls.length} writer invocations exited non-zero`,
+  );
   if (!dump) {
     const missing = "`eden memory dump --json` gave no dump in the contract's shape";
-    return [check("dump", false, missing), exits, ...["ledger", "rows", "unique-ids"].map((name) => check(name, false, missing))];
+    return [
+      check("dump", false, missing),
+      exits,
+      ...["ledger", "rows", "unique-ids"].map((name) => check(name, false, missing)),
+    ];
   }
   const texts = dump.rows.map((row) => row.text);
   const markers = reps.flatMap((rep) => rep.markers);
   const lost = markers.filter((marker) => !texts.some((text) => text.includes(marker)));
+  const lostSome = lost.slice(0, 3).join(", ") || "none";
   const ids = dump.rows.map((row) => row.id);
   const duplicates = ids.length - new Set(ids).size;
   const turns = new Set(dump.ledger.filter((entry) => entry.k === "turn").map((entry) => entry.prompt_id)).size;
@@ -77,7 +86,11 @@ function writerChecks(run: ArmRun, reps: Awaited<ReturnType<typeof writeFacts>>[
     check("dump", true, `${dump.rows.length} rows, ${dump.ledger.length} ledger entries`),
     exits,
     check("ledger", turns >= prompts, `${turns} turn records for ${prompts} human prompts`),
-    check("rows", lost.length === 0, `${markers.length - lost.length} of ${markers.length} facts in rows; lost e.g. ${lost.slice(0, 3).join(", ") || "none"}`),
+    check(
+      "rows",
+      lost.length === 0,
+      `${markers.length - lost.length} of ${markers.length} facts in rows; lost e.g. ${lostSome}`,
+    ),
     check("unique-ids", duplicates === 0, `${duplicates} duplicate ids among ${ids.length} rows`),
   ];
 }

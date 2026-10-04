@@ -27,7 +27,7 @@ import { Rng } from "../harness/rng";
 import type { SessionPlace, SimWorld } from "../harness/session";
 import type { WorldSpec } from "../harness/world";
 import type { LegacyFixture } from "./fixtures/make-legacy-v1";
-import { AUTH, DB, id, monorepo } from "./fixtures/world";
+import { AUTH, CACHE, DB, id, monorepo, set } from "./fixtures/world";
 import { bash, check, Driver, jsonOut, metricsOf, needMet, type Arm, type ArmRun, type Check } from "./kit";
 import { SHAPES } from "./secrets";
 
@@ -98,7 +98,12 @@ function snapshot(dir: string, skip: (path: string) => boolean = () => false): M
       .map((path) => relative(dir, path))
       .filter((path) => !skip(path))
       .sort()
-      .map((path) => [path, createHash("sha256").update(readFileSync(join(dir, path))).digest("hex")]),
+      .map((path) => [
+        path,
+        createHash("sha256")
+          .update(readFileSync(join(dir, path)))
+          .digest("hex"),
+      ]),
   );
 }
 
@@ -118,7 +123,9 @@ export const migrate: Arm = {
   id: "migrate",
   flagged: false,
   async run(run) {
-    const spec = monorepo();
+    // The legacy sessions' facts are the truth the later session's cues are judged by.
+    const legacyTruth = [set(DB, "", "postgres"), set(AUTH, "", "Clerk"), set(CACHE, "", "Redis")];
+    const spec = monorepo({ initialTruth: legacyTruth });
     const world = run.world(spec);
     const worktree = world.addWorktree(".claude/worktrees/agent-x", "agent-x");
     const fixture = JSON.parse(readFileSync(FIXTURE, "utf8")) as LegacyFixture;
@@ -148,15 +155,16 @@ interface Migration {
 async function migrationChecks(run: ArmRun, world: SimWorld, spec: WorldSpec, m: Migration): Promise<Check[]> {
   const memory = join(m.eden, "memory");
   const migrateCli = (flag: string, env: Record<string, string> = {}) =>
-    run.cli(world, ["memory", "migrate", flag], "", env);
+    run.cli(world, ["memory", "migrate", flag], { env });
   const repos = new Set(m.report.sessions.map((row) => row.repo));
   const mappedAll = m.fixture.sessions.every((session) =>
     m.report.sessions.some((row) => row.session === session.id && row.repo !== null),
   );
+  const tree = differences(m.original, snapshot(memory));
   const dryRun = check(
     "dry-run",
-    mappedAll && repos.size === 1 && same(m.original, snapshot(memory)),
-    `${m.report.sessions.length} sessions in ${repos.size} repos; all mapped: ${mappedAll}; tree ${differences(m.original, snapshot(memory))}`,
+    mappedAll && repos.size === 1 && tree === "identical",
+    `${m.report.sessions.length} sessions in ${repos.size} repos; all mapped: ${mappedAll}; tree ${tree}`,
   );
 
   migrateCli("--apply");
@@ -169,7 +177,8 @@ async function migrationChecks(run: ArmRun, world: SimWorld, spec: WorldSpec, m:
     m.fresh();
     migrateCli("--apply", { EDEN_MIGRATE_CRASH_AFTER: step });
     const state = snapshot(m.eden, LOGS_AND_BACKUPS);
-    const old = same(snapshot(memory), m.original) && ![...state.keys()].some((path) => path.startsWith("memory.legacy"));
+    const old =
+      same(snapshot(memory), m.original) && ![...state.keys()].some((path) => path.startsWith("memory.legacy"));
     return { step, ok: old || same(state, applied) };
   });
   m.fresh();
@@ -195,7 +204,11 @@ async function migrationChecks(run: ArmRun, world: SimWorld, spec: WorldSpec, m:
   return [
     dryRun,
     check("apply-idempotent", same(applied, again), `second --apply: ${differences(applied, again)}`),
-    check("rollback-identical", same(rolledBack, m.original), `after --rollback: ${differences(m.original, rolledBack)}`),
+    check(
+      "rollback-identical",
+      same(rolledBack, m.original),
+      `after --rollback: ${differences(m.original, rolledBack)}`,
+    ),
     check(
       "crash-safe",
       crashes.length > 0 && failedCrashes.length === 0,
@@ -207,6 +220,10 @@ async function migrationChecks(run: ArmRun, world: SimWorld, spec: WorldSpec, m:
       pinned.length === 0 && asks.length === 0,
       `SessionStart packets with the legacy rule: ${pinned.length}; asks on gh pr merge: ${asks.length}`,
     ),
-    check("mapped", needMet(metrics, db) && needMet(metrics, auth), `db ${needMet(metrics, db)}, auth (worktree) ${needMet(metrics, auth)}`),
+    check(
+      "mapped",
+      needMet(metrics, db) && needMet(metrics, auth),
+      `db ${needMet(metrics, db)}, auth (worktree) ${needMet(metrics, auth)}`,
+    ),
   ];
 }
