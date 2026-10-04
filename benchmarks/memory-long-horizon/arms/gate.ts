@@ -18,7 +18,7 @@ import { ARMS } from "./registry";
 /** Longest arm run at CI scale (spawn-writers, about 35 s) with room for a slow machine. */
 const TIMEOUT_MS = 240_000;
 
-/** Registers one test per recorded state of each arm of a group (groups.ts). */
+/** Registers one test per CI state (groups.ts `ciStates`) of each arm of a group. */
 export function gate(group: string): void {
   const record = loadRecord();
   describe(`A5 §4 arms (${group}) against plugins/eden-memory, as arms.json records them`, () => {

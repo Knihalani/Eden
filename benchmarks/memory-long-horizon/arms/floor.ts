@@ -9,6 +9,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { HOOK_EVENTS } from "../harness/payloads";
 import type { SimWorld } from "../harness/session";
 import type { WorldSpec } from "../harness/world";
 import { AUTH, CACHE, DB, id, monorepo, set } from "./fixtures/world";
@@ -220,21 +221,7 @@ const poison: Arm = {
 };
 
 /** The events the simulator fires (payloads.ts). FileChanged, CwdChanged and the rest are not modelled. */
-const SIMULATED_EVENTS = new Set([
-  "SessionStart",
-  "InstructionsLoaded",
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-  "PostToolUseFailure",
-  "PostToolBatch",
-  "SubagentStart",
-  "SubagentStop",
-  "Stop",
-  "PreCompact",
-  "PostCompact",
-  "SessionEnd",
-]);
+const SIMULATED_EVENTS = new Set<string>(HOOK_EVENTS);
 
 /**
  * A fault in every entry point (A5 `fail-open`, EXECUTION §5): the memory root is a regular file, so any read or

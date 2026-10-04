@@ -12,20 +12,24 @@
  */
 import { toolResultContent, type ToolCall } from "./tools";
 
-export type HookEvent =
-  | "SessionStart"
-  | "InstructionsLoaded"
-  | "UserPromptSubmit"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "PostToolUseFailure"
-  | "PostToolBatch"
-  | "SubagentStart"
-  | "SubagentStop"
-  | "Stop"
-  | "PreCompact"
-  | "PostCompact"
-  | "SessionEnd";
+/** The hook events the simulator fires. Claude Code has more (FileChanged, CwdChanged, …) that it does not model. */
+export const HOOK_EVENTS = [
+  "SessionStart",
+  "InstructionsLoaded",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "PostToolBatch",
+  "SubagentStart",
+  "SubagentStop",
+  "Stop",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd",
+] as const;
+
+export type HookEvent = (typeof HOOK_EVENTS)[number];
 
 export type PermissionMode = "default" | "plan" | "acceptEdits" | "auto" | "dontAsk" | "bypassPermissions";
 export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";

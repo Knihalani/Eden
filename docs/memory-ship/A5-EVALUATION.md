@@ -124,7 +124,8 @@ Not measured by this A/A, so no floor yet:
 Every arm is also run with its delivery point's flag `off` (asserting identity: no stdout, exit 0, no ledger write) and `shadow` (asserting only the shadow ledger and wide events are written). A `fail-open` arm injects a throw into each hook entry point and asserts exit 0 with empty stdout and stderr. Arms live in `arms.json` with `state: red|green` and the asserted failure `reason` (EXECUTION X4).
 
 **Built in P0.0c** (`benchmarks/memory-long-horizon/arms/`, `arms.json`; [report](reports/P0.0c.md)):
-- Each arm is a script played through the hooks, or a product entry point driven as a process, that returns named checks. `arms.json` records, per arm and flag state, whether today's plugin passes and, if not, exactly which checks fail. CI fails when a run differs from the record.
+- Each arm is a script played through the hooks, or a product entry point driven as a process, that returns named checks. `arms.json` records, per arm and flag state, whether today's plugin passes and, if not, exactly which checks fail.
+- CI gates 60 of the 122 recorded states: every arm's `on` state, and `off` and `shadow` for one flag sample per group (`arms/groups.ts`). It fails when one of them differs from the record. `arms/run.ts` checks all 122, and a slice runs it on its arms. A slice that changes flag behaviour (P0.8) runs `run.ts --flags off` and `--flags shadow` on every arm and updates the record.
 - `off` and `shadow` runs set every delivery-point flag in `~/.eden/flags.json`. They are judged by generic checks: identity for `off`; the shadow ledger and wide events, with no live ledger, for `shadow`.
 - Every arm also passes against a reference: the scripted plugin with the arm's answer table, and a reference CLI.
 - An arm whose subject sits inside Eden drives an entry point the arm defines, and its slice provides it. Each arm's header gives the contract:
