@@ -79,7 +79,8 @@ const OMITS_INSTRUCTIONS = new Set(["Explore", "Plan"]);
 
 /**
  * Subagent types that start with the parent's context, its packets included (A4 §5.3: "a fork subagent inherits
- * the parent's context"). Simulated, not captured: no real fork launch has been recorded yet.
+ * the parent's context"). Simulated, not captured: Claude Code 2.1.285 rejects `subagent_type: "fork"` ("Agent type
+ * 'fork' not found", 2026-10-04), so no real fork launch exists to record.
  */
 const INHERITS_CONTEXT = new Set(["fork"]);
 

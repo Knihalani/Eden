@@ -622,7 +622,7 @@
           "parent-scope",
           "subagent-packet"
         ],
-        "why": "no SubagentStart handler, so no subagent gets a packet; the parent's cli cue does not get 'packages/cli has no auth' either (fork-no-repeat passes: no fork packet)"
+        "why": "no SubagentStart handler, so no subagent gets a packet; the parent's cli cue does not get 'packages/cli has no auth' either (fork-no-repeat passes: no fork packet). fork-no-repeat runs on a simulated fork (agent_type 'fork' starting with the parent's window, A4 §5.3); Claude Code 2.1.285 has no such agent type ('Agent type 'fork' not found', P0.0c end-to-end)"
       },
       "off": {
         "state": "red",
