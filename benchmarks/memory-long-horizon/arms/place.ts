@@ -8,21 +8,19 @@ import { readFileSync } from "node:fs";
  */
 import type { SimWorld } from "../harness/session";
 import type { WorldSpec } from "../harness/world";
-import { DAY_MS } from "./floor";
 import { AUTH, DB, id, monorepo, NODE, set, singlePackage, TEST } from "./fixtures/world";
 import {
-  bulletsIn,
   check,
+  DAY_MS,
   Driver,
   edenFiles,
   judged,
-  metricsOf,
-  needMet,
+  needCheck,
+  noStale,
   packetsAt,
   quote,
   read,
   type Arm,
-  type Check,
   type Turn,
 } from "./kit";
 import { r5UnitRows } from "./scope-rows";
@@ -30,17 +28,6 @@ import { r5UnitRows } from "./scope-rows";
 /** A turn that opens a file of `scope`'s folder, so the next cue's place is that folder. */
 async function openFile(session: Driver, path: string): Promise<void> {
   await session.turn(`open ${path}`, { tools: [[read(path, `// ${path}\nexport {};\n`)]] });
-}
-
-function needsCheck(name: string, world: SimWorld, spec: WorldSpec, turns: Turn[]): Check {
-  const metrics = metricsOf(world, spec);
-  const missed = turns.filter((turn) => !needMet(metrics, turn)).map((turn) => world.cues[turn.cue]?.text ?? "?");
-  return check(name, missed.length === 0, missed.length ? `missed: ${missed.join(" | ")}` : "met");
-}
-
-function noStaleFrom(world: SimWorld, spec: WorldSpec, from: number, name = "no-stale"): Check {
-  const stale = bulletsIn(judged(world, spec), from).filter((bullet) => bullet.stale);
-  return check(name, stale.length === 0, `stale bullets: ${quote(stale)}`);
 }
 
 /** Junk turns per session, as R6's longer sessions run. */
@@ -126,9 +113,9 @@ const scoped: Arm = {
       .join("\n");
     const gone = markers.filter((marker) => !stored.includes(marker));
     return [
-      needsCheck("web-facts", world, spec, web),
-      needsCheck("cli-facts", world, spec, cli),
-      noStaleFrom(world, spec, firstCue, "no-leak"),
+      needCheck("web-facts", world, spec, web),
+      needCheck("cli-facts", world, spec, cli),
+      noStale(world, spec, firstCue, "no-leak"),
       check(
         "junk-on-disk",
         gone.length === 0,
@@ -164,10 +151,10 @@ const cascade: Arm = {
     const root = await session.ask("which node version does the repo use by default?", { needs: [id(NODE, "")] });
     await session.end();
     return [
-      needsCheck("web-22", world, spec, [web]),
-      needsCheck("cli-20", world, spec, [cli]),
-      needsCheck("root-20", world, spec, [root]),
-      noStaleFrom(world, spec, from),
+      needCheck("web-22", world, spec, [web]),
+      needCheck("cli-20", world, spec, [cli]),
+      needCheck("root-20", world, spec, [root]),
+      noStale(world, spec, from),
     ];
   },
 };
@@ -189,7 +176,7 @@ const singlePackageArm: Arm = {
     await openFile(session, "test/db.test.ts");
     const tests = await session.ask("which test runner do the tests in test/ use?", { needs: [id(TEST, "")] });
     await session.end();
-    return [needsCheck("visible-everywhere", world, spec, [db, tests])];
+    return [needCheck("visible-everywhere", world, spec, [db, tests])];
   },
 };
 
@@ -219,7 +206,7 @@ const fanOut: Arm = {
     );
     return [
       check("two-scope-bullet", twoScope.length > 0, `the cue's packet: ${quote(bullets)}`),
-      needsCheck("needs-met", world, spec, [cue]),
+      needCheck("needs-met", world, spec, [cue]),
     ];
   },
 };

@@ -41,6 +41,12 @@ import { filler, toolCall, type ToolSpec } from "../harness/shape";
 import type { WorldSpec } from "../harness/world";
 
 export type FlagState = "on" | "off" | "shadow";
+
+/** A simulated day: the gap between a script's sessions. */
+export const DAY_MS = 86_400_000;
+
+/** A compaction summary that keeps none of the conversation's facts: after it, the window no longer states them. */
+export const BLANK_SUMMARY = "The user and the agent tidied the logging setup. Nothing else was decided.";
 export type Scale = "ci" | "full";
 
 /** The delivery-point flags of X7. `EDEN_MEMORY` and the non-delivery flags (`sleep.llm`, `log.text`) are not here. */
@@ -434,9 +440,40 @@ export function quote(bullets: readonly JudgedBullet[], limit = 3): string {
   return shown.join("; ") + (bullets.length > limit ? `; … ${bullets.length - limit} more` : "");
 }
 
-/** A need check: the cue's needed items were in its packet or its window (A5 `need_miss`). */
+/** Whether the cue's needed items were in its packet or its window (A5 `need_miss`). */
 export function needMet(metrics: Metrics, turn: Turn): boolean {
   return turn.submitted && metrics.cues[turn.cue]?.missed === false;
+}
+
+/** The bullets one event delivered, as the oracle reads them. */
+export function bulletsAt(world: SimWorld, spec: WorldSpec, seq: number): JudgedBullet[] {
+  return packetsAt(judged(world, spec), seq).flatMap((packet) => packet.bullets);
+}
+
+/**
+ * A need check (A5 `need_miss`): every turn's needed items were in its packet or its window. The detail names the
+ * missed cues, and quotes the packets delivered from event `from` (default: the last cue's own) up to the last cue.
+ */
+export function needCheck(
+  name: string,
+  world: SimWorld,
+  spec: WorldSpec,
+  turns: Turn | readonly Turn[],
+  options: { from?: number; note?: string } = {},
+): Check {
+  const list = Array.isArray(turns) ? turns : [turns as Turn];
+  const metrics = metricsOf(world, spec);
+  const missed = list.filter((turn) => !needMet(metrics, turn)).map((turn) => world.cues[turn.cue]?.text ?? "?");
+  const last = list.at(-1)!;
+  const delivered = bulletsIn(judged(world, spec), options.from ?? last.seq, last.seq + 1);
+  const status = missed.length ? `missed: ${missed.join(" | ")}` : "met";
+  return check(name, missed.length === 0, `${status}; packets: ${quote(delivered)}${options.note ?? ""}`);
+}
+
+/** No bullet delivered from event `from` on states a value the oracle does not hold then (A5 `stale_rate`). */
+export function noStale(world: SimWorld, spec: WorldSpec, from = 0, name = "no-stale"): Check {
+  const stale = bulletsIn(judged(world, spec), from).filter((bullet) => bullet.stale);
+  return check(name, stale.length === 0, `stale bullets: ${quote(stale)}`);
 }
 
 /** How many bytes the session's main transcript holds now. */

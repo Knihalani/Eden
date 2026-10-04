@@ -11,23 +11,24 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SimWorld } from "../harness/session";
 import type { WorldSpec } from "../harness/world";
-import { BLANK_SUMMARY, DAY_MS } from "./floor";
 import { AUTH, DB, DEPLOY, ESM_FIX, id, monorepo, PKG, set, VITEST_ENV, webPackage } from "./fixtures/world";
 import {
   bash,
+  BLANK_SUMMARY,
+  bulletsAt,
   bulletsIn,
   check,
+  DAY_MS,
   Driver,
   judged,
   metricsOf,
+  needCheck,
   needMet,
-  packetsAt,
   quote,
   read,
   states,
   type Arm,
   type ArmRun,
-  type Check,
   type Turn,
 } from "./kit";
 
@@ -35,15 +36,6 @@ import {
 function sleep(run: ArmRun, world: SimWorld): number | null {
   world.advance(45 * 60_000);
   return run.cli(world, ["sleep", "--idle", "--after", "0"]).exitCode;
-}
-
-function bulletsAt(world: SimWorld, spec: WorldSpec, seq: number) {
-  return packetsAt(judged(world, spec), seq).flatMap((packet) => packet.bullets);
-}
-
-function needCheck(name: string, world: SimWorld, spec: WorldSpec, turn: Turn, extra = ""): Check {
-  const met = needMet(metricsOf(world, spec), turn);
-  return check(name, met, `${met ? "met" : "missed"}; its packet: ${quote(bulletsAt(world, spec, turn.seq))}${extra}`);
 }
 
 const repoFacts: Arm = {
@@ -75,7 +67,7 @@ const repoFacts: Arm = {
     );
     const stale = bulletsIn(judged(world, spec), from).filter((bullet) => bullet.stale);
     return [
-      needCheck("mined-npm", world, spec, npm, `; sleep exit codes ${sleeps.join(",")}`),
+      needCheck("mined-npm", world, spec, npm, { note: `; sleep exit codes ${sleeps.join(",")}` }),
       needCheck("mined-pnpm", world, spec, pnpm),
       check("cited", cited.length > 0, `pnpm bullets naming pnpm-lock.yaml: ${quote(cited)}`),
       check(
