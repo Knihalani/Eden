@@ -59,6 +59,13 @@ export class SimulatedWindow {
     this.lengthAfter.clear();
   }
 
+  /** Starts this window with what another window holds (a fork subagent inherits its parent's context). */
+  inherit(from: WindowSnapshot): void {
+    this.entries = from.entries.slice();
+    for (const [at, entry] of this.entries.entries()) this.lengthAfter.set(entry.uuid, at + 1);
+    for (const [path, text] of from.instructions) this.instructions.set(path, text);
+  }
+
   /** An instruction file loaded into this window (InstructionsLoaded); a reload replaces its text. */
   loadInstructions(path: string, text: string): void {
     this.instructions.set(path, text);
