@@ -21,12 +21,12 @@ src_tests=$(
 # Tests of the repo's own tooling (scripts/*.test.ts), passed as files for the
 # same reason: a bare `scripts` argument would match any path containing it.
 script_tests=$(find scripts -maxdepth 1 -name '*.test.ts' -print | sort)
-dirs=$(
+pkg_tests=$(
   find packages apps benchmarks \( -name '*.test.ts' -o -name '*.test.tsx' \) -print \
     | grep -v '/node_modules/' \
-    | sed 's|/[^/]*$||' \
-    | sort -u
+    | sort
 )
+dirs=$(printf '%s\n' "$pkg_tests" | sed 's|/[^/]*$||' | sort -u)
 
 if [ -z "$dirs" ] && [ -z "${src_tests:-}" ]; then
   echo "no test files found — check the discovery glob in scripts/test.sh" >&2
@@ -37,9 +37,11 @@ echo "test dirs:" $dirs
 echo "src tests:" $src_tests
 echo "script tests:" $script_tests
 
-# EDEN_TEST_SHARD=k/N runs the k-th of N slices of the test files (bun test --shard), so CI can
-# spread the suite over parallel jobs. The python tests run in slice 1 only. Read here, before
-# the EDEN_* variables are cleared below.
+# EDEN_TEST_SHARD=k/N runs the k-th of N slices of the test files, so CI can spread the suite
+# over parallel jobs. scripts/test-shard.ts deals the files out by their measured times
+# (scripts/test-times.txt); bun's own --shard deals them in path order, which put the slowest
+# files together. The python tests run in slice 1 only. Read here, before the EDEN_* variables
+# are cleared below.
 shard=""
 run_python=1
 if [ -n "${EDEN_TEST_SHARD:-}" ]; then
@@ -50,7 +52,7 @@ if [ -n "${EDEN_TEST_SHARD:-}" ]; then
       exit 1
       ;;
   esac
-  shard="--shard=$EDEN_TEST_SHARD"
+  shard="$EDEN_TEST_SHARD"
   [ "${EDEN_TEST_SHARD%%/*}" = "1" ] || run_python=0
   echo "test shard: $EDEN_TEST_SHARD"
 fi
@@ -65,6 +67,15 @@ for f in $quarantined; do
   ignore="$ignore --path-ignore-patterns=$f"
 done
 echo "quarantined files:" $quarantined
+
+# A slice ignores the files dealt to the other slices. bun still discovers the suite, so a test
+# file the shard script was not given runs in every slice rather than in none.
+if [ -n "$shard" ]; then
+  others=$(printf '%s\n' "$pkg_tests" "$src_tests" "$script_tests" | bun scripts/test-shard.ts "$shard")
+  for f in $others; do
+    ignore="$ignore --path-ignore-patterns=$f"
+  done
+fi
 
 # Tests must never touch the real ~/.eden (issue #67). Test files restore the
 # EDEN_HOME they found, and bunfig.toml's preload (scripts/test-preload.ts)
@@ -94,8 +105,5 @@ fi
 
 # Not exec: the EXIT trap has to run to remove the throwaway HOME. set -e still
 # makes bun's exit status the script's.
-# The shard flag joins the caller's arguments, so the bun test line stays the one
-# benchmarks/memoryagentbench/protocol.test.ts pins.
-if [ -n "$shard" ]; then set -- "$@" "$shard"; fi
 # shellcheck disable=SC2086 # word splitting is intended: one argument per dir/file
 bun test "$@" $ignore $dirs $src_tests $script_tests
