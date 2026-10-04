@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { GROUPS } from "./groups";
+import { FLAG_SAMPLES, GROUPS } from "./groups";
 import { loadRecord } from "./record";
 import { ARMS } from "./registry";
 
@@ -56,10 +56,18 @@ describe("arms.json", () => {
 });
 
 describe("the test files", () => {
-  test("group every arm exactly once, each group with a gate file and a reference file", () => {
+  test("group every arm exactly once, each group with a flag sample, a gate file and a reference file", () => {
     const all = Object.values(GROUPS).flat();
     expect(all.length).toBe(new Set(all).size);
     expect([...all].sort()).toEqual(record.arms.map((arm) => arm.id).sort());
+    for (const [group, id] of Object.entries(FLAG_SAMPLES)) {
+      expect({ group, inGroup: GROUPS[group]?.includes(id), flagged: ARMS.get(id)?.flagged }).toEqual({
+        group,
+        inGroup: true,
+        flagged: true,
+      });
+    }
+    expect(Object.keys(FLAG_SAMPLES).sort()).toEqual(Object.keys(GROUPS).sort());
     const files = readdirSync(import.meta.dir);
     for (const group of Object.keys(GROUPS)) {
       expect(files).toContain(`${group}.gate.test.ts`);

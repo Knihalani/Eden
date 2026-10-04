@@ -1,7 +1,8 @@
 /**
- * The gate (A5 §4; EXECUTION X4: "CI fails if a red arm fails for a different reason"). Every recorded state of
- * the given arms is run at CI scale against `plugins/eden-memory` from this tree, each in fresh processes, and must
- * fail exactly the checks `arms.json` records for it (none for a green state). A red arm that fails another set of
+ * The gate (A5 §4; EXECUTION X4: "CI fails if a red arm fails for a different reason"). Every arm of a group is run
+ * at CI scale against `plugins/eden-memory` from this tree, in fresh processes: its `on` state, and its `off` and
+ * `shadow` states for the group's flag sample (groups.ts). Each run must fail exactly the checks `arms.json`
+ * records for it (none for a green state). A red arm that fails another set of
  * checks, or passes, fails the gate, as does a green arm that fails: either the arm is broken or the plugin's
  * behaviour changed, and `arms.json` is updated only with that evidence.
  *
@@ -9,7 +10,7 @@
  * runs (its pid-derived ids, #98), and the record says so with the measured flips.
  */
 import { describe, test } from "bun:test";
-import { GROUPS } from "./groups";
+import { ciStates, GROUPS } from "./groups";
 import { EDEN_CLI, EDEN_PLUGIN, runArm, type FlagState } from "./kit";
 import { loadRecord, mismatch, statesOf } from "./record";
 import { ARMS } from "./registry";
@@ -24,7 +25,7 @@ export function gate(group: string): void {
     for (const id of GROUPS[group] ?? []) {
       const arm = ARMS.get(id);
       const entry = record.arms.find((item) => item.id === id);
-      for (const state of entry ? statesOf(record, id) : (["on"] as FlagState[])) {
+      for (const state of entry ? ciStates(group, id, statesOf(record, id)) : (["on"] as FlagState[])) {
         const recorded = entry?.[state];
         test(
           `${id} [${state}]: ${recorded?.state ?? "unrecorded"}`,
