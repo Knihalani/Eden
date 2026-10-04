@@ -29,15 +29,16 @@ Read, in this order:
    - The baseline was measured, not assumed.
    - `harness_sha` matches, or the amendment is explained.
 3. **Test honesty.**
-   - The red-arm commit precedes the implementation, and each arm fails for its asserted `reason` on the red commit (check out that commit and run it).
+   - The red commit precedes the implementation, and on it each of the slice's arms fails exactly the checks `arms.json` records (check out that commit and run `benchmarks/memory-long-horizon/arms/run.ts --arm <id>`).
+   - An arm set `green` passes in its own runs, and no arm outside the slice changed state without a stated reason.
    - The tests assert the behaviour, not the implementation.
    - No test was weakened, skipped or special-cased to pass.
    - No `fixture:` edit changes an oracle without a stated reason.
    - No bench string is special-cased in `src/`.
 4. **Re-run the evidence yourself.**
    - CI's four steps: `bun run format:check`, `bun run typecheck`, `bun run test`, `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh` (without the variable, build-cli re-runs typecheck and the suite).
-   - The slice's arms, twice, in fresh processes.
-   - Both flag states.
+   - The slice's arms, twice (`arms/run.ts --arm <id>`; every run uses fresh processes).
+   - Both flag states (`--flags off`, `--flags shadow`).
    - Compare with the numbers in the draft report. **Any mismatch is a finding.**
 5. **Fail-open and safety.**
    - Every hook path exits 0 on error with empty stdout and stderr.

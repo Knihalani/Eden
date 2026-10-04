@@ -9,7 +9,7 @@ You have full permissions: commit, push, open PRs and merge into `main` yourself
 
 ## 0. Orient (read before writing anything)
 
-1. `docs/memory-ship/PROGRESS.md`: confirm $ARGUMENTS exists, is `todo` (or `in-progress` from an earlier run you are resuming), and that every dependency is `done`. If a dependency is not done, stop and report which one.
+1. `docs/memory-ship/PROGRESS.md`: confirm $ARGUMENTS exists, is `todo` (or `in-progress` from an earlier run you are resuming), and that every dependency is `done`. If a dependency is not done, stop and report which one. Read its follow-ups table too: the rows for $ARGUMENTS are part of the slice.
 2. Read, in full:
    - the slice's ROADMAP row;
    - every DECISIONS row it cites (D/X numbers);
@@ -24,13 +24,15 @@ You have full permissions: commit, push, open PRs and merge into `main` yourself
 
 - `git fetch origin`.
 - Create a worktree on `mem/<slice>-<short-slug>` from `origin/main` (EnterWorktree, or `git worktree add .claude/worktrees/<slice> -b <branch> origin/main`).
+- Run `bun install --frozen-lockfile` in it. Without it the plugin cannot import `@eden/ir`, and every hook falls back to spawning `eden hook` (about 2.6 s each), which skews timings and end-to-end runs.
+- A worktree nested in the repo (`.claude/worktrees/…`) gets 2 false typecheck errors (Buffer types in `apps/site/src/assets.ts` and `packages/know/src/cdx.ts`). Run the final local CI in a checkout outside the repo, such as a detached `git worktree add` under your scratchpad.
 - Mark the slice `in-progress` in PROGRESS.md with the branch name. This is the first commit, together with the prereg.
 
 ## 2–5. Pre-register, red first, implement, verify
 
 Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
 - **Baselines are measured.** Run the metric on `origin/main` before changing anything.
-- **Scope before the harness exists.** For slices before P0.0c, the gate is the one in PROGRESS.md's Gate column plus CI. Write tests for the behaviour you change anyway.
+- **The gate.** It is PROGRESS.md's Gate column plus CI. Since P0.0c, a gate's A5 arms are in `arms.json` and run with `benchmarks/memory-long-horizon/arms/run.ts` (README: "The A5 §4 arms"). Write tests for the behaviour you change anyway.
 - **Quality bar.** Code a strong reviewer would call clean:
   - small, well-named functions;
   - types that match the spec vocabulary;
@@ -76,7 +78,7 @@ Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
 ## 8. Report
 
 - Write `docs/memory-ship/reports/<slice>.md` in the `CLAUDE.md` format.
-- Update the PROGRESS.md row: `done`, PR number, report link.
+- Update the PROGRESS.md row: `done`, PR number, report link. Delete the follow-up rows the slice closed, and add a row for each follow-up you file that a later slice owns.
 - Commit both through a follow-up PR (`<slice id>: report`), merged the same way, or include them in the slice PR before merging (preferred).
 - Your **final message is the report**, complete and formatted. Every number must come from output you produced in this session.
 
