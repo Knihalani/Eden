@@ -177,7 +177,7 @@ const guardDedup: Arm = {
       check("one-response", responses.length === 1, `${responses.length} handlers answered \`${FORCE_PUSH}\``),
       check(
         "from-history-rewrite",
-        responses.length === 1 && statesRule(text[0]!, NO_FORCE_PUSH),
+        responses.length === 1 && statesRule(text[0]!, NO_FORCE_PUSH) && !statesRule(text[0]!, NO_PUSH),
         `the answer: ${JSON.stringify(text.map((t) => t.slice(0, 100)))}`,
       ),
     ];

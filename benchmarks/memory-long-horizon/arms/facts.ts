@@ -79,37 +79,41 @@ const repoFacts: Arm = {
   },
 };
 
+/**
+ * A cited fact (D8, D31): mined from apps/web/package.json, so its citation can fail. A user statement is not used:
+ * D8 lets a user statement override a mined fact, and nothing in DECISIONS invalidates one when a file changes.
+ */
 const citation: Arm = {
   id: "citation",
   flagged: true,
   async run(run) {
-    const spec = monorepo({ projectFiles: { "apps/web/package.json": webPackage({ "@clerk/nextjs": "5.0.0" }) } });
+    const spec = monorepo({
+      projectFiles: { "apps/web/package.json": webPackage({ "@clerk/nextjs": "5.0.0" }) },
+      initialTruth: [set(AUTH, "apps/web", "Clerk")],
+    });
     const world = run.world(spec);
+    const mined = sleep(run, world);
     const first = await Driver.start(world, spec);
-    await first.say("In apps/web the auth provider is Clerk.", [set(AUTH, "apps/web", "Clerk")], "apps/web");
-    await first.end();
-    world.advance(DAY_MS);
-    const second = await Driver.start(world, spec);
-    await second.turn("open apps/web/app/login.ts", { tools: [[read("apps/web/app/login.ts", "export {};\n")]] });
-    const control = await second.ask("which auth provider does apps/web use?", {
+    await first.turn("open apps/web/app/login.ts", { tools: [[read("apps/web/app/login.ts", "export {};\n")]] });
+    const control = await first.ask("which auth provider does apps/web use?", {
       scope: "apps/web",
       needs: [id(AUTH, "apps/web")],
     });
-    await second.end();
+    await first.end();
     world.changeRepo({ "apps/web/package.json": webPackage() }, [set(AUTH, "apps/web", null)]);
-    const slept = sleep(run, world);
+    const rechecked = sleep(run, world);
     const from = world.log.length;
-    const third = await Driver.start(world, spec);
-    await third.turn("open apps/web/app/login.ts", { tools: [[read("apps/web/app/login.ts", "export {};\n")]] });
-    await third.ask("how does apps/web authenticate?", { scope: "apps/web", allowed: [id(AUTH, "apps/web")] });
-    await third.end();
+    const second = await Driver.start(world, spec);
+    await second.turn("open apps/web/app/login.ts", { tools: [[read("apps/web/app/login.ts", "export {};\n")]] });
+    await second.ask("how does apps/web authenticate?", { scope: "apps/web", allowed: [id(AUTH, "apps/web")] });
+    await second.end();
     const clerk = bulletsIn(judged(world, spec), from).filter((bullet) => states(bullet, AUTH, "Clerk"));
     return [
-      needCheck("control-packs", world, spec, control),
+      needCheck("control-packs", world, spec, control, { note: `; sleep exit ${mined}` }),
       check(
         "skipped-after-removal",
         clerk.length === 0,
-        `Clerk after @clerk/nextjs was removed: ${quote(clerk)}; sleep exit ${slept}`,
+        `Clerk after @clerk/nextjs was removed: ${quote(clerk)}; sleep exit ${rechecked}`,
       ),
     ];
   },

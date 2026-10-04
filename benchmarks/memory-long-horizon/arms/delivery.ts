@@ -42,7 +42,6 @@ const nonhuman: Arm = {
     const world = run.world(spec);
     const session = await Driver.start(world, spec);
     await session.say("Our auth provider is Clerk.", [set(AUTH, "", "Clerk")]);
-    await session.say("The database is postgres.", [set(DB, "", "postgres")]);
     const runs: AgentRun[] = [];
     await session.turn("run the background checks on the auth flow and the database", {
       within: async (driver) => {
@@ -55,6 +54,8 @@ const nonhuman: Arm = {
       },
     });
     for (const launched of runs) await session.notify(launched);
+    // The control's fact is said after the notifications, so it does not ride on a row surviving their ~60 writers.
+    await session.say("The database is postgres.", [set(DB, "", "postgres")]);
     await session.compact(BLANK_SUMMARY);
     const control = await session.ask("what database do we use?", { needs: [id(DB, "")] });
     await session.end();

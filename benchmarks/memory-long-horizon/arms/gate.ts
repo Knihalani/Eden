@@ -10,30 +10,12 @@
  */
 import { describe, test } from "bun:test";
 import { GROUPS } from "./groups";
-import { EDEN_CLI, EDEN_PLUGIN, runArm, type ArmResult, type FlagState } from "./kit";
-import { loadRecord, statesOf, type StateRecord } from "./record";
+import { EDEN_CLI, EDEN_PLUGIN, runArm, type FlagState } from "./kit";
+import { loadRecord, mismatch, statesOf } from "./record";
 import { ARMS } from "./registry";
 
 /** Longest arm run at CI scale (spawn-writers, about 35 s) with room for a slow machine. */
 const TIMEOUT_MS = 240_000;
-
-/** The difference between a run and its record, in words; empty when they agree. */
-export function mismatch(result: ArmResult, record: StateRecord): string {
-  const unstable = new Set(record.unstable ?? []);
-  const stable = (ids: readonly string[]) => ids.filter((id) => !unstable.has(id)).sort();
-  const want = stable(record.state === "green" ? [] : (record.failed ?? []));
-  const got = stable(result.failed);
-  if (JSON.stringify(want) === JSON.stringify(got)) return "";
-  const unexpected = got.filter((id) => !want.includes(id));
-  const missing = want.filter((id) => !got.includes(id));
-  const detail = result.checks
-    .filter((item) => unexpected.includes(item.id) || missing.includes(item.id))
-    .map((item) => `  ${item.ok ? "now passes" : "now fails"} ${item.id}: ${item.detail}`);
-  return [
-    `${result.arm} [${result.flags}] recorded ${record.state} ${JSON.stringify(want)}, ran ${JSON.stringify(got)}`,
-    ...detail,
-  ].join("\n");
-}
 
 /** Registers one test per recorded state of each arm of a group (groups.ts). */
 export function gate(group: string): void {

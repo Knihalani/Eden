@@ -68,11 +68,13 @@ bun benchmarks/memory-long-horizon/arms/run.ts --scale full --json     # A5's fu
 - **Flag states (X7).** `on` runs with no flag file. `off` and `shadow` write `~/.eden/flags.json` with every
   delivery-point flag set to that value, and are judged by generic checks: `off` is identity (exit 0, nothing printed
   at a delivery point, no context or decision, no ledger); `shadow` also writes the shadow ledger and wide events.
-- **The gate** (`arms/*.test.ts` calling `gate([...])`): CI runs every recorded state at CI scale and fails when a
+- **The gate** (`arms/<group>.gate.test.ts` calling `gate("<group>")`, groups in `arms/groups.ts`): CI runs every
+  recorded state at CI scale and fails when a
   red arm fails any other set of checks, or passes, or a green arm fails (EXECUTION X4). Update `arms.json` only
   with the evidence of a run. A check listed as `unstable` is one today's plugin flips between identical runs.
-- **References** (`arms/reference.ts`): every arm also passes against the scripted plugin in reference mode with the
-  arm's answer table and against `arms/fixtures/reference-cli.ts`, so no arm is unsatisfiable or vacuous.
+- **References** (`arms/reference.ts`, run by `arms/<group>.reference.test.ts` and `run.ts --reference`): every arm
+  also passes against the scripted plugin in reference mode with the arm's answer table and against
+  `arms/fixtures/reference-cli.ts`, so no arm is unsatisfiable or vacuous.
 - **Entry points the arms define**, run in the repo with the hooks' environment (each arm's header has the
   contract): `eden memory dump --json` (spawn-writers), `eden memory remember --jsonl -` (CueBench, policy-trigger,
   alias-batch, scale), `eden memory extract --jsonl -` (extraction), `eden memory scopes --json <path>…` (R5 rows),
@@ -91,5 +93,5 @@ bun benchmarks/memory-long-horizon/arms/run.ts --scale full --json     # A5's fu
 | `arms/policy.ts`, `facts.ts` | Policy, guard, fact and cue arms (G1) |
 | `arms/cuebench.ts`, `bench.ts`, `extraction.ts`, `scale.ts` | Fixture arms: R1/R8 CueBench, triggers, aliases, E3, the 20k/1e6 world |
 | `arms/gate.ts`, `record.ts`, `registry.ts`, `run.ts` | The gate, the record, the arm registry, the runner |
-| `arms/reference.ts`, `fixtures/reference-cli.ts` | The references every arm passes against |
+| `arms/reference.ts`, `reference-suite.ts`, `fixtures/reference-cli.ts` | The references every arm passes against, and their suite |
 | `arms/fixtures/world.ts`, `legacy-v1.json` | The arms' world (oracle data), and pre-P0.5 stores for `migrate` |
