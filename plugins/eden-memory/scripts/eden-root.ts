@@ -3,7 +3,7 @@
  * or, after `/plugin install`, from a copy in its plugin cache, so a path relative to this file is not enough.
  * Only reads files: the Submit budget (150 ms, D20) has no room for a spawn or a network call.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 /** The memory hook's module, relative to an Eden checkout. */
@@ -43,11 +43,14 @@ function marketplaceRoot(pluginRoot: string): EdenRoot | null {
   }
 }
 
-/** The first candidate that holds the memory hook. Throws, naming every place tried, when none does. */
+/**
+ * The first candidate that holds the memory hook, by its real path: Bun loads a module tree slower through a symlinked
+ * path (macOS `/var`, `/tmp`). Throws, naming every place tried, when none does.
+ */
 export function findEdenRoot(pluginRoot: string, env: NodeJS.ProcessEnv = process.env): EdenRoot {
   const candidates = rootCandidates(pluginRoot, env);
   const found = candidates.find((c) => existsSync(join(c.root, MEMORY_HOOK)));
-  if (found) return found;
+  if (found) return { root: realpathSync(found.root), via: found.via };
   const tried = candidates.map((c) => `${c.via} ${c.root}`);
   if (!env.EDEN_ROOT) tried.push("EDEN_ROOT unset");
   throw new Error(`no Eden checkout with ${MEMORY_HOOK} (tried: ${tried.join("; ")})`);
