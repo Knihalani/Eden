@@ -66,6 +66,17 @@ export function pluginHookEvents(plugin: MemoryPlugin | null): string[] {
   return hooks && typeof hooks === "object" && !Array.isArray(hooks) ? Object.keys(hooks) : [];
 }
 
+/**
+ * The shell command a plugin's `hooks/hooks.json` runs on UserPromptSubmit, as Claude Code runs it: `/bin/sh -c`
+ * with `CLAUDE_PLUGIN_ROOT` in the environment. Null when the plugin registers none.
+ */
+export function pluginSubmitCommand(pluginRoot: string): string | null {
+  const hooks = readJson(join(pluginRoot, "hooks", "hooks.json")).hooks as Record<string, unknown> | undefined;
+  const groups = hooks?.UserPromptSubmit as Array<{ hooks?: Array<{ command?: unknown }> }> | undefined;
+  const command = groups?.[0]?.hooks?.[0]?.command;
+  return typeof command === "string" ? command : null;
+}
+
 function filesUnder(dir: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
@@ -126,10 +137,11 @@ export function pluginCheck(plugin: MemoryPlugin | null, hooksFromSettings: bool
 type HookProbe = { loaded: boolean; ms: number; cause?: string };
 
 /**
- * Runs the plugin's hook as Claude Code does, on a Submit, in fresh processes with a throwaway Eden home: Eden loaded
- * in-process when every run exits 0 and none logged a fallback. `ms` is the median wall time, process start included.
+ * Runs the plugin's Submit hook command as Claude Code does, in fresh processes with a throwaway Eden home: Eden
+ * loaded in-process when every run exits 0 and none logged a fallback. `ms` is the median wall time, shell and process
+ * start included.
  */
-function probePluginHook(pluginRoot: string, bun: string): HookProbe {
+function probePluginHook(pluginRoot: string, command: string): HookProbe {
   const home = mkdtempSync(join(tmpdir(), "eden-doctor-probe-"));
   try {
     const env: Record<string, string> = {
@@ -138,6 +150,7 @@ function probePluginHook(pluginRoot: string, bun: string): HookProbe {
       HOME: home,
       EDEN_HOME: join(home, ".eden"),
       EDEN_MEMORY_DIR: join(home, ".eden", "memory"),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
     };
     if (process.env.EDEN_ROOT) env.EDEN_ROOT = process.env.EDEN_ROOT;
     const payload = { hook_event_name: "UserPromptSubmit", session_id: "eden-doctor", prompt: "probe", cwd: home };
@@ -145,7 +158,7 @@ function probePluginHook(pluginRoot: string, bun: string): HookProbe {
     let exitedZero = true;
     for (let i = 0; i < PROBE_RUNS; i++) {
       const started = performance.now();
-      const run = Bun.spawnSync([bun, join(pluginRoot, "scripts", "hook.ts")], {
+      const run = Bun.spawnSync(["/bin/sh", "-c", command], {
         env,
         stdin: new TextEncoder().encode(JSON.stringify(payload)),
         stdout: "ignore",
@@ -167,9 +180,13 @@ function probePluginHook(pluginRoot: string, bun: string): HookProbe {
 /** Whether the hook Claude Code runs loads Eden in-process, from which checkout, and within the Submit budget. */
 export function modulesCheck(plugin: MemoryPlugin | null): { check: DoctorCheck; loaded: boolean } {
   const pluginRoot = plugin?.enabled ? plugin.installPath : CHECKOUT_PLUGIN;
-  const bun = Bun.which("bun");
-  if (!bun) {
+  if (!Bun.which("bun")) {
     return { loaded: false, check: { name: "modules", ok: false, detail: "bun is not on PATH · the hooks run bun" } };
+  }
+  const command = pluginSubmitCommand(pluginRoot);
+  if (!command) {
+    const detail = `${pluginRoot}/hooks/hooks.json registers no UserPromptSubmit hook`;
+    return { loaded: false, check: { name: "modules", ok: false, detail } };
   }
   let where: string;
   try {
@@ -185,7 +202,7 @@ export function modulesCheck(plugin: MemoryPlugin | null): { check: DoctorCheck;
     const detail = `${where} · this hook does not log its fallbacks, so whether it loads Eden is unknown · ${update}`;
     return { loaded: false, check: { name: "modules", ok: false, detail } };
   }
-  const probe = probePluginHook(pluginRoot, bun);
+  const probe = probePluginHook(pluginRoot, command);
   if (!probe.loaded) {
     return { loaded: false, check: { name: "modules", ok: false, detail: `${where} · cannot load: ${probe.cause}` } };
   }
