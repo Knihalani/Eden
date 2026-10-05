@@ -6,8 +6,11 @@
  * - (a) the vendored gitleaks default rules (`vendor/gitleaks/`, v8.30.1), applied as gitleaks applies them to
  *   a fragment: a rule runs only when its keywords occur (case-insensitive); each regex match yields a secret
  *   (the rule's `secretGroup`, else the first non-empty group, else the match); the secret must clear the rule's
- *   entropy floor; and neither the global allowlist nor the rule's own excuses it. Path-only rules never fire
- *   on text, and gitleaks' decoding of base64 and hex segments is not done;
+ *   entropy floor; and neither the global allowlist nor the rule's own excuses it. Text has no path, so three
+ *   choices differ from gitleaks, each stricter: a rule with a regex and a `path` condition (freemius, hashicorp-tf,
+ *   kubernetes-secret-yaml, nuget-config) runs on every text; a path-only rule never fires; an allowlist's path
+ *   condition never holds. Two more: a list's allowlist regexes are tried one by one, where gitleaks joins them
+ *   into one alternation (so a leading `(?i)` reaches the later ones), and base64/hex segments are not decoded;
  * - (a′) provider shapes gitleaks lacks or gates on context: `cfat_` tokens (R9 §R5.2, R3 E12); OpenAI project
  *   keys without the `T3BlbkFJ` marker; Mailgun `key-` and Telegram bot tokens without the provider's name nearby;
  *   AWS key ids below gitleaks' entropy floor. Each makes the gate stricter, never looser;
@@ -102,7 +105,7 @@ export function goRegex(pattern: string): RegExp {
       at++;
     } else if (char === "[") {
       const end = classEnd(source, at);
-      out += posixClasses(source.slice(at, end + 1));
+      out += jsClass(source.slice(at, end + 1));
       at = end;
     } else if (char === "(") {
       const inline = /^\(\?([a-zA-Z-]+)\)/.exec(source.slice(at));
@@ -145,8 +148,9 @@ function classEnd(source: string, start: number): number {
   throw new Error(`unterminated class in ${source}`);
 }
 
-function posixClasses(cls: string): string {
-  return cls.replace(/\[:(\w+):\]/g, (_, name: string) => {
+/** A Go class in JavaScript: a leading literal `]` escaped (`[^]]` is "any character" in JavaScript), POSIX classes. */
+function jsClass(cls: string): string {
+  return cls.replace(/^\[(\^?)\]/, "[$1\\]").replace(/\[:(\w+):\]/g, (_, name: string) => {
     const body = POSIX[name];
     if (body === undefined) throw new Error(`unsupported POSIX class [:${name}:]`);
     return body;
