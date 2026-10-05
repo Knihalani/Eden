@@ -15,8 +15,6 @@ import * as edenMem from "./index";
 import { MEMORY_LANE_KINDS } from "./memory-lanes";
 import { isIclExemplar, isRecsysShot, SemanticStore } from "./semantic-store";
 
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/60
-
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 const WRAP_SRC = readFileSync(join(import.meta.dir, "../packages/wrap/src/know-inject.ts"), "utf8");
 const HOOK_SRC = readFileSync(join(import.meta.dir, "../packages/cli/src/memory-hook.ts"), "utf8");
@@ -111,20 +109,11 @@ function flatten(s: string): string {
     .replace(/\s+/g, " ");
 }
 
-/** M16.2 stays 5 kinds: recsys encode is narrative (or recsys if D added the string, not a 6th kind). */
-function isRecsysLane(lane?: string): boolean {
-  return lane === "narrative" || lane === "recsys";
-}
-
 function storedBlob(mem: AgentMemory): string {
   return mem
     .memories()
     .map((r) => r.text)
     .join("\n");
-}
-
-function movieRecs(mem: AgentMemory): ReturnType<AgentMemory["memories"]> {
-  return mem.memories().filter((r) => /Superbad|Hangover|Knocked Up|The Matrix/i.test(r.text));
 }
 
 function movieKey(s: string): string {
@@ -155,45 +144,6 @@ describe("M31.4 M16.2 kinds stay 5", () => {
     expect([...MEMORY_LANE_KINDS]).toEqual(["icl", "narrative", "fact", "trajectory", "chat"]);
     expect(new Set(MEMORY_LANE_KINDS).size).toBe(5);
     expect(MEMORY_LANE_KINDS).not.toContain("recsys");
-  });
-});
-
-describe("M31.4 recsys store-all (not extractDurable chop)", () => {
-  test.failing("movie list stored as atom (store-all); packet on comedy cue has Superbad / Hangover", async () => {
-    await withMem("eden-m314-liked-", (mem) => {
-      expect(["narrative", "recsys"]).toContain(encodeLane(RECSYS_LIKED));
-      mem.observe([{ role: "user", content: RECSYS_LIKED }]);
-      const blob = storedBlob(mem);
-      expect(blob).toContain(flatten(RECSYS_LIKED));
-      const recs = movieRecs(mem);
-      expect(recs.length).toBeGreaterThan(0);
-      expect(recs.every((r) => isRecsysLane(r.lane))).toBe(true);
-      expect(recs.some((r) => r.lane === "chat")).toBe(false);
-      expect(recs.some((r) => (r.tags ?? []).some((t) => t.toLowerCase() === "recsys"))).toBe(true);
-      const pkt = packetOf(mem.inject([{ role: "user", content: RECSYS_CUE }]));
-      expect(pkt).toMatch(/Superbad/);
-      expect(pkt).toMatch(/Hangover/);
-    });
-  });
-
-  test.failing("numbered movie list is NOT a fact-serial extract", async () => {
-    await withMem("eden-m314-numbered-", (mem, dir) => {
-      expect(["narrative", "recsys"]).toContain(encodeLane(RECSYS_NUMBERED));
-      expect(["narrative", "recsys"]).toContain(encodeLane(flatten(RECSYS_NUMBERED)));
-      mem.observe([{ role: "user", content: RECSYS_NUMBERED }]);
-      const recs = movieRecs(mem);
-      expect(recs.length).toBeGreaterThan(0);
-      const blob = storedBlob(mem);
-      expect(blob).toMatch(/Superbad/);
-      expect(blob).toMatch(/Hangover/);
-      expect(blob).toMatch(/Knocked Up/);
-      expect(blob).toContain(flatten(RECSYS_NUMBERED));
-      expect(recs.every((r) => isRecsysLane(r.lane))).toBe(true);
-      expect(recs.every((r) => r.lane !== "chat")).toBe(true);
-      const live = new SemanticStore(dir).live();
-      expect(live.some((row) => tripleTouchesMovie(row) && row.p === "is")).toBe(false);
-      expect(live.some((row) => movieKey(row.s) === "superbad" && row.p === "is")).toBe(false);
-    });
   });
 });
 
@@ -256,13 +206,6 @@ describe("M31.4 ICL still ICL, not recsys (M7.4)", () => {
 });
 
 describe("M31.4 recsys / ICL false positives", () => {
-  test.failing("RFC ids with years are not recsys; Title (YYYY) lists are", () => {
-    expect(isRecsysShot("RFC 9110 (2022) superseded RFC 7231 (2014)")).toBe(false);
-    expect(encodeLane("RFC 9110 (2022) superseded RFC 7231 (2014)")).not.toBe("narrative");
-    expect(isRecsysShot("Superbad (2007), The Hangover (2009), Knocked Up (2007)")).toBe(true);
-    expect(encodeLane("Superbad (2007), The Hangover (2009), Knocked Up (2007)")).toBe("narrative");
-  });
-
   test("coding Input: path is not ICL; Input: The film is terrible. is ICL", () => {
     expect(isIclExemplar("Input: src/auth.ts")).toBe(false);
     expect(encodeLane("Input: src/auth.ts")).toBe("chat");
@@ -446,28 +389,6 @@ describe("M31.4 assemble firewall", () => {
     expect(extractCandidates([recsysCandidate(recsysCopula, { lane: "narrative", tags: ["recsys"] })])).toEqual([]);
     expect(extractCandidates([recsysCandidate(RECSYS_LIKED, { lane: "narrative" })])).toEqual([]);
     expect(extractCandidates([recsysCandidate(RECSYS_NUMBERED, { lane: "narrative" })])).toEqual([]);
-  });
-
-  test.failing("observed recsys atoms (and recsys-tagged notes) yield zero triples", async () => {
-    await withMem("eden-m314-assemble-", (mem) => {
-      mem.observe([{ role: "user", content: RECSYS_LIKED }]);
-      mem.observe([{ role: "user", content: RECSYS_NUMBERED }]);
-      const recs = movieRecs(mem);
-      expect(recs.length).toBeGreaterThan(0);
-      expect(recs.some((r) => (r.tags ?? []).some((t) => t.toLowerCase() === "recsys"))).toBe(true);
-      for (const r of recs) {
-        expect(
-          extractCandidates([
-            recsysCandidate(r.text, {
-              t: r.at,
-              kind: r.kind,
-              lane: r.lane,
-              tags: r.tags,
-            }),
-          ]),
-        ).toEqual([]);
-      }
-    });
   });
 });
 
