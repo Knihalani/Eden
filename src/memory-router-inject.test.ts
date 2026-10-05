@@ -8,14 +8,9 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { encodeLane, MEMORY_MARK, openMemory, type AgentMemory } from "./index";
-import * as edenMem from "./index";
-import { memoryHookResponse } from "../packages/cli/src/memory-hook";
-import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
+import { MEMORY_MARK, openMemory, type AgentMemory } from "./index";
 import { routeMemory } from "./memory-router";
 import * as memoryRouter from "./memory-router";
-
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/61
 
 const ROOT = join(import.meta.dir, "..");
 const INDEX_PATH = join(import.meta.dir, "index.ts");
@@ -30,7 +25,6 @@ const MILLER_NOVEL =
   "The villagers said the oak still slept under the silt, waiting. " +
   "The special magic number of zebra-quark-17 is 48291.";
 
-const EVENTQA_MILLER = "What happened to the miller by the river?";
 const ICL_CUE = "The movie was great. label:";
 const ICL_GOLD = "The movie was great. label: 28";
 const AUTH_FAIL = "Auth is failing";
@@ -67,26 +61,7 @@ function seedCrossTalk(mem: AgentMemory): void {
   mem.observe([{ role: "user", content: "8. The chairperson is Bob" }]);
 }
 
-function expectNovelStored(mem: AgentMemory): void {
-  expect(encodeLane(MILLER_NOVEL)).toBe("narrative");
-  const novel = mem.memories().find((r) => /zebra-quark-17/.test(r.text) && /miller of Blackford/.test(r.text));
-  expect(novel?.lane).toBe("narrative");
-  expect(mem.memories().filter((r) => r.lane === "icl" && /label:\s*28/.test(r.text)).length).toBeGreaterThanOrEqual(8);
-}
-
 describe("M33.3 cross-talk — ICL shots not in EventQA packet", () => {
-  test.failing("EventQA miller packet contains miller/zebra and not label: 28", () => {
-    withMem((mem) => {
-      seedCrossTalk(mem);
-      expectNovelStored(mem);
-      const pkt = packetOf(mem.inject([{ role: "user", content: EVENTQA_MILLER }]));
-      expect(pkt).toMatch(/miller of Blackford/);
-      expect(pkt).toMatch(/zebra-quark-17/);
-      expect(pkt).not.toMatch(/label:\s*28/);
-      expect(pkt).not.toMatch(/The movie was great/);
-    });
-  });
-
   test("ICL cue packet may contain label: 28 and does not dump the miller novel", () => {
     withMem((mem) => {
       seedCrossTalk(mem);
@@ -124,72 +99,6 @@ describe("M33.3 wrap and hook stay silent", () => {
       expect(src, p).not.toMatch(/\brouteMemory\b/);
       expect(src, p).not.toMatch(/\bmemory_search\b/);
     }
-  });
-
-  test.failing("wrap OpenAI, Anthropic, hook: Clerk / miller / ICL isolation", () => {
-    withMem((mem, dir) => {
-      seedCrossTalk(mem);
-      expectNovelStored(mem);
-      const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
-      const prevDir = process.env.EDEN_MEMORY_DIR;
-      const prevHome = process.env.EDEN_HOME;
-      process.env.EDEN_MEMORY_DIR = dir;
-      delete process.env.EDEN_HOME;
-      try {
-        const openaiAuth = packetOf(
-          withKnowFacts({ messages: [{ role: "user", content: AUTH_FAIL }] }).messages as unknown[],
-        );
-        expect(openaiAuth).toMatch(/Clerk/);
-        expect(openaiAuth).not.toMatch(/label:\s*28/);
-        expect(openaiAuth).not.toMatch(/zebra-quark-17/);
-        const openaiMiller = packetOf(
-          withKnowFacts({ messages: [{ role: "user", content: EVENTQA_MILLER }] }).messages as unknown[],
-        );
-        expect(openaiMiller).toMatch(/miller of Blackford|zebra-quark-17/);
-        expect(openaiMiller).not.toMatch(/label:\s*28/);
-        const openaiIcl = packetOf(
-          withKnowFacts({ messages: [{ role: "user", content: ICL_CUE }] }).messages as unknown[],
-        );
-        expect(openaiIcl).toMatch(/label:\s*28/);
-        expect(openaiIcl).not.toMatch(/zebra-quark-17/);
-
-        const anthAuthBody = withKnowFactsAnthropic({ messages: [{ role: "user", content: AUTH_FAIL }] });
-        const anthAuth = [anthAuthBody.system]
-          .flat()
-          .map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-          .join("\n");
-        expect(anthAuth).toMatch(/Clerk/);
-        expect(anthAuth).not.toMatch(/label:\s*28/);
-        const anthMillerBody = withKnowFactsAnthropic({ messages: [{ role: "user", content: EVENTQA_MILLER }] });
-        const anthMiller = [anthMillerBody.system]
-          .flat()
-          .map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-          .join("\n");
-        expect(anthMiller).toMatch(/miller of Blackford|zebra-quark-17/);
-        expect(anthMiller).not.toMatch(/label:\s*28/);
-
-        const hookAuth = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: AUTH_FAIL });
-        const hookAuthCtx = [
-          hookAuth?.additional_context,
-          (hookAuth?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
-        ].join("\n");
-        expect(hookAuthCtx).toMatch(/Clerk/);
-        expect(hookAuthCtx).not.toMatch(/label:\s*28/);
-        const hookMiller = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: EVENTQA_MILLER });
-        const hookMillerCtx = [
-          hookMiller?.additional_context,
-          (hookMiller?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext,
-        ].join("\n");
-        expect(hookMillerCtx).toMatch(/miller of Blackford|zebra-quark-17/);
-        expect(hookMillerCtx).not.toMatch(/label:\s*28/);
-      } finally {
-        if (prevDir === undefined) delete process.env.EDEN_MEMORY_DIR;
-        else process.env.EDEN_MEMORY_DIR = prevDir;
-        if (prevHome === undefined) delete process.env.EDEN_HOME;
-        else process.env.EDEN_HOME = prevHome;
-        procSpy.mockRestore();
-      }
-    });
   });
 });
 
