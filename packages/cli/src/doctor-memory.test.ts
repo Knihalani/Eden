@@ -4,7 +4,7 @@
  * process against a Claude config dir laid out as `/plugin install eden-memory@eden` leaves it.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -123,6 +123,32 @@ describe("eden doctor --memory", () => {
     expect(lines.get("modules")).toStartWith("!! ");
     expect(lines.get("modules")).toContain("does not log its fallbacks");
     expect(code).toBe(1);
+  });
+
+  test("a hook that crashes before it loads Eden is not vouched for, though hooks.json turns it into `{}`", async () => {
+    const crash = (copy: string) => {
+      const hook = join(copy, "scripts", "hook.ts");
+      const [shebang, ...rest] = readFileSync(hook, "utf8").split("\n");
+      writeFileSync(hook, [shebang, 'throw new Error("boom before Eden loads");', ...rest].join("\n"));
+    };
+    const { code, lines } = await doctorMemory(homeWith({ edit: crash }));
+    expect(lines.get("modules")).toStartWith("!! ");
+    expect(lines.get("modules")).toContain("the hook wrote to stderr");
+    expect(lines.get("modules")).toContain("boom before Eden loads");
+    expect(code).toBe(1);
+  });
+
+  test("hooks from eden setup: modules says there is no plugin to probe", async () => {
+    const home = homeWith(null);
+    const setupHook = { hooks: [{ type: "command", command: "eden hook" }] };
+    const events = ["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd", "PostToolUse"];
+    const hooks = Object.fromEntries([...events, "SubagentStop"].map((event) => [event, [setupHook]]));
+    writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ hooks }));
+    const { code, lines } = await doctorMemory(home);
+    expect(lines.get("memory")).toStartWith("ok memory hooks: UserPromptSubmit");
+    expect(lines.get("plugin")).toBe("ok not installed · the memory hooks come from eden setup");
+    expect(lines.get("modules")).toStartWith("ok not probed");
+    expect(code).toBe(0);
   });
 
   test("a fallback the hook logged shows, with its cause", async () => {

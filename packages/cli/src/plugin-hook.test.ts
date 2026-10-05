@@ -96,37 +96,50 @@ function fallbacks(home: string): Array<{ t: string; plugin: string; cause: stri
     .map((line) => JSON.parse(line) as { t: string; plugin: string; cause: string });
 }
 
-/** The output of the hook run in place from this checkout: what every working copy must print. */
-const inPlace = await runHook(PLUGIN);
+/**
+ * Two Submits of one prompt on one Eden home: the first stores the prompt's rule (and prints `{}`), the second packs
+ * it. A crash would print `{}` too (`hooks.json`'s `|| echo '{}'`), but never the packet, and it writes to stderr.
+ */
+async function submitTwice(pluginRoot: string, extra: Record<string, string> = {}) {
+  const first = await runHook(pluginRoot, extra);
+  const second = await runHook(pluginRoot, extra, first.home);
+  return { first, second, outputs: [first.stdout, second.stdout] };
+}
+
+function expectLoaded(run: Awaited<ReturnType<typeof submitTwice>>) {
+  for (const out of [run.first, run.second]) {
+    expect(out).toMatchObject({ code: 0, stderr: "", spawnedEden: false });
+  }
+  expect(fallbacks(run.first.home)).toEqual([]);
+}
+
+/** The hook run in place from this checkout: what every working copy must print. */
+const inPlace = await submitTwice(PLUGIN);
 
 describe("the plugin loads Eden in-process", () => {
-  test("in place, from this checkout", () => {
-    expect(inPlace.code).toBe(0);
-    expect(inPlace.stderr).toBe("");
-    expect(() => JSON.parse(inPlace.stdout)).not.toThrow();
-    expect(inPlace.spawnedEden).toBe(false);
-    expect(fallbacks(inPlace.home)).toEqual([]);
+  test("in place, from this checkout: the second Submit packs the rule the first stored", () => {
+    expectLoaded(inPlace);
+    expect(inPlace.first.stdout).toBe("{}");
+    expect(inPlace.second.stdout).toContain("Eden Memory:");
+    expect(inPlace.second.stdout).toContain("we use pnpm in this repo, never npm");
   });
 
   test("as an installed copy, through the directory marketplace it was installed from", async () => {
-    const out = await runHook(installCopy(REPO));
-    expect(out.code).toBe(0);
-    expect(out.stdout).toBe(inPlace.stdout);
-    expect(out.spawnedEden).toBe(false);
-    expect(fallbacks(out.home)).toEqual([]);
+    const run = await submitTwice(installCopy(REPO));
+    expectLoaded(run);
+    expect(run.outputs).toEqual(inPlace.outputs);
   });
 
   test("as an installed copy, through EDEN_ROOT", async () => {
-    const out = await runHook(installCopy(null), { EDEN_ROOT: REPO });
-    expect(out.stdout).toBe(inPlace.stdout);
-    expect(out.spawnedEden).toBe(false);
-    expect(fallbacks(out.home)).toEqual([]);
+    const run = await submitTwice(installCopy(null), { EDEN_ROOT: REPO });
+    expectLoaded(run);
+    expect(run.outputs).toEqual(inPlace.outputs);
   });
 
   test("its own checkout comes before EDEN_ROOT", async () => {
-    const out = await runHook(PLUGIN, { EDEN_ROOT: checkoutWithoutDependencies() });
-    expect(out.stdout).toBe(inPlace.stdout);
-    expect(fallbacks(out.home)).toEqual([]);
+    const run = await submitTwice(PLUGIN, { EDEN_ROOT: checkoutWithoutDependencies() });
+    expectLoaded(run);
+    expect(run.outputs).toEqual(inPlace.outputs);
   });
 });
 
@@ -159,6 +172,16 @@ describe("when Eden cannot load, the plugin fails open and says why once", () =>
     const other = await runHook(installCopy(null), {}, first.home);
     expect(other.stdout).toBe("");
     expect(fallbacks(first.home)).toHaveLength(2);
+  });
+
+  test("a copy from a git marketplace does not run Claude Code's clone of it", async () => {
+    const copy = installCopy(null);
+    const plugins = dirname(dirname(dirname(dirname(copy))));
+    const known = { eden: { source: { source: "github", repo: "Knihalani/Eden" }, installLocation: REPO } };
+    writeFileSync(join(plugins, "known_marketplaces.json"), JSON.stringify(known));
+    const out = await runHook(copy);
+    expect(out).toMatchObject({ code: 0, stdout: "", spawnedEden: false });
+    expect(fallbacks(out.home)[0]!.cause).toContain("no Eden checkout");
   });
 
   test("the log holds no prompt text", async () => {

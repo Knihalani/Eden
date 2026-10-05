@@ -14,7 +14,7 @@ import { edenHome } from "./home";
 /** A7 §8, D20: every hook path, Eden's load included, fits in 150 ms on Submit. */
 const SUBMIT_BUDGET_MS = 150;
 const PROBE_RUNS = 3;
-/** The plugin in this checkout, whose hook is probed when no installed copy is enabled. */
+/** The plugin in this checkout, probed when no copy is enabled and no `eden setup` hook is registered. */
 const CHECKOUT_PLUGIN = join(import.meta.dir, "../../../plugins/eden-memory");
 
 export type MemoryPlugin = { id: string; installPath: string; version: string; enabled: boolean };
@@ -136,10 +136,20 @@ export function pluginCheck(plugin: MemoryPlugin | null, hooksFromSettings: bool
 
 type HookProbe = { loaded: boolean; ms: number; cause?: string };
 
+/** A hook that runs longer than this is reported, not waited on. */
+const PROBE_TIMEOUT_MS = 10_000;
+
+/** The line of a crash's output that names the error (Bun prints a source excerpt first). */
+function errorLine(stderr: string): string {
+  const lines = stderr.split("\n").map((line) => line.trim());
+  return lines.find((line) => /^(error|[A-Za-z]*Error):/.test(line)) ?? lines[0]!;
+}
+
 /**
- * Runs the plugin's Submit hook command as Claude Code does, in fresh processes with a throwaway Eden home: Eden
- * loaded in-process when every run exits 0 and none logged a fallback. `ms` is the median wall time, shell and process
- * start included.
+ * Runs the plugin's Submit hook command as Claude Code does, in fresh processes with a throwaway Eden home. Eden
+ * loaded in-process when every run exits 0 within the timeout, writes nothing to stderr and logs no fallback: the
+ * command's `|| echo '{}'` hides a crash's exit status, not its stack trace. `ms` is the median wall time, shell and
+ * process start included.
  */
 function probePluginHook(pluginRoot: string, command: string): HookProbe {
   const home = mkdtempSync(join(tmpdir(), "eden-doctor-probe-"));
@@ -155,62 +165,85 @@ function probePluginHook(pluginRoot: string, command: string): HookProbe {
     if (process.env.EDEN_ROOT) env.EDEN_ROOT = process.env.EDEN_ROOT;
     const payload = { hook_event_name: "UserPromptSubmit", session_id: "eden-doctor", prompt: "probe", cwd: home };
     const times: number[] = [];
-    let exitedZero = true;
-    for (let i = 0; i < PROBE_RUNS; i++) {
+    let failure: string | undefined;
+    for (let i = 0; i < PROBE_RUNS && !failure; i++) {
       const started = performance.now();
       const run = Bun.spawnSync(["/bin/sh", "-c", command], {
         env,
         stdin: new TextEncoder().encode(JSON.stringify(payload)),
         stdout: "ignore",
-        stderr: "ignore",
+        stderr: "pipe",
+        timeout: PROBE_TIMEOUT_MS,
       });
       times.push(performance.now() - started);
-      exitedZero &&= run.exitCode === 0;
+      const stderr = run.stderr.toString().trim();
+      if (run.exitedDueToTimeout) failure = `the hook ran over ${PROBE_TIMEOUT_MS / 1000} s`;
+      else if (stderr) failure = `the hook wrote to stderr: ${errorLine(stderr)}`;
+      else if (run.exitCode !== 0) failure = `the hook exited ${run.exitCode}`;
     }
-    const cause = readFallbacks(fallbackLogPath(join(home, ".eden")))[0]?.cause;
+    const cause = readFallbacks(fallbackLogPath(join(home, ".eden")))[0]?.cause ?? failure;
     const ms = Math.round(times.sort((a, b) => a - b)[Math.floor(times.length / 2)]!);
-    return cause || !exitedZero
-      ? { loaded: false, ms, cause: cause ?? "the hook exited non-zero" }
-      : { loaded: true, ms };
+    return cause ? { loaded: false, ms, cause } : { loaded: true, ms };
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 }
 
-/** Whether the hook Claude Code runs loads Eden in-process, from which checkout, and within the Submit budget. */
-export function modulesCheck(plugin: MemoryPlugin | null): { check: DoctorCheck; loaded: boolean } {
-  const pluginRoot = plugin?.enabled ? plugin.installPath : CHECKOUT_PLUGIN;
-  if (!Bun.which("bun")) {
-    return { loaded: false, check: { name: "modules", ok: false, detail: "bun is not on PATH · the hooks run bun" } };
+/** Whether `dir` is an eden-memory plugin directory (its manifest says so). */
+function isMemoryPlugin(dir: string): boolean {
+  return readJson(join(dir, ".claude-plugin", "plugin.json")).name === "eden-memory";
+}
+
+type ModulesCheck = { check: DoctorCheck; loaded: boolean };
+
+const modulesLine = (ok: boolean, detail: string, loaded = ok): ModulesCheck => ({
+  loaded,
+  check: { name: "modules", ok, detail },
+});
+
+/**
+ * Whether the hook Claude Code runs loads Eden in-process, from which checkout, and within the Submit budget. With no
+ * plugin enabled, `eden setup`'s hooks run the CLI itself (nothing to probe); otherwise this checkout's plugin is
+ * probed, to show whether installing it would work.
+ */
+export function modulesCheck(plugin: MemoryPlugin | null, hooksFromSettings: boolean): ModulesCheck {
+  if (!plugin?.enabled && hooksFromSettings) {
+    return modulesLine(true, "not probed · the memory hooks come from eden setup, which runs the CLI", false);
   }
+  const installed = plugin?.enabled === true;
+  const pluginRoot = installed ? plugin.installPath : CHECKOUT_PLUGIN;
+  if (!installed && !isMemoryPlugin(pluginRoot)) {
+    return modulesLine(
+      false,
+      "nothing to probe · no eden-memory plugin enabled, and this CLI is not in an Eden checkout",
+    );
+  }
+  if (!Bun.which("bun")) return modulesLine(false, "bun is not on PATH · the hooks run bun");
   const command = pluginSubmitCommand(pluginRoot);
-  if (!command) {
-    const detail = `${pluginRoot}/hooks/hooks.json registers no UserPromptSubmit hook`;
-    return { loaded: false, check: { name: "modules", ok: false, detail } };
-  }
+  if (!command) return modulesLine(false, `${pluginRoot}/hooks/hooks.json registers no UserPromptSubmit hook`);
   let where: string;
   try {
     const { root, via } = findEdenRoot(pluginRoot);
-    where = `${root} (${via})`;
+    where = `${installed ? "" : "this checkout's plugin, not installed: "}${root} (${via})`;
   } catch (err) {
-    return { loaded: false, check: { name: "modules", ok: false, detail: (err as Error).message } };
+    return modulesLine(false, (err as Error).message);
   }
   if (!existsSync(join(pluginRoot, "scripts", "fallback-log.ts"))) {
     // A hook from before P0.1 falls back silently, to hookd or to a 2.6 s `eden hook` spawn: a clean probe proves
     // nothing about it.
     const update = `claude plugin update ${plugin?.id ?? "eden-memory@eden"}`;
-    const detail = `${where} · this hook does not log its fallbacks, so whether it loads Eden is unknown · ${update}`;
-    return { loaded: false, check: { name: "modules", ok: false, detail } };
+    return modulesLine(
+      false,
+      `${where} · this hook does not log its fallbacks, so whether it loads Eden is unknown · ${update}`,
+    );
   }
   const probe = probePluginHook(pluginRoot, command);
-  if (!probe.loaded) {
-    return { loaded: false, check: { name: "modules", ok: false, detail: `${where} · cannot load: ${probe.cause}` } };
-  }
+  if (!probe.loaded) return modulesLine(false, `${where} · cannot load: ${probe.cause}`);
   const inBudget = probe.ms <= SUBMIT_BUDGET_MS;
   const timing = inBudget
     ? `in-process in ${probe.ms} ms (budget ${SUBMIT_BUDGET_MS} ms)`
     : `in-process in ${probe.ms} ms, over the ${SUBMIT_BUDGET_MS} ms budget`;
-  return { loaded: true, check: { name: "modules", ok: inBudget, detail: `${where} · the hook loads Eden ${timing}` } };
+  return modulesLine(inBudget, `${where} · the hook loads Eden ${timing}`, true);
 }
 
 /** What the plugin logged when it could not run Eden. A logged cause is fine once the hook loads again. */

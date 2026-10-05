@@ -268,7 +268,7 @@ export function collectMemoryDoctor(): DoctorCheck[] {
   const env = process.env.EDEN_MEMORY;
   const hooks = memoryHooksCheck(settings, { pluginEvents: pluginHookEvents(plugin), env });
   const hooksFromSettings = (memoryHooksCheck(settings, { env }).count ?? 0) > 0;
-  const modules = modulesCheck(plugin);
+  const modules = modulesCheck(plugin, hooksFromSettings);
   return [
     hooks,
     pluginCheck(plugin, hooksFromSettings),
@@ -809,7 +809,13 @@ export async function doctor(args: string[] = []): Promise<number> {
     return treeCheck().ok ? 0 : 1;
   }
   if (args.includes("--memory")) {
-    const checks = collectMemoryDoctor();
+    let checks: DoctorCheck[];
+    try {
+      checks = collectMemoryDoctor();
+    } catch (err) {
+      // As for the full letter: an unreadable config must never throw the doctor process.
+      checks = [{ name: "memory", ok: false, detail: `unreadable · ${(err as Error).message}` }];
+    }
     if (args.includes("--json")) console.log(JSON.stringify({ checks }, null, 2));
     else console.log(checks.map(lineOf).join("\n"));
     return checks.every((c) => c.ok) ? 0 : 1;
