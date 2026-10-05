@@ -38,9 +38,9 @@ jobs:
 
   # The suite in six parallel slices of its test files (EDEN_TEST_SHARD).
   # scripts/test-shard.ts deals the files out by their measured times
-  # (scripts/test-times.txt), about 160 s of tests each. Slicing is by file,
-  # so the slowest file sets the floor: benchmarks/campaign/edge.test.ts,
-  # about 135 s.
+  # (scripts/test-times.txt), about 105 s of tests each. Slicing is by file,
+  # so the slowest file sets the floor: the arms' floor-store.gate.test.ts,
+  # 60 to 104 s on recent runs.
   test:
     runs-on: ubuntu-latest
     strategy:
