@@ -39,10 +39,11 @@ const toolResult = (text: string) => ({
   type: "user",
   message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: text }] },
 });
-const notification = (text: string) => typed(`<task-notification>${text}</task-notification>`, {
-  origin: { kind: "task-notification" },
-  promptSource: "system",
-});
+const notification = (text: string) =>
+  typed(`<task-notification>${text}</task-notification>`, {
+    origin: { kind: "task-notification" },
+    promptSource: "system",
+  });
 const assistant = (text: string) => ({ type: "assistant", message: { role: "assistant", content: text } });
 
 /** A transcripts root holding one project with the given sessions (main files), and optional subagent files. */
@@ -62,7 +63,7 @@ function transcripts(sessions: Record<string, object[]>, subagents: Record<strin
 }
 
 function options(root: string, extra: Partial<BuildOptions> = {}): BuildOptions {
-  return { transcripts: root, evalDir: join(temp("eval"), "eval"), home: "/Users/alice", hostnames: ["alice-mbp.local"], ...extra };
+  return { transcripts: root, evalDir: join(temp("eval"), "eval"), hostnames: ["alice-mbp.local"], ...extra };
 }
 
 type Row = { id: string; text: string; label: string | null };
@@ -92,7 +93,10 @@ describe("build: which prompts become candidates", () => {
     );
     const opts = options(root);
     const report = buildNegatives(opts);
-    expect(draft(opts.evalDir).map((row) => row.text)).toEqual(["why does the login page flash?", "and the signup page?"]);
+    expect(draft(opts.evalDir).map((row) => row.text)).toEqual([
+      "why does the login page flash?",
+      "and the signup page?",
+    ]);
     expect(report).toMatchObject({ prompts: 2, added: 2, total: 2, labelled: 0 });
   });
 
@@ -128,12 +132,14 @@ describe("build: which prompts become candidates", () => {
 
   test("home paths and this machine's host names are normalized; repo-relative paths are kept", () => {
     const root = transcripts({
-      s1: [typed("open /Users/alice/Downloads/app/src/x.ts and /home/bob/y.ts on ALICE-MBP.local, then apps/web/z.ts.")],
+      s1: [
+        typed("open /Users/alice/Downloads/app/src/x.ts and /home/bob/y.ts on ALICE-MBP.local, then app/home/z.ts."),
+      ],
     });
     const opts = options(root);
     buildNegatives(opts);
     expect(draft(opts.evalDir)[0]!.text).toBe(
-      "open /Users/USER/Downloads/app/src/x.ts and /home/USER/y.ts on HOST, then apps/web/z.ts.",
+      "open /Users/USER/Downloads/app/src/x.ts and /home/USER/y.ts on HOST, then app/home/z.ts.",
     );
   });
 
@@ -214,7 +220,10 @@ describe("labels and versions", () => {
     const bytes = readFileSync(first.path);
     expect(first.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect(readFileSync(`${first.path}.sha256`, "utf8")).toBe(`${first.sha256}  real-negatives.v1.jsonl\n`);
-    expect(readFrozenNegatives(first.path).map((row) => row.text)).toEqual(["one?", "three?"]);
+    expect(readFrozenNegatives(first.path)).toEqual({
+      sha256: first.sha256,
+      negatives: rows.filter((row) => row.label === "negative").map(({ id, text }) => ({ id, text })),
+    });
     expect(freezeNegatives(opts.evalDir)).toMatchObject({ version: 2, negatives: 2 });
     writeFileSync(first.path, bytes.toString("utf8").replace("one?", "One?"));
     expect(() => readFrozenNegatives(first.path)).toThrow("sha256");
@@ -258,9 +267,18 @@ describe("the command", () => {
     expect(out + result.stderr.toString()).not.toContain("nobody should see");
   });
 
-  test("an unknown subcommand prints usage and exits 1", () => {
-    const result = run(["eval", "bogus"], temp("home"));
+  test("an unknown subcommand or flag prints usage and exits 1", () => {
+    const calls = [["bogus"], ["build-negatives", "--frezee"], ["build-negatives", "--label", "--freeze"]];
+    for (const args of calls) {
+      const result = run(["eval", ...args], temp("home"));
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain("usage: eden eval build-negatives");
+    }
+  });
+
+  test("labelling before any build says to build first", () => {
+    const result = run(["eval", "build-negatives", "--label"], temp("home"));
     expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain("usage: eden eval build-negatives");
+    expect(result.stderr.toString()).toContain("no draft yet");
   });
 });

@@ -126,10 +126,12 @@ export function writeConfig(c: Config): void {
   }
 }
 
-export function writeFileAtomic(path: string, body: string): void {
+/** Replaces `path` with `body` by rename. With `mode`, the new file is created with it, so it is never looser. */
+export function writeFileAtomic(path: string, body: string, mode?: number): void {
   const tmp = `${path}.${process.pid}.tmp`;
   try {
-    writeFileSync(tmp, body);
+    rmQuietly(tmp);
+    writeFileSync(tmp, body, mode === undefined ? undefined : { mode, flag: "wx" });
     renameSync(tmp, path);
   } catch (err) {
     try {
