@@ -28,9 +28,16 @@ describe("packets and bullets", () => {
     expect(bulletsOf("  \n")).toEqual([]);
   });
 
-  test("today's `[kind · age · src]` tag is metadata, not content", () => {
+  test("today's `[kind · age · src]` tag and D14's trailing provenance are metadata, not content", () => {
     expect(bulletContent("[episode · 0m · user] The database is postgres.")).toBe("The database is postgres.");
     expect(bulletContent("Rule you set: never merge")).toBe("Rule you set: never merge");
+    expect(bulletContent("fix the login (you said, 3 weeks ago)")).toBe("fix the login");
+    expect(bulletContent("Database: postgres (you said)")).toBe("Database: postgres");
+    expect(bulletContent("stack uses Redis (from a summary of earlier work, 1 hour ago)")).toBe("stack uses Redis");
+    expect(bulletContent("CI is green (from a tool result)")).toBe("CI is green");
+    expect(bulletContent("Updated: test runner is now vitest (was jest)")).toBe(
+      "Updated: test runner is now vitest (was jest)",
+    );
   });
 
   test("normalized content ignores case, punctuation and spacing, and matches whole tokens", () => {
