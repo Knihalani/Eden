@@ -132,6 +132,15 @@ describe("stripPastes: D12's pasted spans", () => {
     );
   });
 
+  test("a long repetitive run shared with a result is cut without a quadratic search", () => {
+    const run = "a".repeat(256_000);
+    const line = "GET /health 200 0.4ms\n".repeat(12_000);
+    const started = performance.now();
+    expect(stripPastes(`why so many?\n${run}\nok.`, [run])).toBe("why so many?\n\nok.");
+    expect(stripPastes(`and these?\n${line}done.`, [`log:\n${line}`])).toBe("and these?\n\ndone.");
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
   test("blank lines left by a strip collapse, and the ends are trimmed", () => {
     expect(stripPastes("one.\n\n```\ncode\n```\n\n\ntwo.\n")).toBe("one.\n\ntwo.");
   });

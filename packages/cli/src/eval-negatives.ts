@@ -11,8 +11,8 @@
  * 4. normalizes home paths to `/Users/USER/` (`/home/USER/`) and this machine's host names to `HOST`; repo-relative
  *    paths stay, since they are cue signal;
  * 5. runs the canary: 5 synthetic secrets, fresh each build, are added to the input as typed transcript lines and go
- *    through the same selection and screening as every prompt. If one is not selected, or any part of one survives,
- *    the build aborts and writes nothing.
+ *    through the same selection and screening as every prompt. If one is not selected, or a row about to be written
+ *    holds a canary's value, the build aborts and writes nothing.
  * Candidates are keyed by the sha256 of their text. A rebuild keeps labels, adds new prompts, and keeps rows whose
  * transcripts Claude Code has since swept, so the set grows across builds. `--label` asks for each unlabelled
  * prompt's label; `--freeze` writes the `negative` rows to `real-negatives.vN.jsonl` beside its `.sha256`, which

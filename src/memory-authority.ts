@@ -38,7 +38,10 @@ const TOOL_SPAN_CHARS = 200;
  */
 const ANCHOR = 32;
 const STEP = 64;
-/** Positions kept per anchor text, so a repetitive result cannot make the search quadratic. */
+/**
+ * Positions kept per anchor text, which bounds the work at each text position. A known limit: a result that repeats
+ * with a period that is a multiple of STEP keeps only its first repeats, so a shared span further on can be missed.
+ */
 const MAX_POSITIONS = 8;
 /** Fewer consecutive unpunctuated lines than this are the user's own. */
 const UNPUNCTUATED_RUN = 3;
@@ -151,7 +154,10 @@ function shared(text: string, result: string): [number, number][] {
   }
   const reached = new Map<number, number>();
   const spans: [number, number][] = [];
-  for (let at = 0; at + ANCHOR <= text.length; at++) {
+  // Positions inside a found span need no anchor of their own: a shared span that runs past that span's end still
+  // has an anchor in its last ANCHOR + STEP − 1 characters, which the scan visits. This keeps repetitive text linear.
+  let resume = 0;
+  for (let at = 0; at + ANCHOR <= text.length; at = Math.max(at + 1, resume)) {
     for (const from of anchors.get(text.slice(at, at + ANCHOR)) ?? []) {
       if ((reached.get(from - at) ?? -1) > at) continue;
       let start = at;
@@ -159,7 +165,9 @@ function shared(text: string, result: string): [number, number][] {
       let end = at + ANCHOR;
       while (end < text.length && end + from - at < result.length && text[end] === result[end + from - at]) end++;
       reached.set(from - at, end);
-      if (end - start >= TOOL_SPAN_CHARS) spans.push([start, end]);
+      if (end - start < TOOL_SPAN_CHARS) continue;
+      spans.push([start, end]);
+      resume = Math.max(resume, end - ANCHOR - STEP + 1);
     }
   }
   return spans;
