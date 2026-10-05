@@ -7,6 +7,7 @@ import {
   UNLISTED_SECONDS,
   deal,
   formatTimes,
+  ignorePattern,
   parseShard,
   readTimes,
   timesFromLog,
@@ -52,12 +53,43 @@ describe("deal", () => {
     expect(sizes).toEqual([10, 10, 10, 10, 10, 10]);
   });
 
-  test("on the committed table, no slice runs over a sixth of the suite by more than its slowest file", () => {
+  test("on the committed table, the fullest of six slices is within 5% of the best any deal could do", () => {
     const times = readTimes(readFileSync(TIMES_PATH, "utf8"));
-    const all = [...times.keys(), ...files(300)];
-    const perSlice = loads(deal(all, times, 6), times);
+    const perSlice = loads(deal([...times.keys(), ...files(300)], times, 6), times);
     const total = perSlice.reduce((sum, load) => sum + load, 0);
-    expect(Math.max(...perSlice)).toBeLessThanOrEqual(total / 6 + Math.max(...times.values()));
+    const best = Math.max(total / 6, ...times.values());
+    expect(Math.max(...perSlice)).toBeLessThanOrEqual(best * 1.05);
+  });
+});
+
+describe("ignorePattern", () => {
+  // Bun.Glob stands in for the matcher of bun test's --path-ignore-patterns.
+  const matches = (path: string, other: string) => new Bun.Glob(ignorePattern(path)).match(other);
+
+  test("matches its own path and no other, glob characters included", () => {
+    const paths = [
+      "app/[id]/a.test.ts",
+      "app/[[...path]]/a.test.ts",
+      "a/{x,y}/a.test.ts",
+      "a/*/a.test.ts",
+      "!a.test.ts",
+    ];
+    for (const path of [...paths, "apps/web/app/(notes)/a.test.ts", "src/a.test.ts"]) {
+      expect(matches(path, path)).toBe(true);
+    }
+    expect(matches("app/[id]/a.test.ts", "app/i/a.test.ts")).toBe(false);
+    expect(matches("a/{x,y}/a.test.ts", "a/x/a.test.ts")).toBe(false);
+    expect(matches("a/*/a.test.ts", "a/b/a.test.ts")).toBe(false);
+  });
+
+  test("leaves a plain path as it is", () => {
+    expect(ignorePattern("apps/web/app/(notes)/isolation/copy.test.ts")).toBe(
+      "apps/web/app/(notes)/isolation/copy.test.ts",
+    );
+  });
+
+  test("refuses whitespace, which test.sh splits on", () => {
+    expect(() => ignorePattern("a b/c.test.ts")).toThrow("whitespace");
   });
 });
 

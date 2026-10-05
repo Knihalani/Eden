@@ -1,6 +1,6 @@
 # Seconds per test file in CI's test jobs, for scripts/test-shard.ts. Files under 2 s are left out
 # and count as 0.1 s each. Refresh it after adding or speeding up a slow test file:
-#   gh run view <run> --log > run.log && bun scripts/test-shard.ts --times run.log > scripts/test-times.txt
+#   gh run view <run> --log > /tmp/run.log && bun scripts/test-shard.ts --times /tmp/run.log > scripts/test-times.txt
 134.3 benchmarks/campaign/edge.test.ts
 81.3 benchmarks/campaign/helix.test.ts
 70.7 benchmarks/campaign/moonshot.test.ts
