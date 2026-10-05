@@ -467,7 +467,8 @@ describe("M19 locks: novel vs ICL, identity, hay, search, order", () => {
     expect(mergeNar).toMatch(/function mergeNarrativeLane/);
     expect(mergeNar).not.toMatch(/\bretrieveIcl\b/);
     expect(mergeNar).not.toMatch(/\bIclIndex\b/);
-    const injectSrc = indexSrc.slice(indexSrc.indexOf("inject(messages"), indexSrc.indexOf("injectBody("));
+    // `recall` retrieves for `inject` and for the hook; it observes only after retrieving.
+    const injectSrc = indexSrc.slice(indexSrc.indexOf("recall(messages"), indexSrc.indexOf("injectBody("));
     expect(injectSrc.indexOf("notesFor")).toBeGreaterThan(-1);
     expect(injectSrc.indexOf("this.observe(list")).toBeGreaterThan(injectSrc.indexOf("notesFor"));
     expect(injectSrc).toMatch(/this\.observe\(list,\s*\{\s*deferSleep:\s*true\s*\}\)/);

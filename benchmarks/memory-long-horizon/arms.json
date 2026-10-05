@@ -16,19 +16,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -46,19 +48,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -97,19 +101,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -132,19 +138,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -165,19 +173,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -198,19 +208,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -231,19 +243,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -285,19 +299,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -333,19 +349,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -366,19 +384,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -396,19 +416,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -430,19 +452,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -483,29 +507,28 @@
       ],
       "a5": "20 task-notification submits between human prompts -> 0 packets from them",
       "on": {
-        "state": "red",
-        "failed": [
-          "silent-on-nonhuman"
-        ],
-        "why": "20 of 20 task-notification submits get a packet"
+        "state": "green",
+        "why": "passes: no task-notification submit gets a packet (D24, P0.2: 0 of 20), and the control still packs"
       },
       "off": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -527,19 +550,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -563,19 +588,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -596,19 +623,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -631,19 +660,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -664,19 +695,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -697,19 +730,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -730,19 +765,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -754,25 +791,27 @@
       "a5": "\"continue\" after a report -> no packet; after a proposal -> a packet only on STRONG q_prev evidence",
       "on": {
         "state": "green",
-        "why": "passes: today's plugin is silent on 'continue', after a report and after a proposal alike"
+        "why": "passes: 'continue' after a report is an ack and after a proposal a continuation (A7 §2); P0.2 gives neither a packet, since STRONG evidence from the previous assistant message needs the situation cue (P4.1)"
       },
       "off": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -783,29 +822,28 @@
       ],
       "a5": "a 300-human-turn soak -> tokens_per_epoch <= 6k",
       "on": {
-        "state": "red",
-        "failed": [
-          "tokens-per-epoch"
-        ],
-        "why": "8,595 tokens in one epoch over 100 human turns (95 packets)"
+        "state": "green",
+        "why": "passes at CI scale since P0.2 caps packets (D28): at most 4,710 tokens in an epoch over 100 human turns (95 packets; 8,595 on 172b490d3). At full scale (300 turns) it still fails: 14,882 tokens (29,749 on 172b490d3); the ledger's refractory (P1.1) owns that"
       },
       "off": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -830,19 +868,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -984,19 +1024,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1021,19 +1063,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1055,19 +1099,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1091,19 +1137,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1124,19 +1172,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1160,19 +1210,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1193,19 +1245,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1226,19 +1280,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1259,19 +1315,21 @@
         "state": "red",
         "failed": [
           "no-context",
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
           "no-context",
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1291,18 +1349,20 @@
       "off": {
         "state": "red",
         "failed": [
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {
@@ -1322,18 +1382,20 @@
       "off": {
         "state": "red",
         "failed": [
+          "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, and every human Submit appends a turn record to delivery.log (P0.2)"
       },
       "shadow": {
         "state": "red",
         "failed": [
+          "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
       }
     },
     {

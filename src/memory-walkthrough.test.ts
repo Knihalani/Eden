@@ -274,8 +274,10 @@ function assertProcedure(hay: string): void {
   }
 }
 
+/** No procedure: `inject` tags one `[procedure]`; the hook words it without a tag (D14), so its `verify:` names it. */
 function assertNoProcedure(hay: string): void {
   expect(flat(hay)).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+  expect(flat(hay)).not.toMatch(/\b(?:verify|unknown): /);
 }
 
 function assertCanada(hay: string): void {

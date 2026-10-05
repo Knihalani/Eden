@@ -329,7 +329,7 @@ describe("M7.3 gists + SessionStart", () => {
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
-        expect(ctx).toMatch(/\[gist(?:\s*·[^\]]*)?\]/i);
+        expect(ctx).toMatch(/\(from a summary of earlier work/);
         expect(ctx).toContain(gists[0]!.text);
       },
       session,
@@ -354,7 +354,7 @@ describe("M7.3 gists + SessionStart", () => {
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
         expect(ctx).toMatch(/bun test/i);
-        expect(ctx).toMatch(/\[gist(?:\s*·[^\]]*)?\]/i);
+        expect(ctx).toMatch(/\(from a summary of earlier work/);
         expect(ctx).toContain(gists[0]!.text);
         expect(ctx).not.toMatch(/lunch menu chatter/i);
         expect(ctx).not.toMatch(/weather talk from the hallway/i);

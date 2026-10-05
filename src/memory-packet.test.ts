@@ -146,7 +146,7 @@ const PROVENANCE_SOURCE = /\b(?:user|tool|sleep)\b/;
 const PROVENANCE_SLACK = " · 59m · sleep".length;
 
 describe("M8.4 labeled inject packet", () => {
-  test("inject packet is Eden Memory: labeled [rule] + [fact] (+ episode)", () => {
+  test("inject packet has the packet header, then labeled [rule] + [fact] (+ episode)", () => {
     withMem((mem) => {
       mem.remember(RULE, { kind: "constraint" });
       mem.remember(FACT, { kind: "fact" });
@@ -165,7 +165,7 @@ describe("M8.4 labeled inject packet", () => {
       expect(ruleLine).toContain(RULE);
       expect(pkt).not.toMatch(/\[procedure\b/);
       notDoublePrefixed("fact", factLine);
-      expect(MEMORY_MARK).toBe("Eden Memory:");
+      expect(MEMORY_MARK).toBe("Eden memory, recalled from earlier sessions:");
       expect(bullets.filter((l) => /^-\s\[(rule|fact|episode|gist)\b/.test(l)).length).toBe(3);
     });
   });
@@ -264,7 +264,7 @@ describe("M8.4 episode kind", () => {
 });
 
 describe("M8.4 gist + empty cue", () => {
-  test("after sleep, SessionStart has [gist]; notesFor labels its kinds; empty cue does not dump last-k", async () => {
+  test("after sleep, SessionStart has the gist; notesFor labels its kinds; empty cue does not dump last-k", async () => {
     const session = "s-m84-gist";
     await withMemAsync(
       "eden-m84-gist-",
@@ -288,11 +288,10 @@ describe("M8.4 gist + empty cue", () => {
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
-        expect(ctx).toMatch(new RegExp(kindLabel("gist")));
-        expect(ctx).toMatch(new RegExp(kindLabel("rule")));
-        notDoublePrefixed("rule", ctx);
-        notDoublePrefixed("gist", ctx);
-        expect(ctx).toContain(gists[0]!.text);
+        // The hook words its bullets (D14): a rule the user set, a gist from a summary, no [kind · age · src] tag.
+        expect(ctx).toContain(`- Rule you set: ${RULE}`);
+        expect(ctx).toContain(`- ${gists[0]!.text} (from a summary of earlier work`);
+        expect(ctx).not.toMatch(/\[(?:rule|gist|fact|episode|procedure)\b/);
 
         const notes = mem.notesFor(PACKET_CUE);
         expect(notes.some((r) => kindPrefix("rule").test(r.text) && r.text.includes(RULE))).toBe(true);
@@ -843,7 +842,7 @@ describe("M40 provenance", () => {
     });
   });
 
-  test("wrap and hook default to labeled notes without log chrome", async () => {
+  test("wrap labels its notes and the hook words them (D14), both without log chrome", async () => {
     const dir = tmpDir("eden-m40-host-");
     await withEnv(
       { EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_LOG: undefined },
@@ -872,8 +871,7 @@ describe("M40 provenance", () => {
             });
             const ctx = hookContext(hook);
             expect(ctx).toContain(MEMORY_MARK);
-            expect(ctx).toMatch(/\[fact[^\]]*\]/);
-            expect(ctx).toMatch(/sqlite/i);
+            expect(ctx).toMatch(/sqlite.* \(you said/i);
             expect(ctx).not.toContain(LOG_ID);
             expect(String(hook?.additional_context ?? "")).not.toContain(LOG_ID);
           });

@@ -26,6 +26,8 @@ const AX_URL = "https://example.test/m44-ax-dump";
 const AX_TREE = "RootWebArea [landmark] heading M44AXDUMP";
 const FACT_OR_GIST = /\[(?:fact|gist)(?:\s*[·|][^\]]*)?\]/i;
 const PROCEDURE = /\[procedure(?:\s*[·|][^\]]*)?\]/i;
+/** A fact or gist bullet in a hook packet, which ends with where it came from (D14). */
+const HOOK_FACT_OR_GIST = /\((?:you said|from a summary of earlier work)\b/;
 
 function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), "eden-m44-"));
@@ -200,7 +202,7 @@ describe("M44 project identity", () => {
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
         expect(ctx).toMatch(/sqlite/i);
-        expect(ctx).toMatch(FACT_OR_GIST);
+        expect(ctx).toMatch(HOOK_FACT_OR_GIST);
         expect(ctx).not.toContain(AX_URL);
         expect(ctx).not.toContain("M44AXDUMP");
         expect(ctx).not.toMatch(/RootWebArea/);
@@ -460,7 +462,7 @@ describe("M44 project identity", () => {
         const ctx = hookContext(start);
         expect(ctx).toMatch(/sqlite/i);
         expect(ctx).not.toMatch(/postgres/i);
-        expect(ctx).not.toMatch(/\[fact(?:\s*[·|][^\]]*)?\]/i);
+        expect(ctx).not.toMatch(/\(you said/);
         expect(ctx).not.toContain(secretSession);
         expect(ctx).not.toContain(secretCwd);
         expect(ctx).not.toContain(secretEmail);

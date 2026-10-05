@@ -3,7 +3,8 @@
  * No embeddings, no dump-all, no LLM on submit.
  */
 
-export const MEMORY_PACKET_MARK = "Eden Memory:";
+/** Every packet's header (D14, A4 §5.8). It names the scope once a scope catalog exists (P3.1). */
+export const MEMORY_PACKET_MARK = "Eden memory, recalled from earlier sessions:";
 export const PACKET_BULLET_MAX = 8;
 export const PACKET_BYTE_CAP = 900;
 export const PROCEDURE_TOKEN_CAP = 300;

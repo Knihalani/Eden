@@ -1,0 +1,92 @@
+/**
+ * The packet a memory hook delivers to Claude Code: its shape (D28, A4 §5.1 step 8) and its wording (D14, A4 §5.8).
+ *
+ * - **Shape.** Bullets follow the retrieval order, and a bullet is skipped once its kind is full: ≤ 2 rules,
+ *   ≤ 1 procedure, ≤ 2 episodes (gists included), and 4 bullets in all, D28's soft limit. Nothing is pulled in to
+ *   fill a short packet, and a bullet saying the same as an earlier one is dropped. D28's hard limit of 6 is for
+ *   `Updated:` items (P1.1), which may exceed the soft limit; none exist yet.
+ * - **Wording.** Project information, never an instruction to Claude (R0 F20): a rule is "Rule you set: …"; every
+ *   other bullet ends with where it came from and how long ago, e.g. "(you said, 3 weeks ago)". The header is
+ *   every packet's (`MEMORY_PACKET_MARK`).
+ * - **Size.** The packet stays within 900 bytes; a bullet that does not fit is skipped, never cut.
+ */
+import { MEMORY_PACKET_MARK, PACKET_BYTE_CAP } from "./memory-sota";
+import { noteKindToken, noteSource, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+
+export const PACKET_SOFT_BULLETS = 4;
+
+type PacketKind = "rule" | "procedure" | "episode" | "fact";
+
+const KIND_LIMIT: Partial<Record<PacketKind, number>> = { rule: 2, procedure: 1, episode: 2 };
+
+const SOURCE_WORDS = { user: "you said", tool: "from a tool result", sleep: "from a summary of earlier work" };
+
+/** Wall-clock times are epoch ms (~1.7e12); smaller `at` values are serials, which have no age. */
+const WALL_CLOCK = 1e11;
+
+const AGE_UNITS: [ms: number, unit: string][] = [
+  [7 * 86_400_000, "week"],
+  [86_400_000, "day"],
+  [3_600_000, "hour"],
+  [60_000, "minute"],
+];
+
+function packetKind(note: ProvenanceNote): PacketKind {
+  const kind = noteKindToken(note);
+  if (kind === "rule" || kind === "procedure" || kind === "fact") return kind;
+  return "episode";
+}
+
+function body(note: ProvenanceNote): string {
+  return stripPacketLabel(String(note.text ?? ""))
+    .body.replace(/^\s*-\s+/, "")
+    .trim();
+}
+
+/** "3 weeks ago", "1 hour ago", "just now"; undefined for a time that is not a wall-clock time. */
+export function ageInWords(at: unknown, now: number): string | undefined {
+  if (typeof at !== "number" || !Number.isFinite(at) || at < WALL_CLOCK) return undefined;
+  const elapsed = Math.max(0, now - at);
+  for (const [ms, unit] of AGE_UNITS) {
+    const n = Math.floor(elapsed / ms);
+    if (n >= 1) return `${n} ${unit}${n === 1 ? "" : "s"} ago`;
+  }
+  return "just now";
+}
+
+/** One bullet, worded as information about the project (D14). */
+export function declarativeBullet(note: ProvenanceNote, now: number): string {
+  const text = body(note);
+  if (packetKind(note) === "rule") return `Rule you set: ${text}`;
+  const age = ageInWords(note.at, now);
+  const source = SOURCE_WORDS[noteSource(note)];
+  return `${text} (${age ? `${source}, ${age}` : source})`;
+}
+
+/** D28: the bullets worth a packet, in retrieval order (see the header). */
+export function shapePacket<T extends ProvenanceNote>(notes: readonly T[]): T[] {
+  const taken = new Map<PacketKind, number>();
+  const said = new Set<string>();
+  const shaped: T[] = [];
+  for (const note of notes) {
+    if (shaped.length >= PACKET_SOFT_BULLETS) break;
+    const kind = packetKind(note);
+    const key = body(note).toLowerCase().replace(/\s+/g, " ");
+    const count = taken.get(kind) ?? 0;
+    if (!key || said.has(key) || count >= (KIND_LIMIT[kind] ?? Infinity)) continue;
+    taken.set(kind, count + 1);
+    said.add(key);
+    shaped.push(note);
+  }
+  return shaped;
+}
+
+/** The packet text, or "" when no bullet fits. */
+export function renderPacket(notes: readonly ProvenanceNote[], now = Date.now()): string {
+  let packet = MEMORY_PACKET_MARK;
+  for (const note of notes) {
+    const line = `\n- ${declarativeBullet(note, now)}`;
+    if (Buffer.byteLength(packet + line, "utf8") <= PACKET_BYTE_CAP) packet += line;
+  }
+  return packet === MEMORY_PACKET_MARK ? "" : packet;
+}
