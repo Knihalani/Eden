@@ -99,7 +99,7 @@ Earlier reports filed these follow-ups. The first column is the slice the report
 | P3.5 | Run `scoped` at full scale (4,752 and 15,840 junk turns); `arms.json` records CI scale only | [P0.0c](reports/P0.0c.md) |
 | P4.3 | Replay the real negatives against the planted CueBench store (`eden memory remember`, the gate's store); `arms/silence.ts` uses the world-scenario store today | [P0.0d](reports/P0.0d.md) |
 | P5.1 | When `log.text` writes `dogfood/prompts.jsonl`, `eden eval build-negatives` reads it too (R9 §R5.3 step 1); today it reads Claude transcripts only, which Claude Code sweeps after 30 days | [P0.0d](reports/P0.0d.md) |
-| P6.2 | D20's daemon path is not built: P0.1 removed the plugin's hookd (HTTP, 8 s) and `eden hook` spawn (2.6 s) fallbacks, and the plugin loads Eden in-process only. If the warm-daemon experiment needs the plugin to reach a daemon, add D20's Unix socket first (5 ms connect, 100 ms total), serving the memory hook only, not hookd's `respondToHook` | [P0.1](reports/P0.1.md) |
+| P6.2 | D20's daemon path is not built: P0.1 removed the plugin's hookd (HTTP, 8 s) and `eden hook` spawn (2.6 s) fallbacks, and the plugin loads Eden in-process only. If the warm-daemon experiment needs the plugin to reach a daemon, add D20's Unix socket first (5 ms connect, 100 ms total), serving only the memory hook: hookd's `/hook` (`respondToHook`) also records tool traces and replaces tool results. D20's row says so since P0.1 | [P0.1](reports/P0.1.md) |
 
 ## Rollout stages (EXECUTION §5)
 
