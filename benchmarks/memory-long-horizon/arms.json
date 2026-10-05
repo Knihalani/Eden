@@ -554,7 +554,10 @@
         "failed": [
           "a-not-rearmed"
         ],
-        "why": "after a summary that keeps 'The database is postgres', the fact is delivered again"
+        "why": "after a summary that keeps 'The database is postgres', the fact is delivered again. b-rearmed is unstable: in 1 of 7 Linux CI runs since the arms landed (37285846809) rule B was not delivered after the summary that dropped it, while it held in the other 6, in 40 of 40 local runs and in both P0.0c stability studies; a row lost to today's pid-derived ids (#98, P0.3) would explain it, but that run left no store to confirm it",
+        "unstable": [
+          "b-rearmed"
+        ]
       },
       "off": {
         "state": "red",
