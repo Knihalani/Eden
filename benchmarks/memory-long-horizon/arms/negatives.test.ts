@@ -5,30 +5,23 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DEMO_STORY } from "../harness/fixtures/demo-world";
 import { SimWorld } from "../harness/session";
 import { generateSession, play, type Step } from "../harness/shape";
 import { loadPlugin } from "../harness/runner";
 import { PROBE_PLUGIN, removeTempDirs, SCRIPTED_PLUGIN, tempDir } from "../harness/testkit";
+import { generateWorldScenario } from "../harness/world";
 import { privateHits } from "../../../packages/cli/src/eval-negatives";
-import { nimCues, r1Cues, type BenchCue } from "./cuebench";
+import { nimCues, r1Cues } from "./cuebench";
 import { monorepo } from "./fixtures/world";
 import { EDEN_CLI } from "./kit";
-import { fixtureNegatives, PRIVATE_SET_ABSENT, realNegatives, type NegativeSet } from "./negatives";
+import { askable, fixtureNegatives, PRIVATE_SET_ABSENT, realNegatives, type NegativeSet } from "./negatives";
 import { secretCases } from "./secrets";
-import { replaySilence } from "./silence";
+import { replaySilence, storeControls } from "./silence";
 
 afterAll(removeTempDirs);
 
-const cue = (id: string, text: string, cat = "neg-test"): BenchCue => ({
-  id,
-  cat,
-  scope: "",
-  gold: [],
-  cue: text,
-  last_paths: [],
-  prev_turn: "",
-  split: "test",
-});
+const cue = (id: string, text: string) => askable(id, "neg-test", text);
 
 /** Runs `eden eval build-negatives` over a transcripts root, with its own home; returns the draft's texts. */
 function build(root: string): { texts: string[]; stdout: string; exitCode: number | null } {
@@ -96,18 +89,29 @@ describe("the replay", () => {
     const runDir = tempDir("eden-silence");
     const table = join(runDir, "answers.json");
     writeFileSync(table, JSON.stringify([{ event: "UserPromptSubmit", when: "FIRE", context: "Eden memory:\n- x" }]));
+    const controls = [cue("c1", "FIRE: what does the store say?"), cue("c2", "a control the table misses")];
     const result = await replaySilence({
       pluginDir: SCRIPTED_PLUGIN,
       store,
+      controls,
       sets,
       runDir,
       env: { SCRIPTED_ANSWERS: table },
     });
-    expect(result.map((item) => [item.source, item.fir.k, item.fir.n, item.falseFires])).toEqual([
+    expect(result.control).toMatchObject({ k: 1, n: 2 });
+    expect(result.sources.map((item) => [item.source, item.fir.k, item.fir.n, item.falseFires])).toEqual([
       ["r1", 2, 3, ["q1", "q3"]],
       ["real", 1, 2, ["r2"]],
     ]);
-    expect(result[0]!.fir.ci).toEqual([0.2077, 0.9385]);
+    expect(result.sources[0]!.fir.ci).toEqual([0.2077, 0.9385]);
+  });
+
+  test("the controls are the store's own prompts that need an item, once each", () => {
+    const store = generateWorldScenario(1);
+    const controls = storeControls(store);
+    const needing = DEMO_STORY.filter((beat) => beat.needs?.length).map((beat) => beat.text);
+    expect(controls.map((item) => item.cue).sort()).toEqual([...new Set(needing)].sort());
+    expect(controls.find((item) => item.cue === "which auth provider does apps/web use?")?.scope).toBe("apps/web");
   });
 
   test("every negative meets the store as the seed sessions left it, never the earlier negatives", async () => {
@@ -118,11 +122,12 @@ describe("the replay", () => {
     const result = await replaySilence({
       pluginDir: SCRIPTED_PLUGIN,
       store,
+      controls: [],
       sets: [sets[0]!],
       runDir,
       env: { SCRIPTED_ANSWERS: table, SCRIPTED_REFERENCE: "1" },
     });
-    expect(result[0]!.fir.k).toBe(3);
+    expect(result.sources[0]!.fir.k).toBe(3);
   });
 });
 

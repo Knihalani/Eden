@@ -114,6 +114,8 @@ EDEN_EVAL_NEGATIVES=~/.eden/eval/real-negatives.v1.jsonl bun benchmarks/memory-l
 - **The store**: the world scenario of `--seed` (default 1, the A/A workload) is played once. Every negative is then
   asked in a fresh session against that same store: Eden's files are restored before each one, so the samples are
   independent, as the Wilson interval assumes.
+- **The control**: the store's own prompts that need an item, asked the same way. They should get packets; a
+  plugin that answers none of them is silent everywhere, and its false-inject rates say nothing.
 - **Output**: per source, the false-inject rate with its 95% interval and the ids of the negatives that fired. The
   private set is a holdout (X5): no prompt text is ever printed, and the run directory is removed.
 
