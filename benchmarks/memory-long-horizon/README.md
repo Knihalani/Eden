@@ -94,6 +94,7 @@ bun benchmarks/memory-long-horizon/arms/run.ts --scale full --json     # A5's fu
 | `arms/policy.ts`, `facts.ts` | Policy, guard, fact and cue arms (G1) |
 | `arms/cuebench.ts`, `bench.ts`, `extraction.ts`, `scale.ts` | Fixture arms: R1/R8 CueBench, triggers, aliases, E3, the 20k/1e6 world |
 | `arms/negatives.ts`, `silence.ts` | The silence set (R1, R8, the private real negatives) and its replay (P0.0d, below) |
+| `arms/r6-replay.ts` | This machine's real sessions (R6's corpus) through a plugin's hooks: packet rate and bullet volume (P0.2, below) |
 | `arms/gate.ts`, `record.ts`, `registry.ts`, `run.ts` | The gate, the record, the arm registry, the runner |
 | `arms/reference.ts`, `reference-suite.ts`, `fixtures/reference-cli.ts` | The references every arm passes against, and their suite |
 | `arms/fixtures/world.ts`, `legacy-v1.json` | The arms' world (oracle data), and pre-P0.5 stores for `migrate` |
@@ -118,4 +119,22 @@ EDEN_EVAL_NEGATIVES=~/.eden/eval/real-negatives.v1.jsonl bun benchmarks/memory-l
   plugin that answers none of them is silent everywhere, and its false-inject rates say nothing.
 - **Output**: per source, the false-inject rate with its 95% interval and the ids of the negatives that fired. The
   private set is a holdout (X5): no prompt text is ever printed, and the run directory is removed.
+
+## The R6 replay (`arms/r6-replay.ts`, P0.2)
+
+ROADMAP P0.2's gate and EXECUTION X8's stage 0: the real sessions R6 measured, replayed through a plugin's hooks.
+
+```bash
+bun benchmarks/memory-long-horizon/arms/r6-replay.ts --plugin plugins/eden-memory
+bun benchmarks/memory-long-horizon/arms/r6-replay.ts --projects /path/to/a/copy/of/claude/projects --limit 3
+```
+
+- **Sessions**: the ids R-7 snapshotted on 2026-09-29 (`~/.eden/migrate/session-map.json`), read from
+  `~/.claude/projects` or a copy laid out the same way (`--projects`). Claude Code sweeps transcripts after 30 days,
+  so compare two plugins on one copy; the summary's `corpus` digest shows they read the same lines.
+- **Events**: SessionStart(startup), then per submit a Stop with the last assistant text (when there was assistant
+  work) and a UserPromptSubmit with the transcript as it stood before it. Tool events are not replayed.
+- **Classes** come from the transcript (R6 §1.2): `human`, `task-notification`, `peer`. `packet_rate` is packets on
+  human prompts ÷ human prompts; `bullet_volume` counts the bullets of every packet, SessionStart's included.
+- **Privacy**: counts only, never text; the run directory (transcript copies, the store) is removed when it ends.
 
