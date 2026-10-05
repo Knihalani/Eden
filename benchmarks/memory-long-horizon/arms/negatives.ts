@@ -34,15 +34,11 @@ export function realNegatives(env: Record<string, string | undefined> = process.
   const path = env.EDEN_EVAL_NEGATIVES;
   if (!path) return { status: "absent" };
   const { sha256, negatives } = readFrozenNegatives(path);
-  const cues = negatives.map((row): BenchCue => ({
-    id: row.id,
-    cat: "neg-real",
-    scope: "",
-    gold: [],
-    cue: row.text,
-    last_paths: [],
-    prev_turn: "",
-    split: "real",
-  }));
+  const cues = negatives.map((row) => askable(row.id, "neg-real", row.text));
   return { status: "loaded", path, sha256, set: { source: "real", cues } };
+}
+
+/** A prompt to ask as the first turn of a fresh session: no previous turn, no paths, no gold. */
+export function askable(id: string, cat: string, text: string, scope = ""): BenchCue {
+  return { id, cat, scope, gold: [], cue: text, last_paths: [], prev_turn: "", split: cat };
 }
