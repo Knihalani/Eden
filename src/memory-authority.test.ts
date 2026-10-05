@@ -39,9 +39,15 @@ describe("userTyped: the entries D12 gives the user's authority", () => {
   });
 
   const notTyped: [string, unknown][] = [
-    ["a task notification", typed("<task-notification>done</task-notification>", { origin: { kind: "task-notification" } })],
+    [
+      "a task notification",
+      typed("<task-notification>done</task-notification>", { origin: { kind: "task-notification" } }),
+    ],
     ["a notification by origin alone", typed("Agent finished", { origin: { kind: "task-notification" } })],
-    ["a peer message (meta)", typed("Another Claude session sent a message:\nhi", { isMeta: true, origin: { kind: "peer" } })],
+    [
+      "a peer message (meta)",
+      typed("Another Claude session sent a message:\nhi", { isMeta: true, origin: { kind: "peer" } }),
+    ],
     ["a system-sourced line", typed("tick", { promptSource: "system" })],
     ["a compaction summary", typed("This session is being continued…", { isCompactSummary: true })],
     ["a tool result", typed([{ type: "tool_result", tool_use_id: "t1", content: "ok" }])],
@@ -56,7 +62,10 @@ describe("userTyped: the entries D12 gives the user's authority", () => {
     ["a cross-session message", typed("<cross-session-message>hello</cross-session-message>")],
     ["a teammate message", typed('<teammate-message from="a">hi</teammate-message>')],
     ["an interruption marker", typed([{ type: "text", text: "[Request interrupted by user for tool use]" }])],
-    ["a queued task notification", queued("<task-notification>x</task-notification>", "task-notification", "task-notification")],
+    [
+      "a queued task notification",
+      queued("<task-notification>x</task-notification>", "task-notification", "task-notification"),
+    ],
     ["an empty prompt", typed("   ")],
   ];
   for (const [name, line] of notTyped) test(`not: ${name}`, () => expect(userTyped(line)).toBeUndefined());

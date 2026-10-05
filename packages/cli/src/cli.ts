@@ -32,6 +32,7 @@ inspect
    claims      Published limits board (wins, analogue, limits, retired)
    savings     Show cumulative savings
    bench       Run benchmarks
+   eval        Build your private real-negative set (eval build-negatives)
 
 'eden help' and 'eden --help' print this screen. See 'eden help -a'
 for advanced commands. 'eden <command> --help' for a specific command.
@@ -133,6 +134,9 @@ async function main(): Promise<void> {
   } else if (cmd === "doctor") {
     const { doctor } = await import("./doctor");
     process.exit(await doctor(rest));
+  } else if (cmd === "eval") {
+    const { evalCli } = await import("./eval-negatives");
+    process.exit(await evalCli(rest));
   } else if (cmd === "savings") {
     const { savings } = await import("./login");
     await savings();
