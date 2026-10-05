@@ -3,7 +3,8 @@
  * their own Claude transcripts and kept in `~/.eden/eval/`, never in git.
  *
  * A build:
- * 1. selects human prompts (D12's `userTyped`) from each project's main transcripts; subagent files are skipped;
+ * 1. selects human prompts (D12's `userTyped`) from each project's main transcripts. Subagent files are skipped, and
+ *    so are headless prompts (`claude -p`, `promptSource: "sdk"`): scripts and agents send those, not a person;
  * 2. strips pastes (D12's `stripPastes`, with the last 10 tool results before each prompt);
  * 3. drops, never redacts, a prompt that hits a secret rule (D13, A6 §2.2), a JWT shape or an email address. The
  *    raw prompt is checked, and again what is kept;
@@ -195,10 +196,12 @@ function promptsOf(path: string): SourcePrompt[] {
       continue;
     }
     const text = userTyped(value);
-    if (text !== undefined) prompts.push({ text, recentToolResults: [...recent] });
+    if (text !== undefined && !headless(value)) prompts.push({ text, recentToolResults: [...recent] });
   }
   return prompts;
 }
+
+const headless = (value: unknown) => (value as { promptSource?: unknown }).promptSource === "sdk";
 
 function parseLine(line: string): unknown {
   if (!line.trim()) return undefined;
@@ -352,6 +355,11 @@ function claudeProjects(): string {
   return config ? join(config, "projects") : join(homedir(), ".claude", "projects");
 }
 
+function nextStep(report: BuildReport): string {
+  if (!report.total) return "next: nothing to label yet";
+  return `next: eden eval build-negatives ${report.labelled < report.total ? "--label" : "--freeze"}`;
+}
+
 function printBuild(report: BuildReport): void {
   console.log(
     [
@@ -363,9 +371,7 @@ function printBuild(report: BuildReport): void {
       `canary: ${report.canaries.dropped} of ${report.canaries.injected} synthetic secrets dropped`,
       `draft: ${report.draft}`,
       `candidates: ${report.total} (${report.added} new, ${report.labelled} labelled)`,
-      report.labelled < report.total
-        ? "next: eden eval build-negatives --label"
-        : "next: eden eval build-negatives --freeze",
+      nextStep(report),
     ].join("\n"),
   );
 }
