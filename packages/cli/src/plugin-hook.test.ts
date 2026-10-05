@@ -5,7 +5,7 @@
  * no network, and the cause recorded once in `$EDEN_HOME/plugin-fallback.jsonl`.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -141,7 +141,8 @@ describe("when Eden cannot load, the plugin fails open and says why once", () =>
     }
     const logged = fallbacks(first.home);
     expect(logged).toHaveLength(1);
-    expect(logged[0]!.plugin).toBe(copy);
+    // Bun resolves the script's path, so the log names the copy by its real path (macOS: /var is /private/var).
+    expect(logged[0]!.plugin).toBe(realpathSync(copy));
     expect(logged[0]!.cause).toContain("no Eden checkout");
     expect(logged[0]!.cause).toContain("EDEN_ROOT");
   });

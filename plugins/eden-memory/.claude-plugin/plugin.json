@@ -1,5 +1,5 @@
 {
   "name": "eden-memory",
   "description": "Passive memory for Claude Code. Stores durable facts from conversation and injects them later. No remember() calls.",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
