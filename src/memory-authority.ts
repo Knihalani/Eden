@@ -10,8 +10,8 @@
  *    unclosed);
  * 2. fenced code (to the end when unclosed);
  * 3. `>` quotes;
- * 4. spans of ≥ 200 characters that also occur in a recent tool result (A6: the last 10 tool calls). A span is
- *    a paragraph, or else a single line;
+ * 4. every span of ≥ 200 characters that the prompt shares with a recent tool result (A6: the last 10 tool calls),
+ *    wherever it sits: a whole paste, or part of a line or paragraph wrapped in the user's own words;
  * 5. runs of ≥ 3 lines without sentence-final punctuation (log lines, stack traces, lists of fragments).
  */
 
@@ -32,6 +32,14 @@ const QUOTE = /^\s*>/;
 const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 /** A6 §2.1: a span this long that a recent tool result also holds was pasted from it. */
 const TOOL_SPAN_CHARS = 200;
+/**
+ * Shared spans are found from anchors: ANCHOR characters of a result, taken every STEP characters. A shared span of
+ * at least ANCHOR + STEP − 1 characters always holds one, and 200 is more than that.
+ */
+const ANCHOR = 32;
+const STEP = 64;
+/** Positions kept per anchor text, so a repetitive result cannot make the search quadratic. */
+const MAX_POSITIONS = 8;
 /** Fewer consecutive unpunctuated lines than this are the user's own. */
 const UNPUNCTUATED_RUN = 3;
 
@@ -101,8 +109,8 @@ function typedText(text: string | undefined): string | undefined {
 /** The user's own text of a prompt: D12's pasted spans removed, blank runs collapsed, ends trimmed. */
 export function stripPastes(text: string, recentToolResults: readonly string[] = []): string {
   const lines = withoutFences(text.replace(PASTE, "").split("\n")).filter((line) => !QUOTE.test(line));
-  const kept = withoutUnpunctuatedRuns(withoutToolSpans(lines, recentToolResults));
-  return kept
+  const own = withoutToolSpans(lines.join("\n"), recentToolResults);
+  return withoutUnpunctuatedRuns(own.split("\n"))
     .join("\n")
     .replace(/\n\s*\n(\s*\n)+/g, "\n\n")
     .trim();
@@ -123,28 +131,51 @@ function withoutFences(lines: readonly string[]): string[] {
   return out;
 }
 
-/** Drops each paragraph, or else each line, of ≥ 200 characters that a recent tool result holds verbatim. */
-function withoutToolSpans(lines: readonly string[], results: readonly string[]): string[] {
-  if (!results.length) return [...lines];
-  const pasted = (span: string) => {
-    const trimmed = span.trim();
-    return trimmed.length >= TOOL_SPAN_CHARS && results.some((result) => result.includes(trimmed));
-  };
-  return paragraphs(lines).flatMap((block) => {
-    if (block.length > 1 && pasted(block.join("\n"))) return [];
-    return block.filter((line) => !pasted(line));
-  });
+/** Removes every span of ≥ 200 characters that `text` shares with one of `results`. */
+function withoutToolSpans(text: string, results: readonly string[]): string {
+  if (text.length < TOOL_SPAN_CHARS) return text;
+  const spans = results.filter((result) => result.length >= TOOL_SPAN_CHARS).flatMap((result) => shared(text, result));
+  return cut(text, spans);
 }
 
-/** Lines grouped into paragraphs; each blank line is a group of its own, so joining the groups restores the text. */
-function paragraphs(lines: readonly string[]): string[][] {
-  const out: string[][] = [];
-  for (const line of lines) {
-    const last = out.at(-1);
-    if (line.trim() && last?.[0]?.trim()) last.push(line);
-    else out.push([line]);
+/**
+ * The maximal spans of ≥ 200 characters that `text` and `result` share, as `[start, end)` in `text`. Each anchor hit
+ * is extended both ways; a diagonal (the offset between the two texts) is extended once per stretch.
+ */
+function shared(text: string, result: string): [number, number][] {
+  const anchors = new Map<string, number[]>();
+  for (let at = 0; at + ANCHOR <= result.length; at += STEP) {
+    const key = result.slice(at, at + ANCHOR);
+    const positions = anchors.get(key) ?? [];
+    if (positions.length < MAX_POSITIONS) anchors.set(key, [...positions, at]);
   }
-  return out;
+  const reached = new Map<number, number>();
+  const spans: [number, number][] = [];
+  for (let at = 0; at + ANCHOR <= text.length; at++) {
+    for (const from of anchors.get(text.slice(at, at + ANCHOR)) ?? []) {
+      if ((reached.get(from - at) ?? -1) > at) continue;
+      let start = at;
+      while (start > 0 && start + from - at > 0 && text[start - 1] === result[start - 1 + from - at]) start--;
+      let end = at + ANCHOR;
+      while (end < text.length && end + from - at < result.length && text[end] === result[end + from - at]) end++;
+      reached.set(from - at, end);
+      if (end - start >= TOOL_SPAN_CHARS) spans.push([start, end]);
+    }
+  }
+  return spans;
+}
+
+/** `text` without `spans`: a span across lines leaves a line break, one inside a line leaves nothing. */
+function cut(text: string, spans: readonly [number, number][]): string {
+  let out = "";
+  let at = 0;
+  for (const [start, end] of [...spans].sort((a, b) => a[0] - b[0])) {
+    if (end <= at) continue;
+    const from = Math.max(start, at);
+    out += text.slice(at, from) + (text.slice(from, end).includes("\n") ? "\n" : "");
+    at = end;
+  }
+  return out + text.slice(at);
 }
 
 function withoutUnpunctuatedRuns(lines: readonly string[]): string[] {

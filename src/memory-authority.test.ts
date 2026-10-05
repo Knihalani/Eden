@@ -108,6 +108,30 @@ describe("stripPastes: D12's pasted spans", () => {
     expect(stripPastes(`what does this mean?\n\n${long}`, [])).toBe(`what does this mean?\n\n${long}`);
     expect(stripPastes("is ok. fine.", ["is ok. fine."])).toBe("is ok. fine.");
   });
+  test("a shared span inside a line or across lines of a paragraph goes; the user's own words stay", () => {
+    const error = "TypeError: Cannot read properties of undefined (reading 'session') at handler ".repeat(3).trim();
+    const first =
+      "at Router.handle (node_modules/express/lib/router/index.js:284:7) in the request pipeline for /login";
+    const second =
+      "at next (node_modules/express/lib/router/route.js:149:13) while the session middleware was still busy";
+    const recent = [`$ bun run dev\n${error}\nmore output\n${first}\n${second}\n`];
+    expect(error.length).toBeGreaterThanOrEqual(200);
+    expect(first.length < 200 && second.length < 200 && first.length + second.length + 1 >= 200).toBe(true);
+    expect(stripPastes(`I get this error: ${error} what's wrong?`, recent)).toBe("I get this error:  what's wrong?");
+    expect(stripPastes(`Why this?\n${first}\n${second}`, recent)).toBe("Why this?");
+    expect(stripPastes(`see ${first} please.`, recent)).toBe(`see ${first} please.`);
+  });
+
+  test("a long paste found in a large tool result is removed", () => {
+    const log = Array.from({ length: 2_000 }, (_, i) => `line ${i}: worker ${i % 7} handled request ${i * 31}.`).join(
+      "\n",
+    );
+    const result = "x".repeat(500_000) + log + "y".repeat(500_000);
+    expect(stripPastes(`what happened here?\n${log.slice(1_000, 40_000)}\nthanks.`, [result])).toBe(
+      "what happened here?\n\nthanks.",
+    );
+  });
+
   test("blank lines left by a strip collapse, and the ends are trimmed", () => {
     expect(stripPastes("one.\n\n```\ncode\n```\n\n\ntwo.\n")).toBe("one.\n\ntwo.");
   });

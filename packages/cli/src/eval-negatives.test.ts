@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildNegatives,
+  canaries,
   CanaryError,
   draftPath,
   freezeNegatives,
@@ -164,7 +165,11 @@ describe("build: the canary (EXECUTION §8 step 5)", () => {
   });
 
   test("with the secret filter disabled the build aborts, writes nothing, and names shapes, never values", () => {
-    const opts = options(transcripts({ s1: [typed("is the cache warm?")] }), { privateHits: () => [] });
+    const planted = canaries();
+    const opts = options(transcripts({ s1: [typed("is the cache warm?")] }), {
+      privateHits: () => [],
+      canaries: planted,
+    });
     let error: unknown;
     try {
       buildNegatives(opts);
@@ -174,7 +179,18 @@ describe("build: the canary (EXECUTION §8 step 5)", () => {
     expect(error).toBeInstanceOf(CanaryError);
     const { message, shapes } = error as CanaryError;
     expect(shapes.sort()).toEqual(["aws-key", "cfat-token", "github-pat", "password-in-prose", "url-userinfo"]);
-    expect(message).not.toMatch(/[A-Za-z0-9_]{16,}/);
+    expect(message).toContain("survived");
+    expect(planted.filter((canary) => message.includes(canary.secret))).toEqual([]);
+    expect(existsSync(draftPath(opts.evalDir))).toBe(false);
+  });
+
+  test("a canary that selection drops aborts the build too", () => {
+    const planted = [
+      ...canaries(),
+      { shape: "wrapped", secret: "never-selected", text: "<command-name>/x</command-name>" },
+    ];
+    const opts = options(transcripts({ s1: [typed("is the cache warm?")] }), { canaries: planted });
+    expect(() => buildNegatives(opts)).toThrow("1 of the synthetic secrets were not selected (wrapped)");
     expect(existsSync(draftPath(opts.evalDir))).toBe(false);
   });
 });
