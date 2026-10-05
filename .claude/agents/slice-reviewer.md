@@ -29,7 +29,7 @@ Read, in this order:
    - The baseline was measured, not assumed.
    - `harness_sha` matches, or the amendment is explained.
 3. **Test honesty.**
-   - The red commit precedes the implementation, and on it each of the slice's arms fails exactly the checks `arms.json` records (check out that commit and run `benchmarks/memory-long-horizon/arms/run.ts --arm <id>`).
+   - The red commit precedes the implementation, and on it each of the slice's arms fails exactly the checks `arms.json` records (check out that commit and run `bun benchmarks/memory-long-horizon/arms/run.ts --arm <id>`).
    - An arm set `green` passes in its own runs, and no arm outside the slice changed state without a stated reason.
    - The tests assert the behaviour, not the implementation.
    - No test was weakened, skipped or special-cased to pass.
@@ -37,7 +37,7 @@ Read, in this order:
    - No bench string is special-cased in `src/`.
 4. **Re-run the evidence yourself.**
    - CI's four steps: `bun run format:check`, `bun run typecheck`, `bun run test`, `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh` (without the variable, build-cli re-runs typecheck and the suite).
-   - The slice's arms, twice (`arms/run.ts --arm <id>`; every run uses fresh processes).
+   - The slice's arms, twice (`bun benchmarks/memory-long-horizon/arms/run.ts --arm <id>`; every run uses fresh processes).
    - Both flag states (`--flags off`, `--flags shadow`).
    - Compare with the numbers in the draft report. **Any mismatch is a finding.**
 5. **Fail-open and safety.**

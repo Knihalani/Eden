@@ -37,7 +37,7 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
    - A5 tolerance table and the paired counter-metric;
    - `harness_sha` = `git rev-parse HEAD:benchmarks/memory-long-horizon`.
    Targets are never edited after results are known. If the harness changes, amend the prereg in a visible commit that says why.
-3. **Red first** (second commit). Every A5 §4 arm is already in `benchmarks/memory-long-horizon/arms.json`, `red`, with the checks it fails and why (P0.0c). Run the slice's arms (`bun benchmarks/memory-long-horizon/arms/run.ts --arm <id>`) and confirm each fails exactly its recorded checks. This commit adds the slice's own failing tests, and any arm or check the slice adds, as `red` with its failing checks and why. A test that fails for the wrong reason is a broken test.
+3. **Red first** (second commit). Every A5 §4 arm is already in `benchmarks/memory-long-horizon/arms.json` with its measured state on today's plugin (P0.0c): `red` with the checks it fails and why, or `green` (5 `on` states). Run the slice's arms (`bun benchmarks/memory-long-horizon/arms/run.ts --arm <id>`) and confirm each matches its record. A green arm must stay green. This commit adds the slice's own failing tests, and any arm or check the slice adds, as `red` with its failing checks and why. A test that fails for the wrong reason is a broken test.
 4. **Implement** to the spec. Where the spec is ambiguous, pick the reading most consistent with DECISIONS and record it under "Decisions made" in the report. Fixture or oracle edits go in separate commits prefixed `fixture:`. When an arm passes, set it `green` in `arms.json` in the commit that makes it pass. A slice that builds an entry point an arm drives confirms or revises that arm's contract (its header) in a `fixture:` commit.
 5. **Verify.**
    - While iterating, run only the affected test files. Run CI's four steps locally once, on the final tree, all green. The full suite takes about 20 minutes, so don't repeat it for each small fix: re-run the affected files, and let GitHub CI cover the final push.
@@ -55,7 +55,7 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
    - `gh pr merge --rebase --delete-branch`.
    - Never force-push `main`. Never rewrite published history.
 8. **Record.**
-   - Update `PROGRESS.md` (status, PR, report link).
+   - Update `PROGRESS.md` (status, PR, report link, and its follow-ups table: see `.claude/commands/slice.md` step 8).
    - Write the report to `docs/memory-ship/reports/<slice>.md` (format below) and include it in the merged PR.
    - Print the report as the final message.
 

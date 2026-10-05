@@ -25,7 +25,7 @@ You have full permissions: commit, push, open PRs and merge into `main` yourself
 - `git fetch origin`.
 - Create a worktree on `mem/<slice>-<short-slug>` from `origin/main` (EnterWorktree, or `git worktree add .claude/worktrees/<slice> -b <branch> origin/main`).
 - Run `bun install --frozen-lockfile` in it. Without it the plugin cannot import `@eden/ir`, and every hook falls back to spawning `eden hook` (about 2.6 s each), which skews timings and end-to-end runs.
-- A worktree nested in the repo (`.claude/worktrees/…`) gets 2 false typecheck errors (Buffer types in `apps/site/src/assets.ts` and `packages/know/src/cdx.ts`). Run the final local CI in a checkout outside the repo, such as a detached `git worktree add` under your scratchpad.
+- A worktree nested in the repo (`.claude/worktrees/…`) gets 2 false typecheck errors (Buffer types in `apps/site/src/assets.ts` and `packages/know/src/cdx.ts`). Run the final local CI in a checkout outside the repo, such as a detached `git worktree add` under your scratchpad, after `bun install --frozen-lockfile` there.
 - Mark the slice `in-progress` in PROGRESS.md with the branch name. This is the first commit, together with the prereg.
 
 ## 2–5. Pre-register, red first, implement, verify
