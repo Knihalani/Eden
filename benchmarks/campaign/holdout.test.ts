@@ -26,7 +26,9 @@ import {
   skusFor,
 } from "./holdout-worlds";
 
-process.env.CAMPAIGN_THINK_MS = "0";
+// No simulated think time. Setting CAMPAIGN_THINK_MS here would be too late:
+// session.ts reads it when it is imported, which happens before this line runs.
+const NO_THINK = { thinkMs: 0 };
 
 const TIMEOUT = 5_000;
 
@@ -285,7 +287,7 @@ describe("holdout worlds: compileTraces → shadow goLive", () => {
       { name: "cart", factory: createCart, goals: [...CART_IDS].map((cart) => ({ cart })) },
     ];
     for (const c of cases) {
-      const s = new Session([[c.name, c.factory]], true);
+      const s = new Session([[c.name, c.factory]], true, NO_THINK);
       for (let i = 0; i < 13; i++) {
         await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`holdout-live-${c.name}-${i}`, i));
       }
@@ -298,7 +300,7 @@ describe("holdout worlds: compileTraces → shadow goLive", () => {
       expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
       expect(r.program, `${c.name} program`).not.toBeNull();
       expect(r.program!.manifest?.certified).toBe(true);
-      const live = new Session([[c.name, c.factory]], true);
+      const live = new Session([[c.name, c.factory]], true, NO_THINK);
       live.addPrograms([r.program!]);
       await live.stretch(c.name, c.goals[0]!, blockSeed(`holdout-serve-${c.name}`, 99));
       const fin = live.finish();

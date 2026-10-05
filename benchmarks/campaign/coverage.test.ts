@@ -23,7 +23,9 @@ import {
 } from "./coverage-worlds";
 import { blockSeed, type CallResult, type World } from "./worlds";
 
-process.env.CAMPAIGN_THINK_MS = "1";
+// 1 ms of simulated think time per agent call. Setting CAMPAIGN_THINK_MS here would be too
+// late: session.ts reads it when it is imported, which happens before this line runs.
+const THINK = { thinkMs: 1 };
 process.env.CAMPAIGN_WRAP_TIMEOUT_MS = "120";
 
 const TIMEOUT = 30_000;
@@ -185,10 +187,9 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
   }, 120_000);
 
   test("very-long-session wrap path: 100 live stretches after goLive stay clean", async () => {
-    process.env.CAMPAIGN_THINK_MS = "1";
     const { Session } = await import("./session");
     const pool = [...LONG_SESSION_IDS].map((id) => ({ id }));
-    const s = new Session([["long-session", createLongSession]], true);
+    const s = new Session([["long-session", createLongSession]], true, THINK);
     for (let i = 0; i < 13; i++) {
       await s.stretch("long-session", pool[i % pool.length]!, blockSeed(`vl-w-${i}`, i));
     }

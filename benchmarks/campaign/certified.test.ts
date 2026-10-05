@@ -5,7 +5,9 @@ import { describe, expect, test } from "bun:test";
 import { Session } from "./session";
 import { DESK_IDS, blockSeed, createDesk } from "./worlds";
 
-process.env.CAMPAIGN_THINK_MS = "0";
+// No simulated think time. Setting CAMPAIGN_THINK_MS here would be too late:
+// session.ts reads it when it is imported, which happens before this line runs.
+const NO_THINK = { thinkMs: 0 };
 
 const TIMEOUT = 60_000;
 
@@ -14,7 +16,7 @@ describe("certified go-live (Wave 2.1)", () => {
     "goLive on createDesk PASSes without simulated provider usage",
     async () => {
       const pool = [...DESK_IDS].map((id) => ({ id }));
-      const s = new Session([["desk", createDesk]], true);
+      const s = new Session([["desk", createDesk]], true, NO_THINK);
       for (let i = 0; i < 13; i++) {
         await s.stretch("desk", pool[i % pool.length]!, blockSeed(`cert-desk-${i}`, i));
       }

@@ -20,7 +20,6 @@ import { withVersion, type Step, type StretchProgram } from "@eden/ir";
 import { createState, wrapTools, createArmingStore, type ToolDef } from "@eden/wrap";
 import { fireOblivious, linearProgram } from "./struggle-harness";
 
-process.env.CAMPAIGN_THINK_MS = "1";
 const TIMEOUT = 120_000;
 
 describe("struggle: capacity bounds", () => {

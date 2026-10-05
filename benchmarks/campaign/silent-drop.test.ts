@@ -20,7 +20,6 @@ import {
   ISLAND_CENTS,
 } from "./silent-drop";
 
-process.env.CAMPAIGN_THINK_MS = "0";
 process.env.SILENT_DROP_TOOL_MS = "0";
 
 const TIMEOUT = 30_000;

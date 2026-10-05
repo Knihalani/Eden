@@ -20,7 +20,6 @@ import {
   sessionFromConnection,
 } from "./hosted-dispatch";
 
-process.env.CAMPAIGN_THINK_MS = "1";
 const TIMEOUT = 120_000;
 
 describe("hosted dispatch load-probe", () => {

@@ -7,12 +7,14 @@ import { blockSeed } from "./worlds";
 import { Session } from "./session";
 import { SEV_ALERTS, createSevTriage } from "./horizon-extra-worlds";
 
-process.env.CAMPAIGN_THINK_MS = "0";
+// No simulated think time. Setting CAMPAIGN_THINK_MS here would be too late:
+// session.ts reads it when it is imported, which happens before this line runs.
+const NO_THINK = { thinkMs: 0 };
 
 describe("session.goLive fork family", () => {
   test("3 equal arms × 4 traces = 12 clean is enough to not SKIP for dominant-shape", async () => {
     const goals = [...SEV_ALERTS].map((alert) => ({ alert }));
-    const s = new Session([["sev-triage", createSevTriage]], true);
+    const s = new Session([["sev-triage", createSevTriage]], true, NO_THINK);
     for (let i = 0; i < 12; i++) {
       await s.stretch("sev-triage", goals[i % goals.length]!, blockSeed(`fork-family-12-${i}`, i));
     }

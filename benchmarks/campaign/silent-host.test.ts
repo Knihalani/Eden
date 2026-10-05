@@ -6,7 +6,9 @@ import { describe, expect, test } from "bun:test";
 import { Session } from "./session";
 import { createSilentHost, SILENT_HOST_IDS } from "./silent-host";
 
-process.env.CAMPAIGN_THINK_MS = "0";
+// No simulated think time. Setting CAMPAIGN_THINK_MS here would be too late:
+// session.ts reads it when it is imported, which happens before this line runs.
+const NO_THINK = { thinkMs: 0 };
 
 const TIMEOUT = 60_000;
 
@@ -15,7 +17,7 @@ describe("silent-host (unscrapable provider)", () => {
     "goLive does not install when traces have no prompt_tokens",
     async () => {
       const pool = [...SILENT_HOST_IDS].map((id) => ({ id }));
-      const s = new Session([["silent", createSilentHost]], true, { scrapeUsage: false });
+      const s = new Session([["silent", createSilentHost]], true, { ...NO_THINK, scrapeUsage: false });
       for (let i = 0; i < 13; i++) {
         await s.stretch("silent", pool[i % pool.length]!, 400 + i);
       }
