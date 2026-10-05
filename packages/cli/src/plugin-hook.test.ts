@@ -8,6 +8,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pluginSubmitCommand } from "./doctor-memory";
 
 const REPO = join(import.meta.dir, "../../..");
 const PLUGIN = join(REPO, "plugins", "eden-memory");
@@ -54,8 +55,8 @@ function checkoutWithoutDependencies(): string {
 type Hooked = { code: number; stdout: string; stderr: string; ms: number; spawnedEden: boolean; home: string };
 
 /**
- * Runs a plugin's hook once in a fresh process with its own Eden home, as Claude Code does. `eden` on PATH is a stub
- * that records a call, so a spawn fallback shows.
+ * Runs a plugin's Submit hook command (`hooks/hooks.json`) once in a fresh process with its own Eden home, as Claude
+ * Code does. `eden` on PATH is a stub that records a call, so a spawn fallback shows.
  */
 async function runHook(pluginRoot: string, extra: Record<string, string> = {}, home = freshDir("home")) {
   const stub = join(home, "bin");
@@ -71,8 +72,8 @@ async function runHook(pluginRoot: string, extra: Record<string, string> = {}, h
     ...extra,
   };
   const started = performance.now();
-  const proc = Bun.spawn(["bun", join(pluginRoot, "scripts", "hook.ts")], {
-    env,
+  const proc = Bun.spawn(["/bin/sh", "-c", pluginSubmitCommand(pluginRoot)!], {
+    env: { ...env, CLAUDE_PLUGIN_ROOT: pluginRoot },
     stdin: new Blob([JSON.stringify({ ...SUBMIT, cwd: home })]),
     stdout: "pipe",
     stderr: "pipe",
