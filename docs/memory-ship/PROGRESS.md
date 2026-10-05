@@ -82,7 +82,9 @@ Earlier reports filed these follow-ups. The first column is the slice the report
 | P0.3 | Re-run P0.0b's A/A noise floors: packets differed between identical runs, likely through #98 | [P0.0b](reports/P0.0b.md) |
 | P0.4 | Open issues #19 (memory-import stores an `sk-ant-…` key) and #42 (memory-consent). The Agent tool result is stored as the episode `The Agent tool result is [object Object]` (with P0.6) | [P0.−1](reports/P0.-1.md), [P0.0a](reports/P0.0a.md) |
 | P0.4 | Measure `poison_hits` on pins: P0.0b could not without Eden's store format, and the `poison` arm counts packets, not pins (with P2.1) | [P0.0b](reports/P0.0b.md), [P0.0c](reports/P0.0c.md) |
+| P0.4 | Build `sanitizeForStore` and D12 authority on P0.0d's `src/memory-secrets.ts` (D13 / A6 §2.2 rules: gitleaks v8.30.1 plus Eden's provider shapes) and `src/memory-authority.ts` (`userTyped`, `stripPastes`); no hook calls them yet. Gitleaks' base64/hex segment decoding is not ported. D13's keyword rule matches `is` inside a word (`secrets … pre-registration` hits), so it fires on prose: consider `\b(is\|=\|:)` | [P0.0d](reports/P0.0d.md) |
 | P0.5 | A5 has no cross-repo arm. Today's gist store is global (repo A's rules reach repo B's SessionStart in `policy-recur`). D1 implies isolation, so add an arm that asserts it | [P0.0c](reports/P0.0c.md) |
+| P0.5 | Re-run `arms/silence.ts` (twice) and record its R1/R8 FIR in A5: today 0 of the store's 6 control prompts get a packet in a fresh session (per-session store, A1 D1), so its 1/150 and 0/98 say nothing yet. With a per-repo store the control should pack | [P0.0d](reports/P0.0d.md) |
 | P0.5 | EXECUTION §9 and A6 §4 disagree on how legacy sessions are mapped (R-7's session map vs a transcript's first line). Settle it in the spec; the `migrate` arm accepts either | [P0.0c](reports/P0.0c.md) |
 | P0.8 | Re-record every arm's `off` and `shadow` states in `arms.json` (`arms/run.ts --flags off`, `--flags shadow`); measure `abort_rate` | [P0.0c](reports/P0.0c.md), [P0.0b](reports/P0.0b.md) |
 | P1.1 | If P0.3 has not cleared `reeligible-401`, clear it before turning `re-eligibility` green | [P0.0c](reports/P0.0c.md) |
@@ -91,6 +93,8 @@ Earlier reports filed these follow-ups. The first column is the slice the report
 | P2.3 | The simulator has no `if` filters, PermissionRequest or PermissionDenied | [P0.0a](reports/P0.0a.md) |
 | P2.5 | Claude Code 2.1.285 has no `fork` subagent type (A4 §5.3, A5 `subagent`); the harness simulates one. Say which mechanism "fork" means (perhaps SessionStart `source: fork`), or drop the clause until one is captured | [P0.0c](reports/P0.0c.md) |
 | P3.5 | Run `scoped` at full scale (4,752 and 15,840 junk turns); `arms.json` records CI scale only | [P0.0c](reports/P0.0c.md) |
+| P4.3 | Replay the real negatives against the planted CueBench store (`eden memory remember`, the gate's store); `arms/silence.ts` uses the world-scenario store today | [P0.0d](reports/P0.0d.md) |
+| P5.1 | When `log.text` writes `dogfood/prompts.jsonl`, `eden eval build-negatives` reads it too (R9 §R5.3 step 1); today it reads Claude transcripts only, which Claude Code sweeps after 30 days | [P0.0d](reports/P0.0d.md) |
 
 ## Rollout stages (EXECUTION §5)
 
