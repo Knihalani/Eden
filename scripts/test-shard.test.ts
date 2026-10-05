@@ -8,6 +8,7 @@ import {
   deal,
   formatTimes,
   ignorePattern,
+  medianTimes,
   parseShard,
   readTimes,
   timesFromLog,
@@ -146,6 +147,22 @@ describe("timesFromLog", () => {
       "a/fast.test.ts": 0.75,
       "b/one.test.ts": 2.5,
     });
+  });
+
+  test("several runs give each file its median time, over the runs that ran it", () => {
+    const runs = [
+      new Map([
+        ["a", 14.2],
+        ["b", 3],
+      ]),
+      new Map([["a", 52.2]]),
+      new Map([
+        ["a", 54.3],
+        ["b", 5],
+      ]),
+    ];
+    expect(Object.fromEntries(medianTimes(runs))).toEqual({ a: 52.2, b: 4 });
+    expect(Object.fromEntries(medianTimes([runs[0]!]))).toEqual({ a: 14.2, b: 3 });
   });
 
   test("the table keeps files of at least MIN_LISTED_SECONDS, slowest first", () => {

@@ -1,46 +1,49 @@
 # Seconds per test file in CI's test jobs, for scripts/test-shard.ts. Files under 2 s are left out
-# and count as 0.1 s each. Refresh it after adding or speeding up a slow test file:
-#   gh run view <run> --log > /tmp/run.log && bun scripts/test-shard.ts --times /tmp/run.log > scripts/test-times.txt
-103.6 benchmarks/memory-long-horizon/arms/floor-store.gate.test.ts
-58.1 benchmarks/campaign/edge.test.ts
-41.6 benchmarks/memory-long-horizon/harness/replay.test.ts
-28.3 benchmarks/memory-long-horizon/arms/floor-store.reference.test.ts
-25.2 benchmarks/campaign/failsafe-fuzz-sched.test.ts
+# and count as 0.1 s each. A file's time is its median over the CI runs it was made from:
+# the arm files' times vary by a factor of two or more between runs. Refresh it after adding or speeding
+# up a slow test file, from the last three runs or so:
+#   gh run view <run> --log > /tmp/run-<run>.log  (for each run)
+#   bun scripts/test-shard.ts --times /tmp/run-*.log > scripts/test-times.txt
+95.8 benchmarks/memory-long-horizon/arms/floor-store.gate.test.ts
+58.3 benchmarks/campaign/edge.test.ts
+52.2 benchmarks/memory-long-horizon/arms/delivery-soak.gate.test.ts
+42.0 benchmarks/memory-long-horizon/harness/replay.test.ts
 25.2 benchmarks/memory-long-horizon/arms/place.gate.test.ts
+25.2 benchmarks/memory-long-horizon/arms/floor-store.reference.test.ts
+23.6 benchmarks/campaign/failsafe-fuzz-sched.test.ts
+22.7 benchmarks/memory-long-horizon/arms/delivery.gate.test.ts
 22.2 benchmarks/memory-long-horizon/arms/facts.gate.test.ts
-20.1 benchmarks/memory-long-horizon/arms/floor.gate.test.ts
-20.0 benchmarks/memory-long-horizon/arms/bench.reference.test.ts
+21.9 benchmarks/memory-long-horizon/arms/bench.reference.test.ts
+19.4 benchmarks/memory-long-horizon/arms/floor.gate.test.ts
 18.9 benchmarks/campaign/witness-8.test.ts
-18.5 benchmarks/memory-long-horizon/arms/delivery.gate.test.ts
-17.0 benchmarks/memory-long-horizon/arms/kit.test.ts
 15.1 apps/site/src/ssrf.test.ts
 14.8 benchmarks/memory-long-horizon/arms/policy.gate.test.ts
-14.2 benchmarks/memory-long-horizon/arms/delivery-soak.gate.test.ts
 12.5 benchmarks/campaign/concurrency-matrix.test.ts
-10.5 benchmarks/campaign/coverage.test.ts
-10.2 benchmarks/campaign/moonshot.test.ts
+11.4 benchmarks/campaign/moonshot.test.ts
+10.6 benchmarks/campaign/coverage.test.ts
+10.1 benchmarks/memory-long-horizon/arms/delivery.reference.test.ts
 9.1 benchmarks/poc/pocC-islands.test.ts
 8.6 benchmarks/campaign/horizon.test.ts
-7.6 benchmarks/memory-long-horizon/arms/delivery.reference.test.ts
 6.9 benchmarks/campaign/jit-soak.test.ts
 6.8 benchmarks/campaign/certified.test.ts
 6.6 benchmarks/campaign/holdout.test.ts
-6.5 packages/wrap/src/coding-jail.test.ts
-6.3 benchmarks/campaign/horizon-extra.test.ts
+6.6 packages/wrap/src/coding-jail.test.ts
+6.1 benchmarks/memory-long-horizon/arms/delivery-soak.reference.test.ts
 5.9 benchmarks/memory-long-horizon/arms/place.reference.test.ts
-5.3 benchmarks/memory-long-horizon/arms/delivery-soak.reference.test.ts
+5.7 benchmarks/campaign/horizon-extra.test.ts
 5.2 packages/know/src/store-journal.test.ts
 5.1 benchmarks/memory-long-horizon/harness/session.test.ts
-4.8 src/memory-gist.test.ts
+5.0 benchmarks/memory-long-horizon/arms/facts.reference.test.ts
+4.8 benchmarks/campaign/failsafe-fuzz.test.ts
+4.8 benchmarks/memory-long-horizon/arms/policy.reference.test.ts
 4.6 packages/cli/src/resilience.test.ts
-4.6 benchmarks/campaign/failsafe-fuzz.test.ts
-4.6 benchmarks/memory-long-horizon/arms/facts.reference.test.ts
 4.4 benchmarks/memory-long-horizon/harness/runner.test.ts
-3.9 src/memory-scale.test.ts
-3.4 benchmarks/memory-long-horizon/arms/floor.reference.test.ts
-3.4 packages/cli/src/wrap-key.test.ts
-3.0 benchmarks/memory-long-horizon/arms/policy.reference.test.ts
+3.9 src/memory-gist.test.ts
+3.2 benchmarks/memory-long-horizon/arms/floor.reference.test.ts
+3.2 packages/cli/src/wrap-key.test.ts
 2.9 packages/cli/src/setup.test.ts
-2.4 apps/control/src/golden.test.ts
-2.3 benchmarks/campaign/horizon-more.test.ts
+2.8 benchmarks/campaign/horizon-more.test.ts
+2.4 benchmarks/memory-long-horizon/harness/metrics.test.ts
+2.3 apps/control/src/golden.test.ts
 2.1 packages/runtime/src/runtime.test.ts
+2.0 src/memory-scale.test.ts
