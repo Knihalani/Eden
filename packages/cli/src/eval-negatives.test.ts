@@ -225,6 +225,22 @@ describe("labels and versions", () => {
     expect(shown.join("").split("beta?")).toHaveLength(3);
   });
 
+  test("labelling shows control characters escaped and takes only the five answers", async () => {
+    const opts = options(transcripts({ s1: [typed("why is \u001b[31mthis\u001b[0m red?")] }));
+    buildNegatives(opts);
+    const shown: string[] = [];
+    async function* answers() {
+      yield* ["__proto__", "constructor", "n"];
+    }
+    expect(await labelNegatives(opts.evalDir, answers(), (text) => shown.push(text))).toEqual({
+      labelled: 1,
+      remaining: 0,
+    });
+    expect(draft(opts.evalDir).map((row) => row.label)).toEqual(["negative"]);
+    expect(shown.join("")).toContain("why is \\x1b[31mthis\\x1b[0m red?");
+    expect(shown.join("")).not.toContain("\u001b");
+  });
+
   test("freeze writes the negatives only, with a sha256 the loader checks; the next freeze is v2", () => {
     const opts = options(transcripts({ s1: [typed("one?"), typed("two?"), typed("three?")] }));
     buildNegatives(opts);
