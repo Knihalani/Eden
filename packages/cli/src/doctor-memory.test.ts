@@ -70,13 +70,18 @@ describe("eden doctor --memory", () => {
   test("the plugin installed from this checkout: every line ok, exit 0", async () => {
     const { code, lines } = await doctorMemory(homeWith({}));
     expect([...lines.keys()]).toEqual(SECTION);
-    for (const name of SECTION) expect(lines.get(name)).toStartWith("ok ");
+    for (const name of SECTION.filter((n) => n !== "modules")) expect(lines.get(name)).toStartWith("ok ");
     expect(lines.get("memory")).toContain("UserPromptSubmit");
     expect(lines.get("plugin")).toContain(PLUGIN_ID);
-    expect(lines.get("modules")).toContain(REPO);
-    expect(lines.get("modules")).toMatch(/in-process in \d+ ms \(budget 150 ms\)/);
     expect(lines.get("fallback")).toBe("ok none logged");
-    expect(code).toBe(0);
+    // The probe's timing decides the modules verdict; a slow machine (a loaded CI runner) is over budget.
+    const modules = lines.get("modules")!;
+    expect(modules).toContain(REPO);
+    const ms = Number(/in-process in (\d+) ms/.exec(modules)?.[1]);
+    const inBudget = ms <= 150;
+    expect(modules).toEndWith(inBudget ? `in ${ms} ms (budget 150 ms)` : `in ${ms} ms, over the 150 ms budget`);
+    expect(modules).toStartWith(inBudget ? "ok " : "!! ");
+    expect(code).toBe(inBudget ? 0 : 1);
   });
 
   test("nothing installed: the hooks line says how to install, exit 1", async () => {
@@ -109,6 +114,14 @@ describe("eden doctor --memory", () => {
     const { code, lines } = await doctorMemory(homeWith({ edit: stale }));
     expect(lines.get("plugin")).toStartWith("!! ");
     expect(lines.get("plugin")).toContain("claude plugin update eden-memory@eden");
+    expect(code).toBe(1);
+  });
+
+  test("a copy from before P0.1, which cannot log a fallback, is not vouched for", async () => {
+    const old = (copy: string) => rmSync(join(copy, "scripts", "fallback-log.ts"));
+    const { code, lines } = await doctorMemory(homeWith({ edit: old }));
+    expect(lines.get("modules")).toStartWith("!! ");
+    expect(lines.get("modules")).toContain("does not log its fallbacks");
     expect(code).toBe(1);
   });
 

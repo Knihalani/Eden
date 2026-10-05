@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { rolloutPartition, toolsInventoryLine } from "@eden/ir";
@@ -7,6 +7,15 @@ export { autoApproveCheck, renderTreeLetter, treeCheck, treeSnapshot };
 import { liveToolsPath, readConfig, wrapPlaneUrl, keyFingerprint, edenHome } from "./home";
 import { hookdPidAlive, readHookdPid } from "./hookd";
 import { memoryConsent } from "../../../src/memory-consent";
+import {
+  claudeConfigDir,
+  fallbackCheck,
+  findMemoryPlugin,
+  modulesCheck,
+  pluginCheck,
+  pluginHookEvents,
+  storeChecks,
+} from "./doctor-memory";
 
 export type DoctorCheck = { name: string; ok: boolean; detail: string; count?: number | null };
 
@@ -188,65 +197,8 @@ function isPluginMemoryCommand(command: string): boolean {
   return PLUGIN_MEMORY_CMD.test(command);
 }
 
-function eventsFromPluginHooksFile(path: string): string[] | undefined {
-  try {
-    const j = JSON.parse(readFileSync(path, "utf8")) as { hooks?: Record<string, unknown> };
-    if (!j.hooks || typeof j.hooks !== "object" || Array.isArray(j.hooks)) return undefined;
-    const events = Object.keys(j.hooks).filter((k) => MEMORY_HOOK_EVENT_SET.has(k));
-    return events.length ? events : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function pluginEnabledInSettings(settings: unknown): boolean {
-  const enabled = asSettingsRec(asSettingsRec(settings).enabledPlugins);
-  return Object.entries(enabled).some(([k, v]) => Boolean(v) && /eden-memory/i.test(k));
-}
-
-/** Installed eden-memory plugin events from ~/.claude (not the git checkout). */
-export function detectPluginMemoryEvents(
-  claudeDir = join(homedir(), ".claude"),
-  settings?: unknown,
-): string[] | undefined {
-  const queue = [join(claudeDir, "plugins")];
-  const seen = new Set<string>();
-  while (queue.length) {
-    const dir = queue.shift()!;
-    if (seen.has(dir) || !existsSync(dir)) continue;
-    seen.add(dir);
-    if (seen.size > 200) break;
-    const hooksPath = join(dir, "hooks", "hooks.json");
-    if (/eden-memory(?:$|[\\/])/i.test(dir) && existsSync(hooksPath)) {
-      const events = eventsFromPluginHooksFile(hooksPath);
-      if (events) return events;
-    }
-    const meta = join(dir, ".claude-plugin", "plugin.json");
-    if (existsSync(meta) && existsSync(hooksPath)) {
-      try {
-        const name = String((JSON.parse(readFileSync(meta, "utf8")) as { name?: string }).name ?? "");
-        if (name === "eden-memory") {
-          const events = eventsFromPluginHooksFile(hooksPath);
-          if (events) return events;
-        }
-      } catch {}
-    }
-    try {
-      for (const name of readdirSync(dir)) {
-        if (name === "node_modules" || name === ".git") continue;
-        const p = join(dir, name);
-        try {
-          if (statSync(p).isDirectory()) queue.push(p);
-        } catch {}
-      }
-    } catch {}
-  }
-  if (pluginEnabledInSettings(settings)) return [...MEMORY_HOOK_EVENTS];
-  return undefined;
-}
-
 function readClaudeSettingsFile(): unknown {
-  const settings = join(homedir(), ".claude", "settings.json");
+  const settings = join(claudeConfigDir(), "settings.json");
   if (!existsSync(settings)) return {};
   try {
     return JSON.parse(readFileSync(settings, "utf8")) as unknown;
@@ -304,6 +256,26 @@ export function memoryHooksCheck(settings: unknown, opts?: { pluginEvents?: stri
   }
 
   return { name: "memory", ok, detail, count: listed.length };
+}
+
+/**
+ * `eden doctor`'s memory section: the memory hooks Claude Code registers, the plugin copy it runs, whether that copy
+ * loads Eden in-process within the Submit budget, the fallbacks it logged, and how the store is keyed.
+ */
+export function collectMemoryDoctor(): DoctorCheck[] {
+  const settings = readClaudeSettingsFile();
+  const plugin = findMemoryPlugin();
+  const env = process.env.EDEN_MEMORY;
+  const hooks = memoryHooksCheck(settings, { pluginEvents: pluginHookEvents(plugin), env });
+  const hooksFromSettings = (memoryHooksCheck(settings, { env }).count ?? 0) > 0;
+  const modules = modulesCheck(plugin);
+  return [
+    hooks,
+    pluginCheck(plugin, hooksFromSettings),
+    modules.check,
+    fallbackCheck(modules.loaded),
+    ...storeChecks(),
+  ];
 }
 
 export type MemoryHostName = "codex" | "opencode" | "gemini" | "cursor";
@@ -739,17 +711,11 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
     }
   } else health.push({ name: "live-tools", ok: false, detail: "none yet · approve is the gate" });
 
-  let memory: DoctorCheck;
   try {
-    const claudeSettings = readClaudeSettingsFile();
-    memory = memoryHooksCheck(claudeSettings, {
-      pluginEvents: detectPluginMemoryEvents(join(homedir(), ".claude"), claudeSettings),
-      env: process.env.EDEN_MEMORY,
-    });
+    health.push(...collectMemoryDoctor());
   } catch {
-    memory = { name: "memory", ok: false, detail: "memory hooks: unreadable · run eden setup", count: 0 };
+    health.push({ name: "memory", ok: false, detail: "memory hooks: unreadable · run eden setup", count: 0 });
   }
-  health.push(memory);
   try {
     health.push(...extraHostMemoryCheck());
   } catch {
@@ -819,6 +785,7 @@ export function doctorHelp(): string {
 
   eden doctor            Health letter (default)
   eden doctor --json    Same checks as JSON
+  eden doctor --memory   Memory only: hooks, plugin copy, Eden loads in budget; exit 0 when all ok
   eden doctor --tree     Wave 16–20 leftover letter (no network)
 
 NET_ALLOW empty refuses piped network binaries. A live hookd without a
@@ -840,6 +807,12 @@ export async function doctor(args: string[] = []): Promise<number> {
     if (args.includes("--json")) console.log(JSON.stringify(treeSnapshot(), null, 2));
     else console.log(renderTreeLetter());
     return treeCheck().ok ? 0 : 1;
+  }
+  if (args.includes("--memory")) {
+    const checks = collectMemoryDoctor();
+    if (args.includes("--json")) console.log(JSON.stringify({ checks }, null, 2));
+    else console.log(checks.map(lineOf).join("\n"));
+    return checks.every((c) => c.ok) ? 0 : 1;
   }
   let checks: DoctorCheck[];
   try {
