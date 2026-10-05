@@ -15,8 +15,8 @@ export type EdenRoot = { root: string; via: string };
  * Where an Eden checkout may be, in the order they are tried:
  * 1. the checkout this plugin directory sits in (in place);
  * 2. `EDEN_ROOT`;
- * 3. for an installed copy (`<claude>/plugins/cache/<marketplace>/<plugin>/<version>`), the marketplace's
- *    directory as Claude Code recorded it in `<claude>/plugins/known_marketplaces.json`.
+ * 3. for an installed copy (`<claude>/plugins/cache/<marketplace>/<plugin>/<version>`) from a directory
+ *    marketplace, that directory as Claude Code recorded it in `<claude>/plugins/known_marketplaces.json`.
  */
 export function rootCandidates(pluginRoot: string, env: NodeJS.ProcessEnv = process.env): EdenRoot[] {
   const candidates: EdenRoot[] = [{ root: dirname(dirname(pluginRoot)), via: "plugin checkout" }];
@@ -26,17 +26,25 @@ export function rootCandidates(pluginRoot: string, env: NodeJS.ProcessEnv = proc
   return candidates;
 }
 
+type KnownMarketplace = { source?: { source?: unknown; path?: unknown } };
+
+/**
+ * A directory marketplace is the checkout itself. A git or GitHub one is Claude Code's own clone of it, which has no
+ * `node_modules` and moves on every marketplace update, so it is not used: set `EDEN_ROOT` for such an install.
+ */
 function marketplaceRoot(pluginRoot: string): EdenRoot | null {
   const marketplaceDir = dirname(dirname(pluginRoot));
   const cache = dirname(marketplaceDir);
-  if (basename(cache) !== "cache") return null;
+  const plugins = dirname(cache);
+  if (basename(cache) !== "cache" || basename(plugins) !== "plugins") return null;
   const name = basename(marketplaceDir);
   try {
-    const known = JSON.parse(readFileSync(join(dirname(cache), "known_marketplaces.json"), "utf8")) as Record<
+    const known = JSON.parse(readFileSync(join(plugins, "known_marketplaces.json"), "utf8")) as Record<
       string,
-      { installLocation?: unknown } | undefined
+      KnownMarketplace | undefined
     >;
-    const root = known[name]?.installLocation;
+    const source = known[name]?.source;
+    const root = source?.source === "directory" ? source.path : undefined;
     return typeof root === "string" && root ? { root, via: `marketplace ${name}` } : null;
   } catch {
     return null;
