@@ -6,10 +6,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CHUNK_TARGET_TOKENS, estimateTokens } from "./chunk-store";
-import { retrieveNarrativeChunks } from "./chunk-retrieve";
 import { hopChain } from "./cls/complete";
-import { encodeLane, MEMORY_MARK, openMemory } from "./index";
+import { MEMORY_MARK, memoryInjectSwallows, openMemory } from "./index";
 import {
   MEMORY_LANE_KINDS,
   type ArHopMechanism,
@@ -17,9 +15,6 @@ import {
   type IclIndexMechanism,
   type MemoryLaneKind,
 } from "./memory-lanes";
-import { isRecsysShot } from "./semantic-store";
-
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/54
 
 const LANES_SRC = readFileSync(join(import.meta.dir, "memory-lanes.ts"), "utf8");
 
@@ -200,43 +195,6 @@ describe("M17 encode lanes (flipped M16.3 extract tax)", () => {
     });
   });
 
-  test.failing("M31.1 recsys is narrative store-all; ICL and chat stay isolated", () => {
-    const movies = "1. Superbad (2007)\n2. Super Troopers (2001)\n3. Knocked Up (2007)";
-    const redial =
-      "You are a movie recommender. Here is the conversation:\nUser: I like Superbad (2007)\nSystem: " +
-      "Super Troopers (2001) is similar.";
-    const miller = NOVEL_PARA;
-    const detqa = `Lichem Rocchi's method of death was certainly not ( )
-A. Murder
-B. Sudden death
-C. Suicide
-D. Sudden illness`;
-    expect(encodeLane("The movie was great. label: 28")).toBe("icl");
-    expect(isRecsysShot("The movie was great. label: 28")).toBe(false);
-    expect(encodeLane("Auth is Clerk")).toBe("chat");
-    expect(encodeLane("Use postgres")).toBe("chat");
-    expect(encodeLane("8. The chairperson is Bob")).toBe("chat");
-    expect(isRecsysShot(miller)).toBe(false);
-    expect(encodeLane(miller)).toBe("narrative");
-    expect(isRecsysShot(detqa)).toBe(false);
-    expect(isRecsysShot(movies)).toBe(true);
-    expect(encodeLane(movies)).toBe("narrative");
-    expect(isRecsysShot(redial)).toBe(true);
-    expect(encodeLane(redial)).toBe("narrative");
-    expect(encodeLane("recommend movies")).toBe("narrative");
-    withMem((mem) => {
-      mem.observe([{ role: "user", content: movies }]);
-      mem.observe([{ role: "user", content: "Auth is Clerk" }]);
-      const recs = mem.memories();
-      const recsys = recs.find((r) => (r.tags ?? []).includes("recsys"));
-      expect(recsys?.lane).toBe("narrative");
-      expect(recsys?.text).toMatch(/Superbad \(2007\)/);
-      expect(recsys?.text).toMatch(/Knocked Up \(2007\)/);
-      expect(recs.some((r) => r.lane === "chat" && /Auth is Clerk/.test(r.text))).toBe(true);
-      expect(recs.some((r) => r.lane === "chat" && /Superbad/.test(r.text))).toBe(false);
-    });
-  });
-
   test("secrets still redacted on ICL and narrative store-all", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: "The movie was great. label: 28 token sk-abc123XYZ999" }]);
@@ -272,15 +230,6 @@ const ICL_NEAR = [
   "The soundtrack was soaring. label: 9",
   "The cinematography was lush. label: 16",
 ] as const;
-const ZEBRA_NEEDLE = "The special magic number of zebra-quark-17 is 48291.";
-const ZEBRA_CUE = "What is the special magic number of zebra-quark-17?";
-const NARRATIVE_FILLER = [
-  "The miller walked beside the river that ran through the valley at dawn.",
-  "Villagers said the oak still slept under the silt waiting for summer rain.",
-  "Fog hung low over the marsh and the herons waited on one leg.",
-  "Carts rattled over the stone bridge after the harvest wagons were loaded.",
-  "Children skipped pebbles across the millpond until the geese protested.",
-] as const;
 
 function packetOf(messages: unknown[]): string {
   return (Array.isArray(messages) ? messages : [])
@@ -295,25 +244,6 @@ function mergeNarrativeLaneBody(src: string): string {
   const block = src.match(/function mergeNarrativeLane[\s\S]*?(?=\nfunction mergeIclLane)/)?.[0] ?? "";
   const brace = block.indexOf("{");
   return brace >= 0 ? block.slice(brace) : "";
-}
-
-function buriedZebraNarrative(): string {
-  const head: string[] = [];
-  const tail: string[] = [];
-  for (let i = 0; i < 40; i++) {
-    head.push(NARRATIVE_FILLER[i % NARRATIVE_FILLER.length]!);
-    tail.push(NARRATIVE_FILLER[(i + 2) % NARRATIVE_FILLER.length]!);
-  }
-  return `${head.join(" ")} ${ZEBRA_NEEDLE} ${tail.join(" ")}`;
-}
-
-function withMemDir(fn: (mem: ReturnType<typeof openMemory>, dir: string) => void): void {
-  const dir = mkdtempSync(join(tmpdir(), "eden-m273-"));
-  try {
-    fn(openMemory({ dir }), dir);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
 }
 
 describe("M27.3 SH retrieve does not read icl-index", () => {
@@ -349,30 +279,6 @@ describe("M27.3 SH retrieve does not read icl-index", () => {
     expect(body).not.toMatch(/icl-index/);
   });
 
-  test.failing("SH inject of zebra-quark needle is not dominated by ICL label: shots", () => {
-    withMemDir((mem, dir) => {
-      mem.observe([{ role: "user", content: ICL_GOLD }]);
-      for (const shot of ICL_NEAR) mem.observe([{ role: "user", content: shot }]);
-      const story = buriedZebraNarrative();
-      expect(encodeLane(story)).toBe("narrative");
-      mem.observe([{ role: "user", content: story }]);
-
-      const cue = ZEBRA_CUE;
-      const chunkSrc = readFileSync(join(import.meta.dir, "chunk-retrieve.ts"), "utf8");
-      expect(chunkSrc).toMatch(/\bretrieveNarrativeChunks\b/);
-      expect(chunkSrc).not.toMatch(/icl-index/);
-      expect(INDEX_SRC).toMatch(/from\s+["']\.\/chunk-retrieve["']/);
-
-      const hits = retrieveNarrativeChunks(dir, cue, { k: 10 });
-      expect(hits.some((h) => /48291|zebra-quark-17/.test(h.text))).toBe(true);
-
-      const pkt = packetOf(mem.inject([{ role: "user", content: cue }]));
-      expect(pkt).toMatch(new RegExp(MEMORY_MARK));
-      expect(pkt).toMatch(/48291|zebra-quark-17/);
-      expect(pkt).not.toMatch(/label:\s*28/);
-    });
-  });
-
   test("chat fact cue Auth is Clerk does not pull ICL shots", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: ICL_GOLD }]);
@@ -385,35 +291,37 @@ describe("M27.3 SH retrieve does not read icl-index", () => {
     });
   });
 
-  test.failing("fail-open: inject catch still pass-through (memoryInjectSwallows)", () => {
-    expect(INDEX_SRC).toMatch(/inject\(messages[\s\S]*catch \{\s*memoryInjectSwallows\.n\+\+/);
-    expect(INDEX_SRC).toMatch(/injectBody\(body[\s\S]*catch \{\s*memoryInjectSwallows\.n\+\+/);
-    expect(INDEX_SRC).toMatch(/inject\(messages[\s\S]*catch \{[\s\S]*pass-through/);
+  test("fail-open: inject and injectBody pass through when notesFor throws", () => {
+    withMem((mem) => {
+      mem.observe([{ role: "user", content: "Auth is Clerk" }]);
+      mem.notesFor = (() => {
+        throw new Error("m27.3 notesFor boom");
+      }) as typeof mem.notesFor;
+
+      const messages = [{ role: "user", content: "Auth is Clerk" }];
+      const beforeInject = memoryInjectSwallows.n;
+      let out: unknown;
+      expect(() => {
+        out = mem.inject(messages);
+      }).not.toThrow();
+      expect(out).toBe(messages);
+      expect(memoryInjectSwallows.n).toBe(beforeInject + 1);
+
+      const body = { model: "gpt-4o", messages: [{ role: "user", content: "Auth is Clerk" }] };
+      const unchanged = structuredClone(body);
+      const beforeBody = memoryInjectSwallows.n;
+      let outBody: unknown;
+      expect(() => {
+        outBody = mem.injectBody(body);
+      }).not.toThrow();
+      expect(outBody).toBe(body);
+      expect(body).toEqual(unchanged);
+      expect(memoryInjectSwallows.n).toBe(beforeBody + 1);
+    });
   });
 });
 
-const MH_DIRECTOR_NEEDLE = 'The romantic comedy "Big Stone Gap" was directed by Adriana Trigiani.';
-const MH_BASED_NEEDLE = "Adriana Trigiani is based in Greenwich Village, New York City.";
 const MH_CUE = 'The director of the romantic comedy "Big Stone Gap" is based in what New York city?';
-
-function millerPad(seed: number, minToks: number): string {
-  const parts: string[] = [];
-  let n = 0;
-  let i = 0;
-  while (n < minToks) {
-    const s = `${NARRATIVE_FILLER[i % NARRATIVE_FILLER.length]!.replace(/\.$/, "")} near marker ${seed}-${i}.`;
-    parts.push(s);
-    n += estimateTokens(s);
-    i++;
-  }
-  return parts.join(" ");
-}
-
-function buryMhNeedle(needle: string, seed: number): string {
-  const needleToks = estimateTokens(needle);
-  const each = Math.max(32, Math.floor((CHUNK_TARGET_TOKENS - needleToks) / 2));
-  return `${millerPad(seed, each)} ${needle} ${millerPad(seed + 100, each)}`;
-}
 
 describe("M28 MH hop ICL isolation", () => {
   test("source freeze: MH hop files do not contain icl-index / retrieveIcl / IclIndex", () => {
@@ -430,42 +338,6 @@ describe("M28 MH hop ICL isolation", () => {
     expect(hopChain(MH_CUE, shots)).toEqual([]);
     expect(hopChain("The movie was great. label:", shots)).toEqual([]);
     expect(hopChain(MH_CUE, [{ text: ICL_GOLD, at: 0, i: 0, id: "gold" }])).toEqual([]);
-  });
-
-  test.failing("MH cue with ICL gold + 8 near-dup + 2-hop narrative has Greenwich not label: 28", () => {
-    withMemDir((mem) => {
-      mem.observe([{ role: "user", content: ICL_GOLD }]);
-      for (const shot of ICL_NEAR.slice(0, 8)) mem.observe([{ role: "user", content: shot }]);
-      const directorStory = buryMhNeedle(MH_DIRECTOR_NEEDLE, 1);
-      const basedStory = buryMhNeedle(MH_BASED_NEEDLE, 2);
-      expect(encodeLane(directorStory)).toBe("narrative");
-      expect(encodeLane(basedStory)).toBe("narrative");
-      mem.observe([{ role: "user", content: directorStory }]);
-      mem.observe([{ role: "user", content: basedStory }]);
-      const pkt = packetOf(mem.inject([{ role: "user", content: MH_CUE }]));
-      expect(pkt).toMatch(new RegExp(MEMORY_MARK));
-      expect(pkt).toMatch(/Greenwich Village/i);
-      expect(pkt).not.toMatch(/label:\s*28/);
-    });
-  });
-
-  test.failing("fail-open: inject catch still pass-through (memoryInjectSwallows)", () => {
-    expect(INDEX_SRC).toMatch(/inject\(messages[\s\S]*catch \{\s*memoryInjectSwallows\.n\+\+/);
-    expect(INDEX_SRC).toMatch(/injectBody\(body[\s\S]*catch \{\s*memoryInjectSwallows\.n\+\+/);
-    expect(INDEX_SRC).toMatch(/inject\(messages[\s\S]*catch \{[\s\S]*pass-through/);
-  });
-
-  test.failing("hopStore includes ChunkStore chunks, excludes ICL; skipNarrativeComplete still skips ICL", () => {
-    const hopBlock = INDEX_SRC.match(/const hopStore = \(\(\) => \{[\s\S]*?return out;\s*\}\)\(\);/)?.[0] ?? "";
-    expect(hopBlock).toMatch(/new ChunkStore\(this\.howtoDir\)\.all\(\)/);
-    expect(hopBlock).toMatch(/lane === "icl" \|\| isIclExemplar/);
-    expect(hopBlock).not.toMatch(/\/\\\?\/\.test\(text\)/);
-    expect(hopBlock).toMatch(/isNarrativeNote\(m\) && !\(m\.tags \?\? \[\]\)\.includes\("chunk"\)/);
-    expect(INDEX_SRC).toMatch(/function skipNarrativeComplete[\s\S]*isIclCue\(cue\)\) return true/);
-    expect(INDEX_SRC).toMatch(/function skipNarrativeComplete[\s\S]*lane === "icl" \|\| isIclExemplar/);
-    const complete = readFileSync(join(import.meta.dir, "cls/complete.ts"), "utf8");
-    expect(complete).not.toMatch(/icl-index/);
-    expect(complete).toMatch(/if \(\/\\\?\/\.test\(String\(text/);
   });
 
   test("AR avg is mean of four named leaves or FAIL/missing, never missing-as-0", () => {

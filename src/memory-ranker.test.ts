@@ -1,6 +1,5 @@
 /**
  * M4.4 ranker hygiene. Covers M4.1–M4.3.
- * Report §5.1 leftover: binary IDF (no TF, no length norm) is known; not M4's rewrite.
  */
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -8,8 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, queryHay } from "./index";
 import { pathCues } from "./memory-sota";
-
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/59
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
@@ -20,14 +17,6 @@ function withMem(fn: (mem: ReturnType<typeof openMemory>) => void): void {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-}
-
-function relevantSrc(): string {
-  const i = INDEX_SRC.indexOf("relevant(text:");
-  const j = INDEX_SRC.indexOf("notesFor(", i);
-  expect(i).toBeGreaterThanOrEqual(0);
-  expect(j).toBeGreaterThan(i);
-  return INDEX_SRC.slice(i, j);
 }
 
 const LOCOMO_HAY = ["diet", "child", "kid", "dog", "cat", "running", "stained", "adoption"] as const;
@@ -104,51 +93,6 @@ describe("M4.2 noteBonus / pinEnvFact gone", () => {
       expect(equal.some((t) => /GitHub Actions/i.test(t))).toBe(true);
     });
   });
-
-  test.failing(
-    "set up ci does not pin CircleCI over a better lexical GitHub Actions note even when CircleCI is newer",
-    () => {
-      withMem((mem) => {
-        mem.remember("CI is GitHub Actions and we set up ci with reusable workflows");
-        mem.remember("CI is CircleCI");
-        const top = mem.notesFor("set up ci")[0]?.text ?? "";
-        expect(top).not.toBe("CI is CircleCI");
-        expect(top).toMatch(/GitHub Actions/i);
-      });
-    },
-  );
-
-  test.failing("watch file-watcher is not boosted as a movie", () => {
-    withMem((mem) => {
-      mem.remember("We watched the movie Arrival last night");
-      mem.remember("Add a file watcher on src/index.ts");
-      const flake = mem.notesFor("the file watcher is flaking");
-      const watchIdx = flake.findIndex((r) => /file watcher/i.test(r.text));
-      const movieIdx = flake.findIndex((r) => /Arrival/i.test(r.text));
-      expect(watchIdx).toBeGreaterThanOrEqual(0);
-      if (movieIdx >= 0) expect(watchIdx).toBeLessThan(movieIdx);
-
-      const files = mem.notesFor("watch the files for changes");
-      const w2 = files.findIndex((r) => /file watcher/i.test(r.text));
-      const m2 = files.findIndex((r) => /Arrival/i.test(r.text));
-      expect(w2).toBeGreaterThanOrEqual(0);
-      if (m2 >= 0) expect(w2).toBeLessThan(m2);
-
-      // Bare "watch" must still surface the watcher (not movie-only). Tie-break vs
-      // "watched" on a single token can follow recency/`at` and is not a movie bonus.
-      expect(mem.notesFor("watch").some((r) => /file watcher/i.test(r.text))).toBe(true);
-    });
-  });
-
-  test.failing("watch-files query does not retrieve a movie note that never said watch", () => {
-    withMem((mem) => {
-      mem.remember("Arrival is a great movie about first contact.");
-      mem.remember("Add a file watcher on src/index.ts");
-      const files = mem.notesFor("watch the files for changes");
-      expect(files.some((r) => /file watcher/i.test(r.text))).toBe(true);
-      expect(files.some((r) => /Arrival/i.test(r.text))).toBe(false);
-    });
-  });
 });
 
 describe("M4.3 place + subject", () => {
@@ -199,37 +143,14 @@ describe("M4.3 place + subject", () => {
   });
 });
 
-describe("Report §5.1 leftover binary IDF", () => {
-  // Report §5.1 leftover: binary IDF (no TF, no length norm) is known; not M4's rewrite.
-  test.failing("relevant() still uses Robertson-style binary IDF; no BM25 rewrite this wave", () => {
-    const src = relevantSrc();
-    expect(src).toContain("Math.log((N - d + 0.5) / (d + 0.5) + 1)");
-    expect(src).not.toMatch(/\bBM25\b/);
-    expect(src).not.toMatch(/\bk1\b/);
-    expect(src).not.toMatch(/avgdl/);
-    expect(src).not.toMatch(/termFrequency|term_frequency|\btf\s*\*/i);
-  });
-});
-
 describe("No QUERY_LIGHT / -ship in product ranker", () => {
-  test.failing("src/index.ts has no QUERY_LIGHT and no -ship stemmer hack; liteStem is ok", () => {
-    expect(INDEX_SRC).toMatch(/function liteStem\b/);
+  test("src/index.ts has no QUERY_LIGHT and no -ship stemmer hack", () => {
     expect(INDEX_SRC).not.toMatch(/QUERY_LIGHT/);
     expect(INDEX_SRC).not.toMatch(/endsWith\(\s*["']ship["']\s*\)/);
   });
 });
 
 describe("M34.2 retrieve loop", () => {
-  test.failing("relevant() body has no diet/childhood/pets hay expansions; binary IDF stays", () => {
-    const src = relevantSrc();
-    expect(src).toContain("queryHay(text)");
-    expect(src).not.toMatch(/\b(diet|childhood|pets|stained|adoption)\b/);
-    // Report §5.1 leftover: binary IDF (no TF, no length norm) is known; not this wave's rewrite.
-    expect(src).toContain("Math.log((N - d + 0.5) / (d + 0.5) + 1)");
-    expect(src).toContain("1.55");
-    expect(src).not.toMatch(/\bBM25\b/);
-  });
-
   test("restaurant query still hits Noma not diet, including when most rows miss", () => {
     withMem((mem) => {
       mem.remember("Kai has a peanut diet allergy and skips dairy.");

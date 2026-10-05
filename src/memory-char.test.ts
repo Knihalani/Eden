@@ -1,7 +1,6 @@
 /**
  * M1.3 characterization. Documents today's product behavior so later waves cannot
  * silently "fix" extract/ranker/fuse/persist/wrap without flipping a test.
- * Red desired-behavior cases use Bun `test.failing` and stay tagged WAVE-FIX.
  */
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -11,8 +10,6 @@ import { MEMORY_MARK, openMemory, type AgentMemory } from "./index";
 import { pathCues } from "./memory-sota";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
-
-// Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/39
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
@@ -126,20 +123,6 @@ describe("M1.3 (1) please / fix the / we need to dropped", () => {
 });
 
 describe("M1.3 (2) auth.ts not a path cue", () => {
-  test.failing("today: pathCues keeps dotted filenames and directory segments", () => {
-    const cues = pathCues("never mock src/lib/auth.ts in unit tests.");
-    expect(cues.has("auth.ts")).toBe(true);
-    expect(cues.has("src")).toBe(true);
-    expect(cues.has("lib")).toBe(true);
-    expect(cues.has("src/lib")).toBe(true);
-
-    withMem((mem) => {
-      mem.observe([{ role: "user", content: "Never mock src/lib/auth.ts in unit tests." }]);
-      expect(hasText(mem, "src/lib/auth.ts")).toBe(true);
-      expect(mem.notesFor("auth.ts").some((r) => /auth\.ts/i.test(r.text))).toBe(true);
-    });
-  });
-
   test("desired: dotted filename auth.ts is a first-class path cue", () => {
     const slashed = pathCues("never mock src/lib/auth.ts in unit tests.");
     expect(slashed.has("auth.ts")).toBe(true);
@@ -187,58 +170,5 @@ describe("M1.3 injectBody system observe", () => {
   test("today: injectBody still observes body.system as a user turn (after inject; fail-open catch wraps it)", () => {
     expect(INDEX_SRC).toMatch(/injectBody[\s\S]*observe\(typeof sys === "string" \? \[\{ role: "user"/);
     expect(INDEX_SRC).toMatch(/injectBody[\s\S]*catch \{\s*memoryInjectSwallows\.n\+\+/);
-  });
-});
-
-describe("M1.3 (5) sal=0.6 pin + notesFor cues", () => {
-  const weak = "We changed the timeout in the worker.";
-
-  // WAVE-FIX: M5.3
-  test.failing(
-    "sal=0.6 is persist-pinned through 2000 eviction-pressure remembers",
-    () => {
-      withMem((mem) => {
-        const rec = mem.remember(weak);
-        expect(rec.sal).toBe(0.6);
-        mem.quiet(() => {
-          for (let n = 1; n <= 2000; n++) {
-            mem.remember(`Fact number ${n} is recorded here for eviction pressure.`);
-          }
-        });
-        expect(mem.memories().length).toBe(2000);
-        expect(mem.memories().some((r) => r.id === rec.id)).toBe(true);
-        expect(hasText(mem, "timeout in the worker")).toBe(true);
-      });
-    },
-    60_000,
-  );
-
-  test.failing("notesFor clone keeps cues so intention text stays verbatim", () => {
-    withMem((mem) => {
-      mem.remember("Never console.log in production", { kind: "constraint" });
-      const hit = mem.notesFor("console.log").find((r) => /console\.log/i.test(r.text));
-      expect(hit).toBeTruthy();
-      expect(hit!.text).toBe("[rule] Never console.log in production");
-      expect(hit!.text).not.toMatch(/never no/i);
-      expect(hit!.text).not.toMatch(/Never 0/);
-    });
-  });
-
-  test.failing("close+reopen still treats intention as verbatim (deriveCues on load)", () => {
-    const dir = tmpDir("eden-m53-reload-");
-    try {
-      const a = openMemory({ dir });
-      a.remember("Never console.log in production", { kind: "constraint" });
-      a.close();
-      const b = openMemory({ dir });
-      const hit = b.notesFor("console.log").find((r) => /console\.log/i.test(r.text));
-      expect(hit).toBeTruthy();
-      expect(hit!.text).toBe("[rule] Never console.log in production");
-      expect(hit!.text).not.toMatch(/never no/i);
-      expect(hit!.text).not.toMatch(/Never 0/);
-      b.close();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
   });
 });

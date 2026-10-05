@@ -41,11 +41,9 @@ JSONL under `EDEN_MEMORY_DIR`, or `$EDEN_HOME/memory`, or `~/.eden/memory`.
 
 `EDEN_MEMORY_CAP` is retrieve k (default **6**), not store size. A set value stays in the 6–10 packet band. `EDEN_MEMORY_STORE_CAP` is the JSONL cap (default **2000**).
 
-`EDEN_MEMORY_MIN` (default **0.15**) omits inject when the best on-cue aboutness is below that floor. SessionStart still briefs pins and gists. Unset, empty, NaN, or negative stays 0.15.
+`EDEN_MEMORY_LOG=1` prints note ids and relative ages to stderr. Default off. `EDEN_MEMORY_INJECT_LOG` is a metric file path; unset writes nothing.
 
-`EDEN_MEMORY_LOG=1` prints note ids and relative ages to stderr. Default off. `EDEN_MEMORY_SWALLOW=1` prints inject swallows to stderr. Default off. `EDEN_MEMORY_INJECT_LOG` is a metric file path; unset writes nothing.
-
-`EDEN_MEMORY_AGENT` and `EDEN_MEMORY_PROJECT` isolate a store (project falls back to cwd). `EDEN_MEMORY_SESSION` or `EDEN_MEMORY_PARENT` names the wrap session file. `EDEN_MEMORY_CHILD` opens that session’s child file (`parent--child`). The hook reads the same three names when the payload has no session id.
+`EDEN_MEMORY_SESSION` or `EDEN_MEMORY_PARENT` names the wrap session file. `EDEN_MEMORY_CHILD` opens that session’s child file (`parent--child`). The hook reads the same three names when the payload has no session id.
 
 ### Sleep
 
