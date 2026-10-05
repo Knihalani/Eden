@@ -127,14 +127,13 @@ async function run(cmd: string[], env: Record<string, string>, input: unknown) {
 }
 
 /**
- * The plugin's client, copied out of the checkout so its in-process import fails and it takes the
- * hookd path, as it does when the plugin is installed on its own.
+ * The eden-memory plugin as `/plugin install` copies it, with no Eden checkout to find: the case in which the plugin
+ * used to fall back to hookd.
  */
 function pluginCopy(): string {
-  const copy = join(home, "plugin", "scripts", "hook.ts");
-  mkdirSync(dirname(copy), { recursive: true });
-  cpSync(join(import.meta.dir, "../../../plugins/eden-memory/scripts/hook.ts"), copy);
-  return copy;
+  const copy = join(home, "plugin");
+  cpSync(join(import.meta.dir, "../../../plugins/eden-memory"), copy, { recursive: true });
+  return join(copy, "scripts", "hook.ts");
 }
 
 describe("hookd requires its key (#85)", () => {
@@ -154,34 +153,13 @@ describe("hookd requires its key (#85)", () => {
     expect((await handleHookd(new Request("http://127.0.0.1:8794/health"))).status).toBe(200);
   });
 
-  test("the eden-memory plugin's client authenticates", async () => {
+  test("the eden-memory plugin never sends hookd a hook, even with its key (P0.1)", async () => {
     ensureHookdKey();
-    await withHookd(async (port, statuses) => {
-      const out = await run(["bun", pluginCopy()], clientEnv(home, port), PRE_TOOL);
-      expect(out).toEqual({ stdout: JSON.stringify({ ok: true }), code: 0 });
-      expect(statuses).toEqual([200]);
-    });
-  });
-
-  test("the plugin fails open with no key: exit 0, `{}`, hookd never asked", async () => {
     await withHookd(async (port, statuses) => {
       const prompt = { hook_event_name: "UserPromptSubmit", session_id: "local", prompt: "what is our CI?" };
       const out = await run(["bun", pluginCopy()], clientEnv(home, port), prompt);
-      expect(out).toEqual({ stdout: "{}", code: 0 });
+      expect(out).toEqual({ stdout: "", code: 0 });
       expect(statuses).toEqual([]);
-    });
-  });
-
-  test("the plugin fails open when hookd refuses its key", async () => {
-    ensureHookdKey();
-    const other = join(home, "other-home");
-    mkdirSync(other, { recursive: true });
-    writeFileSync(join(other, "hookd.key"), `${HOOKD_KEY_HEADER}: ${"ab".repeat(32)}\n`, { mode: 0o600 });
-    await withHookd(async (port, statuses) => {
-      const prompt = { hook_event_name: "UserPromptSubmit", session_id: "local", prompt: "what is our CI?" };
-      const out = await run(["bun", pluginCopy()], clientEnv(other, port), prompt);
-      expect(out).toEqual({ stdout: "{}", code: 0 });
-      expect(statuses).toEqual([401]);
     });
   });
 
