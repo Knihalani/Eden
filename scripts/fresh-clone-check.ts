@@ -3,9 +3,10 @@
  * repo into a temp dir outside any repo, with an empty HOME, and checks in order:
  *   1. before `bun install`: the plugin's hook fails open within the Submit budget and logs its cause once;
  *   2. `bun install --frozen-lockfile`, then the CLI loads;
- *   3. the hook run in place (`--plugin-dir`) loads Eden in-process within the budget;
+ *   3. the hook run in place (`--plugin-dir`) loads Eden in-process within the budget, and its later runs pack the
+ *      rule its first run stored;
  *   4. when `claude` is on PATH: `claude plugin marketplace add` + `claude plugin install eden-memory@eden`, then the
- *      installed copy (in Claude's plugin cache) prints what the in-place hook prints, within the budget;
+ *      installed copy (in Claude's plugin cache) prints what the in-place hook prints, run for run, within the budget;
  *   5. `eden doctor --memory` exits 0.
  * Hooks run the command `hooks/hooks.json` declares, with a stub `eden` on PATH that records a call, so a spawn
  * fallback shows. Needs the network (`bun install` into an empty cache). Prints one JSON report and exits 0 when
@@ -52,8 +53,11 @@ function percentile(sorted: number[], p: number): number {
   return Math.round(sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))]! * 10) / 10;
 }
 
-/** Runs a plugin's Submit hook command `runs` times, each in a fresh process, as Claude Code runs it. */
-function runHook(pluginRoot: string, edenHome: (i: number) => string): HookRuns {
+/**
+ * Runs a plugin's Submit hook command `runs` times, each in a fresh process, as Claude Code runs it, on one Eden
+ * home: the first run stores the prompt's rule, the later ones inject it.
+ */
+function runHook(pluginRoot: string, edenHome: string): HookRuns {
   const command = pluginSubmitCommand(pluginRoot);
   if (!command) throw new Error(`${pluginRoot} registers no UserPromptSubmit hook`);
   rmSync(spawnMarker, { force: true });
@@ -61,7 +65,6 @@ function runHook(pluginRoot: string, edenHome: (i: number) => string): HookRuns 
   const exitCodes: number[] = [];
   const outputs: string[] = [];
   for (let i = 0; i < runs; i++) {
-    const eh = edenHome(i);
     const payload = { hook_event_name: "UserPromptSubmit", session_id: "fresh-clone", prompt: PROMPT, cwd: clone };
     const started = performance.now();
     const r = Bun.spawnSync(["/bin/sh", "-c", command], {
@@ -69,8 +72,8 @@ function runHook(pluginRoot: string, edenHome: (i: number) => string): HookRuns 
         PATH: `${stub}:${basePath}`,
         HOME: home,
         TMPDIR: tmpdir(),
-        EDEN_HOME: eh,
-        EDEN_MEMORY_DIR: join(eh, "memory"),
+        EDEN_HOME: edenHome,
+        EDEN_MEMORY_DIR: join(edenHome, "memory"),
         CLAUDE_PLUGIN_ROOT: pluginRoot,
       },
       stdin: new TextEncoder().encode(JSON.stringify(payload)),
@@ -104,7 +107,7 @@ try {
   const plugin = join(clone, "plugins", "eden-memory");
 
   const noInstallHome = join(tmp, "eden-home-no-install");
-  const before = runHook(plugin, () => noInstallHome);
+  const before = runHook(plugin, noInstallHome);
   const logged = fallbackLines(noInstallHome);
   add(
     "1 fallback before bun install",
@@ -131,24 +134,23 @@ try {
     cliHelpExit: help.code,
   });
 
-  const inPlaceHome = (i: number) => join(tmp, `eden-home-in-place-${i}`);
+  const inPlaceHome = join(tmp, "eden-home-in-place");
   const inPlace = runHook(plugin, inPlaceHome);
-  const inPlaceFallbacks = [...Array(runs).keys()].flatMap((i) => fallbackLines(inPlaceHome(i)));
+  const packet = inPlace.outputs.at(-1) ?? "";
   add(
     "3 in place, in-process",
     inPlace.exitCodes.every((c) => c === 0) &&
-      new Set(inPlace.outputs).size === 1 &&
-      inPlace.outputs[0] !== "" &&
+      packet.includes("Eden Memory") &&
       !inPlace.spawnedEden &&
-      inPlaceFallbacks.length === 0 &&
+      fallbackLines(inPlaceHome).length === 0 &&
       inPlace.p95 <= BUDGET_MS,
     {
       p50: inPlace.p50,
       p95: inPlace.p95,
-      distinctOutputs: new Set(inPlace.outputs).size,
-      output: inPlace.outputs[0],
+      firstOutput: inPlace.outputs[0],
+      lastOutput: packet,
       spawnedEden: inPlace.spawnedEden,
-      fallbackLines: inPlaceFallbacks.length,
+      fallbackLines: fallbackLines(inPlaceHome).length,
     },
   );
 
@@ -160,24 +162,24 @@ try {
       plugins: Record<string, Array<{ installPath: string }>>;
     };
     const copy = record.plugins["eden-memory@eden"]![0]!.installPath;
-    const copyHome = (i: number) => join(tmp, `eden-home-installed-${i}`);
+    const copyHome = join(tmp, "eden-home-installed");
     const fromCopy = runHook(copy, copyHome);
-    const copyFallbacks = [...Array(runs).keys()].flatMap((i) => fallbackLines(copyHome(i)));
+    const sameAsInPlace = fromCopy.outputs.every((o, i) => o === inPlace.outputs[i]);
     add(
       "4 installed copy, in-process",
       market.code === 0 &&
         installed.code === 0 &&
-        fromCopy.outputs.every((o) => o === inPlace.outputs[0]) &&
+        sameAsInPlace &&
         !fromCopy.spawnedEden &&
-        copyFallbacks.length === 0 &&
+        fallbackLines(copyHome).length === 0 &&
         fromCopy.p95 <= BUDGET_MS,
       {
         installPath: copy,
         p50: fromCopy.p50,
         p95: fromCopy.p95,
-        sameAsInPlace: fromCopy.outputs.every((o) => o === inPlace.outputs[0]),
+        sameAsInPlace,
         spawnedEden: fromCopy.spawnedEden,
-        fallbackLines: copyFallbacks.length,
+        fallbackLines: fallbackLines(copyHome).length,
       },
     );
     const doctor = sh(["bun", "packages/cli/src/cli.ts", "doctor", "--memory"], clone, {
