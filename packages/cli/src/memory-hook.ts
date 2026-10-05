@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
-import { childSessionName, MEMORY_MARK, openMemory, type MemoryRecord } from "../../../src/index";
+import { childSessionName, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
-import { applyProvenanceLabel } from "../../../src/memory-provenance";
-import { opaqueId } from "../../../src/memory-scrub";
+import { renderPacket, shapePacket } from "../../../src/memory-hook-packet";
+import type { ProvenanceNote } from "../../../src/memory-provenance";
+import { isNonHumanSubmit, turnMode } from "../../../src/memory-turn";
+import { appendTurn, cronHashes, recordCrons, transcriptOffset, windowDir } from "../../../src/memory-window";
 import { consolidate } from "../../../src/sleep";
 import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace";
 
@@ -40,66 +43,65 @@ function isPinnedIntention(r: MemoryRecord): boolean {
   return r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
 }
 
-function additional(event: string, text: string): Record<string, unknown> | null {
-  const notes = String(text ?? "").trim();
-  return notes && notes.includes(MEMORY_MARK)
-    ? { additional_context: notes, hookSpecificOutput: { hookEventName: event, additionalContext: notes } }
+function additional(event: string, packet: string): Record<string, unknown> | null {
+  return packet
+    ? { additional_context: packet, hookSpecificOutput: { hookEventName: event, additionalContext: packet } }
     : null;
 }
 
+/** SessionStart's packet: the newest pinned rules, then this session's latest gists (P2.5 rebuilds it, D23). */
 function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
   const seen = new Set<string>(),
-    lines: string[] = [],
-    pins = mem
-      .memories()
-      .filter(isPinnedIntention)
-      .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
-      .slice(0, 8);
-  for (const r of pins) {
-    let text = r.text.trim();
-    try {
-      text = scrubTombstonedIdentity(text, mem.dir).trim();
-    } catch {}
-    if (!text || seen.has(text.toLowerCase())) continue;
-    seen.add(text.toLowerCase());
-    let line = text;
-    try {
-      line = applyProvenanceLabel({ ...r, text }, text);
-    } catch {
-      line = `[rule] ${text}`;
-    }
-    lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
-  }
-  try {
-    for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" })) {
-      let text = g.text.trim();
+    notes: ProvenanceNote[] = [],
+    add = (note: ProvenanceNote) => {
+      let text = String(note.text ?? "").trim();
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
       } catch {}
-      if (!text || seen.has(text.toLowerCase())) continue;
+      if (!text || seen.has(text.toLowerCase())) return;
       seen.add(text.toLowerCase());
-      let line = text;
-      try {
-        line = applyProvenanceLabel(
-          { id: `gist:${opaqueId(text)}`, text, kind: "gist", tags: ["gist"], at: g.t },
-          text,
-        );
-      } catch {
-        line = `[gist] ${text}`;
-      }
-      lines.push(`\n- ${line.replace(/^\s*-\s*/, "")}`);
-    }
+      notes.push({ ...note, text });
+    };
+  mem
+    .memories()
+    .filter(isPinnedIntention)
+    .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
+    .slice(0, 8)
+    .forEach(add);
+  try {
+    for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" }))
+      add({ text: g.text, kind: "gist", tags: ["gist"], at: g.t });
   } catch {}
-  if (!lines.length) return "";
-  return MEMORY_MARK + lines.join("");
+  return renderPacket(notes);
 }
 
-export function notesFromInject(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => asRec(m))
-    .filter((o) => o.role === "system" && typeof o.content === "string" && String(o.content).includes(MEMORY_MARK))
-    .map((o) => String(o.content))
-    .join("\n\n");
+/** The memory root: `EDEN_MEMORY_DIR`, else `$EDEN_HOME/memory`, else `~/.eden/memory`. */
+function memoryRoot(): string {
+  if (process.env.EDEN_MEMORY_DIR) return process.env.EDEN_MEMORY_DIR;
+  return process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : join(homedir(), ".eden", "memory");
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === "string" && v ? v : undefined;
+}
+
+const PROMPT_KEYS = [
+  "prompt",
+  "text",
+  "input",
+  "message",
+  "body",
+  "query",
+  "user_message",
+  "response",
+  "last_user_message",
+  "user_text",
+  "content",
+] as const;
+
+/** The prompt an event carries: UserPromptSubmit's `prompt`, or the first prompt-like field of another shape. */
+function promptOf(r: Record<string, unknown>): string {
+  return PROMPT_KEYS.map((key) => str(r[key])).find(Boolean) ?? "";
 }
 
 export function messagesFromTranscript(path: string): { role: string; content: string }[] {
@@ -193,12 +195,12 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     } catch {
       resolved = { child: false };
     }
-    const mem = hookMemory({
-      dir: process.env.EDEN_MEMORY_DIR || (process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : undefined),
-      session: resolved.session,
-      child: resolved.child,
-      cwd,
-    });
+    const root = memoryRoot(),
+      win = resolved.child ? undefined : windowDir(root, resolved.session ?? ""),
+      prompt = promptOf(r);
+    // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened.
+    if (event === "UserPromptSubmit" && isNonHumanSubmit(prompt, win ? cronHashes(win) : [])) return null;
+    const mem = hookMemory({ dir: root, session: resolved.session, child: resolved.child, cwd });
     try {
       const transPath =
           typeof r.transcript_path === "string"
@@ -259,6 +261,10 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       }
       if (stop) {
         if (writes) {
+          if (event === "Stop" && win)
+            try {
+              recordCrons(win, r.session_crons);
+            } catch {}
           try {
             if (prior.length || extra)
               mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true });
@@ -269,23 +275,15 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         }
         return null;
       }
-      const prompt =
-          ([
-            r.prompt,
-            r.text,
-            r.input,
-            r.message,
-            r.body,
-            r.query,
-            r.user_message,
-            r.response,
-            r.last_user_message,
-            r.user_text,
-            r.content,
-          ].find((x) => typeof x === "string" && x) as string) || "",
-        notes = prompt ? notesFromInject(mem.inject([{ role: "user", content: prompt }])) : "";
+      if (event === "UserPromptSubmit" && writes && win)
+        try {
+          appendTurn(win, { promptId: str(r.prompt_id), prompt, off: transcriptOffset(transPath) });
+        } catch {}
+      const previousAssistant = prior.findLast((m) => m.role === "assistant")?.content ?? "",
+        mode = event === "UserPromptSubmit" ? turnMode(prompt, { previousAssistant }) : "imperative",
+        notes = prompt && mode === "imperative" ? mem.recall([{ role: "user", content: prompt }]) : [];
       if (writes && prior.length) mem.observe(prior);
-      return additional(event, notes);
+      return additional(event, renderPacket(shapePacket(notes)));
     } finally {
       try {
         mem.close();

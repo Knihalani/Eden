@@ -278,7 +278,7 @@ describe("M26.3 latency — in-process inject, not a 60ms CLI", () => {
 
     const hook = readFileSync(HOOK, "utf8");
     expect(hook).toMatch(/export function memoryHookResponse/);
-    expect(hook).toMatch(/mem\.inject\(\[\{ role: "user", content: prompt \}\]\)/);
+    expect(hook).toMatch(/mem\.recall\(\[\{ role: "user", content: prompt \}\]\)/);
     noMemoryCliSpawn(hook);
   });
 

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { openMemory } from "../../../src/index";
+import { MEMORY_MARK, openMemory } from "../../../src/index";
 import { loadToolTraces, tracesPath } from "../../../src/tool-trace";
 import { withKnowFactsAnthropic } from "./know-inject";
 import { injectBodyThenObserveTools, observeToolTraces, toolTraceMessages, TOOL_TRACE_MAX } from "./tool-observe";
@@ -363,7 +363,7 @@ describe("injectBodyThenObserveTools", () => {
       mem.observe([{ role: "user", content: "Postgres is the session store." }]);
       const body = { messages: [{ role: "user", content: "What store is postgres?" }] };
       const out = injectBodyThenObserveTools(mem, structuredClone(body));
-      expect(JSON.stringify(out)).toMatch(/Eden Memory:/);
+      expect(JSON.stringify(out)).toContain(MEMORY_MARK);
       expect(JSON.stringify(out)).toMatch(/postgres/i);
       expect(existsSync(log)).toBe(true);
       const row = JSON.parse(readFileSync(log, "utf8").trim().split("\n").at(-1)!);

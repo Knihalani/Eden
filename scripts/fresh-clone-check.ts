@@ -18,6 +18,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pluginSubmitCommand } from "../packages/cli/src/doctor-memory";
+import { MEMORY_PACKET_MARK } from "../src/memory-sota";
 
 const BUDGET_MS = 150;
 const PROMPT = "we use pnpm in this repo, never npm";
@@ -140,7 +141,7 @@ try {
   add(
     "3 in place, in-process",
     inPlace.exitCodes.every((c) => c === 0) &&
-      packet.includes("Eden Memory") &&
+      packet.includes(MEMORY_PACKET_MARK) &&
       !inPlace.spawnedEden &&
       fallbackLines(inPlaceHome).length === 0 &&
       inPlace.p95 <= BUDGET_MS,

@@ -207,7 +207,7 @@ describe("M36.4 caller audit", () => {
     expect(tools).toMatch(/mem\.injectBody\(/);
     expect(tools).toMatch(/mem\.observe\(/);
     expect(hook).toMatch(/openMemory\(/);
-    expect(hook).toMatch(/mem\.inject\(/);
+    expect(hook).toMatch(/mem\.recall\(/);
     expect(hook).toMatch(/mem\.observe\(/);
     expect(hook).toMatch(/\bconsolidate\(/);
     expect(hook).toMatch(/export function memoryHookResponse\(/);

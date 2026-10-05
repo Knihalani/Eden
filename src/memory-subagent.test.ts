@@ -492,7 +492,7 @@ describe("M45 subagent share", () => {
         ]);
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: PARENT });
         expect(hookContext(start)).toMatch(/sqlite/i);
-        expect(JSON.stringify(start ?? {})).not.toMatch(/\[procedure/i);
+        expect(JSON.stringify(start ?? {})).not.toMatch(/\b(?:verify|unknown): /);
         const math = childSubmit("what is 2 + 2");
         expect(hookContext(math)).not.toContain(MEMORY_MARK);
       });

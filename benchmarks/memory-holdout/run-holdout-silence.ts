@@ -52,9 +52,9 @@ function freshHome(): string {
 function packetOf(out: unknown): { text: string; bytes: number; omitted: boolean; mark: boolean; raw: string } {
   const raw = additionalContextOf(out as Rec);
   const blocks = raw
-    .split(/(?=Eden Memory:)/)
-    .map((s) => s.trim())
-    .filter((s) => s.includes(MEMORY_MARK));
+    .split(MEMORY_MARK)
+    .slice(1)
+    .map((s) => `${MEMORY_MARK}${s}`.trim());
   const uniq: string[] = [];
   for (const b of blocks) if (!uniq.includes(b)) uniq.push(b);
   const text = uniq.join("\n");
