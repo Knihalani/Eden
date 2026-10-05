@@ -13,7 +13,7 @@
  * runs in every slice rather than in none.
  *
  * Usage:
- *   bun scripts/test-shard.ts k/N < files    the files slice k ignores, one per line
+ *   bun scripts/test-shard.ts k/N < files    slice k's ignore patterns, one per line
  *   bun scripts/test-shard.ts --times LOG    a new times table from `gh run view <run> --log`
  */
 import { readFileSync } from "node:fs";
@@ -28,10 +28,11 @@ export const UNLISTED_SECONDS = 0.1;
 export const TIMES_PATH = join(import.meta.dir, "test-times.txt");
 
 const TIMES_HEADER = [
-  "# Seconds per test file in CI's test jobs, for scripts/test-shard.ts. Files under 2 s are left out",
-  "# and count as 0.1 s each. Refresh it after adding or speeding up a slow test file:",
-  "#   gh run view <run> --log > run.log && bun scripts/test-shard.ts --times run.log > scripts/test-times.txt",
+  `# Seconds per test file in CI's test jobs, for scripts/test-shard.ts. Files under ${MIN_LISTED_SECONDS} s are left out`,
+  `# and count as ${UNLISTED_SECONDS} s each. Refresh it after adding or speeding up a slow test file:`,
+  "#   gh run view <run> --log > /tmp/run.log && bun scripts/test-shard.ts --times /tmp/run.log > scripts/test-times.txt",
 ];
+const USAGE = "usage: bun scripts/test-shard.ts k/N < files | --times LOG";
 
 const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -54,6 +55,17 @@ export function readTimes(text: string): Map<string, number> {
     times.set(m[2]!, Number(m[1]));
   }
   return times;
+}
+
+/**
+ * The pattern that makes bun ignore `file` and nothing else. bun reads each
+ * --path-ignore-patterns as a glob, so a Next.js route such as `[id]` would match
+ * other paths; escaped, its characters are literal. test.sh splits the patterns on
+ * whitespace, so a path holding any is refused.
+ */
+export function ignorePattern(file: string): string {
+  if (/\s/.test(file)) throw new Error(`a test path with whitespace cannot be sharded: ${JSON.stringify(file)}`);
+  return file.replace(/[\\*?[\]{}!]/g, "\\$&");
 }
 
 /**
@@ -106,20 +118,23 @@ export function formatTimes(times: Map<string, number>): string {
 }
 
 async function main(args: string[]): Promise<void> {
-  if (args[0] === "--times" && args.length === 2) {
+  if (args[0] === "--times") {
+    if (args.length !== 2) throw new Error(USAGE);
     process.stdout.write(formatTimes(timesFromLog(readFileSync(args[1]!, "utf8"))));
     return;
   }
-  if (args.length !== 1) throw new Error("usage: bun scripts/test-shard.ts k/N < files | --times LOG");
+  if (args.length !== 1) throw new Error(USAGE);
   const { k, n } = parseShard(args[0]!);
   const times = readTimes(readFileSync(TIMES_PATH, "utf8"));
   const lines = (await Bun.stdin.text()).split("\n").map((line) => line.trim());
   const slices = deal(lines.filter(Boolean), times, n);
   const mine = slices[k - 1]!;
   const seconds = mine.reduce((sum, file) => sum + (times.get(file) ?? UNLISTED_SECONDS), 0);
-  console.error(`test slice ${k}/${n}: ${mine.length} files, about ${Math.round(seconds)} s by scripts/test-times.txt`);
+  console.error(
+    `test slice ${k}/${n}: ${mine.length} files dealt, about ${Math.round(seconds)} s by scripts/test-times.txt`,
+  );
   const others = slices.filter((_, i) => i !== k - 1).flat();
-  if (others.length > 0) process.stdout.write(others.sort(byPath).join("\n") + "\n");
+  if (others.length > 0) process.stdout.write(others.sort(byPath).map(ignorePattern).join("\n") + "\n");
 }
 
 if (import.meta.main) {

@@ -9,6 +9,9 @@
 # `archived/` is excluded deliberately: it is a retired Python/Playwright tree
 # whose files do not parse under the current toolchain.
 set -euo pipefail
+# No pathname expansion: every unquoted list below is meant to split on whitespace
+# only, and test paths may hold glob characters (Next.js routes such as `[id]`).
+set -f
 cd "$(dirname "$0")/.."
 
 # Kept POSIX-ish: macOS still ships bash 3.2, which has no `mapfile`.
