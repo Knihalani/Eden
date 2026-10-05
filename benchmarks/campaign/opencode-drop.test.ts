@@ -15,8 +15,6 @@ import {
 import { applyOpenCodeAfter } from "../../packages/cli/src/transcript-diff";
 import { postToolUseReplacement } from "../../packages/cli/src/transparent";
 
-process.env.CAMPAIGN_THINK_MS = "0";
-
 const TIMEOUT = 30_000;
 
 describe.serial("opencode-drop host (MCP-shaped after payload)", () => {

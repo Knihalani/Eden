@@ -30,7 +30,9 @@ import {
   versionsFor,
 } from "./horizon-extra-worlds";
 
-process.env.CAMPAIGN_THINK_MS = "0";
+// No simulated think time. Setting CAMPAIGN_THINK_MS here would be too late:
+// session.ts reads it when it is imported, which happens before this line runs.
+const NO_THINK = { thinkMs: 0 };
 const TIMEOUT = 8_000;
 
 async function recordStretch(world: World, goal: Record<string, unknown>, seed: number): Promise<StretchTrace> {
@@ -244,14 +246,14 @@ describe("horizon extra: goLive", () => {
       { name: "deep-bill", factory: createDeepBill, goals: [...ACCOUNT_IDS].map((account) => ({ account })) },
     ];
     for (const c of cases) {
-      const s = new Session([[c.name, c.factory]], true);
+      const s = new Session([[c.name, c.factory]], true, NO_THINK);
       for (let i = 0; i < 13; i++) {
         await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`extra-live-${c.name}-${i}`, i));
       }
       const r = await s.goLive(c.name, { compile: 9, holdout: 3, sandbox: c.factory, maxGram: 26 });
       expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
       expect(r.program).not.toBeNull();
-      const live = new Session([[c.name, c.factory]], true);
+      const live = new Session([[c.name, c.factory]], true, NO_THINK);
       live.addPrograms([r.program!]);
       await live.stretch(c.name, c.goals[0]!, blockSeed(`extra-serve-${c.name}`, 99));
       const fin = live.finish();
@@ -262,7 +264,7 @@ describe("horizon extra: goLive", () => {
 
   test("sev-triage goLive PASS with a branched program — FAIL loudly, never skip-as-win", async () => {
     const goals = [...SEV_ALERTS].map((alert) => ({ alert }));
-    const s = new Session([["sev-triage", createSevTriage]], true);
+    const s = new Session([["sev-triage", createSevTriage]], true, NO_THINK);
     // Same witness budget as the other extras: 13 / compile 9 / holdout 3.
     // A 3-arm fork is one shape family; 13 must PASS (not SKIP as thin arms).
     for (let i = 0; i < 13; i++) {

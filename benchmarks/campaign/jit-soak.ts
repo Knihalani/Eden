@@ -17,7 +17,9 @@ import { linearProgram } from "./struggle-harness";
 import { Session } from "./session";
 import { DESK_IDS, blockSeed, createDesk } from "./worlds";
 
-process.env.CAMPAIGN_THINK_MS ??= "1";
+// 1 ms of simulated think time per agent call unless CAMPAIGN_THINK_MS says otherwise. Setting the
+// variable here would be too late: session.ts reads it when it is imported, before this line runs.
+const THINK = { thinkMs: Number(process.env.CAMPAIGN_THINK_MS ?? 1) };
 
 const PRECISION_BAR = 0.95;
 
@@ -130,7 +132,7 @@ function surfaceNames(mode: "jit" | "jit-shadow", messages: unknown[], live: Str
 }
 
 async function compileDesk(): Promise<StretchProgram | null> {
-  const s = new Session([["desk", createDesk]], true);
+  const s = new Session([["desk", createDesk]], true, THINK);
   const pool = [...DESK_IDS].map((id) => ({ id, text: "requesting refund for outage" }));
   for (let i = 0; i < 13; i++) {
     await s.stretch("desk", pool[i % pool.length]!, blockSeed("jit-soak", i));
