@@ -26,6 +26,7 @@ import {
   stripMemoryPacket,
   writeAliasTags,
   WRITE_ALIASES,
+  MEMORY_PACKET_MARK,
   PACKET_BYTE_CAP,
   PACKET_BULLET_MAX,
 } from "./memory-sota";
@@ -55,7 +56,7 @@ export {
 export { logMemoryNotes, memoryLogEnabled } from "./memory-log";
 export { applyProvenanceLabel, relativeMemoryAge } from "./memory-provenance";
 export { sleep } from "./sleep";
-export const MEMORY_MARK = "Eden Memory:",
+export const MEMORY_MARK = MEMORY_PACKET_MARK,
   memoryInjectSwallows = { n: 0 };
 
 function sentenceParts(t: string): string[] {
@@ -1072,46 +1073,57 @@ export class AgentMemory {
     }
   }
 
-  inject(messages: unknown[]): unknown[] {
+  /**
+   * The notes a message list's cue retrieves, ranked and labelled, before any packing; then the list is observed.
+   * Nothing is retrieved for a no-op cue, or when the list already carries a packet. `inject` packs these into its
+   * system message; the memory hook shapes and words them itself (`memory-hook-packet.ts`). Fails open: a throw is
+   * counted in `memoryInjectSwallows` and recalls nothing.
+   */
+  recall(messages: unknown[]): MemoryRecord[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
-      try {
-        if (memoryConsent() === "off") return list;
-      } catch {
-        return list;
-      }
-      const blob = convBlob(list),
-        notes: { role: "system"; content: string }[] = [],
-        cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
-      if (!blob.includes(MEMORY_MARK)) {
+      if (memoryConsent() === "off") return [];
+    } catch {
+      return [];
+    }
+    try {
+      const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
+      let packet: MemoryRecord[] = [];
+      if (!convBlob(list).includes(MEMORY_MARK)) {
         let silent = false;
         try {
           if (cue && isNoopCue(cue)) silent = true;
           else if (hookLane(cue) === "none") silent = true;
         } catch {}
-        const retrieved = !silent && cue ? this.notesFor(cue) : [];
-        let packet = retrieved;
+        packet = !silent && cue ? this.notesFor(cue) : [];
         try {
-          if (retrieved.length && cue && routeMemory(cue) === "sf-assemble")
-            packet = assembleNotes(retrieved, this.dir);
+          if (packet.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(packet, this.dir);
         } catch {}
-        if (packet.length) {
+        if (packet.length)
           try {
             logMemoryNotes(packet);
           } catch {}
-          const packed = packNotes(packet, PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
-          if (packed.length)
-            notes.push({ role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") });
-        }
       }
       try {
         if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim()))
           this.observe(list, { deferSleep: true });
       } catch {}
-      if (!notes.length) return list;
-      const next = list.slice(),
+      return packet;
+    } catch {
+      memoryInjectSwallows.n++;
+      return [];
+    }
+  }
+
+  inject(messages: unknown[]): unknown[] {
+    const list = Array.isArray(messages) ? messages : [];
+    try {
+      const packed = packNotes(this.recall(list), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
+      if (!packed.length) return list;
+      const note = { role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") },
+        next = list.slice(),
         i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
-      return (next.splice(i < 0 ? next.length : i, 0, ...notes), next);
+      return (next.splice(i < 0 ? next.length : i, 0, note), next);
     } catch {
       memoryInjectSwallows.n++;
       return list;

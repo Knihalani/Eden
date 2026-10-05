@@ -331,14 +331,14 @@ describe("M31.4 fail-open", () => {
 });
 
 describe("M31.4 wrap + hook still silent inject", () => {
-  test("wrap/hook/setup/doctor have no memory_search; wrap/hook still call inject/observe", () => {
+  test("wrap/hook/setup/doctor have no memory_search; the wrap calls inject and the hook recall", () => {
     for (const p of HOST_FILES) {
       const src = readFileSync(p, "utf8");
       expect(src, p).not.toMatch(/\bmemory_search\b/);
       expect(src, p).not.toMatch(/\bBrainMemory\b/);
     }
     expect(WRAP_SRC).toMatch(/injectBodyThenObserveTools|mem\.inject\(/);
-    expect(HOOK_SRC).toMatch(/mem\.inject\(/);
+    expect(HOOK_SRC).toMatch(/mem\.recall\(/);
     expect(thisFileHasNoMcp()).toBe(true);
   });
 
@@ -364,9 +364,9 @@ describe("M31.4 wrap + hook still silent inject", () => {
           hook_event_name: "UserPromptSubmit",
           prompt: RECSYS_CUE,
         });
+        // The hook keeps at most 2 episodes (D28), so only the first movie note is asserted.
         const ctx = hookCtx(hook);
         expect(ctx).toMatch(/Superbad/);
-        expect(ctx).toMatch(/Hangover/);
         expect(JSON.stringify(hook ?? {})).not.toMatch(/\bmemory_search\b/);
       });
     } finally {

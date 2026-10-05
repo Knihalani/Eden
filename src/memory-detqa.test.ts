@@ -359,7 +359,8 @@ describe("M30.1 empty cue / SessionStart", () => {
 
       const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
       const ctx = hookMemoryText(start);
-      const gistMarks = ctx.match(/\[gist(?:\s*·[^\]]*)?\]/g) ?? [];
+      // The hook words a gist "… (from a summary of earlier work, …)" (D14).
+      const gistMarks = ctx.match(/\(from a summary of earlier work\b/g) ?? [];
       expect(gistMarks.length).toBeLessThanOrEqual(5);
       expect(millerFillerCount(ctx)).toBeLessThanOrEqual(3);
       expect(ctx).not.toMatch(/(The miller walked beside the river that ran through the valley at dawn\.\s*){6,}/);

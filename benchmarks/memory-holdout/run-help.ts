@@ -173,9 +173,9 @@ function hookPacket(out: unknown): string {
   const ctx = additionalContextOf(asRec(out));
   if (!ctx.includes(MEMORY_MARK)) return "";
   const blocks = ctx
-    .split(/(?=Eden Memory:)/)
-    .map((s) => s.trim())
-    .filter((s) => s.includes(MEMORY_MARK));
+    .split(MEMORY_MARK)
+    .slice(1)
+    .map((s) => `${MEMORY_MARK}${s}`.trim());
   const uniq: string[] = [];
   for (const b of blocks) if (!uniq.includes(b)) uniq.push(b);
   return uniq.join("\n");

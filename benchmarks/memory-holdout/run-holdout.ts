@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { respondToHook } from "../../packages/cli/src/hook.ts";
 import { memoryHookResponse } from "../../packages/cli/src/memory-hook.ts";
-import { openMemory } from "../../src/index.ts";
+import { MEMORY_MARK, openMemory } from "../../src/index.ts";
 import {
   additionalContextOf,
   formatResults,
@@ -115,7 +115,7 @@ function asRec(v: unknown): Rec {
 
 function injectEmpty(ctx: string): boolean {
   const t = ctx
-    .replace(/Eden Memory:\s*/gi, "")
+    .replaceAll(MEMORY_MARK, "")
     .replace(/^[-•]\s*/gm, "")
     .trim();
   return !t;

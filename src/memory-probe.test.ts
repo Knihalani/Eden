@@ -215,6 +215,8 @@ function expectNoEmptyDump(hay: string): void {
   expect(hay).not.toContain(TRAJ);
   expect(hay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
   expect(hay).not.toMatch(/\[episode(?:\s*·[^\]]*)?\]/);
+  // The hook words a procedure without a tag (D14); its `verify:` names it.
+  expect(hay).not.toMatch(/\b(?:verify|unknown): /);
 }
 
 /** OpenAI injectBody, tool-observe, withKnowFacts, Anthropic, and hook submit. */
@@ -291,11 +293,11 @@ describe("M36.1 empty cue", () => {
       const start = memoryHookResponse({ hook_event_name: "SessionStart" });
       const ctx = hookContext(start);
       expectNoEmptyDump(ctx);
-      expect(ctx).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-      expect(ctx).toContain(PIN);
-      expect(ctx).toMatch(/\[rule(?:\s*·[^\]]*)?\]/);
+      // The hook words its bullets (D14): every one is a rule the user set or a gist from a summary.
+      expect(ctx).not.toMatch(/\b(?:verify|unknown): /);
+      expect(ctx).toMatch(new RegExp(`Rule you set: .*${PIN}`));
       for (const line of bullets(ctx)) {
-        expect(line).toMatch(/^-\s+\[(?:rule|gist)(?:\s*·[^\]]*)?\]/);
+        expect(line).toMatch(/^-\s+(?:Rule you set: .*|.* \(from a summary of earlier work[^()]*\))$/);
       }
       const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "" });
       expectNoEmptyDump(hookContext(submit));
@@ -473,7 +475,7 @@ describe("M36.1 concurrent persist", () => {
 });
 
 describe("M36.1 k=40 is not product", () => {
-  test.failing("EDEN_MEMORY_CAP=40 clamps to 10 and packet bullets stay ≤10", async () => {
+  test("EDEN_MEMORY_CAP=40 clamps to 10 and packet bullets stay ≤10", async () => {
     expect(PACKET_CHAT_K_MIN).toBe(6);
     expect(PACKET_CHAT_K_MAX).toBe(10);
     expect(PACKET_CHAT_K_DEFAULT).toBeGreaterThanOrEqual(PACKET_CHAT_K_MIN);

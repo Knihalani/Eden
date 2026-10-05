@@ -1640,7 +1640,7 @@ describe("M11.4 wrap/hook fail-open and no [procedure]", () => {
       const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what is auth using?" });
       const submitHay = JSON.stringify(submit);
       expect(submitHay).toMatch(/Clerk/i);
-      expect(submitHay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+      expect(submitHay).not.toMatch(HOOK_PROCEDURE);
 
       expect(() => memoryHookResponse({ hook_event_name: "Stop" })).not.toThrow();
       expect(memoryHookResponse({ hook_event_name: "Stop" })).toBeNull();
@@ -1737,6 +1737,16 @@ function procedureSpans(pkt: string): string[] {
 
 function assertFlakeProcedure(hay: string): void {
   expect(hay).toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+  expect(hay).toMatch(/auth\.ts/);
+  expect(hay).toMatch(/pytest/i);
+  expect(hay).toMatch(/tests\/auth\/session\.test\.ts/);
+}
+
+/** A procedure bullet in a hook packet: the hook words bullets without kind tags (D14), so its `verify:` names it. */
+const HOOK_PROCEDURE = /\b(?:verify|unknown): /;
+
+function assertHookFlakeProcedure(hay: string): void {
+  expect(hay).toMatch(HOOK_PROCEDURE);
   expect(hay).toMatch(/auth\.ts/);
   expect(hay).toMatch(/pytest/i);
   expect(hay).toMatch(/tests\/auth\/session\.test\.ts/);
@@ -1845,12 +1855,9 @@ describe("M12.4 Start does not dump last-k how-to", () => {
         mem.remember("Always run tests before committing", { kind: "constraint" });
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
         const hay = JSON.stringify(start ?? {});
-        expect(hay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(hay).not.toMatch(HOOK_PROCEDURE);
         expect(hay).not.toMatch(/howto\.jsonl|how-to dump/i);
-        if (hay.includes(MEMORY_MARK)) {
-          expect(hay).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
-          expect(hay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
-        }
+        if (hay.includes(MEMORY_MARK)) expect(hay).toMatch(/Rule you set: |\(from a summary of earlier work/);
 
         const empty = packetOf(mem.inject([]));
         expect(empty).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
@@ -2074,7 +2081,7 @@ describe("M14.4 one dir / same how-to id", () => {
 
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
         const startHay = JSON.stringify(start ?? {});
-        expect(startHay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(startHay).not.toMatch(HOOK_PROCEDURE);
         expect(startHay).not.toMatch(/howto\.jsonl|how-to dump/i);
 
         const afterStart = new HowToStore(dir).latest("auth pytest flake", 5);
@@ -2086,7 +2093,7 @@ describe("M14.4 one dir / same how-to id", () => {
           session_id: session,
           prompt: FLAKE_TEXT_CUE,
         });
-        assertFlakeProcedure(JSON.stringify(submit ?? {}));
+        assertHookFlakeProcedure(JSON.stringify(submit ?? {}));
         expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored.id)).toBe(true);
       },
       session,
@@ -2101,7 +2108,7 @@ describe("M14.4 one dir / same how-to id", () => {
       expect(existsSync(join(dir, "howto.jsonl"))).toBe(true);
 
       const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: "s-hook-after-wrap" });
-      expect(JSON.stringify(start ?? {})).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+      expect(JSON.stringify(start ?? {})).not.toMatch(HOOK_PROCEDURE);
       expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored.id)).toBe(true);
 
       const submit = memoryHookResponse({
@@ -2109,7 +2116,7 @@ describe("M14.4 one dir / same how-to id", () => {
         session_id: "s-hook-after-wrap",
         prompt: FLAKE_TEXT_CUE,
       });
-      assertFlakeProcedure(JSON.stringify(submit ?? {}));
+      assertHookFlakeProcedure(JSON.stringify(submit ?? {}));
       expect(howtoPath(join(dir, "s-hook-after-wrap"))).toBe(join(dir, "howto.jsonl"));
     });
   });
@@ -2208,7 +2215,7 @@ describe("M14.4 chat-only zero how-to", () => {
       const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what is auth using?" });
       const submitHay = JSON.stringify(submit ?? {});
       expect(submitHay).toMatch(/Clerk/i);
-      expect(submitHay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+      expect(submitHay).not.toMatch(HOOK_PROCEDURE);
     });
   });
 });
@@ -2308,7 +2315,7 @@ describe("M35.4 schema-rename command→cmd", () => {
         expect(packetOf(mem.inject([{ role: "user", content: "" }]))).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
 
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-        expect(JSON.stringify(start ?? {})).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(JSON.stringify(start ?? {})).not.toMatch(HOOK_PROCEDURE);
 
         const clerk = packetOf(mem.inject([{ role: "user", content: "what is auth using?" }]));
         expect(clerk).toMatch(/Clerk/i);

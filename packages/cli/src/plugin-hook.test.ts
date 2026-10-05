@@ -120,7 +120,7 @@ describe("the plugin loads Eden in-process", () => {
   test("in place, from this checkout: the second Submit packs the rule the first stored", () => {
     expectLoaded(inPlace);
     expect(inPlace.first.stdout).toBe("{}");
-    expect(inPlace.second.stdout).toContain("Eden Memory:");
+    expect(inPlace.second.stdout).toContain("Eden memory, recalled from earlier sessions:");
     expect(inPlace.second.stdout).toContain("we use pnpm in this repo, never npm");
   });
 

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { memoryHookResponse, messagesFromTranscript, notesFromInject } from "./memory-hook";
+import { memoryHookResponse, messagesFromTranscript } from "./memory-hook";
 import { respondToHook } from "./hook";
 import { AgentMemory, childSessionName, MEMORY_MARK, openMemory } from "../../../src/index";
 import { HowToStore, howtoPath } from "../../../src/howto-store";
@@ -117,16 +117,6 @@ describe("passive memory hooks", () => {
       memoryHookResponse({ hook_event_name: "PreCompact", transcript_path: "/no/such/transcript.jsonl" }),
     ).toBeNull();
     rmSync(process.env.EDEN_MEMORY_DIR, { recursive: true, force: true });
-  });
-
-  test("notesFromInject keeps only memory system notes", () => {
-    expect(
-      notesFromInject([
-        { role: "system", content: `${MEMORY_MARK}\n- Pacific` },
-        { role: "user", content: "hi" },
-        { role: "system", content: "unrelated" },
-      ]),
-    ).toContain("Pacific");
   });
 
   test("PostToolUse observes tool failure text into memories.jsonl", async () => {
@@ -621,7 +611,7 @@ describe("passive memory hooks", () => {
         .map((x) => String(x ?? ""))
         .join("\n");
       expect(ctx).toContain(MEMORY_MARK);
-      expect(ctx).toMatch(/\[fact(?:\s*·[^\]]*)?\].*Bob/);
+      expect(ctx).toMatch(/Bob.* \(you said/);
       expect(ctx).not.toMatch(/Alice/);
     } finally {
       if (prevDir === undefined) delete process.env.EDEN_MEMORY_DIR;
@@ -1021,7 +1011,7 @@ describe("M13 honest off switch (hook)", () => {
     }
   });
 
-  test("readonly: Submit about sqlite still injects [fact]; Auth is Clerk is not persisted", () => {
+  test("readonly: Submit about sqlite still injects the fact; Auth is Clerk is not persisted", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m13-hook-ro-"));
     try {
       m13WithEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, () => {
@@ -1044,8 +1034,7 @@ describe("M13 honest off switch (hook)", () => {
           });
           const ctx = m13HookCtx(later);
           expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/sqlite/i);
-          expect(ctx).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(ctx).toMatch(/sqlite.* \(you said/i);
         });
       }
       expect(m13JsonlContents(dir)).not.toMatch(/Clerk/i);
@@ -1069,8 +1058,7 @@ describe("M13 honest off switch (hook)", () => {
           });
           const ctx = m13HookCtx(later);
           expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/sqlite/i);
-          expect(ctx).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(ctx).toMatch(/sqlite.* \(you said/i);
         });
       }
     } finally {
@@ -1188,7 +1176,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
 
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: M14_SESSION });
         const startHay = m13HookCtx(start);
-        expect(`${startHay}\n${JSON.stringify(start ?? {})}`).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(`${startHay}\n${JSON.stringify(start ?? {})}`).not.toMatch(/verify:/);
         expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored!.id)).toBe(true);
 
         const submit = memoryHookResponse({
@@ -1197,7 +1185,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
           prompt: M14_FLAKE,
         });
         const submitHay = `${m13HookCtx(submit)}\n${JSON.stringify(submit ?? {})}`;
-        expect(submitHay).toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(submitHay).toMatch(/verify: .*\(from a tool result/);
         expect(submitHay).toMatch(/auth\.ts/);
         expect(submitHay).toMatch(/pytest/i);
         expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored!.id)).toBe(true);
@@ -1207,7 +1195,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
     }
   });
 
-  test("chat-only hook Submit injects Clerk with no [procedure]", async () => {
+  test("chat-only hook Submit injects Clerk with no procedure", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m14-hook-chat-"));
     try {
       await m13WithEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
@@ -1223,7 +1211,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
         const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what is auth using?" });
         const hay = `${m13HookCtx(submit)}\n${JSON.stringify(submit ?? {})}`;
         expect(hay).toMatch(/Clerk/i);
-        expect(hay).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+        expect(hay).not.toMatch(/verify:/);
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1299,8 +1287,8 @@ describe("M38.2 hook honors an omitted packet; Start still briefs", () => {
           const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: "s-m38" });
           const ctx = m13HookCtx(start);
           expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/\[rule(?:\s*·[^\]]*)?\]|\[gist(?:\s*·[^\]]*)?\]/);
-          expect(ctx).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(ctx).toMatch(/Rule you set: |\(from a summary of earlier work/);
+          expect(ctx).not.toMatch(/\(you said/);
           expect(ctx).toMatch(/Always run tests before committing/i);
         },
       );
