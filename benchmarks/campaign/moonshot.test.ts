@@ -39,7 +39,9 @@ import {
   hostsFor,
 } from "./moonshot-worlds";
 
-process.env.CAMPAIGN_THINK_MS = "0";
+// No simulated think time. Setting CAMPAIGN_THINK_MS here would be too late:
+// session.ts reads it when it is imported, which happens before this line runs.
+const NO_THINK = { thinkMs: 0 };
 
 const TIMEOUT = 5_000;
 
@@ -454,7 +456,7 @@ describe("moonshot worlds: compileTraces → shadow goLive", () => {
       { name: "inventory", factory: createInventory, goals: [...WAVE_IDS].map((wave) => ({ wave })) },
     ];
     for (const c of cases) {
-      const s = new Session([[c.name, c.factory]], true);
+      const s = new Session([[c.name, c.factory]], true, NO_THINK);
       for (let i = 0; i < 13; i++) {
         await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`moonshot-live-${c.name}-${i}`, i));
       }
@@ -467,7 +469,7 @@ describe("moonshot worlds: compileTraces → shadow goLive", () => {
       expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
       expect(r.program, `${c.name} program`).not.toBeNull();
       expect(r.program!.manifest?.certified).toBe(true);
-      const live = new Session([[c.name, c.factory]], true);
+      const live = new Session([[c.name, c.factory]], true, NO_THINK);
       live.addPrograms([r.program!]);
       await live.stretch(c.name, c.goals[0]!, blockSeed(`moonshot-serve-${c.name}`, 99));
       const fin = live.finish();
@@ -487,7 +489,7 @@ describe("moonshot worlds: compileTraces → shadow goLive", () => {
       { name: "dns-tls", factory: createDnsTls, goals: [...ZONE_IDS].map((zone) => ({ zone })) },
     ];
     for (const c of cases) {
-      const s = new Session([[c.name, c.factory]], true);
+      const s = new Session([[c.name, c.factory]], true, NO_THINK);
       for (let i = 0; i < 13; i++) {
         await s.stretch(c.name, c.goals[i % c.goals.length]!, blockSeed(`moonshot-live-${c.name}-${i}`, i));
       }
@@ -500,7 +502,7 @@ describe("moonshot worlds: compileTraces → shadow goLive", () => {
       expect(r.verdict, `${c.name} goLive ${r.verdict}: ${r.reasons.join("; ")}`).toBe("PASS");
       expect(r.program, `${c.name} program`).not.toBeNull();
       expect(r.program!.manifest?.certified).toBe(true);
-      const live = new Session([[c.name, c.factory]], true);
+      const live = new Session([[c.name, c.factory]], true, NO_THINK);
       live.addPrograms([r.program!]);
       await live.stretch(c.name, c.goals[0]!, blockSeed(`moonshot-serve-${c.name}`, 99));
       const fin = live.finish();
@@ -511,7 +513,7 @@ describe("moonshot worlds: compileTraces → shadow goLive", () => {
 
   test("map-reduce goLive PASS with a certified program; wrap serve turns===1", async () => {
     const goals = [...JOB_IDS].map((job) => ({ job }));
-    const s = new Session([["map-reduce", createMapReduce]], true);
+    const s = new Session([["map-reduce", createMapReduce]], true, NO_THINK);
     for (let i = 0; i < 13; i++) {
       await s.stretch("map-reduce", goals[i % goals.length]!, blockSeed(`moonshot-live-map-reduce-${i}`, i));
     }
@@ -527,7 +529,7 @@ describe("moonshot worlds: compileTraces → shadow goLive", () => {
     const rows = r.program!.steps.find((s) => s.kind === "tool" && s.tool === "mergeReport") as
       { args?: Record<string, { kind?: string }> } | undefined;
     expect(rows?.args?.rows?.kind, "certified program still binds rows from the loop").toBe("from");
-    const live = new Session([["map-reduce", createMapReduce]], true);
+    const live = new Session([["map-reduce", createMapReduce]], true, NO_THINK);
     live.addPrograms([r.program!]);
     await live.stretch("map-reduce", goals[0]!, blockSeed("moonshot-serve-map-reduce", 99));
     const fin = live.finish();

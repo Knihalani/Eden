@@ -34,7 +34,6 @@ import {
   type MutationMap,
 } from "./failsafe-gen";
 
-process.env.CAMPAIGN_THINK_MS = "1";
 const TIMEOUT = 120_000;
 const TIMEOUT_10K = 180_000;
 

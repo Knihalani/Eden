@@ -20,7 +20,9 @@ import {
   createResearch,
 } from "./worlds";
 
-process.env.CAMPAIGN_THINK_MS = "8";
+// 8 ms of simulated think time per agent call. Setting CAMPAIGN_THINK_MS here would be too
+// late: session.ts reads it when it is imported, which happens before this line runs.
+const THINK = { thinkMs: 8 };
 
 const TEST_TIMEOUT = 120_000;
 /** 12 witnesses over a 4-id pool: even with the worlds' seeded sloppiness
@@ -31,7 +33,7 @@ const WITNESS = 12;
 
 /** Record witnesses, go live, return the result for assertions. */
 async function liveAfter(factory: WorldFactory, pool: Array<Record<string, unknown>>) {
-  const s = new Session([["w", factory]], true);
+  const s = new Session([["w", factory]], true, THINK);
   for (let i = 0; i < WITNESS; i++) await s.stretch("w", pool[i % pool.length]!, 900 + i);
   const r = await s.goLive("w", { compile: WITNESS - 3, holdout: 3, sandbox: factory, maxGram: 26 });
   return { session: s, result: r };
@@ -48,7 +50,7 @@ describe("campaign lifecycle", () => {
       expect(result.program!.sequence[0]).toBe("getAccount");
 
       // A fresh session with that program live resolves a witnessed goal in ONE call.
-      const s2 = new Session([["desk", createDesk]], true);
+      const s2 = new Session([["desk", createDesk]], true, THINK);
       s2.addPrograms(result.program ? [result.program] : []);
       await s2.stretch("desk", { id: DESK_IDS[0] }, 7);
       const st = s2.finish();
@@ -84,7 +86,7 @@ describe("campaign lifecycle", () => {
         [...DESK_IDS].map((id) => ({ id })),
       );
       expect(program).not.toBeNull();
-      const s = new Session([["desk", createDesk]], true);
+      const s = new Session([["desk", createDesk]], true, THINK);
       s.addPrograms(program ? [program] : []);
       // Novel id: never witnessed, so outside the envelope.
       await s.stretch("desk", { id: "A-NOVEL-1" }, 11);
@@ -103,7 +105,7 @@ describe("campaign lifecycle", () => {
     async () => {
       const pool = [...INCIDENT_KEYS].map((key) => ({ key }));
       const { program } = await liveAfter(() => createIncident(0), pool);
-      const s = new Session([["incident", () => createIncident(0)]], true);
+      const s = new Session([["incident", () => createIncident(0)]], true, THINK);
       s.addPrograms(program ? [program] : []);
       for (let i = 0; i < 4; i++) {
         await s.stretch("incident", pool[i % pool.length]!, 300 + i);
@@ -118,7 +120,7 @@ describe("campaign lifecycle", () => {
     async () => {
       const pool = [...DESK_IDS].map((id) => ({ id }));
       const { program } = await liveAfter(createDesk, pool);
-      const s = new Session([["desk", createDesk]], true, { aware: false });
+      const s = new Session([["desk", createDesk]], true, { ...THINK, aware: false });
       s.addPrograms(program ? [program] : []);
       await s.stretch("desk", { id: DESK_IDS[1] }, 21);
       const st = s.finish();
@@ -134,7 +136,7 @@ describe("campaign edge surfaces", () => {
   test(
     "compile refuses garbage traces instead of emitting junk programs",
     async () => {
-      const s = new Session([["etl", () => createEtl(3)]], true);
+      const s = new Session([["etl", () => createEtl(3)]], true, THINK);
       // One incomplete trace only: nothing to compile, nothing to shadow.
       await s.stretch("etl", { run: "R-X" }, 5);
       const r = await s.goLive("etl", { compile: 3, holdout: 3, sandbox: () => createEtl(3) });
@@ -156,7 +158,7 @@ describe("campaign edge surfaces", () => {
       const { session, result } = await liveAfter(createResearch, pool);
       if (result.program) {
         expect(result.verdict).toBe("PASS");
-        const s2 = new Session([["research", createResearch]], true);
+        const s2 = new Session([["research", createResearch]], true, THINK);
         s2.addPrograms([result.program]);
         await s2.stretch("research", { topic: "auth-flow" }, 33);
         expect(s2.finish().violations).toEqual([]);
@@ -177,6 +179,7 @@ describe("campaign edge surfaces", () => {
           ["incident", () => createIncident(0)],
         ],
         false,
+        THINK,
       );
       await s.stretch("desk", { id: DESK_IDS[2] }, 41);
       await s.stretch("orders", { orderId: ORDER_IDS[0] }, 42);
