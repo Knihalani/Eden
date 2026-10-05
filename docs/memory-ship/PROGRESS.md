@@ -77,7 +77,7 @@ Earlier reports filed these follow-ups. The first column is the slice the report
 |---|---|---|
 | P0.1 | Decide the dead-import test files P0.−1 listed whose issues are still open: #39, #54, #59, #60, #61, #64 (each says "Decide in P0.1": re-point the import, restore the feature, or delete the test). Their broken tests are `test.failing` today | [P0.−1](reports/P0.-1.md) |
 | P0.1 | Run the fresh-clone check in a tree outside the repo with an empty `HOME`. The plugin's silent fallback hid the fresh-install failure; a checkout without `bun install` falls back to spawning `eden hook`, about 2.6 s per hook | [P0.−1](reports/P0.-1.md), [P0.0b](reports/P0.0b.md) |
-| P0.3 | Clear `arms.json`'s two `unstable` checks, `scoped` `junk-on-disk` and `re-eligibility` `reeligible-401` (#98): once ids are ULIDs, run both arms ≥ 20 times and make them plain checks | [P0.0c](reports/P0.0c.md) |
+| P0.3 | Clear `arms.json`'s three `unstable` checks, `scoped` `junk-on-disk`, `re-eligibility` `reeligible-401` and `compaction` `b-rearmed` (#98): once ids are ULIDs, run those arms ≥ 20 times, on Linux too (`b-rearmed` flipped only in CI), and make them plain checks | [P0.0c](reports/P0.0c.md) |
 | P0.3 | Honour `EDEN_NOW` (epoch ms): the arms hand hooks and the CLI the simulated clock through it | [P0.0c](reports/P0.0c.md) |
 | P0.3 | Re-run P0.0b's A/A noise floors: packets differed between identical runs, likely through #98 | [P0.0b](reports/P0.0b.md) |
 | P0.4 | Open issues #19 (memory-import stores an `sk-ant-…` key) and #42 (memory-consent). The Agent tool result is stored as the episode `The Agent tool result is [object Object]` (with P0.6) | [P0.−1](reports/P0.-1.md), [P0.0a](reports/P0.0a.md) |
@@ -86,6 +86,7 @@ Earlier reports filed these follow-ups. The first column is the slice the report
 | P0.5 | EXECUTION §9 and A6 §4 disagree on how legacy sessions are mapped (R-7's session map vs a transcript's first line). Settle it in the spec; the `migrate` arm accepts either | [P0.0c](reports/P0.0c.md) |
 | P0.8 | Re-record every arm's `off` and `shadow` states in `arms.json` (`arms/run.ts --flags off`, `--flags shadow`); measure `abort_rate` | [P0.0c](reports/P0.0c.md), [P0.0b](reports/P0.0b.md) |
 | P1.1 | If P0.3 has not cleared `reeligible-401`, clear it before turning `re-eligibility` green | [P0.0c](reports/P0.0c.md) |
+| P1.2 | If P0.3 has not cleared `compaction`'s `b-rearmed`, clear it before turning `compaction` green | [#112](https://github.com/Knihalani/Eden/pull/112) |
 | P1.3 | The simulator does not fire nested `InstructionsLoaded` (`nested_traversal`, `path_glob_match`), which the D27 shadow set needs | [P0.0a](reports/P0.0a.md) |
 | P2.3 | The simulator has no `if` filters, PermissionRequest or PermissionDenied | [P0.0a](reports/P0.0a.md) |
 | P2.5 | Claude Code 2.1.285 has no `fork` subagent type (A4 §5.3, A5 `subagent`); the harness simulates one. Say which mechanism "fork" means (perhaps SessionStart `source: fork`), or drop the clause until one is captured | [P0.0c](reports/P0.0c.md) |
