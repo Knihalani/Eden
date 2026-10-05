@@ -224,7 +224,7 @@ export function modulesCheck(plugin: MemoryPlugin | null, hooksFromSettings: boo
   let where: string;
   try {
     const { root, via } = findEdenRoot(pluginRoot);
-    where = `${installed ? "" : "this checkout's plugin, not installed: "}${root} (${via})`;
+    where = `${installed ? "" : "this checkout's plugin (none enabled): "}${root} (${via})`;
   } catch (err) {
     return modulesLine(false, (err as Error).message);
   }
