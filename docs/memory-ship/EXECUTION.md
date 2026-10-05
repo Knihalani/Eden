@@ -323,6 +323,8 @@ Decided in DECISIONS **D37** from `research/R8-nim-experiments.md`.
 
 Agents see only aggregates and the ids of false fires. CI prints `skipped: private set absent`. The P4.3 gate is run locally and its output attached to the PR.
 
+Built in P0.0d: `eden eval build-negatives` (steps 1–5; also drops a JWT shape or an email address, R9 §R5.3; skips headless `claude -p` prompts), `--label` (step 6) and `--freeze` (step 7: `real-negatives.vN.jsonl` and its `.sha256`). A rebuild keeps labels and keeps prompts whose transcripts Claude Code has since swept, so rebuild within every 30 days. The harness reads a frozen set from `EDEN_EVAL_NEGATIVES` and replays it with `benchmarks/memory-long-horizon/arms/silence.ts`.
+
 ---
 
 ## 9. Migration of existing stores (X12)

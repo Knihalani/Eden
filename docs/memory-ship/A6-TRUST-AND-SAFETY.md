@@ -45,7 +45,7 @@ An automatic memory that injects into a model able to run shell commands is a **
 
 1. **One gate.** Every writer calls `sanitizeForStore(text)`: JSONL, live/history, policies, intents, gotchas, episodes, aliases, `hook.log`, `miss.jsonl`, traces.
 2. **Detection:**
-   - (a) the **vendored gitleaks default rule set** (~150 provider-shaped rules; covers `cfat_`, `AIza`, `npm_`, JWT, Stripe, Slack, AWS, GitHub, …);
+   - (a) the **vendored gitleaks default rule set** (v8.30.1: 221 rules with a regex; covers `AIza`, `npm_`, JWT, Stripe, Slack, AWS, GitHub, …), plus the provider shapes it lacks or gates on context: `cfat_`, OpenAI `sk-proj-` keys without their `T3BlbkFJ` marker, Mailgun `key-` and Telegram bot tokens without the provider's name, AWS key ids below its entropy floor (`src/memory-secrets.ts`, P0.0d);
    - (b) the keyword rule `(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(is|=|:)\s*\S{6,}`, which redacts the value whatever its entropy;
    - (c) URL userinfo `scheme://user:pass@`;
    - (d) entropy **only** for a whitespace-delimited token ≥ 32 chars, mixing letters and digits, with no `/ . -` runs, **and** a secret keyword within 40 chars.

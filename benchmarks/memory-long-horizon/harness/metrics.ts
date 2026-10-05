@@ -93,7 +93,7 @@ export interface Metrics {
 }
 
 export const NOT_MEASURED: Record<string, string> = {
-  "silence.real_negatives": "P0.0d: the real-negative set",
+  "silence.real_negatives": "measured apart, one fresh session per negative: arms/silence.ts (P0.0d)",
   "poison_hits.pins": "P0.4 / P2.1: a pin is known only from Eden's store format; packets are counted",
   abort_rate: "P0.8: budget aborts are known only from Eden's wide events",
   restate_rate: "dogfood only (A5 §5)",
