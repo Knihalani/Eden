@@ -93,6 +93,27 @@ bun benchmarks/memory-long-horizon/arms/run.ts --scale full --json     # A5's fu
 | `arms/delivery.ts` | Delivery arms (G5) |
 | `arms/policy.ts`, `facts.ts` | Policy, guard, fact and cue arms (G1) |
 | `arms/cuebench.ts`, `bench.ts`, `extraction.ts`, `scale.ts` | Fixture arms: R1/R8 CueBench, triggers, aliases, E3, the 20k/1e6 world |
+| `arms/negatives.ts`, `silence.ts` | The silence set (R1, R8, the private real negatives) and its replay (P0.0d, below) |
 | `arms/gate.ts`, `record.ts`, `registry.ts`, `run.ts` | The gate, the record, the arm registry, the runner |
 | `arms/reference.ts`, `reference-suite.ts`, `fixtures/reference-cli.ts` | The references every arm passes against, and their suite |
 | `arms/fixtures/world.ts`, `legacy-v1.json` | The arms' world (oracle data), and pre-P0.5 stores for `migrate` |
+
+## The silence set (`arms/negatives.ts`, `arms/silence.ts`, P0.0d)
+
+A5 §2 `silence` (c): prompts that need no memory, asked through a plugin's hooks. A packet on one is a false fire.
+
+```bash
+bun benchmarks/memory-long-horizon/arms/silence.ts                    # R1 + R8 negatives through plugins/eden-memory
+bun benchmarks/memory-long-horizon/arms/silence.ts --per-category 5   # a quick look
+EDEN_EVAL_NEGATIVES=~/.eden/eval/real-negatives.v1.jsonl bun benchmarks/memory-long-horizon/arms/silence.ts
+```
+
+- **Sources**, reported apart: R1's 150 negatives, R8's 98 `nim-neg` negatives, and the user's frozen real-negative
+  set when `EDEN_EVAL_NEGATIVES` names one (built by `eden eval build-negatives`, EXECUTION §8). The private set is
+  checked against its `.sha256` before use. Without it, the report says `skipped: private set absent`, as in CI.
+- **The store**: the world scenario of `--seed` (default 1, the A/A workload) is played once. Every negative is then
+  asked in a fresh session against that same store: Eden's files are restored before each one, so the samples are
+  independent, as the Wilson interval assumes.
+- **Output**: per source, the false-inject rate with its 95% interval and the ids of the negatives that fired. The
+  private set is a holdout (X5): no prompt text is ever printed, and the run directory is removed.
+
