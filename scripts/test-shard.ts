@@ -14,7 +14,7 @@
  *
  * Usage:
  *   bun scripts/test-shard.ts k/N < files    slice k's ignore patterns, one per line
- *   bun scripts/test-shard.ts --times LOG    a new times table from `gh run view <run> --log`
+ *   bun scripts/test-shard.ts --times LOG... a new times table from `gh run view <run> --log` logs
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,10 +29,13 @@ export const TIMES_PATH = join(import.meta.dir, "test-times.txt");
 
 const TIMES_HEADER = [
   `# Seconds per test file in CI's test jobs, for scripts/test-shard.ts. Files under ${MIN_LISTED_SECONDS} s are left out`,
-  `# and count as ${UNLISTED_SECONDS} s each. Refresh it after adding or speeding up a slow test file:`,
-  "#   gh run view <run> --log > /tmp/run.log && bun scripts/test-shard.ts --times /tmp/run.log > scripts/test-times.txt",
+  `# and count as ${UNLISTED_SECONDS} s each. A file's time is its median over the CI runs it was made from:`,
+  "# the arm files' times vary by a factor of two or more between runs. Refresh it after adding or speeding",
+  "# up a slow test file, from the last three runs or so:",
+  "#   gh run view <run> --log > /tmp/run-<run>.log  (for each run)",
+  "#   bun scripts/test-shard.ts --times /tmp/run-*.log > scripts/test-times.txt",
 ];
-const USAGE = "usage: bun scripts/test-shard.ts k/N < files | --times LOG";
+const USAGE = "usage: bun scripts/test-shard.ts k/N < files | --times LOG...";
 
 const byPath = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -109,6 +112,18 @@ export function timesFromLog(log: string): Map<string, number> {
   return times;
 }
 
+/** Each file's median time over the runs that ran it. */
+export function medianTimes(runs: Array<Map<string, number>>): Map<string, number> {
+  const all = new Map<string, number[]>();
+  for (const run of runs) for (const [file, seconds] of run) all.set(file, [...(all.get(file) ?? []), seconds]);
+  const median = (xs: number[]) => {
+    const sorted = [...xs].sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  };
+  return new Map([...all].map(([file, times]) => [file, median(times)]));
+}
+
 export function formatTimes(times: Map<string, number>): string {
   const rows = [...times]
     .filter(([, seconds]) => seconds >= MIN_LISTED_SECONDS)
@@ -119,8 +134,9 @@ export function formatTimes(times: Map<string, number>): string {
 
 async function main(args: string[]): Promise<void> {
   if (args[0] === "--times") {
-    if (args.length !== 2) throw new Error(USAGE);
-    process.stdout.write(formatTimes(timesFromLog(readFileSync(args[1]!, "utf8"))));
+    if (args.length < 2) throw new Error(USAGE);
+    const runs = args.slice(1).map((log) => timesFromLog(readFileSync(log, "utf8")));
+    process.stdout.write(formatTimes(medianTimes(runs)));
     return;
   }
   if (args.length !== 1) throw new Error(USAGE);
