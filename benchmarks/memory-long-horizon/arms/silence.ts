@@ -9,6 +9,8 @@
  * - The store: the world scenario of seed N (world.ts; default 1, the A/A workload), played once. Every negative
  *   then meets the store as those sessions left it: Eden's files are restored before each one, so no negative is
  *   answered from an earlier one, and the samples are independent, as the interval assumes.
+ * - The control: the store's own annotated prompts that need an item, asked the same way. They should get packets;
+ *   a plugin that answers none of them is silent everywhere, and its false-inject rates say nothing.
  * - The sets: R1's and R8's negatives, and the private set when `EDEN_EVAL_NEGATIVES` names one. Without it, the
  *   report's `real` says `skipped: private set absent`.
  * - `--per-category N` asks only the first N negatives of each category (a quick look); by default, all of them.
@@ -20,9 +22,16 @@ import { rate, type Rate } from "../harness/metrics";
 import { loadPlugin } from "../harness/runner";
 import { SimWorld } from "../harness/session";
 import { generateWorldScenario, playScenario, type Scenario } from "../harness/world";
-import { askCue, perCategory } from "./cuebench";
+import { askCue, perCategory, type BenchCue } from "./cuebench";
 import { EDEN_PLUGIN } from "./kit";
-import { fixtureNegatives, PRIVATE_SET_ABSENT, realNegatives, type NegativeSet, type SilenceSource } from "./negatives";
+import {
+  askable,
+  fixtureNegatives,
+  PRIVATE_SET_ABSENT,
+  realNegatives,
+  type NegativeSet,
+  type SilenceSource,
+} from "./negatives";
 
 export interface SourceSilence {
   source: SilenceSource;
@@ -31,17 +40,24 @@ export interface SourceSilence {
   falseFires: string[];
 }
 
+export interface SilenceReport {
+  /** Control prompts that got a packet. */
+  control: Rate;
+  sources: SourceSilence[];
+}
+
 export interface SilenceOptions {
   pluginDir: string;
   /** The sessions that build the store before any negative is asked. */
   store: Required<Scenario>;
+  controls: readonly BenchCue[];
   sets: readonly NegativeSet[];
   runDir: string;
   env?: Record<string, string>;
 }
 
-/** Plays the store's sessions, then asks every negative of every set against that same store. */
-export async function replaySilence(options: SilenceOptions): Promise<SourceSilence[]> {
+/** Plays the store's sessions, then asks every control and every negative against that same store. */
+export async function replaySilence(options: SilenceOptions): Promise<SilenceReport> {
   const { store } = options;
   const world = new SimWorld({
     runDir: options.runDir,
@@ -57,16 +73,32 @@ export async function replaySilence(options: SilenceOptions): Promise<SourceSile
   const state = edenState(world);
   const saved = state.map((_, i) => join(options.runDir, "store-after-seeding", String(i)));
   state.forEach((dir, i) => copyOver(dir, saved[i]!));
-  const results: SourceSilence[] = [];
-  for (const set of options.sets) {
-    const falseFires: string[] = [];
-    for (const cue of set.cues) {
+  /** The ids of the cues that got a packet, each asked against the store as seeding left it. */
+  const fired = async (cues: readonly BenchCue[]) => {
+    const ids: string[] = [];
+    for (const cue of cues) {
       state.forEach((dir, i) => copyOver(saved[i]!, dir));
-      if ((await askCue(world, store.world, cue, [])).packet) falseFires.push(cue.id);
+      if ((await askCue(world, store.world, cue, [])).packet) ids.push(cue.id);
     }
-    results.push({ source: set.source, fir: rate(falseFires.length, set.cues.length), falseFires });
+    return ids;
+  };
+  const control = await fired(options.controls);
+  const sources: SourceSilence[] = [];
+  for (const set of options.sets) {
+    const falseFires = await fired(set.cues);
+    sources.push({ source: set.source, fir: rate(falseFires.length, set.cues.length), falseFires });
   }
-  return results;
+  return { control: rate(control.length, options.controls.length), sources };
+}
+
+/** The store's prompts that need an item (A5 §3.6 `needs`), once each, as controls. */
+export function storeControls(store: Scenario): BenchCue[] {
+  const scopes = new Map<string, string>();
+  for (const step of store.sessions.flatMap((script) => script.steps)) {
+    const said = step.kind === "prompt" || step.kind === "rewind" || step.kind === "queued-prompt";
+    if (said && step.cue.needs.length && !scopes.has(step.text)) scopes.set(step.text, step.cue.scope);
+  }
+  return [...scopes].map(([text, scope], i) => askable(`control-${i + 1}`, "control", text, scope));
 }
 
 /** Where a plugin keeps state: Eden's home and the plugin's data directory. */
@@ -96,10 +128,18 @@ async function main(args: string[]): Promise<void> {
   const runDir = mkdtempSync(join(tmpdir(), "eden-silence-"));
   const started = performance.now();
   try {
-    const sources = await replaySilence({ pluginDir, store: generateWorldScenario(seed), sets, runDir });
+    const store = generateWorldScenario(seed);
+    const { control, sources } = await replaySilence({
+      pluginDir,
+      store,
+      controls: storeControls(store),
+      sets,
+      runDir,
+    });
     const report = {
       plugin: pluginDir,
       seed,
+      control,
       sources,
       real: real.status === "loaded" ? { path: real.path, sha256: real.sha256 } : PRIVATE_SET_ABSENT,
       seconds: Math.round((performance.now() - started) / 100) / 10,
