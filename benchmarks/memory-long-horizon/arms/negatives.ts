@@ -7,6 +7,7 @@
  *   its `.sha256` by the product's reader. It is a holdout (X5): its text never leaves the replay, and reports
  *   carry aggregates and the ids of false fires only. CI has no such file.
  */
+import { appendFileSync, readFileSync } from "node:fs";
 import { readFrozenNegatives } from "../../../packages/cli/src/eval-negatives";
 import { isNegative, nimCues, r1Cues, type BenchCue } from "./cuebench";
 
@@ -20,7 +21,8 @@ export interface NegativeSet {
 /** What a run without the private set says in its place (EXECUTION §8). */
 export const PRIVATE_SET_ABSENT = "skipped: private set absent";
 
-export type RealNegatives = { status: "absent" } | { status: "loaded"; path: string; sha256: string; set: NegativeSet };
+export type RealNegatives =
+  { status: "absent" } | { status: "loaded"; path: string; sha256: string; looks: number; set: NegativeSet };
 
 export function fixtureNegatives(): NegativeSet[] {
   return [
@@ -29,13 +31,20 @@ export function fixtureNegatives(): NegativeSet[] {
   ];
 }
 
-/** The frozen set `EDEN_EVAL_NEGATIVES` names; throws when its bytes do not match its sha256. */
+/**
+ * The frozen set `EDEN_EVAL_NEGATIVES` names; throws when its bytes do not match its sha256. Every load is a look at
+ * the holdout, and X5 logs every look: it appends the time and the sha256 to `<set>.looks.jsonl`, beside the set, and
+ * returns how many looks that version has had (X5 refreshes the holdout after about 20).
+ */
 export function realNegatives(env: Record<string, string | undefined> = process.env): RealNegatives {
   const path = env.EDEN_EVAL_NEGATIVES;
   if (!path) return { status: "absent" };
   const { sha256, negatives } = readFrozenNegatives(path);
+  const log = `${path}.looks.jsonl`;
+  appendFileSync(log, JSON.stringify({ at: new Date().toISOString(), sha256 }) + "\n", { mode: 0o600 });
+  const looks = readFileSync(log, "utf8").split("\n").filter(Boolean).length;
   const cues = negatives.map((row) => askable(row.id, "neg-real", row.text));
-  return { status: "loaded", path, sha256, set: { source: "real", cues } };
+  return { status: "loaded", path, sha256, looks, set: { source: "real", cues } };
 }
 
 /** A prompt to ask as the first turn of a fresh session: no previous turn, no paths, no gold. */

@@ -61,6 +61,12 @@ describe("Go regular expressions in JavaScript", () => {
     expect(goRegex("a\\\\z").test("a\\z")).toBe(true);
   });
 
+  test("a class opening with a literal ] keeps it literal", () => {
+    expect(goRegex("^[^]]+$").test("abc")).toBe(true);
+    expect(goRegex("^[^]]+$").test("a]")).toBe(false);
+    expect(goRegex("^[]a]+$").test("]a")).toBe(true);
+  });
+
   test("a POSIX class the rules do not use is refused, not guessed", () => {
     expect(() => goRegex("[[:digit:]]")).toThrow("digit");
   });

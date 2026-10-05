@@ -10,8 +10,9 @@
  *    raw prompt is checked, and again what is kept;
  * 4. normalizes home paths to `/Users/USER/` (`/home/USER/`) and this machine's host names to `HOST`; repo-relative
  *    paths stay, since they are cue signal;
- * 5. runs the canary: 5 synthetic secrets, fresh each build, go through the same screen. If any survives, the build
- *    aborts and writes nothing.
+ * 5. runs the canary: 5 synthetic secrets, fresh each build, are added to the input as typed transcript lines and go
+ *    through the same selection and screening as every prompt. If one is not selected, or any part of one survives,
+ *    the build aborts and writes nothing.
  * Candidates are keyed by the sha256 of their text. A rebuild keeps labels, adds new prompts, and keeps rows whose
  * transcripts Claude Code has since swept, so the set grows across builds. `--label` asks for each unlabelled
  * prompt's label; `--freeze` writes the `negative` rows to `real-negatives.vN.jsonl` beside its `.sha256`, which
@@ -48,6 +49,15 @@ export interface BuildOptions {
   hostnames: string[];
   /** The rules that drop a prompt; a test replaces them to show the canary aborts. */
   privateHits?: (text: string) => string[];
+  /** The canaries to add (default: `canaries()`, fresh values); a test passes its own to know their values. */
+  canaries?: Canary[];
+}
+
+/** One synthetic secret, said in a prompt. */
+export interface Canary {
+  shape: string;
+  secret: string;
+  text: string;
 }
 
 export type DropReason = "secret" | "email" | "empty" | "duplicate";
@@ -62,10 +72,13 @@ export interface BuildReport {
   draft: string;
 }
 
-/** A canary secret survived the screen: the build wrote nothing. Names the shapes, never the values. */
+/** A canary was not selected, or survived the screen: the build wrote nothing. Names shapes, never values. */
 export class CanaryError extends Error {
-  constructor(readonly shapes: string[]) {
-    super(`canary: ${shapes.length} of ${CANARIES.length} synthetic secrets survived (${shapes.join(", ")})`);
+  constructor(
+    readonly shapes: string[],
+    outcome: "survived" | "were not selected",
+  ) {
+    super(`canary: ${shapes.length} of the synthetic secrets ${outcome} (${shapes.join(", ")})`);
   }
 }
 
@@ -98,7 +111,7 @@ const base62 = (n: number) =>
 const base32 = (n: number) => [...randomBytes(n)].map((byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 
 /** EXECUTION §8 step 5, R9 §R5.3: five shapes, each caught by a different rule. Prefixes are split in the source. */
-const CANARIES: { shape: string; secret: () => string; prompt: (secret: string) => string }[] = [
+const CANARY_SHAPES: { shape: string; secret: () => string; prompt: (secret: string) => string }[] = [
   {
     shape: "cfat-token",
     secret: () => "cf" + "at_" + base62(40),
@@ -117,6 +130,14 @@ const CANARIES: { shape: string; secret: () => string; prompt: (secret: string) 
     prompt: (s) => `the url is postgres://admin:${s}@db.internal:5432/app, is it up?`,
   },
 ];
+
+/** The 5 canaries, with fresh random values. */
+export function canaries(): Canary[] {
+  return CANARY_SHAPES.map(({ shape, secret, prompt }) => {
+    const value = secret();
+    return { shape, secret: value, text: prompt(value) };
+  });
+}
 
 export const draftPath = (evalDir: string) => join(evalDir, DRAFT);
 
@@ -160,15 +181,6 @@ function screen(prompt: SourcePrompt, options: BuildOptions): Screened {
   return kept ? { drop: kept } : { text };
 }
 
-/** Step 5: the shapes whose canary survived the screen. */
-function survivingCanaries(options: BuildOptions): string[] {
-  return CANARIES.filter((canary) => {
-    const secret = canary.secret();
-    const result = screen({ text: canary.prompt(secret), recentToolResults: [] }, options);
-    return "text" in result && result.text.includes(secret);
-  }).map((canary) => canary.shape);
-}
-
 /** Every human prompt of the main transcripts under `root`, in file order. */
 function readHumanPrompts(root: string): SourcePrompt[] {
   if (!existsSync(root)) return [];
@@ -180,14 +192,15 @@ function readHumanPrompts(root: string): SourcePrompt[] {
     readdirSync(project)
       .filter((name) => name.endsWith(".jsonl"))
       .sort()
-      .flatMap((name) => promptsOf(join(project, name))),
+      .flatMap((name) => promptsOf(readFileSync(join(project, name), "utf8").split("\n"))),
   );
 }
 
-function promptsOf(path: string): SourcePrompt[] {
+/** The human prompts of a transcript's lines, each with the tool results before it. */
+function promptsOf(lines: readonly string[]): SourcePrompt[] {
   const prompts: SourcePrompt[] = [];
   const recent: string[] = [];
-  for (const line of readFileSync(path, "utf8").split("\n")) {
+  for (const line of lines) {
     const value = parseLine(line);
     const result = toolResultText(value);
     if (result !== undefined) {
@@ -202,6 +215,14 @@ function promptsOf(path: string): SourcePrompt[] {
 }
 
 const headless = (value: unknown) => (value as { promptSource?: unknown }).promptSource === "sdk";
+
+/** A transcript line as Claude Code writes a typed prompt. */
+const typedLine = (text: string) => ({
+  type: "user",
+  message: { role: "user", content: text },
+  origin: { kind: "human" },
+  promptSource: "typed",
+});
 
 function parseLine(line: string): unknown {
   if (!line.trim()) return undefined;
@@ -235,29 +256,43 @@ const jsonl = (rows: readonly object[]) =>
 
 /** Steps 1–5: screens every human prompt and merges the new ones into the draft. Throws `CanaryError`. */
 export function buildNegatives(options: BuildOptions): BuildReport {
-  const surviving = survivingCanaries(options);
-  if (surviving.length) throw new CanaryError(surviving);
+  const injected = options.canaries ?? canaries();
+  const planted = promptsOf(injected.map((canary) => JSON.stringify(typedLine(canary.text))));
+  const unselected = injected.filter((canary) => !planted.some((prompt) => prompt.text === canary.text));
+  if (unselected.length)
+    throw new CanaryError(
+      unselected.map((canary) => canary.shape),
+      "were not selected",
+    );
   const prompts = readHumanPrompts(options.transcripts);
   const dropped: Record<DropReason, number> = { secret: 0, email: 0, empty: 0, duplicate: 0 };
   const previous = readDraft(options.evalDir);
   const known = new Set(previous.map((row) => row.id));
   const fresh = new Map<string, Candidate>();
-  for (const prompt of prompts) {
+  for (const [n, prompt] of [...planted, ...prompts].entries()) {
     const result = screen(prompt, options);
+    // The canaries come first and are never counted: they must not reach `fresh`, which the check below asserts.
+    const counted = n >= planted.length;
     if ("drop" in result) {
-      dropped[result.drop]++;
+      if (counted) dropped[result.drop]++;
       continue;
     }
     const id = sha256(result.text).slice(0, 16);
-    if (fresh.has(id)) dropped.duplicate++;
+    if (fresh.has(id)) dropped.duplicate += counted ? 1 : 0;
     else if (!known.has(id)) fresh.set(id, { id, text: result.text, label: null });
   }
   const rows = [...previous, ...fresh.values()];
+  const surviving = injected.filter((canary) => rows.some((row) => row.text.includes(canary.secret)));
+  if (surviving.length)
+    throw new CanaryError(
+      surviving.map((canary) => canary.shape),
+      "survived",
+    );
   writePrivate(options.evalDir, draftPath(options.evalDir), jsonl(rows));
   return {
     prompts: prompts.length,
     dropped,
-    canaries: { injected: CANARIES.length, dropped: CANARIES.length },
+    canaries: { injected: injected.length, dropped: injected.length },
     added: fresh.size,
     total: rows.length,
     labelled: rows.filter((row) => row.label).length,

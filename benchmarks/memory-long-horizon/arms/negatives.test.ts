@@ -3,7 +3,7 @@
  * checked against what the simulator knows: which submits were human, and which secrets were planted.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEMO_STORY } from "../harness/fixtures/demo-world";
 import { SimWorld } from "../harness/session";
@@ -17,7 +17,7 @@ import { monorepo } from "./fixtures/world";
 import { EDEN_CLI } from "./kit";
 import { askable, fixtureNegatives, PRIVATE_SET_ABSENT, realNegatives, type NegativeSet } from "./negatives";
 import { secretCases } from "./secrets";
-import { replaySilence, storeControls } from "./silence";
+import { measureSilence, replaySilence, storeControls } from "./silence";
 
 afterAll(removeTempDirs);
 
@@ -53,9 +53,23 @@ describe("the silence set", () => {
     );
   });
 
-  test("without EDEN_EVAL_NEGATIVES the private set is absent, and the replay says it is skipped", () => {
+  test("without EDEN_EVAL_NEGATIVES the replay skips the private set and says so (the PROGRESS gate line)", async () => {
     expect(realNegatives({})).toEqual({ status: "absent" });
-    console.log(PRIVATE_SET_ABSENT);
+    const table = join(tempDir("eden-silence-skip"), "answers.json");
+    writeFileSync(table, "[]");
+    const run = await measureSilence({
+      pluginDir: SCRIPTED_PLUGIN,
+      store: { seed: 1, world: monorepo(), sessions: [] },
+      perCategory: 1,
+      env: {},
+      hookEnv: { SCRIPTED_ANSWERS: table },
+    });
+    expect(run.real).toBe(PRIVATE_SET_ABSENT);
+    expect(run.sources.map((item) => [item.source, item.fir.n])).toEqual([
+      ["r1", 4],
+      ["r8", 1],
+    ]);
+    console.log(run.real);
     expect(PRIVATE_SET_ABSENT).toBe("skipped: private set absent");
   });
 
@@ -67,7 +81,14 @@ describe("the silence set", () => {
     const sha = new Bun.CryptoHasher("sha256").update(body).digest("hex");
     writeFileSync(`${path}.sha256`, `${sha}  real-negatives.v1.jsonl\n`);
     const loaded = realNegatives({ EDEN_EVAL_NEGATIVES: path });
-    expect(loaded).toMatchObject({ status: "loaded", sha256: sha });
+    expect(loaded).toMatchObject({ status: "loaded", sha256: sha, looks: 1 });
+    expect(realNegatives({ EDEN_EVAL_NEGATIVES: path })).toMatchObject({ looks: 2 });
+    const looks = readFileSync(`${path}.looks.jsonl`, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(looks.map((look) => look.sha256)).toEqual([sha, sha]);
+    expect(statSync(`${path}.looks.jsonl`).mode & 0o777).toBe(0o600);
     if (loaded.status === "loaded")
       expect(loaded.set.cues.map((item) => [item.id, item.cat])).toEqual([
         ["a1", "neg-real"],
@@ -155,8 +176,10 @@ describe("eden eval build-negatives on simulated transcripts", () => {
     expect(submits - human.length).toBeGreaterThan(0);
     const expected = [...new Set(human.map((text) => text.trim()))];
     expect(expected.length).toBeGreaterThan(5);
-    const { texts, exitCode } = build(join(world.home, ".claude", "projects"));
+    const { texts, stdout, exitCode } = build(join(world.home, ".claude", "projects"));
     expect(exitCode).toBe(0);
+    // Selection itself, before stripping: exactly the human submits, so no non-human text is left for it to remove.
+    expect(stdout).toContain(`human prompts: ${human.length}\n`);
     expect(texts.sort()).toEqual(expected.sort());
   }, 120_000);
 

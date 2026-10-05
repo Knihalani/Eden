@@ -117,37 +117,67 @@ function argument(args: string[], name: string): string | undefined {
   return at >= 0 ? args[at + 1] : undefined;
 }
 
-async function main(args: string[]): Promise<void> {
-  const seed = Number(argument(args, "--seed") ?? 1);
-  const pluginDir = resolve(argument(args, "--plugin") ?? EDEN_PLUGIN);
-  const per = argument(args, "--per-category");
-  const real = realNegatives();
+export interface SilenceRun extends SilenceReport {
+  plugin: string;
+  seed: number;
+  /** The private set's file and sha256, or why it was skipped. */
+  real: { path: string; sha256: string; looks: number } | typeof PRIVATE_SET_ABSENT;
+  seconds: number;
+}
+
+/**
+ * One measurement as the command runs it: R1, R8 and (when `env` names one) the private set, against the world
+ * scenario of `seed` unless a `store` is given, in a run directory removed afterwards.
+ */
+export async function measureSilence(options: {
+  pluginDir: string;
+  seed?: number;
+  store?: Required<Scenario>;
+  perCategory?: number;
+  env?: Record<string, string | undefined>;
+  hookEnv?: Record<string, string>;
+}): Promise<SilenceRun> {
+  const seed = options.seed ?? 1;
+  const real = realNegatives(options.env);
+  const per = options.perCategory;
   const sets = [...fixtureNegatives(), ...(real.status === "loaded" ? [real.set] : [])].map((set) =>
-    per === undefined ? set : { ...set, cues: perCategory(set.cues, Number(per)) },
+    per === undefined ? set : { ...set, cues: perCategory(set.cues, per) },
   );
+  const store = options.store ?? generateWorldScenario(seed);
   const runDir = mkdtempSync(join(tmpdir(), "eden-silence-"));
   const started = performance.now();
   try {
-    const store = generateWorldScenario(seed);
+    const controls = storeControls(store);
     const { control, sources } = await replaySilence({
-      pluginDir,
+      pluginDir: options.pluginDir,
       store,
-      controls: storeControls(store),
+      controls,
       sets,
       runDir,
+      env: options.hookEnv,
     });
-    const report = {
-      plugin: pluginDir,
+    return {
+      plugin: options.pluginDir,
       seed,
       control,
       sources,
-      real: real.status === "loaded" ? { path: real.path, sha256: real.sha256 } : PRIVATE_SET_ABSENT,
+      real: real.status === "loaded" ? { path: real.path, sha256: real.sha256, looks: real.looks } : PRIVATE_SET_ABSENT,
       seconds: Math.round((performance.now() - started) / 100) / 10,
     };
-    console.log(JSON.stringify(report, null, 2));
   } finally {
     rmSync(runDir, { recursive: true, force: true });
   }
+}
+
+async function main(args: string[]): Promise<void> {
+  const per = argument(args, "--per-category");
+  const run = await measureSilence({
+    pluginDir: resolve(argument(args, "--plugin") ?? EDEN_PLUGIN),
+    seed: Number(argument(args, "--seed") ?? 1),
+    perCategory: per === undefined ? undefined : Number(per),
+    env: process.env,
+  });
+  console.log(JSON.stringify(run, null, 2));
 }
 
 if (import.meta.main) await main(process.argv.slice(2));
