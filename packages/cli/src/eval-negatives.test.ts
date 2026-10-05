@@ -76,7 +76,7 @@ const draft = (evalDir: string): Row[] =>
 const ghp = () => "gh" + "p_" + "Zx9Kq2Lm4Np6Rs8Tu0Vw1Xy3Ab5Cd7Ef9Gh2J";
 
 describe("build: which prompts become candidates", () => {
-  test("only the human prompts of main transcripts, in order", () => {
+  test("only the human prompts of main transcripts, in order; not headless (claude -p) ones", () => {
     const root = transcripts(
       {
         s1: [
@@ -86,6 +86,7 @@ describe("build: which prompts become candidates", () => {
           notification("agent done"),
           typed("<command-name>/next</command-name>"),
           typed("and the signup page?", { promptSource: "queued" }),
+          typed("Run ls and count the entries.", { origin: undefined, promptSource: "sdk" }),
           typed("This session is being continued…", { isCompactSummary: true }),
         ],
       },
