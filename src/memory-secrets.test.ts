@@ -22,9 +22,13 @@ describe("the vendored gitleaks rules", () => {
     const ids = secretRules().map((rule) => rule.id);
     expect(ids.filter((id) => !id.startsWith("eden-")).length).toBe(221);
     expect(ids.filter((id) => id.startsWith("eden-")).sort()).toEqual([
+      "eden-aws-key-id",
       "eden-cfat",
       "eden-entropy-keyword",
       "eden-keyword",
+      "eden-mailgun",
+      "eden-openai",
+      "eden-telegram",
       "eden-url-userinfo",
     ]);
   });
@@ -58,7 +62,7 @@ describe("Go regular expressions in JavaScript", () => {
   });
 
   test("a POSIX class the rules do not use is refused, not guessed", () => {
-    expect(() => goRegex("[[:blank:]]")).toThrow("blank");
+    expect(() => goRegex("[[:digit:]]")).toThrow("digit");
   });
 });
 
@@ -69,6 +73,10 @@ describe("what hits", () => {
     ["D13 keyword rule", "the staging password is Tr0ub4dor-x9", "eden-keyword"],
     ["URL userinfo", `connect with postgres://admin:${alnum(12)}@db.internal:5432/app`, "eden-url-userinfo"],
     ["cfat_ (R9 R5.2)", `the token ${"cf" + "at_"}${alnum(40)} expired`, "eden-cfat"],
+    ["OpenAI project key without its marker", `use ${"sk" + "-proj-"}${alnum(48)} here`, "eden-openai"],
+    ["Mailgun key without the word mailgun", `${"key" + "-"}${"0123456789abcdef".repeat(2)} works`, "eden-mailgun"],
+    ["Telegram bot token without the word", `bot ${"1234567890:" + "AA"}${alnum(33)} is live`, "eden-telegram"],
+    ["AWS key id below the entropy floor", `id ${"AK" + "IA"}${"Q".repeat(16)} is set`, "eden-aws-key-id"],
     ["entropy + keyword", `deploy secret ${alnum(40, 5)}3 rotates monthly`, "eden-entropy-keyword"],
   ];
   for (const [name, text, rule] of cases) {

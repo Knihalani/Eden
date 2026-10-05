@@ -9,7 +9,8 @@ import { SimWorld } from "../harness/session";
 import { generateSession, play, type Step } from "../harness/shape";
 import { loadPlugin } from "../harness/runner";
 import { PROBE_PLUGIN, removeTempDirs, SCRIPTED_PLUGIN, tempDir } from "../harness/testkit";
-import type { BenchCue } from "./cuebench";
+import { privateHits } from "../../../packages/cli/src/eval-negatives";
+import { nimCues, r1Cues, type BenchCue } from "./cuebench";
 import { monorepo } from "./fixtures/world";
 import { EDEN_CLI } from "./kit";
 import { fixtureNegatives, PRIVATE_SET_ABSENT, realNegatives, type NegativeSet } from "./negatives";
@@ -74,10 +75,11 @@ describe("the silence set", () => {
     writeFileSync(`${path}.sha256`, `${sha}  real-negatives.v1.jsonl\n`);
     const loaded = realNegatives({ EDEN_EVAL_NEGATIVES: path });
     expect(loaded).toMatchObject({ status: "loaded", sha256: sha });
-    if (loaded.status === "loaded") expect(loaded.set.cues.map((item) => [item.id, item.cat])).toEqual([
-      ["a1", "neg-real"],
-      ["b2", "neg-real"],
-    ]);
+    if (loaded.status === "loaded")
+      expect(loaded.set.cues.map((item) => [item.id, item.cat])).toEqual([
+        ["a1", "neg-real"],
+        ["b2", "neg-real"],
+      ]);
     writeFileSync(path, body.replace("monad", "Monad"));
     expect(() => realNegatives({ EDEN_EVAL_NEGATIVES: path })).toThrow("sha256");
   });
@@ -134,15 +136,31 @@ describe("eden eval build-negatives on simulated transcripts", () => {
   test("the draft holds exactly the human prompts (precision and recall 1.0)", async () => {
     const runDir = tempDir("eden-select");
     const world = new SimWorld({ runDir, plugin: loadPlugin(PROBE_PLUGIN), seed: 5, env: { PROBE_MODE: "silent" } });
-    const scripts = [3, 17, 29].map((seed) => generateSession(seed, { toolScale: 0.1, growthScale: 0.1 }));
-    const kinds = new Set(scripts.flatMap((script) => script.steps.map((step) => step.kind)));
-    for (const kind of ["notify", "peer", "compact", "subagent", "rewind", "queued-prompt"]) expect(kinds).toContain(kind);
+    const small = { toolScale: 0.1, growthScale: 0.1 };
+    const scripts = [generateSession(28, small), generateSession(14, { ...small, compactAtTokens: 20_000 })];
+    const steps = scripts.flatMap((script) => script.steps);
+    const kinds = new Set<string>(steps.map((step) => step.kind));
+    for (const kind of ["notify", "peer", "compact", "subagent", "rewind", "queued-prompt"])
+      expect(kinds).toContain(kind);
+    expect(steps.some((step) => step.kind === "prompt" && step.source === "queued")).toBe(true);
     for (const script of scripts) await play(script, world);
-    const expected = [...new Set(scripts.flatMap((script) => humanTexts(script.steps)).map((text) => text.trim()))];
+    const human = scripts.flatMap((script) => humanTexts(script.steps));
+    const submits = world.log.filter((record) => record.event === "UserPromptSubmit").length;
+    // Non-human submits to reject: task notifications and peer messages, idle and mid-turn.
+    expect(submits - human.length).toBeGreaterThan(0);
+    const expected = [...new Set(human.map((text) => text.trim()))];
+    expect(expected.length).toBeGreaterThan(5);
     const { texts, exitCode } = build(join(world.home, ".claude", "projects"));
     expect(exitCode).toBe(0);
     expect(texts.sort()).toEqual(expected.sort());
   }, 120_000);
+
+  test("benign prompts: at most 2% of the 1,224 fixture cues hit a drop rule (prereg counter-metric)", () => {
+    const cues = [...r1Cues(), ...nimCues()];
+    const dropped = cues.filter((item) => privateHits(item.cue).length > 0);
+    expect(cues).toHaveLength(1224);
+    expect(dropped.length / cues.length).toBeLessThanOrEqual(0.02);
+  });
 
   test("the secrets arm's 360 texts, typed and pasted: every prompt dropped, no secret byte in the draft", () => {
     const root = tempDir("eden-secret-prompts");
