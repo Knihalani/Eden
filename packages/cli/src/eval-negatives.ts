@@ -96,13 +96,15 @@ const FROZEN = /^real-negatives\.v(\d+)\.jsonl$/;
 const RECENT_TOOL_RESULTS = 10;
 const JWT = /\bey[A-Za-z0-9_-]{8,}\.ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
-const LABELS: Record<string, Label | "skip" | "quit"> = {
-  n: "negative",
-  p: "positive",
-  d: "drop",
-  s: "skip",
-  q: "quit",
-};
+const LABELS = new Map<string, Label | "skip" | "quit">([
+  ["n", "negative"],
+  ["p", "positive"],
+  ["d", "drop"],
+  ["s", "skip"],
+  ["q", "quit"],
+]);
+/** Control characters other than newline and tab, shown escaped so a prompt cannot drive the terminal. */
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/g;
 
 const base62 = (n: number) =>
   [...randomBytes(n)]
@@ -300,6 +302,9 @@ export function buildNegatives(options: BuildOptions): BuildReport {
   };
 }
 
+const shown = (text: string) =>
+  text.replace(CONTROL, (char) => `\\x${char.charCodeAt(0).toString(16).padStart(2, "0")}`);
+
 /** Step 6: shows each unlabelled prompt and reads its label, one answer per line; saves after each label. */
 export async function labelNegatives(
   evalDir: string,
@@ -315,10 +320,10 @@ export async function labelNegatives(
     let answer: Label | "skip" | "quit" | undefined;
     while (!answer) {
       show(
-        `\n[${n + 1}/${todo.length}] ${row.id}\n${row.text}\nnegative (n) · positive (p) · drop (d) · skip (s) · quit (q): `,
+        `\n[${n + 1}/${todo.length}] ${row.id}\n${shown(row.text)}\nnegative (n) · positive (p) · drop (d) · skip (s) · quit (q): `,
       );
       const next = await input.next();
-      answer = next.done ? "quit" : LABELS[String(next.value).trim().toLowerCase()];
+      answer = next.done ? "quit" : LABELS.get(String(next.value).trim().toLowerCase());
     }
     if (answer === "quit") break;
     if (answer === "skip") continue;
