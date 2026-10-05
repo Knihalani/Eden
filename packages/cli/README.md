@@ -69,3 +69,5 @@ Reads a JSONL or JSON transcript file or directory into local memory. `--dry-run
 ### Hooks
 
 `eden setup` installs seven memory events. `eden doctor` lists the same seven: UserPromptSubmit, SessionStart, PreCompact, Stop, SessionEnd, PostToolUse, SubagentStop. Memory stays on unless you set `EDEN_MEMORY`. Do not enable the Claude plugin and `eden setup` together — both attach UserPromptSubmit.
+
+`eden doctor --memory` prints only the memory section and exits 0 when every line is ok: the hooks registered, the installed eden-memory plugin (enabled, and the same as the checkout it runs), a probe that runs that plugin's hook on a Submit (Eden loads in-process, median of 3 within 150 ms), the fallbacks the plugin logged, and how the store is keyed (repo key, scope catalog, guard).
