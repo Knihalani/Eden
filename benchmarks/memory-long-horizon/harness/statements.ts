@@ -18,6 +18,8 @@ export interface Statement {
 
 const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$/;
 const TAG = /^\[[^\]]*\]\s*/;
+/** D14's provenance at a bullet's end (A4 §5.8): "(you said, 3 weeks ago)", "(from a tool result)", … */
+const PROVENANCE = /\s*\((?:you said|from a tool result|from a summary of earlier work)(?:, [^()]*)?\)\s*$/;
 /** Words after which a value is history or negated, with at most one word in between ("no longer use X"). */
 const HISTORIC =
   /(?:^|[^a-z0-9'])(?:was|were|from|not|no|never|don't|doesn't|didn't|no longer|instead of|rather than|formerly|previously|used to|replaced|dropped|removed|without)(?:\s+\S+)?\s+$/;
@@ -31,9 +33,12 @@ export function bulletsOf(packet: string): string[] {
   return bullets.length ? bullets : packet.trim() ? [packet.trim()] : [];
 }
 
-/** A bullet without its leading `[kind · age · src]` tag, which is Eden's metadata, not content. */
+/**
+ * A bullet without Eden's metadata, which is not content: today's leading `[kind · age · src]` tag, or D14's
+ * trailing provenance.
+ */
 export function bulletContent(bullet: string): string {
-  return bullet.replace(TAG, "").trim();
+  return bullet.replace(TAG, "").replace(PROVENANCE, "").trim();
 }
 
 /** The lines of a packet that are not bullets, such as `Eden memory (apps/web), recalled …`. */
