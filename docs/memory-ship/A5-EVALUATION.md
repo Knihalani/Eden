@@ -82,7 +82,7 @@ Each metric is computed per arm from the harness's **oracle files** (§3) and Ed
 | `p99_hook_ms` Stop (n = 1,000) | 1272.5–1656.4 ms | 383.9 ms | +10 ms | **no** |
 
 Not measured by this A/A, so no floor yet:
-- silence on real negatives. P0.0d built the replay (`arms/silence.ts`); the private set waits for the user's labels (R-8). Through today's plugin, two runs gave the same result: R1 1 of 150 negatives fired (95% CI 0.0012–0.0368), R8 0 of 98 (0–0.0377). But 0 of the store's 6 control prompts got a packet: in a fresh session today's per-session store is nearly silent (A1 D1), so these rates say nothing yet. Re-run after P0.5;
+- silence on real negatives. P0.0d built the replay (`arms/silence.ts`); the private set waits for the user's labels (R-8). Through today's plugin, in five runs (fresh processes, world seed 1), R1 fired on 1 of 150 negatives (`q325`; 95% CI 0.0012–0.0368) four times and on none once, so its noise floor is at least 1 negative (0.67 pp); R8 fired on 0 of 98 (0–0.0377) every time. But 0 of the store's 6 control prompts got a packet in any of the four runs that asked them: in a fresh session today's per-session store is nearly silent (A1 D1), so these rates say nothing yet. Re-run after P0.5;
 - `abort_rate` (P0.8);
 - `restate_rate` (dogfood);
 - `poison_hits` on pins (P0.4, P2.1);
