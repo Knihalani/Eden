@@ -163,12 +163,13 @@ describe("D14, D28: the packet's wording and shape", () => {
     expect(packet).not.toMatch(/you said|you set/i);
   });
 
-  test("a rule without a source reads 'Rule on record: …' at SessionStart", () => {
+  test("a rule without a source is a plain bullet at SessionStart", () => {
     submit("Never commit .env or credentials.json", { prompt_id: "p1" });
     const out = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "startup" });
     const packet = (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
     expect(packet).toStartWith(HEADER);
-    expect(packet).toContain("- Rule on record: Never commit .env or credentials.json");
+    expect(packet).toContain("- Never commit .env or credentials.json");
+    expect(packet).not.toMatch(/Rule you set|Rule on record/);
   });
 
   test("bullets are not filled to a fixed count: at most 4, at most 2 episodes, within 900 bytes", () => {

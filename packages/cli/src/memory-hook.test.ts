@@ -1287,10 +1287,13 @@ describe("M38.2 hook honors an omitted packet; Start still briefs", () => {
           const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: "s-m38" });
           const ctx = m13HookCtx(start);
           expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/Rule on record: |\(earlier session notes/);
-          // Pins and gists only: every bullet is a rule or a gist (D14 wording).
-          for (const line of ctx.split("\n").filter((l) => l.startsWith("- ")))
-            expect(line).toMatch(/^- (?:Rule (?:you set|on record): .*|.* \(earlier session notes[^()]*\))$/);
+          // Pins and gists only: every bullet is the pinned rule or a gist ("Use sqlite." is not pinned).
+          const bullets = ctx.split("\n").filter((l) => l.startsWith("- "));
+          expect(bullets.length).toBeGreaterThan(0);
+          for (const line of bullets)
+            expect(
+              /^- Always run tests before committing/.test(line) || /\(earlier session notes[^()]*\)$/.test(line),
+            ).toBe(true);
           expect(ctx).toMatch(/Always run tests before committing/i);
         },
       );
