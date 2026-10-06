@@ -611,7 +611,7 @@ describe("passive memory hooks", () => {
         .map((x) => String(x ?? ""))
         .join("\n");
       expect(ctx).toContain(MEMORY_MARK);
-      expect(ctx).toMatch(/Bob.* \(you said/);
+      expect(ctx).toMatch(/^- (?!Rule ).*Bob/m);
       expect(ctx).not.toMatch(/Alice/);
     } finally {
       if (prevDir === undefined) delete process.env.EDEN_MEMORY_DIR;
@@ -1034,7 +1034,7 @@ describe("M13 honest off switch (hook)", () => {
           });
           const ctx = m13HookCtx(later);
           expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/sqlite.* \(you said/i);
+          expect(ctx).toMatch(/^- (?!Rule ).*sqlite/im);
         });
       }
       expect(m13JsonlContents(dir)).not.toMatch(/Clerk/i);
@@ -1058,7 +1058,7 @@ describe("M13 honest off switch (hook)", () => {
           });
           const ctx = m13HookCtx(later);
           expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/sqlite.* \(you said/i);
+          expect(ctx).toMatch(/^- (?!Rule ).*sqlite/im);
         });
       }
     } finally {
@@ -1176,7 +1176,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
 
         const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: M14_SESSION });
         const startHay = m13HookCtx(start);
-        expect(`${startHay}\n${JSON.stringify(start ?? {})}`).not.toMatch(/verify:/);
+        expect(`${startHay}\n${JSON.stringify(start ?? {})}`).not.toMatch(/\b(?:verify|unknown): /);
         expect(new HowToStore(dir).latest("auth pytest flake", 5).some((r) => r.id === stored!.id)).toBe(true);
 
         const submit = memoryHookResponse({
@@ -1211,7 +1211,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
         const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "what is auth using?" });
         const hay = `${m13HookCtx(submit)}\n${JSON.stringify(submit ?? {})}`;
         expect(hay).toMatch(/Clerk/i);
-        expect(hay).not.toMatch(/verify:/);
+        expect(hay).not.toMatch(/\b(?:verify|unknown): /);
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1287,8 +1287,10 @@ describe("M38.2 hook honors an omitted packet; Start still briefs", () => {
           const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: "s-m38" });
           const ctx = m13HookCtx(start);
           expect(ctx).toContain(MEMORY_MARK);
-          expect(ctx).toMatch(/Rule you set: |\(from a summary of earlier work/);
-          expect(ctx).not.toMatch(/\(you said/);
+          expect(ctx).toMatch(/Rule on record: |\(earlier session notes/);
+          // Pins and gists only: every bullet is a rule or a gist (D14 wording).
+          for (const line of ctx.split("\n").filter((l) => l.startsWith("- ")))
+            expect(line).toMatch(/^- (?:Rule (?:you set|on record): .*|.* \(earlier session notes[^()]*\))$/);
           expect(ctx).toMatch(/Always run tests before committing/i);
         },
       );

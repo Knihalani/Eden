@@ -82,7 +82,8 @@ export function turnMode(
   if (isNonHumanSubmit(prompt, context.cronHashes)) return "nonhuman";
   const proposal = isProposal(context.previousAssistant ?? "");
   const said = chatterPhrases(prompt);
-  if (said && said.length <= 3) {
+  // A7 §2 counts tokens, so "got it, thanks" is 3 and "sounds good, got it, thanks" is 5.
+  if (said && said.join(" ").split(" ").length <= 3) {
     if (said.some((phrase) => GO_AHEAD.includes(phrase))) return "continuation";
     if (said.some((phrase) => CONTINUE.includes(phrase))) return proposal ? "continuation" : "ack";
     return "ack";

@@ -5,6 +5,8 @@
 
 /** Every packet's header (D14, A4 §5.8). It names the scope once a scope catalog exists (P3.1). */
 export const MEMORY_PACKET_MARK = "Eden memory, recalled from earlier sessions:";
+/** Both headers a packet may carry: today's, and the one before P0.2, still in older conversations. */
+export const MEMORY_PACKET_MARKS = [MEMORY_PACKET_MARK, "Eden Memory:"] as const;
 export const PACKET_BULLET_MAX = 8;
 export const PACKET_BYTE_CAP = 900;
 export const PROCEDURE_TOKEN_CAP = 300;
@@ -309,8 +311,10 @@ export function hookLane(cue: string): HookLane {
   }
 }
 
+/** A packet's header line and the bullet lines under it, in either wording. */
 const MEMORY_BLOCK = new RegExp(
-  `${MEMORY_PACKET_MARK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?(?=\\n\\S|$)`,
+  `(?:${MEMORY_PACKET_MARKS.map((mark) => mark.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})` +
+    String.raw`[^\n]*(?:\n[ \t]*-[^\n]*)*`,
   "g",
 );
 const LABELED_LINE = /^\s*-\s+\[(?:fact|episode|rule|gist|procedure)[^\]]*\]\s+/gim;

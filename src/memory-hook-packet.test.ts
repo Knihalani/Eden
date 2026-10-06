@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { openMemory } from "./index";
 import { ageInWords, declarativeBullet, PACKET_SOFT_BULLETS, renderPacket, shapePacket } from "./memory-hook-packet";
-import { MEMORY_PACKET_MARK } from "./memory-sota";
+import type { ProvenanceNote } from "./memory-provenance";
+import { MEMORY_PACKET_MARK, MEMORY_PACKET_MARKS, stripMemoryPacket } from "./memory-sota";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const ago = (ms: number) => NOW - ms;
@@ -12,17 +17,22 @@ const rule = (text: string) => ({ id: text, text, kind: "constraint", at: ago(HO
 const procedure = (text: string) => ({ id: text, text, kind: "procedure", tags: ["howto"], at: ago(HOUR) });
 const gist = (text: string) => ({ id: text, text, kind: "gist", tags: ["gist"], at: ago(HOUR) });
 
-describe("D14: declarative wording", () => {
-  test("a rule is a rule the user set", () => {
-    expect(declarativeBullet(rule("Never merge PRs yourself."), NOW)).toBe("Rule you set: Never merge PRs yourself.");
+const fromUser = <T extends ProvenanceNote>(note: T) => ({ ...note, tags: [...(note.tags ?? []), "src:user"] });
+
+describe("D14: declarative wording, claiming only the source a row shows (A6 §2.1)", () => {
+  test("a rule the user set says so; a rule with no source is on record", () => {
+    expect(declarativeBullet(fromUser(rule("Never merge PRs yourself.")), NOW)).toBe(
+      "Rule you set: Never merge PRs yourself.",
+    );
+    expect(declarativeBullet(rule("Never merge PRs yourself."), NOW)).toBe("Rule on record: Never merge PRs yourself.");
   });
 
-  test("other bullets end with where they came from and how long ago, without the old [kind · age · src] tag", () => {
-    expect(declarativeBullet(fact("Our auth provider is Clerk", ago(3 * 7 * 86_400_000)), NOW)).toBe(
+  test("other bullets end with their source and age, without the old [kind · age · src] tag", () => {
+    expect(declarativeBullet(fromUser(fact("Our auth provider is Clerk", ago(3 * 7 * 86_400_000))), NOW)).toBe(
       "Our auth provider is Clerk (you said, 3 weeks ago)",
     );
     expect(declarativeBullet(gist("stack uses Redis"), NOW)).toBe(
-      "stack uses Redis (from a summary of earlier work, 1 hour ago)",
+      "stack uses Redis (earlier session notes, 1 hour ago)",
     );
     expect(declarativeBullet({ ...fact("CI is green"), tags: ["src:tool"] }, NOW)).toBe(
       "CI is green (from a tool result, 1 hour ago)",
@@ -32,8 +42,15 @@ describe("D14: declarative wording", () => {
     );
   });
 
-  test("a serial `at` has no age", () => {
-    expect(declarativeBullet(fact("The database is postgres", 8), NOW)).toBe("The database is postgres (you said)");
+  test("a row without a source says only how old it is; one without a wall-clock time, nothing", () => {
+    expect(declarativeBullet(fact("Our auth provider is Clerk", ago(2 * HOUR)), NOW)).toBe(
+      "Our auth provider is Clerk (2 hours ago)",
+    );
+    expect(declarativeBullet(episode("fix the login"), NOW)).toBe("fix the login (1 hour ago)");
+    expect(declarativeBullet(fact("The database is postgres", 8), NOW)).toBe("The database is postgres");
+    expect(declarativeBullet(fromUser(fact("The database is postgres", 8)), NOW)).toBe(
+      "The database is postgres (you said)",
+    );
   });
 
   test("ages in words", () => {
@@ -85,8 +102,8 @@ describe("D28: the packet's shape", () => {
 
 describe("the rendered packet", () => {
   test("a header, then one line per bullet", () => {
-    expect(renderPacket([rule("Never merge PRs yourself."), fact("Our auth provider is Clerk")], NOW)).toBe(
-      `${MEMORY_PACKET_MARK}\n- Rule you set: Never merge PRs yourself.\n- Our auth provider is Clerk (you said, 1 hour ago)`,
+    expect(renderPacket([fromUser(rule("Never merge PRs yourself.")), fact("Our auth provider is Clerk")], NOW)).toBe(
+      `${MEMORY_PACKET_MARK}\n- Rule you set: Never merge PRs yourself.\n- Our auth provider is Clerk (1 hour ago)`,
     );
   });
 
@@ -103,5 +120,30 @@ describe("the rendered packet", () => {
     expect(packet).toContain("short two");
     expect(packet).toContain("z".repeat(300));
     expect(packet).not.toContain("y".repeat(10));
+  });
+});
+
+describe("packets in either wording: today's header and the one before P0.2", () => {
+  test("a history that already holds a packet gets no second one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-packet-marks-"));
+    try {
+      const mem = openMemory({ dir });
+      mem.remember("The database is sqlite.");
+      const ask = { role: "user", content: "what database do we use" };
+      expect(mem.recall([ask]).length).toBeGreaterThan(0);
+      for (const header of MEMORY_PACKET_MARKS) {
+        expect(mem.recall([{ role: "system", content: `${header}\n- something earlier` }, ask])).toEqual([]);
+      }
+      mem.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("stripMemoryPacket removes a packet's header and its bullets, and keeps the text around it", () => {
+    for (const header of MEMORY_PACKET_MARKS) {
+      const text = `Before.\n${header}\n- Rule on record: never merge\n- The database is sqlite (2 hours ago)\nAfter.`;
+      expect(stripMemoryPacket(text)).toBe("Before.\n\nAfter.");
+    }
   });
 });

@@ -27,6 +27,7 @@ import {
   writeAliasTags,
   WRITE_ALIASES,
   MEMORY_PACKET_MARK,
+  MEMORY_PACKET_MARKS,
   PACKET_BYTE_CAP,
   PACKET_BULLET_MAX,
 } from "./memory-sota";
@@ -349,7 +350,8 @@ export function cueFor(list: unknown[]): string {
         const role = String((x as { role?: unknown }).role ?? "").toLowerCase();
         if (role === "system") return false;
         const text = convBlob([x]).trim();
-        return !!text && !text.startsWith(MEMORY_MARK) && (role === "user" || role === "human");
+        const packet = MEMORY_PACKET_MARKS.some((mark) => text.startsWith(mark));
+        return !!text && !packet && (role === "user" || role === "human");
       })
     : undefined;
   const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
@@ -410,7 +412,7 @@ function extractDurable(blob: string): string[] {
       t.startsWith("http") ||
       t.startsWith("#") ||
       /^(const|let|import |export |function )\b/.test(t) ||
-      t.includes(MEMORY_MARK) ||
+      MEMORY_PACKET_MARKS.some((mark) => t.includes(mark)) ||
       t.includes("Eden Know:") ||
       CHAT.test(t) ||
       /qx\d+z/i.test(t)
@@ -1074,10 +1076,10 @@ export class AgentMemory {
   }
 
   /**
-   * The notes a message list's cue retrieves, ranked and labelled, before any packing; then the list is observed.
-   * Nothing is retrieved for a no-op cue, or when the list already carries a packet. `inject` packs these into its
-   * system message; the memory hook shapes and words them itself (`memory-hook-packet.ts`). Fails open: a throw is
-   * counted in `memoryInjectSwallows` and recalls nothing.
+   * The notes a message list's cue retrieves, ranked and labelled, before any packing; then the list is observed
+   * (`observeCue`). Nothing is retrieved for a no-op cue, or when the list already carries a packet. `inject` packs
+   * these into its system message; the memory hook shapes and words them itself (`memory-hook-packet.ts`). Fails
+   * open: a throw is counted in `memoryInjectSwallows` and recalls nothing.
    */
   recall(messages: unknown[]): MemoryRecord[] {
     const list = Array.isArray(messages) ? messages : [];
@@ -1087,9 +1089,10 @@ export class AgentMemory {
       return [];
     }
     try {
-      const cue = attachPlaceCues(cueFor(list), placePathsFrom(list));
+      const cue = attachPlaceCues(cueFor(list), placePathsFrom(list)),
+        blob = convBlob(list);
       let packet: MemoryRecord[] = [];
-      if (!convBlob(list).includes(MEMORY_MARK)) {
+      if (!MEMORY_PACKET_MARKS.some((mark) => blob.includes(mark))) {
         let silent = false;
         try {
           if (cue && isNoopCue(cue)) silent = true;
@@ -1104,15 +1107,20 @@ export class AgentMemory {
             logMemoryNotes(packet);
           } catch {}
       }
-      try {
-        if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim()))
-          this.observe(list, { deferSleep: true });
-      } catch {}
+      this.observeCue(list, cue);
       return packet;
     } catch {
       memoryInjectSwallows.n++;
       return [];
     }
+  }
+
+  /** Stores a message list's cue, unless it is a no-op or a question: what `recall` stores after retrieving. */
+  observeCue(messages: unknown[], cue = attachPlaceCues(cueFor(messages), placePathsFrom(messages))): void {
+    try {
+      if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim()))
+        this.observe(messages, { deferSleep: true });
+    } catch {}
   }
 
   inject(messages: unknown[]): unknown[] {
