@@ -1296,7 +1296,11 @@
       ],
       "a5": "cli postgres -> sqlite; cue \"cli db setup\" -> no postgres bullet",
       "on": {
-        "state": "green"
+        "state": "red",
+        "failed": [
+          "no-postgres"
+        ],
+        "why": "'packages/cli uses postgres for its database' is delivered after the switch to sqlite. P0.2's validity reads only D7's own forms with a \"we\" subject and a capitalized or identifier-shaped value; \"packages/cli switched its database from postgres to sqlite\" has neither, so the switch waits for P3.3's slots and value classes"
       },
       "off": {
         "state": "red",
