@@ -36,7 +36,7 @@ This is the single source of truth for what is done and what is next. `/next` re
 | P0.0c | Harness: every A5 §4 arm, landed **red** with asserted reasons; `arms.json` | P0.0b | L | CI checks red arms fail for their reason | done | #110 | [reports/P0.0c.md](reports/P0.0c.md) |
 | P0.0d | Harness: real-negative loader + `eden eval build-negatives` (canary secrets) | P0.0a | S | canary test; CI prints `skipped: private set absent` | done | #114 | [reports/P0.0d.md](reports/P0.0d.md) |
 | P0.1 | Packaging: fresh-clone check, dead tests, `eden doctor`, plugin fallback within 150 ms | P0.0c | S | fresh clone passes; doctor green | done (#64's 9 `test.failing` tests wait: P0.5 row below) | #117 | [reports/P0.1.md](reports/P0.1.md) |
-| P0.2 | Stop the bleeding: non-human + ack silence, variable k, declarative wording | P0.1 | S | `nonhuman`, `continue`; R6 replay packet rate ≤ 30% | in-progress (`mem/P0.2-stop-bleeding`) | | |
+| P0.2 | Stop the bleeding: non-human + ack silence, variable k, declarative wording | P0.1 | S | `nonhuman`, `continue`; R6 replay packet rate ≤ 30% | blocked (user decision: R6 packet rate 37–38% vs ≤ 30% and bullet volume 22–23% vs ≤ 20% missed, `stale_rate` guard failed; merge as is, pull D23's SessionStart selection forward, or keep blocked) | #119 | [reports/P0.2.md](reports/P0.2.md) |
 | P0.3 | Ids, clocks, persisted validity | P0.0c | M | `spawn-writers`, `reload-stale`, `numbered-list`; plus two writer processes with the same `pid % 36` run one after the other, and both keep their rows (#98) | todo | | |
 | P0.4 | Trust gate: authority, paste stripping, gitleaks + keyword secrets, purge | P0.0c | M | `secrets` (≥ 300 cases), `poison` | todo | | |
 | P0.8 | Flags, shadow mode, wide events, circuit breaker | P0.0c | M | both flag states on every arm; injected-throw test | todo | | |
@@ -75,6 +75,16 @@ Earlier reports filed these follow-ups. The first column is the slice the report
 
 | For | Follow-up | From |
 |---|---|---|
+| P0.3 | `re-eligibility`'s `refractory-399` flakes on `main` too (3 of 25 isolated runs; P0.2 records it `unstable`): find the cause once ids are stable, checking the legacy sleep's timing first. Until a slice brings that record to `main`, `main`'s CI can go red on it. Validity on gists: the legacy SessionStart briefing shows stale gists, which carry P0.2's failed `stale_rate` guard | [P0.2](reports/P0.2.md) |
+| P0.4 | Writers record `src`, so the hook's "you said" / "Rule you set" appear where true (A6 §2.1; until then no hook bullet claims them). The legacy extractor stores imperative fragments ("Reply with just: noted") that reach packets verbatim (A6 §2.3) | [P0.2](reports/P0.2.md) |
+| P0.5 | The packet header says "recalled from earlier sessions", true once the store is per repo | [P0.2](reports/P0.2.md) |
+| P0.7 | The wrap and OpenAI-shaped inject adopt the hook's shape and wording (`src/memory-hook-packet.ts`); P0.2 changed only their header | [P0.2](reports/P0.2.md) |
+| P0.8 | Confirm the live UserPromptSubmit `prompt` of an idle peer message from wide events (R0 F34; P0.2 accepts a one-line preamble before `<agent-message`), then settle D24's wording. The `off`/`shadow` records include `no-ledger` / `no-live-ledger` since P0.2's turn records | [P0.2](reports/P0.2.md) |
+| P1.1 | `budget` is green at CI scale only (about 4,000 tokens at 100 turns; 14,471–14,882 at 300). D28's hard limit of 6 is for `Updated:` items. `re-eligibility` has two `unstable` checks to clear before it turns green | [P0.2](reports/P0.2.md) |
+| P1.3 | With D28's 2-episode cap, a freed slot can go to an echo of the cue itself (the `memory-recsys` hook leg); D26's residual filter | [P0.2](reports/P0.2.md) |
+| P2.1 | A rule's per-class declarative rewrite ("PRs are merged by you, not by the agent") needs `(class, polarity, object)` keys | [P0.2](reports/P0.2.md) |
+| P2.5 | SessionStart's selection (D23: ≤ 3 pins and `Updated:` items); P0.2 kept the legacy ≤ 8 pins and 3 gists, now within 900 B | [P0.2](reports/P0.2.md) |
+| P4.1 | Continuation turns get no packet until `q_prev` and STRONG evidence exist (P0.2): restore STRONG injections, such as a trigger hit on the proposal ("ok merge it" after "Shall I merge?"). Tune the proposal markers ("I can see …") | [P0.2](reports/P0.2.md) |
 | P0.3 | Clear `arms.json`'s three `unstable` checks, `scoped` `junk-on-disk`, `re-eligibility` `reeligible-401` and `compaction` `b-rearmed` (#98): once ids are ULIDs, run those arms ≥ 20 times on macOS and on Linux (CI), and make them plain checks. `re-eligibility`'s `refractory-399` flipped too, once: it passed in a full local suite run under load (P0.0d, at `309d831e9`), while 10 of 10 isolated runs on that tree and 10 of 10 on `main` matched the record | [P0.0c](reports/P0.0c.md) |
 | P0.3 | Honour `EDEN_NOW` (epoch ms): the arms hand hooks and the CLI the simulated clock through it | [P0.0c](reports/P0.0c.md) |
 | P0.3 | Re-run P0.0b's A/A noise floors: packets differed between identical runs, likely through #98 | [P0.0b](reports/P0.0b.md) |

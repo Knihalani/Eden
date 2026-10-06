@@ -823,7 +823,7 @@
       "a5": "a 300-human-turn soak -> tokens_per_epoch <= 6k",
       "on": {
         "state": "green",
-        "why": "passes at CI scale since P0.2 caps packets (D28): at most 4,710 tokens in an epoch over 100 human turns (95 packets; 8,595 on 172b490d3). At full scale (300 turns) it still fails: 14,882 tokens (29,749 on 172b490d3); the ledger's refractory (P1.1) owns that"
+        "why": "passes at CI scale since P0.2 caps packets (D28): 3,974–4,043 tokens at most in an epoch over 100 human turns on 159c34503 / 2e9630c93 (three runs; 95 packets; 8,595 on 172b490d3). At full scale (300 turns) it still fails: 14,471–14,882 tokens on P0.2's code before review (29,749 on 172b490d3); the ledger's refractory (P1.1) owns that"
       },
       "off": {
         "state": "red",
