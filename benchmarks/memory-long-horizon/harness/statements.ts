@@ -18,8 +18,14 @@ export interface Statement {
 
 const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$/;
 const TAG = /^\[[^\]]*\]\s*/;
-/** D14's provenance at a bullet's end (A4 §5.8): "(you said, 3 weeks ago)", "(from a tool result)", … */
-const PROVENANCE = /\s*\((?:you said|from a tool result|from a summary of earlier work)(?:, [^()]*)?\)\s*$/;
+/**
+ * D14's provenance at a bullet's end (A4 §5.8, A6 §2.1): a source label and an age, "(you said, 3 weeks ago)",
+ * "(earlier session notes)", or only the age of a row with no source, "(3 weeks ago)", "(just now)".
+ */
+const PROVENANCE = new RegExp(
+  String.raw`\s*\((?:(?:you said|from a tool result|earlier session notes)(?:, [^()]*)?|` +
+    String.raw`just now|\d+ (?:minute|hour|day|week)s? ago)\)\s*$`,
+);
 /** Words after which a value is history or negated, with at most one word in between ("no longer use X"). */
 const HISTORIC =
   /(?:^|[^a-z0-9'])(?:was|were|from|not|no|never|don't|doesn't|didn't|no longer|instead of|rather than|formerly|previously|used to|replaced|dropped|removed|without)(?:\s+\S+)?\s+$/;
