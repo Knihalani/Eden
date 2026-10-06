@@ -1,20 +1,20 @@
 /**
  * A7 §4's admission of an episode, as far as P0.2 can tell one: a row whose source shows the user did not type it
- * (`src:tool`, `src:assistant`) is an episode (A4 §3.0, "everything else, including assistant, tool and paste text"),
+ * (`src:tool`, `src:agent`) is an episode (A4 §3.0, "everything else, including assistant, tool and paste text"),
  * delivered "lexically, only with MEDIUM+ evidence" (A4 §3.1). A7 §4 admits it on one STRONG match, or on MEDIUM
  * evidence from at least two different cue parts:
  * - **STRONG**: an identifier-shaped token it shares with the prompt: a path, a filename with an extension (or a
  *   dotted name, `vitest.config`), an `ERR_*` or `E123` code, a CLI flag, a version string, an id mixing letters and
  *   digits, a symbol with an inner capital or underscore.
  * - **MEDIUM**: a content word it shares with a cue part. The parts available before P4.1's situation cue are the
- *   prompt, the previous typed prompt (`q_turn`) and the agent's last message (`q_prev`); a common word is WEAK and
+ *   prompt, the previous typed prompt (`q_turn`) and the agent's last message (`q_prev`); a function word is WEAK and
  *   never counts.
  *
  * BM25F and τ_repo, which A7 also asks of an episode, arrive with P4.2 and P4.3. Rows the user typed, rows of
  * unknown source and gists keep today's lexical admission.
  */
-import type { ProvenanceNote } from "./memory-provenance";
-import { stripPacketLabel } from "./memory-provenance";
+import { stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { contentWords as words } from "./memory-transcript";
 
 const IDENTIFIER_SHAPES = [
   /^[\w@.-]*\/[\w@./-]*\w$/, // a path: apps/web, ./src/auth.ts
@@ -27,15 +27,6 @@ const IDENTIFIER_SHAPES = [
   /^[a-z]+[A-Z]\w*$|^[A-Z][a-z]+[A-Z]\w*$/, // a symbol with an inner capital: getUser, ClerkProvider
   /^[a-z]\w*_\w+$/i, // a symbol with an underscore: user_id
 ];
-
-/** Function words: WEAK evidence, which never admits (A7 §4). P4.3 replaces this list with the repo's df. */
-const COMMON = new Set(
-  (
-    "the and for with that this from have has had was were are not but you your our their its can will would " +
-    "should could into about there here what which when where why how all any some more most other such than " +
-    "then them they these those very just also only"
-  ).split(" "),
-);
 
 /** Strips what never belongs to an identifier: quotes, brackets and sentence punctuation around it. */
 function bare(token: string): string {
@@ -56,14 +47,9 @@ export function identifierTokens(text: string): Set<string> {
   return found;
 }
 
+/** A7 §4's MEDIUM words: content words of three letters or more (a function word is WEAK, never evidence). */
 function contentWords(text: string): Set<string> {
-  return new Set(
-    (
-      String(text ?? "")
-        .toLowerCase()
-        .match(/[a-z0-9]+/g) ?? []
-    ).filter((w) => w.length >= 3 && !COMMON.has(w)),
-  );
+  return new Set(words(text).filter((word) => word.length >= 3));
 }
 
 function shares(a: Set<string>, b: Set<string>): boolean {
@@ -73,7 +59,7 @@ function shares(a: Set<string>, b: Set<string>): boolean {
 
 /** Whether a row's source shows the user did not type it: an episode by A4 §3.0. */
 export function isUntyped(note: ProvenanceNote): boolean {
-  return (note.tags ?? []).some((tag) => tag === "src:tool" || tag === "src:assistant");
+  return (note.tags ?? []).some((tag) => tag === "src:tool" || tag === "src:agent");
 }
 
 /** The cue parts P0.2 has: the prompt, the previous typed prompt and the agent's last message. */

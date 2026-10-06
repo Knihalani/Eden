@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isResidual, isResidualNote, legacySlot, residualSentences, residualTexts } from "./memory-residual";
+import { isResidual, isResidualNote, legacySlot, recentConversation, residualSentences } from "./memory-residual";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -40,13 +40,16 @@ describe("D26: the residual", () => {
       typed("fix the cache test"),
       said("Done: the cache test passes."),
     ]);
-    expect(residualTexts(path, "what next?")).toEqual([
-      "what next?",
-      "Done: the cache test passes.",
-      "fix the cache test",
-      "Redis it is.",
-      "We use Redis for caching.",
-    ]);
+    expect(recentConversation(path, "what next?")).toEqual({
+      residual: [
+        "what next?",
+        "Done: the cache test passes.",
+        "fix the cache test",
+        "Redis it is.",
+        "We use Redis for caching.",
+      ],
+      previousTyped: "fix the cache test",
+    });
   });
 
   test("nothing before a compaction counts, and a missing transcript leaves the prompt", () => {
@@ -55,8 +58,22 @@ describe("D26: the residual", () => {
       { type: "user", isCompactSummary: true, message: { role: "user", content: "Summary: postgres." } },
       typed("run the tests"),
     ]);
-    expect(residualTexts(path, "and now?")).toEqual(["and now?", "run the tests"]);
-    expect(residualTexts(join(tmpdir(), "no-such-transcript.jsonl"), "hi")).toEqual(["hi"]);
+    expect(recentConversation(path, "and now?")).toEqual({
+      residual: ["and now?", "run the tests"],
+      previousTyped: "run the tests",
+    });
+    expect(recentConversation(join(tmpdir(), "no-such-transcript.jsonl"), "hi")).toEqual({
+      residual: ["hi"],
+      previousTyped: "",
+    });
+  });
+
+  test("the current prompt's own line, when already written (R0 F8), is not one of the 2 earlier prompts", () => {
+    const path = transcript([typed("first ask"), typed("second ask"), typed("third ask"), typed("the current ask")]);
+    expect(recentConversation(path, "the current ask")).toEqual({
+      residual: ["the current ask", "third ask", "second ask"],
+      previousTyped: "third ask",
+    });
   });
 
   test("an episode or rule is residual at content-token Jaccard ≥ 0.6 with one sentence", () => {
