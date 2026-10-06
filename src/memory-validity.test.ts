@@ -14,34 +14,72 @@ function tempRoot(): string {
   return dir;
 }
 
-describe("A4 §3.1: what invalidates a value or a rule", () => {
-  test("retractions, switches and revocations, one token each", () => {
+const shown = (text: string) =>
+  invalidationsIn(text, 1).map((r) => (r.k === "retract" ? `retract:${r.o}` : `revoke:${r.c}:${r.o.join("+")}`));
+
+describe("A4 §3.1, D7: what invalidates a value", () => {
+  test("a retraction or a switch, with a 'we' subject or 'use A not B', of a capitalized or identifier-shaped value", () => {
     const cases: [string, string[]][] = [
       ["We no longer use Redis.", ["retract:redis"]],
-      ["we don't use jest anymore", ["retract:jest"]],
+      ["we don't use Jest anymore", ["retract:jest"]],
+      ["We're not using Jest anymore.", ["retract:jest"]],
       ["We dropped Sentry last week.", ["retract:sentry"]],
       ["We switched apps/web from Auth0 to Clerk.", ["retract:auth0"]],
-      ["we replaced npm with pnpm", ["retract:npm"]],
-      ["Use pnpm, not npm.", ["retract:npm"]],
-      ["Run vitest instead of jest.", ["retract:jest"]],
-      ["You can merge PRs yourself now.", ["revoke:merge"]],
+      ["We migrated the queue from SQS to Kafka.", ["retract:sqs"]],
+      ["Use Vitest instead of Jest.", ["retract:jest"]],
+      ["We use pnpm, not npm_v6.", ["retract:npm_v6"]],
     ];
-    for (const [text, expected] of cases) {
-      const found = invalidationsIn(text, 1).map((r) => (r.k === "retract" ? `retract:${r.o}` : `revoke:${r.v}`));
-      expect(found).toEqual(expected);
-    }
+    for (const [text, expected] of cases) expect(shown(text)).toEqual(expected);
   });
 
-  test("questions, tasks and pronouns invalidate nothing", () => {
+  test("questions, conditionals, other subjects, common words, paths and pasted spans invalidate nothing", () => {
     for (const text of [
-      "Can you merge it now?",
+      "Should we use pnpm instead of npm?",
+      "What if we no longer use Redis?",
+      "If we switched from Postgres to MySQL, what breaks?",
+      "I moved the date helper from src to lib.",
+      "Look at the logs instead of the code.",
+      "use a Set for the lookup instead of an array",
+      "use a map instead of the nested loops",
+      "We switched the handlers from src/old to src/new.",
+      "we no longer use the old helper",
+      "> We no longer use Jest.",
+      "```\nWe no longer use Redis.\n```",
+      "<pasted_content id=1>\nWe no longer use Redis.\n</pasted_content id=1>",
+      "We dropped Sentry\nthen the build\nkept failing",
       "fix the failing test in src/app.ts",
-      "this is no longer needed",
-      "the build no longer uses it",
-      "I removed the unused import",
       "which auth provider does apps/web use?",
     ])
-      expect(invalidationsIn(text, 1)).toEqual([]);
+      expect(shown(text)).toEqual([]);
+  });
+});
+
+describe("A4 §3.1, D9: what revokes a rule", () => {
+  test("'you can <action> … now' with an A7 §5 action verb, keeping its object", () => {
+    expect(shown("You can merge PRs yourself now.")).toEqual(["revoke:integrate:pr"]);
+    expect(shown("You can merge now.")).toEqual(["revoke:integrate:"]);
+    expect(shown("You can push the feature branch now.")).toEqual(["revoke:push-upstream:feature+branch"]);
+  });
+
+  test("other verbs, questions and statements about the user are no revocation", () => {
+    for (const text of ["You can run the tests now.", "You can use the staging server now.", "Can you merge it now?"])
+      expect(shown(text)).toEqual([]);
+  });
+
+  test("a revocation drops a rule of its class on its object, and nothing else", () => {
+    const merge = invalidationsIn("You can merge PRs yourself now.", 100);
+    expect(validText("Push the fix to the PR, but don't merge it yourself", 50, merge)).toBe("");
+    expect(validText("Never merge PRs yourself", 50, merge)).toBe("");
+    expect(validText("Never push directly to main.", 50, merge)).toBe("Never push directly to main.");
+    const push = invalidationsIn("You can push the feature branch now.", 100);
+    expect(validText("Never push directly to main.", 50, push)).toBe("Never push directly to main.");
+    const bare = invalidationsIn("You can merge now.", 100);
+    expect(validText("Don't merge it yourself.", 50, bare)).toBe("");
+    expect(validText("Never merge PRs without a review.", 50, bare)).toBe("Never merge PRs without a review.");
+    for (const text of ["You can run the tests now.", "You can use the staging server now."])
+      expect(validText("Never run database migrations against production.", 50, invalidationsIn(text, 100))).toBe(
+        "Never run database migrations against production.",
+      );
   });
 });
 
@@ -49,27 +87,21 @@ describe("A4 §5.1 step 5: validity at delivery", () => {
   const records = [
     ...invalidationsIn("We no longer use Redis.", 100),
     ...invalidationsIn("We switched apps/web from Auth0 to Clerk.", 100),
-    ...invalidationsIn("You can merge PRs yourself now.", 100),
   ];
 
-  test("a sentence older than an invalidation that still asserts its value is dropped", () => {
+  test("a sentence older than an invalidation that still names its value is dropped", () => {
     expect(validText("stack uses Redis", 50, records)).toBe("");
     expect(validText("in apps web the auth provider is Auth0, and the database is postgres", 50, records)).toBe("");
     expect(validText("stack uses Redis. Never commit .env files", 50, records)).toBe("Never commit .env files");
   });
 
-  test("a revoked rule is dropped; the action itself is not", () => {
-    expect(validText("Push the fix to the PR, but don't merge it yourself", 50, records)).toBe("");
-    expect(validText("Never merge PRs yourself", undefined, records)).toBe("");
-    expect(validText("merge the pr once ci is green", 50, records)).toBe("merge the pr once ci is green");
-  });
-
-  test("newer text, the change itself and look-alike tokens stay", () => {
+  test("newer text, the change itself, and the value inside a path or a filename stay", () => {
     expect(validText("We use Redis again", 150, records)).toBe("We use Redis again");
     expect(validText("We switched apps/web from Auth0 to Clerk", 50, records)).toBe(
       "We switched apps/web from Auth0 to Clerk",
     );
     expect(validText("redis.conf sets maxmemory", 50, records)).toBe("redis.conf sets maxmemory");
+    expect(validText("see vendor/redis/README", 50, records)).toBe("see vendor/redis/README");
     expect(validText("stack uses Redis", 50, [])).toBe("stack uses Redis");
   });
 });
@@ -81,7 +113,7 @@ describe("the validity log", () => {
     recordInvalidations(root, "We no longer use Redis. You can merge PRs yourself now.", 2);
     expect(readInvalidations(root)).toEqual([
       { k: "retract", o: "redis", t: 2 },
-      { k: "revoke", v: "merge", t: 2 },
+      { k: "revoke", c: "integrate", o: ["pr"], t: 2 },
     ]);
     expect(statSync(join(root, "validity.jsonl")).mode & 0o777).toBe(0o600);
     expect(readFileSync(join(root, "validity.jsonl"), "utf8")).not.toContain("We no longer");

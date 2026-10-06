@@ -204,10 +204,29 @@ function conversation(prompts: string[]): string {
 
 describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered", () => {
   test("after 'we no longer use …', an older row stating it is dropped at Submit", () => {
-    submit("We use zebracache for caching.", { prompt_id: "p1" });
-    expect(submit("what is zebracache used for?", { prompt_id: "p2" })).toContain("We use zebracache");
-    submit("We no longer use zebracache.", { prompt_id: "p3" });
-    expect(submit("what is zebracache used for?", { prompt_id: "p4" }) ?? "").not.toContain("We use zebracache");
+    const rearm = () => memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "compact" });
+    submit("We use ZebraCache for caching.", { prompt_id: "p1" });
+    expect(submit("what is ZebraCache used for?", { prompt_id: "p2" })).toContain("We use ZebraCache");
+    // A compaction re-arms the ledger (A4 §4), so only validity can keep the row out.
+    rearm();
+    expect(submit("what is ZebraCache used for?", { prompt_id: "p3" })).toContain("We use ZebraCache");
+    submit("We no longer use ZebraCache.", { prompt_id: "p4" });
+    rearm();
+    expect(submit("what is ZebraCache used for?", { prompt_id: "p5" }) ?? "").not.toContain("We use ZebraCache");
+  });
+
+  test("a lowercase value, a question or another subject retracts nothing", () => {
+    const rearm = () => memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "compact" });
+    submit("We use ZebraCache for caching.", { prompt_id: "p1" });
+    for (const [n, prompt] of [
+      "We no longer use zebracache.",
+      "Should we drop ZebraCache?",
+      "I moved off ZebraCache.",
+    ].entries()) {
+      submit(prompt, { prompt_id: `q${n}` });
+      rearm();
+      expect(submit("what is ZebraCache used for?", { prompt_id: `c${n}` })).toContain("We use ZebraCache");
+    }
   });
 
   test("after 'you can … now', a rule forbidding that action is dropped at SessionStart", () => {

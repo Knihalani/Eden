@@ -8,7 +8,7 @@ import { memoryConsent } from "../../../src/memory-consent";
 import { declarativeBullet, renderPacket, shapePacket } from "../../../src/memory-hook-packet";
 import { notRefractory, recordDeliveries, startEpoch } from "../../../src/memory-ledger";
 import { admitNotes } from "../../../src/memory-gate";
-import { isResidualNote, previousTypedPrompt, residualSentences, residualTexts } from "../../../src/memory-residual";
+import { isResidualNote, recentConversation, residualSentences } from "../../../src/memory-residual";
 import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenance";
 import { isNonHumanSubmit, promptHash, turnMode } from "../../../src/memory-turn";
 import {
@@ -374,8 +374,9 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       if (!notes.length) return null;
       // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
       // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).
-      const parts = { prompt, turn: previousTypedPrompt(transPath, prompt), prev: previousAssistant };
-      const residual = residualSentences(residualTexts(transPath, prompt));
+      const recent = recentConversation(transPath, prompt);
+      const parts = { prompt, turn: recent.previousTyped, prev: previousAssistant };
+      const residual = residualSentences(recent.residual);
       let novel = admitNotes(stillValid(notes, readInvalidations(mem.dir), prompt), parts).filter(
         (note) => !isResidualNote(note, residual),
       );

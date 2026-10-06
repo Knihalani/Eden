@@ -786,9 +786,9 @@ export class AgentMemory {
           }))
           .filter((i) => i.text),
         // A6 §2.1: a row from text the user did not type keeps its true source: a tool result the caller marks
-        // `src: "tool"`, or the assistant's text.
+        // `src: "tool"`, or the assistant's text (A6 calls its source `agent`).
         srcTags = (it: { role: string; src?: unknown }): string[] =>
-          it.src === "tool" ? ["src:tool"] : it.role === "assistant" ? ["src:assistant"] : [],
+          it.src === "tool" ? ["src:tool"] : it.role === "assistant" ? ["src:agent"] : [],
         batchLive = new Map<string, string>();
       for (let i = 0; i < items.length; i++) {
         const it = items[i]!,

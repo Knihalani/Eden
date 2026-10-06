@@ -577,9 +577,10 @@
         "failed": [
           "a-not-rearmed"
         ],
-        "why": "after a summary that keeps 'The database is postgres', the fact is delivered again. b-rearmed is unstable: rule B was not delivered after the summary that dropped it ('none') in 1 of 8 Linux CI runs since the arms landed (37285846809) and in 2 of 92 local macOS runs after P0.0c (0 of 40, then 2 of 52 in PR #112's review); it held in both P0.0c stability studies. A row lost to today's pid-derived ids (#98, P0.3) would explain it, but no failing run kept its store to confirm it",
+        "why": "after a summary that keeps 'The database is postgres', the fact is delivered again. b-rearmed is unstable: rule B was not delivered after the summary that dropped it ('none') in 1 of 8 Linux CI runs since the arms landed (37285846809) and in 2 of 92 local macOS runs after P0.0c (0 of 40, then 2 of 52 in PR #112's review); it held in both P0.0c stability studies. A row lost to today's pid-derived ids (#98, P0.3) would explain it, but no failing run kept its store to confirm it. delivered-before is unstable since P0.2's ledger: rule B was not delivered at its first cue after the blank summary in 1 of 4 full `--flags on` runs on P0.2's round-4 code (a reviewer's run on 113947e54), and in 0 of 40 isolated runs (0 of 20 on be9a31c5a). Suspected, not confirmed: the rule's row lost to #98's ids while a gist carrying the rule was delivered at the fact's cue, which the ledger then holds back at the rule's cue",
         "unstable": [
-          "b-rearmed"
+          "b-rearmed",
+          "delivered-before"
         ]
       },
       "off": {
@@ -846,10 +847,9 @@
       "on": {
         "state": "red",
         "failed": [
-          "refractory-399",
           "usage-logged"
         ],
-        "why": "the pin is delivered again at about 391 KB (no refractory distance), and no wide events exist to hold message.usage. reeligible-401 is unstable: in 2 of 20 runs of the second stability study the pin was not delivered at the fresh cue (distance 412,836 and 412,857 bytes, inside the window), as today's plugin lost its row over the ~20 growth turns (#98, P0.3). refractory-399 is unstable too, and was before P0.2: the pin is missing from the packet at about 390 KB in some runs, so the check passes by accident; in isolated runs (arms/run.ts and an instrumented probe) 3 of 25 on 172b490d3 and 9 of 53 on P0.2's code, and once in a full local suite run on P0.2's code. The pin's row is in the store in every run inspected. Raising P0.2's 4-bullet cap to 6 (2 of 10) or turning its turn records off (3 of 10) does not remove it. Cause not found; untested suspects: the legacy sleep's timing (the 25 ms incremental budget, the idle-triggered full sleep) and #98's ids",
+        "why": "no wide events exist to hold message.usage. reeligible-401 is unstable: in 2 of 20 runs of the second stability study the pin was not delivered at the fresh cue (distance 412,836 and 412,857 bytes, inside the window), as today's plugin lost its row over the ~20 growth turns (#98, P0.3). refractory-399 passes since P0.2's ledger holds a delivered rule for 400 KB (A4 §4; 4 of 4 full `--flags on` runs on its round-4 code); before, it flipped (3 of 25 isolated runs on 172b490d3 passed by accident, the pin missing from the 390 KB packet), so it stays unstable until about 20 runs show it holds",
         "unstable": [
           "reeligible-401",
           "refractory-399"
