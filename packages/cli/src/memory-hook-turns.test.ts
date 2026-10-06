@@ -97,7 +97,9 @@ describe("D24: non-human submits are silent and do not count as turns", () => {
 
   test("a prompt equal to a cron of the window's last Stop is non-human; the cron text is kept only as a hash", () => {
     submit("Kai's timezone is Pacific", { prompt_id: "p1" });
-    stop({ session_crons: [{ id: "c1", schedule: "*/5 * * * *", recurring: true, prompt: "ping Kai about the release" }] });
+    stop({
+      session_crons: [{ id: "c1", schedule: "*/5 * * * *", recurring: true, prompt: "ping Kai about the release" }],
+    });
     expect(submit("ping Kai about the release", { prompt_id: "p2" })).toBeUndefined();
     expect(humanTurns()).toBe(1);
     expect(windowFile("ctx.log")).not.toContain("ping Kai");
@@ -240,8 +242,7 @@ describe("A4 §4: the ledger's refractory rule", () => {
   const start = (source: string) =>
     (
       memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source })?.hookSpecificOutput as
-        | { additionalContext?: string }
-        | undefined
+        { additionalContext?: string } | undefined
     )?.additionalContext;
 
   test("a bullet is delivered once per window; resume keeps the ledger, a compaction re-arms it", () => {
@@ -256,5 +257,32 @@ describe("A4 §4: the ledger's refractory rule", () => {
     expect(log).toContain('"k":"deliver"');
     expect(log).toContain('"k":"epoch"');
     expect(log).not.toContain("db-replica2");
+  });
+});
+
+describe("A4 §3.0, A6 §2.1, A7 §4: text the user did not type", () => {
+  test("a tool result is stored with its source and delivered only on A7 §4's evidence", () => {
+    const path = join(dir, "tools.jsonl");
+    const lines = [
+      { type: "user", message: { role: "user", content: "look at the zebra billing logs" } },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Read" }] } },
+      {
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "t1", content: "zebra billing worker restarts in billing/worker.ts" },
+          ],
+        },
+      },
+      { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Done." }] } },
+    ];
+    writeFileSync(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+    submit("thanks, that helps", { prompt_id: "p1", transcript_path: path });
+    expect(storeText()).toMatch(/zebra billing worker restarts[^\n]*"src:tool"/);
+    expect(submit("why does zebra billing stall?", { prompt_id: "p2" }) ?? "").not.toContain("restarts");
+    const packet = submit("why does billing/worker.ts restart?", { prompt_id: "p3" }) ?? "";
+    expect(packet).toContain("zebra billing worker restarts");
+    expect(packet).toContain("(from a tool result");
   });
 });
