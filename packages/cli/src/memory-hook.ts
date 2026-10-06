@@ -281,7 +281,11 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         } catch {}
       const previousAssistant = prior.findLast((m) => m.role === "assistant")?.content ?? "",
         mode = event === "UserPromptSubmit" ? turnMode(prompt, { previousAssistant }) : "imperative",
-        notes = prompt && mode === "imperative" ? mem.recall([{ role: "user", content: prompt }]) : [];
+        cue = [{ role: "user", content: prompt }];
+      let notes: MemoryRecord[] = [];
+      // A4 §5.1: every human submit is encoded (step 1); the turn mode decides only whether it is answered (step 2).
+      if (prompt && mode === "imperative") notes = mem.recall(cue);
+      else if (prompt) mem.observeCue(cue);
       if (writes && prior.length) mem.observe(prior);
       return additional(event, renderPacket(shapePacket(notes)));
     } finally {

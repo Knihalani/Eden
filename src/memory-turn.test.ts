@@ -64,10 +64,11 @@ describe("A7 §2: turn modes", () => {
     expect(turnMode("thanks", { cronHashes: [promptHash("thanks")] })).toBe("nonhuman");
   });
 
-  test("ack: up to 3 of {ok, thanks, cool, nice, great, got it, sounds good}", () => {
-    for (const prompt of ["ok", "Thanks!", "great, thanks", "got it", "ok cool, sounds good", "Nice."])
+  test("ack: up to 3 tokens of {ok, thanks, cool, nice, great, got it, sounds good}", () => {
+    for (const prompt of ["ok", "Thanks!", "great, thanks", "got it", "cool, sounds good", "Nice."])
       expect(turnMode(prompt, { previousAssistant: PROPOSAL })).toBe("ack");
     expect(turnMode("ok ok thanks great")).toBe("imperative");
+    expect(turnMode("sounds good, got it, thanks", { previousAssistant: REPORT })).toBe("imperative");
     expect(turnMode("thanks, now fix the login")).toBe("imperative");
   });
 

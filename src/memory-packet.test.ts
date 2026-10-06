@@ -289,8 +289,8 @@ describe("M8.4 gist + empty cue", () => {
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
         // The hook words its bullets (D14): a rule the user set, a gist from a summary, no [kind · age · src] tag.
-        expect(ctx).toContain(`- Rule you set: ${RULE}`);
-        expect(ctx).toContain(`- ${gists[0]!.text} (from a summary of earlier work`);
+        expect(ctx).toContain(`- Rule on record: ${RULE}`);
+        expect(ctx).toContain(`- ${gists[0]!.text} (earlier session notes`);
         expect(ctx).not.toMatch(/\[(?:rule|gist|fact|episode|procedure)\b/);
 
         const notes = mem.notesFor(PACKET_CUE);
@@ -871,7 +871,7 @@ describe("M40 provenance", () => {
             });
             const ctx = hookContext(hook);
             expect(ctx).toContain(MEMORY_MARK);
-            expect(ctx).toMatch(/sqlite.* \(you said/i);
+            expect(ctx).toMatch(/^- (?!Rule ).*sqlite/im);
             expect(ctx).not.toContain(LOG_ID);
             expect(String(hook?.additional_context ?? "")).not.toContain(LOG_ID);
           });
