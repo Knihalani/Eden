@@ -859,9 +859,10 @@
           "refractory-399",
           "usage-logged"
         ],
-        "why": "the pin is delivered again at about 391 KB (no refractory distance), and no wide events exist to hold message.usage. reeligible-401 is unstable: in 2 of 20 runs of the second stability study the pin was not delivered at the fresh cue (distance 412,836 and 412,857 bytes, inside the window), as today's plugin lost its row over the ~20 growth turns (#98, P0.3)",
+        "why": "the pin is delivered again at about 391 KB (no refractory distance), and no wide events exist to hold message.usage. reeligible-401 is unstable: in 2 of 20 runs of the second stability study the pin was not delivered at the fresh cue (distance 412,836 and 412,857 bytes, inside the window), as today's plugin lost its row over the ~20 growth turns (#98, P0.3). refractory-399 is unstable since P0.2: on 8d3f6dd9d the pin was missing from the packet at about 390 KB in 8 of 38 isolated runs (and in one full local suite run), while its row was in the store in every run inspected; 0 of 10 on 172b490d3. 10 runs each with P0.2's 4-bullet cap raised to 6 and with its turn records off still flipped (2 and 3), and the packet without the pin was 77 bytes, so neither those nor the 900-byte limit is the cause; the cause is not found (#98, P0.3, are the first suspect)",
         "unstable": [
-          "reeligible-401"
+          "reeligible-401",
+          "refractory-399"
         ]
       },
       "off": {
