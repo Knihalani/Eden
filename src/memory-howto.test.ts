@@ -1857,7 +1857,8 @@ describe("M12.4 Start does not dump last-k how-to", () => {
         const hay = JSON.stringify(start ?? {});
         expect(hay).not.toMatch(HOOK_PROCEDURE);
         expect(hay).not.toMatch(/howto\.jsonl|how-to dump/i);
-        if (hay.includes(MEMORY_MARK)) expect(hay).toMatch(/Rule on record: |\(earlier session notes/);
+        if (hay.includes(MEMORY_MARK))
+          expect(hay).toMatch(/- Always run tests before committing|\(earlier session notes/);
 
         const empty = packetOf(mem.inject([]));
         expect(empty).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
