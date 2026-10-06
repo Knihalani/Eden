@@ -33,8 +33,12 @@ describe("packets and bullets", () => {
     expect(bulletContent("Rule you set: never merge")).toBe("Rule you set: never merge");
     expect(bulletContent("fix the login (you said, 3 weeks ago)")).toBe("fix the login");
     expect(bulletContent("Database: postgres (you said)")).toBe("Database: postgres");
-    expect(bulletContent("stack uses Redis (from a summary of earlier work, 1 hour ago)")).toBe("stack uses Redis");
+    expect(bulletContent("stack uses Redis (earlier session notes, 1 hour ago)")).toBe("stack uses Redis");
     expect(bulletContent("CI is green (from a tool result)")).toBe("CI is green");
+    expect(bulletContent("fix the login (3 weeks ago)")).toBe("fix the login");
+    expect(bulletContent("fix the login (just now)")).toBe("fix the login");
+    expect(bulletContent("Rule on record: never merge")).toBe("Rule on record: never merge");
+    expect(bulletContent("bump the version (in 2 places)")).toBe("bump the version (in 2 places)");
     expect(bulletContent("Updated: test runner is now vitest (was jest)")).toBe(
       "Updated: test runner is now vitest (was jest)",
     );
