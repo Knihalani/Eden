@@ -5,10 +5,27 @@ import { redact } from "@eden/ir";
 import { childSessionName, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
-import { renderPacket, shapePacket } from "../../../src/memory-hook-packet";
-import type { ProvenanceNote } from "../../../src/memory-provenance";
-import { isNonHumanSubmit, turnMode } from "../../../src/memory-turn";
-import { appendTurn, cronHashes, recordCrons, transcriptOffset, windowDir } from "../../../src/memory-window";
+import { declarativeBullet, renderPacket, shapePacket } from "../../../src/memory-hook-packet";
+import { notRefractory, recordDeliveries, startEpoch } from "../../../src/memory-ledger";
+import { admitNotes } from "../../../src/memory-gate";
+import { isResidualNote, previousTypedPrompt, residualSentences, residualTexts } from "../../../src/memory-residual";
+import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenance";
+import { isNonHumanSubmit, promptHash, turnMode } from "../../../src/memory-turn";
+import {
+  asksHistory,
+  readInvalidations,
+  recordInvalidations,
+  validText,
+  type Invalidation,
+} from "../../../src/memory-validity";
+import {
+  appendTurn,
+  cronHashes,
+  humanTurns,
+  recordCrons,
+  transcriptOffset,
+  windowDir,
+} from "../../../src/memory-window";
 import { consolidate } from "../../../src/sleep";
 import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace";
 
@@ -43,36 +60,79 @@ function isPinnedIntention(r: MemoryRecord): boolean {
   return r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
 }
 
+/** SessionStart briefs the 3 latest valid gists, looking through at most 12. */
+const BRIEFED_GISTS = 3;
+const GIST_SCAN = 12;
+
 function additional(event: string, packet: string): Record<string, unknown> | null {
   return packet
     ? { additional_context: packet, hookSpecificOutput: { hookEventName: event, additionalContext: packet } }
     : null;
 }
 
-/** SessionStart's packet: the newest pinned rules, then this session's latest gists (P2.5 rebuilds it, D23). */
-function briefing(mem: ReturnType<typeof openMemory>, session = ""): string {
+/**
+ * SessionStart's packet: the newest pinned rules (not after a compaction, A4 §5.2), then the 3 latest gists, each
+ * still valid (A4 §5.1 step 5, before any selection). Until the store is per repo (P0.5), gists are the only memory
+ * one session passes to the next, so D23's pins-only briefing waits for P2.5.
+ */
+function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true): ProvenanceNote[] {
   const seen = new Set<string>(),
     notes: ProvenanceNote[] = [],
-    add = (note: ProvenanceNote) => {
-      let text = String(note.text ?? "").trim();
+    invalid = readInvalidations(mem.dir),
+    add = (note: ProvenanceNote): boolean => {
+      let text = validText(String(note.text ?? ""), note.at, invalid);
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
       } catch {}
-      if (!text || seen.has(text.toLowerCase())) return;
+      if (!text || seen.has(text.toLowerCase())) return false;
       seen.add(text.toLowerCase());
       notes.push({ ...note, text });
+      return true;
     };
-  mem
-    .memories()
-    .filter(isPinnedIntention)
-    .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
-    .slice(0, 8)
-    .forEach(add);
+  if (pins)
+    mem
+      .memories()
+      .filter(isPinnedIntention)
+      .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
+      .slice(0, 8)
+      .forEach(add);
   try {
-    for (const g of new GistStore(mem.dir).latest(session || "", 3, { excludeSrc: "experience" }))
-      add({ text: g.text, kind: "gist", tags: ["gist"], at: g.t });
+    let gists = 0;
+    for (const g of new GistStore(mem.dir).latest(session || "", GIST_SCAN, { excludeSrc: "experience" })) {
+      if (gists >= BRIEFED_GISTS) break;
+      if (add({ text: g.text, kind: "gist", tags: ["gist"], at: g.t })) gists++;
+    }
   } catch {}
-  return renderPacket(notes);
+  return notes;
+}
+
+/**
+ * Renders a packet and records what it delivered in the window ledger (A4 §4): the notes whose bullet made it
+ * into the 900 bytes. A ledger that cannot be written leaves the packet as it is.
+ */
+function deliver(notes: readonly ProvenanceNote[], win: string | undefined, at: { off: number; att: string }): string {
+  const now = Date.now();
+  const packet = renderPacket(notes, now);
+  if (packet && win)
+    try {
+      const delivered = notes.filter((note) => packet.includes(`\n- ${declarativeBullet(note, now)}`));
+      recordDeliveries(win, delivered, { ...at, ht: humanTurns(win) });
+    } catch {}
+  return packet;
+}
+
+/**
+ * A4 §5.1 step 5: each note without the sentences an invalidation has made invalid; a note left empty is dropped.
+ * When the cue asks about history, episodes keep what they say (D31 `stale_for`); facts and rules do not.
+ */
+function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
+  if (!invalid.length) return notes;
+  const history = asksHistory(prompt);
+  return notes.flatMap((note) => {
+    if (history && !["fact", "rule"].includes(noteKindToken(note) ?? "")) return [note];
+    const text = validText(note.text, note.at, invalid);
+    return text ? [{ ...note, text }] : [];
+  });
 }
 
 /** The memory root: `EDEN_MEMORY_DIR`, else `$EDEN_HOME/memory`, else `~/.eden/memory`. */
@@ -104,9 +164,12 @@ function promptOf(r: Record<string, unknown>): string {
   return PROMPT_KEYS.map((key) => str(r[key])).find(Boolean) ?? "";
 }
 
-export function messagesFromTranscript(path: string): { role: string; content: string }[] {
+/** A transcript message as `observe` reads it; `src: "tool"` marks a tool result on a user line (A6 §2.1). */
+type TranscriptMessage = { role: string; content: string; src?: "tool" };
+
+export function messagesFromTranscript(path: string): TranscriptMessage[] {
   try {
-    const out: { role: string; content: string }[] = [];
+    const out: TranscriptMessage[] = [];
     for (const line of readFileSync(path, "utf8").split("\n")) {
       try {
         const o = asRec(JSON.parse(line)),
@@ -122,8 +185,12 @@ export function messagesFromTranscript(path: string): { role: string; content: s
                   rawRole === "assistant"
                 ? "assistant"
                 : "",
-          content = flattenContent(msg.content ?? o.content ?? msg.parts);
-        if ((role === "user" || role === "assistant") && content) out.push({ role, content });
+          content = flattenContent(msg.content ?? o.content ?? msg.parts),
+          // A tool result arrives on a user line, but the user did not type it (A4 §3.0, A6 §2.1).
+          src = "tool" as const,
+          toolResult = Array.isArray(msg.content) && msg.content.some((block) => asRec(block).type === "tool_result");
+        if ((role === "user" || role === "assistant") && content)
+          out.push({ role, content, ...(toolResult ? { src } : {}) });
       } catch {}
     }
     return out;
@@ -218,7 +285,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
             original = r.tool_response ?? r.tool_output ?? r.result ?? r.output,
             result = flattenContent(original == null || original === "" ? "" : redact(original)),
             text = result ? `The ${name || "subagent"} tool result is ${result}.` : "";
-          if (text) mem.observe([{ role: "user", content: text }]);
+          if (text) mem.observe([{ role: "user", content: text, src: "tool" }]);
           else if (event === "SubagentStop" && prior.length) mem.observe(prior);
           try {
             persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
@@ -257,7 +324,19 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
           try {
             mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true });
           } catch {}
-        return additional(event, briefing(mem, resolved.session));
+        // A4 §5.2: a resumed session still holds the packets it had (R0 F5), so resume brings nothing new and keeps
+        // the ledger. A compaction re-arms (a new epoch, A4 §4): its pins come back on their next cue, not here.
+        // The gists, the legacy carrier between sessions, stay at every other SessionStart until P0.5 and P2.5.
+        // `/clear` opens a new session: a new window, with an empty ledger.
+        const off = transcriptOffset(transPath),
+          ledger = writes ? win : undefined,
+          compact = r.source === "compact";
+        if (r.source === "resume") return null;
+        if (compact && ledger)
+          try {
+            startEpoch(ledger, "compact", off);
+          } catch {}
+        return additional(event, deliver(briefing(mem, resolved.session, !compact), ledger, { off, att: "" }));
       }
       if (stop) {
         if (writes) {
@@ -275,19 +354,33 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
         }
         return null;
       }
-      if (event === "UserPromptSubmit" && writes && win)
+      const off = transcriptOffset(transPath),
+        att = str(r.prompt_id) || `${promptHash(prompt)}@${off}`,
+        ledger = event === "UserPromptSubmit" && writes ? win : undefined;
+      if (ledger)
         try {
-          appendTurn(win, { promptId: str(r.prompt_id), prompt, off: transcriptOffset(transPath) });
+          appendTurn(ledger, { promptId: att, prompt, off });
         } catch {}
       const previousAssistant = prior.findLast((m) => m.role === "assistant")?.content ?? "",
         mode = event === "UserPromptSubmit" ? turnMode(prompt, { previousAssistant }) : "imperative",
         cue = [{ role: "user", content: prompt }];
       let notes: MemoryRecord[] = [];
       // A4 §5.1: every human submit is encoded (step 1); the turn mode decides only whether it is answered (step 2).
+      // A4 §3.1: what the user just retracted or revoked is invalid from this Submit on (A4 §3.0: typed text only).
+      if (writes && prompt && event === "UserPromptSubmit") recordInvalidations(mem.dir, prompt);
       if (prompt && mode === "imperative") notes = mem.recall(cue);
       else if (prompt) mem.observeCue(cue);
       if (writes && prior.length) mem.observe(prior);
-      return additional(event, renderPacket(shapePacket(notes)));
+      if (!notes.length) return null;
+      // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
+      // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).
+      const parts = { prompt, turn: previousTypedPrompt(transPath, prompt), prev: previousAssistant };
+      const residual = residualSentences(residualTexts(transPath, prompt));
+      let novel = admitNotes(stillValid(notes, readInvalidations(mem.dir), prompt), parts).filter(
+        (note) => !isResidualNote(note, residual),
+      );
+      if (win) novel = notRefractory(win, novel, { size: off, transcriptPath: transPath });
+      return additional(event, deliver(shapePacket(novel), ledger, { off, att }));
     } finally {
       try {
         mem.close();

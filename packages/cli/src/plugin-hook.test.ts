@@ -17,6 +17,8 @@ const SUBMIT = {
   session_id: "s-plugin",
   prompt: "we use pnpm in this repo, never npm",
 };
+/** A later prompt that cues the rule without restating it (D26 would not deliver back what the prompt says). */
+const CUE = "install the dependencies with npm";
 
 const tmp = mkdtempSync(join(tmpdir(), "eden-plugin-hook-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -58,7 +60,12 @@ type Hooked = { code: number; stdout: string; stderr: string; ms: number; spawne
  * Runs a plugin's Submit hook command (`hooks/hooks.json`) once in a fresh process with its own Eden home, as Claude
  * Code does. `eden` on PATH is a stub that records a call, so a spawn fallback shows.
  */
-async function runHook(pluginRoot: string, extra: Record<string, string> = {}, home = freshDir("home")) {
+async function runHook(
+  pluginRoot: string,
+  extra: Record<string, string> = {},
+  home = freshDir("home"),
+  prompt = SUBMIT.prompt,
+) {
   const stub = join(home, "bin");
   const spawned = join(home, "eden-was-spawned");
   mkdirSync(stub, { recursive: true });
@@ -74,7 +81,7 @@ async function runHook(pluginRoot: string, extra: Record<string, string> = {}, h
   const started = performance.now();
   const proc = Bun.spawn(["/bin/sh", "-c", pluginSubmitCommand(pluginRoot)!], {
     env: { ...env, CLAUDE_PLUGIN_ROOT: pluginRoot },
-    stdin: new Blob([JSON.stringify({ ...SUBMIT, cwd: home })]),
+    stdin: new Blob([JSON.stringify({ ...SUBMIT, prompt, cwd: home })]),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -97,12 +104,13 @@ function fallbacks(home: string): Array<{ t: string; plugin: string; cause: stri
 }
 
 /**
- * Two Submits of one prompt on one Eden home: the first stores the prompt's rule (and prints `{}`), the second packs
- * it. A crash would print `{}` too (`hooks.json`'s `|| echo '{}'`), but never the packet, and it writes to stderr.
+ * Two Submits on one Eden home: the first stores the prompt's rule (and prints `{}`), the second, a prompt that cues
+ * it, packs it. A crash would print `{}` too (`hooks.json`'s `|| echo '{}'`), but never the packet, and it writes to
+ * stderr.
  */
 async function submitTwice(pluginRoot: string, extra: Record<string, string> = {}) {
   const first = await runHook(pluginRoot, extra);
-  const second = await runHook(pluginRoot, extra, first.home);
+  const second = await runHook(pluginRoot, extra, first.home, CUE);
   return { first, second, outputs: [first.stdout, second.stdout] };
 }
 

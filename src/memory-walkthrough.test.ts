@@ -381,6 +381,8 @@ describe("M36.2 walkthrough 2 — Clerk survives Auth is failing after sleep", (
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m36-2h", prompt: CLERK });
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m36-2h", prompt: FAILING });
       hookStop("s-m36-2h");
+      // The second Submit delivered Clerk; a compaction re-arms it (A4 §4), so the later cue shows what survived.
+      memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: "s-m36-2h" });
       const later = hookSubmit("s-m36-2h", AUTH_CUE);
       assertClerk(later);
       expect(later).toContain(MEMORY_MARK);
