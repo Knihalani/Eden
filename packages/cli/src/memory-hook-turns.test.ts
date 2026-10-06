@@ -1,6 +1,7 @@
 /**
- * P0.2 at the hook: which submits get a packet (D24, A7 §2), the human-turn counter (A4 §4), and the packet's shape
- * and wording (D28, D14).
+ * P0.2 at the hook: which submits get a packet (D24, A7 §2), the human-turn counter (A4 §4), the packet's shape
+ * and wording (D28, D14), and what is no longer delivered: an invalidated value or rule (A4 §3.1, §5.1 step 5) and
+ * what the last turns already say (D26).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -96,12 +97,13 @@ describe("D24: non-human submits are silent and do not count as turns", () => {
 
   test("a prompt equal to a cron of the window's last Stop is non-human; the cron text is kept only as a hash", () => {
     submit("Kai's timezone is Pacific", { prompt_id: "p1" });
-    stop({ session_crons: [{ id: "c1", schedule: "*/5 * * * *", recurring: true, prompt: "ping Kai about Pacific" }] });
-    expect(submit("ping Kai about Pacific", { prompt_id: "p2" })).toBeUndefined();
+    stop({ session_crons: [{ id: "c1", schedule: "*/5 * * * *", recurring: true, prompt: "ping Kai about the release" }] });
+    expect(submit("ping Kai about the release", { prompt_id: "p2" })).toBeUndefined();
     expect(humanTurns()).toBe(1);
     expect(windowFile("ctx.log")).not.toContain("ping Kai");
     stop({ session_crons: [] });
-    expect(submit("ping Kai about Pacific", { prompt_id: "p3" })).toContain("Pacific");
+    // Human again once the cron is gone. The prompt must not state the value itself, which D26 would drop.
+    expect(submit("ping Kai about the release", { prompt_id: "p3" })).toContain("Pacific");
     expect(humanTurns()).toBe(2);
   });
 });
@@ -179,5 +181,80 @@ describe("D14, D28: the packet's wording and shape", () => {
     expect(bullets.length).toBeGreaterThan(0);
     expect(bullets.length).toBeLessThanOrEqual(2);
     expect(Buffer.byteLength(packet, "utf8")).toBeLessThanOrEqual(900);
+  });
+});
+
+function sessionStart(session: string): string {
+  const out = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session, source: "startup" });
+  return (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
+}
+
+/** A transcript of typed prompts, each answered by the assistant. */
+function conversation(prompts: string[]): string {
+  const path = join(dir, `c-${Math.random().toString(36).slice(2)}.jsonl`);
+  const lines = prompts.flatMap((text) => [
+    { type: "user", message: { role: "user", content: text } },
+    { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Done." }] } },
+  ]);
+  writeFileSync(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+  return path;
+}
+
+describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered", () => {
+  test("after 'we no longer use …', an older row stating it is dropped at Submit", () => {
+    submit("We use zebracache for caching.", { prompt_id: "p1" });
+    expect(submit("what is zebracache used for?", { prompt_id: "p2" })).toContain("We use zebracache");
+    submit("We no longer use zebracache.", { prompt_id: "p3" });
+    expect(submit("what is zebracache used for?", { prompt_id: "p4" }) ?? "").not.toContain("We use zebracache");
+  });
+
+  test("after 'you can … now', a rule forbidding that action is dropped at SessionStart", () => {
+    submit("Never merge the zebra PRs yourself.", { prompt_id: "p1" });
+    submit("ok, what is next for the zebra release?", { prompt_id: "p2" });
+    expect(sessionStart(SESSION)).toContain("Never merge the zebra PRs yourself");
+    submit("You can merge the zebra PRs yourself now.", { prompt_id: "p3" });
+    expect(sessionStart(SESSION)).not.toContain("Never merge the zebra PRs yourself");
+  });
+});
+
+describe("D26: what the last turns already say is not delivered", () => {
+  test("a row that restates a recent typed prompt is dropped; an older one is not", () => {
+    submit("zebra billing runs on the db-replica2 host", { prompt_id: "p1" });
+    submit("now fix the lint warnings", { prompt_id: "p2" });
+    const recent = conversation(["zebra billing runs on the db-replica2 host", "now fix the lint warnings"]);
+    expect(submit("where does zebra billing run?", { prompt_id: "p3", transcript_path: recent }) ?? "").not.toContain(
+      "db-replica2",
+    );
+    const older = conversation([
+      "zebra billing runs on the db-replica2 host",
+      "rename the export helper",
+      "now fix the lint warnings",
+    ]);
+    expect(submit("where does zebra billing run?", { prompt_id: "p4", transcript_path: older })).toContain(
+      "db-replica2",
+    );
+  });
+});
+
+describe("A4 §4: the ledger's refractory rule", () => {
+  const start = (source: string) =>
+    (
+      memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source })?.hookSpecificOutput as
+        | { additionalContext?: string }
+        | undefined
+    )?.additionalContext;
+
+  test("a bullet is delivered once per window; resume keeps the ledger, a compaction re-arms it", () => {
+    submit("zebra billing runs on the db-replica2 host", { prompt_id: "p1" });
+    expect(submit("where does zebra billing run?", { prompt_id: "p2" })).toContain("db-replica2");
+    expect(submit("where does zebra billing run, again?", { prompt_id: "p3" }) ?? "").not.toContain("db-replica2");
+    expect(start("resume")).toBeUndefined();
+    expect(submit("where does zebra billing run now?", { prompt_id: "p4" }) ?? "").not.toContain("db-replica2");
+    start("compact");
+    expect(submit("where does zebra billing run?", { prompt_id: "p5" })).toContain("db-replica2");
+    const log = windowFile("delivery.log");
+    expect(log).toContain('"k":"deliver"');
+    expect(log).toContain('"k":"epoch"');
+    expect(log).not.toContain("db-replica2");
   });
 });
