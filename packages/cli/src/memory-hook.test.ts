@@ -571,10 +571,12 @@ describe("passive memory hooks", () => {
       const bareCtx = (bare?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
       expect(bareCtx).not.toMatch(/Pacific/i);
 
+      // The prompt names the subject but not the value: one that says "GitHub Actions CI" already holds the fact,
+      // which D26 then does not deliver back.
       const later = memoryHookResponse({
         hook_event_name: "UserPromptSubmit",
         transcript_path: trans,
-        prompt: "What GitHub Actions CI do we use?",
+        prompt: "Which GitHub CI runner do we use?",
       });
       const ctx = (later?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
       expect(ctx).toContain(MEMORY_MARK);
@@ -691,7 +693,7 @@ describe("passive memory hooks", () => {
       const pre = memoryHookResponse({
         hook_event_name: "PreCompact",
         transcript_path: trans,
-        prompt: "What GitHub Actions CI do we use?",
+        prompt: "Which GitHub CI runner do we use?",
       });
       const ctx = (pre?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
       expect(ctx).toContain(MEMORY_MARK);

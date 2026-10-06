@@ -781,9 +781,14 @@ export class AgentMemory {
         items = list
           .map((m) => ({
             role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"),
+            src: m && typeof m === "object" ? (m as { src?: unknown }).src : undefined,
             text: convBlob([m]).trim().replace(/\s+/g, " "),
           }))
           .filter((i) => i.text),
+        // A6 §2.1: a row from text the user did not type keeps its true source: a tool result the caller marks
+        // `src: "tool"`, or the assistant's text.
+        srcTags = (it: { role: string; src?: unknown }): string[] =>
+          it.src === "tool" ? ["src:tool"] : it.role === "assistant" ? ["src:assistant"] : [],
         batchLive = new Map<string, string>();
       for (let i = 0; i < items.length; i++) {
         const it = items[i]!,
@@ -796,7 +801,11 @@ export class AgentMemory {
               text = omitConflictingIdentity(text, this.semantic());
             } catch {}
           if (text && !this.seenLower.has(text.toLowerCase())) {
-            const rec = this.remember(text, { kind: lane === "narrative" ? "episode" : "fact", lane });
+            const rec = this.remember(text, {
+              kind: lane === "narrative" ? "episode" : "fact",
+              lane,
+              tags: srcTags(it),
+            });
             out.push(rec);
             try {
               if (lane === "narrative") new ChunkStore(this.dir).put(text, { src: rec.id, t: rec.at });
@@ -872,7 +881,7 @@ export class AgentMemory {
             } catch {
               kind = "episode";
             }
-          out.push(this.remember(text, { kind, pin }));
+          out.push(this.remember(text, { kind, pin, tags: srcTags(it) }));
           coveredChars += text.length;
         }
         try {
@@ -891,7 +900,7 @@ export class AgentMemory {
                 !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) &&
                 ![...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key)
               )
-                out.push(this.remember(safe, { kind: "episode" }));
+                out.push(this.remember(safe, { kind: "episode", tags: srcTags(it) }));
             }
           }
         } catch {}

@@ -357,6 +357,8 @@ describe("M19.2 hook isolation", () => {
           session_id: "s-m192",
         });
         for (const cue of CHAT_CUES) {
+          // Each cue in a fresh epoch: the window ledger (A4 §4) delivers a bullet once per epoch.
+          memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: "s-m192" });
           const later = memoryHookResponse({
             hook_event_name: "UserPromptSubmit",
             prompt: cue,
