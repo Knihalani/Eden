@@ -289,7 +289,9 @@ describe("M8.4 gist + empty cue", () => {
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
         // The hook words its bullets (D14): a rule the user set, a gist from a summary, no [kind · age · src] tag.
-        expect(ctx).toContain(`- Rule on record: ${RULE}`);
+        // A pinned rule with no recorded source is a plain bullet: no "Rule you set" (A6 §2.1).
+        expect(ctx).toContain(`- ${RULE}`);
+        expect(ctx).not.toMatch(/Rule you set/);
         expect(ctx).toContain(`- ${gists[0]!.text} (earlier session notes`);
         expect(ctx).not.toMatch(/\[(?:rule|gist|fact|episode|procedure)\b/);
 

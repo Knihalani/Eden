@@ -7,8 +7,8 @@
  *   `Updated:` items (P1.1), which may exceed the soft limit; none exist yet.
  * - **Wording.** Project information, never an instruction to Claude (R0 F20). A rule the user set reads "Rule you
  *   set: …"; every other bullet ends with its source and age, e.g. "(you said, 3 weeks ago)". The source comes from
- *   the row's `src`, and a row without one claims no authority (A6 §2.1): "Rule on record: …", "… (3 weeks ago)".
- *   The header is every packet's (`MEMORY_PACKET_MARK`).
+ *   the row's `src`, and a row without one claims no authority (A6 §2.1): a plain bullet, "… (3 weeks ago)", even
+ *   for a rule. The header is every packet's (`MEMORY_PACKET_MARK`).
  * - **Size.** The packet stays within 900 bytes; a bullet that does not fit is skipped, never cut.
  */
 import { MEMORY_PACKET_MARK, PACKET_BYTE_CAP } from "./memory-sota";
@@ -60,7 +60,7 @@ export function ageInWords(at: unknown, now: number): string | undefined {
 export function declarativeBullet(note: ProvenanceNote, now: number): string {
   const text = body(note);
   const source = knownNoteSource(note);
-  if (packetKind(note) === "rule") return `${source === "user" ? "Rule you set" : "Rule on record"}: ${text}`;
+  if (packetKind(note) === "rule" && source === "user") return `Rule you set: ${text}`;
   const provenance = [source && SOURCE_WORDS[source], ageInWords(note.at, now)].filter(Boolean).join(", ");
   return provenance ? `${text} (${provenance})` : text;
 }

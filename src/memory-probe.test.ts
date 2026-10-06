@@ -293,11 +293,11 @@ describe("M36.1 empty cue", () => {
       const start = memoryHookResponse({ hook_event_name: "SessionStart" });
       const ctx = hookContext(start);
       expectNoEmptyDump(ctx);
-      // The hook words its bullets (D14): every one is a rule the user set or a gist from a summary.
+      // The hook words its bullets (D14): every one is the pinned rule (plain: no source recorded) or a gist.
       expect(ctx).not.toMatch(/\b(?:verify|unknown): /);
-      expect(ctx).toMatch(new RegExp(`Rule on record: .*${PIN}`));
+      expect(ctx).toMatch(new RegExp(`^- Never print ${PIN}`, "m"));
       for (const line of bullets(ctx)) {
-        expect(line).toMatch(/^-\s+(?:Rule on record: .*|.* \(earlier session notes[^()]*\))$/);
+        expect(line.includes(PIN) || /\(earlier session notes[^()]*\)$/.test(line)).toBe(true);
       }
       const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "" });
       expectNoEmptyDump(hookContext(submit));

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { openMemory } from "./index";
 import { ageInWords, declarativeBullet, PACKET_SOFT_BULLETS, renderPacket, shapePacket } from "./memory-hook-packet";
 import type { ProvenanceNote } from "./memory-provenance";
-import { MEMORY_PACKET_MARK, MEMORY_PACKET_MARKS, stripMemoryPacket } from "./memory-sota";
+import { MEMORY_PACKET_MARK, stripMemoryPacket } from "./memory-sota";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const ago = (ms: number) => NOW - ms;
@@ -20,11 +20,11 @@ const gist = (text: string) => ({ id: text, text, kind: "gist", tags: ["gist"], 
 const fromUser = <T extends ProvenanceNote>(note: T) => ({ ...note, tags: [...(note.tags ?? []), "src:user"] });
 
 describe("D14: declarative wording, claiming only the source a row shows (A6 §2.1)", () => {
-  test("a rule the user set says so; a rule with no source is on record", () => {
+  test("a rule the user set says so; a rule with no source is a plain bullet", () => {
     expect(declarativeBullet(fromUser(rule("Never merge PRs yourself.")), NOW)).toBe(
       "Rule you set: Never merge PRs yourself.",
     );
-    expect(declarativeBullet(rule("Never merge PRs yourself."), NOW)).toBe("Rule on record: Never merge PRs yourself.");
+    expect(declarativeBullet(rule("Never merge PRs yourself."), NOW)).toBe("Never merge PRs yourself. (1 hour ago)");
   });
 
   test("other bullets end with their source and age, without the old [kind · age · src] tag", () => {
@@ -123,6 +123,9 @@ describe("the rendered packet", () => {
   });
 });
 
+/** The headers literally, not the constant under test: today's (D14) and the one before P0.2. */
+const HEADERS = ["Eden memory, recalled from earlier sessions:", "Eden Memory:"];
+
 describe("packets in either wording: today's header and the one before P0.2", () => {
   test("a history that already holds a packet gets no second one", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-packet-marks-"));
@@ -131,7 +134,7 @@ describe("packets in either wording: today's header and the one before P0.2", ()
       mem.remember("The database is sqlite.");
       const ask = { role: "user", content: "what database do we use" };
       expect(mem.recall([ask]).length).toBeGreaterThan(0);
-      for (const header of MEMORY_PACKET_MARKS) {
+      for (const header of HEADERS) {
         expect(mem.recall([{ role: "system", content: `${header}\n- something earlier` }, ask])).toEqual([]);
       }
       mem.close();
@@ -141,8 +144,8 @@ describe("packets in either wording: today's header and the one before P0.2", ()
   });
 
   test("stripMemoryPacket removes a packet's header and its bullets, and keeps the text around it", () => {
-    for (const header of MEMORY_PACKET_MARKS) {
-      const text = `Before.\n${header}\n- Rule on record: never merge\n- The database is sqlite (2 hours ago)\nAfter.`;
+    for (const header of HEADERS) {
+      const text = `Before.\n${header}\n- Rule you set: never merge\n- The database is sqlite (2 hours ago)\nAfter.`;
       expect(stripMemoryPacket(text)).toBe("Before.\n\nAfter.");
     }
   });

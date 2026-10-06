@@ -27,7 +27,7 @@ const AX_TREE = "RootWebArea [landmark] heading M44AXDUMP";
 const FACT_OR_GIST = /\[(?:fact|gist)(?:\s*[·|][^\]]*)?\]/i;
 const PROCEDURE = /\[procedure(?:\s*[·|][^\]]*)?\]/i;
 /** A fact or gist bullet in a hook packet: not a rule, not a procedure (D14 words them without tags). */
-const HOOK_FACT_OR_GIST = /^- (?!Rule (?:you set|on record): )(?!.*\b(?:verify|unknown): )/m;
+const HOOK_FACT_OR_GIST = /^- (?!Rule you set: )(?!.*\b(?:verify|unknown): )/m;
 
 function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), "eden-m44-"));
@@ -462,9 +462,9 @@ describe("M44 project identity", () => {
         const ctx = hookContext(start);
         expect(ctx).toMatch(/sqlite/i);
         expect(ctx).not.toMatch(/postgres/i);
-        // Pins and gists only: every bullet is a rule or a gist (D14 wording).
+        // No pins here: every bullet is a gist (D14 wording).
         for (const line of ctx.split("\n").filter((l) => l.startsWith("- ")))
-          expect(line).toMatch(/^- (?:Rule (?:you set|on record): .*|.* \(earlier session notes[^()]*\))$/);
+          expect(line).toMatch(/\(earlier session notes[^()]*\)$/);
         expect(ctx).not.toContain(secretSession);
         expect(ctx).not.toContain(secretCwd);
         expect(ctx).not.toContain(secretEmail);
