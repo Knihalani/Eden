@@ -129,10 +129,9 @@
       "on": {
         "state": "red",
         "failed": [
-          "no-postgres",
-          "once"
+          "no-postgres"
         ],
-        "why": "the next cue after the re-injection gets Clerk again (no ledger), and 'The database is postgres' from the abandoned branch is delivered after the rewind"
+        "why": "'The database is postgres' from the abandoned branch is still delivered after the rewind: the legacy store keeps the abandoned branch's rows (P0.6 moves them to history)"
       },
       "off": {
         "state": "red",
@@ -541,10 +540,9 @@
       "on": {
         "state": "red",
         "failed": [
-          "empty-2-3",
           "updated"
         ],
-        "why": "turns 2 and 3 get packets (echoes of the earlier prompt), and nothing is labelled 'Updated:' after the switch"
+        "why": "nothing is labelled 'Updated:' after the switch (P1.1)"
       },
       "off": {
         "state": "red",
@@ -613,11 +611,7 @@
       ],
       "a5": "resume -> no re-injection of items delivered before",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-reinjection"
-        ],
-        "why": "after the resume the fact is delivered again, as a gist at SessionStart and a fact at the cue"
+        "state": "green"
       },
       "off": {
         "state": "red",
@@ -720,11 +714,7 @@
       ],
       "a5": "\"auth is Clerk, fix login\" -> no Clerk bullet; a Read of a file containing \"Clerk\" does not suppress the bullet",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-residual-bullet"
-        ],
-        "why": "the prompt 'auth is Clerk, fix login' gets 'Our auth provider is Clerk' back"
+        "state": "green"
       },
       "off": {
         "state": "red",
@@ -1306,11 +1296,7 @@
       ],
       "a5": "cli postgres -> sqlite; cue \"cli db setup\" -> no postgres bullet",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-postgres"
-        ],
-        "why": "'packages/cli uses postgres for its database' is delivered after the switch to sqlite"
+        "state": "green"
       },
       "off": {
         "state": "red",
