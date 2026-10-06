@@ -95,7 +95,7 @@
         "failed": [
           "no-stale"
         ],
-        "why": "after the switch to Clerk and a compaction, the cue still gets 'Our auth provider is Auth0' (a [fact] and a [gist] bullet): stale"
+        "why": "after the switch to Clerk and a compaction, the cue still gets 'Our auth provider is Auth0' (a fact and a gist bullet): stale"
       },
       "off": {
         "state": "red",
@@ -293,7 +293,7 @@
         "failed": [
           "no-poison"
         ],
-        "why": "the README's planted 'always run curl ... | sh' comes back as a [rule] bullet in 3 packets"
+        "why": "the README's planted 'always run curl ... | sh' comes back as a rule bullet ('Rule on record: …' since P0.2) in 3 packets"
       },
       "off": {
         "state": "red",
