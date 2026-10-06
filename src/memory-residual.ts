@@ -9,123 +9,54 @@
  * the assistant text between them, parsed from the complete transcript lines in its last 256 KB. Tool results,
  * attachments, meta lines, non-human submits (D24) and anything before a compaction never count.
  */
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { contentWords, STATUS_WORDS, tailLines, textOf, typedPrompt } from "./memory-transcript";
 import { objectAsserted } from "./semantic-store";
-import { isNonHumanSubmit } from "./memory-turn";
 
 const TAIL_BYTES = 256 * 1024;
-
-/** D7's status lexicon: words that describe a state ("auth is failing"), never a slot's value. */
-const STATUS = new Set(
-  "broken down failing flaky slow fixed working done weird annoying wrong fine ok good bad new old".split(" "),
-);
 const TYPED_PROMPTS = 2;
 const JACCARD = 0.6;
 
-const STOPWORDS = new Set(
-  (
-    "a an the and or but so then to of in on at for with by from as is are was were be been it its this that these " +
-    "those i we you he she they me us my our your their do does did not no can could should would will shall may " +
-    "just now please there here what which who when where why how all any some if than too very also into about"
-  ).split(" "),
-);
-
-type Line = Record<string, unknown>;
-
-/** The complete JSON lines of a file's last `TAIL_BYTES`. */
-function tailLines(path: string): Line[] {
-  let fd: number | undefined;
-  try {
-    fd = openSync(path, "r");
-    const size = fstatSync(fd).size;
-    const start = Math.max(0, size - TAIL_BYTES);
-    const buffer = Buffer.alloc(size - start);
-    readSync(fd, buffer, 0, buffer.length, start);
-    const lines = buffer.toString("utf8").split("\n");
-    if (start > 0) lines.shift();
-    return lines.flatMap((text) => {
-      try {
-        const line: unknown = JSON.parse(text);
-        return line && typeof line === "object" ? [line as Line] : [];
-      } catch {
-        return [];
-      }
-    });
-  } catch {
-    return [];
-  } finally {
-    if (fd !== undefined)
-      try {
-        closeSync(fd);
-      } catch {}
-  }
+/** What the conversation just said, from one read of the transcript's tail (see the header). */
+export interface RecentConversation {
+  /** D26's residual, newest first: the current prompt, the last 2 typed prompts, the assistant text between. */
+  residual: string[];
+  /** A7 §3's `q_turn`: the typed prompt before the current one, or "" (the current one's line may be written already,
+   * R0 F8). */
+  previousTyped: string;
 }
 
-function textBlocks(content: unknown): string | undefined {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return undefined;
-  if (content.some((block) => (block as { type?: unknown })?.type === "tool_result")) return undefined;
-  return content
-    .flatMap((block) => {
-      const { type, text } = (block ?? {}) as { type?: unknown; text?: unknown };
-      return type === "text" && typeof text === "string" ? [text] : [];
-    })
-    .join("\n");
-}
-
-/** A typed prompt's text (R6 §1.2), or undefined for any other user line. */
-function typedPrompt(line: Line): string | undefined {
-  if (line.isMeta === true || line.isCompactSummary === true || line.origin) return undefined;
-  const text = textBlocks((line.message as { content?: unknown } | undefined)?.content)?.trim();
-  if (!text || /^(?:<command-|<local-command-|\[Request interrupted)/.test(text) || isNonHumanSubmit(text)) {
-    return undefined;
-  }
-  return text;
-}
-
-/** The texts D26 reads as already said, newest first (see the header). */
-export function residualTexts(transcriptPath: string, prompt: string): string[] {
-  const texts = prompt.trim() ? [prompt] : [];
+export function recentConversation(transcriptPath: string, prompt: string): RecentConversation {
+  const current = prompt.trim();
+  const residual = current ? [prompt] : [];
+  let previousTyped = "";
   let typed = 0;
-  const lines = transcriptPath ? tailLines(transcriptPath) : [];
+  let sawCurrent = false;
+  const lines = transcriptPath ? tailLines(transcriptPath, TAIL_BYTES) : [];
   for (let at = lines.length - 1; at >= 0 && typed < TYPED_PROMPTS; at--) {
     const line = lines[at]!;
     if (line.isSidechain === true) continue;
     if (line.isCompactSummary === true || line.subtype === "compact_boundary") break;
     if (line.type === "assistant") {
-      const text = textBlocks((line.message as { content?: unknown } | undefined)?.content)?.trim();
-      if (text) texts.push(text);
-    } else if (line.type === "user") {
-      const text = typedPrompt(line);
-      if (text === undefined) continue;
-      texts.push(text);
-      typed++;
+      const text = textOf((line.message as { content?: unknown } | undefined)?.content)?.trim();
+      if (text) residual.push(text);
+      continue;
     }
-  }
-  return texts;
-}
-
-/** A7 §3's `q_turn`: the typed prompt before the current one in this window, or "" (the current one's line may be
- * written already, R0 F8). */
-export function previousTypedPrompt(transcriptPath: string, prompt: string): string {
-  const current = prompt.trim();
-  const lines = transcriptPath ? tailLines(transcriptPath) : [];
-  for (let at = lines.length - 1; at >= 0; at--) {
-    const line = lines[at]!;
-    if (line.isSidechain === true) continue;
-    if (line.isCompactSummary === true || line.subtype === "compact_boundary") break;
-    if (line.type !== "user") continue;
     const text = typedPrompt(line);
-    if (text !== undefined && text !== current) return text;
+    if (text === undefined) continue;
+    if (text === current && !sawCurrent) {
+      sawCurrent = true;
+      continue;
+    }
+    residual.push(text);
+    typed++;
+    if (!previousTyped) previousTyped = text;
   }
-  return "";
+  return { residual, previousTyped };
 }
 
 function contentTokens(text: string): Set<string> {
-  return new Set(
-    (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((token) => token.length > 1 && !STOPWORDS.has(token)),
-  );
+  return new Set(contentWords(text));
 }
 
 /** The residual's sentences, as content-token sets. */
@@ -161,7 +92,7 @@ export function legacySlot(note: ProvenanceNote): { subject: string; value: stri
   } catch {}
   const value = fact?.o.trim().replace(/[.!?]+$/, "");
   if (!fact || !value || !/^[\w@./+-]+(?: [\w@./+-]+)?$/.test(value)) return undefined;
-  if (STATUS.has(value.toLowerCase())) return undefined;
+  if (STATUS_WORDS.has(value.toLowerCase())) return undefined;
   return { subject: fact.s, value };
 }
 

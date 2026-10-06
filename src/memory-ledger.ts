@@ -5,7 +5,7 @@
  * - **Deliveries** are appended to the window's `delivery.log` next to its `turn` records:
  *   `{"k":"deliver","cid":…,"ver":…,"off":…,"att":…,"ht":…}`. `off` is the transcript's size at delivery, `att`
  *   the Submit's `prompt_id`, `ht` the human-turn count.
- * - **cid / ver.** A slot (`legacySlot`) is keyed by its subject, `F:<hash>`, with its value as `ver`, so two rows
+ * - **cid / ver.** A slot (`legacySlot`) is keyed by its subject, `s:<hash>`, with its value as `ver`, so two rows
  *   saying the same value share a cid. A rule is `P:<hash>` and anything else `E:<hash>`, both of
  *   their normalized content words, so near-identical text gets one cid. P2.1 and P3.3 bring the real keys.
  * - **Still in the window**: the same epoch, the same `ver`, the transcript grown by less than 400 KB (rules) or
@@ -18,17 +18,15 @@
  * P1.1 adds the `delivery.json` snapshot, the overflow policy and `hook.log.d/`.
  */
 import { createHash } from "node:crypto";
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { legacySlot } from "./memory-residual";
+import { contentWords, tailLines } from "./memory-transcript";
 import { appendRecord, windowRecords } from "./memory-window";
 
 export const REFRACTORY_BYTES = { rule: 400_000, other: 1_200_000 } as const;
 
 /** The transcript tail read for the branch check: past the longest distance, so an older delivery has expired. */
 const BRANCH_TAIL_BYTES = 1_500_000;
-
-const STOPWORDS = new Set("a an the and or but to of in on at for with by is are was were be it this that".split(" "));
 
 export interface LedgerKey {
   cid: string;
@@ -41,14 +39,13 @@ function hash(text: string): string {
 }
 
 function words(text: string): string {
-  const tokens = (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((token) => !STOPWORDS.has(token));
-  return [...new Set(tokens)].sort().join(" ");
+  return [...new Set(contentWords(text))].sort().join(" ");
 }
 
 /** A note's cid and ver (see the header). */
 export function ledgerKey(note: ProvenanceNote): LedgerKey {
   const slot = legacySlot(note);
-  if (slot) return { cid: `F:${hash(words(slot.subject))}`, ver: hash(words(slot.value)), rule: false };
+  if (slot) return { cid: `s:${hash(words(slot.subject))}`, ver: hash(words(slot.value)), rule: false };
   const content = hash(words(stripPacketLabel(String(note.text ?? "")).body));
   return noteKindToken(note) === "rule"
     ? { cid: `P:${content}`, ver: content, rule: true }
@@ -99,44 +96,22 @@ function epochDeliveries(dir: string): Delivery[] {
 function branchPrompts(transcriptPath: string): { seen: Set<string>; onBranch: Set<string> } {
   const seen = new Set<string>();
   const onBranch = new Set<string>();
-  let fd: number | undefined;
-  try {
-    fd = openSync(transcriptPath, "r");
-    const size = fstatSync(fd).size;
-    const start = Math.max(0, size - BRANCH_TAIL_BYTES);
-    const buffer = Buffer.alloc(size - start);
-    readSync(fd, buffer, 0, buffer.length, start);
-    const lines = buffer.toString("utf8").split("\n");
-    if (start > 0) lines.shift();
-    const parent = new Map<string, string | null>();
-    const prompt = new Map<string, string>();
-    let last: string | undefined;
-    for (const text of lines) {
-      let line: Record<string, unknown>;
-      try {
-        line = JSON.parse(text) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-      if (!line || typeof line.uuid !== "string" || line.isSidechain === true) continue;
-      parent.set(line.uuid, typeof line.parentUuid === "string" ? line.parentUuid : null);
-      if (typeof line.promptId === "string") {
-        prompt.set(line.uuid, line.promptId);
-        seen.add(line.promptId);
-      }
-      last = line.uuid;
+  const parent = new Map<string, string | null>();
+  const prompt = new Map<string, string>();
+  let last: string | undefined;
+  for (const line of tailLines(transcriptPath, BRANCH_TAIL_BYTES)) {
+    if (typeof line.uuid !== "string" || line.isSidechain === true) continue;
+    parent.set(line.uuid, typeof line.parentUuid === "string" ? line.parentUuid : null);
+    if (typeof line.promptId === "string") {
+      prompt.set(line.uuid, line.promptId);
+      seen.add(line.promptId);
     }
-    for (let uuid = last, steps = 0; uuid && steps < parent.size; steps++) {
-      const id = prompt.get(uuid);
-      if (id) onBranch.add(id);
-      uuid = parent.get(uuid) ?? undefined;
-    }
-  } catch {
-  } finally {
-    if (fd !== undefined)
-      try {
-        closeSync(fd);
-      } catch {}
+    last = line.uuid;
+  }
+  for (let uuid = last, steps = 0; uuid && steps < parent.size; steps++) {
+    const id = prompt.get(uuid);
+    if (id) onBranch.add(id);
+    uuid = parent.get(uuid) ?? undefined;
   }
   return { seen, onBranch };
 }

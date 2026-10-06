@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { admitNotes, admitsEpisode, identifierTokens, isUntyped } from "./memory-gate";
 
 const tool = (text: string) => ({ id: text, text, tags: ["src:tool"] });
-const said = (text: string) => ({ id: text, text, tags: ["src:assistant"] });
+const said = (text: string) => ({ id: text, text, tags: ["src:agent"] });
 const typed = (text: string) => ({ id: text, text });
 
 describe("A7 §4: identifier-shaped tokens", () => {
