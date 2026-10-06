@@ -209,7 +209,7 @@ describe("M24.2 packet merge — labeled slices; Start has no traj dump", () => 
         expect(hay).not.toMatch(/RootWebArea/);
         expect(hay).not.toMatch(new RegExp(`${EXPERIENCE_DIRNAME}/`));
         if (hay.includes(MEMORY_MARK)) {
-          expect(hay).toMatch(/Rule you set: |\(from a summary of earlier work/);
+          expect(hay).toMatch(/Rule on record: |\(earlier session notes/);
           expect(hay).not.toMatch(/RootWebArea/);
         }
       },

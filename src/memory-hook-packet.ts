@@ -5,13 +5,14 @@
  *   ≤ 1 procedure, ≤ 2 episodes (gists included), and 4 bullets in all, D28's soft limit. Nothing is pulled in to
  *   fill a short packet, and a bullet saying the same as an earlier one is dropped. D28's hard limit of 6 is for
  *   `Updated:` items (P1.1), which may exceed the soft limit; none exist yet.
- * - **Wording.** Project information, never an instruction to Claude (R0 F20): a rule is "Rule you set: …"; every
- *   other bullet ends with where it came from and how long ago, e.g. "(you said, 3 weeks ago)". The header is
- *   every packet's (`MEMORY_PACKET_MARK`).
+ * - **Wording.** Project information, never an instruction to Claude (R0 F20). A rule the user set reads "Rule you
+ *   set: …"; every other bullet ends with its source and age, e.g. "(you said, 3 weeks ago)". The source comes from
+ *   the row's `src`, and a row without one claims no authority (A6 §2.1): "Rule on record: …", "… (3 weeks ago)".
+ *   The header is every packet's (`MEMORY_PACKET_MARK`).
  * - **Size.** The packet stays within 900 bytes; a bullet that does not fit is skipped, never cut.
  */
 import { MEMORY_PACKET_MARK, PACKET_BYTE_CAP } from "./memory-sota";
-import { noteKindToken, noteSource, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { knownNoteSource, noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 
 export const PACKET_SOFT_BULLETS = 4;
 
@@ -19,7 +20,8 @@ type PacketKind = "rule" | "procedure" | "episode" | "fact";
 
 const KIND_LIMIT: Partial<Record<PacketKind, number>> = { rule: 2, procedure: 1, episode: 2 };
 
-const SOURCE_WORDS = { user: "you said", tool: "from a tool result", sleep: "from a summary of earlier work" };
+/** A6 §2.1's source labels. */
+const SOURCE_WORDS = { user: "you said", tool: "from a tool result", sleep: "earlier session notes" };
 
 /** Wall-clock times are epoch ms (~1.7e12); smaller `at` values are serials, which have no age. */
 const WALL_CLOCK = 1e11;
@@ -54,13 +56,13 @@ export function ageInWords(at: unknown, now: number): string | undefined {
   return "just now";
 }
 
-/** One bullet, worded as information about the project (D14). */
+/** One bullet, worded as information about the project (D14), claiming only the source the row shows (A6 §2.1). */
 export function declarativeBullet(note: ProvenanceNote, now: number): string {
   const text = body(note);
-  if (packetKind(note) === "rule") return `Rule you set: ${text}`;
-  const age = ageInWords(note.at, now);
-  const source = SOURCE_WORDS[noteSource(note)];
-  return `${text} (${age ? `${source}, ${age}` : source})`;
+  const source = knownNoteSource(note);
+  if (packetKind(note) === "rule") return `${source === "user" ? "Rule you set" : "Rule on record"}: ${text}`;
+  const provenance = [source && SOURCE_WORDS[source], ageInWords(note.at, now)].filter(Boolean).join(", ");
+  return provenance ? `${text} (${provenance})` : text;
 }
 
 /** D28: the bullets worth a packet, in retrieval order (see the header). */

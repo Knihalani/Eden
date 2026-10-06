@@ -1,5 +1,6 @@
 import { alreadyInjected, injectFromRequest, injectNote } from "../../know/src/inject";
 import { MEMORY_MARK, placePathsFrom, processMemory } from "../../../src/index";
+import { MEMORY_PACKET_MARKS } from "../../../src/memory-sota";
 import { memoryConsent } from "../../../src/memory-consent";
 import { messageText } from "./intent";
 import { injectBodyThenObserveTools, observeToolTraces, stripUpstreamPlaceFields } from "./tool-observe";
@@ -101,7 +102,7 @@ export function withKnowFactsAnthropic(body: {
     const blob = `${sys}\n${messageText(messages)}`;
     const extras: Array<{ type: "text"; text: string }> = [];
     const mem = processMemory();
-    if (alreadyInjected(blob) || blob.includes(MEMORY_MARK)) {
+    if (alreadyInjected(blob) || MEMORY_PACKET_MARKS.some((mark) => blob.includes(mark))) {
       mem.observe(messages);
       observeToolTraces(mem, body.messages);
       return stripUpstreamPlaceFields(body) as typeof body;

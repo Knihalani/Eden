@@ -123,6 +123,12 @@ describe("A7 §2: ack and continuation turns are silent until the situation cue 
     expect(humanTurns()).toBe(3);
   });
 
+  test("an unanswered reply to a proposal is still stored, so a later prompt can recall it (A4 §5.1 step 1)", () => {
+    const proposal = transcript("I can set up the package scripts next. Should I use npm?");
+    expect(submit("zebrapkg uses pnpm", { prompt_id: "p1", transcript_path: proposal })).toBeUndefined();
+    expect(submit("which package manager does zebrapkg use?", { prompt_id: "p2" })).toContain("pnpm");
+  });
+
   test("the same short reply after a report is an ordinary prompt", () => {
     submit("Yes, the staging replica runs postgres 15.", { prompt_id: "p1" });
     const report = transcript("The staging database is migrated.");
@@ -146,21 +152,23 @@ describe("A4 §4: the human-turn counter", () => {
 });
 
 describe("D14, D28: the packet's wording and shape", () => {
-  test("a packet is worded as project information, with where each bullet came from", () => {
+  // No writer records a row's source (`src`) before P0.4, so no bullet may claim one (A6 §2.1): no "you said",
+  // no "Rule you set".
+  test("a packet is worded as project information, with no tag and no authority it cannot show", () => {
     submit("Kai's timezone is Pacific", { prompt_id: "p1" });
     const packet = submit("What time should I ping Kai about the release?", { prompt_id: "p2" }) ?? "";
     expect(packet.startsWith(`${HEADER}\n- `)).toBe(true);
-    // Ages need persisted times (P0.3); until then a bullet may say only where it came from.
-    expect(packet).toMatch(/Pacific.* \(you said(?:, [^)]+)?\)$/m);
+    expect(packet).toMatch(/^- Kai's timezone is Pacific/m);
     expect(packet).not.toMatch(/\[(?:fact|episode|rule|gist|procedure)\b/);
+    expect(packet).not.toMatch(/you said|you set/i);
   });
 
-  test("a rule reads 'Rule you set: …' at SessionStart", () => {
+  test("a rule without a source reads 'Rule on record: …' at SessionStart", () => {
     submit("Never commit .env or credentials.json", { prompt_id: "p1" });
     const out = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "startup" });
     const packet = (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
     expect(packet).toStartWith(HEADER);
-    expect(packet).toContain("- Rule you set: Never commit .env or credentials.json");
+    expect(packet).toContain("- Rule on record: Never commit .env or credentials.json");
   });
 
   test("bullets are not filled to a fixed count: at most 4, at most 2 episodes, within 900 bytes", () => {

@@ -72,7 +72,8 @@ export function noteKindToken(r: ProvenanceNote, text = String(r.text ?? "")): s
   }
 }
 
-export function noteSource(r: ProvenanceNote): MemoryProvenanceSrc {
+/** A note's source when the note shows it, else undefined: a row with no `src` makes no authority claim (A6 §2.1). */
+export function knownNoteSource(r: ProvenanceNote): MemoryProvenanceSrc | undefined {
   try {
     const tags = (r.tags ?? []).map((t) => String(t).toLowerCase());
     // Content tokens ("sleep", "tool", "gist") are not a source. observe()
@@ -84,10 +85,15 @@ export function noteSource(r: ProvenanceNote): MemoryProvenanceSrc {
     const lane = String(r.lane ?? "").toLowerCase();
     if (kind === "digest" || kind === "gist") return "sleep";
     if (kind === "procedure" || lane === "trajectory") return "tool";
-    return "user";
+    return undefined;
   } catch {
-    return "user";
+    return undefined;
   }
+}
+
+/** The `[kind · age · src]` tag's source: the known one, else `user`. */
+export function noteSource(r: ProvenanceNote): MemoryProvenanceSrc {
+  return knownNoteSource(r) ?? "user";
 }
 
 function procedureVerified(r: ProvenanceNote, body: string): boolean {

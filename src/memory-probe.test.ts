@@ -295,9 +295,9 @@ describe("M36.1 empty cue", () => {
       expectNoEmptyDump(ctx);
       // The hook words its bullets (D14): every one is a rule the user set or a gist from a summary.
       expect(ctx).not.toMatch(/\b(?:verify|unknown): /);
-      expect(ctx).toMatch(new RegExp(`Rule you set: .*${PIN}`));
+      expect(ctx).toMatch(new RegExp(`Rule on record: .*${PIN}`));
       for (const line of bullets(ctx)) {
-        expect(line).toMatch(/^-\s+(?:Rule you set: .*|.* \(from a summary of earlier work[^()]*\))$/);
+        expect(line).toMatch(/^-\s+(?:Rule on record: .*|.* \(earlier session notes[^()]*\))$/);
       }
       const submit = memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "" });
       expectNoEmptyDump(hookContext(submit));
