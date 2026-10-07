@@ -26,6 +26,7 @@ You have full permissions: commit, push, open PRs and merge into `main` yourself
 - Create a worktree on `mem/<slice>-<short-slug>` from `origin/main` (EnterWorktree, or `git worktree add .claude/worktrees/<slice> -b <branch> origin/main`).
 - Run `bun install --frozen-lockfile` in it. Without it the plugin cannot import `@eden/ir`, and every hook falls back to spawning `eden hook` (about 2.6 s each), which skews timings and end-to-end runs.
 - A worktree nested in the repo (`.claude/worktrees/…`) gets 2 false typecheck errors (Buffer types in `apps/site/src/assets.ts` and `packages/know/src/cdx.ts`). Run the final local CI in a checkout outside the repo, such as a detached `git worktree add` under your scratchpad, after `bun install --frozen-lockfile` there.
+- Make the baseline checkout once, and reuse it for the whole slice: `git worktree add --detach <scratchpad>/base origin/main`, then `bun install --frozen-lockfile` there. The measure script's `--base` and the soak and timing comparisons use it; measure the base guards once (`--guard-base` reuses their files afterwards).
 - Mark the slice `in-progress` in PROGRESS.md with the branch name. This is the first commit, together with the prereg.
 
 ## 2–5. Pre-register, red first, implement, verify
@@ -40,6 +41,32 @@ Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
   - no duplicated helpers;
   - comments only where intent is not obvious.
 - **When the spec is wrong or impossible** (contradicts measured reality or the hook docs in `docs/memory-ship/research/sources/`): do not silently deviate. Implement the closest faithful version, record it under "Decisions made", and add a follow-up to update DECISIONS / A4 in the same PR if the change is clear-cut.
+- **Spend machine time once.** A full measurement takes 1–2 hours serially. P0.2 re-ran it after every fix, on six versions; measure the approved code once instead:
+  1. **While iterating**, run only:
+     - the affected test files;
+     - the slice's arms (`arms/run.ts --arm <id>`, `--flags on|off|shadow` as separate processes);
+     - the earlier review rounds' probes, committed as tests;
+     - for a behaviour change, one kept world replay (`benchmarks/memory-long-horizon/harness/replay.ts --world <seed> --out <dir>`, about 2 minutes) and the real-session end-to-end (a few minutes).
+
+     These are fast and catch most defects.
+  2. **Code review before measuring** (§6, rounds 1–3).
+  3. **Measure once**, on the commit the code review approved, from a checkout outside the repo:
+     ```bash
+     git worktree add --detach <scratchpad>/m-<sha> <sha> && (cd <scratchpad>/m-<sha> && bun install --frozen-lockfile)
+     bun run measure:slice --new <scratchpad>/m-<sha> --base <scratchpad>/base --out <scratchpad>/measure-<sha> \
+       [--guard-base <base guard JSON files>] [--r6-projects <frozen copy>] [--worlds 1,2] [--only …]
+     ```
+     The script runs the count-only measures `--jobs` at a time (default half the cores), longest first:
+     - the arms: `on` twice, `off`, `shadow`;
+     - the guard seeds, one process each;
+     - the R6 replays;
+     - the kept world replays.
+
+     Load reaches these counts only through hook timeouts, and the summary counts those. It then runs the soak and the locked bench alone, each after the load falls, and records the load. `--only timing` adds the interleaved Submit timing with an A/A pair (`scripts/submit-timing.ts`), for a slice that changes Submit latency. It writes `summary.md`, with the guard table pooled and paired by `scripts/slice-guards.ts`; copy numbers from it.
+  4. **After a later change**, re-measure only what that change can affect: `--changed <last measured commit>` selects from the changed files (docs and tests: nothing; `arms.json`: the arms; code the hook may load or the harness: everything). Copy its "selected"/"skipped" lines into the report. You may skip a measure it selected only for a reason a counter shows (e.g. the R6 replay records no invalidation, so a change confined to validity cannot move it), stated in the report.
+  5. **Local CI once**, on the final tree, in the outside checkout: `bun run format:check && bun run typecheck && bun run test:parallel && EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh`.
+  6. **A quiet machine for timing.** Never run two measurements, or a measurement and the local suite, at once. Check `uptime` before timing work, and report the load next to every latency number.
+  7. **Batch pushes.** Push when you need GitHub CI's evidence (before the evidence check and the merge), not after each fix: each push runs seven CI jobs.
 - **End-to-end means a real Claude Code session**, not a unit test. Run it headless against the worktree's plugin, with an isolated store:
   ```bash
   export EDEN_MEMORY_DIR=$(mktemp -d)
@@ -58,10 +85,19 @@ Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
 
 ## 6. Independent review
 
-- Launch the `slice-reviewer` subagent with the slice id, the worktree path and the base ref `origin/main`.
-- Give it your draft report so it can check the numbers.
-- Address every blocker and major finding, then re-run the reviewer. Minor findings: fix them, or list them under follow-ups.
-- Maximum 3 rounds. If it still requests changes after that, mark the slice `blocked` with the unresolved findings. Do not merge.
+Two phases, so the slow measurement runs once, on approved code:
+1. **Code review** (counted rounds). Before the full measurement, launch the `slice-reviewer` subagent with:
+   - the slice id, the worktree path and the base ref `origin/main`;
+   - `phase: code review`;
+   - the results you have: tests, arms, the kept world replay and the end-to-end.
+
+   Address every blocker and major finding, then re-run the reviewer. Minor findings: fix them, or list them under follow-ups. Commit the reviewer's probes (it saves them under `<scratchpad>/review-probes/`) as regression tests, so the same class of defect cannot come back unseen.
+2. **Measure once** on the approved commit (§5).
+3. **Evidence check.** Continue the same reviewer with `SendMessage`: give it the measurement directory and the draft report, `phase: evidence check`. It re-derives the numbers from the artifacts instead of re-running long measures.
+   - A numbers-only finding: fix the report; it is not a new round.
+   - A finding that needs a code change: a new code-review round, and re-measure with `--changed`.
+- At most 3 code-review rounds. If the reviewer still requests changes, ask the user whether to allow one more round; otherwise mark the slice `blocked` with the unresolved findings. Do not merge.
+- The reviewer relies on GitHub CI's run for the full suite rather than re-running it.
 - Also run `/security-review` where `CLAUDE.md` requires it.
 
 ## 7. Merge
@@ -73,7 +109,7 @@ Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
    - Exception: until P0.−1 is merged, `main` is red, so require "no new failures versus `main`" and show the comparison.
 4. `gh pr merge --rebase --delete-branch`.
 5. Record the merge commit sha.
-6. Remove the worktree.
+6. Remove the worktree, the scratch checkouts (`git worktree remove`), and any private copy (such as an R6 snapshot).
 
 ## 8. Report
 

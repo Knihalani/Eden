@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "test": "./scripts/test.sh",
+    "test:parallel": "./scripts/test-parallel.sh",
+    "measure:slice": "bun scripts/slice-measure.ts",
     "dev": "bun run --cwd apps/web dev",
     "demo": "bun run --cwd apps/control src/demo.ts",
     "cli": "bun run packages/cli/src/cli.ts",
