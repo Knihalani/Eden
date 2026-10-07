@@ -236,6 +236,40 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
     submit("You can merge the zebra PRs yourself now.", { prompt_id: "p3" });
     expect(sessionStart(SESSION)).not.toContain("Never merge the zebra PRs yourself");
   });
+
+  test("a permission on another object, or a retraction, leaves a rule in place", () => {
+    const cases = [
+      ["Never delete the main branch.", "You can delete the branch now."],
+      ["Don't push directly to the main branch.", "You can push to the feature branch now."],
+      ["Never merge PRs without a review.", "You may merge PR 12 now."],
+      ["Never install packages globally.", "You can install the types package now."],
+      ["Never drop the production table.", "You can run the tests now."],
+      ["Never merge until CI is green.", "We no longer run CI on Fridays."],
+      ["Never return GET responses without an ETag.", "Use POST instead of GET for this endpoint."],
+      ["Always deploy to AWS from the release branch.", "We no longer use the AWS SDK v2."],
+      ["Never flush Redis in production.", "We no longer use Redis."],
+    ];
+    for (const [n, [rule, said]] of cases.entries()) {
+      const session = `${SESSION}-${n}`;
+      const ask = (prompt: string, id: string) =>
+        memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: session, prompt, prompt_id: id });
+      ask(rule!, "p1");
+      ask("ok, what is next?", "p2");
+      expect(sessionStart(session)).toContain(rule!.replace(/\.$/, ""));
+      ask(said!, "p3");
+      expect(sessionStart(session)).toContain(rule!.replace(/\.$/, ""));
+    }
+  });
+
+  test("the validity log keeps no secret a stored row would not", () => {
+    submit("You can push with ghp_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2Y now. We no longer use AKIAZZZZZZZZZZZZZZZZ.", {
+      prompt_id: "p1",
+    });
+    const log = windowFile("../../validity.jsonl");
+    expect(log).toContain('"k":"revoke"');
+    expect(log.toLowerCase()).not.toContain("akiazzzzzzzzzzzzzzzz");
+    expect(log.toLowerCase()).not.toContain("ab1cd2ef3gh4");
+  });
 });
 
 describe("D26: what the last turns already say is not delivered", () => {

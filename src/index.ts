@@ -640,6 +640,11 @@ export class AgentMemory {
     return this.compiled.map((c) => c.rec);
   }
 
+  /** A text as the store keeps it (`persistText`): secrets redacted, the session and paths scrubbed. */
+  storableText(text: string): string {
+    return this.persistText(text);
+  }
+
   private persistText(text: string): string {
     let t = String(text ?? "");
     // IR redact misses short tokens and `sk-ant-…` keys (`\bsk-[A-Za-z0-9]{8,}`); every stored row passes here.

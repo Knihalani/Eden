@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { asksHistory, invalidationsIn, readInvalidations, recordInvalidations, validText } from "./memory-validity";
@@ -18,21 +18,20 @@ const shown = (text: string) =>
   invalidationsIn(text, 1).map((r) => (r.k === "retract" ? `retract:${r.o}` : `revoke:${r.c}:${r.o.join("+")}`));
 
 describe("A4 §3.1, D7: what invalidates a value", () => {
-  test("a retraction or a switch, with a 'we' subject or 'use A not B', of a capitalized or identifier-shaped value", () => {
+  test("a retraction or a switch with a 'we' subject, of a capitalized or identifier-shaped value ending its clause", () => {
     const cases: [string, string[]][] = [
       ["We no longer use Redis.", ["retract:redis"]],
       ["we don't use Jest anymore", ["retract:jest"]],
       ["We're not using Jest anymore.", ["retract:jest"]],
-      ["We dropped Sentry last week.", ["retract:sentry"]],
+      ["We dropped Sentry.", ["retract:sentry"]],
+      ["We no longer use Redis, so drop the cache flag.", ["retract:redis"]],
       ["We switched apps/web from Auth0 to Clerk.", ["retract:auth0"]],
       ["We migrated the queue from SQS to Kafka.", ["retract:sqs"]],
-      ["Use Vitest instead of Jest.", ["retract:jest"]],
-      ["We use pnpm, not npm_v6.", ["retract:npm_v6"]],
     ];
     for (const [text, expected] of cases) expect(shown(text)).toEqual(expected);
   });
 
-  test("questions, conditionals, other subjects, common words, paths and pasted spans invalidate nothing", () => {
+  test("questions, conditionals, other subjects, common words, paths, pasted spans and longer names invalidate nothing", () => {
     for (const text of [
       "Should we use pnpm instead of npm?",
       "What if we no longer use Redis?",
@@ -49,6 +48,19 @@ describe("A4 §3.1, D7: what invalidates a value", () => {
       "We dropped Sentry\nthen the build\nkept failing",
       "fix the failing test in src/app.ts",
       "which auth provider does apps/web use?",
+      "We no longer run CI on Fridays.",
+      "We no longer use the AWS SDK v2.",
+      "We no longer use Node 16.",
+      "We stopped using Docker Compose.",
+      "We no longer use GitHub Actions for deploys.",
+      "We no longer have PRs open on the old repo.",
+      "We no longer use the API key in CI.",
+      "We dropped Sentry last week.",
+      "Use POST instead of GET for this endpoint.",
+      "Use Map instead of Object.",
+      "Please use Error instead of String.",
+      "Use Set, not Array.",
+      "We use pnpm, not npm_v6.",
     ])
       expect(shown(text)).toEqual([]);
   });
@@ -67,19 +79,38 @@ describe("A4 §3.1, D9: what revokes a rule", () => {
   });
 
   test("a revocation drops a rule of its class on its object, and nothing else", () => {
-    const merge = invalidationsIn("You can merge PRs yourself now.", 100);
-    expect(validText("Push the fix to the PR, but don't merge it yourself", 50, merge)).toBe("");
-    expect(validText("Never merge PRs yourself", 50, merge)).toBe("");
-    expect(validText("Never push directly to main.", 50, merge)).toBe("Never push directly to main.");
-    const push = invalidationsIn("You can push the feature branch now.", 100);
-    expect(validText("Never push directly to main.", 50, push)).toBe("Never push directly to main.");
-    const bare = invalidationsIn("You can merge now.", 100);
-    expect(validText("Don't merge it yourself.", 50, bare)).toBe("");
-    expect(validText("Never merge PRs without a review.", 50, bare)).toBe("Never merge PRs without a review.");
-    for (const text of ["You can run the tests now.", "You can use the staging server now."])
-      expect(validText("Never run database migrations against production.", 50, invalidationsIn(text, 100))).toBe(
-        "Never run database migrations against production.",
-      );
+    const kept = (rule: string, permit: string) => validText(rule, 50, invalidationsIn(permit, 100));
+    expect(kept("Push the fix to the PR, but don't merge it yourself", "You can merge PRs yourself now.")).toBe("");
+    expect(kept("Never merge PRs yourself", "You can merge PRs yourself now.")).toBe("");
+    expect(kept("Don't merge it yourself.", "You can merge now.")).toBe("");
+    for (const [rule, permit] of [
+      ["Never push directly to main.", "You can merge PRs yourself now."],
+      ["Never push directly to main.", "You can push the feature branch now."],
+      ["Never merge PRs without a review.", "You can merge now."],
+      ["Never delete the main branch.", "You can delete the branch now."],
+      ["Don't push directly to the main branch.", "You can push to the feature branch now."],
+      ["Never merge PRs without a review.", "You may merge PR 12 now."],
+      ["Never merge.", "You may merge PR 12 now."],
+      ["Never install packages globally.", "You can install the types package now."],
+      ["Never drop the production table.", "You can drop the test table now."],
+      ["Don't deploy on Fridays without checking the PR.", "You can deploy the PR preview now."],
+      ["Never remove the audit logs.", "You can remove the old logs now."],
+      ["Never run database migrations against production.", "You can run the tests now."],
+      ["Never run database migrations against production.", "You can use the staging server now."],
+    ])
+      expect(kept(rule, permit)).toBe(rule);
+  });
+
+  test("a retraction never supersedes a rule; only a revocation does", () => {
+    const records = [...invalidationsIn("We no longer use Redis.", 100)];
+    expect(validText("Never flush Redis in production.", 50, records, true)).toBe("Never flush Redis in production.");
+    expect(validText("stack uses Redis", 50, records, false)).toBe("");
+  });
+
+  test("a revocation of an unknown class in the log is ignored", () => {
+    const root = tempRoot();
+    writeFileSync(join(root, "validity.jsonl"), '{"k":"revoke","c":"branch","o":[],"t":9}\n');
+    expect(readInvalidations(root)).toEqual([]);
   });
 });
 

@@ -166,7 +166,7 @@
         "failed": [
           "no-redis"
         ],
-        "why": "after 'We no longer use Redis', packets still state 'We use Redis for caching' and the gist 'stack uses Redis'"
+        "why": "after 'We no longer use Redis', a packet still states the gist 'stack uses Redis'. Since P0.2's validity the row 'We use Redis for caching' is dropped; the gist is written after the retraction and carries its writing time, not the statement's, so it is not older than the retraction (P0.3, P3.3)"
       },
       "off": {
         "state": "red",

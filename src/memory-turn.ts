@@ -32,8 +32,12 @@ const PHRASES = [...ACK, ...CONTINUE, ...GO_AHEAD].sort((a, b) => b.length - a.l
 /** A trailing question, or an offer to act: the previous assistant message proposed something (A7 §2). */
 const PROPOSAL = /\b(?:shall I|want me to|should I|next,? I['’]ll|I can(?!['’]t|not))\b/i;
 
-/** Words that carry no content when counting a reply's content tokens. */
-const FUNCTION_WORDS = new Set(
+/**
+ * A7 §2's reply filler: words that do not count toward a short reply's "≤ 4 content tokens". It is kept apart from
+ * the delivery steps' wider `FUNCTION_WORDS` (memory-transcript.ts) because it decides which replies are
+ * continuations; changing it would change those turns.
+ */
+const REPLY_FILLER = new Set(
   "a an the and or but so then to of in on at for with it its this that is are be me you i we us please just now".split(
     " ",
   ),
@@ -72,7 +76,7 @@ function chatterPhrases(prompt: string): string[] | undefined {
 
 function contentTokens(prompt: string): number {
   const words = prompt.toLowerCase().match(/[a-z0-9][a-z0-9'._/-]*/g) ?? [];
-  return words.filter((word) => !FUNCTION_WORDS.has(word)).length;
+  return words.filter((word) => !REPLY_FILLER.has(word)).length;
 }
 
 export function turnMode(

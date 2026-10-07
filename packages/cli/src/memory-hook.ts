@@ -79,8 +79,8 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
   const seen = new Set<string>(),
     notes: ProvenanceNote[] = [],
     invalid = readInvalidations(mem.dir),
-    add = (note: ProvenanceNote): boolean => {
-      let text = validText(String(note.text ?? ""), note.at, invalid);
+    add = (note: ProvenanceNote, rule = false): boolean => {
+      let text = validText(String(note.text ?? ""), note.at, invalid, rule);
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
       } catch {}
@@ -95,7 +95,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
       .filter(isPinnedIntention)
       .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
       .slice(0, 8)
-      .forEach(add);
+      .forEach((pin) => add(pin, true));
   try {
     let gists = 0;
     for (const g of new GistStore(mem.dir).latest(session || "", GIST_SCAN, { excludeSrc: "experience" })) {
@@ -123,14 +123,16 @@ function deliver(notes: readonly ProvenanceNote[], win: string | undefined, at: 
 
 /**
  * A4 §5.1 step 5: each note without the sentences an invalidation has made invalid; a note left empty is dropped.
- * When the cue asks about history, episodes keep what they say (D31 `stale_for`); facts and rules do not.
+ * A rule or pin yields only to a revocation. When the cue asks about history, episodes keep what they say (D31
+ * `stale_for`); facts and rules do not.
  */
 function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
   if (!invalid.length) return notes;
   const history = asksHistory(prompt);
   return notes.flatMap((note) => {
-    if (history && !["fact", "rule"].includes(noteKindToken(note) ?? "")) return [note];
-    const text = validText(note.text, note.at, invalid);
+    const rule = noteKindToken(note) === "rule" || isPinnedIntention(note);
+    if (history && !rule && noteKindToken(note) !== "fact") return [note];
+    const text = validText(note.text, note.at, invalid, rule);
     return text ? [{ ...note, text }] : [];
   });
 }
@@ -367,7 +369,8 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       let notes: MemoryRecord[] = [];
       // A4 §5.1: every human submit is encoded (step 1); the turn mode decides only whether it is answered (step 2).
       // A4 §3.1: what the user just retracted or revoked is invalid from this Submit on (A4 §3.0: typed text only).
-      if (writes && prompt && event === "UserPromptSubmit") recordInvalidations(mem.dir, prompt);
+      // Read after the store's own secret redaction, so the log can hold no token a stored row would not.
+      if (writes && prompt && event === "UserPromptSubmit") recordInvalidations(mem.dir, mem.storableText(prompt));
       if (prompt && mode === "imperative") notes = mem.recall(cue);
       else if (prompt) mem.observeCue(cue);
       if (writes && prior.length) mem.observe(prior);
