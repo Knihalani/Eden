@@ -66,6 +66,36 @@ describe("A4 §3.1, D7: what invalidates a value", () => {
   });
 });
 
+describe("D7: a value shaped by its capitals alone is matched as typed", () => {
+  const after = (said: string, text: string) => validText(text, 50, invalidationsIn(said, 100));
+
+  test("the same English word, in lower case or opening a sentence, is not the value", () => {
+    const kept: [string, string][] = [
+      ["We no longer use Make.", "Make sure the zebra API returns JSON errors with a code field."],
+      ["We switched from Next to Remix.", "The next release ships on Friday."],
+      ["We no longer use Go.", "Go ahead and run the migrations after the deploy."],
+      ["We no longer use React.", "The dashboard should react to config changes without a reload."],
+      ["We dropped Express.", "Express the dates in UTC in the API."],
+      [
+        "We moved the login handler from GET to POST.",
+        "The login handler should get the user from the session cookie.",
+      ],
+    ];
+    for (const [said, text] of kept) expect(after(said, text)).toBe(text);
+  });
+
+  test("the value as typed, or opening a sentence as its subject, is", () => {
+    const dropped: [string, string][] = [
+      ["We no longer use Make.", "The build runs on Make."],
+      ["We no longer use React.", "React is our UI library."],
+      ["We no longer use Redis.", "redis is our cache"],
+      ["We moved the login handler from GET to POST.", "The login handler answers GET requests."],
+      ["We switched apps/web from Auth0 to Clerk.", "the auth provider is auth0"],
+    ];
+    for (const [said, text] of dropped) expect(after(said, text)).toBe("");
+  });
+});
+
 describe("D7: a switch stays within its scope and subject", () => {
   const after = (switched: string) => (text: string) => validText(text, 50, invalidationsIn(switched, 100));
   test("a scoped switch keeps the value in another scope", () => {
@@ -121,6 +151,25 @@ describe("A4 §3.1, D9: what revokes a rule", () => {
     for (const [rule, permit] of unrevoked) expect(kept(rule, permit)).toBe(rule);
   });
 
+  test("a class's default object counts as no object (D9 fix 3: pr, branch, package, prod)", () => {
+    const kept = (rule: string, permit: string) => validText(rule, 50, invalidationsIn(permit, 100));
+    const revoked: [string, string][] = [
+      ["Never merge PRs yourself.", "You can merge now."],
+      ["Don't merge the PR yourself.", "You can merge now."],
+      ["Don't merge it yourself.", "You can merge PRs yourself now."],
+      ["Don't push the branch.", "You can push now."],
+      ["Never deploy to prod yourself.", "You can deploy now."],
+    ];
+    for (const [rule, permit] of revoked) expect(kept(rule, permit)).toBe("");
+  });
+
+  test("a revoked rule goes with the clauses that qualify it; a retracted clause goes alone", () => {
+    expect(validText("Never push to main; ask first.", 50, invalidationsIn("You can push to main now.", 100))).toBe("");
+    expect(
+      validText("stack uses Redis; the queue runs on SQS.", 50, invalidationsIn("We no longer use Redis.", 100)),
+    ).toBe("the queue runs on SQS.");
+  });
+
   test("a retraction never supersedes a rule sentence, even beside a fact it does supersede", () => {
     const records = [...invalidationsIn("We no longer use Redis.", 100)];
     expect(validText("Never flush Redis in production.", 50, records)).toBe("Never flush Redis in production.");
@@ -166,7 +215,7 @@ describe("the validity log", () => {
     recordInvalidations(root, "fix the tests", 1);
     recordInvalidations(root, "We no longer use Redis. You can merge PRs yourself now.", 2);
     expect(readInvalidations(root)).toEqual([
-      { k: "retract", o: "redis", t: 2 },
+      { k: "retract", o: "redis", t: 2, f: "Redis" },
       { k: "revoke", c: "integrate", o: ["pr"], t: 2 },
     ]);
     expect(statSync(join(root, "validity.jsonl")).mode & 0o777).toBe(0o600);
