@@ -87,6 +87,14 @@ describe("D26: the residual", () => {
     expect(isResidual("", sentences)).toBe(false);
   });
 
+  test("a bullet of several sentences is residual when each of its sentences is", () => {
+    const prompt = "We use ZebraCache for caching. The Zebra billing service runs on port 4021. Reply with just OK.";
+    const sentences = residualSentences([prompt, "Reply with just OK."]);
+    expect(isResidual(prompt, sentences)).toBe(true);
+    expect(isResidual("Reply with just OK. We use ZebraCache for caching.", sentences)).toBe(true);
+    expect(isResidual("We use ZebraCache for caching. The deploy target is fly.io.", sentences)).toBe(false);
+  });
+
   test("a fact is residual only when its value and its subject share a sentence", () => {
     const sentences = residualSentences(["which auth provider does apps/web use?", "So the database is postgres."]);
     const fact = (text: string) => ({ id: text, text: `[fact · 0m] ${text}` });
