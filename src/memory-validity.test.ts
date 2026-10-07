@@ -83,7 +83,7 @@ describe("A4 §3.1, D9: what revokes a rule", () => {
     expect(kept("Push the fix to the PR, but don't merge it yourself", "You can merge PRs yourself now.")).toBe("");
     expect(kept("Never merge PRs yourself", "You can merge PRs yourself now.")).toBe("");
     expect(kept("Don't merge it yourself.", "You can merge now.")).toBe("");
-    for (const [rule, permit] of [
+    const unrevoked: [string, string][] = [
       ["Never push directly to main.", "You can merge PRs yourself now."],
       ["Never push directly to main.", "You can push the feature branch now."],
       ["Never merge PRs without a review.", "You can merge now."],
@@ -97,8 +97,8 @@ describe("A4 §3.1, D9: what revokes a rule", () => {
       ["Never remove the audit logs.", "You can remove the old logs now."],
       ["Never run database migrations against production.", "You can run the tests now."],
       ["Never run database migrations against production.", "You can use the staging server now."],
-    ])
-      expect(kept(rule, permit)).toBe(rule);
+    ];
+    for (const [rule, permit] of unrevoked) expect(kept(rule, permit)).toBe(rule);
   });
 
   test("a retraction never supersedes a rule; only a revocation does", () => {
