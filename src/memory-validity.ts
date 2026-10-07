@@ -4,8 +4,10 @@
  * the user still needs:
  * - a **retraction** (A4 §3.1): "we no longer use Redis", "we don't use Jest anymore", "we're not using Jest
  *   anymore", "we dropped Sentry";
- * - a **switch** (D7): "we switched apps/web from Auth0 to Clerk" (or moved, migrated). D7's "use A, not B" waits for
- *   P3.3: without a slot to tie it to, "use POST instead of GET" is a coding instruction, not a switch;
+ * - a **switch** (D7): "we switched apps/web from Auth0 to Clerk" (or moved, migrated). The words before "from" tie it
+ *   to a slot as far as text can: a scope path ("apps/web") and subject words ("the queue"); a sentence naming another
+ *   scope, or lacking the subject, keeps the value. D7's "use A, not B" waits for P3.3: without a slot to tie it to,
+ *   "use POST instead of GET" is a coding instruction, not a switch;
  * - a **revocation** (A4 §3.1, D9): "you can merge PRs yourself now", whose verb is one of A7 §5's action classes. It
  *   invalidates a rule that forbids an action of the same class on the same object (`forbids`).
  *
@@ -18,7 +20,8 @@
  *
  * The hook appends each invalidation to `<root>/validity.jsonl` with its time. Every delivery point then drops each
  * sentence of an older row or gist that still names the value as a whole token, or forbids the revoked action; the
- * sentence stating the change stays, and so does a rule a retraction names (only a revocation supersedes a rule). An
+ * sentence stating the change stays, and so does a rule sentence a retraction names (only a revocation supersedes a
+ * rule). An
  * episode carrying an invalidated value is D31's `stale_for`: a cue that asks about history keeps it. The whole
  * sentence goes, so a still-valid clause in it goes too, until P3.3's slots split them.
  */
@@ -26,7 +29,12 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript";
 
-export type Invalidation = { k: "retract"; o: string; t: number } | { k: "revoke"; c: string; o: string[]; t: number };
+/**
+ * A retraction or switch (`retract`) of value `o`; a switch also keeps the scope it names (`s`, a path) and its
+ * subject words (`w`). A revocation (`revoke`) of action class `c` on object words `o`.
+ */
+export type Invalidation =
+  { k: "retract"; o: string; t: number; s?: string; w?: string[] } | { k: "revoke"; c: string; o: string[]; t: number };
 
 const FILE = "validity.jsonl";
 
@@ -43,8 +51,15 @@ const RETRACT = [
   new RegExp(String.raw`\bwe (?:don'?t|do not) (?:use|run|need) ${VALUE} any ?more\b`, "gi"),
   new RegExp(String.raw`\bwe(?:'re| are) not (?:using|running) ${VALUE} any ?more\b`, "gi"),
   new RegExp(String.raw`\bwe(?:'ve| have)? (?:dropped|stopped using|got rid of) ${VALUE}${CLAUSE_END}`, "gi"),
-  new RegExp(String.raw`\bwe(?:'ve| have)? (?:switched|moved|migrated)\b[^.!?;\n]*?\bfrom ${VALUE} to \S`, "gi"),
 ];
+/** D7's switch: the words between the verb and "from" name the slot's subject or scope ("apps/web", "the queue"). */
+const SWITCH = new RegExp(
+  String.raw`\bwe(?:'ve| have)? (?:switched|moved|migrated)\b([^.!?;\n]*?)\bfrom ${VALUE} to \S`,
+  "gi",
+);
+const PATH = /[\w@.-]*\/[\w@./-]*\w/g;
+/** Words between a switch's verb and "from" that name no subject. */
+const NO_SUBJECT = new Set(["everything", "things", "stuff", "over", "back", "all", "entirely", "fully"]);
 
 /** A7 §5's action-class verbs that a revocation can name: the class is what a rule and its revocation share. */
 const ACTION_VERBS: Record<string, string> = {
@@ -142,6 +157,19 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
     for (const pattern of RETRACT)
       for (const match of sentence.matchAll(pattern))
         if (valueShaped(match[1]!)) found.push({ k: "retract", o: match[1]!.toLowerCase(), t });
+    for (const match of sentence.matchAll(SWITCH)) {
+      if (!valueShaped(match[2]!)) continue;
+      const middle = match[1]!;
+      const scope = middle.match(PATH)?.[0]?.toLowerCase();
+      const subject = objectWords(middle.replace(PATH, " ")).filter((word) => !NO_SUBJECT.has(word));
+      found.push({
+        k: "retract",
+        o: match[2]!.toLowerCase(),
+        t,
+        ...(scope ? { s: scope } : {}),
+        ...(subject.length ? { w: subject } : {}),
+      });
+    }
     const revoked = REVOKE.exec(sentence);
     if (revoked)
       found.push({ k: "revoke", c: ACTION_VERBS[revoked[1]!.toLowerCase()]!, o: objectWords(revoked[2]!), t });
@@ -172,7 +200,13 @@ export function readInvalidations(root: string): Invalidation[] {
       const record = JSON.parse(line) as Record<string, unknown>;
       const t = record.t;
       if (typeof t !== "number") return [];
-      if (record.k === "retract" && typeof record.o === "string") return [{ k: "retract", o: record.o, t }];
+      if (record.k === "retract" && typeof record.o === "string") {
+        const scope = typeof record.s === "string" ? { s: record.s } : {};
+        const subject = Array.isArray(record.w)
+          ? { w: record.w.filter((word): word is string => typeof word === "string") }
+          : {};
+        return [{ k: "retract", o: record.o, t, ...scope, ...subject }];
+      }
       if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
         return [
           { k: "revoke", c: record.c, o: record.o.filter((word): word is string => typeof word === "string"), t },
@@ -214,25 +248,44 @@ function forbids(sentence: string, record: Extract<Invalidation, { k: "revoke" }
   return objectWords(match[1]!).every((word) => revoked.has(word)) && record.o.every((word) => named.has(word));
 }
 
-function invalidates(record: Invalidation, sentence: string, rule: boolean): boolean {
+/** Whether a sentence may be about a switch's scope: it names no path, or a path within that scope. */
+function sameScope(sentence: string, scope: string | undefined): boolean {
+  if (!scope) return true;
+  const paths = (sentence.match(PATH) ?? []).map((path) => path.toLowerCase());
+  return !paths.length || paths.some((path) => path === scope || path.startsWith(`${scope}/`));
+}
+
+/** Whether a sentence names a switch's subject (D7 ties a switch to its slot's subject). */
+function namesSubject(sentence: string, subject: readonly string[] | undefined): boolean {
+  if (!subject?.length) return true;
+  const words = new Set(objectWords(sentence));
+  return subject.some((word) => words.has(word));
+}
+
+/** A sentence that states a rule (a prohibition or an "always"), which only a revocation supersedes (A4 §3.1). */
+const RULE_SENTENCE = /\b(?:never|always|don'?t|do not|must|must not|should not|shouldn'?t|avoid)\b/i;
+
+function invalidates(record: Invalidation, sentence: string): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
-  if (rule) return false;
+  if (RULE_SENTENCE.test(sentence)) return false;
   if (!mentions(sentence, record.o)) return false;
+  if (!sameScope(sentence, record.s) || !namesSubject(sentence, record.w)) return false;
   return !invalidationsIn(sentence, 0).some((own) => own.k === "retract" && own.o === record.o);
 }
 
 /**
  * A row's or gist's text without the sentences an invalidation newer than `at` has made invalid; "" when none is
- * left. A text without a wall-clock time counts as older than every invalidation. A rule (`rule`) is superseded only
- * by a revocation: a retraction supersedes slot facts and makes episodes `stale_for` (A4 §3.1).
+ * left. A text without a wall-clock time counts as older than every invalidation. Each sentence is read on its own,
+ * as A4 §3.1 supersedes statements: a rule sentence yields only to a revocation; a fact or episode sentence yields to
+ * a retraction (supersession, `stale_for`), even inside a pinned row.
  */
-export function validText(text: string, at: unknown, records: readonly Invalidation[], rule = false): string {
+export function validText(text: string, at: unknown, records: readonly Invalidation[]): string {
   const raw = String(text ?? "").trim();
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
   const newer = records.filter((record) => record.t > time);
   if (!raw || !newer.length) return raw;
   const parts = sentences(raw);
-  const kept = parts.filter((sentence) => !newer.some((record) => invalidates(record, sentence, rule)));
+  const kept = parts.filter((sentence) => !newer.some((record) => invalidates(record, sentence)));
   return kept.length === parts.length ? raw : kept.join(" ");
 }
 

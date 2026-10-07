@@ -79,8 +79,8 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
   const seen = new Set<string>(),
     notes: ProvenanceNote[] = [],
     invalid = readInvalidations(mem.dir),
-    add = (note: ProvenanceNote, rule = false): boolean => {
-      let text = validText(String(note.text ?? ""), note.at, invalid, rule);
+    add = (note: ProvenanceNote): boolean => {
+      let text = validText(String(note.text ?? ""), note.at, invalid);
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
       } catch {}
@@ -95,7 +95,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
       .filter(isPinnedIntention)
       .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
       .slice(0, 8)
-      .forEach((pin) => add(pin, true));
+      .forEach(add);
   try {
     let gists = 0;
     for (const g of new GistStore(mem.dir).latest(session || "", GIST_SCAN, { excludeSrc: "experience" })) {
@@ -123,16 +123,16 @@ function deliver(notes: readonly ProvenanceNote[], win: string | undefined, at: 
 
 /**
  * A4 §5.1 step 5: each note without the sentences an invalidation has made invalid; a note left empty is dropped.
- * A rule or pin yields only to a revocation. When the cue asks about history, episodes keep what they say (D31
- * `stale_for`); facts and rules do not.
+ * A rule sentence yields only to a revocation (`validText`). When the cue asks about history, episodes keep what they
+ * say (D31 `stale_for`); facts and rules do not.
  */
 function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
   if (!invalid.length) return notes;
   const history = asksHistory(prompt);
   return notes.flatMap((note) => {
-    const rule = noteKindToken(note) === "rule" || isPinnedIntention(note);
-    if (history && !rule && noteKindToken(note) !== "fact") return [note];
-    const text = validText(note.text, note.at, invalid, rule);
+    const kind = noteKindToken(note);
+    if (history && kind !== "rule" && kind !== "fact" && !isPinnedIntention(note)) return [note];
+    const text = validText(note.text, note.at, invalid);
     return text ? [{ ...note, text }] : [];
   });
 }
