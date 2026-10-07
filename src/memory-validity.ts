@@ -16,25 +16,32 @@
  * questions or conditionals, after the store's own secret redaction. A retracted or switched-from value is one token
  * that ends its clause, capitalized or identifier-shaped and not a path (D7's rule for a value outside a slot's value
  * class; P3.3 brings the classes), so a common word ("array", "src") or the first word of a longer name ("Node" of
- * "Node 16") never is one.
+ * "Node 16") never is one. The same shape holds where the value is matched: a value shaped by its capitals alone
+ * ("Make", "GET") is matched as typed, and where it opens a sentence only as the sentence's subject ("Make is …",
+ * not "Make sure …"); a value with a digit, a dot or an underscore ("Auth0") is matched in any case.
  *
  * The hook appends each invalidation to `<root>/validity.jsonl` with its time. Every delivery point then drops each
- * sentence of an older row or gist that still names the value as a whole token, or forbids the revoked action; the
- * sentence stating the change stays, and so does a rule sentence a retraction names (only a revocation supersedes a
- * rule). An
- * episode carrying an invalidated value is D31's `stale_for`: a cue that asks about history keeps it. The whole
- * sentence goes, so a still-valid clause in it goes too, until P3.3's slots split them.
+ * clause of an older row or gist that still names the value as a whole token, and each sentence with a clause that
+ * forbids the revoked action (its `;` clauses qualify the rule). The sentence stating the change stays, and so does a
+ * rule clause a retraction names (only a revocation supersedes a rule). An episode carrying an invalidated value is
+ * D31's `stale_for`: a cue that asks about history keeps it. A whole clause goes, so a still-valid part of it goes too,
+ * until P3.3's slots split them.
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripPacketLabel } from "./memory-provenance";
 import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript";
 
 /**
- * A retraction or switch (`retract`) of value `o`; a switch also keeps the scope it names (`s`, a path) and its
- * subject words (`w`). A revocation (`revoke`) of action class `c` on object words `o`.
+ * A retraction or switch (`retract`) of value `o`, with its typed form `f` when its capitals alone shape it; a switch
+ * also keeps the scope it names (`s`, a path) and its subject words (`w`). A revocation (`revoke`) of action class `c`
+ * on object words `o`.
  */
 export type Invalidation =
-  { k: "retract"; o: string; t: number; s?: string; w?: string[] } | { k: "revoke"; c: string; o: string[]; t: number };
+  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[] }
+  | { k: "revoke"; c: string; o: string[]; t: number };
+type Retraction = Extract<Invalidation, { k: "retract" }>;
+type Revocation = Extract<Invalidation, { k: "revoke" }>;
 
 const FILE = "validity.jsonl";
 
@@ -90,6 +97,15 @@ const VERBS = Object.keys(ACTION_VERBS).join("|");
 const CLASSES = new Set(Object.values(ACTION_VERBS));
 const REVOKE = new RegExp(String.raw`^you (?:can|may|are allowed to|are free to) (${VERBS})\b(.*?)\bnow\b`, "i");
 
+/** D9 fix 3: a class's default object is no object of its own, so "never merge PRs" is the integrate rule on `*`. */
+const DEFAULT_OBJECTS: Record<string, readonly string[]> = {
+  integrate: ["pr", "pull", "request"],
+  "push-upstream": ["branch"],
+  "history-rewrite": ["branch"],
+  dependency: ["package"],
+  deploy: ["prod", "production"],
+};
+
 /** Words that name no object: D9 normalizes "don't merge it yourself" to the object `*`. */
 const NO_OBJECT = new Set(["yourself", "yourselves", "again", "too", "anytime", "freely", "whenever", "want", "like"]);
 
@@ -121,9 +137,13 @@ function typedText(prompt: string): string {
   return kept.join("\n");
 }
 
+const SENTENCE_END = /(?<=[.!?])\s+|\n+/;
+const CLAUSE_BREAK = /;\s+/;
+
 function sentences(text: string): string[] {
   return String(text ?? "")
-    .split(/(?<=[.!?])\s+|\n+|;\s+/)
+    .split(SENTENCE_END)
+    .flatMap((sentence) => sentence.split(CLAUSE_BREAK))
     .map((sentence) => sentence.trim())
     .filter(Boolean);
 }
@@ -139,8 +159,15 @@ function valueShaped(value: string): boolean {
   return /^[A-Z]/.test(value) || /\d/.test(value) || /[a-z][A-Z]/.test(value) || /\w[._]\w/.test(value);
 }
 
-/** An object word in one form ("PRs" and "PR" are the same object). */
+/** A retracted value as logged: lower case, with its typed form when its capitals alone shape it ("Make", "GET"). */
+function retracted(value: string): { o: string; f?: string } {
+  const byCase = !/\d/.test(value) && !/\w[._]\w/.test(value);
+  return { o: value.toLowerCase(), ...(byCase ? { f: value } : {}) };
+}
+
+/** An object word in one form ("PRs" and "PR", "branches" and "branch" are the same object). */
 function singular(word: string): string {
+  if (word.length >= 5 && /(?:ch|sh|ss|x|z)es$/.test(word)) return word.slice(0, -2);
   return word.length >= 3 && /[^siu]s$/.test(word) ? word.slice(0, -1) : word;
 }
 
@@ -156,7 +183,7 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
   for (const sentence of statements(typedText(prompt))) {
     for (const pattern of RETRACT)
       for (const match of sentence.matchAll(pattern))
-        if (valueShaped(match[1]!)) found.push({ k: "retract", o: match[1]!.toLowerCase(), t });
+        if (valueShaped(match[1]!)) found.push({ k: "retract", ...retracted(match[1]!), t });
     for (const match of sentence.matchAll(SWITCH)) {
       if (!valueShaped(match[2]!)) continue;
       const middle = match[1]!;
@@ -164,7 +191,7 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
       const subject = objectWords(middle.replace(PATH, " ")).filter((word) => !NO_SUBJECT.has(word));
       found.push({
         k: "retract",
-        o: match[2]!.toLowerCase(),
+        ...retracted(match[2]!),
         t,
         ...(scope ? { s: scope } : {}),
         ...(subject.length ? { w: subject } : {}),
@@ -201,11 +228,12 @@ export function readInvalidations(root: string): Invalidation[] {
       const t = record.t;
       if (typeof t !== "number") return [];
       if (record.k === "retract" && typeof record.o === "string") {
+        const form = typeof record.f === "string" ? { f: record.f } : {};
         const scope = typeof record.s === "string" ? { s: record.s } : {};
         const subject = Array.isArray(record.w)
           ? { w: record.w.filter((word): word is string => typeof word === "string") }
           : {};
-        return [{ k: "retract", o: record.o, t, ...scope, ...subject }];
+        return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject }];
       }
       if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
         return [
@@ -222,9 +250,24 @@ function escape(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Whether a sentence names a value as a whole token: not inside a path, a filename or a longer name. */
-function mentions(sentence: string, value: string): boolean {
-  return new RegExp(`(?<![\\w@./+-])${escape(value)}(?![\\w@/+-]|\\.\\w)`, "i").test(sentence);
+/** A verb after a value that opens a sentence, making the value the sentence's subject ("React is our UI library"). */
+const SUBJECT_VERB = /^\s+(?:is|are|was|were|has|had|uses|used|runs|ran|handles|stores|caches|serves)\b/i;
+
+/**
+ * Whether a sentence names a retracted value as a whole token, not inside a path, a filename or a longer name. A value
+ * shaped by its capitals alone is matched as typed, and where it opens the sentence only as its subject: "Make sure …"
+ * and "the next release" do not name Make or Next.
+ */
+function mentions(sentence: string, record: Retraction): boolean {
+  const pattern = new RegExp(`(?<![\\w@./+-])${escape(record.o)}(?![\\w@/+-]|\\.\\w)`, "gi");
+  for (const match of sentence.matchAll(pattern)) {
+    if (!record.f) return true;
+    const end = match.index + match[0].length;
+    if (/^\W*$/.test(stripPacketLabel(sentence.slice(0, match.index)).body)) {
+      if (SUBJECT_VERB.test(sentence.slice(end))) return true;
+    } else if (match[0] === record.f) return true;
+  }
+  return false;
 }
 
 /**
@@ -234,7 +277,7 @@ function mentions(sentence: string, value: string): boolean {
  * fix to the PR, but don't merge it yourself", and not "never merge PRs without a review" or "never merge"; "you can
  * delete the branch now" does not revoke "never delete the main branch".
  */
-function forbids(sentence: string, record: Extract<Invalidation, { k: "revoke" }>): boolean {
+function forbids(sentence: string, record: Revocation): boolean {
   const verbs = Object.keys(ACTION_VERBS).filter((verb) => ACTION_VERBS[verb] === record.c);
   if (!verbs.length) return false;
   const negated = new RegExp(
@@ -243,9 +286,16 @@ function forbids(sentence: string, record: Extract<Invalidation, { k: "revoke" }
   );
   const match = negated.exec(sentence);
   if (!match) return false;
-  const revoked = new Set(record.o);
+  const revoked = keyObject(record.o, record.c);
   const named = new Set(objectWords(sentence));
-  return objectWords(match[1]!).every((word) => revoked.has(word)) && record.o.every((word) => named.has(word));
+  const object = keyObject(objectWords(match[1]!), record.c);
+  return object.every((word) => revoked.includes(word)) && revoked.every((word) => named.has(word));
+}
+
+/** An object as D9 keys it: without its class's default object. */
+function keyObject(words: readonly string[], cls: string): string[] {
+  const defaults = DEFAULT_OBJECTS[cls] ?? [];
+  return words.filter((word) => !defaults.includes(word));
 }
 
 /** Whether a sentence may be about a switch's scope: it names no path, or a path within that scope. */
@@ -268,25 +318,37 @@ const RULE_SENTENCE = /\b(?:never|always|don'?t|do not|must|must not|should not|
 function invalidates(record: Invalidation, sentence: string): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
   if (RULE_SENTENCE.test(sentence)) return false;
-  if (!mentions(sentence, record.o)) return false;
+  if (!mentions(sentence, record)) return false;
   if (!sameScope(sentence, record.s) || !namesSubject(sentence, record.w)) return false;
   return !invalidationsIn(sentence, 0).some((own) => own.k === "retract" && own.o === record.o);
 }
 
 /**
- * A row's or gist's text without the sentences an invalidation newer than `at` has made invalid; "" when none is
- * left. A text without a wall-clock time counts as older than every invalidation. Each sentence is read on its own,
- * as A4 §3.1 supersedes statements: a rule sentence yields only to a revocation; a fact or episode sentence yields to
- * a retraction (supersession, `stale_for`), even inside a pinned row.
+ * A row's or gist's text without what an invalidation newer than `at` has made invalid; "" when nothing is left. A
+ * text without a wall-clock time counts as older than every invalidation. Each clause is read on its own, as A4 §3.1
+ * supersedes statements: a rule clause yields only to a revocation, which takes its whole sentence (the clauses after
+ * a `;` qualify the rule: "never push to main; ask first"); a fact or episode clause yields to a retraction
+ * (supersession, `stale_for`), even inside a pinned row.
  */
 export function validText(text: string, at: unknown, records: readonly Invalidation[]): string {
   const raw = String(text ?? "").trim();
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
   const newer = records.filter((record) => record.t > time);
   if (!raw || !newer.length) return raw;
-  const parts = sentences(raw);
-  const kept = parts.filter((sentence) => !newer.some((record) => invalidates(record, sentence)));
-  return kept.length === parts.length ? raw : kept.join(" ");
+  let dropped = false;
+  const kept: string[] = [];
+  for (const sentence of raw.split(SENTENCE_END)) {
+    const clauses = sentence
+      .split(CLAUSE_BREAK)
+      .map((clause) => clause.trim())
+      .filter(Boolean);
+    const valid = (clause: string) => !newer.some((record) => invalidates(record, clause));
+    const revoked = clauses.some((clause) => newer.some((record) => record.k === "revoke" && forbids(clause, record)));
+    const left = revoked ? [] : clauses.filter(valid);
+    if (left.length < clauses.length) dropped = true;
+    if (left.length) kept.push(left.join("; "));
+  }
+  return dropped ? kept.join(" ") : raw;
 }
 
 /** A cue that asks about history (A4 §5.1 step 5; R3's markers), which keeps episodes carrying an older value. */

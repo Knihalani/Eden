@@ -59,9 +59,9 @@ function contentTokens(text: string): Set<string> {
   return new Set(contentWords(text));
 }
 
-/** The residual's sentences, as content-token sets. */
 const SENTENCE_BREAK = /(?<=[.!?])\s+|\n+/;
 
+/** The residual's sentences, as content-token sets. */
 export function residualSentences(texts: readonly string[]): Set<string>[] {
   return texts
     .flatMap((text) => text.split(SENTENCE_BREAK))
