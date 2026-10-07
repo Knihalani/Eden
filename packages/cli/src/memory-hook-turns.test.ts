@@ -215,6 +215,15 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
     expect(submit("what is ZebraCache used for?", { prompt_id: "p5" }) ?? "").not.toContain("We use ZebraCache");
   });
 
+  test("a retracted value shaped by its capital alone leaves the same English word alone", () => {
+    const rearm = () => memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "compact" });
+    submit("Make sure the zebra API returns JSON errors with a code field.", { prompt_id: "p1" });
+    expect(submit("what should zebra API errors return?", { prompt_id: "p2" })).toContain("Make sure the zebra API");
+    submit("We no longer use Make.", { prompt_id: "p3" });
+    rearm();
+    expect(submit("what should zebra API errors return?", { prompt_id: "p4" })).toContain("Make sure the zebra API");
+  });
+
   test("a lowercase value, a question or another subject retracts nothing", () => {
     const rearm = () => memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "compact" });
     submit("We use ZebraCache for caching.", { prompt_id: "p1" });
