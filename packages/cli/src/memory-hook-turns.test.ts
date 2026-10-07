@@ -312,6 +312,17 @@ describe("D26: what the last turns already say is not delivered", () => {
       "db-replica2",
     );
   });
+
+  test("so is a row that restates a recent prompt of several sentences", () => {
+    const said = "We use ZebraCache for caching. The zebra billing service runs on port 4021. Reply with just OK.";
+    submit(said, { prompt_id: "p1" });
+    // The next submit encodes the transcript, which stores the earlier prompt whole beside its sentences.
+    submit("now fix the lint warnings", { prompt_id: "p2", transcript_path: conversation([said]) });
+    const recent = conversation([said, "now fix the lint warnings"]);
+    expect(submit("Reply with just OK again.", { prompt_id: "p3", transcript_path: recent }) ?? "").not.toContain(
+      "port 4021",
+    );
+  });
 });
 
 describe("A4 §4: the ledger's refractory rule", () => {
