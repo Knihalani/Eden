@@ -4,22 +4,23 @@
  * the user still needs:
  * - a **retraction** (A4 §3.1): "we no longer use Redis", "we don't use Jest anymore", "we're not using Jest
  *   anymore", "we dropped Sentry";
- * - a **switch** (D7): "we switched apps/web from Auth0 to Clerk" (or moved, migrated), and "use pnpm, not npm" (or
- *   instead of, rather than) at the start of a sentence or after "we";
+ * - a **switch** (D7): "we switched apps/web from Auth0 to Clerk" (or moved, migrated). D7's "use A, not B" waits for
+ *   P3.3: without a slot to tie it to, "use POST instead of GET" is a coding instruction, not a switch;
  * - a **revocation** (A4 §3.1, D9): "you can merge PRs yourself now", whose verb is one of A7 §5's action classes. It
- *   invalidates a rule that forbids an action of the same class and names the same object; a revocation that names
- *   no object invalidates only a rule that names none (D9's `*`).
+ *   invalidates a rule that forbids an action of the same class on the same object (`forbids`).
  *
  * Only typed text invalidates (A4 §3.0, A6 §2.1): the human Submit's prompt, without its pasted spans
  * (`<pasted_content>`, fenced code, `>` quotes, runs of 3 or more lines without sentence punctuation), and without
- * questions or conditionals. A retracted or switched-from value is one token, capitalized or identifier-shaped and
- * not a path (D7's rule for a value outside a slot's value class; P3.3 brings the classes), so a common word
- * ("array", "src") never is one.
+ * questions or conditionals, after the store's own secret redaction. A retracted or switched-from value is one token
+ * that ends its clause, capitalized or identifier-shaped and not a path (D7's rule for a value outside a slot's value
+ * class; P3.3 brings the classes), so a common word ("array", "src") or the first word of a longer name ("Node" of
+ * "Node 16") never is one.
  *
  * The hook appends each invalidation to `<root>/validity.jsonl` with its time. Every delivery point then drops each
  * sentence of an older row or gist that still names the value as a whole token, or forbids the revoked action; the
- * sentence stating the change stays. An episode carrying an invalidated value is D31's `stale_for`: a cue that asks
- * about history keeps it.
+ * sentence stating the change stays, and so does a rule a retraction names (only a revocation supersedes a rule). An
+ * episode carrying an invalidated value is D31's `stale_for`: a cue that asks about history keeps it. The whole
+ * sentence goes, so a still-valid clause in it goes too, until P3.3's slots split them.
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,18 +32,18 @@ const FILE = "validity.jsonl";
 
 /** A value: one token after an optional article, never a path. Its shape is checked by `valueShaped`. */
 const VALUE = String.raw`(?:the |our |a |an )?([A-Za-z0-9@][\w@.+-]*[A-Za-z0-9])`;
+/** The value ends its clause ("we no longer use Redis.", not "we no longer use Node 16" or "… CI on Fridays"). */
+const CLAUSE_END = String.raw`(?: any ?more)?\s*(?:[.!;,]|$)`;
 
 const RETRACT = [
   new RegExp(
-    String.raw`\bwe(?:'re| are)? no longer (?:use|using|run|running|need|have|depend on|rely on) ${VALUE}`,
+    String.raw`\bwe(?:'re| are)? no longer (?:use|using|run|running|need|have|depend on|rely on) ${VALUE}${CLAUSE_END}`,
     "gi",
   ),
   new RegExp(String.raw`\bwe (?:don'?t|do not) (?:use|run|need) ${VALUE} any ?more\b`, "gi"),
   new RegExp(String.raw`\bwe(?:'re| are) not (?:using|running) ${VALUE} any ?more\b`, "gi"),
-  new RegExp(String.raw`\bwe(?:'ve| have)? (?:dropped|stopped using|got rid of) ${VALUE}`, "gi"),
+  new RegExp(String.raw`\bwe(?:'ve| have)? (?:dropped|stopped using|got rid of) ${VALUE}${CLAUSE_END}`, "gi"),
   new RegExp(String.raw`\bwe(?:'ve| have)? (?:switched|moved|migrated)\b[^.!?;\n]*?\bfrom ${VALUE} to \S`, "gi"),
-  new RegExp(String.raw`^(?:please |let'?s )?use [\w@./+-]+,? (?:not|instead of|rather than) ${VALUE}`, "gi"),
-  new RegExp(String.raw`\bwe use [\w@./+-]+,? (?:not|instead of|rather than) ${VALUE}`, "gi"),
 ];
 
 /** A7 §5's action-class verbs that a revocation can name: the class is what a rule and its revocation share. */
@@ -71,6 +72,7 @@ const ACTION_VERBS: Record<string, string> = {
   wipe: "destructive-db",
 };
 const VERBS = Object.keys(ACTION_VERBS).join("|");
+const CLASSES = new Set(Object.values(ACTION_VERBS));
 const REVOKE = new RegExp(String.raw`^you (?:can|may|are allowed to|are free to) (${VERBS})\b(.*?)\bnow\b`, "i");
 
 /** Words that name no object: D9 normalizes "don't merge it yourself" to the object `*`. */
@@ -118,7 +120,7 @@ function statements(text: string): string[] {
 /** D7's value shape: capitalized, or with a digit, an inner capital, a dot or an underscore; never a path. */
 function valueShaped(value: string): boolean {
   const lower = value.toLowerCase();
-  if (value.includes("/") || FUNCTION_WORDS.has(lower) || STATUS_WORDS.has(lower)) return false;
+  if (value.includes("/") || lower === "redacted" || FUNCTION_WORDS.has(lower) || STATUS_WORDS.has(lower)) return false;
   return /^[A-Z]/.test(value) || /\d/.test(value) || /[a-z][A-Z]/.test(value) || /\w[._]\w/.test(value);
 }
 
@@ -171,7 +173,7 @@ export function readInvalidations(root: string): Invalidation[] {
       const t = record.t;
       if (typeof t !== "number") return [];
       if (record.k === "retract" && typeof record.o === "string") return [{ k: "retract", o: record.o, t }];
-      if (record.k === "revoke" && typeof record.c === "string" && Array.isArray(record.o))
+      if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
         return [
           { k: "revoke", c: record.c, o: record.o.filter((word): word is string => typeof word === "string"), t },
         ];
@@ -191,37 +193,46 @@ function mentions(sentence: string, value: string): boolean {
   return new RegExp(`(?<![\\w@./+-])${escape(value)}(?![\\w@/+-]|\\.\\w)`, "i").test(sentence);
 }
 
-/** Whether a sentence forbids an action of the revoked class on the revoked object (see the header). */
+/**
+ * Whether a sentence forbids an action of the revoked class on the revoked object (D9's `(class, polarity,
+ * object)`): its object, the words after the negated verb up to the end of the clause, is within the revocation's,
+ * and the revocation's is named in the sentence. "You can merge PRs now" so revokes "never merge PRs" and "push the
+ * fix to the PR, but don't merge it yourself", and not "never merge PRs without a review" or "never merge"; "you can
+ * delete the branch now" does not revoke "never delete the main branch".
+ */
 function forbids(sentence: string, record: Extract<Invalidation, { k: "revoke" }>): boolean {
   const verbs = Object.keys(ACTION_VERBS).filter((verb) => ACTION_VERBS[verb] === record.c);
+  if (!verbs.length) return false;
   const negated = new RegExp(
-    String.raw`\b(?:don'?t|do not|never|not)\s+(?:\w+\s+){0,2}(?:${verbs.join("|")})\w*\b(.*)$`,
+    String.raw`\b(?:don'?t|do not|never|not)\s+(?:\w+\s+){0,2}(?:${verbs.join("|")})\w*\b([^,;:.!?]*)`,
     "i",
   );
   const match = negated.exec(sentence);
   if (!match) return false;
-  if (!record.o.length) return objectWords(match[1]!).length === 0;
-  const words = new Set(objectWords(sentence));
-  return record.o.some((word) => words.has(word));
+  const revoked = new Set(record.o);
+  const named = new Set(objectWords(sentence));
+  return objectWords(match[1]!).every((word) => revoked.has(word)) && record.o.every((word) => named.has(word));
 }
 
-function invalidates(record: Invalidation, sentence: string): boolean {
+function invalidates(record: Invalidation, sentence: string, rule: boolean): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
+  if (rule) return false;
   if (!mentions(sentence, record.o)) return false;
   return !invalidationsIn(sentence, 0).some((own) => own.k === "retract" && own.o === record.o);
 }
 
 /**
  * A row's or gist's text without the sentences an invalidation newer than `at` has made invalid; "" when none is
- * left. A text without a wall-clock time counts as older than every invalidation.
+ * left. A text without a wall-clock time counts as older than every invalidation. A rule (`rule`) is superseded only
+ * by a revocation: a retraction supersedes slot facts and makes episodes `stale_for` (A4 §3.1).
  */
-export function validText(text: string, at: unknown, records: readonly Invalidation[]): string {
+export function validText(text: string, at: unknown, records: readonly Invalidation[], rule = false): string {
   const raw = String(text ?? "").trim();
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
   const newer = records.filter((record) => record.t > time);
   if (!raw || !newer.length) return raw;
   const parts = sentences(raw);
-  const kept = parts.filter((sentence) => !newer.some((record) => invalidates(record, sentence)));
+  const kept = parts.filter((sentence) => !newer.some((record) => invalidates(record, sentence, rule)));
   return kept.length === parts.length ? raw : kept.join(" ");
 }
 
