@@ -1,0 +1,8 @@
+# Test files that gate on wall-clock latency, so they fail when other test processes share the CPU.
+# scripts/test-parallel.sh leaves them out of its parallel slices and runs them alone afterwards. CI is
+# unaffected: each of its test jobs has a machine to itself. Add a file here when it fails under
+# `bun run test:parallel` and passes alone (`bun test <file>`), with the gate it checks.
+
+# The scale arms (scale-20k, scale-1e6): UserPromptSubmit p99 < 150 ms (arms/scale.ts).
+benchmarks/memory-long-horizon/arms/bench.reference.test.ts
+benchmarks/memory-long-horizon/arms/bench.gate.test.ts
