@@ -273,9 +273,10 @@ function mentions(sentence: string, record: Retraction): boolean {
 /**
  * Whether a sentence forbids an action of the revoked class on the revoked object (D9's `(class, polarity,
  * object)`): its object, the words after the negated verb up to the end of the clause, is within the revocation's,
- * and the revocation's is named in the sentence. "You can merge PRs now" so revokes "never merge PRs" and "push the
- * fix to the PR, but don't merge it yourself", and not "never merge PRs without a review" or "never merge"; "you can
- * delete the branch now" does not revoke "never delete the main branch".
+ * and the revocation's is named in the sentence, a class's default object counting as none (D9 fix 3). "You can
+ * merge PRs now" so revokes "never merge PRs", "never merge" and "push the fix to the PR, but don't merge it
+ * yourself", and not "never merge PRs without a review"; "you can delete the branch now" does not revoke "never
+ * delete the main branch".
  */
 function forbids(sentence: string, record: Revocation): boolean {
   const verbs = Object.keys(ACTION_VERBS).filter((verb) => ACTION_VERBS[verb] === record.c);
