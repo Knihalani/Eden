@@ -15,6 +15,7 @@ import { promoteNarrativeGists } from "./gist-retrieve";
 import { HowToStore, mergeSharedPrefixHowTo, type HowTo, type HowToStep } from "./howto-store";
 import { memoryConsent } from "./memory-consent";
 import { scrubMemoryText } from "./memory-scrub";
+import { readInvalidations, validText } from "./memory-validity";
 import { parseRuleTime, writeAliasTags, type MissClass } from "./memory-sota";
 import {
   isIclExemplar,
@@ -950,15 +951,20 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     } catch {}
   }
   if (incrementalExpired(opts)) return;
+  // A4 §3.3, §5.1 step 5: the session gist is rewritten at every sleep, later than what it states, so each source
+  // is checked against the validity log at its own time; SessionStart checks the gist again at the gist's time.
+  const invalid = readInvalidations(mem.dir);
   const facts: string[] = [];
   for (const w of winners) {
-    facts.push(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`);
+    const fact = validText(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`, w.t, invalid);
+    if (fact) facts.push(fact);
   }
   const pins = mem
     .memories()
     .filter((r) => r.kind === "constraint" && !isIcl(r.text))
     .slice(-8)
-    .map((r) => r.text.replace(/\s+/g, " ").trim());
+    .map((r) => validText(r.text.replace(/\s+/g, " ").trim(), r.at, invalid))
+    .filter(Boolean);
   const gist = [...facts, ...pins].join(". ").slice(0, 800);
   if (gist)
     new GistStore(mem.dir).put(
