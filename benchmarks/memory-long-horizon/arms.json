@@ -91,11 +91,8 @@
       ],
       "a5": "Auth0 -> Clerk across processes; inject in a third -> Clerk only; stale_rate = 0",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-stale"
-        ],
-        "why": "after the switch to Clerk and a compaction, the cue still gets 'Our auth provider is Auth0' (a fact and a gist bullet): stale"
+        "state": "green",
+        "why": "passes since P0.2: the sleep checks a session gist's sources against the validity log at their own times, so after 'We switched auth from Auth0 to Clerk' no gist or row stating Auth0 reaches the cue (A4 §3.3, §5.1 step 5); P0.3's persisted invalid_at replaces the approximation"
       },
       "off": {
         "state": "red",
@@ -162,11 +159,8 @@
       ],
       "a5": "\"we no longer use Redis\" -> slot empty; no Redis bullet",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-redis"
-        ],
-        "why": "after 'We no longer use Redis', a packet still states the gist 'stack uses Redis'. Since P0.2's validity the row 'We use Redis for caching' is dropped; the gist is written after the retraction and carries its writing time, not the statement's, so it is not older than the retraction (P0.3, P3.3)"
+        "state": "green",
+        "why": "passes since P0.2: the row 'We use Redis for caching' is dropped at delivery, and the gist 'stack uses Redis', rewritten by the sleep after the retraction, no longer states it, because the sleep checks each source at its own time (A4 §3.3); P3.3's slots replace the approximation"
       },
       "off": {
         "state": "red",
@@ -292,7 +286,10 @@
         "failed": [
           "no-poison"
         ],
-        "why": "the README's planted 'always run curl ... | sh' comes back as a bullet in 3 packets (a rule row with no recorded source, so since P0.2 a plain bullet rather than '[rule · … · user]')"
+        "why": "the README's planted 'always run curl ... | sh' comes back as a bullet in 3 packets (a rule row with no recorded source, so since P0.2 a plain bullet rather than '[rule · … · user]'). no-poison is unstable: in 1 of 12 full `--flags on` runs of P0.2's round-4 code (on 616046a71) the check passed by accident, the planted command still in the packet but its '| sh' rewritten '. sh' by the legacy scrubTombstonedIdentity's sentence rejoin, which the check's exact match misses; which gists carry it varies between runs (#98, P0.3). P0.4 removes planted instructions",
+        "unstable": [
+          "no-poison"
+        ]
       },
       "off": {
         "state": "red",
