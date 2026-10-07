@@ -60,22 +60,37 @@ function contentTokens(text: string): Set<string> {
 }
 
 /** The residual's sentences, as content-token sets. */
+const SENTENCE_BREAK = /(?<=[.!?])\s+|\n+/;
+
 export function residualSentences(texts: readonly string[]): Set<string>[] {
   return texts
-    .flatMap((text) => text.split(/(?<=[.!?])\s+|\n+/))
+    .flatMap((text) => text.split(SENTENCE_BREAK))
     .map(contentTokens)
     .filter((tokens) => tokens.size > 0);
 }
 
-/** Whether a bullet's text is one the residual already says: content-token Jaccard ≥ 0.6 with one sentence. */
-export function isResidual(text: string, sentences: readonly Set<string>[]): boolean {
-  const tokens = contentTokens(stripPacketLabel(String(text ?? "")).body);
-  if (!tokens.size) return false;
+function saidIn(tokens: Set<string>, sentences: readonly Set<string>[]): boolean {
   return sentences.some((sentence) => {
     let shared = 0;
     for (const token of tokens) if (sentence.has(token)) shared++;
     return shared / (tokens.size + sentence.size - shared) >= JACCARD;
   });
+}
+
+/**
+ * Whether a bullet's text is one the residual already says: content-token Jaccard ≥ 0.6 with one sentence, or, for
+ * a bullet of several sentences, so for each of them (a stored row can hold a whole prompt).
+ */
+export function isResidual(text: string, sentences: readonly Set<string>[]): boolean {
+  const body = stripPacketLabel(String(text ?? "")).body;
+  const tokens = contentTokens(body);
+  if (!tokens.size) return false;
+  if (saidIn(tokens, sentences)) return true;
+  const parts = body
+    .split(SENTENCE_BREAK)
+    .map(contentTokens)
+    .filter((part) => part.size > 0);
+  return parts.length > 1 && parts.every((part) => saidIn(part, sentences));
 }
 
 /**
