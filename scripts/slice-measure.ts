@@ -21,13 +21,16 @@
  *   - `timing`: scripts/submit-timing.ts, small and big transcripts and an A/A pair (only when named in `--only`).
  * - Selection: `--only` names the measures. `--changed REF` selects them from `git diff --name-only REF...HEAD` in
  *   the `--new` checkout (`selectMeasures`). With neither, every measure but `timing`.
- * - The parallel phase (arms, guards, r6, worlds) shares `--jobs` processes, default half the cores, longest first.
- *   These are counts: load reaches them only through hook timeouts, which the summary counts.
+ * - The parallel phase (arms, guards, r6, worlds) shares `--jobs` processes, default half the cores, longest first,
+ *   and starts a task only while the 1-minute load average is under `--max-load` (default the core count). These are
+ *   counts: load reaches them through hook timeouts, which change a run's events. A task with a hook timeout, a
+ *   non-zero exit, runs of one seed on different events, or (arms) a mismatch is re-run alone afterwards, once; the
+ *   summary gives both results, and one still affected alone is marked not valid.
  * - The serial phase (soak, bench, timing) waits, before each step, until the 1-minute load average is under
  *   `--quiet-load` (default half the cores) or `--quiet-wait` minutes (default 10) pass, and records the load.
  * - Output: each task's log and JSON under `--out`, and `summary.md` (also printed).
  */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { availableParallelism, loadavg } from "node:os";
 import { join, resolve } from "node:path";
 import { guardReport, readSide } from "./slice-guards";
@@ -69,6 +72,7 @@ interface Options {
   worlds: number[];
   quietLoad: number;
   quietWaitMs: number;
+  maxLoad: number;
   dryRun: boolean;
 }
 
@@ -152,6 +156,7 @@ function options(args: string[]): Options {
     worlds,
     quietLoad: Number(argument(args, "--quiet-load") ?? half),
     quietWaitMs: Number(argument(args, "--quiet-wait") ?? 10) * 60_000,
+    maxLoad: Number(argument(args, "--max-load") ?? availableParallelism()),
     dryRun: args.includes("--dry-run"),
   };
 }
@@ -257,13 +262,14 @@ async function runTask(task: Task, out: string): Promise<Done> {
   }
 }
 
-/** Runs the tasks `jobs` at a time, in order. */
-async function pool(tasks: Task[], jobs: number, out: string): Promise<Done[]> {
+/** Runs the tasks `jobs` at a time, in order, each started only while the load is under `maxLoad`. */
+async function pool(tasks: Task[], jobs: number, out: string, maxLoad: number, waitMs: number): Promise<Done[]> {
   const done: Done[] = [];
   let next = 0;
   const worker = async () => {
     while (next < tasks.length) {
       const task = tasks[next++]!;
+      await quiet(maxLoad, waitMs);
       console.log(`start ${task.name}`);
       const result = await runTask(task, out);
       console.log(`done  ${task.name}: exit ${result.exit}, ${result.seconds.toFixed(0)} s`);
@@ -290,6 +296,63 @@ function lastJson(text: string): Record<string, any> | undefined {
     } catch {}
   }
   return undefined;
+}
+
+/** The JSON a task wrote: its `--out` file for guards, else the last JSON object in its log. */
+function taskJson(done: Done): Record<string, any> | undefined {
+  const at = done.task.cmd.indexOf("--out");
+  const file = done.task.measure === "guards" && at >= 0 ? done.task.cmd[at + 1] : undefined;
+  if (file) return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : undefined;
+  return lastJson(readFileSync(done.log, "utf8"));
+}
+
+/**
+ * Why a task's counts may be load's doing, or undefined when they are clean: a hook timeout or non-zero exit, runs of
+ * one seed on different events (a timeout changes what follows), an arms mismatch, or no result at all.
+ */
+export function loadAffected(
+  measure: Measure,
+  exit: number,
+  result: Record<string, any> | undefined,
+): string | undefined {
+  if (measure === "arms") return exit === 0 ? undefined : "an arms mismatch";
+  if (!result) return `no result (exit ${exit})`;
+  const runs: Record<string, any>[] =
+    measure === "guards" ? (Object.values(result.world ?? {}) as Record<string, any>[][]).flat() : [result];
+  const timedOut = runs.reduce((sum, run) => sum + (run.failOpen?.timedOut ?? 0), 0);
+  const nonZero = runs.reduce((sum, run) => sum + (run.failOpen?.nonZeroExit ?? 0), 0);
+  if (timedOut || nonZero) return `${timedOut} hook timeouts, ${nonZero} non-zero exits`;
+  if (measure === "guards") {
+    const seeds = Object.values(result.world ?? {}) as { digest: string }[][];
+    if (seeds.some((seedRuns) => seedRuns.some((run) => run.digest !== seedRuns[0]?.digest)))
+      return "runs of one seed on different events";
+  }
+  return exit === 0 ? undefined : `exit ${exit}`;
+}
+
+/** Re-runs each load-affected task alone, after the load falls; the parallel run's files are kept as `*.parallel.*`. */
+async function confirmAlone(o: Options, done: Done[]): Promise<{ done: Done[]; notes: string[] }> {
+  const notes: string[] = [];
+  const kept: Done[] = [];
+  for (const result of done) {
+    const why = loadAffected(result.task.measure, result.exit, taskJson(result));
+    if (!why) {
+      kept.push(result);
+      continue;
+    }
+    const at = result.task.cmd.indexOf("--out");
+    const outFile = result.task.measure === "guards" && at >= 0 ? result.task.cmd[at + 1] : undefined;
+    if (outFile && existsSync(outFile)) renameSync(outFile, outFile.replace(/\.json$/, ".parallel.json"));
+    renameSync(result.log, result.log.replace(/\.log$/, ".parallel.log"));
+    const load = await quiet(o.quietLoad, o.quietWaitMs);
+    console.log(`again ${result.task.name} alone (${why} in parallel; ${load})`);
+    const alone = await runTask(result.task, o.out);
+    const still = loadAffected(alone.task.measure, alone.exit, taskJson(alone));
+    const verdict = still ? `still ${still}: not valid, re-run on a quieter machine` : "clean";
+    notes.push(`- ${result.task.name}: ${why} in the parallel run; re-run alone (${load}): ${verdict}`);
+    kept.push(alone);
+  }
+  return { done: kept, notes };
 }
 
 function armsLine(done: Done): string {
@@ -419,7 +482,9 @@ async function main(): Promise<void> {
     `- measures: ${o.measures.join(", ") || "none"}; parallel jobs ${o.jobs}; cores ${availableParallelism()}`,
     ...o.skipped.map((note) => `- ${note}`),
   ];
-  const done = await pool(tasks, o.jobs, o.out);
+  const parallel = await pool(tasks, o.jobs, o.out, o.maxLoad, o.quietWaitMs);
+  const { done, notes } = await confirmAlone(o, parallel);
+  if (notes.length) lines.push("", "## Re-run alone (load-affected in the parallel phase)", "", ...notes);
   const of = (measure: Measure) =>
     done.filter((d) => d.task.measure === measure).sort((a, b) => a.task.name.localeCompare(b.task.name));
   if (of("arms").length)
