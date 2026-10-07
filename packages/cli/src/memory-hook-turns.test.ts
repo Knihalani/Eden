@@ -229,6 +229,18 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
     }
   });
 
+  test("a session gist the sleep rewrites after a retraction is as old as its sources (A4 §3.3)", () => {
+    submit("We use ZebraCache for caching.", { prompt_id: "p1" });
+    stop();
+    expect(sessionStart(SESSION)).toContain("ZebraCache");
+    Bun.sleepSync(5);
+    submit("We no longer use ZebraCache.", { prompt_id: "p2" });
+    Bun.sleepSync(5);
+    // The sleep at this Stop writes the session's gist again, after the retraction, from the same older row.
+    stop();
+    expect(sessionStart(SESSION)).not.toMatch(/uses ZebraCache/i);
+  });
+
   test("after 'you can … now', a rule forbidding that action is dropped at SessionStart", () => {
     submit("Never merge the zebra PRs yourself.", { prompt_id: "p1" });
     submit("ok, what is next for the zebra release?", { prompt_id: "p2" });
