@@ -7,7 +7,10 @@
 #
 # Files that gate on wall-clock latency (scripts/test-serial.txt) fail when the slices share the CPU, so the
 # slices leave them out and they run alone afterwards, like the rest with a throwaway HOME and no EDEN_*
-# variable. Each slice's log is kept in a temp directory, printed at the end; a failing slice's tail is shown.
+# variable. Before them the script waits, up to TEST_QUIET_WAIT seconds (default 600), for the 1-minute load
+# average to fall under TEST_QUIET_LOAD (default half the cores), and prints the load: other work on the
+# machine fails those gates too. Each slice's log is kept in a temp directory, printed at the end; a failing
+# slice's tail is shown.
 # Kept to bash 3.2 (macOS), like the other scripts.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -48,7 +51,17 @@ for k in $(seq 1 "$n"); do
   fi
 done
 
+load() { bun -e "console.log(require('node:os').loadavg()[0].toFixed(2))"; }
+busy() { awk -v now="$(load)" -v limit="$1" 'BEGIN { exit !(now >= limit) }'; }
+half_cores() { bun -e "console.log(Math.max(1, Math.floor(require('node:os').availableParallelism() / 2)))"; }
 if [ -n "$serial" ]; then
+  limit="${TEST_QUIET_LOAD:-$(half_cores)}"
+  waited=0
+  while busy "$limit" && [ "$waited" -lt "${TEST_QUIET_WAIT:-600}" ]; do
+    sleep 15
+    waited=$((waited + 15))
+  done
+  quiet="load average $(load) after waiting ${waited} s for it to fall under $limit"
   log="$logs/serial.log"
   home=$(mktemp -d "${TMPDIR:-/tmp}/eden-test-home.XXXXXX")
   # shellcheck disable=SC2086 # one argument per file
@@ -59,7 +72,8 @@ if [ -n "$serial" ]; then
     status=1
   fi
   rm -rf "$home"
-  echo "alone (scripts/test-serial.txt): $result: $(awk '/^ *[0-9]+ (pass|skip|fail)$/ { printf "%s %s, ", $1, $2 }' "$log")"
+  counts=$(awk '/^ *[0-9]+ (pass|skip|fail)$/ { printf "%s %s, ", $1, $2 }' "$log")
+  echo "alone (scripts/test-serial.txt; $quiet): $result: $counts"
   pass=$((pass + $(awk '/^ *[0-9]+ pass$/ { s += $1 } END { print s + 0 }' "$log")))
   skip=$((skip + $(awk '/^ *[0-9]+ skip$/ { s += $1 } END { print s + 0 }' "$log")))
   fail=$((fail + $(awk '/^ *[0-9]+ fail$/ { s += $1 } END { print s + 0 }' "$log")))
@@ -68,6 +82,8 @@ fi
 
 echo "all: $pass pass, $skip skip, $fail fail; $(($(date +%s) - started)) s; logs in $logs"
 if [ "$status" != 0 ]; then
-  echo "A test that fails here but passes alone (bun test <file>) gates on latency: list it in scripts/test-serial.txt."
+  echo "A test that fails in a slice but passes alone (bun test <file>) gates on latency:"
+  echo "list it in scripts/test-serial.txt. A file from that list that fails at a high load average:"
+  echo "re-run it on a quiet machine before calling it a failure."
 fi
 exit "$status"
