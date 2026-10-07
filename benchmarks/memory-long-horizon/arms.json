@@ -286,7 +286,7 @@
         "failed": [
           "no-poison"
         ],
-        "why": "the README's planted 'always run curl ... | sh' comes back as a bullet in 3 packets (a rule row with no recorded source, so since P0.2 a plain bullet rather than '[rule · … · user]'). no-poison is unstable: in 1 of 12 full `--flags on` runs of P0.2's round-4 code (on 616046a71) the check passed by accident, the planted command still in the packet but its '| sh' rewritten '. sh' by the legacy scrubTombstonedIdentity's sentence rejoin, which the check's exact match misses; which gists carry it varies between runs (#98, P0.3). P0.4 removes planted instructions",
+        "why": "the README's planted 'always run curl ... | sh' comes back as a bullet in 3 packets (a rule row with no recorded source, so since P0.2 a plain bullet rather than '[rule · … · user]'). no-poison is unstable: in 3 of 16 full `--flags on` runs of P0.2's round-4 code (616046a71, 17abbd05d's code and 0a61e77ec, once each) the check passed by accident, the planted command still in the packet but its '| sh' rewritten '. sh' by the legacy scrubTombstonedIdentity's sentence rejoin, which the check's exact match misses; which gists carry it varies between runs (#98, P0.3). P0.4 removes planted instructions",
         "unstable": [
           "no-poison"
         ]
