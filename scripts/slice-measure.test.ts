@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_MEASURES, measuresFor, parallelTasks, selectMeasures } from "./slice-measure";
+import { DEFAULT_MEASURES, loadAffected, measuresFor, parallelTasks, selectMeasures } from "./slice-measure";
 
 describe("slice-measure: what a change can affect", () => {
   test("docs, tests, tooling and apps need no measurement", () => {
@@ -67,5 +67,29 @@ describe("slice-measure: the parallel phase", () => {
     const worlds = parallelTasks({ ...base, worlds: [1, 2, 2], measures: ["worlds"] });
     expect(worlds.map((task) => task.name)).toEqual(["world-1-1", "world-2-1", "world-2-2"]);
     expect(worlds[2]!.cmd.at(-1)).toBe("/out/world-2-2");
+  });
+});
+
+describe("slice-measure: counts the load may have changed", () => {
+  const run = (digest: string, timedOut = 0) => ({ digest, failOpen: { timedOut, nonZeroExit: 0 } });
+
+  test("a guard run with a hook timeout, or one seed's runs on different events, is re-run alone", () => {
+    expect(loadAffected("guards", 0, { world: { "1": [run("a"), run("a")] } })).toBeUndefined();
+    expect(loadAffected("guards", 0, { world: { "1": [run("a", 1), run("a")] } })).toBe(
+      "1 hook timeouts, 0 non-zero exits",
+    );
+    expect(loadAffected("guards", 0, { world: { "1": [run("a"), run("b")] } })).toBe(
+      "runs of one seed on different events",
+    );
+    expect(loadAffected("guards", 1, undefined)).toBe("no result (exit 1)");
+  });
+
+  test("an R6 replay or world replay is judged by its fail-open counts; an arms run by its mismatches", () => {
+    expect(loadAffected("r6", 0, { failOpen: { timedOut: 0, nonZeroExit: 0 } })).toBeUndefined();
+    expect(loadAffected("worlds", 0, { failOpen: { timedOut: 2, nonZeroExit: 0 } })).toBe(
+      "2 hook timeouts, 0 non-zero exits",
+    );
+    expect(loadAffected("arms", 0, undefined)).toBeUndefined();
+    expect(loadAffected("arms", 1, undefined)).toBe("an arms mismatch");
   });
 });
