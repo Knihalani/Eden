@@ -6,7 +6,7 @@ Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `mai
 3. `bun run test` (`scripts/test.sh`)
 4. `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh`. Without the variable, build-cli runs typecheck and the whole suite again first.
 
-In CI, steps 1, 2 and 4 run in one job, and step 3 runs in six parallel shards (`EDEN_TEST_SHARD=k/6`). `scripts/test-shard.ts` balances the shards by each test file's measured time (`scripts/test-times.txt`). When you add a test file that takes more than a few seconds, refresh the table (the command is in its header). A run takes about as long as its slowest shard.
+In CI, steps 1, 2 and 4 run in one job, and step 3 runs in six parallel shards (`EDEN_TEST_SHARD=k/6`). `scripts/test-shard.ts` balances the shards by each test file's measured time (`scripts/test-times.txt`). When you add a test file that takes more than a few seconds, refresh the table (the command is in its header). A run takes about as long as its slowest shard. Locally, `bun run test:parallel` runs the same six shards at once (`scripts/test-parallel.sh`).
 
 ## The memory program (most work here)
 
@@ -39,18 +39,20 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
    Targets are never edited after results are known. If the harness changes, amend the prereg in a visible commit that says why.
 3. **Red first** (second commit). Every A5 §4 arm is already in `benchmarks/memory-long-horizon/arms.json` with its measured state on today's plugin (P0.0c): `red` with the checks it fails and why, or `green` (5 `on` states). Run the slice's arms (`bun benchmarks/memory-long-horizon/arms/run.ts --arm <id>`) and confirm each matches its record. A green arm must stay green. This commit adds the slice's own failing tests, and any arm or check the slice adds, as `red` with its failing checks and why. A test that fails for the wrong reason is a broken test.
 4. **Implement** to the spec. Where the spec is ambiguous, pick the reading most consistent with DECISIONS and record it under "Decisions made" in the report. Fixture or oracle edits go in separate commits prefixed `fixture:`. When an arm passes, set it `green` in `arms.json` in the commit that makes it pass. A slice that builds an entry point an arm drives confirms or revises that arm's contract (its header) in a `fixture:` commit.
-5. **Verify.**
-   - While iterating, run only the affected test files. Run CI's four steps locally once, on the final tree, all green. The full suite takes about 12 minutes, so don't repeat it for each small fix: re-run the affected files, and let GitHub CI cover the final push.
-   - Run the slice's arms twice (`arms/run.ts --arm <id>`, fresh processes every run); both runs must match `arms.json`.
+5. **Verify.** Cheap checks while the code changes; the full measurement once, on the commit the code review approved (step 6). Details and commands: `.claude/commands/slice.md` §5.
+   - While iterating, run only the affected test files, the slice's arms (`arms/run.ts --arm <id>`) and the earlier review rounds' probes (committed as tests). For behaviour changes, add one kept world replay and the real-session end-to-end (minutes each). No full measurement chain while the code is still changing.
+   - Measure with `bun run measure:slice` (`scripts/slice-measure.ts`). It runs the count-only measures in parallel (arms in every flag state, guard seeds, R6 replays) and the timing-sensitive ones alone on a quiet machine (soak, bench). After a later change, `--changed <last measured commit>` re-runs only what that change can affect; the report lists what was skipped and why.
+   - Run CI's four steps locally once, on the final tree, all green, with `bun run test:parallel` for step 3. Don't repeat them for each small fix: re-run the affected files, and let GitHub CI cover the final push.
+   - Run the slice's arms twice (the measure script runs `on` twice, as separate fresh processes); both runs must match `arms.json`.
    - Run both flag states: `--flags off` (identity) and `--flags shadow` (shadow ledger only). CI gates them for one sample arm per group, so a slice that changes flag behaviour runs both on every arm and updates `arms.json`.
    - Run the end-to-end scenario in a **real Claude Code session** with the plugin built from this worktree. Run it headless: `claude -p … --plugin-dir ./plugins/eden-memory`, with a temp `EDEN_MEMORY_DIR` (details in `.claude/commands/slice.md`).
    - Record the numbers exactly as the commands printed them.
 6. **Independent review.**
-   - Run the `slice-reviewer` subagent on the diff and prereg. It must return `APPROVE`.
-   - Fix every correctness, spec or test-honesty finding and re-run it. Stop after 3 rounds and mark the slice `blocked`.
+   - Run the `slice-reviewer` subagent on the code first: the diff, prereg, tests and arms, before the full measurement. After the measurement, the same reviewer checks the report's numbers against the artifacts (the evidence check). It must return `APPROVE`.
+   - Fix every correctness, spec or test-honesty finding and re-run it, and commit the reviewer's probes as regression tests. Stop after 3 code-review rounds: ask the user whether to allow one more; otherwise mark the slice `blocked`.
    - Also run `/security-review` for P0.4, P0.5, P2.3, any migration, and anything touching secrets or permissions.
 7. **Merge.**
-   - Rebase on `origin/main`, push, open the PR with the report as its body. Put related fixes in one PR, so CI runs once rather than once per PR.
+   - Rebase on `origin/main`, push, open the PR with the report as its body. Put related fixes in one PR, so CI runs once rather than once per PR, and push only when you need CI's evidence: each push runs seven CI jobs.
    - Wait for CI (`gh pr checks --watch`); it must be green. Until P0.−1 lands, CI is red on `main`; then require "no new failures versus `main`" instead.
    - `gh pr merge --rebase --delete-branch`.
    - Never force-push `main`. Never rewrite published history.
