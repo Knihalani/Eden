@@ -53,6 +53,7 @@ const WINNER = "8. Lacrosse originated in Canada.";
 const HOP_CUE = "What country is the sport of Zane from?";
 const ICL_SHOT = "The movie was great. label: 28";
 const ICL_CUE = "The movie was great. label: 28";
+const HOOK_ICL_CUE = "The movie was great. label:";
 const NOVEL =
   "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. " +
   "He remembered the flood of his childhood and the oak that had fallen across the millrace. " +
@@ -971,7 +972,8 @@ describe("M36.2 walkthrough 10 — ICL shot survives a novel-sized narrative ing
           later.close();
         } catch {}
       }
-      assertIclShot(hookSubmit("s-m36-10h", ICL_CUE));
+      // D26: the hook does not deliver what the current prompt already says, so its cue asks for the label.
+      assertIclShot(hookSubmit("s-m36-10h", HOOK_ICL_CUE));
     });
   });
 });
