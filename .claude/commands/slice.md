@@ -32,7 +32,7 @@ You have full permissions: commit, push, open PRs and merge into `main` yourself
 ## 2–5. Pre-register, red first, implement, verify
 
 Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
-- **Baselines are measured.** Run the metric on `origin/main` before changing anything.
+- **Baselines are measured.** Run the metric on `origin/main` before changing anything: `bun run measure:slice --new <scratchpad>/base --out <scratchpad>/measure-base --only <the slice's measures>`. Keep its `guards-new-*.json` files: they are the slice's `--guard-base` from then on.
 - **The gate.** It is PROGRESS.md's Gate column plus CI. Since P0.0c, a gate's A5 arms are in `arms.json` and run with `benchmarks/memory-long-horizon/arms/run.ts` (README: "The A5 §4 arms"). Write tests for the behaviour you change anyway.
 - **Quality bar.** Code a strong reviewer would call clean:
   - small, well-named functions;
