@@ -72,6 +72,7 @@ describe("D7: a value shaped by its capitals alone is matched as typed", () => {
   test("the same English word, in lower case or opening a sentence, is not the value", () => {
     const kept: [string, string][] = [
       ["We no longer use Make.", "Make sure the zebra API returns JSON errors with a code field."],
+      ["We no longer use Make.", "[fact · 0m] Make sure the zebra API returns JSON errors."],
       ["We switched from Next to Remix.", "The next release ships on Friday."],
       ["We no longer use Go.", "Go ahead and run the migrations after the deploy."],
       ["We no longer use React.", "The dashboard should react to config changes without a reload."],
