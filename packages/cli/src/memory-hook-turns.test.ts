@@ -241,6 +241,17 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
     expect(sessionStart(SESSION)).not.toMatch(/uses ZebraCache/i);
   });
 
+  test("so is one the sleep rewrites after a revocation", () => {
+    submit("Never merge the zebra PRs yourself.", { prompt_id: "p1" });
+    stop();
+    expect(sessionStart(SESSION)).toContain("Never merge the zebra PRs yourself");
+    Bun.sleepSync(5);
+    submit("You can merge the zebra PRs yourself now.", { prompt_id: "p2" });
+    Bun.sleepSync(5);
+    stop();
+    expect(sessionStart(SESSION)).not.toContain("Never merge the zebra PRs yourself");
+  });
+
   test("after 'you can … now', a rule forbidding that action is dropped at SessionStart", () => {
     submit("Never merge the zebra PRs yourself.", { prompt_id: "p1" });
     submit("ok, what is next for the zebra release?", { prompt_id: "p2" });
