@@ -66,6 +66,26 @@ describe("A4 §3.1, D7: what invalidates a value", () => {
   });
 });
 
+describe("D7: a switch stays within its scope and subject", () => {
+  const after = (switched: string) => (text: string) => validText(text, 50, invalidationsIn(switched, 100));
+  test("a scoped switch keeps the value in another scope", () => {
+    const valid = after("We switched packages/cli from Postgres to SQLite.");
+    expect(valid("apps/web uses Postgres.")).toBe("apps/web uses Postgres.");
+    expect(valid("packages/cli uses Postgres.")).toBe("");
+    expect(valid("packages/cli/src/db.ts opens Postgres.")).toBe("");
+    expect(valid("The database is Postgres.")).toBe("");
+  });
+
+  test("a switch of a subject keeps the value for another subject", () => {
+    const docs = after("We moved the docs from Notion to GitHub.");
+    expect(docs("Design specs live in Notion.")).toBe("Design specs live in Notion.");
+    expect(docs("The docs live in Notion.")).toBe("");
+    const queue = after("We migrated the queue from SQS to Kafka.");
+    expect(queue("The job queue runs on SQS.")).toBe("");
+    expect(queue("Logs are archived to SQS.")).toBe("Logs are archived to SQS.");
+  });
+});
+
 describe("A4 §3.1, D9: what revokes a rule", () => {
   test("'you can <action> … now' with an A7 §5 action verb, keeping its object", () => {
     expect(shown("You can merge PRs yourself now.")).toEqual(["revoke:integrate:pr"]);
@@ -101,10 +121,13 @@ describe("A4 §3.1, D9: what revokes a rule", () => {
     for (const [rule, permit] of unrevoked) expect(kept(rule, permit)).toBe(rule);
   });
 
-  test("a retraction never supersedes a rule; only a revocation does", () => {
+  test("a retraction never supersedes a rule sentence, even beside a fact it does supersede", () => {
     const records = [...invalidationsIn("We no longer use Redis.", 100)];
-    expect(validText("Never flush Redis in production.", 50, records, true)).toBe("Never flush Redis in production.");
-    expect(validText("stack uses Redis", 50, records, false)).toBe("");
+    expect(validText("Never flush Redis in production.", 50, records)).toBe("Never flush Redis in production.");
+    expect(validText("stack uses Redis", 50, records)).toBe("");
+    expect(validText("stack uses Redis. Push the fix to the PR, but don't merge it yourself.", 50, records)).toBe(
+      "Push the fix to the PR, but don't merge it yourself.",
+    );
   });
 
   test("a revocation of an unknown class in the log is ignored", () => {
