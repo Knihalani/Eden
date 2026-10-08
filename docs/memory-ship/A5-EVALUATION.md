@@ -81,6 +81,11 @@ Each metric is computed per arm from the harness's **oracle files** (§3) and Ed
 | `p99_hook_ms` PostToolUse (n = 971) | 292.0–353.2 ms | 61.2 ms | +10 ms | **no** |
 | `p99_hook_ms` Stop (n = 1,000) | 1272.5–1656.4 ms | 383.9 ms | +10 ms | **no** |
 
+**Re-run after P0.3** (2026-10-08, [report](reports/P0.3.md)): three fresh runs per seed (1–3) on each side, the `measure:slice` guard runs, not P0.0b's ten. Every run of a seed fired one event sequence on both sides.
+- `main` before P0.3 (`dee3f72ae`): `redundant_rate` 36.11–37.14 · 18.75–20.45 · 33.33–35.71 % (spread 2.38 pp); `need_miss_rate` 33.33–50.00 · 33.33–33.33 · 33.33–50.00 % (16.67 pp, one cue of six); `packet_rate` 38.89–41.67 · 35.90–43.59 · 46.81–48.94 % (7.69 pp); `stale_rate` 0 and `false_rate` 100 % in every run.
+- P0.3 (`19f2474c0`): every metric identical across the three runs of each seed (spread 0): `redundant_rate` 37.14 · 19.15 · 35.09 %, `need_miss_rate` 33.33 % each, `packet_rate` 41.67 · 41.03 · 48.94 %.
+- So the plugin's run-to-run noise came from #98's pid-derived ids, as P0.0b suspected. Three runs bound a floor only from below; the p99 floors were not re-measured.
+
 Not measured by this A/A, so no floor yet:
 - silence on real negatives. P0.0d built the replay (`arms/silence.ts`); the private set waits for the user's labels (R-8). Through today's plugin, in five runs (fresh processes, world seed 1), R1 fired on 1 of 150 negatives (`q325`; 95% CI 0.0012–0.0368) four times and on none once, so its noise floor is at least 1 negative (0.67 pp); R8 fired on 0 of 98 (0–0.0377) every time. But 0 of the store's 6 control prompts got a packet in any of the four runs that asked them: in a fresh session today's per-session store is nearly silent (A1 D1), so these rates say nothing yet. Re-run after P0.5;
 - `abort_rate` (P0.8);
