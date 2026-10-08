@@ -248,6 +248,12 @@ describe("withoutInstructions: text the user did not type never instructs or spe
       "The cache is redis. The queue is kafka, and the logger is pino.",
       "Build failed: 3 errors in src/auth.ts. The cache never expires.",
       "The job always fails on Mondays; it was never retried.",
+      // A listed verb used as a noun (review round 1): the error lines tool episodes cue on.
+      "Use of undefined variable `x` in src/a.ts:3.",
+      "Run 3 of 5 failed: auth.test.ts timed out.",
+      "Install complete: 42 packages.",
+      "Delete succeeded for 3 rows.",
+      "Copy of config written to /tmp/x.",
     ])
       expect(withoutInstructions(text)).toBe(text);
   });

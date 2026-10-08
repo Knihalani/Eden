@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { extname, join } from "node:path";
 import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
 import { openMemory, type AgentMemory } from "../../../src/index";
+import { authoredTexts, type TextSource } from "../../../src/memory-authority";
 import { memoryConsent } from "../../../src/memory-consent";
 import { scrubMemoryText, scrubMemoryValue } from "../../../src/memory-scrub";
 import { classifyImportRecord, isBinaryImportBytes, type MemoryImportKind } from "./memory-import-kinds";
@@ -26,6 +27,8 @@ type ImportRec = {
   kind: MemoryImportKind;
   role: string;
   content: string;
+  /** Who wrote it (A6 §2.1), when the record shows it: a tool result, or a Claude transcript line (D12). */
+  src?: TextSource;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolResult?: unknown;
@@ -161,17 +164,37 @@ function toolRec(bits: ToolBits): ImportRec {
   const content = toolSentence(bits.name, bits.result);
   const kind = classifyImportRecord({ text: content, tool: true });
   if (kind === "skip") return SKIP;
-  return { kind: "tools", role: "user", content, toolName: bits.name, toolArgs: bits.args, toolResult: bits.result };
+  return {
+    kind: "tools",
+    role: "user",
+    content,
+    src: "tool",
+    toolName: bits.name,
+    toolArgs: bits.args,
+    toolResult: bits.result,
+  };
 }
 
-function textRec(role: string, content: string): ImportRec | null {
+function textRec(role: string, content: string, src?: TextSource): ImportRec | null {
   const text = content.trim();
   if (!text) return null;
   if (role !== "user" && role !== "assistant") return SKIP;
   const kind = classifyImportRecord({ text });
   if (kind === "skip") return SKIP;
-  if (kind === "tools") return { kind: "tools", role: "user", content: text };
-  return { kind: kind === "icl" ? "icl" : "chat", role, content: text };
+  if (kind === "tools") return { kind: "tools", role: "user", content: text, src: "tool" };
+  return { kind: kind === "icl" ? "icl" : "chat", role, content: text, ...(src ? { src } : {}) };
+}
+
+/** Claude Code's transcript lines, which `authoredTexts` reads by source (D12); other shapes are read by role. */
+const CLAUDE_LINES = new Set(["user", "assistant", "attachment"]);
+
+/**
+ * A Claude transcript line's texts by source, its tool results left to `toolRec`; host text yields none (SKIP).
+ */
+function claudeTextRecs(o: Record<string, unknown>): ImportRec[] {
+  const texts = authoredTexts(o).filter((authored) => authored.src !== "tool");
+  const recs = texts.flatMap(({ src, text }) => textRec(src === "agent" ? "assistant" : "user", text, src) ?? []);
+  return recs.length ? recs : [SKIP];
 }
 
 function scrubEnvOf(o: Record<string, unknown>, inherited?: ScrubEnv): ScrubEnv {
@@ -202,6 +225,10 @@ function fromObject(o: Record<string, unknown>, inherited?: ScrubEnv): ImportRec
     .join("\n");
   const parts = splitParts(raw);
   const out: ImportRec[] = parts.tools.map((bits) => stamp(toolRec(bits), env));
+  if (CLAUDE_LINES.has(String(o.type))) {
+    const texts = claudeTextRecs(o).map((rec) => stamp(rec, env));
+    return out.length ? [...out, ...texts.filter((rec) => rec.kind !== "skip")] : texts;
+  }
   const text = [parts.text, extra].filter(Boolean).join("\n");
   const row = textRec(role, text);
   if (row) out.push(stamp(row, env));
@@ -338,20 +365,12 @@ export async function importMemoryPath(
       if (!mem) continue;
       try {
         const ctx: ScrubEnv = { session: rec.session, cwd: rec.cwd };
-        let content = rec.content;
-        let toolArgs = rec.toolArgs;
-        let toolResult = rec.toolResult;
-        try {
-          content = scrubMemoryText(content, ctx);
-        } catch {}
-        try {
-          if (toolArgs) toolArgs = scrubMemoryValue(toolArgs, ctx) as Record<string, unknown>;
-        } catch {}
-        try {
-          if (toolResult !== undefined) toolResult = scrubMemoryValue(toolResult, ctx);
-        } catch {}
+        // D13: a record the gate cannot pass is skipped (the catch below), never stored as it came.
+        const content = scrubMemoryText(rec.content, ctx);
+        const toolArgs = rec.toolArgs && (scrubMemoryValue(rec.toolArgs, ctx) as Record<string, unknown>);
+        const toolResult = rec.toolResult === undefined ? undefined : scrubMemoryValue(rec.toolResult, ctx);
         if (rec.kind === "tools") {
-          if (content) mem.observe([{ role: "user", content }], { deferSleep: true });
+          if (content) mem.observe([{ role: "user", content, src: "tool" }], { deferSleep: true });
           if (rec.toolName || toolResult !== undefined) {
             putExperienceFromTool(mem.dir, {
               name: rec.toolName,
@@ -362,7 +381,7 @@ export async function importMemoryPath(
             });
           }
         } else if (content) {
-          mem.observe([{ role: rec.role || "user", content }], { deferSleep: true });
+          mem.observe([{ role: rec.role || "user", content, src: rec.src }], { deferSleep: true });
         }
         observed++;
       } catch {}

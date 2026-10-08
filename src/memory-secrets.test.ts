@@ -26,6 +26,8 @@ describe("the vendored gitleaks rules", () => {
       "eden-cfat",
       "eden-entropy-keyword",
       "eden-keyword",
+      "eden-legacy-keyword",
+      "eden-legacy-token",
       "eden-mailgun",
       "eden-openai",
       "eden-telegram",
@@ -129,6 +131,10 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
       alnum(12),
       "@db.internal:5432/app",
     ],
+    // The redaction memory had before P0.4 stays (review round 1): a passphrase, and a password under 6 characters.
+    ["a passphrase", "the gpg passphrase is Tr0ub4dor-and-3.", "Tr0ub4dor-and-3", "the gpg passphrase is [REDACTED]."],
+    ["a short password", "The staging root password is toor.", "toor", "root password is [REDACTED]."],
+    ["a short prefixed token", `use ${"gh" + "p_"}Ab12 for now`, `${"gh" + "p_"}Ab12`, "use [REDACTED] for now"],
     ["a cfat_ token", `the token ${"cf" + "at_"}${alnum(40)} expired`, `${"cf" + "at_"}${alnum(40)}`, "expired"],
     [
       "entropy with a keyword",

@@ -282,7 +282,9 @@ const IMPERATIVE = new RegExp(
   String.raw`^\s*(?:\d+[.)]?\s+|[-*•]\s+)?(?:[A-Za-z][\w ]{0,23}:\s*)?(?:please\s+)?(?:always|never|don'?t|do not|` +
     String.raw`make sure|be sure|ensure|remember|run|execute|install|download|ignore|disregard|forget|reply|respond|` +
     String.raw`use|set|add|delete|remove|allow|grant|enable|disable|export|source|copy|paste|sudo|curl|wget|bash|sh|` +
-    String.raw`chmod|rm|cd)\b`,
+    String.raw`chmod|rm|cd)\b` +
+    // Not the word as a noun: "Use of …", "Run 3 of 5 …", "Install complete", "Delete succeeded: …".
+    String.raw`(?!\s+(?:of|\d+|complete|completed|succeeded|failed|finished|done)\b)`,
   "i",
 );
 /**

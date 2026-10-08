@@ -250,7 +250,10 @@ function cleanText(text: string, cap: number, ctx?: MemoryScrubCtx): string {
   } catch {}
   try {
     s = scrubMemoryText(s, ctx);
-  } catch {}
+  } catch {
+    // D13: text the gate could not pass is not stored.
+    return "";
+  }
   if (cap > 0 && s.length > cap) s = s.slice(0, cap);
   return s;
 }
