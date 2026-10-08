@@ -9,7 +9,11 @@
  *   scope, or lacking the subject, keeps the value. D7's "use A, not B" waits for P3.3: without a slot to tie it to,
  *   "use POST instead of GET" is a coding instruction, not a switch;
  * - a **revocation** (A4 §3.1, D9): "you can merge PRs yourself now", whose verb is one of A7 §5's action classes. It
- *   invalidates a rule that forbids an action of the same class on the same object (`forbids`).
+ *   invalidates a rule that forbids an action of the same class on the same object (`forbids`);
+ * - a **forget** (A6 §3, A4 §3.1's "forget that"): "forget ZebraCache", "forget that the auth provider is Clerk". It
+ *   is a retraction (`r: "forget"`) of the value its sentence ends with, in any case unless its capitals shape it,
+ *   and never a pronoun or a function word ("forget it"); "don't forget to …" is none (D9 fix 2). Unlike the others,
+ *   neither its own sentence (`withoutForgets`) nor a history cue keeps the value.
  *
  * Only typed text invalidates (A4 §3.0, A6 §2.1): the human Submit's prompt, without its pasted spans
  * (`<pasted_content>`, fenced code, `>` quotes, runs of 3 or more lines without sentence punctuation), and without
@@ -39,7 +43,7 @@ import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript"
  * on object words `o`.
  */
 export type Invalidation =
-  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[] }
+  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; r?: "forget" }
   | { k: "revoke"; c: string; o: string[]; t: number };
 type Retraction = Extract<Invalidation, { k: "retract" }>;
 type Revocation = Extract<Invalidation, { k: "revoke" }>;
@@ -60,6 +64,13 @@ const RETRACT = [
   new RegExp(String.raw`\bwe(?:'re| are) not (?:using|running) ${VALUE} any ?more\b`, "gi"),
   new RegExp(String.raw`\bwe(?:'ve| have)? (?:dropped|stopped using|got rid of) ${VALUE}${CLAUSE_END}`, "gi"),
 ];
+/** A6 §3's forget, opening its sentence: the value is the clause's last token, after "that …" when there is one. */
+const FORGET = new RegExp(
+  String.raw`^(?:please\s+)?forget(?: about)?\s+(?:that\s+[^.!?;]*?\s)?${VALUE}${CLAUSE_END}`,
+  "i",
+);
+/** Words a forget never takes as its value: "forget it", "forget everything". */
+const NOT_FORGETTABLE = new Set(["it", "that", "this", "them", "those", "these", "everything", "anything", "all"]);
 /** D7's switch: the words between the verb and "from" name the slot's subject or scope ("apps/web", "the queue"). */
 const SWITCH = new RegExp(
   String.raw`\bwe(?:'ve| have)? (?:switched|moved|migrated)\b([^.!?;\n]*?)\bfrom ${VALUE} to \S`,
@@ -182,10 +193,28 @@ function objectWords(text: string): string[] {
     .map(singular);
 }
 
+/** The forget a sentence states, if it states one. */
+function forgetIn(sentence: string, t: number): Retraction | undefined {
+  const value = FORGET.exec(sentence)?.[1];
+  const lower = value?.toLowerCase();
+  if (!value || !lower || NOT_FORGETTABLE.has(lower) || FUNCTION_WORDS.has(lower) || lower === "redacted") return;
+  // A lowercase value has no capitals to match as typed, so any case of it is forgotten.
+  return { k: "retract", ...(value === lower ? { o: lower } : retracted(value)), t, r: "forget" };
+}
+
+/** A typed text without the sentences that forget (A6 §3): a forget is not itself a memory, as it names the value. */
+export function withoutForgets(text: string): string {
+  const parts = String(text ?? "").split(SENTENCE_END);
+  const kept = parts.filter((sentence) => !forgetIn(sentence.trim(), 0));
+  return kept.length === parts.length ? text : kept.join(" ").trim();
+}
+
 /** The invalidations a typed prompt states. */
 export function invalidationsIn(prompt: string, t: number): Invalidation[] {
   const found: Invalidation[] = [];
   for (const sentence of statements(typedText(prompt))) {
+    const forget = forgetIn(sentence, t);
+    if (forget) found.push(forget);
     for (const pattern of RETRACT)
       for (const match of sentence.matchAll(pattern))
         if (valueShaped(match[1]!)) found.push({ k: "retract", ...retracted(match[1]!), t });
@@ -209,14 +238,22 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
   return found;
 }
 
-/** Appends the invalidations of a human prompt to the store's validity log. Fails open. */
-export function recordInvalidations(root: string, prompt: string, t = memoryNow()): void {
+/** Appends the invalidations of a human prompt to the store's validity log, and returns them. Fails open. */
+export function recordInvalidations(root: string, prompt: string, t = memoryNow()): Invalidation[] {
   try {
     const found = invalidationsIn(prompt, t);
-    if (!found.length) return;
+    if (!found.length) return [];
     mkdirSync(root, { recursive: true });
     appendFileSync(join(root, FILE), found.map((record) => `${JSON.stringify(record)}\n`).join(""), { mode: 0o600 });
-  } catch {}
+    return found;
+  } catch {
+    return [];
+  }
+}
+
+/** Whether an invalidation is a forget (A6 §3). */
+export function isForget(record: Invalidation): boolean {
+  return record.k === "retract" && record.r === "forget";
 }
 
 /**
@@ -253,7 +290,8 @@ export function readInvalidations(root: string): Invalidation[] {
         const subject = Array.isArray(record.w)
           ? { w: record.w.filter((word): word is string => typeof word === "string") }
           : {};
-        return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject }];
+        const forget = record.r === "forget" ? { r: "forget" as const } : {};
+        return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...forget }];
       }
       if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
         return [
@@ -361,7 +399,8 @@ function invalidates(record: Invalidation, sentence: string): boolean {
   if (RULE_SENTENCE.test(sentence)) return false;
   if (!mentions(sentence, record)) return false;
   if (!sameScope(sentence, record.s) || !namesSubject(sentence, record.w)) return false;
-  return !invalidationsIn(sentence, 0).some((own) => own.k === "retract" && own.o === record.o);
+  // The sentence stating the change stays, unless it is a forget.
+  return !invalidationsIn(sentence, 0).some((own) => own.k === "retract" && own.o === record.o && !own.r);
 }
 
 /**

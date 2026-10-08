@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { redact } from "@eden/ir";
+import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
 import { childSessionName, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
@@ -13,9 +14,11 @@ import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenan
 import { isNonHumanSubmit, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   asksHistory,
+  isForget,
   readInvalidations,
   recordInvalidations,
   validText,
+  withoutForgets,
   type Invalidation,
 } from "../../../src/memory-validity";
 import {
@@ -52,7 +55,9 @@ function flattenContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return content.map(flattenContent).filter(Boolean).join("\n");
   const o = asRec(content);
-  return String(o.text ?? o.content ?? o.stdout ?? o.stderr ?? o.output ?? o.message ?? o.error ?? o.llmContent ?? "");
+  const field = o.text ?? o.content ?? o.stdout ?? o.stderr ?? o.output ?? o.message ?? o.error ?? o.llmContent;
+  // A nested result (the Agent tool's `content` blocks) is read through, never stored as "[object Object]".
+  return field == null ? "" : typeof field === "object" ? flattenContent(field) : String(field);
 }
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
@@ -125,17 +130,30 @@ function deliver(notes: readonly ProvenanceNote[], win: string | undefined, at: 
 /**
  * A4 §5.1 step 5: each note without the sentences an invalidation has made invalid; a note left empty is dropped.
  * A rule sentence yields only to a revocation (`validText`). When the cue asks about history, episodes keep what they
- * say (D31 `stale_for`); facts and rules do not.
+ * say (D31 `stale_for`), except what the user asked to forget (A6 §3); facts and rules do not.
  */
 function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
   if (!invalid.length) return notes;
   const history = asksHistory(prompt);
   return notes.flatMap((note) => {
     const kind = noteKindToken(note);
-    if (history && kind !== "rule" && kind !== "fact" && !isPinnedIntention(note)) return [note];
-    const text = validText(note.text, note.at, invalid);
+    const episode = kind !== "rule" && kind !== "fact" && !isPinnedIntention(note);
+    const text = validText(note.text, note.at, history && episode ? invalid.filter(isForget) : invalid);
     return text ? [{ ...note, text }] : [];
   });
+}
+
+/**
+ * What a prompt gives `observe` (D12): the user's own words, without its forgets (A6 §3), and each pasted span as
+ * a `paste` episode.
+ */
+function promptMessages(prompt: string, tools: readonly string[]): TranscriptMessage[] {
+  const { own, pasted } = splitPastes(prompt, tools);
+  const said = withoutForgets(own);
+  return [
+    ...(said ? [{ role: "user", content: said, src: "user" as const }] : []),
+    ...pasted.map((content) => ({ role: "user", content, src: "paste" as const })),
+  ];
 }
 
 /** The memory root: `EDEN_MEMORY_DIR`, else `$EDEN_HOME/memory`, else `~/.eden/memory`. */
@@ -167,39 +185,59 @@ function promptOf(r: Record<string, unknown>): string {
   return PROMPT_KEYS.map((key) => str(r[key])).find(Boolean) ?? "";
 }
 
-/** A transcript message as `observe` reads it; `src: "tool"` marks a tool result on a user line (A6 §2.1). */
-type TranscriptMessage = { role: string; content: string; src?: "tool" };
+/** A transcript message as `observe` reads it, with its source (A6 §2.1) when the transcript shows it. */
+type TranscriptMessage = { role: string; content: string; src?: TextSource };
 
+/** The tool results the paste rule compares a prompt with (A6 §2.1: the last 10 tool calls). */
+const RECENT_TOOL_RESULTS = 10;
+
+/** Claude Code's transcript entries; a line of another shape is read by its role alone (`genericMessage`). */
+const CLAUDE_ENTRIES = new Set(["user", "assistant", "attachment"]);
+
+/**
+ * A transcript's messages by source (D12, `authoredTexts`): what the user typed, the spans they pasted, tool
+ * results, and the agent's text. Host text (meta lines, wrappers, non-human submits) is left out.
+ */
 export function messagesFromTranscript(path: string): TranscriptMessage[] {
   try {
     const out: TranscriptMessage[] = [];
+    const tools: string[] = [];
     for (const line of readFileSync(path, "utf8").split("\n")) {
       try {
-        const o = asRec(JSON.parse(line)),
-          msg = asRec(o.message ?? o),
-          rawRole = String(msg.role || o.type || o.role || ""),
-          role =
-            rawRole === "human" || rawRole === "Human" || rawRole === "user"
-              ? "user"
-              : rawRole === "model" ||
-                  rawRole === "Model" ||
-                  rawRole === "ai" ||
-                  rawRole === "AI" ||
-                  rawRole === "assistant"
-                ? "assistant"
-                : "",
-          content = flattenContent(msg.content ?? o.content ?? msg.parts),
-          // A tool result arrives on a user line, but the user did not type it (A4 §3.0, A6 §2.1).
-          src = "tool" as const,
-          toolResult = Array.isArray(msg.content) && msg.content.some((block) => asRec(block).type === "tool_result");
-        if ((role === "user" || role === "assistant") && content)
-          out.push({ role, content, ...(toolResult ? { src } : {}) });
+        const o = asRec(JSON.parse(line));
+        if (!CLAUDE_ENTRIES.has(String(o.type))) {
+          const generic = genericMessage(o);
+          if (generic) out.push(generic);
+          continue;
+        }
+        for (const { src, text } of authoredTexts(o, tools.slice(-RECENT_TOOL_RESULTS))) {
+          if (src === "tool") tools.push(text);
+          const content = src === "user" ? withoutForgets(text) : text;
+          if (content) out.push({ role: src === "agent" ? "assistant" : "user", content, src });
+        }
       } catch {}
     }
     return out;
   } catch {
     return [];
   }
+}
+
+/** A line of another host's transcript, by its role: no source is known (`observe` claims none). */
+function genericMessage(o: Record<string, unknown>): TranscriptMessage | undefined {
+  const msg = asRec(o.message ?? o),
+    raw = String(msg.role || o.role || ""),
+    role = /^(?:human|user)$/i.test(raw) ? "user" : /^(?:model|ai|assistant)$/i.test(raw) ? "assistant" : "",
+    content = flattenContent(msg.content ?? o.content ?? msg.parts);
+  return role && content ? { role, content } : undefined;
+}
+
+/**
+ * The text a SessionStart, Stop or SessionEnd payload carries (`last_assistant_message` and the like): no such event
+ * carries what the user typed, so it is the agent's (A6 §2.1).
+ */
+function agentText(content: string): TranscriptMessage {
+  return { role: "assistant", content, src: "agent" };
 }
 
 function payloadMessages(r: Record<string, unknown>): { role: string; content: string }[] {
@@ -325,7 +363,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       if (event === "SessionStart") {
         if (writes && (prior.length || extra))
           try {
-            mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, {
+            mem.observe(extra ? [...prior, agentText(extra)] : prior, {
               keepLiveIdentity: true,
               reread: true,
             });
@@ -355,7 +393,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
           const ending = event === "SessionEnd";
           try {
             if (prior.length || extra)
-              mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, {
+              mem.observe(extra ? [...prior, agentText(extra)] : prior, {
                 keepLiveIdentity: true,
                 reread: true,
                 deferSleep: ending,
@@ -382,12 +420,16 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       // A4 §5.1: every human submit is encoded (step 1); the turn mode decides only whether it is answered (step 2).
       // A4 §3.1: what the user just retracted or revoked is invalid from this Submit on (A4 §3.0: typed text only).
       // Read after the store's own secret redaction, so the log can hold no token a stored row would not.
-      if (writes && prompt && event === "UserPromptSubmit") recordInvalidations(mem.dir, mem.storableText(prompt));
+      // A typed forget also sends the rows it names to history (A6 §3).
+      if (writes && prompt && event === "UserPromptSubmit")
+        mem.forget(recordInvalidations(mem.dir, mem.storableText(prompt)));
       // The conversation so far is encoded before the prompt (which `recall` encodes after retrieving), so what the
       // prompt states is newer than every transcript line it supersedes.
       if (writes && prior.length) mem.observe(prior, { reread: true });
-      if (prompt && mode === "imperative") notes = mem.recall(cue);
-      else if (prompt) mem.observeCue(cue);
+      const tools = fromFile.filter((m) => m.src === "tool").map((m) => m.content),
+        encode = promptMessages(prompt, tools.slice(-RECENT_TOOL_RESULTS));
+      if (prompt && mode === "imperative") notes = mem.recall(cue, encode);
+      else if (prompt) mem.observeCue(cue, undefined, encode);
       if (!notes.length) return null;
       // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
       // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).

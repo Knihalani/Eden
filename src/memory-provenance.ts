@@ -75,6 +75,14 @@ export function noteKindToken(r: ProvenanceNote, text = String(r.text ?? "")): s
   }
 }
 
+/** The sources of text the user did not type (A6 §2.1): their rows are episodes only (A4 §3.0). */
+const UNTYPED_SOURCES = new Set(["src:tool", "src:agent", "src:paste", "src:legacy"]);
+
+/** Whether a row's source shows the user did not type it. A row with no `src` (written before P0.4) does not. */
+export function isUntyped(r: ProvenanceNote): boolean {
+  return (r.tags ?? []).some((tag) => UNTYPED_SOURCES.has(tag));
+}
+
 /** A note's source when the note shows it, else undefined: a row with no `src` makes no authority claim (A6 §2.1). */
 export function knownNoteSource(r: ProvenanceNote): MemoryProvenanceSrc | undefined {
   try {

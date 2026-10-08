@@ -473,7 +473,7 @@ describe("M19 locks: novel vs ICL, identity, hay, search, order", () => {
     const injectSrc = indexSrc.slice(indexSrc.indexOf("recall(messages"), indexSrc.indexOf("injectBody("));
     expect(injectSrc.indexOf("notesFor")).toBeGreaterThan(-1);
     expect(injectSrc.indexOf("this.observeCue(list")).toBeGreaterThan(injectSrc.indexOf("notesFor"));
-    expect(injectSrc).toMatch(/this\.observe\(messages,\s*\{\s*deferSleep:\s*true\s*\}\)/);
+    expect(injectSrc).toMatch(/this\.observe\(encode,\s*\{\s*deferSleep:\s*true\s*\}\)/);
   });
 
   test("deferSleep still retrieves before observe: this-turn text is absent, prior fact is present", () => {

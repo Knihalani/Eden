@@ -2,7 +2,6 @@ import { chmodSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
-import { redact } from "../packages/ir/src/redact";
 import { assembleNotes, listUnderHeading, splitNumberedItems } from "./assemble";
 import { noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
 import { ChunkStore } from "./chunk-store";
@@ -14,10 +13,11 @@ import { memoryConsent } from "./memory-consent";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
-import { applyProvenanceLabel, stripPacketLabel } from "./memory-provenance";
+import { withoutInstructions, type TextSource } from "./memory-authority";
+import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
-import { recordSupersession } from "./memory-validity";
+import { isForget, recordSupersession, validText, type Invalidation } from "./memory-validity";
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
 import {
@@ -149,11 +149,6 @@ function isLiveRow(r: MemoryRecord, now = memoryNow()): boolean {
   return !superseded(r) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
 }
 
-/** Whether a row came from text the user typed (A4 §3.0, A6 §2.1); a tool result or the assistant's text did not. */
-function typedByUser(r: Pick<MemoryRecord, "tags">): boolean {
-  return !(r.tags ?? []).some((tag) => tag === "src:tool" || tag === "src:agent");
-}
-
 /** Whether two statements give one subject different values, so the newer supersedes the older (A4 §3.1). */
 function contradicts(a: string, b: string): boolean {
   try {
@@ -176,13 +171,17 @@ function copulaKey(text: string): string | undefined {
   }
 }
 
+/**
+ * Of the retrieved rows giving one subject a value, the newest. A row the user did not type is an episode (A4 §3.0):
+ * it competes with no statement, so a newer tool result or assistant claim never displaces what the user said.
+ */
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   const byKey = new Map<string, T>(),
     rest: T[] = [];
   for (const row of rows) {
     let a: ReturnType<typeof objectAsserted>;
     try {
-      a = objectAsserted(row.rec.text);
+      a = isUntyped(row.rec) ? undefined : objectAsserted(row.rec.text);
     } catch {
       a = undefined;
     }
@@ -416,8 +415,6 @@ const ACK_PREFIX = new RegExp(
 );
 const SPEAKER_LABEL = /^([A-Z][A-Za-z0-9 /._-]{1,32}:)(?=\s)/;
 
-const SECRET_INLINE = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
-
 function extractDurable(blob: string): string[] {
   const seen = new Set<string>(),
     out: string[] = [];
@@ -443,8 +440,7 @@ function extractDurable(blob: string): string[] {
       .trim()
       .replace(/\s+/g, " ")
       .replace(/^(i think|i believe|i guess|maybe|perhaps|tbh|imo)\s+/i, "")
-      .replace(ACK_PREFIX, "")
-      .replace(SECRET_INLINE, "[REDACTED]");
+      .replace(ACK_PREFIX, "");
     if (
       t.length < 8 ||
       t.length > (labeledWhole ? 800 : 400) ||
@@ -482,6 +478,35 @@ function extractDurable(blob: string): string[] {
     }
   }
   return out;
+}
+
+/** "remember that …", "always …": a statement that pins itself, unless it says not to remember. */
+function pinsItself(text: string): boolean {
+  return (
+    !/\b(?:don'?t|do not|never)\s+remember\b/i.test(text) &&
+    (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(text) || /\balways\s+\S/i.test(text))
+  );
+}
+
+const TEXT_SOURCES = new Set<string>(["user", "paste", "tool", "agent"]);
+
+/** A message as `observe` encodes it: its role, its source (A6 §2.1) and its text, whitespace collapsed. */
+type ObservedItem = { role: string; src?: TextSource; untyped: boolean; text: string };
+
+/**
+ * A message's source: the one its caller marks (`src`), else `agent` for the assistant's text; a user message with
+ * no mark (another host, an import) has no known source. Text the user did not type loses its instructions and its
+ * claims for the user before it is stored (A6 §2.3, §2.6).
+ */
+function observedItem(message: unknown): ObservedItem {
+  const fields = message && typeof message === "object" ? (message as { role?: unknown; src?: unknown }) : {};
+  const role = String(fields.role || "user");
+  const marked =
+    typeof fields.src === "string" && TEXT_SOURCES.has(fields.src) ? (fields.src as TextSource) : undefined;
+  const src = marked ?? (role === "assistant" ? "agent" : undefined);
+  const untyped = src !== undefined && src !== "user";
+  const raw = convBlob([message]).trim();
+  return { role, src, untyped, text: (untyped ? withoutInstructions(raw) : raw).trim().replace(/\s+/g, " ") };
 }
 
 const finite = (value: unknown): number | undefined =>
@@ -596,7 +621,7 @@ function settleIntoStore(root: string, path: string, rows: readonly MemoryRecord
  * and older text giving the old value is stale (D31), as when a writer supersedes (`invalidateSameCopula`).
  */
 function supersedeByTime(root: string, stored: readonly MemoryRecord[], settled: ReadonlySet<string>): void {
-  const live = () => stored.filter((r) => !superseded(r) && typedByUser(r));
+  const live = () => stored.filter((r) => !superseded(r) && !isUntyped(r));
   for (const row of live().filter((r) => settled.has(r.id)))
     for (const other of live()) {
       if (other === row || superseded(row) || !contradicts(row.text, other.text)) continue;
@@ -829,25 +854,9 @@ export class AgentMemory {
     return this.persistText(text);
   }
 
+  /** Every stored row passes here: D13's gate and the identifier scrub (`scrubMemoryText`). */
   private persistText(text: string): string {
-    let t = String(text ?? "");
-    // IR redact misses short tokens and `sk-ant-…` keys (`\bsk-[A-Za-z0-9]{8,}`); every stored row passes here.
-    try {
-      t = t.replace(SECRET_INLINE, "[REDACTED]");
-    } catch {}
-    try {
-      const redacted = redact(t);
-      if (typeof redacted === "string") t = redacted;
-    } catch {}
-    try {
-      // IR redact is key=value only — "password is hunter2" would otherwise persist.
-      // Do not use "auth is" / "token is": those eat Clerk facts and ordinary speech.
-      t = t.replace(/\b((?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+)[^\s,.;]+/gi, "$1[REDACTED]");
-    } catch {}
-    try {
-      t = scrubMemoryText(t, { session: this.scrubSession, cwd: this.scrubCwd });
-    } catch {}
-    return t;
+    return scrubMemoryText(String(text ?? ""), { session: this.scrubSession, cwd: this.scrubCwd });
   }
 
   remember(
@@ -869,11 +878,8 @@ export class AgentMemory {
     } catch {
       return rec;
     }
-    const pin =
-      opts.pin === true ||
-      ((t) =>
-        !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) &&
-        (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(rec.text);
+    const untyped = isUntyped(rec);
+    const pin = !untyped && (opts.pin === true || pinsItself(rec.text));
     if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
     rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => {
       if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false;
@@ -886,7 +892,7 @@ export class AgentMemory {
       if (typeof until === "number") rec.validUntil = until;
     } catch {}
     try {
-      const fact = objectAsserted(rec.text);
+      const fact = untyped ? undefined : objectAsserted(rec.text);
       if (fact && !STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, rec.at);
     } catch {}
     const c = compileNeedles(rec),
@@ -909,7 +915,7 @@ export class AgentMemory {
    * typed supersedes: a tool result or the assistant's text is an episode (A4 §3.0, A6 §2.1).
    */
   private invalidateSameCopula(incoming: MemoryRecord): void {
-    if (!typedByUser(incoming) || !copulaKey(incoming.text)) return;
+    if (isUntyped(incoming) || !copulaKey(incoming.text)) return;
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id || superseded(c.rec) || !contradicts(c.rec.text, incoming.text)) continue;
       c.rec.invalidBy = incoming.id;
@@ -917,6 +923,27 @@ export class AgentMemory {
       const old = legacySlot(c.rec);
       if (old && legacySlot(incoming)) recordSupersession(this.dir, old, incoming.at);
     }
+  }
+
+  /**
+   * A6 §3: the rows a typed forget names go to history, invalid at the store's next `seq` with no successor (A4
+   * §3.1). So reading the transcript again never learns them anew, and only a later typed statement does
+   * (`restated`). Other sessions' rows and gists yield at delivery, to the validity log the caller wrote.
+   */
+  forget(records: readonly Invalidation[]): void {
+    const forgets = records.filter(isForget);
+    if (!forgets.length) return;
+    const named = this.compiled.filter(
+      (c) => !superseded(c.rec) && validText(c.rec.text, 0, forgets) !== c.rec.text.trim(),
+    );
+    if (!named.length) return;
+    const seq = claimSeqs(this.dir, 1) ?? Math.max(0, ...this.compiled.map((c) => c.rec.seq ?? 0));
+    for (const c of named) {
+      c.rec.invalidAt = seq;
+      this.changed.add(c.rec.id);
+    }
+    this.post = null;
+    this.flush(true);
   }
 
   private rebuildSeen() {
@@ -951,24 +978,15 @@ export class AgentMemory {
           (m) => (m && typeof m === "object" ? (m as { role?: string }).role : "") !== "system",
         ),
         out: MemoryRecord[] = [],
-        items = list
-          .map((m) => ({
-            role: String((m && typeof m === "object" ? (m as { role?: string }).role : "") || "user"),
-            src: m && typeof m === "object" ? (m as { src?: unknown }).src : undefined,
-            text: convBlob([m]).trim().replace(/\s+/g, " "),
-          }))
-          .filter((i) => i.text),
-        // A6 §2.1: a row from text the user did not type keeps its true source: a tool result the caller marks
-        // `src: "tool"`, or the assistant's text (A6 calls its source `agent`).
-        srcTags = (it: { role: string; src?: unknown }): string[] =>
-          it.src === "tool" ? ["src:tool"] : it.role === "assistant" ? ["src:agent"] : [],
+        items = list.map(observedItem).filter((i) => i.text),
+        srcTags = (it: ObservedItem): string[] => (it.src ? [`src:${it.src}`] : []),
         batchLive = new Map<string, string>(),
         lanes = items.map((it) => encodeLane(it.text)),
         durables = items.map((it, i) => (lanes[i] === "icl" || lanes[i] === "narrative" ? [] : this.durables(it.text))),
         // Where the user last typed a statement about each subject: the only place a restatement can be.
         lastTyped = new Map<string, string>();
       durables.forEach((texts, i) => {
-        if (srcTags(items[i]!).length) return;
+        if (items[i]!.untyped) return;
         texts.forEach((text, j) => {
           const key = copulaKey(text);
           if (key) lastTyped.set(key, `${i}:${j}`);
@@ -986,7 +1004,7 @@ export class AgentMemory {
             } catch {}
           if (text && !this.seenLower.has(text.toLowerCase())) {
             const rec = this.remember(text, {
-              kind: lane === "narrative" ? "episode" : "fact",
+              kind: lane === "narrative" || it.untyped ? "episode" : "fact",
               lane,
               tags: srcTags(it),
             });
@@ -1003,7 +1021,7 @@ export class AgentMemory {
           skippedIdentity = false;
         for (const [j, text] of durables[i]!.entries()) {
           try {
-            const fact = objectAsserted(text);
+            const fact = it.untyped ? undefined : objectAsserted(text);
             if (fact) {
               const store = this.semantic(),
                 live = store.get(fact.s, fact.p);
@@ -1031,25 +1049,25 @@ export class AgentMemory {
           const lastTypedHere = lastTyped.get(copulaKey(text) ?? "") === `${i}:${j}`;
           const learnAgain = !opts.reread && this.restated(text, lastTypedHere);
           if (this.seenLower.has(text.toLowerCase()) && !learnAgain) continue;
-          const pin = ((t) =>
-              !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) &&
-              (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text),
+          // A4 §3.0: text the user did not type is an episode, never a fact, a rule or a pin.
+          const pin = !it.untyped && pinsItself(text),
             asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
-          let kind: MemoryKind = asQuestion
-            ? "episode"
-            : pin
-              ? "constraint"
-              : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text)
+          let kind: MemoryKind =
+            it.untyped || asQuestion
+              ? "episode"
+              : pin
                 ? "constraint"
-                : new RegExp(
-                      String.raw`\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|` +
-                        String.raw`standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|` +
-                        String.raw`deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b`,
-                      "i",
-                    ).test(text) ||
-                    (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text))
-                  ? "episode"
-                  : "fact";
+                : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text)
+                  ? "constraint"
+                  : new RegExp(
+                        String.raw`\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|` +
+                          String.raw`standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|` +
+                          String.raw`deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b`,
+                        "i",
+                      ).test(text) ||
+                      (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text))
+                    ? "episode"
+                    : "fact";
           if (kind === "fact" && !asQuestion && !pin)
             try {
               if (!objectAsserted(text)) kind = "episode";
@@ -1318,7 +1336,11 @@ export class AgentMemory {
    * these into its system message; the memory hook shapes and words them itself (`memory-hook-packet.ts`). Fails
    * open: a throw is counted in `memoryInjectSwallows` and recalls nothing.
    */
-  recall(messages: unknown[]): MemoryRecord[] {
+  /**
+   * The notes for a message list's cue, then the list encoded (`observeCue`). `encode` replaces what is encoded when
+   * the caller knows more of its sources than the cue shows (the hook splits a prompt's pasted spans off, D12).
+   */
+  recall(messages: unknown[], encode?: unknown[]): MemoryRecord[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
       if (memoryConsent() === "off") return [];
@@ -1344,7 +1366,7 @@ export class AgentMemory {
             logMemoryNotes(packet);
           } catch {}
       }
-      this.observeCue(list, cue);
+      this.observeCue(list, cue, encode ?? list);
       return packet;
     } catch {
       memoryInjectSwallows.n++;
@@ -1352,11 +1374,18 @@ export class AgentMemory {
     }
   }
 
-  /** Stores a message list's cue, unless it is a no-op or a question: what `recall` stores after retrieving. */
-  observeCue(messages: unknown[], cue = attachPlaceCues(cueFor(messages), placePathsFrom(messages))): void {
+  /**
+   * Stores a message list (or `encode`, see `recall`) unless its cue is a no-op or a question: what `recall` stores
+   * after retrieving.
+   */
+  observeCue(
+    messages: unknown[],
+    cue = attachPlaceCues(cueFor(messages), placePathsFrom(messages)),
+    encode: unknown[] = messages,
+  ): void {
     try {
       if (cue && !isNoopCue(cue) && !/^(?:what|which|who|where|when|why|how)\b/i.test(cue.trim()))
-        this.observe(messages, { deferSleep: true });
+        this.observe(encode, { deferSleep: true });
     } catch {}
   }
 
