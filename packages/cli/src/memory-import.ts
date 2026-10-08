@@ -10,6 +10,7 @@ import { classifyImportRecord, isBinaryImportBytes, type MemoryImportKind } from
 export function memoryImportHelp(): string {
   return `usage: eden memory import <path>
        eden memory import --dry-run <path>
+       eden memory dump [--json]
 
 Read a JSONL or JSON transcript file or directory into AgentMemory.
 Local only. Dry-run counts records and does not write.
@@ -387,6 +388,10 @@ function flagPath(args: string[]): string | undefined {
 }
 
 export async function memoryCli(args: string[]): Promise<number> {
+  if (args[0] === "dump") {
+    const { memoryDumpCli } = await import("./memory-dump");
+    return memoryDumpCli(args.slice(1));
+  }
   try {
     const rest = args[0] === "import" ? args.slice(1) : args;
     const help = rest.length === 0 || rest.includes("-h") || rest.includes("--help") || rest[0] === "help";

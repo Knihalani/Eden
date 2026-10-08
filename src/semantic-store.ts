@@ -76,18 +76,6 @@ function isStatusObject(obj: string): boolean {
   return STATUS_OBJECT.test(obj);
 }
 
-/** Fact-list serials are small ints. Observe/emit wall-clock is ~1e12. */
-const WALL_CLOCK_T = 1e11;
-
-function isSerialT(t: number): boolean {
-  return Number.isFinite(t) && t < WALL_CLOCK_T;
-}
-
-/** Serial overwrite may replace a wall-clock live/tombstone even when t is smaller. */
-function serialOverWall(incoming: number, existing: number): boolean {
-  return isSerialT(incoming) && Number.isFinite(existing) && existing >= WALL_CLOCK_T;
-}
-
 export class SemanticStore {
   readonly dir: string;
   readonly path: string;
@@ -188,23 +176,20 @@ export class SemanticStore {
     const live = this.replay(ns, np);
     if (live) {
       if (oEq(live.o, no)) {
-        if (t > live.t || serialOverWall(t, live.t)) {
-          const row = this.liveRow(ns, np);
-          if (row) row.t = serialOverWall(t, live.t) ? t : Math.max(row.t, t);
-        }
+        const row = t > live.t ? this.liveRow(ns, np) : undefined;
+        if (row) row.t = t;
         return;
       }
-      // Unnumbered wall-clock must not demote a live serial winner (M21 basketball).
-      if (isSerialT(live.t) && !isSerialT(t)) return;
-      if (t < live.t && !serialOverWall(t, live.t)) return;
+      // An older value never replaces a newer one; list numbers are not times (A1 D8).
+      if (t < live.t) return;
       const old = this.liveRow(ns, np);
       if (old) {
         old.tombstone = true;
-        old.t = serialOverWall(t, live.t) ? live.t : t;
+        old.t = t;
       }
     } else {
       const last = this.lastEvent(ns, np);
-      if (last?.tombstone && t < last.t && !serialOverWall(t, last.t)) return;
+      if (last?.tombstone && t < last.t) return;
     }
     this.rows.push({ s: ns, p: np, o: no, t, seq: this.seq++ });
   }
@@ -296,14 +281,9 @@ export class SemanticStore {
 
   private replay(s: string, p: string): SemanticTriple | undefined {
     if (!s || !p) return undefined;
-    const ev = this.rows.filter((r) => r.s === s && r.p === p);
-    const byT = (a: Row, b: Row) => a.t - b.t || a.seq - b.seq;
-    // Wall-clock first, then fact-list serials. Serial overwrite must outrank
-    // Date.now() rows that would otherwise sort after t=8 and wipe the winner.
-    const walls = ev.filter((e) => e.t >= WALL_CLOCK_T).sort(byT);
-    const serials = ev.filter((e) => e.t < WALL_CLOCK_T).sort(byT);
+    const ev = this.rows.filter((r) => r.s === s && r.p === p).sort((a, b) => a.t - b.t || a.seq - b.seq);
     let cur: SemanticTriple | undefined;
-    for (const e of [...walls, ...serials]) {
+    for (const e of ev) {
       if (e.tombstone) cur = undefined;
       else cur = { s: e.s, p: e.p, o: e.o, t: e.t };
     }

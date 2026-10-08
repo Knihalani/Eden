@@ -1,12 +1,14 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { memoryNow } from "./memory-clock";
+import { inStoreOrder } from "./memory-ids";
 import { isIclExemplar, isRecsysShot, isToolProse, objectAsserted, SemanticStore } from "./semantic-store";
 
 export type Triple = { s: string; p: string; o: string; t: number; recId?: string };
 
 export type CandidateText = { text: string; t: number; id?: string; kind?: string; lane?: string };
 
-type NoteLike = { id?: string; text: string; at?: number; kind?: string; lane?: string };
+type NoteLike = { id?: string; text: string; at?: number; seq?: number; kind?: string; lane?: string };
 
 const STATUS_OBJECT = new RegExp(
   String.raw`\b(?:failing|broken|down|flaky|crashing|hanging|erroring|working|ready|live|dead|ok|fine|` +
@@ -71,11 +73,9 @@ function stripPacketDecor(text: string): string {
   return t;
 }
 
-function leadingSerial(text: string): number | undefined {
-  const m = stripPacketDecor(text).match(/^(\d+)[.)]\s+\S/);
-  if (!m) return undefined;
-  const n = Number(m[1]);
-  return Number.isFinite(n) ? n : undefined;
+/** A numbered list item ("8. The sport of Alice is basketball."): one piece, whatever sentences it holds. */
+function isListItem(text: string): boolean {
+  return /^\d+[.)]\s+\S/.test(stripPacketDecor(text));
 }
 
 function blockedKindOrLane(item: { kind?: string; lane?: string } | null | undefined): boolean {
@@ -100,6 +100,18 @@ function candidateFromNote(n: NoteLike, text?: string): CandidateText {
   if (n.kind != null && n.kind !== "") c.kind = n.kind;
   if (n.lane != null && n.lane !== "") c.lane = n.lane;
   return c;
+}
+
+/**
+ * A heading over a numbered list ("Notes for this repo: 1. The database is sqlite 2. Logs go to stdout", its lines
+ * joined): its items, each a statement of its own, so a later statement can supersede one (A5 `numbered-list`).
+ * The items must count 1, 2, … so a number inside a sentence ("version 2. Then …") never splits one. The heading is
+ * not a speaker label: no item carries it.
+ */
+export function listUnderHeading(text: string): string[] | undefined {
+  const [heading, ...items] = text.trim().split(/\s+(?=\d{1,3}[.)]\s+\S)/);
+  if (!heading?.endsWith(":") || items.length < 2) return undefined;
+  return items.every((item, i) => item.startsWith(`${i + 1}.`) || item.startsWith(`${i + 1})`)) ? items : undefined;
 }
 
 export function splitNumberedItems(text: string): string[] {
@@ -144,7 +156,7 @@ export function splitNumberedItems(text: string): string[] {
 function sentencePieces(text: string): string[] {
   const one = asText(text).trim();
   if (!one) return [];
-  if (leadingSerial(one) != null) return [one];
+  if (isListItem(one)) return [one];
   const sents = one
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
@@ -163,7 +175,7 @@ function pieces(text: string): string[] {
   const chunks = pipes.length ? pipes : [stripped];
   const out: string[] = [];
   for (const chunk of chunks) {
-    const items = splitNumberedItems(chunk);
+    const items = listUnderHeading(chunk) ?? splitNumberedItems(chunk);
     if (items.length > 1) {
       for (const item of items) out.push(...sentencePieces(item));
       continue;
@@ -248,8 +260,7 @@ function tripleFromPiece(piece: string, fallbackT: number, recId?: string): Trip
   if (!cleaned || isIclExemplar(cleaned) || isIclExemplar(piece)) return undefined;
   const asserted = assertedFromPiece(cleaned);
   if (!asserted) return undefined;
-  const serial = leadingSerial(cleaned);
-  const t = serial != null ? serial : fallbackT;
+  const t = fallbackT;
   if (!Number.isFinite(t)) return undefined;
   const s = normKeyPart(asserted.s);
   const p = normKeyPart(asserted.p);
@@ -273,18 +284,14 @@ export function extractCandidates(texts: CandidateText[]): Triple[] {
         for (const piece of pieces(text)) {
           const decided = decidedAll(piece);
           if (decided.length > 1) {
-            const serial = leadingSerial(stripPacketDecor(piece));
-            const t = serial != null ? serial : fallback;
-            if (Number.isFinite(t)) {
-              for (const asserted of decided) {
-                const s = normKeyPart(asserted.s);
-                const p = normKeyPart(asserted.p);
-                const o = asText(asserted.o).trim().replace(/\s+/g, " ");
-                if (!s || !p || !o) continue;
-                out.push(id ? { s, p, o, t, recId: id } : { s, p, o, t });
-              }
-              continue;
+            for (const asserted of decided) {
+              const s = normKeyPart(asserted.s);
+              const p = normKeyPart(asserted.p);
+              const o = asText(asserted.o).trim().replace(/\s+/g, " ");
+              if (!s || !p || !o) continue;
+              out.push(id ? { s, p, o, t: fallback, recId: id } : { s, p, o, t: fallback });
             }
+            continue;
           }
           const tr = tripleFromPiece(piece, fallback, id);
           if (tr) out.push(tr);
@@ -309,15 +316,6 @@ export function assemble(triples: Triple[]): Triple[] {
         if (!s || !p || !o || t == null) continue;
         const k = spKey(s, p);
         const prev = best.get(k);
-        const wall = t >= WALL_CLOCK_T;
-        const prevWall = prev != null && prev.t >= WALL_CLOCK_T;
-        if (prev && !prevWall && wall) continue; // serial beats wall-clock
-        if (prev && prevWall && !wall) {
-          const next: Triple = { s, p, o, t };
-          if (raw.recId != null && raw.recId !== "") next.recId = String(raw.recId);
-          best.set(k, next);
-          continue;
-        }
         if (!prev || t >= prev.t) {
           const next: Triple = { s, p, o, t };
           if (raw.recId != null && raw.recId !== "") next.recId = String(raw.recId);
@@ -361,21 +359,15 @@ export function losingTriples(triples: Triple[]): Triple[] {
 export function assemblyTWrite(liveT: number | undefined, winnerT: number, now?: number): number {
   const live = finiteT(liveT) ?? 0;
   const win = finiteT(winnerT) ?? 0;
-  const n = finiteT(now) ?? Date.now();
+  const n = finiteT(now) ?? memoryNow();
   const wall = Number.isFinite(n) ? n : 0;
   return Math.max(wall, live + 1, win);
 }
 
-const WALL_CLOCK_T = 1e11;
-
 function emitOne(store: SemanticStore, winner: Triple, losers: Triple[]): void {
   const live0 = store.get(winner.s, winner.p);
   const realLosers = losers.filter((l) => !oEq(l.o, winner.o));
-  const liveSerial = live0 != null && live0.t < WALL_CLOCK_T;
-  const winSerial = winner.t < WALL_CLOCK_T;
-  if (live0 && !oEq(live0.o, winner.o) && !realLosers.length) {
-    if (!(liveSerial && winSerial && winner.t > live0.t)) return;
-  }
+  if (live0 && !oEq(live0.o, winner.o) && !realLosers.length) return;
   let pending = !live0 || !oEq(live0.o, winner.o);
   if (!pending) {
     for (const l of losers) {
@@ -389,24 +381,19 @@ function emitOne(store: SemanticStore, winner: Triple, losers: Triple[]): void {
   if (!pending) return;
 
   let tWrite = assemblyTWrite(live0?.t, winner.t);
-  if (!winSerial) {
-    for (const l of losers) {
-      if (oEq(l.o, winner.o)) continue;
-      const live = store.get(winner.s, winner.p);
-      if (live && oEq(live.o, l.o)) continue;
-      if (store.supersededObject(l.o, l.s, l.p)) continue;
-      tWrite = Math.max(tWrite, assemblyTWrite(live?.t, winner.t), l.t);
-      store.put(l.s, l.p, l.o, tWrite);
-    }
+  for (const l of losers) {
+    if (oEq(l.o, winner.o)) continue;
+    const live = store.get(winner.s, winner.p);
+    if (live && oEq(live.o, l.o)) continue;
+    if (store.supersededObject(l.o, l.s, l.p)) continue;
+    tWrite = Math.max(tWrite, assemblyTWrite(live?.t, winner.t), l.t);
+    store.put(l.s, l.p, l.o, tWrite);
   }
 
   tWrite = Math.max(tWrite, assemblyTWrite(store.get(winner.s, winner.p)?.t, winner.t));
   const live = store.get(winner.s, winner.p);
-  if (live && !oEq(live.o, winner.o)) {
-    const tombT = winSerial && live.t < WALL_CLOCK_T ? Math.max(winner.t, live.t) : Math.max(tWrite, live.t);
-    store.tombstone(winner.s, winner.p, tombT);
-  }
-  store.put(winner.s, winner.p, winner.o, winSerial ? winner.t : tWrite);
+  if (live && !oEq(live.o, winner.o)) store.tombstone(winner.s, winner.p, Math.max(tWrite, live.t));
+  store.put(winner.s, winner.p, winner.o, tWrite);
 }
 
 export function emitAssemblyTombstones(dir: string | undefined, triples: Triple[]): void {
@@ -439,7 +426,7 @@ export function emitAssemblyTombstones(dir: string | undefined, triples: Triple[
   } catch {}
 }
 
-function liveStoreRows(dir: string | undefined, keys: Set<string>, skip: Set<string>): Triple[] {
+function liveStoreRows(dir: string | undefined, keys: Set<string>): Triple[] {
   const out: Triple[] = [];
   if (!dir || !keys.size) return out;
   try {
@@ -449,7 +436,6 @@ function liveStoreRows(dir: string | undefined, keys: Set<string>, skip: Set<str
       const k = spKey(normKeyPart(row.s), normKeyPart(row.p));
       if (!keys.has(k)) continue;
       const t = finiteT(row.t);
-      if (skip.has(k) && (t == null || t > WALL_CLOCK_T)) continue;
       const o = asText(row.o).trim().replace(/\s+/g, " ");
       if (t == null || !o) continue;
       out.push({ s: normKeyPart(row.s), p: normKeyPart(row.p), o, t });
@@ -502,27 +488,15 @@ function scrubLosing(text: string, losers: Map<string, string[]>, kind?: string,
 export function assembleNotes<T extends NoteLike>(notes: T[], dir?: string): T[] {
   try {
     if (!Array.isArray(notes)) return [];
-    const texts: CandidateText[] = [];
-    for (const n of notes) {
-      if (!n || typeof n !== "object") continue;
-      texts.push(candidateFromNote(n));
-    }
-    const fromNotes = extractCandidates(texts);
+    const ordered = inStoreOrder(
+      notes
+        .filter((n) => n && typeof n === "object")
+        .map((note) => ({ note, id: note.id ?? "", seq: note.seq, at: note.at })),
+    );
+    const fromNotes = extractCandidates(ordered.map(({ row, t }) => ({ ...candidateFromNote(row.note), t })));
     const keys = new Set<string>();
-    const serialKeys = new Set<string>();
     for (const tr of fromNotes) keys.add(spKey(tr.s, tr.p));
-    for (const n of notes) {
-      if (!n || typeof n !== "object") continue;
-      if (blockedKindOrLane(n)) continue;
-      const text = asText(n.text);
-      if (!text || isIclExemplar(text) || isRecsysShot(text)) continue;
-      const serialed = pieces(text).some((p) => leadingSerial(p) != null && assertedFromPiece(p));
-      if (!serialed) continue;
-      for (const tr of extractCandidates([candidateFromNote(n)])) {
-        serialKeys.add(spKey(tr.s, tr.p));
-      }
-    }
-    const extra = liveStoreRows(dir, keys, serialKeys);
+    const extra = liveStoreRows(dir, keys);
     const winners = assemble([...fromNotes, ...extra]);
     const winByKey = new Map<string, Triple>();
     for (const w of winners) winByKey.set(spKey(w.s, w.p), w);

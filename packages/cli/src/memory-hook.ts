@@ -27,6 +27,7 @@ import {
   windowDir,
 } from "../../../src/memory-window";
 import { consolidate } from "../../../src/sleep";
+import { memoryNow } from "../../../src/memory-clock";
 import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace";
 
 const MEMORY_EVENTS = new Set([
@@ -111,7 +112,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
  * into the 900 bytes. A ledger that cannot be written leaves the packet as it is.
  */
 function deliver(notes: readonly ProvenanceNote[], win: string | undefined, at: { off: number; att: string }): string {
-  const now = Date.now();
+  const now = memoryNow();
   const packet = renderPacket(notes, now);
   if (packet && win)
     try {
@@ -138,7 +139,7 @@ function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], pro
 }
 
 /** The memory root: `EDEN_MEMORY_DIR`, else `$EDEN_HOME/memory`, else `~/.eden/memory`. */
-function memoryRoot(): string {
+export function memoryRoot(): string {
   if (process.env.EDEN_MEMORY_DIR) return process.env.EDEN_MEMORY_DIR;
   return process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : join(homedir(), ".eden", "memory");
 }
@@ -371,9 +372,11 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       // A4 §3.1: what the user just retracted or revoked is invalid from this Submit on (A4 §3.0: typed text only).
       // Read after the store's own secret redaction, so the log can hold no token a stored row would not.
       if (writes && prompt && event === "UserPromptSubmit") recordInvalidations(mem.dir, mem.storableText(prompt));
+      // The conversation so far is encoded before the prompt (which `recall` encodes after retrieving), so what the
+      // prompt states is newer than every transcript line it supersedes.
+      if (writes && prior.length) mem.observe(prior);
       if (prompt && mode === "imperative") notes = mem.recall(cue);
       else if (prompt) mem.observeCue(cue);
-      if (writes && prior.length) mem.observe(prior);
       if (!notes.length) return null;
       // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
       // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).

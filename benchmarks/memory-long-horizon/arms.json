@@ -73,14 +73,8 @@
       ],
       "a5": "200 events, one process each, distinct facts; plus concurrent PostToolUse -> 200 rows; 0 duplicate ids; no lost ledger entries",
       "on": {
-        "state": "red",
-        "failed": [
-          "dump",
-          "ledger",
-          "rows",
-          "unique-ids"
-        ],
-        "why": "`eden memory dump --json` does not exist (today every `eden memory <x>` falls through to import and prints 'import: nothing to read'), so rows, ids and ledger entries cannot be counted; all 302 writer invocations exit 0"
+        "state": "green",
+        "why": "passes since P0.3: row ids are ULIDs, so two hook processes never mint the same id (#98), every row gets a store seq under the store lock or waits in pending.jsonl for sleep (A4 §1), and `eden memory dump --json` lists rows and ledger records; all 200 facts are kept in rows of their own"
       }
     },
     {
@@ -124,11 +118,8 @@
       ],
       "a5": "\"db is postgres\" -> rewind -> \"db is sqlite\" -> postgres in history; a delivery on the abandoned branch re-injects once",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-postgres"
-        ],
-        "why": "'The database is postgres' from the abandoned branch is still delivered after the rewind: the legacy store keeps the abandoned branch's rows (P0.6 moves them to history)"
+        "state": "green",
+        "why": "passes since P0.3, through supersession rather than rewind detection: the new branch's 'The database is sqlite' is a later typed statement that supersedes postgres (A4 §3.1, persisted). An abandoned-branch statement the new branch does not restate would still be delivered until P0.6's delta encoder moves abandoned rows to history"
       },
       "off": {
         "state": "red",
@@ -191,11 +182,8 @@
       ],
       "a5": "\"1. The database is sqlite\", later \"the database is postgres\" -> postgres",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-stale"
-        ],
-        "why": "the cue gets 'Notes for this repo: 1. The database is sqlite ...' after 'The database is postgres': stale"
+        "state": "green",
+        "why": "passes since P0.3: list numbers are not clocks (A1 D8), a heading's numbered list is stored item by item, so 'The database is postgres' supersedes '1. The database is sqlite' (invalid_at, persisted), and the superseded value is stale for older text that still states it (D31), the whole-prompt episode included"
       },
       "off": {
         "state": "red",

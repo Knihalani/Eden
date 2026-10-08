@@ -39,8 +39,8 @@ export function logMemoryNotes(notes: Array<{ id?: string; at?: number; text?: s
       if (!n || typeof n !== "object") continue;
       const id = scrubLogPart(String(n.id ?? ""));
       if (!id) continue;
-      const at = typeof n.at === "number" && Number.isFinite(n.at) ? n.at : Date.now();
-      parts.push(`${id}:${relativeMemoryAge(at)}`);
+      const age = relativeMemoryAge(n.at);
+      parts.push(age ? `${id}:${age}` : id);
     }
     if (!parts.length) return;
     process.stderr.write(`eden-memory ${parts.join(" ")}\n`);

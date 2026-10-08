@@ -212,11 +212,11 @@ describe("M22 hop-order two-hop overwrite", () => {
     { text: WINNER, at: 3, i: 2, id: "win", kind: "fact" as const },
   ];
 
-  test("hopChain is 2 hops; last object canada serial 8 not Scotland", () => {
+  test("hopChain is 2 hops; last object canada, the newer row, not Scotland", () => {
     const hops = hopChain(CUE, sportRows);
     expect(hops).toHaveLength(2);
     expect(hops[1]!.o).toMatch(/canada/i);
-    expect(hops[1]!.t).toBe(8);
+    expect(hops[1]!.t).toBe(3);
     expect(hops[1]!.text).toMatch(/Canada/);
     expect(hops[1]!.text).not.toMatch(/Scotland/);
     expect(hops.some((h) => /scotland/i.test(h.o) || /Scotland/.test(h.text))).toBe(false);
@@ -264,7 +264,7 @@ describe("M22 hop-order two-hop overwrite", () => {
     const hops = hopChain(CUE, mixed);
     expect(hops).toHaveLength(2);
     expect(hops[1]!.o).toMatch(/canada/i);
-    expect(hops[1]!.t).toBe(8);
+    expect(hops[1]!.t).toBe(3);
     expect(hops.every((h) => !/\blabel\s*:/i.test(h.text))).toBe(true);
     expect(hops.every((h) => !/miller of Blackford/i.test(h.text))).toBe(true);
 

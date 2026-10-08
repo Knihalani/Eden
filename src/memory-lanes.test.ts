@@ -122,7 +122,8 @@ const NOVEL_ALLOW_DROP = "Nobody mentioned the letter.";
 describe("M17 encode lanes (flipped M16.3 extract tax)", () => {
   test("chat path still calls extractDurable", () => {
     const indexSrc = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
-    expect(indexSrc).toMatch(/for \(const raw of extractDurable\(it\.text\)\)/);
+    expect(indexSrc).toMatch(/for \(const text of durables\[i\]!\)/);
+    expect(indexSrc).toMatch(/return extractDurable\(text\)/);
     expect(indexSrc).toMatch(/function extractDurable/);
     expect(indexSrc).not.toMatch(/peelIdentitySentences/);
     expect(indexSrc).not.toMatch(/\blet\s+extractSrc\s*=\s*it\.text/);

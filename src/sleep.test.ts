@@ -6,7 +6,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep } from "./index";
+import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, superseded } from "./index";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { SemanticStore } from "./semantic-store";
 import { GistStore } from "./gist-store";
@@ -147,7 +147,7 @@ describe("M7.2 Clerk status is not a delete", () => {
 });
 
 describe("M7.2 chairperson serial-newer wins", () => {
-  test("Alice then Bob + sleep: inject packet has Bob, Alice is gone (not ×0.45)", async () => {
+  test("Alice then Bob + sleep: inject packet has Bob, Alice is history (not ×0.45)", async () => {
     await withMem("eden-m74-chair-", async (mem, dir) => {
       mem.remember("The chairperson of the committee is Alice.");
       mem.remember("The chairperson of the committee is Bob.");
@@ -157,7 +157,13 @@ describe("M7.2 chairperson serial-newer wins", () => {
       const pkt = packetOf(out);
       expect(pkt).toMatch(/Bob/);
       expect(pkt).not.toMatch(/Alice/);
-      expect(mem.memories().some((r) => /Alice/.test(r.text))).toBe(false);
+      // A4 §3.1: a superseded row moves to history (invalid_at), so reading the conversation again never revives it.
+      expect(
+        mem
+          .memories()
+          .filter((r) => /Alice/.test(r.text))
+          .every(superseded),
+      ).toBe(true);
       expect(factObject(new SemanticStore(dir).get("chairperson of the committee", "is"))).toMatch(/Bob/i);
     });
   });
@@ -172,7 +178,12 @@ describe("M7.2 postgres then sqlite instead", () => {
       const pkt = packetOf(mem.inject([{ role: "user", content: "what database do we use" }]));
       expect(pkt).toMatch(/sqlite/i);
       expect(pkt).not.toMatch(/postgres/i);
-      expect(mem.memories().some((r) => /postgres/i.test(r.text))).toBe(false);
+      expect(
+        mem
+          .memories()
+          .filter((r) => /postgres/i.test(r.text))
+          .every(superseded),
+      ).toBe(true);
     });
   });
 

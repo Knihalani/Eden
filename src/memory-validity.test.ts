@@ -249,15 +249,16 @@ describe("P0.2 review round 4, closed in P0.3", () => {
     );
   });
 
-  test("a capital-shaped value opening a clause after a label, colon, list marker or comma is not the value", () => {
+  test("a capital-shaped value opening a clause after a label, colon or list marker is not the value", () => {
     for (const text of [
       "Note: Make sure the zebra API returns JSON errors.",
       "1. Make sure the zebra API returns JSON errors.",
       "- Make sure the zebra API returns JSON errors.",
-      "Before the deploy, Make sure the zebra API returns JSON errors.",
     ])
       expect(after("We no longer use Make.", text)).toBe(text);
     expect(after("We no longer use Make.", "Note: Make is our build tool.")).toBe("");
+    // After a comma a capital marks a name, not a clause opening.
+    expect(after("We no longer use Make.", "The build needs Redis, Make and Docker.")).toBe("");
   });
 
   test("what is left of a dropped item is not a bare list marker", () => {
