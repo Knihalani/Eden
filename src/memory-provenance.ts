@@ -2,6 +2,8 @@
  * M40.1 packet provenance: `[fact · 3h · user]` / `[procedure · verified]`.
  * Relative age + source only. Never cwd / email / session_id / paths.
  */
+import { memoryNow } from "./memory-clock";
+
 export const PACKET_KIND = "rule|fact|episode|gist|procedure";
 /** Matches `[fact]`, `[fact · 3h · user]`, `[fact | 3h | user]`, `[procedure · verified]`. */
 export const PACKET_LABEL_RE = new RegExp(`^(\\s*\\[(?:${PACKET_KIND})(?:\\s*[·|][^\\]]*)?\\]\\s*)`, "i");
@@ -18,13 +20,14 @@ export type ProvenanceNote = {
   at?: number;
 };
 
-/** Wall-clock `at` is Date.now() (~1e12). Serial t=8 is not an age. */
-const WALL_CLOCK_AT = 1e11;
+/** Times are epoch ms (~1.7e12); a smaller number is a list serial a store from before P0.3 kept, not a time. */
+const LEGACY_SERIAL = 1e11;
 
-export function relativeMemoryAge(at: number, now = Date.now()): string {
+/** How long ago a row was written ("3h"); undefined for a row whose time was never kept (A1 D6: no "0m" claim). */
+export function relativeMemoryAge(at: number | undefined, now = memoryNow()): string | undefined {
   try {
     const t = Number(at);
-    if (!Number.isFinite(t) || t < WALL_CLOCK_AT) return "0m";
+    if (!Number.isFinite(t) || t < LEGACY_SERIAL) return undefined;
     const ms = Math.max(0, now - t);
     const m = Math.floor(ms / 60_000);
     if (m < 60) return `${m}m`;
@@ -34,7 +37,7 @@ export function relativeMemoryAge(at: number, now = Date.now()): string {
     if (d < 7) return `${d}d`;
     return `${Math.floor(d / 7)}w`;
   } catch {
-    return "0m";
+    return undefined;
   }
 }
 
@@ -111,8 +114,7 @@ export function provenanceBracket(r: ProvenanceNote, kind: string, body?: string
     const k = String(kind || "fact").toLowerCase();
     const bare = stripPacketLabel(body ?? String(r.text ?? "")).body;
     if (k === "procedure" && procedureVerified(r, bare)) return "[procedure · verified]";
-    const at = typeof r.at === "number" && Number.isFinite(r.at) ? r.at : Date.now();
-    return `[${k} · ${relativeMemoryAge(at)} · ${noteSource(r)}]`;
+    return `[${[k, relativeMemoryAge(r.at), noteSource(r)].filter(Boolean).join(" · ")}]`;
   } catch {
     return `[${kind || "fact"}]`;
   }

@@ -24,7 +24,7 @@ import {
 import * as howtoMod from "./howto-store";
 import { retrieveHowTo, HOWTO_RETRIEVE_K, HOWTO_TOKEN_CAP, type HowToView } from "./howto-retrieve";
 import * as howtoRetrieve from "./howto-retrieve";
-import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
+import { AgentMemory, MEMORY_MARK, openMemory, sleep, superseded } from "./index";
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
 import * as sleepMod from "./sleep";
@@ -968,7 +968,7 @@ describe("M10.4 stale prune (M10.3)", () => {
 });
 
 describe("M10.4 facts still LWW", () => {
-  test("Use postgres then Use sqlite instead: sleep keeps sqlite, drops postgres", async () => {
+  test("Use postgres then Use sqlite instead: sleep keeps sqlite live, postgres history", async () => {
     await withMem("eden-m104-lww-", async (mem) => {
       mem.observe([{ role: "user", content: "Use postgres" }]);
       mem.observe([{ role: "user", content: "Use sqlite instead" }]);
@@ -976,6 +976,7 @@ describe("M10.4 facts still LWW", () => {
       const injected = mem.inject([{ role: "user", content: "what database do we use" }]);
       const hay = `${packetOf(injected)}\n${mem
         .memories()
+        .filter((r) => !superseded(r))
         .map((r) => r.text)
         .join("\n")}`;
       expect(hay).toMatch(/sqlite/i);

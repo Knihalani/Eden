@@ -748,8 +748,8 @@ describe("M40 provenance", () => {
     });
   });
 
-  test("serial at is 0m; wall-clock 3h is 3h; identifiers never in the age token", () => {
-    expect(relativeMemoryAge(8)).toBe("0m");
+  test("a legacy serial time claims no age (A1 D6); wall-clock 3h is 3h; identifiers never in the age token", () => {
+    expect(relativeMemoryAge(8)).toBeUndefined();
     expect(relativeMemoryAge(Date.now() - 3 * 3600_000)).toBe("3h");
     expect(relativeMemoryAge(Date.now())).toBe("0m");
     expect(relativeMemoryAge(Date.now() - 3 * 3600_000)).not.toMatch(/@|\//);
@@ -920,7 +920,7 @@ describe("M40 provenance", () => {
     );
   });
 
-  test("M40 pin: content words stay user, one label, serial 8 is 0m, gap is not verified", () => {
+  test("M40 pin: content words stay user, one label, a legacy serial time claims no age, gap is not verified", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: PG }]);
       mem.observe([{ role: "user", content: "The sleep interval is thirty." }]);
@@ -995,7 +995,7 @@ describe("M40 provenance", () => {
         .notesFor(CUE)
         .map((r) => r.text)
         .join("\n");
-      expect(text).toMatch(/^\[fact · 0m · user\]/m);
+      expect(text).toMatch(/^\[fact · user\]/m);
       expect(text).not.toMatch(/\d{3,}w/);
       expect(text).not.toContain(EMAIL);
       expect(text).not.toContain(CWD);
@@ -1017,7 +1017,7 @@ describe("M40 provenance", () => {
         delete process.env.EDEN_MEMORY_LOG;
       }
     });
-    expect(stderr).toContain(`${LOG_ID}:0m`);
+    expect(stderr).toMatch(new RegExp(`${LOG_ID}(?!:)`));
     expect(stderr).toContain(`${SESSION}:3h`);
     expect(stderr).not.toContain(EMAIL);
     expect(stderr).not.toContain(CWD);

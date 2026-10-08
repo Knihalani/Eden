@@ -67,31 +67,31 @@ describe("extractCandidates", () => {
       { text: "Auth is failing", t: 1003, id: "st" },
       { text: "Use sqlite instead of postgres.", t: 1004, id: "u" },
     ]);
-    expect(got.some((tr) => tr.o === "Alice" && tr.t === 1 && tr.recId === "a")).toBe(true);
-    expect(got.some((tr) => tr.o === "Bob" && tr.t === 8 && tr.recId === "b")).toBe(true);
+    expect(got.some((tr) => tr.o === "Alice" && tr.t === 1000 && tr.recId === "a")).toBe(true);
+    expect(got.some((tr) => tr.o === "Bob" && tr.t === 1001 && tr.recId === "b")).toBe(true);
     expect(got.some((tr) => /label|28|positive|great/i.test(tr.o) || tr.p === "label")).toBe(false);
     expect(got.some((tr) => /failing/i.test(tr.o))).toBe(false);
     expect(got.some((tr) => tr.s === "stack" && tr.p === "uses" && /sqlite/i.test(tr.o))).toBe(true);
   });
 
-  test("M20.1: 8. The chairperson is X → serial 8, not wall-clock t", () => {
+  test("A1 D8: a list number is not a time: 8. The chairperson is X keeps its row's time", () => {
     const got = extractCandidates([{ text: "8. The chairperson is X.", t: 999, id: "x" }]);
-    expect(got.some((tr) => tr.o === "X" && tr.t === 8 && tr.recId === "x")).toBe(true);
-    expect(got.some((tr) => tr.t === 999)).toBe(false);
+    expect(got.some((tr) => tr.o === "X" && tr.t === 999 && tr.recId === "x")).toBe(true);
+    expect(got.some((tr) => tr.t === 8)).toBe(false);
     const paren = extractCandidates([{ text: "8) The chairperson is X.", t: 999, id: "p" }]);
-    expect(paren.some((tr) => tr.o === "X" && tr.t === 8 && tr.recId === "p")).toBe(true);
-    expect(paren.some((tr) => tr.t === 999)).toBe(false);
+    expect(paren.some((tr) => tr.o === "X" && tr.t === 999 && tr.recId === "p")).toBe(true);
+    expect(paren.some((tr) => tr.t === 8)).toBe(false);
   });
 
-  test("M20.1: one blob with 1. and 8. yields both serials; now/was/became extract", () => {
+  test("M20.1: one blob with 1. and 8. yields both, at the row's time; now/was/became extract", () => {
     const blob = extractCandidates([
       {
         text: "1. The chairperson of the committee is Alice.\n8. The chairperson of the committee is Bob.",
         t: 50,
       },
     ]);
-    expect(blob.some((tr) => tr.o === "Alice" && tr.t === 1)).toBe(true);
-    expect(blob.some((tr) => tr.o === "Bob" && tr.t === 8)).toBe(true);
+    expect(blob.some((tr) => tr.o === "Alice" && tr.t === 50)).toBe(true);
+    expect(blob.some((tr) => tr.o === "Bob" && tr.t === 50)).toBe(true);
 
     const extra = extractCandidates([
       { text: "The chairperson became Bob.", t: 3 },
@@ -242,7 +242,7 @@ describe("assembleNotes keeps non-triples; fail-open", () => {
     expect(out.some((n) => /Alice/.test(n.text))).toBe(false);
   });
 
-  test("fused note with both serials is scrubbed to the winner", () => {
+  test("a fused note is scrubbed to its later statement, whatever the list numbers say (A1 D8)", () => {
     const out = assembleNotes([
       {
         id: "fuse",
@@ -250,8 +250,8 @@ describe("assembleNotes keeps non-triples; fail-open", () => {
         at: 9,
       },
     ]);
-    expect(out.some((n) => /Bob/.test(n.text))).toBe(true);
-    expect(out.some((n) => /Alice/.test(n.text))).toBe(false);
+    expect(out.some((n) => /Alice/.test(n.text))).toBe(true);
+    expect(out.some((n) => /Bob/.test(n.text))).toBe(false);
     expect(out.some((n) => /^\[fact(?:\s*·[^\]]*)?\]/.test(n.text.trim()))).toBe(true);
   });
 
@@ -264,7 +264,7 @@ describe("assembleNotes keeps non-triples; fail-open", () => {
     expect(out.some((n) => /Alice/.test(n.text))).toBe(false);
   });
 
-  test("provenance [fact · 3h · user]: sqlite wins, postgres absent, serial 8 still extracts", () => {
+  test("provenance [fact · 3h · user]: sqlite wins, postgres absent, a labelled list item still extracts", () => {
     const out = assembleNotes([
       { id: "old", text: "[fact · 3h · user] The database is postgres.", at: 1 },
       { id: "new", text: "[fact · 1h · user] The database is sqlite.", at: 2 },
@@ -281,14 +281,13 @@ describe("assembleNotes keeps non-triples; fail-open", () => {
         id: "c",
       },
     ]);
-    expect(got.some((tr) => tr.t === 8 && /bob/i.test(tr.o))).toBe(true);
-    expect(got.some((tr) => tr.t === 999)).toBe(false);
+    expect(got.some((tr) => tr.t === 999 && /bob/i.test(tr.o))).toBe(true);
 
     const hops = hopChain("who is the chairperson of the committee", [
       { text: "[fact · 3h · user] 1. The chairperson of the committee is Alice.", at: 100, i: 0 },
       { text: "[fact | 1h | user] 8. The chairperson of the committee is Bob.", at: 200, i: 1 },
     ]);
-    expect(hops.some((h) => h.t === 8 && /bob/i.test(factObject(h)))).toBe(true);
+    expect(hops.some((h) => h.t === 200 && /bob/i.test(factObject(h)))).toBe(true);
     expect(hops.some((h) => /alice/i.test(factObject(h)))).toBe(false);
 
     const icl = assembleNotes([{ id: "icl", text: "label: positive Input: postgres Output: sqlite", at: 1 }]);
@@ -860,14 +859,14 @@ describe("M20.2 prior-override (Finland → ice hockey then basketball)", () => 
   const LOSER = "2. The sport of Alice is ice hockey.";
   const WINNER = "8. The sport of Alice is basketball.";
 
-  test("extractCandidates returns both sport triples (t=2 ice hockey, t=8 basketball)", () => {
+  test("extractCandidates returns both sport triples, at their rows' times (A1 D8: list numbers are not clocks)", () => {
     const got = extractCandidates([
       { text: ORIGIN, t: 1000, id: "fin" },
       { text: LOSER, t: 1001, id: "hock" },
       { text: WINNER, t: 1002, id: "bask" },
     ]);
-    expect(got.some((tr) => /ice hockey/i.test(tr.o) && tr.t === 2)).toBe(true);
-    expect(got.some((tr) => /basketball/i.test(tr.o) && tr.t === 8)).toBe(true);
+    expect(got.some((tr) => /ice hockey/i.test(tr.o) && tr.t === 1001)).toBe(true);
+    expect(got.some((tr) => /basketball/i.test(tr.o) && tr.t === 1002)).toBe(true);
     // Finland origin may also extract (different (s,p) than sport).
     expect(got.some((tr) => /Finland/i.test(tr.o))).toBe(true);
   });
@@ -879,7 +878,7 @@ describe("M20.2 prior-override (Finland → ice hockey then basketball)", () => 
     expect(src).not.toMatch(/\bcomplete\s*\(/);
   });
 
-  test("code picks max(serial): packet has basketball, not ice hockey", async () => {
+  test("code picks the newest statement: packet has basketball, not ice hockey", async () => {
     const picked = assemble(
       extractCandidates([
         { text: ORIGIN, t: 1000 },
@@ -887,7 +886,7 @@ describe("M20.2 prior-override (Finland → ice hockey then basketball)", () => 
         { text: WINNER, t: 1002 },
       ]),
     );
-    expect(picked.some((tr) => /basketball/i.test(tr.o) && tr.t === 8)).toBe(true);
+    expect(picked.some((tr) => /basketball/i.test(tr.o) && tr.t === 1002)).toBe(true);
     expect(picked.some((tr) => /ice hockey/i.test(tr.o))).toBe(false);
 
     await withMem((mem) => {
@@ -909,7 +908,7 @@ describe("M20.2 prior-override (Finland → ice hockey then basketball)", () => 
  * loser so a later session cannot resurrect it. Generator is not asked.
  * M20.2 prior-override stays a passing test. M16.4 hop fixture is green two-hop overwrite (M22).
  */
-describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
+describe("M21 SF code-pick (newest statement, tombstone, sleep agrees; A1 D8: list numbers are not clocks)", () => {
   const ALICE = "1. The chairperson of the committee is Alice.";
   const BOB = "8. The chairperson of the committee is Bob.";
   const SPORT_WIN = "8. The sport of Alice is basketball.";
@@ -931,18 +930,18 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
     });
   });
 
-  test("incomplete retrieve of the loser does not demote a higher-serial live winner", () => {
+  test("incomplete retrieve of the older statement does not demote the newer live value", () => {
     const dir = tmpDir("eden-m21-incomplete-");
     try {
       assembleNotes(
         [
-          { id: "win", text: SPORT_WIN, at: 1 },
-          { id: "lose", text: SPORT_LOSE, at: 2 },
+          { id: "lose", text: SPORT_LOSE, at: 1 },
+          { id: "win", text: SPORT_WIN, at: 2 },
         ],
         dir,
       );
       expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/basketball/i);
-      const incomplete = assembleNotes([{ id: "lose", text: SPORT_LOSE, at: 3 }], dir);
+      const incomplete = assembleNotes([{ id: "lose", text: SPORT_LOSE, at: 1 }], dir);
       expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/basketball/i);
       expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).not.toMatch(/ice hockey/i);
       expect(incomplete.some((n) => /basketball/i.test(n.text))).toBe(true);
@@ -993,7 +992,7 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
     }
   });
 
-  test("observe keeps numbered serials: reverse wall-clock still basketball, not ice hockey", async () => {
+  test("observe keeps numbered items; the later one wins whatever its number (A1 D8)", async () => {
     await withMem(async (mem, dir) => {
       const first = mem.observe([{ role: "user", content: SPORT_WIN }]);
       expect(mem.memories().some((r) => /^8\.\s/.test(r.text) && /basketball/i.test(r.text))).toBe(true);
@@ -1002,13 +1001,13 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
       expect(mem.memories().some((r) => /basketball/i.test(r.text))).toBe(true);
       expect(mem.memories().some((r) => /ice hockey/i.test(r.text))).toBe(true);
       const pkt = packetOf(mem.inject([{ role: "user", content: "what is the sport of Alice" }]));
-      expect(pkt).toMatch(/basketball/i);
-      expect(pkt).not.toMatch(/ice hockey/i);
+      expect(pkt).toMatch(/ice hockey/i);
+      expect(pkt).not.toMatch(/basketball/i);
       await sleep({ dir, mem });
       const later = openMemory({ dir });
       const pkt2 = packetOf(later.inject([{ role: "user", content: "what is the sport of Alice" }]));
-      expect(pkt2).toMatch(/basketball/i);
-      expect(pkt2).not.toMatch(/ice hockey/i);
+      expect(pkt2).toMatch(/ice hockey/i);
+      expect(pkt2).not.toMatch(/basketball/i);
     });
   });
 
@@ -1018,8 +1017,8 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
       process.env.EDEN_MEMORY_DIR = dir;
       const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
       try {
-        mem.observe([{ role: "user", content: SPORT_WIN }]);
         mem.observe([{ role: "user", content: SPORT_LOSE }]);
+        mem.observe([{ role: "user", content: SPORT_WIN }]);
         const openai = mem.injectBody({ messages: [{ role: "user", content: "what is the sport of Alice" }] });
         const pkt = packetOf((openai as { messages?: unknown[] }).messages ?? []);
         expect(pkt).toMatch(/basketball/i);
@@ -1053,7 +1052,7 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
     });
   });
 
-  test("sleep agrees / reverse wall-clock: serial 8 then later serial 2 still basketball", async () => {
+  test("sleep agrees: 8. basketball then a later 2. ice hockey is ice hockey (A1 D8)", async () => {
     await withMem(async (mem, dir) => {
       const first = mem.remember(SPORT_WIN);
       laterThan(first.at);
@@ -1063,17 +1062,17 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
       await sleep({ dir, mem });
       const pkt = packetOf(mem.inject([{ role: "user", content: "what is the sport of Alice" }]));
       expect(pkt).toContain(MEMORY_MARK);
-      expect(pkt).toMatch(/basketball/i);
-      expect(pkt).not.toMatch(/ice hockey/i);
+      expect(pkt).toMatch(/ice hockey/i);
+      expect(pkt).not.toMatch(/basketball/i);
       const live = factObject(new SemanticStore(dir).get(SPORT_S, "is"));
-      expect(live).toMatch(/basketball/i);
-      expect(live).not.toMatch(/ice hockey/i);
+      expect(live).toMatch(/ice hockey/i);
+      expect(live).not.toMatch(/basketball/i);
       const later = openMemory({ dir });
       const pkt2 = packetOf(later.inject([{ role: "user", content: "what is the sport of Alice" }]));
-      expect(pkt2).toMatch(/basketball/i);
-      expect(pkt2).not.toMatch(/ice hockey/i);
-      expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/basketball/i);
-      expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).not.toMatch(/ice hockey/i);
+      expect(pkt2).toMatch(/ice hockey/i);
+      expect(pkt2).not.toMatch(/basketball/i);
+      expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/ice hockey/i);
+      expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).not.toMatch(/basketball/i);
     });
   });
 
@@ -1122,15 +1121,15 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
     });
   });
 
-  test("unnumbered ice hockey after serial 8 still basketball", async () => {
+  test("an unnumbered ice hockey after 8. basketball is ice hockey (A1 D8)", async () => {
     await withMem((mem, dir) => {
       mem.observe([{ role: "user", content: SPORT_WIN }]);
       laterThan(Date.now());
       mem.observe([{ role: "user", content: "The sport of Alice is ice hockey." }]);
       const pkt = packetOf(mem.inject([{ role: "user", content: "what is the sport of Alice" }]));
-      expect(pkt).toMatch(/basketball/i);
-      expect(pkt).not.toMatch(/ice hockey/i);
-      expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/basketball/i);
+      expect(pkt).toMatch(/ice hockey/i);
+      expect(pkt).not.toMatch(/basketball/i);
+      expect(factObject(new SemanticStore(dir).get(SPORT_S, "is"))).toMatch(/ice hockey/i);
     });
   });
 
@@ -1146,14 +1145,14 @@ describe("M21 SF code-pick (max serial, tombstone, sleep agrees)", () => {
     });
   });
 
-  test("k=1 retrieve of the later loser still injects basketball", async () => {
+  test("k=1 retrieve of the older loser still injects basketball", async () => {
     await withMem((mem) => {
       const prev = process.env.EDEN_MEMORY_CAP;
       process.env.EDEN_MEMORY_CAP = "1";
       try {
-        mem.observe([{ role: "user", content: SPORT_WIN }]);
-        laterThan(Date.now());
         mem.observe([{ role: "user", content: SPORT_LOSE }]);
+        laterThan(Date.now());
+        mem.observe([{ role: "user", content: SPORT_WIN }]);
         const pkt = packetOf(mem.inject([{ role: "user", content: "ice hockey Alice sport" }]));
         expect(pkt).toMatch(/basketball/i);
         expect(pkt).not.toMatch(/ice hockey/i);

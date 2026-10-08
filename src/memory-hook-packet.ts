@@ -13,6 +13,7 @@
  */
 import { MEMORY_PACKET_MARK, PACKET_BYTE_CAP } from "./memory-sota";
 import { knownNoteSource, noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { memoryNow } from "./memory-clock";
 
 export const PACKET_SOFT_BULLETS = 4;
 
@@ -22,9 +23,6 @@ const KIND_LIMIT: Partial<Record<PacketKind, number>> = { rule: 2, procedure: 1,
 
 /** A6 §2.1's source labels. */
 const SOURCE_WORDS = { user: "you said", tool: "from a tool result", sleep: "earlier session notes" };
-
-/** Wall-clock times are epoch ms (~1.7e12); smaller `at` values are serials, which have no age. */
-const WALL_CLOCK = 1e11;
 
 const AGE_UNITS: [ms: number, unit: string][] = [
   [7 * 86_400_000, "week"],
@@ -45,9 +43,15 @@ function body(note: ProvenanceNote): string {
     .trim();
 }
 
-/** "3 weeks ago", "1 hour ago", "just now"; undefined for a time that is not a wall-clock time. */
+/**
+ * Times are epoch ms (~1.7e12). A smaller number is no time: a list serial a store from before P0.3 kept as one
+ * (A1 D8), which has no age.
+ */
+const LEGACY_SERIAL = 1e11;
+
+/** "3 weeks ago", "1 hour ago", "just now"; undefined for a row whose time was never kept. */
 export function ageInWords(at: unknown, now: number): string | undefined {
-  if (typeof at !== "number" || !Number.isFinite(at) || at < WALL_CLOCK) return undefined;
+  if (typeof at !== "number" || !Number.isFinite(at) || at < LEGACY_SERIAL) return undefined;
   const elapsed = Math.max(0, now - at);
   for (const [ms, unit] of AGE_UNITS) {
     const n = Math.floor(elapsed / ms);
@@ -84,7 +88,7 @@ export function shapePacket<T extends ProvenanceNote>(notes: readonly T[]): T[] 
 }
 
 /** The packet text, or "" when no bullet fits. */
-export function renderPacket(notes: readonly ProvenanceNote[], now = Date.now()): string {
+export function renderPacket(notes: readonly ProvenanceNote[], now = memoryNow()): string {
   let packet = MEMORY_PACKET_MARK;
   for (const note of notes) {
     const line = `\n- ${declarativeBullet(note, now)}`;

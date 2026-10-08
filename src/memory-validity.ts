@@ -29,6 +29,7 @@
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { memoryNow } from "./memory-clock";
 import { stripPacketLabel } from "./memory-provenance";
 import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript";
 
@@ -137,7 +138,8 @@ function typedText(prompt: string): string {
   return kept.join("\n");
 }
 
-const SENTENCE_END = /(?<=[.!?])\s+|\n+/;
+/** A sentence ends at its punctuation, never after a list marker ("1. The database is …" is one sentence). */
+const SENTENCE_END = /(?<=[.!?])(?<!(?:^|\s)\d{1,3}[.)])\s+|\n+/;
 const CLAUSE_BREAK = /;\s+/;
 
 function sentences(text: string): string[] {
@@ -165,10 +167,13 @@ function retracted(value: string): { o: string; f?: string } {
   return { o: value.toLowerCase(), ...(byCase ? { f: value } : {}) };
 }
 
-/** An object word in one form ("PRs" and "PR", "branches" and "branch" are the same object). */
+/**
+ * An object word in one form, whatever its plural: "PRs" and "PR", "branches" and "branch", "caches" and "cache",
+ * "prizes" and "prize" each share one. The form need not be a word ("cach"), only the same for both.
+ */
 function singular(word: string): string {
-  if (word.length >= 5 && /(?:ch|sh|ss|x|z)es$/.test(word)) return word.slice(0, -2);
-  return word.length >= 3 && /[^siu]s$/.test(word) ? word.slice(0, -1) : word;
+  const stem = word.length >= 3 && /[^siu]s$/.test(word) ? word.slice(0, -1) : word;
+  return stem.length >= 4 && /(?:ch|sh|ss|x|z)e$/.test(stem) ? stem.slice(0, -1) : stem;
 }
 
 function objectWords(text: string): string[] {
@@ -205,12 +210,27 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
 }
 
 /** Appends the invalidations of a human prompt to the store's validity log. Fails open. */
-export function recordInvalidations(root: string, prompt: string, t = Date.now()): void {
+export function recordInvalidations(root: string, prompt: string, t = memoryNow()): void {
   try {
     const found = invalidationsIn(prompt, t);
     if (!found.length) return;
     mkdirSync(root, { recursive: true });
     appendFileSync(join(root, FILE), found.map((record) => `${JSON.stringify(record)}\n`).join(""), { mode: 0o600 });
+  } catch {}
+}
+
+/**
+ * D31's `stale_for` (A4 §3.2): when a typed statement supersedes a slot's value ("The database is postgres" after
+ * "1. The database is sqlite"), older text that still gives the subject its old value is stale, episodes included.
+ * It is logged as D7's switch is: a retraction of the old value, tied to the slot's subject words. Fails open.
+ */
+export function recordSupersession(root: string, slot: { subject: string; value: string }, t = memoryNow()): void {
+  try {
+    const subject = objectWords(slot.subject).filter((word) => !NO_SUBJECT.has(word));
+    if (!subject.length) return;
+    const record: Invalidation = { k: "retract", ...retracted(slot.value), t, w: subject };
+    mkdirSync(root, { recursive: true });
+    appendFileSync(join(root, FILE), `${JSON.stringify(record)}\n`, { mode: 0o600 });
   } catch {}
 }
 
@@ -252,6 +272,11 @@ function escape(text: string): string {
 
 /** A verb after a value that opens a sentence, making the value the sentence's subject ("React is our UI library"). */
 const SUBJECT_VERB = /^\s+(?:is|are|was|were|has|had|uses|used|runs|ran|handles|stores|caches|serves)\b/i;
+/**
+ * What may come before a clause's first word: nothing but punctuation, a list marker ("1. ", "- "), or a label and
+ * its colon ("Note: "). Not a comma: after one, a capital marks a name ("Redis, Make and Docker"), not an opening.
+ */
+const CLAUSE_OPENING = /^\W*(?:\d{1,3}[.)]\s+)?$|:\s*$/;
 
 /**
  * Whether a sentence names a retracted value as a whole token, not inside a path, a filename or a longer name. A value
@@ -263,7 +288,7 @@ function mentions(sentence: string, record: Retraction): boolean {
   for (const match of sentence.matchAll(pattern)) {
     if (!record.f) return true;
     const end = match.index + match[0].length;
-    if (/^\W*$/.test(stripPacketLabel(sentence.slice(0, match.index)).body)) {
+    if (CLAUSE_OPENING.test(stripPacketLabel(sentence.slice(0, match.index)).body)) {
       if (SUBJECT_VERB.test(sentence.slice(end))) return true;
     } else if (match[0] === record.f) return true;
   }
@@ -316,6 +341,21 @@ function namesSubject(sentence: string, subject: readonly string[] | undefined):
 /** A sentence that states a rule (a prohibition or an "always"), which only a revocation supersedes (A4 §3.1). */
 const RULE_SENTENCE = /\b(?:never|always|don'?t|do not|must|must not|should not|shouldn'?t|avoid)\b/i;
 
+const revokes = (records: readonly Invalidation[], text: string) =>
+  records.some((record) => record.k === "revoke" && forbids(text, record));
+
+/**
+ * What a revocation leaves of a sentence: the rules joined to the revoked one (by `;` or `,`) about another action
+ * ("never merge PRs yourself; never push to main" keeps "never push to main"). The other clauses qualified the
+ * revoked rule and go with it ("never push to main; ask first").
+ */
+function otherRules(sentence: string, records: readonly Invalidation[]): string[] {
+  return sentence
+    .split(/[;,]\s+/)
+    .map((part) => part.trim())
+    .filter((part) => RULE_SENTENCE.test(part) && !revokes(records, part));
+}
+
 function invalidates(record: Invalidation, sentence: string): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
   if (RULE_SENTENCE.test(sentence)) return false;
@@ -344,10 +384,12 @@ export function validText(text: string, at: unknown, records: readonly Invalidat
       .map((clause) => clause.trim())
       .filter(Boolean);
     const valid = (clause: string) => !newer.some((record) => invalidates(record, clause));
-    const revoked = clauses.some((clause) => newer.some((record) => record.k === "revoke" && forbids(clause, record)));
-    const left = revoked ? [] : clauses.filter(valid);
-    if (left.length < clauses.length) dropped = true;
-    if (left.length) kept.push(left.join("; "));
+    const revoked = clauses.some((clause) => revokes(newer, clause));
+    const left = revoked ? otherRules(sentence, newer).filter(valid) : clauses.filter(valid);
+    if (revoked || left.length < clauses.length) dropped = true;
+    // What is left must say something: never a bare list marker ("1.").
+    const said = left.filter((part) => contentWords(part).length);
+    if (said.length) kept.push(said.join("; "));
   }
   return dropped ? kept.join(" ") : raw;
 }
