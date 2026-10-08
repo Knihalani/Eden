@@ -125,7 +125,8 @@ describe("A4 §1: seq and t", () => {
     await sleep({ dir: root, session: "s1", mem });
     mem.close();
     expect(typeof rowWith(diskRows(root, "s1"), "tag-alpha")?.seq).toBe("number");
-    expect(readFileSync(join(root, "pending.jsonl"), "utf8")).not.toContain("tag-alpha");
+    const left = join(root, "pending.jsonl");
+    expect(existsSync(left) ? readFileSync(left, "utf8") : "").not.toContain("tag-alpha");
   });
 });
 

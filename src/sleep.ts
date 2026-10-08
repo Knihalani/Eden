@@ -8,7 +8,9 @@ import {
   type CandidateText,
   type Triple,
 } from "./assemble";
-import type { MemoryRecord } from "./index";
+import { settlePendingRows, superseded, type MemoryRecord } from "./index";
+import { memoryNow } from "./memory-clock";
+import { inStoreOrder } from "./memory-ids";
 import { ExperienceStore, promoteExperienceHowTo, type ExperienceState, type ExperienceTraj } from "./experience-store";
 import { GistStore, scrubTombstonedIdentity } from "./gist-store";
 import { promoteNarrativeGists } from "./gist-retrieve";
@@ -29,13 +31,14 @@ import { loadToolTraces, memoryTracesDir, type ToolTrace } from "./tool-trace";
 
 export { mergeSharedPrefix } from "./howto-store";
 
-export type SleepRecord = Pick<MemoryRecord, "id" | "text" | "kind" | "at" | "lane" | "tags"> & {
+export type SleepRecord = Pick<MemoryRecord, "id" | "text" | "kind" | "at" | "seq" | "lane" | "tags"> & {
   sal?: number;
   ep?: string;
   heat?: number;
   validUntil?: number;
   validFrom?: number;
   invalidAt?: number;
+  invalidBy?: string;
 };
 export type SleepMem = {
   dir: string;
@@ -602,7 +605,7 @@ function fastMemorize(mem: SleepMem, recs: SleepRecord[]): void {
         for (const fact of facts) {
           const live = store.get(fact.s, fact.p);
           if (live && oSame(live.o, fact.o)) continue;
-          const t = Number.isFinite(fact.t) && fact.t > 0 ? fact.t : r.at || Date.now();
+          const t = Number.isFinite(fact.t) && fact.t > 0 ? fact.t : r.at || memoryNow();
           if (live && !oSame(live.o, fact.o)) store.tombstone(fact.s, fact.p, t);
           store.put(fact.s, fact.p, fact.o, t);
         }
@@ -637,7 +640,7 @@ function decayHeat(mem: SleepMem, recs: SleepRecord[]): void {
     const live = new SemanticStore(root).live();
     const prov = new Map<string, number>();
     for (const r of recs) {
-      if (typeof r.invalidAt === "number") continue;
+      if (superseded(r)) continue;
       let facts: Triple[] = [];
       try {
         facts = extractIdentity(r);
@@ -651,7 +654,7 @@ function decayHeat(mem: SleepMem, recs: SleepRecord[]): void {
       }
     }
     mem.patchWhere((row) => {
-      if (typeof row.invalidAt === "number") return;
+      if (superseded(row)) return;
       let facts: Triple[] = [];
       try {
         facts = extractIdentity(row);
@@ -742,7 +745,7 @@ function writeMissTaxonomy(dir: string, recs: SleepRecord[]): void {
         extracted.every((f) => !live.some((l) => l.s === f.s && l.p === f.p && oSame(l.o, f.o)))
       ) {
         rows.push({ id: r.id, miss: "Store" });
-      } else if (typeof r.invalidAt === "number") {
+      } else if (superseded(r)) {
         rows.push({ id: r.id, miss: "Maintain" });
       } else if ((r.kind === "episode" || r.kind === "procedure") && (r.heat ?? r.sal ?? 1) < 0.6) {
         rows.push({ id: r.id, miss: "Retrieve" });
@@ -803,7 +806,7 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
                   !(live && live.o.trim().toLowerCase() !== o.trim().toLowerCase()) &&
                   !store.supersededObject(o, s, p)
                 ) {
-                  store.put(s, p, o, Number(rec.at) || Date.now());
+                  store.put(s, p, o, Number(rec.at) || memoryNow());
                 }
               } catch {}
             }
@@ -816,7 +819,7 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
             const live = store.get(f.s, f.p);
             if (live && live.o.trim().toLowerCase() !== f.o.trim().toLowerCase()) continue;
             if (store.supersededObject(f.o, f.s, f.p)) continue;
-            store.put(f.s, f.p, f.o, Number.isFinite(f.t) ? f.t : Number(rec.at) || Date.now());
+            store.put(f.s, f.p, f.o, Number.isFinite(f.t) ? f.t : Number(rec.at) || memoryNow());
           } catch {}
         }
       }
@@ -861,14 +864,16 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   try {
     migrateSessionHowTo(mem);
   } catch {}
-  const recs = mem
-    .memories()
-    .slice()
-    .sort((a, b) => a.at - b.at);
+  try {
+    settlePendingRows(mem.dir);
+  } catch {}
+  // A superseded row is history (A4 §3.1): it neither competes for its subject nor is superseded again.
+  const ordered = inStoreOrder(mem.memories().filter((r) => !superseded(r)));
+  const recs = ordered.map(({ row }) => row);
   const candidates: Triple[] = [];
-  for (const r of recs) {
+  for (const { row, t } of ordered) {
     try {
-      for (const fact of extractIdentity(r)) candidates.push(fact);
+      for (const fact of extractIdentity({ ...row, at: t })) candidates.push(fact);
     } catch {
       // Fail-open: a bad episode must not abort the rest of consolidate.
     }
@@ -885,8 +890,10 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     for (const w of winners) winByKey.set(liveKey(w.s, w.p), w);
     const live = new Map<string, string>();
     for (const [k, w] of winByKey) live.set(k, w.o);
-    if (live.size && mem.dropWhere) {
-      const drop = new Set<string>();
+    // A fact row whose every value lost goes to history, superseded by the row that won (A4 §3.1). It stays in the
+    // store, so reading the transcript again never learns it anew as the newest value.
+    if (live.size && mem.patchWhere) {
+      const supersededBy = new Map<string, string>();
       const lost = new Set<string>();
       try {
         for (const l of losingTriples(candidates)) {
@@ -898,10 +905,16 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
           const facts = extractIdentity(r);
           if (!facts.length) continue;
           if (String(r.kind ?? "") === "episode") continue;
-          if (facts.every((fact) => lost.has(`${liveKey(fact.s, fact.p)}\0${normObj(fact.o)}`))) drop.add(r.id);
+          if (!facts.every((fact) => lost.has(`${liveKey(fact.s, fact.p)}\0${normObj(fact.o)}`))) continue;
+          const winner = winByKey.get(liveKey(facts[0]!.s, facts[0]!.p))?.recId;
+          if (winner && winner !== r.id) supersededBy.set(r.id, winner);
         } catch {}
       }
-      if (drop.size) mem.dropWhere((r) => drop.has(r.id));
+      if (supersededBy.size)
+        mem.patchWhere((r) => {
+          const by = supersededBy.get(r.id);
+          return by && !superseded(r) ? { ...r, invalidBy: by } : undefined;
+        });
     }
     if (live.size && mem.rewriteWhere) {
       mem.rewriteWhere((r) => {
@@ -970,7 +983,7 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     new GistStore(mem.dir).put(
       gist,
       typeof opts?.session === "string" && opts.session.trim() ? opts.session.trim() : "default",
-      Date.now(),
+      memoryNow(),
     );
   if (incrementalExpired(opts)) return;
   try {

@@ -26,7 +26,6 @@ export type HopFact = {
 const MAX_HOPS = 4;
 const HOP_K = 10;
 /** Observe's Date.now() (~1e12). Serial t=8 must beat wall-clock ice hockey. */
-const WALL_CLOCK_T = 1e11;
 
 const REL_ALIASES: Record<string, string> = {
   author: "author",
@@ -160,31 +159,15 @@ function stripPacketDecor(text: string): string {
   return t;
 }
 
-function factTime(text: string, at: number | undefined, idx: number): number {
-  const m = stripPacketDecor(text).match(/^(\d+)[.)]\s+/);
-  if (m) return Number(m[1]);
-  if (at != null && Number.isFinite(at)) return at;
-  return idx;
+/** A fact's time: its row's, else its position; a list number is not a time (A1 D8). */
+function factTime(at: number | undefined, idx: number): number {
+  return at != null && Number.isFinite(at) ? at : idx;
 }
 
-function isWall(t: number): boolean {
-  return t >= WALL_CLOCK_T;
-}
-
-/** max(serial) per (s,p): a numbered serial beats a wall-clock stamp. */
+/** The newer fact per (s, p): the later time, then the later row. */
 function factBeats(a: HopFact, b: HopFact): boolean {
-  const aW = isWall(a.t),
-    bW = isWall(b.t);
-  if (aW !== bW) return !aW;
   if (a.t !== b.t) return a.t > b.t;
   return a.i > b.i;
-}
-
-function timeBeats(a: number, b: number): number {
-  const aW = isWall(a),
-    bW = isWall(b);
-  if (aW !== bW) return aW ? -1 : 1;
-  return a - b;
 }
 
 function bodyOf(text: string): string {
@@ -445,7 +428,7 @@ function maxPerKey(rows: HopSource[]): HopFact[] {
   rows.forEach((row, idx) => {
     const trip = extractTriple(row.text);
     if (!trip) return;
-    const t = factTime(row.text, row.at, idx);
+    const t = factTime(row.at, idx);
     const i = row.i ?? idx;
     const fact: HopFact = { ...trip, t, text: row.text, i, id: row.id };
     const k = `${fact.s}\0${fact.p}`;
@@ -565,10 +548,10 @@ function topKForEntity(entity: string, rows: HopSource[], extra: string[], k = H
     if (skipGraphText(row.text)) continue;
     const body = bodyOf(row.text) || String(row.text ?? "");
     if (!mentionsEntity(body, ent)) continue;
-    const t = factTime(row.text, row.at, i);
+    const t = factTime(row.at, i);
     scored.push({ row, score: lexicalScore(body, ent, extra), t, i });
   }
-  scored.sort((a, b) => b.score - a.score || timeBeats(b.t, a.t) || b.i - a.i);
+  scored.sort((a, b) => b.score - a.score || b.t - a.t || b.i - a.i);
   return scored.slice(0, k).map((s) => s.row);
 }
 
@@ -586,10 +569,10 @@ function topKForQuery(rows: HopSource[], qToks: string[], k = HOP_K): HopSource[
       else if (n.length >= 3 && bSet.has(n)) score += 1;
     }
     if (score <= 0) continue;
-    const t = factTime(row.text, row.at, i);
+    const t = factTime(row.at, i);
     scored.push({ row, score, t, i });
   }
-  scored.sort((a, b) => b.score - a.score || timeBeats(b.t, a.t) || b.i - a.i);
+  scored.sort((a, b) => b.score - a.score || b.t - a.t || b.i - a.i);
   return scored.slice(0, k).map((s) => s.row);
 }
 
@@ -797,7 +780,7 @@ function defeatedByHops(text: string, hops: HopFact[]): boolean {
 /**
  * Reorder an inject packet so last hop is first among hop results.
  * Missing last-hop rows are unshifted from `store`. Fail-open: throw → notes unchanged.
- * Objects that lost max(serial) for a chosen hop's (s, p) are dropped.
+ * Objects that lost to a newer fact for a chosen hop's (s, p) are dropped.
  */
 export function completeNotes<T extends HopSource>(
   query: string,

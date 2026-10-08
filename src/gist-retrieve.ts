@@ -7,6 +7,7 @@
 import { bm25Rank } from "./chunk-retrieve";
 import { ChunkStore, type NarrativeChunk } from "./chunk-store";
 import { GistStore, type Gist } from "./gist-store";
+import { memoryNow } from "./memory-clock";
 
 export const GIST_RETRIEVE_K = 3;
 export const GIST_TOKEN_CAP = 300;
@@ -136,7 +137,7 @@ function docT(chunks: NarrativeChunk[]): number {
   for (const c of chunks) {
     if (typeof c.t === "number" && Number.isFinite(c.t) && c.t > t) t = c.t;
   }
-  return t || Date.now();
+  return t || memoryNow();
 }
 
 /**

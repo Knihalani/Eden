@@ -1,9 +1,9 @@
 import { chmodSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { redact } from "../packages/ir/src/redact";
-import { assembleNotes, splitNumberedItems } from "./assemble";
+import { assembleNotes, listUnderHeading, splitNumberedItems } from "./assemble";
 import { noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
 import { ChunkStore } from "./chunk-store";
 import { retrieveNarrativeChunks } from "./chunk-retrieve";
@@ -16,6 +16,10 @@ import { type MemoryLaneKind } from "./memory-lanes";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { applyProvenanceLabel, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
+import { legacySlot } from "./memory-residual";
+import { recordSupersession } from "./memory-validity";
+import { memoryNow } from "./memory-clock";
+import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
 import {
   attachPlaceCues,
   hookLane,
@@ -78,16 +82,6 @@ export function encodeLane(text: string): MemoryLaneKind {
         : "chat";
 }
 
-function leadingSerial(text: string): number | undefined {
-  const n = Number(
-    String(text ?? "")
-      .trim()
-      .replace(/^\[[^\]]+\]\s+/, "")
-      .match(/^(\d+)[.)]\s+\S/)?.[1],
-  );
-  return Number.isFinite(n) ? n : undefined;
-}
-
 function rankKindBoost(r: MemoryRecord): number {
   const k = String(r.kind ?? "");
   return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
@@ -124,25 +118,45 @@ function omitConflictingIdentity(text: string, store: SemanticStore): string {
 }
 
 export type MemoryKind = "fact" | "preference" | "episode" | "procedure" | "constraint" | string;
+/**
+ * A row (A4 §1). On disk its time is `t`, and its validity `invalid_at` (the `seq` of the row that superseded it,
+ * A4 §3.1), `invalid_by` (that row's id, while it waits in `pending.jsonl` for its seq) and `valid_until`.
+ */
 export type MemoryRecord = {
   id: string;
   text: string;
   kind: MemoryKind;
   tags?: string[];
+  /** When the row was written (`memoryNow`); absent on rows written before P0.3, whose time was never kept. */
   at: number;
+  /** The store's order (A4 §1); absent until the store lock gives it one, and on rows written before P0.3. */
+  seq?: number;
   ep?: string;
   sal?: number;
   lane?: MemoryLaneKind;
   invalidAt?: number;
+  invalidBy?: string;
   validUntil?: number;
   heat?: number;
 };
 
-function isLiveRow(r: MemoryRecord, now = Date.now()): boolean {
-  return (
-    !(typeof r.invalidAt === "number" && Number.isFinite(r.invalidAt) && r.invalidAt <= now) &&
-    !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now)
-  );
+/** Whether a newer row has superseded this one (A4 §3.1). */
+export function superseded(r: Pick<MemoryRecord, "invalidAt" | "invalidBy">): boolean {
+  return typeof r.invalidAt === "number" || typeof r.invalidBy === "string";
+}
+
+function isLiveRow(r: MemoryRecord, now = memoryNow()): boolean {
+  return !superseded(r) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
+}
+
+/** The subject a copula statement gives a value to (`s`, `p`), or undefined. */
+function copulaKey(text: string): string | undefined {
+  try {
+    const asserted = objectAsserted(text);
+    return asserted ? `${asserted.s}\0${asserted.p}` : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
@@ -165,18 +179,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
       byKey.set(k, row);
       continue;
     }
-    const serial = leadingSerial(row.rec.text),
-      prevSerial = leadingSerial(prev.rec.text);
-    if (serial != null && prevSerial != null) {
-      if (serial >= prevSerial) byKey.set(k, row);
-      continue;
-    }
-    if (serial != null) {
-      byKey.set(k, row);
-      continue;
-    }
-    if (prevSerial != null) continue;
-    if (row.rec.at >= prev.rec.at) byKey.set(k, row);
+    if (compareRecency(row.rec, prev.rec) >= 0) byKey.set(k, row);
   }
   return [...byKey.values(), ...rest];
 }
@@ -386,17 +389,20 @@ function extractDurable(blob: string): string[] {
   let whole = blob.trim().replace(/\s+/g, " ").replace(ACK_PREFIX, "");
   if (SPEAKER_LABEL.test(whole) && whole.endsWith("?") && /[.!]/.test(whole.slice(0, -1)))
     whole = whole.replace(/\s+[^.!?]+\?\s*$/, "").trim();
-  const labeledWhole = SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"),
+  const listed = listUnderHeading(blob),
+    labeledWhole = !listed && SPEAKER_LABEL.test(whole) && whole.length <= 800 && !whole.endsWith("?"),
     numberedWhole = /^\d+[.)]\s+\S/.test(whole),
-    label = whole.match(SPEAKER_LABEL)?.[1];
-  const chunks = labeledWhole
-    ? [whole]
-    : numberedWhole
-      ? splitNumberedItems(whole)
-      : blob
-          .replace(ACK_PREFIX, "")
-          .split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/)
-          .flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
+    label = listed ? undefined : whole.match(SPEAKER_LABEL)?.[1];
+  const chunks = listed
+    ? listed
+    : labeledWhole
+      ? [whole]
+      : numberedWhole
+        ? splitNumberedItems(whole)
+        : blob
+            .replace(ACK_PREFIX, "")
+            .split(/(?:(?<=\n)|(?<=[.!?])(?<!\d\.))\s+/)
+            .flatMap((p) => p.split(/(?<=\d\.)\s+(?=[A-Z])/));
   for (const raw of chunks) {
     let t = raw
       .trim()
@@ -443,6 +449,49 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
+const finite = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+/** A store file's row as a record: A4 §1's `t`, `seq`, `invalid_at`, `invalid_by` and `valid_until` mapped in. */
+function fromDisk(parsed: unknown): MemoryRecord | undefined {
+  if (Array.isArray(parsed)) return { id: parsed[0], text: parsed[1], at: parsed[2], kind: "episode" };
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const { t, seq, invalid_at, invalid_by, valid_until, ...rest } = parsed as Record<string, unknown>;
+  const rec = { ...rest, kind: rest.kind || "fact" } as MemoryRecord;
+  const at = finite(t),
+    order = finite(seq),
+    invalidAt = finite(invalid_at),
+    validUntil = finite(valid_until);
+  if (at !== undefined) rec.at = at;
+  if (order !== undefined) rec.seq = order;
+  if (invalidAt !== undefined) rec.invalidAt = invalidAt;
+  if (typeof invalid_by === "string") rec.invalidBy = invalid_by;
+  if (validUntil !== undefined) rec.validUntil = validUntil;
+  return rec;
+}
+
+/** A record as its store file holds it. A row written before P0.3 that is a bare episode keeps its compact form. */
+function toDisk(r: MemoryRecord): DiskRow | [string, string] {
+  const { at, seq, invalidAt, invalidBy, validUntil, ...rest } = r;
+  const bare = !r.tags && !r.lane && !r.ep && !r.heat && !r.sal && invalidAt === undefined && invalidBy === undefined;
+  if (r.kind === "episode" && bare && at === undefined && seq === undefined && validUntil === undefined)
+    return [r.id, r.text];
+  return {
+    ...rest,
+    kind: r.kind === "fact" ? undefined : r.kind,
+    t: at,
+    seq,
+    invalid_at: invalidAt,
+    invalid_by: invalidBy,
+    valid_until: validUntil,
+  };
+}
+
+/** One store file's rows, the last line of an id winning. */
+export function storeRows(path: string): MemoryRecord[] {
+  return load(path).map((c) => c.rec);
+}
+
 function load(path: string): Compiled[] {
   const out: Compiled[] = [],
     idx = new Map<string, number>();
@@ -454,12 +503,8 @@ function load(path: string): Compiled[] {
   }
   for (const t of raw.split("\n")) {
     try {
-      const parsed = JSON.parse(t);
-      const rec = (
-        Array.isArray(parsed) ? { id: parsed[0], text: parsed[1], at: parsed[2], kind: "episode" } : parsed
-      ) as MemoryRecord;
+      const rec = fromDisk(JSON.parse(t));
       if (rec?.id && rec.text) {
-        if (!rec.kind) rec.kind = "fact";
         const c = compileNeedles(rec),
           at = idx.get(rec.id);
         if (at != null) out[at] = c;
@@ -468,6 +513,76 @@ function load(path: string): Compiled[] {
     } catch {}
   }
   return out;
+}
+
+/**
+ * The record to keep for a row two writers hold: this process's, with the store's `seq` when it already has one,
+ * and superseded if either copy is (validity only ever moves from live to superseded, so a stale copy cannot undo
+ * another process's supersession).
+ */
+function mergeRow(disk: MemoryRecord | undefined, mine: MemoryRecord): MemoryRecord {
+  if (!disk) return mine;
+  const merged = { ...mine, seq: disk.seq ?? mine.seq };
+  const invalidAt = [disk.invalidAt, mine.invalidAt].filter((v): v is number => typeof v === "number");
+  if (invalidAt.length) {
+    merged.invalidAt = Math.min(...invalidAt);
+    delete merged.invalidBy;
+  } else if (!merged.invalidBy && disk.invalidBy) merged.invalidBy = disk.invalidBy;
+  return merged;
+}
+
+/**
+ * Merges rows into a store file under its lock: new ids are appended, known ones merged (`mergeRow`), and every
+ * `invalid_by` that names a row now holding a seq becomes that seq. Throws when the lock stays taken.
+ */
+function mergeIntoStore(path: string, rows: readonly MemoryRecord[]): void {
+  withFileLock(`${path}.lock`, () => {
+    const byId = new Map(load(path).map((c) => [c.rec.id, c.rec]));
+    for (const row of rows) byId.set(row.id, mergeRow(byId.get(row.id), row));
+    writeStore(path, resolveSupersessions([...byId.values()]));
+  });
+}
+
+/** `invalid_by` → `invalid_at` wherever the superseding row has its seq. */
+function resolveSupersessions(rows: MemoryRecord[]): MemoryRecord[] {
+  const seqs = new Map(rows.flatMap((r) => (typeof r.seq === "number" ? [[r.id, r.seq] as const] : [])));
+  return rows.map((r) => {
+    const seq = r.invalidBy === undefined ? undefined : seqs.get(r.invalidBy);
+    if (seq === undefined) return r;
+    const { invalidBy: _resolved, ...rest } = r;
+    return { ...rest, invalidAt: seq };
+  });
+}
+
+function writeStore(path: string, rows: readonly MemoryRecord[]): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileAtomic(path, rows.map((r) => JSON.stringify(toDisk(r))).join("\n") + (rows.length ? "\n" : ""));
+  try {
+    chmodSync(path, 0o600);
+  } catch {}
+}
+
+/**
+ * Sleep's half of A4 §1: the rows writers left in `pending.jsonl` get their `seq` and go into their stores. A store
+ * that cannot be written keeps them pending for the next sleep.
+ */
+export function settlePendingRows(root: string): void {
+  const taken = takePending(root);
+  if (!taken) return;
+  let stored = true;
+  for (const [store, rows] of taken.byStore) {
+    const name = memorySessionName(store);
+    if (store && !name) continue;
+    try {
+      mergeIntoStore(
+        join(root, name ?? "", "memories.jsonl"),
+        rows.flatMap((row) => fromDisk(row) ?? []),
+      );
+    } catch {
+      stored = false;
+    }
+  }
+  if (stored) taken.done();
 }
 
 const STATUS_OBJECT = new RegExp(
@@ -594,8 +709,6 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   return [...kept, rec];
 }
 
-let memSeq = 0;
-
 export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
@@ -609,6 +722,10 @@ export class AgentMemory {
   private seenLower = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
   private knownIds = new Set<string>();
+  /** Rows this process wrote that no store file holds yet. */
+  private unsaved = new Set<string>();
+  /** Rows this process left in `pending.jsonl`: sleep writes them, so this process never does. */
+  private pended = new Set<string>();
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
@@ -670,12 +787,13 @@ export class AgentMemory {
     text: string,
     opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {},
   ): MemoryRecord {
+    const at = memoryNow();
     const rec: MemoryRecord = {
-      id: opts.id || `${(process.pid % 36).toString(36)}${(++memSeq).toString(36)}`,
+      id: opts.id || ulid(at),
       text: this.persistText(String(text || "").trim()),
       kind: opts.kind || "fact",
       tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
-      at: Date.now(),
+      at,
       ...(opts.lane ? { lane: opts.lane } : {}),
       ...(this.session ? { ep: opaqueId(this.session) } : {}),
     };
@@ -702,11 +820,7 @@ export class AgentMemory {
     } catch {}
     try {
       const fact = objectAsserted(rec.text);
-      if (fact && !STATUS_OBJECT.test(fact.o)) {
-        const live = this.semantic().get(fact.s, fact.p);
-        const serial = leadingSerial(rec.text);
-        if (!(serial == null && live && live.t < 1e11)) this.semantic().put(fact.s, fact.p, fact.o, serial ?? rec.at);
-      }
+      if (fact && !STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, rec.at);
     } catch {}
     const c = compileNeedles(rec),
       i = this.compiled.findIndex((x) => x.rec.id === rec.id);
@@ -716,12 +830,19 @@ export class AgentMemory {
     } catch {}
     this.compiled.push(c);
     this.knownIds.add(rec.id);
+    this.unsaved.add(rec.id);
     this.post = null;
     this.seenLower.add(rec.text.toLowerCase());
     return (this.flush(true), rec);
   }
 
+  /**
+   * A newer statement of a copula's subject supersedes its older values (A4 §3.1), whatever list numbers they carry,
+   * and when both are slots, older text giving the old value is stale (D31, `recordSupersession`). Only what the user
+   * typed supersedes: a tool result or the assistant's text is an episode (A4 §3.0, A6 §2.1).
+   */
   private invalidateSameCopula(incoming: MemoryRecord): void {
+    if ((incoming.tags ?? []).some((tag) => tag === "src:tool" || tag === "src:agent")) return;
     let asserted: ReturnType<typeof objectAsserted>;
     try {
       asserted = objectAsserted(incoming.text);
@@ -729,11 +850,8 @@ export class AgentMemory {
       return;
     }
     if (!asserted) return;
-    const now = incoming.at ?? Date.now(),
-      incomingSerial = leadingSerial(incoming.text);
     for (const c of this.compiled) {
-      if (c.rec.id === incoming.id || (typeof c.rec.invalidAt === "number" && Number.isFinite(c.rec.invalidAt)))
-        continue;
+      if (c.rec.id === incoming.id || superseded(c.rec)) continue;
       let other: ReturnType<typeof objectAsserted>;
       try {
         other = objectAsserted(c.rec.text);
@@ -742,13 +860,9 @@ export class AgentMemory {
       }
       if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
       if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
-      const liveSerial = leadingSerial(c.rec.text);
-      if (
-        (incomingSerial != null && liveSerial != null && incomingSerial < liveSerial) ||
-        (incomingSerial == null && liveSerial != null)
-      )
-        continue;
-      c.rec.invalidAt = now;
+      c.rec.invalidBy = incoming.id;
+      const old = legacySlot(c.rec);
+      if (old && legacySlot(incoming)) recordSupersession(this.dir, old, incoming.at);
     }
   }
 
@@ -794,11 +908,18 @@ export class AgentMemory {
         // `src: "tool"`, or the assistant's text (A6 calls its source `agent`).
         srcTags = (it: { role: string; src?: unknown }): string[] =>
           it.src === "tool" ? ["src:tool"] : it.role === "assistant" ? ["src:agent"] : [],
-        batchLive = new Map<string, string>();
+        batchLive = new Map<string, string>(),
+        lanes = items.map((it) => encodeLane(it.text)),
+        durables = items.map((it, i) => (lanes[i] === "icl" || lanes[i] === "narrative" ? [] : this.durables(it.text))),
+        lastSaid = new Map<string, string>();
+      for (const text of durables.flat()) {
+        const key = copulaKey(text);
+        if (key) lastSaid.set(key, text.toLowerCase());
+      }
       for (let i = 0; i < items.length; i++) {
         const it = items[i]!,
           safe = this.persistText(stripMemoryPacket(it.text)),
-          lane = encodeLane(it.text);
+          lane = lanes[i]!;
         if (lane === "icl" || lane === "narrative") {
           let text = safe;
           if (lane === "narrative" && opts.keepLiveIdentity)
@@ -822,14 +943,7 @@ export class AgentMemory {
         const before = out.length;
         let coveredChars = 0,
           skippedIdentity = false;
-        for (const raw of extractDurable(it.text)) {
-          let text = raw;
-          try {
-            const asserted = objectAsserted(text);
-            if (asserted && /\b(?:instead of|rather than)\b/i.test(text))
-              text = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`;
-          } catch {}
-          text = this.persistText(text);
+        for (const text of durables[i]!) {
           try {
             const fact = objectAsserted(text);
             if (fact) {
@@ -850,17 +964,13 @@ export class AgentMemory {
                   }
                 }
               }
-              const serial = leadingSerial(text);
-              if (
-                !(serial == null && live && live.t < 1e11 && !batchLive.has(`${fact.s}\0${fact.p}`)) &&
-                !STATUS_OBJECT.test(fact.o)
-              ) {
-                store.put(fact.s, fact.p, fact.o, serial ?? Date.now());
+              if (!STATUS_OBJECT.test(fact.o)) {
+                store.put(fact.s, fact.p, fact.o, memoryNow());
                 batchLive.set(`${fact.s}\0${fact.p}`, fact.o.trim().toLowerCase());
               }
             }
           } catch {}
-          if (this.seenLower.has(text.toLowerCase())) continue;
+          if (this.seenLower.has(text.toLowerCase()) && !this.restated(text, lastSaid)) continue;
           const pin = ((t) =>
               !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) &&
               (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text),
@@ -925,64 +1035,102 @@ export class AgentMemory {
     }
   }
 
+  /** A message's durable statements as rows hold them: "X instead of Y" as X alone, the store's redaction applied. */
+  private durables(text: string): string[] {
+    return extractDurable(text).map((raw) => {
+      let said = raw;
+      try {
+        const asserted = objectAsserted(said);
+        if (asserted && /\b(?:instead of|rather than)\b/i.test(said))
+          said = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`;
+      } catch {}
+      return this.persistText(said);
+    });
+  }
+
+  /**
+   * A statement whose text only superseded rows hold, said again: a later typed statement re-learns a value
+   * (A4 §3.1). Reading a conversation again replays its old statements too, so only the last statement of its
+   * subject in the batch can be one.
+   */
+  private restated(text: string, lastSaid: ReadonlyMap<string, string>): boolean {
+    const key = copulaKey(text),
+      lower = text.toLowerCase();
+    if (!key || lastSaid.get(key) !== lower) return false;
+    const holding = this.compiled.filter((c) => c.rec.text.toLowerCase() === lower);
+    return holding.length > 0 && holding.every((c) => superseded(c.rec));
+  }
+
   private flush(mark: boolean) {
     if (mark) this.dirty = true;
     if (this.batch || !this.dirty) return;
     this.persist();
   }
 
+  /**
+   * Writes the store (A4 §1). The rows this process wrote first get their `seq`, under the store lock. When that
+   * lock is not free within 50 ms, or the store file's own lock stays taken, they go to `pending.jsonl` for sleep
+   * instead of being lost (A1 D11). A row another process also holds is merged, never replaced (`mergeRow`).
+   */
   private persist() {
     try {
       if (memoryConsent() !== "on") return;
     } catch {
       return;
     }
+    if (!this.sequence()) this.pend();
     try {
       withFileLock(`${this.path}.lock`, () => {
         try {
           const mine = new Set(this.compiled.map((c) => c.rec.id)),
             byId = new Map<string, Compiled>();
-          for (const c of load(this.path))
+          for (const c of load(this.path)) {
+            // A row this process left pending is in the store once a sleep has given it its seq.
+            this.pended.delete(c.rec.id);
             if (mine.has(c.rec.id) || !this.knownIds.has(c.rec.id)) byId.set(c.rec.id, c);
-          for (const c of this.compiled) byId.set(c.rec.id, c);
+          }
+          for (const c of this.compiled) byId.set(c.rec.id, { ...c, rec: mergeRow(byId.get(c.rec.id)?.rec, c.rec) });
           this.compiled = [...byId.values()];
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
         } catch {}
         this.trimToStoreCap();
-        writeFileAtomic(
+        const resolved = resolveSupersessions(this.compiled.map((c) => c.rec));
+        this.compiled = this.compiled.map((c, i) => (resolved[i] === c.rec ? c : { ...c, rec: resolved[i]! }));
+        writeStore(
           this.path,
-          this.compiled
-            .map((x) => {
-              const r = x.rec;
-              return r.kind === "episode" &&
-                !r.tags &&
-                !r.lane &&
-                !r.ep &&
-                !r.invalidAt &&
-                !r.validUntil &&
-                !r.heat &&
-                !r.sal
-                ? JSON.stringify([r.id, r.text])
-                : JSON.stringify({
-                    ...r,
-                    kind: r.kind === "fact" ? undefined : r.kind,
-                    at: undefined,
-                    invalidAt: undefined,
-                    validUntil: undefined,
-                  });
-            })
-            .join("\n") + (this.compiled.length ? "\n" : ""),
+          this.compiled.filter((c) => !this.pended.has(c.rec.id)).map((c) => c.rec),
         );
-        try {
-          chmodSync(this.path, 0o600);
-        } catch {}
         try {
           unlinkSync(`${this.path}.wal`);
         } catch {}
       });
+      this.unsaved.clear();
       this.rebuildSeen();
       this.dirty = false;
-    } catch {}
+    } catch {
+      this.pend();
+    }
+  }
+
+  /** Gives the rows this process wrote their `seq` (A4 §1); false when the store lock was not free in time. */
+  private sequence(): boolean {
+    const waiting = this.compiled.map((c) => c.rec).filter((r) => this.unsaved.has(r.id) && r.seq === undefined);
+    if (!waiting.length) return true;
+    const first = claimSeqs(this.dir, waiting.length);
+    if (first === undefined) return false;
+    waiting.forEach((r, i) => (r.seq = first + i));
+    return true;
+  }
+
+  /** Leaves the rows no store file holds yet to sleep, in `pending.jsonl`, with the store they belong to. */
+  private pend(): void {
+    const rows = this.compiled.map((c) => c.rec).filter((r) => this.unsaved.has(r.id));
+    const disk = rows.map(toDisk).filter((row): row is DiskRow => !Array.isArray(row));
+    if (!appendPending(this.dir, this.session ?? "", disk)) return;
+    for (const r of rows) {
+      this.pended.add(r.id);
+      this.unsaved.delete(r.id);
+    }
   }
 
   private trimToStoreCap(): void {
@@ -990,7 +1138,7 @@ export class AgentMemory {
     if (!Number.isFinite(cap) || cap <= 0 || this.compiled.length <= cap) return;
     const pinned = (r: MemoryRecord) => (r.tags ?? []).includes("pin") || r.kind === "constraint",
       keep = this.compiled.filter((c) => pinned(c.rec)),
-      rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => a.rec.at - b.rec.at);
+      rest = this.compiled.filter((c) => !pinned(c.rec)).sort((a, b) => compareRecency(a.rec, b.rec));
     this.compiled = keep.concat(rest.slice(Math.max(0, rest.length - Math.max(0, cap - keep.length))));
     this.post = null;
   }
@@ -1036,7 +1184,10 @@ export class AgentMemory {
       }
       return liveCopulaLatest(scored)
         .sort(
-          (a, b) => b.n + rankKindBoost(b.rec) - (a.n + rankKindBoost(a.rec)) || b.rare - a.rare || b.rec.at - a.rec.at,
+          (a, b) =>
+            b.n + rankKindBoost(b.rec) - (a.n + rankKindBoost(a.rec)) ||
+            b.rare - a.rare ||
+            compareRecency(b.rec, a.rec),
         )
         .slice(0, Math.max(0, Math.floor(Number(cap) || 0)))
         .map((x) => x.rec);

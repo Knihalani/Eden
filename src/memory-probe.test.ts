@@ -341,7 +341,7 @@ describe("M36.1 empty cue", () => {
 });
 
 describe("M36.1 unicode path", () => {
-  test.failing("openMemory on a unicode dir persists, reloads, and injects", async () => {
+  test("openMemory on a unicode dir persists, reloads, and injects", async () => {
     const parent = tmpDir("eden-m36-uni-");
     const dir = join(parent, "记忆-café-日本語");
     try {
