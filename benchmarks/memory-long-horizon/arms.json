@@ -1235,22 +1235,20 @@
       "off": {
         "state": "red",
         "failed": [
-          "no-context",
           "no-ledger",
           "quiet"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, and every human Submit appends a turn record to delivery.log (P0.2). Since P0.4 the arm gets no packet, so no-context passes: its one packet was a SessionStart gist of the tool's ERR_REQUIRE_ESM error text, which was stored as a fact; a tool result is an episode now (D12) and makes no such gist"
       },
       "shadow": {
         "state": "red",
         "failed": [
-          "no-context",
           "no-live-ledger",
           "quiet",
           "shadow-ledger",
           "wide-events"
         ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2). Since P0.4 the arm gets no packet, so no-context passes: its one packet was a SessionStart gist of the tool's ERR_REQUIRE_ESM error text, which was stored as a fact; a tool result is an episode now (D12) and makes no such gist"
       }
     },
     {

@@ -102,9 +102,12 @@ export function knownNoteSource(r: ProvenanceNote): MemoryProvenanceSrc | undefi
   }
 }
 
-/** The `[kind · age · src]` tag's source: the known one, else `user`. */
-export function noteSource(r: ProvenanceNote): MemoryProvenanceSrc {
-  return knownNoteSource(r) ?? "user";
+/**
+ * The `[kind · age · src]` tag's source: the known one, else `user`, except for a row whose source shows the user did
+ * not type it (A6 §2.1, §2.6: the agent's or a paste's text is never "user"), which claims none.
+ */
+export function noteSource(r: ProvenanceNote): MemoryProvenanceSrc | undefined {
+  return knownNoteSource(r) ?? (isUntyped(r) ? undefined : "user");
 }
 
 function procedureVerified(r: ProvenanceNote, body: string): boolean {
