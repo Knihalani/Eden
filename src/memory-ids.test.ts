@@ -376,19 +376,21 @@ describe("review round 2", () => {
       ["Use postgres", "Use sqlite instead"],
       ["The chairperson of the committee is Alice.", "The chairperson of the committee is Bob."],
     ]) {
-      const root = tempRoot();
-      const mem = openMemory({ dir: root, session: "s1" });
       const conversation = [
         { role: "user", content: older! },
         { role: "user", content: newer! },
       ];
-      mem.observe(conversation.slice(0, 1));
-      mem.observe(conversation, { reread: true });
-      await sleep({ dir: root, session: "s1", mem });
-      mem.observe(conversation, { reread: true });
-      const live = mem.memories().filter((r) => r.kind === "fact" && !superseded(r));
-      mem.close();
-      expect(live.some((r) => /postgres|Alice/.test(r.text))).toBe(false);
+      for (const reread of [true, false]) {
+        const root = tempRoot();
+        const mem = openMemory({ dir: root, session: "s1" });
+        mem.observe(conversation.slice(0, 1));
+        mem.observe(conversation, { reread });
+        await sleep({ dir: root, session: "s1", mem });
+        mem.observe(conversation, { reread });
+        const live = mem.memories().filter((r) => r.kind === "fact" && !superseded(r));
+        mem.close();
+        expect(live.some((r) => /postgres|Alice/.test(r.text))).toBe(false);
+      }
     }
   });
 
