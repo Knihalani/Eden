@@ -9,7 +9,9 @@
  *
  *   eden memory dump --json   →   {"rows": [{"id", "text"}…], "ledger": [{"window", "k", "prompt_id"?}…]}
  *
- * run in the repo with the hooks' environment. Until a slice provides it, the checks that need it fail. A5 asks
+ * run in the repo with the hooks' environment. P0.3 provides it (`packages/cli/src/memory-dump.ts`) and confirms the
+ * contract: a row may carry more fields (`store`, `kind`, `seq`, `t`, `invalid_at`, `valid_until`), and a row still
+ * waiting in `pending.jsonl` for its seq is listed with `pending: true`; it is a row all the same. A5 asks
  * concurrency arms for ≥ 20 repetitions with 0 failures; CI runs one, `--scale full` runs 20, each in a home of its
  * own and checked on its own.
  */
