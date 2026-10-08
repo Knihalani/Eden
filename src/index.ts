@@ -149,6 +149,23 @@ function isLiveRow(r: MemoryRecord, now = memoryNow()): boolean {
   return !superseded(r) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
 }
 
+/** Whether a row came from text the user typed (A4 §3.0, A6 §2.1); a tool result or the assistant's text did not. */
+function typedByUser(r: Pick<MemoryRecord, "tags">): boolean {
+  return !(r.tags ?? []).some((tag) => tag === "src:tool" || tag === "src:agent");
+}
+
+/** Whether two statements give one subject different values, so the newer supersedes the older (A4 §3.1). */
+function contradicts(a: string, b: string): boolean {
+  try {
+    const one = objectAsserted(a),
+      two = objectAsserted(b);
+    const value = (o: string) => o.replace(/\s+/g, " ").toLowerCase();
+    return !!one && !!two && one.s === two.s && one.p === two.p && value(one.o) !== value(two.o);
+  } catch {
+    return false;
+  }
+}
+
 /** The subject a copula statement gives a value to (`s`, `p`), or undefined. */
 function copulaKey(text: string): string | undefined {
   try {
@@ -532,15 +549,30 @@ function mergeRow(disk: MemoryRecord | undefined, mine: MemoryRecord): MemoryRec
 }
 
 /**
- * Merges rows into a store file under its lock: new ids are appended, known ones merged (`mergeRow`), and every
- * `invalid_by` that names a row now holding a seq becomes that seq. Throws when the lock stays taken.
+ * Settles pending rows into a store file under its lock: new ids are appended, known ones merged (`mergeRow`).
+ * A pending row got its seq late, after rows written later, so time decides between it and a stored row giving
+ * its subject another value (`supersedeByTime`). Every `invalid_by` naming a row with a seq then becomes that seq.
+ * Throws when the lock stays taken.
  */
-function mergeIntoStore(path: string, rows: readonly MemoryRecord[]): void {
+function settleIntoStore(path: string, rows: readonly MemoryRecord[]): void {
   withFileLock(`${path}.lock`, () => {
     const byId = new Map(load(path).map((c) => [c.rec.id, c.rec]));
     for (const row of rows) byId.set(row.id, mergeRow(byId.get(row.id), row));
-    writeStore(path, resolveSupersessions([...byId.values()]));
+    const stored = [...byId.values()];
+    supersedeByTime(stored, new Set(rows.map((row) => row.id)));
+    writeStore(path, resolveSupersessions(stored));
   });
+}
+
+/** Of two live typed rows giving one subject different values, one of them settled, the later supersedes the other. */
+function supersedeByTime(stored: readonly MemoryRecord[], settled: ReadonlySet<string>): void {
+  const live = () => stored.filter((r) => !superseded(r) && typedByUser(r));
+  for (const row of live().filter((r) => settled.has(r.id)))
+    for (const other of live()) {
+      if (other === row || superseded(row) || !contradicts(row.text, other.text)) continue;
+      const [older, newer] = (other.at ?? 0) > (row.at ?? 0) ? [row, other] : [other, row];
+      older.invalidBy = newer.id;
+    }
 }
 
 /** `invalid_by` → `invalid_at` wherever the superseding row has its seq. */
@@ -574,7 +606,7 @@ export function settlePendingRows(root: string): void {
     const name = memorySessionName(store);
     if (store && !name) continue;
     try {
-      mergeIntoStore(
+      settleIntoStore(
         join(root, name ?? "", "memories.jsonl"),
         rows.flatMap((row) => fromDisk(row) ?? []),
       );
@@ -726,6 +758,8 @@ export class AgentMemory {
   private unsaved = new Set<string>();
   /** Rows this process left in `pending.jsonl`: sleep writes them, so this process never does. */
   private pended = new Set<string>();
+  /** Rows this process superseded since it last wrote them. */
+  private changed = new Set<string>();
   private sem?: SemanticStore;
 
   constructor(opts: MemoryOptions = {}) {
@@ -842,25 +876,11 @@ export class AgentMemory {
    * typed supersedes: a tool result or the assistant's text is an episode (A4 §3.0, A6 §2.1).
    */
   private invalidateSameCopula(incoming: MemoryRecord): void {
-    if ((incoming.tags ?? []).some((tag) => tag === "src:tool" || tag === "src:agent")) return;
-    let asserted: ReturnType<typeof objectAsserted>;
-    try {
-      asserted = objectAsserted(incoming.text);
-    } catch {
-      return;
-    }
-    if (!asserted) return;
+    if (!typedByUser(incoming) || !copulaKey(incoming.text)) return;
     for (const c of this.compiled) {
-      if (c.rec.id === incoming.id || superseded(c.rec)) continue;
-      let other: ReturnType<typeof objectAsserted>;
-      try {
-        other = objectAsserted(c.rec.text);
-      } catch {
-        continue;
-      }
-      if (!other || other.s !== asserted.s || other.p !== asserted.p) continue;
-      if (other.o.replace(/\s+/g, " ").toLowerCase() === asserted.o.replace(/\s+/g, " ").toLowerCase()) continue;
+      if (c.rec.id === incoming.id || superseded(c.rec) || !contradicts(c.rec.text, incoming.text)) continue;
       c.rec.invalidBy = incoming.id;
+      this.changed.add(c.rec.id);
       const old = legacySlot(c.rec);
       if (old && legacySlot(incoming)) recordSupersession(this.dir, old, incoming.at);
     }
@@ -911,11 +931,15 @@ export class AgentMemory {
         batchLive = new Map<string, string>(),
         lanes = items.map((it) => encodeLane(it.text)),
         durables = items.map((it, i) => (lanes[i] === "icl" || lanes[i] === "narrative" ? [] : this.durables(it.text))),
-        lastSaid = new Map<string, string>();
-      for (const text of durables.flat()) {
-        const key = copulaKey(text);
-        if (key) lastSaid.set(key, text.toLowerCase());
-      }
+        // Where the user last typed a statement about each subject: the only place a restatement can be.
+        lastTyped = new Map<string, string>();
+      durables.forEach((texts, i) => {
+        if (srcTags(items[i]!).length) return;
+        texts.forEach((text, j) => {
+          const key = copulaKey(text);
+          if (key) lastTyped.set(key, `${i}:${j}`);
+        });
+      });
       for (let i = 0; i < items.length; i++) {
         const it = items[i]!,
           safe = this.persistText(stripMemoryPacket(it.text)),
@@ -943,7 +967,7 @@ export class AgentMemory {
         const before = out.length;
         let coveredChars = 0,
           skippedIdentity = false;
-        for (const text of durables[i]!) {
+        for (const [j, text] of durables[i]!.entries()) {
           try {
             const fact = objectAsserted(text);
             if (fact) {
@@ -970,7 +994,11 @@ export class AgentMemory {
               }
             }
           } catch {}
-          if (this.seenLower.has(text.toLowerCase()) && !this.restated(text, lastSaid)) continue;
+          if (
+            this.seenLower.has(text.toLowerCase()) &&
+            !this.restated(text, lastTyped.get(copulaKey(text) ?? "") === `${i}:${j}`)
+          )
+            continue;
           const pin = ((t) =>
               !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) &&
               (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text),
@@ -1049,14 +1077,13 @@ export class AgentMemory {
   }
 
   /**
-   * A statement whose text only superseded rows hold, said again: a later typed statement re-learns a value
-   * (A4 §3.1). Reading a conversation again replays its old statements too, so only the last statement of its
-   * subject in the batch can be one.
+   * A statement whose text only superseded rows hold, said again: only a later typed statement re-learns a value
+   * (A4 §3.1, D12). Reading a conversation again replays its old statements too, so a restatement must be the last
+   * statement the user typed about its subject in the batch (`lastTyped`); the assistant's or a tool's echo never is.
    */
-  private restated(text: string, lastSaid: ReadonlyMap<string, string>): boolean {
-    const key = copulaKey(text),
-      lower = text.toLowerCase();
-    if (!key || lastSaid.get(key) !== lower) return false;
+  private restated(text: string, lastTyped: boolean): boolean {
+    if (!lastTyped) return false;
+    const lower = text.toLowerCase();
     const holding = this.compiled.filter((c) => c.rec.text.toLowerCase() === lower);
     return holding.length > 0 && holding.every((c) => superseded(c.rec));
   }
@@ -1078,7 +1105,7 @@ export class AgentMemory {
     } catch {
       return;
     }
-    if (!this.sequence()) this.pend();
+    if (!this.sequence()) this.pend(this.rowsIn(this.unsaved));
     try {
       withFileLock(`${this.path}.lock`, () => {
         try {
@@ -1105,11 +1132,18 @@ export class AgentMemory {
         } catch {}
       });
       this.unsaved.clear();
+      // A row waiting in pending.jsonl that this process has since superseded waits again, as it is now.
+      this.pend(this.rowsIn(this.changed).filter((r) => this.pended.has(r.id)));
+      this.changed.clear();
       this.rebuildSeen();
       this.dirty = false;
     } catch {
-      this.pend();
+      this.pend(this.rowsIn(new Set([...this.unsaved, ...this.changed])));
     }
+  }
+
+  private rowsIn(ids: ReadonlySet<string>): MemoryRecord[] {
+    return this.compiled.map((c) => c.rec).filter((r) => ids.has(r.id));
   }
 
   /** Gives the rows this process wrote their `seq` (A4 §1); false when the store lock was not free in time. */
@@ -1122,14 +1156,16 @@ export class AgentMemory {
     return true;
   }
 
-  /** Leaves the rows no store file holds yet to sleep, in `pending.jsonl`, with the store they belong to. */
-  private pend(): void {
-    const rows = this.compiled.map((c) => c.rec).filter((r) => this.unsaved.has(r.id));
+  /**
+   * Leaves rows to sleep, in `pending.jsonl`, with the store they belong to: new rows no store file holds yet, and
+   * rows this process superseded when it could not write them. Sleep merges them into the store (`mergeRow`).
+   */
+  private pend(rows: readonly MemoryRecord[]): void {
     const disk = rows.map(toDisk).filter((row): row is DiskRow => !Array.isArray(row));
-    if (!appendPending(this.dir, this.session ?? "", disk)) return;
+    if (!disk.length || !appendPending(this.dir, this.session ?? "", disk)) return;
     for (const r of rows) {
-      this.pended.add(r.id);
-      this.unsaved.delete(r.id);
+      if (this.unsaved.delete(r.id)) this.pended.add(r.id);
+      this.changed.delete(r.id);
     }
   }
 

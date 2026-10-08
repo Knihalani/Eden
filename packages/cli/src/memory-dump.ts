@@ -53,7 +53,13 @@ export function memoryDump(root: string): MemoryDump {
     const path = join(root, store, "memories.jsonl");
     return existsSync(path) ? storeRows(path).map((r) => dumpRow(r, store)) : [];
   });
-  for (const { store, row } of pendingRows(root)) rows.push({ ...(row as DiskRow), store, pending: true });
+  // A row is listed once: from its store when a sleep has stored it (its taken pending file stays until `done`, or
+  // after a crash), else as its last pending copy (a row superseded after it was left pending is left again).
+  const stored = new Set(rows.map((row) => row.id));
+  const waiting = new Map<string, Record<string, unknown>>();
+  for (const { store, row } of pendingRows(root))
+    if (!stored.has(row.id)) waiting.set(row.id, { ...(row as DiskRow), store, pending: true });
+  rows.push(...waiting.values());
   const windows = join(root, "windows");
   const ledger = subdirs(windows).flatMap((window) =>
     windowRecords(join(windows, window), "delivery.log").map((record) => ({ window, ...record })),
