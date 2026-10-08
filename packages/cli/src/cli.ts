@@ -24,7 +24,7 @@ record the agent
    hookd       Start the recording daemon for Claude Code hooks
    hook        Record a single tool call (called by hooks)
    drain       Flush pending recordings
-   memory      Import history (eden memory import <path>)
+   memory      Import, dump or purge memory (eden memory help)
    mcp         Stdio MCP in front of wrap (empty catalog; dispatch ≤1)
 
 inspect
