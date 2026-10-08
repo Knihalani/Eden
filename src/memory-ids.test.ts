@@ -449,7 +449,7 @@ describe("review round 2", () => {
   });
 });
 
-describe("SessionEnd stays within Claude Code's 1.5 s budget (R0)", () => {
+describe("SessionEnd encodes and does not sleep (Claude Code cancels it at 1.5 s, R0)", () => {
   test("it encodes what the session added and leaves the sleep to the Stop before it", async () => {
     const root = tempRoot();
     const { memoryHookResponse } = await import("../packages/cli/src/memory-hook");
