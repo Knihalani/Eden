@@ -13,7 +13,7 @@
  *   and base guard runs when no `--guard-base` file (an earlier `aa.ts --out`) is given.
  * - Measures:
  *   - `arms`: every arm in every recorded flag state, as four processes: `on` twice, `off`, `shadow`;
- *   - `guards`: `harness/aa.ts`, one process per seed (1, 2, 3; 3 runs each; no soak);
+ *   - `guards`: `harness/aa.ts`, one process per seed and run (seeds 1–3, 3 runs each; no soak);
  *   - `r6`: the R6 replay twice, from `--r6-projects` (a frozen private copy; counts only);
  *   - `worlds`: `replay.ts --world N --out` for each seed in `--worlds`, kept for hand-read packets;
  *   - `soak`: `replay.ts --soak 1000`, base and new at once (the paired protocol);
@@ -93,6 +93,8 @@ interface Done {
 }
 
 const HARNESS = "benchmarks/memory-long-horizon";
+/** A5's guard batch: seeds 1–3, three runs each. Each run is one process, so a run the load spoiled is re-run alone. */
+const GUARD_RUNS = [1, 2, 3].flatMap((seed) => [1, 2, 3].map((run) => [seed, run] as const));
 const PLUGIN = "plugins/eden-memory";
 
 function argument(args: string[], name: string): string | undefined {
@@ -185,12 +187,12 @@ export function parallelTasks(
   if (o.base && !o.guardBase) guardSides.push(["base", o.base]);
   if (has("guards"))
     for (const [side, dir] of guardSides)
-      for (const seed of [1, 2, 3])
+      for (const [seed, run] of GUARD_RUNS)
         tasks.push({
-          name: `guards-${side}-${seed}`,
+          name: `guards-${side}-${seed}-${run}`,
           measure: "guards",
           cwd: dir,
-          weight: 450,
+          weight: 150,
           cmd: [
             "bun",
             `${HARNESS}/harness/aa.ts`,
@@ -199,11 +201,11 @@ export function parallelTasks(
             "--seeds",
             String(seed),
             "--runs",
-            "3",
+            "1",
             "--soak-runs",
             "0",
             "--out",
-            join(o.out, `guards-${side}-${seed}.json`),
+            join(o.out, `guards-${side}-${seed}-${run}.json`),
           ],
         });
   if (has("r6") && o.r6Projects)
@@ -453,12 +455,16 @@ async function serialPhase(o: Options, lines: string[]): Promise<void> {
   }
 }
 
+/** A side's guard run files in pairing order: seed, then run (base run r pairs with new run r of the seed). */
+export function guardFiles(out: string, side: string): string[] {
+  return GUARD_RUNS.map(([seed, run]) => join(out, `guards-${side}-${seed}-${run}.json`));
+}
+
 function guardsSection(o: Options, done: Done[]): string[] {
-  const files = (side: string) =>
-    [1, 2, 3].map((seed) => join(o.out, `guards-${side}-${seed}.json`)).filter(existsSync);
+  const files = (side: string) => guardFiles(o.out, side).filter(existsSync);
   const next = files("new");
   const base = o.guardBase ?? files("base");
-  const lines = ["", "## Guards (`harness/aa.ts`, one process per seed)", ""];
+  const lines = ["", "## Guards (`harness/aa.ts`, one process per seed and run)", ""];
   for (const result of done.filter((d) => d.task.measure === "guards"))
     lines.push(`- ${result.task.name}: exit ${result.exit}, ${result.seconds.toFixed(0)} s`);
   if (next.length && base.length) lines.push("", guardReport(readSide(base.join(",")), readSide(next.join(","))));
