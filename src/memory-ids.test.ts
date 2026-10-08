@@ -4,10 +4,20 @@
  * numbers are not clocks, and ages are real.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { openMemory } from "./index";
+import { openMemory, storeRows, superseded } from "./index";
+import { takePending } from "./memory-ids";
 import { ageInWords } from "./memory-hook-packet";
 import { provenanceBracket } from "./memory-provenance";
 import { SemanticStore } from "./semantic-store";
@@ -239,5 +249,101 @@ describe("P0.2 follow-up: validity against real row times", () => {
     expect(packet).toContain("Redis again");
     expect(packet).not.toContain("We cache sessions in Redis.");
     expect(existsSync(join(root, "validity.jsonl"))).toBe(true);
+  });
+});
+
+describe("A4 §3.1, D12: only a later typed statement re-learns a superseded value (review round 1)", () => {
+  const conversation = [
+    { role: "user", content: "The database is sqlite." },
+    { role: "user", content: "The database is postgres." },
+  ];
+  const liveDatabase = (mem: ReturnType<typeof openMemory>) =>
+    mem
+      .memories()
+      .filter((r) => r.kind === "fact" && /database is/i.test(r.text) && !superseded(r))
+      .map((r) => r.text);
+
+  function afterReading(last?: { role: string; content: string; src?: string }): string[] {
+    const root = tempRoot();
+    const mem = openMemory({ dir: root, session: "s1" });
+    mem.observe(conversation.slice(0, 1));
+    mem.observe(conversation);
+    mem.observe(last ? [...conversation, last] : conversation);
+    const live = liveDatabase(mem);
+    mem.close();
+    return live;
+  }
+
+  test("a plain re-read of the conversation changes nothing", () => {
+    expect(afterReading()).toEqual(["The database is postgres"]);
+  });
+
+  test("the assistant's or a tool's echo of the old value changes nothing", () => {
+    expect(afterReading({ role: "assistant", content: "The README still says this. The database is sqlite." })).toEqual(
+      ["The database is postgres"],
+    );
+    expect(afterReading({ role: "user", content: "# README\n\nThe database is sqlite.", src: "tool" })).toEqual([
+      "The database is postgres",
+    ]);
+  });
+
+  test("the user typing the old value again brings it back", () => {
+    expect(afterReading({ role: "user", content: "Sorry, I was wrong. The database is sqlite." })).toEqual([
+      "The database is sqlite",
+    ]);
+  });
+});
+
+describe("A4 §1: a pending row never beats a later statement (review round 1)", () => {
+  const holdLock = (root: string) =>
+    writeFileSync(join(root, ".lock"), JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() }));
+  const liveAfterSleep = async (root: string) => {
+    const mem = openMemory({ dir: root, session: "s1" });
+    await sleep({ dir: root, session: "s1", mem });
+    mem.close();
+    return storeRows(join(root, "s1", "memories.jsonl"))
+      .filter((r) => /database is/i.test(r.text) && !superseded(r))
+      .map((r) => r.text);
+  };
+
+  test("one process: a row it left pending and then superseded stays superseded", async () => {
+    const root = tempRoot();
+    const mem = openMemory({ dir: root, session: "s1" });
+    mem.remember("The build tag for module alpha is tag-alpha.");
+    holdLock(root);
+    mem.remember("The database is sqlite.");
+    rmSync(join(root, ".lock"));
+    mem.remember("The database is postgres.");
+    mem.close();
+    expect(await liveAfterSleep(root)).toEqual(["The database is postgres."]);
+  });
+
+  test("two processes: a row left pending is older than a statement stored after it", async () => {
+    const root = tempRoot();
+    process.env.EDEN_NOW = String(T0);
+    const first = openMemory({ dir: root, session: "s1" });
+    first.remember("The build tag for module alpha is tag-alpha.");
+    holdLock(root);
+    first.remember("The database is sqlite.");
+    first.close();
+    rmSync(join(root, ".lock"));
+    process.env.EDEN_NOW = String(T0 + 60_000);
+    const second = openMemory({ dir: root, session: "s1" });
+    second.remember("The database is postgres.");
+    second.close();
+    expect(await liveAfterSleep(root)).toEqual(["The database is postgres."]);
+  });
+
+  test("a line appended to pending.jsonl after a sleep took it is kept for the next sleep", () => {
+    const root = tempRoot();
+    mkdirSync(root, { recursive: true });
+    const line = (id: string) => `${JSON.stringify({ store: "s1", row: { id, text: `row ${id}`, t: T0 } })}\n`;
+    writeFileSync(join(root, "pending.jsonl"), line("01J9AAAAAAAAAAAAAAAAAAAAAA"));
+    const taken = takePending(root)!;
+    const [takenFile] = readdirSync(root).filter((name) => name.startsWith("pending.jsonl."));
+    appendFileSync(join(root, takenFile!), line("01J9BBBBBBBBBBBBBBBBBBBBBB"));
+    taken.done();
+    expect(readFileSync(join(root, "pending.jsonl"), "utf8")).toContain("01J9BBBBBBBBBBBBBBBBBBBBBB");
+    expect(readFileSync(join(root, "pending.jsonl"), "utf8")).not.toContain("01J9AAAAAAAAAAAAAAAAAAAAAA");
   });
 });
