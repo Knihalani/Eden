@@ -257,8 +257,9 @@ describe("P0.2 review round 4, closed in P0.3", () => {
     ])
       expect(after("We no longer use Make.", text)).toBe(text);
     expect(after("We no longer use Make.", "Note: Make is our build tool.")).toBe("");
-    // After a comma a capital marks a name, not a clause opening.
+    // After a comma a capital marks a name, not a clause opening, so these clauses name the value.
     expect(after("We no longer use Make.", "The build needs Redis, Make and Docker.")).toBe("");
+    expect(after("We no longer use Make.", "Before the deploy, Make sure the zebra API returns JSON errors.")).toBe("");
   });
 
   test("what is left of a dropped item is not a bare list marker", () => {

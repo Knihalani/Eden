@@ -158,12 +158,9 @@ describe("M7.2 chairperson serial-newer wins", () => {
       expect(pkt).toMatch(/Bob/);
       expect(pkt).not.toMatch(/Alice/);
       // A4 §3.1: a superseded row moves to history (invalid_at), so reading the conversation again never revives it.
-      expect(
-        mem
-          .memories()
-          .filter((r) => /Alice/.test(r.text))
-          .every(superseded),
-      ).toBe(true);
+      const alice = mem.memories().filter((r) => /Alice/.test(r.text));
+      expect(alice.length).toBeGreaterThan(0);
+      expect(alice.every(superseded)).toBe(true);
       expect(factObject(new SemanticStore(dir).get("chairperson of the committee", "is"))).toMatch(/Bob/i);
     });
   });
@@ -178,12 +175,9 @@ describe("M7.2 postgres then sqlite instead", () => {
       const pkt = packetOf(mem.inject([{ role: "user", content: "what database do we use" }]));
       expect(pkt).toMatch(/sqlite/i);
       expect(pkt).not.toMatch(/postgres/i);
-      expect(
-        mem
-          .memories()
-          .filter((r) => /postgres/i.test(r.text))
-          .every(superseded),
-      ).toBe(true);
+      const postgres = mem.memories().filter((r) => /postgres/i.test(r.text));
+      expect(postgres.length).toBeGreaterThan(0);
+      expect(postgres.every(superseded)).toBe(true);
     });
   });
 

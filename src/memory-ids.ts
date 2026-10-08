@@ -150,6 +150,10 @@ function pendingLines(path: string): { store: string; row: DiskRow }[] {
   } catch {
     return [];
   }
+  return parsePending(text);
+}
+
+function parsePending(text: string): { store: string; row: DiskRow }[] {
   return text.split("\n").flatMap((line) => {
     try {
       const { store, row } = JSON.parse(line) as { store?: unknown; row?: DiskRow };
@@ -174,18 +178,20 @@ export function pendingRows(root: string): { store: string; row: DiskRow }[] {
 
 /**
  * Takes the pending rows under the store lock (sleep's wait, not a writer's): renames `pending.jsonl` aside and
- * gives each row without a seq the next one, in the order they were left. Rows of an earlier sleep that did not
- * finish are taken again, with the seqs they already have.
+ * gives each row without a seq the next one, in the order they were left. The rows of an earlier sleep that did not
+ * finish are taken again and get new seqs; one already merged into its store keeps the seq it has there
+ * (`mergeRow`), so a retry leaves only gaps. A writer appends without the lock, so one that opened `pending.jsonl`
+ * before the rename may append to the taken file after it was read: `done` puts such lines back.
  */
 export function takePending(root: string): TakenRows | undefined {
   try {
     return withFileLock(join(root, LOCK), () => {
       if (existsSync(join(root, PENDING))) renameSync(join(root, PENDING), join(root, `${PENDING}.${ulid()}`));
-      const files = readdirSync(root)
+      const taken = readdirSync(root)
         .filter((name) => TAKEN.test(name))
         .sort()
-        .map((name) => join(root, name));
-      const lines = files.flatMap(pendingLines);
+        .map((name) => ({ path: join(root, name), bytes: readFileSync(join(root, name)) }));
+      const lines = taken.flatMap(({ bytes }) => parsePending(bytes.toString("utf8")));
       const unsequenced = lines.filter(({ row }) => seqOf(row.seq) === undefined);
       if (unsequenced.length) {
         let next = advance(root, unsequenced.length);
@@ -196,7 +202,11 @@ export function takePending(root: string): TakenRows | undefined {
       return {
         byStore,
         done: () => {
-          for (const file of files) rmSync(file, { force: true });
+          for (const { path, bytes } of taken) {
+            const late = readFileSync(path).subarray(bytes.length);
+            if (late.length) appendFileSync(join(root, PENDING), late, { mode: 0o600 });
+            rmSync(path, { force: true });
+          }
         },
       };
     });
