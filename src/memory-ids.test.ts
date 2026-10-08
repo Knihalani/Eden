@@ -448,3 +448,18 @@ describe("review round 2", () => {
     expect(() => taken.done()).not.toThrow();
   });
 });
+
+describe("SessionEnd stays within Claude Code's 1.5 s budget (R0)", () => {
+  test("it encodes what the session added and leaves the sleep to the Stop before it", async () => {
+    const root = tempRoot();
+    const { memoryHookResponse } = await import("../packages/cli/src/memory-hook");
+    const end = (hook_event_name: string, last_assistant_message: string) =>
+      memoryHookResponse({ hook_event_name, session_id: "s1", cwd: REPO, transcript_path: "", last_assistant_message });
+    end("Stop", "The build tag for module alpha is tag-alpha.");
+    const gists = () => (existsSync(join(root, "gists.jsonl")) ? readFileSync(join(root, "gists.jsonl"), "utf8") : "");
+    const afterStop = gists();
+    end("SessionEnd", "The build tag for module beta is tag-beta.");
+    expect(storeRows(join(root, "s1", "memories.jsonl")).some((r) => r.text.includes("tag-beta"))).toBe(true);
+    expect(gists()).toBe(afterStop);
+  });
+});

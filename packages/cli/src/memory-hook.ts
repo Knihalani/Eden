@@ -350,16 +350,21 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
             try {
               recordCrons(win, r.session_crons);
             } catch {}
+          // Claude Code cancels SessionEnd hooks after 1.5 s (R0), and the Stop that ended the last turn has just
+          // slept over everything up to it, so SessionEnd only encodes; the next sleep takes what it adds.
+          const ending = event === "SessionEnd";
           try {
             if (prior.length || extra)
               mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, {
                 keepLiveIdentity: true,
                 reread: true,
+                deferSleep: ending,
               });
           } catch {}
-          try {
-            consolidate(mem, { session: resolved.session, mode: "full" });
-          } catch {}
+          if (!ending)
+            try {
+              consolidate(mem, { session: resolved.session, mode: "full" });
+            } catch {}
         }
         return null;
       }
