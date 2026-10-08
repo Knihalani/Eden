@@ -1046,7 +1046,7 @@ describe("M10 leftover identity: tool prose is not a fact", () => {
     });
   });
 
-  test.failing("hook PostToolUse + Stop: how-to at root; no bash-tool-result identity", async () => {
+  test("hook PostToolUse + Stop: how-to at root; no bash-tool-result identity", async () => {
     const dir = tmpDir("eden-m104-noidentity-hook-");
     const session = "s-m104-noid";
     await withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {

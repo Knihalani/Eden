@@ -13,6 +13,15 @@
  * 4. every span of ≥ 200 characters that the prompt shares with a recent tool result (A6: the last 10 tool calls),
  *    wherever it sits: a whole paste, or part of a line or paragraph wrapped in the user's own words;
  * 5. runs of ≥ 3 lines without sentence-final punctuation (log lines, stack traces, lists of fragments).
+ *
+ * `splitPastes` also returns what it removed: those spans are `src=paste` episodes. `authoredTexts` reads a
+ * transcript entry by source: the user's own text, its pasted spans, a tool result, or the agent's text (assistant
+ * lines, compaction summaries, a subagent's lines). Host text (meta lines, command and reminder wrappers,
+ * non-human submits) is none of these, and is not memory.
+ *
+ * `withoutInstructions` keeps text the user did not type from instructing the model or speaking for the user once
+ * it is a memory (A6 §2.3, §2.6): it drops each sentence, or clause, that is an instruction (an imperative, a
+ * "you should …", "always …" or "never …", a download piped to a shell) or that claims what the user wants or said.
  */
 
 const WRAPPERS = [
@@ -28,7 +37,7 @@ const WRAPPERS = [
 const INTERRUPTED = /^\[Request interrupted by user/;
 const PASTE = /<pasted_content id=("?)([^"\s>]*)\1>[\s\S]*?(?:<\/pasted_content id=\1\2\1>\n?|$)/g;
 const FENCE = /^\s*(`{3,}|~{3,})/;
-const QUOTE = /^\s*>/;
+const QUOTE = /^\s*>\s?/;
 const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 /** A6 §2.1: a span this long that a recent tool result also holds was pasted from it. */
 const TOOL_SPAN_CHARS = 200;
@@ -111,17 +120,43 @@ function typedText(text: string | undefined): string | undefined {
 
 /** The user's own text of a prompt: D12's pasted spans removed, blank runs collapsed, ends trimmed. */
 export function stripPastes(text: string, recentToolResults: readonly string[] = []): string {
-  const lines = withoutFences(text.replace(PASTE, "").split("\n")).filter((line) => !QUOTE.test(line));
-  const own = withoutToolSpans(lines.join("\n"), recentToolResults);
-  return withoutUnpunctuatedRuns(own.split("\n"))
-    .join("\n")
-    .replace(/\n\s*\n(\s*\n)+/g, "\n\n")
-    .trim();
+  return splitPastes(text, recentToolResults).own;
 }
 
-function withoutFences(lines: readonly string[]): string[] {
+/** A prompt split by D12: the user's own text (`stripPastes`) and each span it removed, trimmed and non-empty. */
+export function splitPastes(
+  text: string,
+  recentToolResults: readonly string[] = [],
+): { own: string; pasted: string[] } {
+  const pasted: string[] = [];
+  const unmarked = text.replace(PASTE, (span) => {
+    pasted.push(pasteBody(span));
+    return "";
+  });
+  const lines: string[] = [];
+  for (const line of withoutFences(unmarked.split("\n"), pasted)) {
+    if (QUOTE.test(line)) pasted.push(line.replace(QUOTE, ""));
+    else lines.push(line);
+  }
+  const own = withoutToolSpans(lines.join("\n"), recentToolResults, pasted);
+  return {
+    own: withoutUnpunctuatedRuns(own.split("\n"), pasted)
+      .join("\n")
+      .replace(/\n\s*\n(\s*\n)+/g, "\n\n")
+      .trim(),
+    pasted: pasted.map((span) => span.trim()).filter(Boolean),
+  };
+}
+
+/** A marked paste without its markers. */
+function pasteBody(span: string): string {
+  return span.replace(/^<pasted_content[^>]*>/, "").replace(/<\/pasted_content[^>]*>\n?$/, "");
+}
+
+function withoutFences(lines: readonly string[], removed: string[]): string[] {
   const out: string[] = [];
   let open: string | undefined;
+  let block: string[] = [];
   for (const line of lines) {
     const marker = FENCE.exec(line)?.[1];
     if (open === undefined) {
@@ -129,16 +164,21 @@ function withoutFences(lines: readonly string[]): string[] {
       else out.push(line);
     } else if (marker && marker[0] === open[0] && marker.length >= open.length && !line.trim().slice(marker.length)) {
       open = undefined;
+      removed.push(block.join("\n"));
+      block = [];
+    } else {
+      block.push(line);
     }
   }
+  if (block.length) removed.push(block.join("\n"));
   return out;
 }
 
 /** Removes every span of ≥ 200 characters that `text` shares with one of `results`. */
-function withoutToolSpans(text: string, results: readonly string[]): string {
+function withoutToolSpans(text: string, results: readonly string[], removed: string[]): string {
   if (text.length < TOOL_SPAN_CHARS) return text;
   const spans = results.filter((result) => result.length >= TOOL_SPAN_CHARS).flatMap((result) => shared(text, result));
-  return cut(text, spans);
+  return cut(text, spans, removed);
 }
 
 /**
@@ -174,23 +214,25 @@ function shared(text: string, result: string): [number, number][] {
 }
 
 /** `text` without `spans`: a span across lines leaves a line break, one inside a line leaves nothing. */
-function cut(text: string, spans: readonly [number, number][]): string {
+function cut(text: string, spans: readonly [number, number][], removed: string[]): string {
   let out = "";
   let at = 0;
   for (const [start, end] of [...spans].sort((a, b) => a[0] - b[0])) {
     if (end <= at) continue;
     const from = Math.max(start, at);
+    removed.push(text.slice(from, end));
     out += text.slice(at, from) + (text.slice(from, end).includes("\n") ? "\n" : "");
     at = end;
   }
   return out + text.slice(at);
 }
 
-function withoutUnpunctuatedRuns(lines: readonly string[]): string[] {
+function withoutUnpunctuatedRuns(lines: readonly string[], removed: string[]): string[] {
   const out: string[] = [];
   let run: string[] = [];
   const flush = () => {
     if (run.length < UNPUNCTUATED_RUN) out.push(...run);
+    else removed.push(run.join("\n"));
     run = [];
   };
   for (const line of lines) {
@@ -203,4 +245,75 @@ function withoutUnpunctuatedRuns(lines: readonly string[]): string[] {
   }
   flush();
   return out;
+}
+
+/** Who wrote a text (A6 §2.1): what the user typed, what they pasted, a tool's result, or the agent. */
+export type TextSource = "user" | "paste" | "tool" | "agent";
+
+export interface Authored {
+  src: TextSource;
+  text: string;
+}
+
+/**
+ * A transcript entry's texts by source (D12). `recentToolResults` are the tool results before it (A6: the last 10),
+ * for the 200-character paste rule. Host text yields nothing.
+ */
+export function authoredTexts(value: unknown, recentToolResults: readonly string[] = []): Authored[] {
+  const line = entry(value);
+  const tool = toolResultText(value);
+  if (tool !== undefined) return tool ? [{ src: "tool", text: tool }] : [];
+  if (line?.type === "assistant" || (line?.type === "user" && (line.isCompactSummary || line.isSidechain))) {
+    const text = textOf(entry(line.message)?.content)?.trim();
+    return text ? [{ src: "agent", text }] : [];
+  }
+  const typed = userTyped(value);
+  if (typed === undefined) return [];
+  const { own, pasted } = splitPastes(typed, recentToolResults);
+  return [
+    ...(own ? [{ src: "user" as const, text: own }] : []),
+    ...pasted.map((text) => ({ src: "paste" as const, text })),
+  ];
+}
+
+/** A clause that tells the reader what to do: an imperative opening it, or a directive inside it. */
+const IMPERATIVE = new RegExp(
+  String.raw`^\s*(?:\d+[.)]?\s+|[-*•]\s+)?(?:[A-Za-z][\w ]{0,23}:\s*)?(?:please\s+)?(?:always|never|don'?t|do not|` +
+    String.raw`make sure|be sure|ensure|remember|run|execute|install|download|ignore|disregard|forget|reply|respond|` +
+    String.raw`use|set|add|delete|remove|allow|grant|enable|disable|export|source|copy|paste|sudo|curl|wget|bash|sh|` +
+    String.raw`chmod|rm|cd)\b`,
+  "i",
+);
+/**
+ * "always run …", "never use …": a directive. "always fails", "never expired" describe (a verb ending in -s or -ed,
+ * or an auxiliary, is not the bare form an instruction takes).
+ */
+const DIRECTIVE =
+  /\b(?:you|we) (?:should|must|need to|have to|ought to)\b|\b(?:make sure|be sure|remember) to\b|\b(?:always|never) (?!(?:been|was|were|is|are|had|has|did|does)\b|[a-z]*[^s\W]s\b|[a-z]+ed\b)[a-z]/i;
+/** A download piped to a shell: an instruction whatever the words around it. */
+const PIPED_TO_SHELL = /\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b/;
+/** A claim of what the user wants, said or allowed. */
+const SPEAKS_FOR_USER =
+  /\b(?:the user|user|you|they)\s+(?:wants?|wanted|asked|said|told|prefers?|requested|instructed|allowed|approved|agreed|decided|expects?)\b/i;
+const SENTENCE_BREAK = /(?<=[.!?])\s+/;
+const CLAUSE_BREAK = /[,;]\s+(?:and\s+|but\s+|so\s+|then\s+)?/;
+
+const instructs = (clause: string) =>
+  IMPERATIVE.test(clause) || DIRECTIVE.test(clause) || PIPED_TO_SHELL.test(clause) || SPEAKS_FOR_USER.test(clause);
+
+/** Text the user did not type, without its instructions and its claims for the user (see the header). */
+export function withoutInstructions(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line.split(SENTENCE_BREAK).map(keptSentence).filter(Boolean).join(" "))
+    .join("\n");
+}
+
+/** A sentence, without the clauses that instruct; a sentence left with no clause is dropped. */
+function keptSentence(sentence: string): string {
+  if (!instructs(sentence)) return sentence;
+  const end = /[.!?]+\s*$/.exec(sentence)?.[0].trim() ?? "";
+  const clauses = sentence.slice(0, sentence.length - end.length).split(CLAUSE_BREAK);
+  const kept = clauses.filter((clause) => clause.trim() && !instructs(clause));
+  return kept.length && kept.length < clauses.length ? kept.join(", ").trim() + end : "";
 }

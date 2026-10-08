@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { admitNotes, admitsEpisode, identifierTokens, isUntyped } from "./memory-gate";
+import { admitNotes, admitsEpisode, identifierTokens } from "./memory-gate";
+import { isUntyped } from "./memory-provenance";
 
 const tool = (text: string) => ({ id: text, text, tags: ["src:tool"] });
 const said = (text: string) => ({ id: text, text, tags: ["src:agent"] });
