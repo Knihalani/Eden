@@ -85,7 +85,8 @@ function purgeTree(root: string, pattern: RegExp): Purged {
     if (path.endsWith(".lock") || SQLITE_COMPANION.test(path)) continue;
     const bytes = readFileSync(path);
     let matches = 0;
-    if (bytes.subarray(0, SQLITE_HEADER.length).toString("latin1") === SQLITE_HEADER) matches = purgeSqlite(path, pattern);
+    if (bytes.subarray(0, SQLITE_HEADER.length).toString("latin1") === SQLITE_HEADER)
+      matches = purgeSqlite(path, pattern);
     else if (bytes.includes(0)) purged.skipped.push(path);
     else matches = withFileLock(`${path}.lock`, () => purgeText(path, pattern));
     purged.matches += matches;
