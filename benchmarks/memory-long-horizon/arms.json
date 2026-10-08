@@ -324,10 +324,7 @@
       "a5": "web Clerk + postgres; cli none + sqlite at 4752 and 15840 turns, junk on disk",
       "on": {
         "state": "green",
-        "why": "passes at CI scale (48 junk turns): the gist store carries both folders' statements, each naming its folder. junk-on-disk is unstable: it failed in 3 of 28 runs of the first study and its hunt, and 6 of 20 in the second (47 of 48 junk turns on disk); in a captured failure the lost row was one of three junk prompts of a session whose pid-derived ids shared one prefix (#98, P0.3)",
-        "unstable": [
-          "junk-on-disk"
-        ]
+        "why": "passes at CI scale (48 junk turns): the gist store carries both folders' statements, each naming its folder. junk-on-disk is a plain check since P0.3: its flakes were rows lost to pid-derived ids (#98); with ULIDs it held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175)"
       },
       "off": {
         "state": "red",
@@ -562,11 +559,7 @@
         "failed": [
           "a-not-rearmed"
         ],
-        "why": "after a summary that keeps 'The database is postgres', the fact is delivered again. b-rearmed is unstable: rule B was not delivered after the summary that dropped it ('none') in 1 of 8 Linux CI runs since the arms landed (37285846809) and in 2 of 92 local macOS runs after P0.0c (0 of 40, then 2 of 52 in PR #112's review); it held in both P0.0c stability studies. A row lost to today's pid-derived ids (#98, P0.3) would explain it, but no failing run kept its store to confirm it. delivered-before is unstable since P0.2's ledger: rule B was not delivered at its first cue after the blank summary in 1 of 4 full `--flags on` runs on P0.2's round-4 code (a reviewer's run on 113947e54), and in 0 of 40 isolated runs (0 of 20 on be9a31c5a). Suspected, not confirmed: the rule's row lost to #98's ids while a gist carrying the rule was delivered at the fact's cue, which the ledger then holds back at the rule's cue",
-        "unstable": [
-          "b-rearmed",
-          "delivered-before"
-        ]
+        "why": "after a summary that keeps 'The database is postgres', the fact is delivered again. b-rearmed and delivered-before are plain checks since P0.3: both held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175), with ids that no longer collide (#98)"
       },
       "off": {
         "state": "red",
@@ -834,11 +827,7 @@
         "failed": [
           "usage-logged"
         ],
-        "why": "no wide events exist to hold message.usage. reeligible-401 is unstable: in 2 of 20 runs of the second stability study the pin was not delivered at the fresh cue (distance 412,836 and 412,857 bytes, inside the window), as today's plugin lost its row over the ~20 growth turns (#98, P0.3). refractory-399 passes since P0.2's ledger holds a delivered rule for 400 KB (A4 §4; 4 of 4 full `--flags on` runs on its round-4 code); before, it flipped (3 of 25 isolated runs on 172b490d3 passed by accident, the pin missing from the 390 KB packet), so it stays unstable until about 20 runs show it holds",
-        "unstable": [
-          "reeligible-401",
-          "refractory-399"
-        ]
+        "why": "no wide events exist to hold message.usage. reeligible-401 and refractory-399 are plain checks since P0.3: both held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175); their flakes were the pin's row lost to pid-derived ids (#98)"
       },
       "off": {
         "state": "red",
