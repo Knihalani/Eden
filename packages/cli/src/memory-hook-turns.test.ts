@@ -4,7 +4,7 @@
  * what the last turns already say (D26).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "./memory-hook";
@@ -156,19 +156,20 @@ describe("A4 §4: the human-turn counter", () => {
 });
 
 describe("D14, D28: the packet's wording and shape", () => {
-  // No writer records a row's source (`src`) before P0.4, so no bullet may claim one (A6 §2.1): no "you said",
-  // no "Rule you set".
-  test("a packet is worded as project information, with no tag and no authority it cannot show", () => {
+  // A bullet claims the source its row records (A6 §2.1): since P0.4 the user's own rows record `src:user`.
+  test("a packet is worded as project information, with no tag and the authority its row shows", () => {
     submit("Kai's timezone is Pacific", { prompt_id: "p1" });
     const packet = submit("What time should I ping Kai about the release?", { prompt_id: "p2" }) ?? "";
     expect(packet.startsWith(`${HEADER}\n- `)).toBe(true);
-    expect(packet).toMatch(/^- Kai's timezone is Pacific/m);
+    expect(packet).toMatch(/^- Kai's timezone is Pacific \(you said, just now\)$/m);
     expect(packet).not.toMatch(/\[(?:fact|episode|rule|gist|procedure)\b/);
-    expect(packet).not.toMatch(/you said|you set/i);
   });
 
   test("a rule without a source is a plain bullet at SessionStart", () => {
-    submit("Never commit .env or credentials.json", { prompt_id: "p1" });
+    // A row written before P0.4 records no source.
+    const legacy = { id: "r1", text: "Never commit .env or credentials.json", kind: "constraint", tags: ["pin"] };
+    mkdirSync(join(dir, "memory", SESSION), { recursive: true });
+    writeFileSync(join(dir, "memory", SESSION, "memories.jsonl"), JSON.stringify({ ...legacy, t: Date.now() }) + "\n");
     const out = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "startup" });
     const packet = (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
     expect(packet).toStartWith(HEADER);
