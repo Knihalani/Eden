@@ -13,7 +13,7 @@
  * BM25F and τ_repo, which A7 also asks of an episode, arrive with P4.2 and P4.3. Rows the user typed, rows of
  * unknown source and gists keep today's lexical admission.
  */
-import { stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { isUntyped, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { contentWords as words } from "./memory-transcript";
 
 const IDENTIFIER_SHAPES = [
@@ -55,11 +55,6 @@ function contentWords(text: string): Set<string> {
 function shares(a: Set<string>, b: Set<string>): boolean {
   for (const token of a) if (b.has(token)) return true;
   return false;
-}
-
-/** Whether a row's source shows the user did not type it: an episode by A4 §3.0. */
-export function isUntyped(note: ProvenanceNote): boolean {
-  return (note.tags ?? []).some((tag) => tag === "src:tool" || tag === "src:agent");
 }
 
 /** The cue parts P0.2 has: the prompt, the previous typed prompt and the agent's last message. */

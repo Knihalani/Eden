@@ -349,7 +349,8 @@ describe("M36.1 unicode path", () => {
         { EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_MEMORY_CAP: undefined },
         async () => {
           const mem = openMemory({ dir });
-          mem.observe([{ role: "user", content: "The unicode catalog token M36UNI is durable." }]);
+          // Not "catalog token … is durable": D13's keyword rule redacts the word after "token … is" (P0.4).
+          mem.observe([{ role: "user", content: "The unicode catalog entry M36UNI is durable." }]);
           mem.close();
           const reloaded = openMemory({ dir });
           expect(reloaded.memories().some((r) => r.text.includes("M36UNI"))).toBe(true);

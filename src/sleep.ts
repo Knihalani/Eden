@@ -17,6 +17,7 @@ import { GistStore, scrubTombstonedIdentity } from "./gist-store";
 import { promoteNarrativeGists } from "./gist-retrieve";
 import { HowToStore, mergeSharedPrefixHowTo, type HowTo, type HowToStep } from "./howto-store";
 import { memoryConsent } from "./memory-consent";
+import { isUntyped } from "./memory-provenance";
 import { scrubMemoryText } from "./memory-scrub";
 import { readInvalidations, validText } from "./memory-validity";
 import { parseRuleTime, writeAliasTags, type MissClass } from "./memory-sota";
@@ -184,8 +185,8 @@ function recLane(r: { lane?: unknown }): string | undefined {
 
 /**
  * Identity extract (assemble extractCandidates) at the row's time `at`. ICL / tool prose / narrative lanes yield
- * nothing, and are skipped before any text test: a narrative row can be tens of KB. Fail-open: a bad episode returns
- * [] so consolidate continues.
+ * nothing, and are skipped before any text test: a narrative row can be tens of KB. So does a row the user did not
+ * type (A4 §3.0: an episode, never a slot fact). Fail-open: a bad episode returns [] so consolidate continues.
  */
 function extractIdentity(r: {
   id?: string;
@@ -197,7 +198,8 @@ function extractIdentity(r: {
 }): Triple[] {
   try {
     const text = String(r?.text ?? "");
-    if (!text || blockedKindOrLane(r) || isIcl(text) || isToolProse(text) || isRecsysShot(text)) return [];
+    if (!text || isUntyped(r) || blockedKindOrLane(r) || isIcl(text) || isToolProse(text) || isRecsysShot(text))
+      return [];
     const tags = Array.isArray(r.tags) ? r.tags : [];
     if (tags.some((t) => String(t).toLowerCase() === "recsys")) return [];
     const c: CandidateText = { text, t: Number.isFinite(r.at) ? Number(r.at) : 0 };
@@ -781,7 +783,7 @@ function applyMissTaxonomy(mem: SleepMem, recs: SleepRecord[]): void {
       const miss = String(row.miss ?? "");
       if (miss === "Maintain") continue;
       const rec = byId.get(String(row.id ?? ""));
-      if (!rec) continue;
+      if (!rec || isUntyped(rec)) continue;
       if (miss === "Store" || miss === "Encode") {
         let facts: Triple[] = [];
         try {

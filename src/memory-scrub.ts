@@ -1,9 +1,10 @@
 /**
- * Memory-only identifier scrub. Secrets stay in `@eden/ir` `redact()` —
- * this module does not eat ordinary words like "session" in chat, and does
- * not change the IR redactor.
+ * What memory stores of a text: D13's secret gate (`sanitizeForStore`), then identifiers scrubbed. Every store
+ * writer passes its text here, so it is the one gate A6 §2.2 asks for. It does not eat ordinary words like
+ * "session" in chat, and does not change the IR redactor.
  */
 import { createHash } from "node:crypto";
+import { sanitizeForStore } from "./memory-secrets";
 
 export type MemoryScrubCtx = { session?: string; cwd?: string };
 
@@ -49,13 +50,13 @@ function pathNeedles(p: string): string[] {
 }
 
 /**
- * Strip identifiers from stored memory text.
- * Emails → `[email]`. Provided session / cwd / `process.cwd()` → placeholders.
+ * Memory text as a store may keep it: secrets redacted (D13), then identifiers stripped. Emails → `[email]`.
+ * Provided session / cwd / `process.cwd()` → placeholders.
  */
 export function scrubMemoryText(text: string, ctx?: MemoryScrubCtx): string {
   let s = String(text ?? "");
   if (!s) return s;
-  s = s.replace(EMAIL_RE, "[email]");
+  s = sanitizeForStore(s).replace(EMAIL_RE, "[email]");
   const session = typeof ctx?.session === "string" ? ctx.session.trim() : "";
   if (session.length >= MIN_SESSION) s = cut(s, session, "[session]");
   const paths: string[] = [];

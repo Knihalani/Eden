@@ -11,6 +11,8 @@ export function memoryImportHelp(): string {
   return `usage: eden memory import <path>
        eden memory import --dry-run <path>
        eden memory dump [--json]
+       eden memory purge <regex>
+       eden memory forget --secret <regex>
 
 Read a JSONL or JSON transcript file or directory into AgentMemory.
 Local only. Dry-run counts records and does not write.
@@ -388,6 +390,10 @@ function flagPath(args: string[]): string | undefined {
 }
 
 export async function memoryCli(args: string[]): Promise<number> {
+  if (args[0] === "purge" || args[0] === "forget") {
+    const { memoryPurgeCli } = await import("./memory-purge");
+    return memoryPurgeCli(args);
+  }
   if (args[0] === "dump") {
     const { memoryDumpCli } = await import("./memory-dump");
     return memoryDumpCli(args.slice(1));

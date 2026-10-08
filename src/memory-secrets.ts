@@ -1,6 +1,7 @@
 /**
- * D13's secret gate, as A6 §2.2 details it: which rules a text hits. Nothing here redacts or writes; callers
- * decide (`eden eval build-negatives` drops the prompt; P0.4's `sanitizeForStore` will redact).
+ * D13's secret gate, as A6 §2.2 details it: which rules a text hits (`secretHits`; `eden eval build-negatives`
+ * drops such a prompt), and the text every memory writer stores (`sanitizeForStore`: each secret replaced by
+ * `[REDACTED]`, so a row keeps what the value is, never the value).
  *
  * The rules:
  * - (a) the vendored gitleaks default rules (`vendor/gitleaks/`, v8.30.1), applied as gitleaks applies them to
@@ -14,12 +15,14 @@
  * - (a′) provider shapes gitleaks lacks or gates on context: `cfat_` tokens (R9 §R5.2, R3 E12); OpenAI project
  *   keys without the `T3BlbkFJ` marker; Mailgun `key-` and Telegram bot tokens without the provider's name nearby;
  *   AWS key ids below gitleaks' entropy floor. Each makes the gate stricter, never looser;
- * - (b) D13's keyword rule, whatever the value's entropy;
+ * - (b) D13's keyword rule, whatever the value's entropy, with `is` read as a word ("secrets in this" assigns
+ *   nothing) and an already redacted value left alone;
  * - (c) URL userinfo, `scheme://user:pass@`;
  * - (d) entropy only with a keyword: a whitespace-delimited token of ≥ 32 characters that mixes letters and
  *   digits and holds no `/`, `.` or `-`, with a secret keyword within 40 characters. ULIDs, UUIDs, `sha512-`
  *   integrity strings and paths never qualify on their own.
  */
+import { redact, REDACTED } from "../packages/ir/src/redact";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
 
 interface Allowlist {
@@ -53,25 +56,33 @@ interface CompiledAllowlist {
   hasPaths: boolean;
 }
 
+/** Where a secret sits in a text: `[start, end)`. */
+type Span = [number, number];
+
 export interface SecretRule {
   id: string;
   /** Lower-case words of which at least one must occur in the text for the rule to run; none: always runs. */
   keywords: string[];
-  hits(text: string): boolean;
+  /** Where the rule's secrets sit in `text`; none when it finds none. */
+  spans(text: string): Span[];
 }
 
-/** D13's keyword rule, verbatim, and case-insensitive: env lines spell it `PASSWORD=`. */
+/**
+ * D13's keyword rule, case-insensitive (env lines spell it `PASSWORD=`), with `is` read as a word and the value in
+ * group 1. A value already redacted is no secret.
+ */
 const KEYWORD_RULE =
-  /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(is|=|:)\s*\S{6,}/i;
+  /(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])(\S{6,})/dgi;
 const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)/i;
-const URL_USERINFO = /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s/@]+@/i;
+/** URL userinfo, with the password in group 1: the user and host stay, as they say where the secret is for. */
+const URL_USERINFO = /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@/dgi;
 /** (a′): the bare shapes, with no keyword, marker or entropy condition. */
 const PROVIDER_SHAPES: [string, RegExp][] = [
-  ["eden-cfat", /\bcfat_[A-Za-z0-9_-]{20,}/],
-  ["eden-openai", /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/],
-  ["eden-mailgun", /\bkey-[0-9a-f]{32}\b/],
-  ["eden-telegram", /\b\d{8,10}:AA[A-Za-z0-9_-]{32,}/],
-  ["eden-aws-key-id", /\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/],
+  ["eden-cfat", /\bcfat_[A-Za-z0-9_-]{20,}/g],
+  ["eden-openai", /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/g],
+  ["eden-mailgun", /\bkey-[0-9a-f]{32}\b/g],
+  ["eden-telegram", /\b\d{8,10}:AA[A-Za-z0-9_-]{32,}/g],
+  ["eden-aws-key-id", /\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/g],
 ];
 const ENTROPY_TOKEN = /\S{32,}/g;
 /** How far from a long token rule (d) looks for a secret keyword. */
@@ -205,52 +216,73 @@ function lineAt(text: string, index: number): string {
   return text.slice(start, end < 0 ? text.length : end);
 }
 
+/**
+ * A gitleaks rule. As gitleaks does, each match (its ends' line breaks trimmed) is matched again on its own to find
+ * the secret: the rule's group, else the first non-empty group, else the whole match. Compiled on first use, since
+ * most rules never run (their keywords are absent).
+ */
 function gitleaksRule(rule: GitleaksRule & { regex: string }, global: CompiledAllowlist): SecretRule {
-  const regex = goRegex(rule.regex);
-  const scan = new RegExp(regex.source, regex.flags + "g");
-  const own = (rule.allowlists ?? []).map(compileAllowlist);
-  /** gitleaks: the rule's group, else the first non-empty group, else the whole match. */
-  const secretOf = (match: string): string | undefined => {
-    const groups = regex.exec(match);
-    if (!groups || groups.length < 2) return match;
-    if (rule.secretGroup) return groups[rule.secretGroup];
-    return groups.slice(1).find((group) => group) ?? match;
+  let compiled: { regex: RegExp; scan: RegExp; own: CompiledAllowlist[] } | undefined;
+  const compile = () => {
+    const regex = goRegex(rule.regex);
+    return {
+      regex: new RegExp(regex.source, regex.flags + "d"),
+      scan: new RegExp(regex.source, regex.flags + "g"),
+      own: (rule.allowlists ?? []).map(compileAllowlist),
+    };
+  };
+  /** The secret's span within `match`; undefined when the rule's group did not take part. */
+  const secretIn = (regex: RegExp, match: string): Span | undefined => {
+    const indices = regex.exec(match)?.indices;
+    if (!indices || indices.length < 2) return [0, match.length];
+    if (rule.secretGroup) return indices[rule.secretGroup];
+    return indices.slice(1).find((span) => span && span[1] > span[0]) ?? [0, match.length];
   };
   return {
     id: rule.id,
     keywords: (rule.keywords ?? []).map((word) => word.toLowerCase()),
-    hits(text) {
+    spans(text) {
+      const { regex, scan, own } = (compiled ??= compile());
+      const out: Span[] = [];
       for (const found of text.matchAll(scan)) {
         const match = found[0].replace(/^\n+|\n+$/g, "");
-        const secret = secretOf(match);
-        if (secret === undefined) continue;
+        const at = found.index + found[0].indexOf(match);
+        const span = secretIn(regex, match);
+        if (!span) continue;
+        const secret = match.slice(span[0], span[1]);
         if (rule.entropy && shannon(secret) <= rule.entropy) continue;
         const finding = { match, secret, line: lineAt(text, found.index) };
         if (allows(global, finding) || own.some((list) => allows(list, finding))) continue;
-        return true;
+        out.push([at + span[0], at + span[1]]);
       }
-      return false;
+      return out;
     },
   };
 }
 
-/** Rule (d): a long letters-and-digits token with a secret keyword nearby. */
-function entropyWithKeyword(text: string): boolean {
+/** Rule (d): long letters-and-digits tokens with a secret keyword nearby. */
+function entropyWithKeyword(text: string): Span[] {
+  const out: Span[] = [];
   for (const found of text.matchAll(ENTROPY_TOKEN)) {
     const token = found[0];
     if (/[/.-]/.test(token) || !/[A-Za-z]/.test(token) || !/\d/.test(token)) continue;
     const before = text.slice(Math.max(0, found.index - KEYWORD_REACH), found.index);
     const after = text.slice(found.index + token.length, found.index + token.length + KEYWORD_REACH);
-    if (SECRET_WORD.test(before) || SECRET_WORD.test(after)) return true;
+    if (SECRET_WORD.test(before) || SECRET_WORD.test(after)) out.push([found.index, found.index + token.length]);
   }
-  return false;
+  return out;
 }
 
-const plain = (id: string, test: (text: string) => boolean): SecretRule => ({ id, keywords: [], hits: test });
+/** Every match of a global regex: group 1 when the regex has one, else the whole match. */
+function matchSpans(regex: RegExp, text: string): Span[] {
+  return [...text.matchAll(regex)].map((found) => found.indices?.[1] ?? [found.index, found.index + found[0].length]);
+}
+
+const plain = (id: string, spans: (text: string) => Span[]): SecretRule => ({ id, keywords: [], spans });
 
 let compiled: SecretRule[] | undefined;
 
-/** Every rule: gitleaks' (those with a regex) and Eden's (`eden-…`). Compiled once. */
+/** Every rule: gitleaks' (those with a regex) and Eden's (`eden-…`). */
 export function secretRules(): SecretRule[] {
   if (compiled) return compiled;
   const config = gitleaks as GitleaksConfig;
@@ -258,25 +290,48 @@ export function secretRules(): SecretRule[] {
   const withRegex = config.rules.filter((rule): rule is GitleaksRule & { regex: string } => Boolean(rule.regex));
   compiled = [
     ...withRegex.map((rule) => gitleaksRule(rule, global)),
-    ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, (text) => shape.test(text))),
-    plain("eden-keyword", (text) => KEYWORD_RULE.test(text)),
-    plain("eden-url-userinfo", (text) => URL_USERINFO.test(text)),
+    ...PROVIDER_SHAPES.map(([id, shape]) => plain(id, (text) => matchSpans(shape, text))),
+    plain("eden-keyword", (text) => matchSpans(KEYWORD_RULE, text)),
+    plain("eden-url-userinfo", (text) => matchSpans(URL_USERINFO, text)),
     plain("eden-entropy-keyword", entropyWithKeyword),
   ];
   return compiled;
 }
 
-/** The ids of the rules `text` hits, sorted; empty when it carries no secret D13 knows. */
-export function secretHits(text: string): string[] {
+/** The rules whose keywords `text` holds, each with the spans it finds there. */
+function findings(text: string): { id: string; spans: Span[] }[] {
   const lower = text.toLowerCase();
   return secretRules()
     .filter((rule) => !rule.keywords.length || rule.keywords.some((word) => lower.includes(word)))
-    .filter((rule) => rule.hits(text))
-    .map((rule) => rule.id)
+    .map((rule) => ({ id: rule.id, spans: rule.spans(text) }))
+    .filter((found) => found.spans.length > 0);
+}
+
+/** The ids of the rules `text` hits, sorted; empty when it carries no secret D13 knows. */
+export function secretHits(text: string): string[] {
+  return findings(text)
+    .map((found) => found.id)
     .sort();
 }
 
-/** D13's one gate (A6 §2.2): every writer stores `sanitizeForStore(text)`. Not built yet (P0.4). */
+/**
+ * D13's one gate (A6 §2.2, A4 §3.0): the text a memory writer may store. Every secret a rule finds is replaced by
+ * `[REDACTED]` (overlapping finds as one), so "the staging password is [REDACTED]" keeps what the value is for and
+ * nothing of the value. The IR redactor (`@eden/ir`, the trace redactor) runs after it, so the gate is never looser
+ * than the redaction memory had before. A text with no secret is returned as it is.
+ */
 export function sanitizeForStore(text: string): string {
-  return text;
+  const spans = findings(text)
+    .flatMap((found) => found.spans)
+    .sort((a, b) => a[0] - b[0]);
+  let out = "";
+  let at = 0;
+  for (const [start, end] of spans) {
+    if (end <= at) continue;
+    out += text.slice(at, Math.max(start, at)) + (start >= at ? REDACTED : "");
+    at = end;
+  }
+  const gated = out + text.slice(at);
+  const redacted = redact(gated);
+  return typeof redacted === "string" ? redacted : gated;
 }

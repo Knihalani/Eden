@@ -98,7 +98,9 @@ describe("eden memory purge", () => {
       const { code, out } = await run(args);
       expect(code).toBe(0);
       for (const path of filesUnder(root)) expect(readFileSync(path).includes(SECRET)).toBe(false);
-      const rows = readFileSync(join(root, "s1", "memories.jsonl"), "utf8").trim().split("\n");
+      const rows = readFileSync(join(root, "s1", "memories.jsonl"), "utf8")
+        .trim()
+        .split("\n");
       expect(rows.map((line) => JSON.parse(line).id)).toEqual(["a", "b"]);
       expect(rows[1]).toContain("The database is postgres.");
       expect(JSON.parse(readFileSync(join(root, "postings.json"), "utf8")).postgres).toEqual([3]);
