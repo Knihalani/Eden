@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_MEASURES, loadAffected, measuresFor, parallelTasks, selectMeasures } from "./slice-measure";
+import {
+  DEFAULT_MEASURES,
+  guardFiles,
+  loadAffected,
+  measuresFor,
+  parallelTasks,
+  selectMeasures,
+} from "./slice-measure";
 
 describe("slice-measure: what a change can affect", () => {
   test("docs, tests, tooling and apps need no measurement", () => {
@@ -45,23 +52,28 @@ describe("slice-measure: what a change can affect", () => {
 describe("slice-measure: the parallel phase", () => {
   const base = { next: "/new", out: "/out", worlds: [] as number[] };
 
-  test("the arms run as four processes, guards one per seed, longest first", () => {
+  test("the arms run as four processes, guards one per seed and run, longest first", () => {
     const tasks = parallelTasks({ ...base, measures: ["arms", "guards"] });
-    expect(tasks.map((task) => task.name)).toEqual([
-      "guards-new-1",
-      "guards-new-2",
-      "guards-new-3",
-      "arms-on-1",
-      "arms-on-2",
-      "arms-off",
-      "arms-shadow",
-    ]);
+    expect(tasks.slice(0, 4).map((task) => task.name)).toEqual(["arms-on-1", "arms-on-2", "arms-off", "arms-shadow"]);
+    const guards = tasks.filter((task) => task.measure === "guards");
+    expect(guards).toHaveLength(9);
+    expect(guards[0]!.name).toBe("guards-new-1-1");
+    expect(guards[0]!.cmd).toEqual(expect.arrayContaining(["--seeds", "1", "--runs", "1"]));
     expect(tasks.find((task) => task.name === "arms-off")!.cmd).toContain("off");
+  });
+
+  test("guard files pair in order: seed, then run", () => {
+    expect(guardFiles("/out", "new").slice(0, 4)).toEqual([
+      "/out/guards-new-1-1.json",
+      "/out/guards-new-1-2.json",
+      "/out/guards-new-1-3.json",
+      "/out/guards-new-2-1.json",
+    ]);
   });
 
   test("base guards run only without earlier base guard files; worlds keep one directory per run", () => {
     const withBase = parallelTasks({ ...base, base: "/base", measures: ["guards"] });
-    expect(withBase.filter((task) => task.name.startsWith("guards-base-"))).toHaveLength(3);
+    expect(withBase.filter((task) => task.name.startsWith("guards-base-"))).toHaveLength(9);
     const reused = parallelTasks({ ...base, base: "/base", guardBase: ["/old.json"], measures: ["guards"] });
     expect(reused.some((task) => task.name.startsWith("guards-base-"))).toBe(false);
     const worlds = parallelTasks({ ...base, worlds: [1, 2, 2], measures: ["worlds"] });

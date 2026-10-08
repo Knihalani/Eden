@@ -28,7 +28,7 @@ Quality gates stay as they are. The time goes to running each slow thing once, i
 
   No full measurement while the code is still changing.
 - **Code review before measuring.** Run `slice-reviewer` on the code (phase `code review`) first.
-- **Measure once,** on the approved commit: `bun run measure:slice --new <checkout> --base <base checkout> --out <dir> …`. It runs the arms, guard seeds and R6 replays in parallel, and the soak and bench alone on a quiet machine. Then continue the same reviewer for the evidence check, from the artifacts.
+- **Measure once,** on the approved commit: `bun run measure:slice --new <checkout> --base <base checkout> --out <dir> …`. It runs the arms, guard runs and R6 replays in parallel, and the soak and bench alone on a quiet machine. Then continue the same reviewer for the evidence check, from the artifacts.
 - **Re-measure only what a change can affect:** `--changed <last measured commit>`. Report what it skipped and why.
 - **Reuse what is already measured:** one base checkout and one set of base guard runs per slice (`--guard-base`).
 - **Local CI once,** on the final tree: `bun run test:parallel` for the suite, and the other three CI steps.
