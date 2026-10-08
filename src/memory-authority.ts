@@ -21,7 +21,8 @@
  *
  * `withoutInstructions` keeps text the user did not type from instructing the model or speaking for the user once
  * it is a memory (A6 §2.3, §2.6): it drops each sentence, or clause, that is an instruction (an imperative, a
- * "you should …", "always …" or "never …", a download piped to a shell) or that claims what the user wants or said.
+ * "you should …", "always …" or "never …", one reported, "it says to run …", a download piped to a shell) or that
+ * claims what the user wants or said.
  */
 
 const WRAPPERS = [
@@ -290,6 +291,9 @@ const IMPERATIVE = new RegExp(
  */
 const DIRECTIVE =
   /\b(?:you|we) (?:should|must|need to|have to|ought to)\b|\b(?:make sure|be sure|remember) to\b|\b(?:always|never) (?!(?:been|was|were|is|are|had|has|did|does)\b|[a-z]*[^s\W]s\b|[a-z]+ed\b)[a-z]/i;
+/** An instruction reported rather than given: "it says to run …", "the doc tells you to …". */
+const REPORTED_DIRECTIVE =
+  /\b(?:says?|said|tells?|told|asks?|asked|instructs?|instructed|wants?|wanted)\s+(?:(?:you|us|me|them)\s+)?to\s+(?:always\s+|never\s+|first\s+)?[a-z]/i;
 /** A download piped to a shell: an instruction whatever the words around it. */
 const PIPED_TO_SHELL = /\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b/;
 /** A claim of what the user wants, said or allowed. */
@@ -298,8 +302,8 @@ const SPEAKS_FOR_USER =
 const SENTENCE_BREAK = /(?<=[.!?])\s+/;
 const CLAUSE_BREAK = /[,;]\s+(?:and\s+|but\s+|so\s+|then\s+)?/;
 
-const instructs = (clause: string) =>
-  IMPERATIVE.test(clause) || DIRECTIVE.test(clause) || PIPED_TO_SHELL.test(clause) || SPEAKS_FOR_USER.test(clause);
+const INSTRUCTION_SIGNS = [IMPERATIVE, DIRECTIVE, REPORTED_DIRECTIVE, PIPED_TO_SHELL, SPEAKS_FOR_USER];
+const instructs = (clause: string) => INSTRUCTION_SIGNS.some((sign) => sign.test(clause));
 
 /** Text the user did not type, without its instructions and its claims for the user (see the header). */
 export function withoutInstructions(text: string): string {
