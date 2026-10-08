@@ -2,6 +2,7 @@ import { chmodSync, existsSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { join, resolve } from "node:path";
 import {
   assemble,
+  blockedKindOrLane,
   emitAssemblyTombstones,
   extractCandidates,
   losingTriples,
@@ -182,9 +183,9 @@ function recLane(r: { lane?: unknown }): string | undefined {
 }
 
 /**
- * Serial-aware identity extract (assemble extractCandidates). Numbered `N. ` is t=N,
- * else wall-clock `at`. ICL / tool prose / narrative lanes yield nothing.
- * Fail-open: a bad episode returns [] so consolidate continues.
+ * Identity extract (assemble extractCandidates) at the row's time `at`. ICL / tool prose / narrative lanes yield
+ * nothing, and are skipped before any text test: a narrative row can be tens of KB. Fail-open: a bad episode returns
+ * [] so consolidate continues.
  */
 function extractIdentity(r: {
   id?: string;
@@ -196,7 +197,7 @@ function extractIdentity(r: {
 }): Triple[] {
   try {
     const text = String(r?.text ?? "");
-    if (!text || isIcl(text) || isToolProse(text) || isRecsysShot(text)) return [];
+    if (!text || blockedKindOrLane(r) || isIcl(text) || isToolProse(text) || isRecsysShot(text)) return [];
     const tags = Array.isArray(r.tags) ? r.tags : [];
     if (tags.some((t) => String(t).toLowerCase() === "recsys")) return [];
     const c: CandidateText = { text, t: Number.isFinite(r.at) ? Number(r.at) : 0 };

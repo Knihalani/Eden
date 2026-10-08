@@ -300,30 +300,38 @@ const STOP = new Set([
   "when",
 ]);
 
+/** A row with its needles, computed on first use: a narrative row can be tens of KB and most paths never ask. */
 function compileNeedles(rec: MemoryRecord): Compiled {
+  let needles: string[] | undefined;
   return {
     rec,
-    needles: [
-      ...new Set([
-        ...(rec.tags ?? []).filter(
-          (t) =>
-            t.length >= 3 &&
-            !STOP.has(t) &&
-            !/^\d+$/.test(t) &&
-            !/^[a-z]\d[a-z]$/.test(t) &&
-            !/^[a-z]{3,}\d+[a-z]$/.test(t),
-        ),
-        ...((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter(
-          (w) =>
-            w.length >= 3 &&
-            !STOP.has(w) &&
-            !/^\d+$/.test(w) &&
-            !/^[a-z]\d[a-z]$/.test(w) &&
-            !/^[a-z]{3,}\d+[a-z]$/.test(w),
-        ),
-      ]),
-    ],
+    get needles() {
+      return (needles ??= needlesOf(rec));
+    },
   };
+}
+
+function needlesOf(rec: MemoryRecord): string[] {
+  return [
+    ...new Set([
+      ...(rec.tags ?? []).filter(
+        (t) =>
+          t.length >= 3 &&
+          !STOP.has(t) &&
+          !/^\d+$/.test(t) &&
+          !/^[a-z]\d[a-z]$/.test(t) &&
+          !/^[a-z]{3,}\d+[a-z]$/.test(t),
+      ),
+      ...((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter(
+        (w) =>
+          w.length >= 3 &&
+          !STOP.has(w) &&
+          !/^\d+$/.test(w) &&
+          !/^[a-z]\d[a-z]$/.test(w) &&
+          !/^[a-z]{3,}\d+[a-z]$/.test(w),
+      ),
+    ]),
+  ];
 }
 
 export function queryHay(text: string): Set<string> {
@@ -1141,13 +1149,16 @@ export class AgentMemory {
             this.pended.delete(c.rec.id);
             if (mine.has(c.rec.id) || !this.knownIds.has(c.rec.id)) byId.set(c.rec.id, c);
           }
-          for (const c of this.compiled) byId.set(c.rec.id, { ...c, rec: mergeRow(byId.get(c.rec.id)?.rec, c.rec) });
+          for (const c of this.compiled) {
+            const merged = mergeRow(byId.get(c.rec.id)?.rec, c.rec);
+            byId.set(c.rec.id, merged === c.rec ? c : compileNeedles(merged));
+          }
           this.compiled = [...byId.values()];
           for (const c of this.compiled) this.knownIds.add(c.rec.id);
         } catch {}
         this.trimToStoreCap();
         const resolved = resolveSupersessions(this.compiled.map((c) => c.rec));
-        this.compiled = this.compiled.map((c, i) => (resolved[i] === c.rec ? c : { ...c, rec: resolved[i]! }));
+        this.compiled = this.compiled.map((c, i) => (resolved[i] === c.rec ? c : compileNeedles(resolved[i]!)));
         writeStore(
           this.path,
           this.compiled.filter((c) => !this.pended.has(c.rec.id)).map((c) => c.rec),
