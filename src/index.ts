@@ -201,6 +201,16 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   return [...byKey.values(), ...rest];
 }
 
+export type ObserveOptions = {
+  keepLiveIdentity?: boolean;
+  deferSleep?: boolean;
+  /**
+   * The messages are a conversation read again (the hook reads its transcript at every event): what they say was
+   * encoded when it was new, so they never re-learn a superseded value (`restated`).
+   */
+  reread?: boolean;
+};
+
 export type MemoryOptions = { dir?: string; project?: string; session?: string; cwd?: string; child?: boolean };
 
 export function memorySessionName(raw: unknown): string | undefined {
@@ -533,45 +543,59 @@ function load(path: string): Compiled[] {
 }
 
 /**
- * The record to keep for a row two writers hold: this process's, with the store's `seq` when it already has one,
- * and superseded if either copy is (validity only ever moves from live to superseded, so a stale copy cannot undo
- * another process's supersession).
+ * `kept` with the store's `seq` when it has one, superseded if either copy is: validity only ever moves from live to
+ * superseded, so a stale copy cannot undo another process's supersession.
  */
-function mergeRow(disk: MemoryRecord | undefined, mine: MemoryRecord): MemoryRecord {
-  if (!disk) return mine;
-  const merged = { ...mine, seq: disk.seq ?? mine.seq };
-  const invalidAt = [disk.invalidAt, mine.invalidAt].filter((v): v is number => typeof v === "number");
+function withValidity(kept: MemoryRecord, stored: MemoryRecord, other: MemoryRecord): MemoryRecord {
+  const merged = { ...kept, seq: stored.seq ?? other.seq };
+  const invalidAt = [stored.invalidAt, other.invalidAt].filter((v): v is number => typeof v === "number");
   if (invalidAt.length) {
     merged.invalidAt = Math.min(...invalidAt);
     delete merged.invalidBy;
-  } else if (!merged.invalidBy && disk.invalidBy) merged.invalidBy = disk.invalidBy;
+  } else merged.invalidBy = stored.invalidBy ?? other.invalidBy;
+  if (merged.invalidBy === undefined) delete merged.invalidBy;
   return merged;
 }
 
+/** The record to keep for a row two writers hold: this process's, with the stored copy's seq and validity merged. */
+function mergeRow(disk: MemoryRecord | undefined, mine: MemoryRecord): MemoryRecord {
+  return disk ? withValidity(mine, disk, mine) : mine;
+}
+
 /**
- * Settles pending rows into a store file under its lock: new ids are appended, known ones merged (`mergeRow`).
- * A pending row got its seq late, after rows written later, so time decides between it and a stored row giving
- * its subject another value (`supersedeByTime`). Every `invalid_by` naming a row with a seq then becomes that seq.
- * Throws when the lock stays taken.
+ * Settles pending rows into a store file under its lock: new ids are appended; a pending copy of a stored row brings
+ * its seq and validity. A pending row got its seq late, after rows written later, so time decides between it and a
+ * stored row giving its subject another value (`supersedeByTime`). Every `invalid_by` naming a row with a seq then
+ * becomes that seq. Throws when the lock stays taken.
  */
-function settleIntoStore(path: string, rows: readonly MemoryRecord[]): void {
+function settleIntoStore(root: string, path: string, rows: readonly MemoryRecord[]): void {
   withFileLock(`${path}.lock`, () => {
     const byId = new Map(load(path).map((c) => [c.rec.id, c.rec]));
-    for (const row of rows) byId.set(row.id, mergeRow(byId.get(row.id), row));
+    // A pending copy of a row the store already holds brings only its seq and validity: the stored row may have
+    // changed since (sleep's rewrites), and the copy is older.
+    for (const row of rows) {
+      const stored = byId.get(row.id);
+      byId.set(row.id, stored ? withValidity(stored, stored, row) : row);
+    }
     const stored = [...byId.values()];
-    supersedeByTime(stored, new Set(rows.map((row) => row.id)));
+    supersedeByTime(root, stored, new Set(rows.map((row) => row.id)));
     writeStore(path, resolveSupersessions(stored));
   });
 }
 
-/** Of two live typed rows giving one subject different values, one of them settled, the later supersedes the other. */
-function supersedeByTime(stored: readonly MemoryRecord[], settled: ReadonlySet<string>): void {
+/**
+ * Of two live typed rows giving one subject different values, one of them settled, the later supersedes the other,
+ * and older text giving the old value is stale (D31), as when a writer supersedes (`invalidateSameCopula`).
+ */
+function supersedeByTime(root: string, stored: readonly MemoryRecord[], settled: ReadonlySet<string>): void {
   const live = () => stored.filter((r) => !superseded(r) && typedByUser(r));
   for (const row of live().filter((r) => settled.has(r.id)))
     for (const other of live()) {
       if (other === row || superseded(row) || !contradicts(row.text, other.text)) continue;
       const [older, newer] = (other.at ?? 0) > (row.at ?? 0) ? [row, other] : [other, row];
       older.invalidBy = newer.id;
+      const slot = legacySlot(older);
+      if (slot && legacySlot(newer)) recordSupersession(root, slot, newer.at);
     }
 }
 
@@ -607,6 +631,7 @@ export function settlePendingRows(root: string): void {
     if (store && !name) continue;
     try {
       settleIntoStore(
+        root,
         join(root, name ?? "", "memories.jsonl"),
         rows.flatMap((row) => fromDisk(row) ?? []),
       );
@@ -905,7 +930,8 @@ export class AgentMemory {
     this.post = post;
   }
 
-  observe(messages: unknown[], opts: { keepLiveIdentity?: boolean; deferSleep?: boolean } = {}): MemoryRecord[] {
+  /** Encodes messages (`ObserveOptions`). */
+  observe(messages: unknown[], opts: ObserveOptions = {}): MemoryRecord[] {
     try {
       if (memoryConsent() !== "on") return [];
     } catch {
@@ -994,11 +1020,9 @@ export class AgentMemory {
               }
             }
           } catch {}
-          if (
-            this.seenLower.has(text.toLowerCase()) &&
-            !this.restated(text, lastTyped.get(copulaKey(text) ?? "") === `${i}:${j}`)
-          )
-            continue;
+          const lastTypedHere = lastTyped.get(copulaKey(text) ?? "") === `${i}:${j}`;
+          const learnAgain = !opts.reread && this.restated(text, lastTypedHere);
+          if (this.seenLower.has(text.toLowerCase()) && !learnAgain) continue;
           const pin = ((t) =>
               !/\b(?:don'?t|do not|never)\s+remember\b/i.test(t) &&
               (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(t) || /\balways\s+\S/i.test(t)))(text),
@@ -1078,11 +1102,12 @@ export class AgentMemory {
 
   /**
    * A statement whose text only superseded rows hold, said again: only a later typed statement re-learns a value
-   * (A4 §3.1, D12). Reading a conversation again replays its old statements too, so a restatement must be the last
-   * statement the user typed about its subject in the batch (`lastTyped`); the assistant's or a tool's echo never is.
+   * (A4 §3.1, D12). A batch can hold old statements too, so a restatement must be the last statement the user typed
+   * about its subject in the batch; the assistant's or a tool's echo never is, and neither is anything in a batch the
+   * caller marks a re-read (`observe`).
    */
-  private restated(text: string, lastTyped: boolean): boolean {
-    if (!lastTyped) return false;
+  private restated(text: string, lastTypedHere: boolean): boolean {
+    if (!lastTypedHere) return false;
     const lower = text.toLowerCase();
     const holding = this.compiled.filter((c) => c.rec.text.toLowerCase() === lower);
     return holding.length > 0 && holding.every((c) => superseded(c.rec));
