@@ -235,3 +235,41 @@ describe("A4 §5.1 step 5: a cue that asks history", () => {
     for (const prompt of ["which cache do we use?", "fix the login redirect"]) expect(asksHistory(prompt)).toBe(false);
   });
 });
+
+describe("P0.2 review round 4, closed in P0.3", () => {
+  const after = (said: string, text: string) => validText(text, 50, invalidationsIn(said, 100));
+
+  test("plural objects and subjects match their singular, whatever the stem ends in", () => {
+    expect(after("We migrated the caches from Memcached to Redis.", "The cache runs on Memcached.")).toBe("");
+    expect(after("You can delete the caches now.", "Never delete the cache.")).toBe("");
+    expect(after("You can delete the prizes now.", "Never delete the prize.")).toBe("");
+    expect(after("You can delete the release branches now.", "Never delete the release branch.")).toBe("");
+    expect(after("You can delete the caches now.", "Never delete the cache table.")).toBe(
+      "Never delete the cache table.",
+    );
+  });
+
+  test("a capital-shaped value opening a clause after a label, colon, list marker or comma is not the value", () => {
+    for (const text of [
+      "Note: Make sure the zebra API returns JSON errors.",
+      "1. Make sure the zebra API returns JSON errors.",
+      "- Make sure the zebra API returns JSON errors.",
+      "Before the deploy, Make sure the zebra API returns JSON errors.",
+    ])
+      expect(after("We no longer use Make.", text)).toBe(text);
+    expect(after("We no longer use Make.", "Note: Make is our build tool.")).toBe("");
+  });
+
+  test("what is left of a dropped item is not a bare list marker", () => {
+    expect(after("We switched the database from SQLite to Postgres.", "1. The database is SQLite")).toBe("");
+    expect(
+      after("We switched the database from SQLite to Postgres.", "1. The database is SQLite. 2. Logs go to stdout."),
+    ).toBe("2. Logs go to stdout.");
+  });
+
+  test("a revocation keeps a joined rule about another action", () => {
+    expect(after("You can merge now.", "Never merge PRs yourself; never push to main.")).toBe("never push to main.");
+    expect(after("You can merge now.", "Never merge PRs yourself, never push to main.")).toBe("never push to main.");
+    expect(after("You can push to main now.", "Never push to main; ask first.")).toBe("");
+  });
+});
