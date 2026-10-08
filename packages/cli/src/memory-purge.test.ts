@@ -5,7 +5,7 @@
  */
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryCli } from "./memory-import";
@@ -113,6 +113,21 @@ describe("eden memory purge", () => {
       expect(readFileSync(holding, "utf8")).toBe(transcript);
     });
   }
+
+  test("a file it cannot read is named and fails the run; every other file is still rewritten", async () => {
+    seed();
+    const locked = put(join(root, "a", "aaa-unreadable.jsonl"), JSON.stringify({ text: SECRET }) + "\n");
+    chmodSync(locked, 0o000);
+    try {
+      const { code, out } = await run(["purge", "zq-secret-[0-9]+"]);
+      expect(code).toBe(1);
+      expect(out).toContain(locked);
+      for (const path of filesUnder(root).filter((path) => path !== locked))
+        expect(readFileSync(path).includes(SECRET)).toBe(false);
+    } finally {
+      chmodSync(locked, 0o600);
+    }
+  });
 
   test("an invalid pattern changes nothing", async () => {
     seed();

@@ -926,16 +926,15 @@ export class AgentMemory {
   }
 
   /**
-   * A6 §3: the rows a typed forget names go to history, invalid at the store's next `seq` with no successor (A4
-   * §3.1). So reading the transcript again never learns them anew, and only a later typed statement does
-   * (`restated`). Other sessions' rows and gists yield at delivery, to the validity log the caller wrote.
+   * A6 §3: the rows a typed forget leaves with nothing to say go to history, invalid at the store's next `seq` with
+   * no successor (A4 §3.1). So reading the transcript again never learns them anew, and only a later typed statement
+   * does (`restated`). A row that also says something else keeps it: at delivery it loses only the sentences naming
+   * the value, as other sessions' rows and gists do, to the validity log the caller wrote.
    */
   forget(records: readonly Invalidation[]): void {
     const forgets = records.filter(isForget);
     if (!forgets.length) return;
-    const named = this.compiled.filter(
-      (c) => !superseded(c.rec) && validText(c.rec.text, 0, forgets) !== c.rec.text.trim(),
-    );
+    const named = this.compiled.filter((c) => !superseded(c.rec) && !validText(c.rec.text, 0, forgets));
     if (!named.length) return;
     const seq = claimSeqs(this.dir, 1) ?? Math.max(0, ...this.compiled.map((c) => c.rec.seq ?? 0));
     for (const c of named) {
@@ -1334,10 +1333,7 @@ export class AgentMemory {
    * The notes a message list's cue retrieves, ranked and labelled, before any packing; then the list is observed
    * (`observeCue`). Nothing is retrieved for a no-op cue, or when the list already carries a packet. `inject` packs
    * these into its system message; the memory hook shapes and words them itself (`memory-hook-packet.ts`). Fails
-   * open: a throw is counted in `memoryInjectSwallows` and recalls nothing.
-   */
-  /**
-   * The notes for a message list's cue, then the list encoded (`observeCue`). `encode` replaces what is encoded when
+   * open: a throw is counted in `memoryInjectSwallows` and recalls nothing. `encode` replaces what is encoded when
    * the caller knows more of its sources than the cue shows (the hook splits a prompt's pasted spans off, D12).
    */
   recall(messages: unknown[], encode?: unknown[]): MemoryRecord[] {

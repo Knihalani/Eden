@@ -24,7 +24,8 @@ const SQLITE_COMPANION = /-(?:wal|shm|journal)$/;
 interface Purged {
   matches: number;
   files: number;
-  skipped: string[];
+  /** Files left as they were, and why: binary, or a read, lock or write that failed. */
+  skipped: { path: string; why: string }[];
 }
 
 export function memoryPurgeHelp(): string {
@@ -59,14 +60,15 @@ export function memoryPurgeCli(args: readonly string[]): number {
   const root = memoryRoot();
   const purged = purgeTree(root, pattern);
   console.log(`purged ${purged.matches} matches in ${purged.files} files under ${root}`);
-  for (const path of purged.skipped) console.log(`not rewritten (binary): ${path}`);
+  for (const { path, why } of purged.skipped) console.log(`not rewritten (${why}): ${path}`);
   const transcripts = transcriptsHolding(pattern);
   if (!transcripts.length) console.log("no Claude transcript holds it");
   else {
     console.log("Claude transcripts that still hold it (Eden never edits them; edit or delete them yourself):");
     for (const path of transcripts) console.log(`  ${path}`);
   }
-  return 0;
+  // A file left as it was may still hold the match.
+  return purged.skipped.length ? 1 : 0;
 }
 
 function filesUnder(dir: string): string[] {
@@ -83,16 +85,25 @@ function purgeTree(root: string, pattern: RegExp): Purged {
   const purged: Purged = { matches: 0, files: 0, skipped: [] };
   for (const path of filesUnder(root)) {
     if (path.endsWith(".lock") || SQLITE_COMPANION.test(path)) continue;
-    const bytes = readFileSync(path);
-    let matches = 0;
-    if (bytes.subarray(0, SQLITE_HEADER.length).toString("latin1") === SQLITE_HEADER)
-      matches = purgeSqlite(path, pattern);
-    else if (bytes.includes(0)) purged.skipped.push(path);
-    else matches = withFileLock(`${path}.lock`, () => purgeText(path, pattern));
-    purged.matches += matches;
-    if (matches) purged.files++;
+    try {
+      const matches = purgeFile(path, pattern);
+      purged.matches += matches;
+      if (matches) purged.files++;
+    } catch (err) {
+      purged.skipped.push({ path, why: err instanceof BinaryFile ? "binary" : (err as Error).message });
+    }
   }
   return purged;
+}
+
+class BinaryFile extends Error {}
+
+/** One file without the matches; returns how many it removed. Throws when it cannot rewrite the file. */
+function purgeFile(path: string, pattern: RegExp): number {
+  const bytes = readFileSync(path);
+  if (bytes.subarray(0, SQLITE_HEADER.length).toString("latin1") === SQLITE_HEADER) return purgeSqlite(path, pattern);
+  if (bytes.includes(0)) throw new BinaryFile();
+  return withFileLock(`${path}.lock`, () => purgeText(path, pattern));
 }
 
 /** Rewrites a text file without the matches; returns how many it removed. */
@@ -158,10 +169,9 @@ function purgeSqlite(path: string, pattern: RegExp): number {
       for (const row of doomed) remove.run(row.eden_rowid as number);
       deleted += doomed.length;
     }
-    if (deleted) {
-      db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-      db.run("VACUUM");
-    }
+    // Even with nothing to delete now, an earlier delete may have left the match in a free page or the WAL.
+    db.run("PRAGMA wal_checkpoint(TRUNCATE)");
+    db.run("VACUUM");
     return deleted;
   } finally {
     db.close();
@@ -177,7 +187,11 @@ function matchesText(value: unknown, pattern: RegExp): boolean {
 /** The Claude Code transcripts that hold a match. */
 function transcriptsHolding(pattern: RegExp): string[] {
   const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-  return filesUnder(join(config, "projects")).filter(
-    (path) => path.endsWith(".jsonl") && matchesText(readFileSync(path, "utf8"), pattern),
-  );
+  return filesUnder(join(config, "projects")).filter((path) => {
+    try {
+      return path.endsWith(".jsonl") && matchesText(readFileSync(path, "utf8"), pattern);
+    } catch {
+      return false;
+    }
+  });
 }

@@ -20,7 +20,9 @@
  * - (c) URL userinfo, `scheme://user:pass@`;
  * - (d) entropy only with a keyword: a whitespace-delimited token of ≥ 32 characters that mixes letters and
  *   digits and holds no `/`, `.` or `-`, with a secret keyword within 40 characters. ULIDs, UUIDs, `sha512-`
- *   integrity strings and paths never qualify on their own.
+ *   integrity strings and paths never qualify on their own;
+ * - (e) the redaction memory had before P0.4 (a password, passphrase or API key of any length; short token
+ *   prefixes), so the gate is never looser than it was.
  */
 import { redact, REDACTED } from "../packages/ir/src/redact";
 import gitleaks from "./vendor/gitleaks/gitleaks.toml";
@@ -71,11 +73,23 @@ export interface SecretRule {
  * D13's keyword rule, case-insensitive (env lines spell it `PASSWORD=`), with `is` read as a word and the value in
  * group 1. A value already redacted is no secret.
  */
-const KEYWORD_RULE =
-  /(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])(\S{6,})/dgi;
+const KEYWORD_RULE = new RegExp(
+  String.raw`(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)s?\b[^\n]{0,20}?(?:\bis\b|=|:)\s*(?!\[REDACTED\])(\S{6,})`,
+  "dgi",
+);
 const SECRET_WORD = /(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credential)/i;
 /** URL userinfo, with the password in group 1: the user and host stay, as they say where the secret is for. */
-const URL_USERINFO = /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@/dgi;
+const URL_USERINFO = new RegExp(String.raw`\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?!\[REDACTED\]@)([^\s/@]+)@`, "dgi");
+/**
+ * (e) The redaction memory had before P0.4, kept so the gate is never looser: a password, passphrase or API key
+ * after `is`, `=` or `:`, of any length (D13's keyword rule wants 6 characters and has no "passphrase"), with the
+ * value in group 1; and the short token prefixes it caught.
+ */
+const LEGACY_KEYWORD = new RegExp(
+  String.raw`\b(?:passwords?|passwd|passphrase|api[_-]?keys?)\s*(?:=|:|is)\s+(?!\[REDACTED\])([^\s,.;]+)`,
+  "dgi",
+);
+const LEGACY_TOKEN = /\b(?:sk-|ghp_|gho_|github_pat_|AKIA)[A-Za-z0-9/_-]+/g;
 /** (a′): the bare shapes, with no keyword, marker or entropy condition. */
 const PROVIDER_SHAPES: [string, RegExp][] = [
   ["eden-cfat", /\bcfat_[A-Za-z0-9_-]{20,}/g],
@@ -294,6 +308,8 @@ export function secretRules(): SecretRule[] {
     plain("eden-keyword", (text) => matchSpans(KEYWORD_RULE, text)),
     plain("eden-url-userinfo", (text) => matchSpans(URL_USERINFO, text)),
     plain("eden-entropy-keyword", entropyWithKeyword),
+    plain("eden-legacy-keyword", (text) => matchSpans(LEGACY_KEYWORD, text)),
+    plain("eden-legacy-token", (text) => matchSpans(LEGACY_TOKEN, text)),
   ];
   return compiled;
 }
@@ -317,8 +333,8 @@ export function secretHits(text: string): string[] {
 /**
  * D13's one gate (A6 §2.2, A4 §3.0): the text a memory writer may store. Every secret a rule finds is replaced by
  * `[REDACTED]` (overlapping finds as one), so "the staging password is [REDACTED]" keeps what the value is for and
- * nothing of the value. The IR redactor (`@eden/ir`, the trace redactor) runs after it, so the gate is never looser
- * than the redaction memory had before. A text with no secret is returned as it is.
+ * nothing of the value. With rule (e) and the IR redactor (`@eden/ir`, the trace redactor), which runs after it, the
+ * gate is never looser than the redaction memory had before. A text with no secret is returned as it is.
  */
 export function sanitizeForStore(text: string): string {
   const spans = findings(text)

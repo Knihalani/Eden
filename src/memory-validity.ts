@@ -11,9 +11,9 @@
  * - a **revocation** (A4 §3.1, D9): "you can merge PRs yourself now", whose verb is one of A7 §5's action classes. It
  *   invalidates a rule that forbids an action of the same class on the same object (`forbids`);
  * - a **forget** (A6 §3, A4 §3.1's "forget that"): "forget ZebraCache", "forget that the auth provider is Clerk". It
- *   is a retraction (`r: "forget"`) of the value its sentence ends with, in any case unless its capitals shape it,
- *   and never a pronoun or a function word ("forget it"); "don't forget to …" is none (D9 fix 2). Unlike the others,
- *   neither its own sentence (`withoutForgets`) nor a history cue keeps the value.
+ *   is a retraction (`r: "forget"`) of the value its sentence ends with, shaped as a retracted value is: "Forget the
+ *   tests, just fix the build" sets nothing aside, "forget it" neither, and "don't forget to …" is none (D9 fix 2).
+ *   Unlike the others, neither its own sentence (`withoutForgets`) nor a history cue keeps the value.
  *
  * Only typed text invalidates (A4 §3.0, A6 §2.1): the human Submit's prompt, without its pasted spans
  * (`<pasted_content>`, fenced code, `>` quotes, runs of 3 or more lines without sentence punctuation), and without
@@ -69,8 +69,6 @@ const FORGET = new RegExp(
   String.raw`^(?:please\s+)?forget(?: about)?\s+(?:that\s+[^.!?;]*?\s)?${VALUE}${CLAUSE_END}`,
   "i",
 );
-/** Words a forget never takes as its value: "forget it", "forget everything". */
-const NOT_FORGETTABLE = new Set(["it", "that", "this", "them", "those", "these", "everything", "anything", "all"]);
 /** D7's switch: the words between the verb and "from" name the slot's subject or scope ("apps/web", "the queue"). */
 const SWITCH = new RegExp(
   String.raw`\bwe(?:'ve| have)? (?:switched|moved|migrated)\b([^.!?;\n]*?)\bfrom ${VALUE} to \S`,
@@ -196,17 +194,21 @@ function objectWords(text: string): string[] {
 /** The forget a sentence states, if it states one. */
 function forgetIn(sentence: string, t: number): Retraction | undefined {
   const value = FORGET.exec(sentence)?.[1];
-  const lower = value?.toLowerCase();
-  if (!value || !lower || NOT_FORGETTABLE.has(lower) || FUNCTION_WORDS.has(lower) || lower === "redacted") return;
-  // A lowercase value has no capitals to match as typed, so any case of it is forgotten.
-  return { k: "retract", ...(value === lower ? { o: lower } : retracted(value)), t, r: "forget" };
+  return value && valueShaped(value) ? { k: "retract", ...retracted(value), t, r: "forget" } : undefined;
 }
 
 /** A typed text without the sentences that forget (A6 §3): a forget is not itself a memory, as it names the value. */
 export function withoutForgets(text: string): string {
-  const parts = String(text ?? "").split(SENTENCE_END);
-  const kept = parts.filter((sentence) => !forgetIn(sentence.trim(), 0));
-  return kept.length === parts.length ? text : kept.join(" ").trim();
+  let dropped = false;
+  const lines = String(text ?? "")
+    .split("\n")
+    .map((line) => {
+      const parts = line.split(SENTENCE_END);
+      const kept = parts.filter((sentence) => !forgetIn(sentence.trim(), 0));
+      dropped ||= kept.length < parts.length;
+      return kept.join(" ").trim();
+    });
+  return dropped ? lines.filter(Boolean).join("\n") : text;
 }
 
 /** The invalidations a typed prompt states. */
