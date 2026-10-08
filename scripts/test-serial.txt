@@ -6,3 +6,6 @@
 # The scale arms (scale-20k, scale-1e6): UserPromptSubmit p99 < 150 ms (arms/scale.ts).
 benchmarks/memory-long-horizon/arms/bench.reference.test.ts
 benchmarks/memory-long-horizon/arms/bench.gate.test.ts
+
+# 64 live armings must keep the idle ping path under 50 µs (packages/wrap, Wave 4.3).
+packages/wrap/src/idle-64.test.ts
