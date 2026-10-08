@@ -275,3 +275,8 @@ export function secretHits(text: string): string[] {
     .map((rule) => rule.id)
     .sort();
 }
+
+/** D13's one gate (A6 §2.2): every writer stores `sanitizeForStore(text)`. Not built yet (P0.4). */
+export function sanitizeForStore(text: string): string {
+  return text;
+}

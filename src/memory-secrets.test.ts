@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { goRegex, secretHits, secretRules } from "./memory-secrets";
+import { goRegex, sanitizeForStore, secretHits, secretRules } from "./memory-secrets";
 
 const VENDORED = join(import.meta.dir, "vendor", "gitleaks", "gitleaks.toml");
 const alnum = (n: number, seed = 7) =>
@@ -90,21 +90,70 @@ describe("what hits", () => {
   }
 });
 
+const BENIGN = [
+  "fix the failing test in apps/web/src/auth.ts",
+  "the auth provider is Clerk and the database is postgres",
+  "what does the token bucket algorithm do?",
+  "why does the api key rotation job fail on Mondays?",
+  "use pnpm, not npm",
+  "the build id is 01J9ZQ4S8R6X2M3N5P7Q9T1V3W",
+  "request 3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c failed",
+  "commit 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 broke it",
+  "integrity sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUR1ZsZW9I6Xa7yuqd==",
+  "read /Users/someone/Downloads/project/packages/cli/src/index.ts",
+  "set the session timeout to 30 minutes",
+  // D13's keyword rule reads "is" as a word: "secrets" … "this" is no assignment (the P0.0d follow-up).
+  "keep the secrets in this pre-registration file",
+];
+
 describe("what does not hit", () => {
-  const benign = [
-    "fix the failing test in apps/web/src/auth.ts",
-    "the auth provider is Clerk and the database is postgres",
-    "what does the token bucket algorithm do?",
-    "why does the api key rotation job fail on Mondays?",
-    "use pnpm, not npm",
-    "the build id is 01J9ZQ4S8R6X2M3N5P7Q9T1V3W",
-    "request 3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c failed",
-    "commit 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 broke it",
-    "integrity sha512-z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUR1ZsZW9I6Xa7yuqd==",
-    "read /Users/someone/Downloads/project/packages/cli/src/index.ts",
-    "set the session timeout to 30 minutes",
-  ];
-  for (const text of benign) {
+  for (const text of BENIGN) {
     test(text, () => expect(secretHits(text)).toEqual([]));
   }
+});
+
+describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", () => {
+  const key = `${"gh" + "p_"}${alnum(36)}`;
+  const cases: [name: string, text: string, secret: string, kept: string][] = [
+    ["a provider token mid-sentence", `ci uses ${key} for releases`, key, "ci uses [REDACTED] for releases"],
+    ["an env line", `GITHUB_TOKEN=${key}`, key, "GITHUB_TOKEN="],
+    [
+      "D13's keyword rule",
+      "the staging password is Tr0ub4dor-x9",
+      "Tr0ub4dor-x9",
+      "the staging password is [REDACTED]",
+    ],
+    [
+      "URL userinfo keeps the host",
+      `connect with postgres://admin:${alnum(12)}@db.internal:5432/app`,
+      alnum(12),
+      "@db.internal:5432/app",
+    ],
+    ["a cfat_ token", `the token ${"cf" + "at_"}${alnum(40)} expired`, `${"cf" + "at_"}${alnum(40)}`, "expired"],
+    [
+      "entropy with a keyword",
+      `deploy secret ${alnum(40, 5)}3 rotates monthly`,
+      `${alnum(40, 5)}3`,
+      "deploy secret [REDACTED] rotates monthly",
+    ],
+    [
+      "a private key block, whole",
+      ["-----BEGIN RSA " + "PRIVATE KEY-----", alnum(64), alnum(64, 5), "-----END RSA PRIVATE KEY-----"].join("\n"),
+      alnum(64, 5),
+      "[REDACTED]",
+    ],
+  ];
+  for (const [name, text, secret, kept] of cases) {
+    test(name, () => {
+      const stored = sanitizeForStore(text);
+      expect(stored).not.toContain(secret);
+      expect(stored).toContain(kept);
+      expect(secretHits(stored)).toEqual([]);
+      expect(sanitizeForStore(stored)).toBe(stored);
+    });
+  }
+
+  test("text with no secret is stored as it is", () => {
+    for (const text of BENIGN) expect(sanitizeForStore(text)).toBe(text);
+  });
 });
