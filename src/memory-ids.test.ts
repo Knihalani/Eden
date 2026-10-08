@@ -221,3 +221,23 @@ describe("A1 D6: real ages", () => {
     expect(provenanceBracket({ text: "The database is postgres.", kind: "fact" }, "fact")).toBe("[fact · user]");
   });
 });
+
+describe("P0.2 follow-up: validity against real row times", () => {
+  test("a value restated after its retraction is delivered again; the retracted statement is not", async () => {
+    const root = tempRoot();
+    const { memoryHookResponse } = await import("../packages/cli/src/memory-hook");
+    const submit = (prompt: string, at: number) => {
+      process.env.EDEN_NOW = String(at);
+      const out = memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s1", prompt, cwd: REPO });
+      const spec = out?.hookSpecificOutput as { additionalContext?: string } | undefined;
+      return spec?.additionalContext ?? "";
+    };
+    submit("We cache sessions in Redis.", T0);
+    submit("We no longer use Redis.", T0 + DAY_MS);
+    submit("We cache sessions in Redis again, with a one hour TTL.", T0 + 2 * DAY_MS);
+    const packet = submit("where do we cache sessions?", T0 + 3 * DAY_MS);
+    expect(packet).toContain("Redis again");
+    expect(packet).not.toContain("We cache sessions in Redis.");
+    expect(existsSync(join(root, "validity.jsonl"))).toBe(true);
+  });
+});
