@@ -78,7 +78,8 @@ function isListItem(text: string): boolean {
   return /^\d+[.)]\s+\S/.test(stripPacketDecor(text));
 }
 
-function blockedKindOrLane(item: { kind?: string; lane?: string } | null | undefined): boolean {
+/** An ICL, narrative, trajectory or recsys row (or note): it states no identity fact. */
+export function blockedKindOrLane(item: { kind?: string; lane?: string } | null | undefined): boolean {
   if (!item || typeof item !== "object") return false;
   const kind = asText(item.kind).trim().toLowerCase();
   const lane = asText(item.lane).trim().toLowerCase();
