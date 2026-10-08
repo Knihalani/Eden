@@ -289,7 +289,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
             result = flattenContent(original == null || original === "" ? "" : redact(original)),
             text = result ? `The ${name || "subagent"} tool result is ${result}.` : "";
           if (text) mem.observe([{ role: "user", content: text, src: "tool" }]);
-          else if (event === "SubagentStop" && prior.length) mem.observe(prior);
+          else if (event === "SubagentStop" && prior.length) mem.observe(prior, { reread: true });
           try {
             persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
           } catch {}
@@ -325,7 +325,10 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       if (event === "SessionStart") {
         if (writes && (prior.length || extra))
           try {
-            mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true });
+            mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, {
+              keepLiveIdentity: true,
+              reread: true,
+            });
           } catch {}
         // A4 §5.2: a resumed session still holds the packets it had (R0 F5), so resume brings nothing new and keeps
         // the ledger. A compaction re-arms (a new epoch, A4 §4): its pins come back on their next cue, not here.
@@ -349,7 +352,10 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
             } catch {}
           try {
             if (prior.length || extra)
-              mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, { keepLiveIdentity: true });
+              mem.observe(extra ? [...prior, { role: "user", content: extra }] : prior, {
+                keepLiveIdentity: true,
+                reread: true,
+              });
           } catch {}
           try {
             consolidate(mem, { session: resolved.session, mode: "full" });
@@ -374,7 +380,7 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
       if (writes && prompt && event === "UserPromptSubmit") recordInvalidations(mem.dir, mem.storableText(prompt));
       // The conversation so far is encoded before the prompt (which `recall` encodes after retrieving), so what the
       // prompt states is newer than every transcript line it supersedes.
-      if (writes && prior.length) mem.observe(prior);
+      if (writes && prior.length) mem.observe(prior, { reread: true });
       if (prompt && mode === "imperative") notes = mem.recall(cue);
       else if (prompt) mem.observeCue(cue);
       if (!notes.length) return null;

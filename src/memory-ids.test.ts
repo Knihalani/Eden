@@ -16,8 +16,9 @@ import {
 } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { openMemory, storeRows, superseded } from "./index";
+import { openMemory, settlePendingRows, storeRows, superseded } from "./index";
 import { takePending } from "./memory-ids";
+import { readInvalidations } from "./memory-validity";
 import { ageInWords } from "./memory-hook-packet";
 import { provenanceBracket } from "./memory-provenance";
 import { SemanticStore } from "./semantic-store";
@@ -345,5 +346,103 @@ describe("A4 §1: a pending row never beats a later statement (review round 1)",
     taken.done();
     expect(readFileSync(join(root, "pending.jsonl"), "utf8")).toContain("01J9BBBBBBBBBBBBBBBBBBBBBB");
     expect(readFileSync(join(root, "pending.jsonl"), "utf8")).not.toContain("01J9AAAAAAAAAAAAAAAAAAAAAA");
+  });
+});
+
+describe("review round 2", () => {
+  test("a hook's re-read of a lagging transcript never revives the value the prompt replaced", async () => {
+    const root = tempRoot();
+    const { memoryHookResponse } = await import("../packages/cli/src/memory-hook");
+    const transcript = join(root, "..", "transcript.jsonl");
+    // The transcript holds the first prompt only: the second prompt's line has not been flushed yet (R0 F8).
+    writeFileSync(
+      transcript,
+      `${JSON.stringify({ type: "user", message: { role: "user", content: "The database is sqlite." } })}\n`,
+    );
+    const event = (hook_event_name: string, prompt?: string) =>
+      memoryHookResponse({ hook_event_name, session_id: "s1", prompt, cwd: REPO, transcript_path: transcript });
+    event("UserPromptSubmit", "The database is sqlite.");
+    event("UserPromptSubmit", "The database is postgres.");
+    event("Stop");
+    event("UserPromptSubmit", "Reply with just OK.");
+    const live = storeRows(join(root, "s1", "memories.jsonl"))
+      .filter((r) => r.kind === "fact" && /database is/i.test(r.text) && !superseded(r))
+      .map((r) => r.text);
+    expect(live).toEqual(["The database is postgres"]);
+  });
+
+  test("reading the conversation again after sleep superseded a value never learns it anew", async () => {
+    for (const [older, newer] of [
+      ["Use postgres", "Use sqlite instead"],
+      ["The chairperson of the committee is Alice.", "The chairperson of the committee is Bob."],
+    ]) {
+      const root = tempRoot();
+      const mem = openMemory({ dir: root, session: "s1" });
+      const conversation = [
+        { role: "user", content: older! },
+        { role: "user", content: newer! },
+      ];
+      mem.observe(conversation.slice(0, 1));
+      mem.observe(conversation, { reread: true });
+      await sleep({ dir: root, session: "s1", mem });
+      mem.observe(conversation, { reread: true });
+      const live = mem.memories().filter((r) => r.kind === "fact" && !superseded(r));
+      mem.close();
+      expect(live.some((r) => /postgres|Alice/.test(r.text))).toBe(false);
+    }
+  });
+
+  test("settling a stored row's pending copy keeps the stored text and takes the copy's supersession", async () => {
+    const root = tempRoot();
+    const mem = openMemory({ dir: root, session: "s1" });
+    const row = mem.remember("The build tag for module alpha is tag-alpha.");
+    mem.close();
+    const stored = storeRows(join(root, "s1", "memories.jsonl"))[0]!;
+    const copy = {
+      id: row.id,
+      text: "an older copy of the text",
+      t: row.at,
+      seq: stored.seq,
+      invalid_by: "01J9ZZZZZZZZZZZZZZZZZZZZZZ",
+    };
+    writeFileSync(join(root, "pending.jsonl"), `${JSON.stringify({ store: "s1", row: copy })}\n`);
+    settlePendingRows(root);
+    const after = storeRows(join(root, "s1", "memories.jsonl"))[0]!;
+    expect(after.text).toBe(stored.text);
+    expect(after.seq).toBe(stored.seq);
+    expect(after.invalidBy).toBe("01J9ZZZZZZZZZZZZZZZZZZZZZZ");
+  });
+
+  test("a supersession decided while settling marks older text stating the old value stale (D31)", () => {
+    const root = tempRoot();
+    process.env.EDEN_NOW = String(T0);
+    const first = openMemory({ dir: root, session: "s1" });
+    first.remember("The build tag for module alpha is tag-alpha.");
+    writeFileSync(join(root, ".lock"), JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() }));
+    first.remember("The database is sqlite.");
+    first.close();
+    rmSync(join(root, ".lock"));
+    // The second writer never sees the pending row, so only the settle can supersede it.
+    process.env.EDEN_NOW = String(T0 + 60_000);
+    const second = openMemory({ dir: root, session: "s1" });
+    second.remember("The database is postgres.");
+    second.close();
+    expect(existsSync(join(root, "validity.jsonl"))).toBe(false);
+    settlePendingRows(root);
+    expect(readInvalidations(root)).toEqual([
+      { k: "retract", o: "sqlite", f: "sqlite", t: T0 + 60_000, w: ["database"] },
+    ]);
+  });
+
+  test("finishing a taken pending file another sleep already removed is not an error", () => {
+    const root = tempRoot();
+    mkdirSync(root, { recursive: true });
+    writeFileSync(
+      join(root, "pending.jsonl"),
+      `${JSON.stringify({ store: "s1", row: { id: "01J9AAAAAAAAAAAAAAAAAAAAAA", text: "x", t: T0 } })}\n`,
+    );
+    const taken = takePending(root)!;
+    for (const name of readdirSync(root).filter((n) => n.startsWith("pending.jsonl."))) rmSync(join(root, name));
+    expect(() => taken.done()).not.toThrow();
   });
 });

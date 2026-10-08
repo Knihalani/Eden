@@ -202,11 +202,13 @@ export function takePending(root: string): TakenRows | undefined {
       return {
         byStore,
         done: () => {
-          for (const { path, bytes } of taken) {
-            const late = readFileSync(path).subarray(bytes.length);
-            if (late.length) appendFileSync(join(root, PENDING), late, { mode: 0o600 });
-            rmSync(path, { force: true });
-          }
+          // Each file on its own: another sleep that took the same file may have finished it already.
+          for (const { path, bytes } of taken)
+            try {
+              const late = readFileSync(path).subarray(bytes.length);
+              if (late.length) appendFileSync(join(root, PENDING), late, { mode: 0o600 });
+              rmSync(path, { force: true });
+            } catch {}
         },
       };
     });
