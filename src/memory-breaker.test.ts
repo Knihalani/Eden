@@ -22,7 +22,8 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 function log(point: Flag, n: number, extra: Partial<WideEvent> = {}, t = NOW): void {
-  for (let i = 0; i < n; i++) appendWideEvent(root, { t, ev: "UserPromptSubmit", point, ms: 1, aborted: false, ...extra });
+  for (let i = 0; i < n; i++)
+    appendWideEvent(root, { t, ev: "UserPromptSubmit", point, ms: 1, aborted: false, ...extra });
 }
 
 const flags = () => resolveFlags(undefined, { EDEN_HOME: home });
