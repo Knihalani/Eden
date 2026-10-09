@@ -248,7 +248,7 @@ export function childSessionName(parent?: string, child?: string): string | unde
   return p && c ? memorySessionName(`${p}--${c}`) : (c ?? p);
 }
 
-type Compiled = { rec: MemoryRecord; needles: string[] };
+type Compiled = { rec: MemoryRecord; needles: string[]; scorable: boolean };
 
 const STOP = new Set([
   "the",
@@ -315,38 +315,49 @@ const STOP = new Set([
   "when",
 ]);
 
-/** A row with its needles, computed on first use: a narrative row can be tens of KB and most paths never ask. */
+/** `relevant` scores a row of at most 12 needles; a longer one (a tool result, a narrative) never ranks there. */
+const SCORABLE_NEEDLES = 12;
+
+/**
+ * A row with its needles, computed on first use: a narrative row can be tens of KB and most paths never ask. Whether
+ * `relevant` can score it reads only as far as its 13th needle.
+ */
 function compileNeedles(rec: MemoryRecord): Compiled {
   let needles: string[] | undefined;
+  let scorable: boolean | undefined;
   return {
     rec,
     get needles() {
-      return (needles ??= needlesOf(rec));
+      return (needles ??= [...new Set(needleWords(rec))]);
+    },
+    get scorable() {
+      return (scorable ??= needles ? needles.length <= SCORABLE_NEEDLES : fewNeedles(rec));
     },
   };
 }
 
-function needlesOf(rec: MemoryRecord): string[] {
-  return [
-    ...new Set([
-      ...(rec.tags ?? []).filter(
-        (t) =>
-          t.length >= 3 &&
-          !STOP.has(t) &&
-          !/^\d+$/.test(t) &&
-          !/^[a-z]\d[a-z]$/.test(t) &&
-          !/^[a-z]{3,}\d+[a-z]$/.test(t),
-      ),
-      ...((s) => s.toLowerCase().match(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g) ?? [])(rec.text).filter(
-        (w) =>
-          w.length >= 3 &&
-          !STOP.has(w) &&
-          !/^\d+$/.test(w) &&
-          !/^[a-z]\d[a-z]$/.test(w) &&
-          !/^[a-z]{3,}\d+[a-z]$/.test(w),
-      ),
-    ]),
-  ];
+function isNeedle(word: string): boolean {
+  return (
+    word.length >= 3 &&
+    !STOP.has(word) &&
+    !/^\d+$/.test(word) &&
+    !/^[a-z]\d[a-z]$/.test(word) &&
+    !/^[a-z]{3,}\d+[a-z]$/.test(word)
+  );
+}
+
+/** A row's needles, with repeats: its tags, then its text's words. */
+function* needleWords(rec: MemoryRecord): Generator<string> {
+  for (const tag of rec.tags ?? []) if (isNeedle(tag)) yield tag;
+  for (const [word] of rec.text.toLowerCase().matchAll(/[a-z0-9]+(?:\.[a-z0-9]+)+|[a-z0-9]+/g))
+    if (isNeedle(word)) yield word;
+}
+
+/** Whether a row has at most `SCORABLE_NEEDLES` distinct needles, read no further than the next one. */
+function fewNeedles(rec: MemoryRecord): boolean {
+  const seen = new Set<string>();
+  for (const word of needleWords(rec)) if (seen.add(word).size > SCORABLE_NEEDLES) return false;
+  return true;
 }
 
 export function queryHay(text: string): Set<string> {
@@ -851,6 +862,8 @@ export class AgentMemory {
   private batch = 0;
   private dirty = false;
   private seenLower = new Set<string>();
+  /** `seenLower` without end punctuation: an episode is not stored twice for a final period. */
+  private seenKeys = new Set<string>();
   /** Every row's text exactly: a text a row already holds has passed the gate, which `observe` need not run again. */
   private stored = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
@@ -977,8 +990,7 @@ export class AgentMemory {
     this.knownIds.add(rec.id);
     this.unsaved.add(rec.id);
     this.post = null;
-    this.seenLower.add(rec.text.toLowerCase());
-    this.stored.add(rec.text);
+    this.noteSeen(rec.text);
     return (this.flush(true), rec);
   }
 
@@ -1041,19 +1053,29 @@ export class AgentMemory {
 
   private rebuildSeen() {
     this.seenLower = new Set();
+    this.seenKeys = new Set();
     this.stored = new Set();
     this.post = null;
-    for (const c of this.compiled) {
-      this.seenLower.add(c.rec.text.toLowerCase());
-      this.stored.add(c.rec.text);
-    }
+    for (const c of this.compiled) this.noteSeen(c.rec.text);
   }
 
+  private noteSeen(text: string): void {
+    const lower = text.toLowerCase();
+    this.seenLower.add(lower);
+    this.seenKeys.add(lower.replace(/[.!?]+$/g, ""));
+    this.stored.add(text);
+  }
+
+  /**
+   * The postings `relevant` ranks from: the live rows it can score (P0.6). A row of more than 12 needles never
+   * ranks, so it neither fills the candidate pool nor counts in a term's df, and it is never tokenized whole: a
+   * store's tool results made this index the Submit's cost that grew with the session.
+   */
   private ensureIndex() {
     if (this.post) return;
     const post = new Map<string, Compiled[]>();
     for (const c of this.compiled)
-      if (isLiveRow(c.rec))
+      if (isLiveRow(c.rec) && c.scorable)
         for (const w of c.needles) {
           let arr = post.get(w);
           if (!arr) post.set(w, (arr = []));
@@ -1191,7 +1213,7 @@ export class AgentMemory {
               if (
                 !this.seenLower.has(safe.toLowerCase()) &&
                 !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) &&
-                ![...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key)
+                !this.seenKeys.has(key)
               )
                 out.push(this.remember(safe, { kind: "episode", tags: srcTags(it), origin: it.origin }));
             }
@@ -1366,7 +1388,7 @@ export class AgentMemory {
           }
         if (
           n &&
-          c.needles.length <= 12 &&
+          c.needles.length <= SCORABLE_NEEDLES &&
           !c.needles.some((x) => !hay.has(x) && /^[a-z]+\d+[a-z]$/.test(x)) &&
           !/\b(?:is|are)\s+not\b|\bunrelated\b|\bred herring\b/i.test(c.rec.text)
         )
