@@ -301,7 +301,7 @@ const PIPED_TO_SHELL = /\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b/;
 /** A claim of what the user wants, said or allowed. */
 const SPEAKS_FOR_USER =
   /\b(?:the user|user|you|they)\s+(?:wants?|wanted|asked|said|told|prefers?|requested|instructed|allowed|approved|agreed|decided|expects?)\b/i;
-/** A sentence's end and the space after it. A loop over its matches, not a look-behind split: 30× faster on 10 KB. */
+/** A sentence's end and the space after it, read by a loop over its matches (a look-behind split is slow). */
 const SENTENCE_BREAK = /[.!?]\s+/g;
 const CLAUSE_BREAK = /[,;]\s+(?:and\s+|but\s+|so\s+|then\s+)?/;
 
