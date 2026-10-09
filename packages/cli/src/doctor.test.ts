@@ -966,7 +966,8 @@ describe("M13.3 memory hooks doctor", () => {
     expect(full.ok).toBe(true);
     expect(full.detail).toContain("UserPromptSubmit");
     expect(full.detail).toContain("Stop");
-    expect(full.detail).toContain("PostToolUse");
+    expect(full.detail).toContain("PostToolBatch");
+    expect(full.detail).not.toContain("missing");
     expect(full.detail).toContain("SubagentStop");
     expect(full.detail).toMatch(/EDEN_MEMORY /);
     expect(JSON.stringify(full)).not.toContain("/forget");

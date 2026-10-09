@@ -10,6 +10,7 @@ import {
   startEpoch,
   wouldPreempt,
 } from "./memory-ledger";
+import { encodeDelta } from "./memory-delta";
 import { SHADOW_LEDGER } from "./memory-window";
 
 const dirs: string[] = [];
@@ -49,7 +50,7 @@ describe("A4 §4: the refractory rule", () => {
     const win = tempDir();
     const notes = [rule("Never merge PRs yourself."), episode("We switched auth to Clerk")];
     recordDeliveries(win, notes, { off: 1_000, att: "p1", ht: 1 });
-    const left = (size: number) => notRefractory(win, notes, { size, transcriptPath: "" }).map((n) => n.id);
+    const left = (size: number) => notRefractory(win, notes, size).map((n) => n.id);
     expect(left(1_000)).toEqual([]);
     expect(left(1_000 + REFRACTORY_BYTES.rule - 1)).toEqual([]);
     expect(left(1_000 + REFRACTORY_BYTES.rule)).toEqual(["Never merge PRs yourself."]);
@@ -59,7 +60,7 @@ describe("A4 §4: the refractory rule", () => {
   test("a new value, or a new epoch, re-arms", () => {
     const win = tempDir();
     recordDeliveries(win, [fact("The database is postgres")], { off: 0, att: "p1", ht: 1 });
-    const now = { size: 10, transcriptPath: "" };
+    const now = 10;
     expect(notRefractory(win, [fact("The database is postgres")], now)).toEqual([]);
     expect(notRefractory(win, [fact("The database is sqlite")], now)).toHaveLength(1);
     startEpoch(win, "compact", 5);
@@ -67,15 +68,16 @@ describe("A4 §4: the refractory rule", () => {
     expect(readFileSync(join(win, "delivery.log"), "utf8")).not.toContain("postgres");
   });
 
-  test("a delivery on an abandoned branch (a rewind) does not count; an unwritten prompt does", () => {
+  test("a delivery on a branch the delta encoder found abandoned does not count; an unread prompt does", () => {
     const win = tempDir();
     const path = join(tempDir(), "t.jsonl");
     const line = (uuid: string, parentUuid: string | null, promptId: string) =>
       JSON.stringify({ type: "user", uuid, parentUuid, promptId, message: { role: "user", content: promptId } });
     // p1 → p2 (abandoned) ; p1 → p3 (the current branch)
     writeFileSync(path, [line("u1", null, "p1"), line("u2", "u1", "p2"), line("u3", "u1", "p3")].join("\n") + "\n");
+    encodeDelta(win, path, () => {});
     const clerk = episode("We switched auth to Clerk");
-    const now = { size: 100, transcriptPath: path };
+    const now = 100;
     recordDeliveries(win, [clerk], { off: 50, att: "p2", ht: 2 });
     expect(notRefractory(win, [clerk], now)).toHaveLength(1);
     recordDeliveries(win, [clerk], { off: 60, att: "p4", ht: 3 });
@@ -86,7 +88,7 @@ describe("A4 §4: the refractory rule", () => {
 describe("X7: the shadow ledger", () => {
   test("a shadow point's refractory rule reads both ledgers, each folded by its own epochs; a live one reads its own", () => {
     const win = tempDir();
-    const now = { size: 100, transcriptPath: "" };
+    const now = 100;
     const pg = fact("The database is postgres");
     recordDeliveries(win, [pg], { off: 0, att: "p1", ht: 1 }, SHADOW_LEDGER);
     expect(notRefractory(win, [pg], now)).toHaveLength(1);

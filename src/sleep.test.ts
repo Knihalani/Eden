@@ -578,6 +578,12 @@ describe("M7.1 Stop/SessionEnd runs sleep", () => {
         const sleepFnSpy = spyOn(sleepMod, "sleep");
         const memSleep = spyOn(AgentMemory.prototype, "sleep");
         try {
+          // The typed line reaches memory through its Submit (P0.6: the delta encoder leaves typed lines to it).
+          memoryHookResponse({
+            hook_event_name: "UserPromptSubmit",
+            session_id: "s-m74-stop",
+            prompt: "Auth is Clerk",
+          });
           const stop = memoryHookResponse({
             hook_event_name: "Stop",
             session_id: "s-m74-stop",

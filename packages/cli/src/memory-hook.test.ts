@@ -364,11 +364,11 @@ describe("passive memory hooks", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  test("plugin hooks.json lists PostToolUse and SubagentStop", () => {
+  test("plugin hooks.json lists PostToolBatch (P0.6: batches, not each PostToolUse) and SubagentStop", () => {
     const json = JSON.parse(
       readFileSync(join(import.meta.dir, "../../../plugins/eden-memory/hooks/hooks.json"), "utf8"),
     ) as { hooks?: Record<string, unknown> };
-    expect(json.hooks?.PostToolUse).toBeTruthy();
+    expect(json.hooks?.PostToolBatch).toBeTruthy();
     expect(json.hooks?.SubagentStop).toBeTruthy();
   });
 

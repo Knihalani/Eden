@@ -9,9 +9,9 @@
  *   saying the same value share a cid. A rule is `P:<hash>` and anything else `E:<hash>`, both of
  *   their normalized content words, so near-identical text gets one cid. P2.1 and P3.3 bring the real keys.
  * - **Still in the window**: the same epoch, the same `ver`, the transcript grown by less than 400 KB (rules) or
- *   1.2 MB (everything else) since `off`, and `att` not on an abandoned branch (a rewind): a prompt whose line is in
- *   the transcript but not on the current `parentUuid` chain. A prompt whose line is not written yet counts as on
- *   the branch.
+ *   1.2 MB (everything else) since `off`, and `att` not on an abandoned branch: a prompt the delta encoder found
+ *   abandoned by a rewind (A4 §3.3, `memory-delta.ts`). A prompt whose line it has not read yet counts as on the
+ *   branch.
  * - **Epochs**: SessionStart `compact` or `clear` starts a new one, which re-arms everything (P1.2 re-arms only what
  *   the compact summary dropped); `resume` keeps the ledger.
  * - **Shadow** (X7): a point in `shadow` writes the same records to `delivery.shadow.log`, so its refractory rule is
@@ -21,15 +21,13 @@
  * P1.1 adds the `delivery.json` snapshot, the overflow policy and `hook.log.d/`'s stage drops.
  */
 import { createHash } from "node:crypto";
+import { abandonedPrompts } from "./memory-delta";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { legacySlot } from "./memory-residual";
-import { contentWords, tailLines } from "./memory-transcript";
+import { contentWords } from "./memory-transcript";
 import { appendRecord, LIVE_LEDGER, SHADOW_LEDGER, windowRecords, type LedgerFile } from "./memory-window";
 
 export const REFRACTORY_BYTES = { rule: 400_000, other: 1_200_000 } as const;
-
-/** The transcript tail read for the branch check: past the longest distance, so an older delivery has expired. */
-const BRANCH_TAIL_BYTES = 1_500_000;
 
 export interface LedgerKey {
   cid: string;
@@ -107,49 +105,21 @@ function readLedgers(file: LedgerFile): LedgerFile[] {
   return file === SHADOW_LEDGER ? [LIVE_LEDGER, SHADOW_LEDGER] : [LIVE_LEDGER];
 }
 
-/** The `promptId`s of a transcript tail's main-thread lines, and those on the current `parentUuid` chain. */
-function branchPrompts(transcriptPath: string): { seen: Set<string>; onBranch: Set<string> } {
-  const seen = new Set<string>();
-  const onBranch = new Set<string>();
-  const parent = new Map<string, string | null>();
-  const prompt = new Map<string, string>();
-  let last: string | undefined;
-  for (const line of tailLines(transcriptPath, BRANCH_TAIL_BYTES)) {
-    if (typeof line.uuid !== "string" || line.isSidechain === true) continue;
-    parent.set(line.uuid, typeof line.parentUuid === "string" ? line.parentUuid : null);
-    if (typeof line.promptId === "string") {
-      prompt.set(line.uuid, line.promptId);
-      seen.add(line.promptId);
-    }
-    last = line.uuid;
-  }
-  for (let uuid = last, steps = 0; uuid && steps < parent.size; steps++) {
-    const id = prompt.get(uuid);
-    if (id) onBranch.add(id);
-    uuid = parent.get(uuid) ?? undefined;
-  }
-  return { seen, onBranch };
-}
-
 /** The notes still eligible: those not delivered in this window's live part (see the header). */
 export function notRefractory<T extends ProvenanceNote>(
   dir: string,
   notes: readonly T[],
-  now: { size: number; transcriptPath: string },
+  size: number,
   file: LedgerFile = LIVE_LEDGER,
 ): T[] {
   const deliveries = readLedgers(file).flatMap((ledger) => epochDeliveries(dir, ledger));
   if (!deliveries.length) return [...notes];
-  let branch: ReturnType<typeof branchPrompts> | undefined;
-  const abandoned = (att: string) => {
-    branch ??= now.transcriptPath ? branchPrompts(now.transcriptPath) : { seen: new Set(), onBranch: new Set() };
-    return branch.seen.has(att) && !branch.onBranch.has(att);
-  };
+  const abandoned = abandonedPrompts(dir);
   return notes.filter((note) => {
     const key = ledgerKey(note);
     const distance = key.rule ? REFRACTORY_BYTES.rule : REFRACTORY_BYTES.other;
     return !deliveries.some(
-      (d) => d.cid === key.cid && d.ver === key.ver && now.size - d.off < distance && !abandoned(d.att),
+      (d) => d.cid === key.cid && d.ver === key.ver && size - d.off < distance && !abandoned.has(d.att),
     );
   });
 }
