@@ -810,6 +810,8 @@ export class AgentMemory {
   private batch = 0;
   private dirty = false;
   private seenLower = new Set<string>();
+  /** Every row's text exactly: a text a row already holds has passed the gate, which `observe` need not run again. */
+  private stored = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
   private knownIds = new Set<string>();
   /** Rows this process wrote that no store file holds yet. */
@@ -906,6 +908,7 @@ export class AgentMemory {
     this.unsaved.add(rec.id);
     this.post = null;
     this.seenLower.add(rec.text.toLowerCase());
+    this.stored.add(rec.text);
     return (this.flush(true), rec);
   }
 
@@ -947,8 +950,12 @@ export class AgentMemory {
 
   private rebuildSeen() {
     this.seenLower = new Set();
+    this.stored = new Set();
     this.post = null;
-    for (const c of this.compiled) this.seenLower.add(c.rec.text.toLowerCase());
+    for (const c of this.compiled) {
+      this.seenLower.add(c.rec.text.toLowerCase());
+      this.stored.add(c.rec.text);
+    }
   }
 
   private ensureIndex() {
@@ -993,7 +1000,9 @@ export class AgentMemory {
       });
       for (let i = 0; i < items.length; i++) {
         const it = items[i]!,
-          safe = this.persistText(stripMemoryPacket(it.text)),
+          plain = stripMemoryPacket(it.text),
+          // A re-read message a row already holds is stored as it is (the gate is idempotent), and is skipped below.
+          safe = this.stored.has(plain) ? plain : this.persistText(plain),
           lane = lanes[i]!;
         if (lane === "icl" || lane === "narrative") {
           let text = safe;
