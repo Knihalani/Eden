@@ -61,10 +61,18 @@ function contentTokens(text: string): Set<string> {
 
 const SENTENCE_BREAK = /(?<=[.!?])\s+|\n+/;
 
+/** A text's sentences, trimmed, as the residual splits them. */
+export function sentencesOf(text: string): string[] {
+  return text
+    .split(SENTENCE_BREAK)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
 /** The residual's sentences, as content-token sets. */
 export function residualSentences(texts: readonly string[]): Set<string>[] {
   return texts
-    .flatMap((text) => text.split(SENTENCE_BREAK))
+    .flatMap(sentencesOf)
     .map(contentTokens)
     .filter((tokens) => tokens.size > 0);
 }

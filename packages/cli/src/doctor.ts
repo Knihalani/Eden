@@ -8,9 +8,12 @@ import { liveToolsPath, readConfig, wrapPlaneUrl, keyFingerprint, edenHome } fro
 import { hookdPidAlive, readHookdPid } from "./hookd";
 import { memoryConsent } from "../../../src/memory-consent";
 import {
+  breakerCheck,
   claudeConfigDir,
   fallbackCheck,
   findMemoryPlugin,
+  flagsCheck,
+  killSwitchesCheck,
   modulesCheck,
   pluginCheck,
   pluginHookEvents,
@@ -260,7 +263,8 @@ export function memoryHooksCheck(settings: unknown, opts?: { pluginEvents?: stri
 
 /**
  * `eden doctor`'s memory section: the memory hooks Claude Code registers, the plugin copy it runs, whether that copy
- * loads Eden in-process within the Submit budget, the fallbacks it logged, and how the store is keyed.
+ * loads Eden in-process within the Submit budget, the fallbacks it logged, how the store is keyed, the delivery
+ * flags, the circuit breaker and the kill switches.
  */
 export function collectMemoryDoctor(): DoctorCheck[] {
   const settings = readClaudeSettingsFile();
@@ -275,6 +279,9 @@ export function collectMemoryDoctor(): DoctorCheck[] {
     modules.check,
     fallbackCheck(modules.loaded),
     ...storeChecks(),
+    flagsCheck(),
+    breakerCheck(),
+    killSwitchesCheck(),
   ];
 }
 
