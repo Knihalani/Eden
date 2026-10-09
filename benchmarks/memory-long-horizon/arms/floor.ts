@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { HOOK_EVENTS } from "../harness/payloads";
 import type { SimWorld } from "../harness/session";
 import type { WorldSpec } from "../harness/world";
-import { AUTH, CACHE, DB, id, monorepo, set } from "./fixtures/world";
+import { AUTH, CACHE, DB, id, monorepo, set, TEST } from "./fixtures/world";
 import {
   bash,
   BLANK_SUMMARY,
@@ -204,6 +204,9 @@ const rewind: Arm = {
     await session.compact(BLANK_SUMMARY);
     const abandoned = await session.ask("which auth provider do we use?", { needs: [id(AUTH, "")] });
     await session.say("The database is postgres.", [set(DB, "", "postgres")]);
+    // A statement only the abandoned branch makes: no later statement supersedes it, so only rewind detection can
+    // take it back (A4 §3.3). P0.3's follow-up: `no-postgres` alone passes through supersession.
+    await session.say("The test runner is jest.", [set(TEST, "", "jest")]);
     const branch = await session.rewind(0, "The database is sqlite.", {
       sets: [set(DB, "", "sqlite")],
       cue: { allowed: [id(DB, "")] },
@@ -211,6 +214,7 @@ const rewind: Arm = {
     const again = await session.ask("which auth provider do we use?", { needs: [id(AUTH, "")] });
     const twice = await session.ask("remind me which auth provider we use", { needs: [id(AUTH, "")] });
     await session.ask("what database do we use?", { needs: [id(DB, "")] });
+    await session.ask("which test runner do we use?", { allowed: [id(TEST, "")] });
     await session.end();
     const packets = judged(world, spec);
     const clerkAt = (turn: Turn) =>
@@ -218,6 +222,7 @@ const rewind: Arm = {
         .flatMap((packet) => packet.bullets)
         .filter((bullet) => states(bullet, AUTH, "Clerk"));
     const postgres = bulletsIn(packets, branch.seq).filter((bullet) => states(bullet, DB, "postgres"));
+    const jest = bulletsIn(packets, branch.seq).filter((bullet) => states(bullet, TEST, "jest"));
     return [
       check(
         "abandoned-delivery",
@@ -227,6 +232,7 @@ const rewind: Arm = {
       check("reinjects", clerkAt(again).length > 0, `Clerk on the new branch's first cue: ${quote(clerkAt(again))}`),
       check("once", clerkAt(twice).length === 0, `Clerk again on the next cue: ${quote(clerkAt(twice))}`),
       check("no-postgres", postgres.length === 0, `the abandoned postgres after the rewind: ${quote(postgres)}`),
+      check("no-abandoned", jest.length === 0, `the abandoned jest after the rewind: ${quote(jest)}`),
     ];
   },
 };
