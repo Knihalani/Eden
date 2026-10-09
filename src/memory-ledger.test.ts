@@ -2,7 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ledgerKey, notRefractory, recordDeliveries, REFRACTORY_BYTES, startEpoch } from "./memory-ledger";
+import {
+  ledgerKey,
+  notRefractory,
+  recordDeliveries,
+  REFRACTORY_BYTES,
+  startEpoch,
+  wouldPreempt,
+} from "./memory-ledger";
+import { SHADOW_LEDGER } from "./memory-window";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -72,5 +80,35 @@ describe("A4 §4: the refractory rule", () => {
     expect(notRefractory(win, [clerk], now)).toHaveLength(1);
     recordDeliveries(win, [clerk], { off: 60, att: "p4", ht: 3 });
     expect(notRefractory(win, [clerk], now)).toHaveLength(0);
+  });
+});
+
+describe("X7: the shadow ledger", () => {
+  test("a shadow point's refractory rule reads both ledgers, each folded by its own epochs; a live one reads its own", () => {
+    const win = tempDir();
+    const now = { size: 100, transcriptPath: "" };
+    const pg = fact("The database is postgres");
+    recordDeliveries(win, [pg], { off: 0, att: "p1", ht: 1 }, SHADOW_LEDGER);
+    expect(notRefractory(win, [pg], now)).toHaveLength(1);
+    expect(notRefractory(win, [pg], now, SHADOW_LEDGER)).toHaveLength(0);
+    startEpoch(win, "compact", 10, SHADOW_LEDGER);
+    expect(notRefractory(win, [pg], now, SHADOW_LEDGER)).toHaveLength(1);
+    recordDeliveries(win, [pg], { off: 20, att: "p2", ht: 2 });
+    expect(notRefractory(win, [pg], now, SHADOW_LEDGER)).toHaveLength(0);
+  });
+
+  test("would_preempt: a statement of a shadow delivery from the last 3 human turns; a slot only at its value", () => {
+    const win = tempDir();
+    const merge = rule("Never merge PRs yourself.");
+    recordDeliveries(win, [merge, fact("The database is postgres")], { off: 0, att: "p1", ht: 1 }, SHADOW_LEDGER);
+    const ruleCid = ledgerKey(merge).cid;
+    const slotCid = ledgerKey(fact("The database is postgres")).cid;
+    expect(wouldPreempt(win, ["never merge PRs yourself"], 2)).toEqual([ruleCid]);
+    expect(wouldPreempt(win, ["The database is postgres."], 4)).toEqual([slotCid]);
+    expect(wouldPreempt(win, ["The database is sqlite."], 2)).toEqual([]);
+    expect(wouldPreempt(win, ["never merge PRs yourself"], 5)).toEqual([]);
+    expect(wouldPreempt(win, ["never merge PRs yourself"], 1)).toEqual([]);
+    recordDeliveries(win, [merge], { off: 0, att: "p9", ht: 1 });
+    expect(wouldPreempt(tempDir(), ["never merge PRs yourself"], 2)).toEqual([]);
   });
 });

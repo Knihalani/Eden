@@ -7,6 +7,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MEMORY_MARK, openMemory } from "./index";
+import { memoryConsent } from "./memory-consent";
 
 const SESSION = "sess-m132-abc";
 const CWD = "/tmp/eden-m132-cwd";
@@ -189,5 +190,13 @@ describe("M13 AgentMemory off / readonly / on", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("EDEN_MEMORY, the master flag (EXECUTION X7)", () => {
+  test("unset and the on words are on; an unknown value is off, the identity", () => {
+    for (const raw of [undefined, "", "1", "on", "TRUE", " yes "]) expect(memoryConsent(raw)).toBe("on");
+    for (const raw of ["readonly", "read-only", "RO"]) expect(memoryConsent(raw)).toBe("readonly");
+    for (const raw of ["0", "off", "false", "none", "enabled", "maybe", "2"]) expect(memoryConsent(raw)).toBe("off");
   });
 });
