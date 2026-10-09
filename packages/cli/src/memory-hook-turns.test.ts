@@ -68,7 +68,6 @@ function humanTurns(): number {
   return new Set(records.filter((record) => record.k === "turn").map((record) => record.prompt_id)).size;
 }
 
-/** Every file under the memory root, as one string. */
 /** Every file under the memory root, or (`logs`) only the wide events of `hook.log.d/` (P0.8), which name rules. */
 function storeText(logs = false): string {
   const root = join(dir, "memory");
