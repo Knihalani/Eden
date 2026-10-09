@@ -244,16 +244,28 @@ describe("wide events", () => {
 describe("an exception in the handler (injected)", () => {
   /** A payload whose transcript path throws when read: every memory event reads it once its store is open. */
   function throwing(event: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-    return Object.defineProperty({ hook_event_name: event, session_id: SESSION, prompt: CUE, ...extra }, "transcript_path", {
-      enumerable: true,
-      get() {
-        throw new TypeError(`injected ${RULE}`);
+    return Object.defineProperty(
+      { hook_event_name: event, session_id: SESSION, prompt: CUE, ...extra },
+      "transcript_path",
+      {
+        enumerable: true,
+        get() {
+          throw new TypeError(`injected ${RULE}`);
+        },
       },
-    });
+    );
   }
 
   test("every memory event returns null, and its wide event names the error's class and line, not its text", () => {
-    const events = ["SessionStart", "UserPromptSubmit", "PostToolUse", "Stop", "PreCompact", "SubagentStop", "SessionEnd"];
+    const events = [
+      "SessionStart",
+      "UserPromptSubmit",
+      "PostToolUse",
+      "Stop",
+      "PreCompact",
+      "SubagentStop",
+      "SessionEnd",
+    ];
     for (const ev of events) expect(memoryHookResponse(throwing(ev))).toBeNull();
     const logged = wideEvents();
     expect(logged.map((event) => event.ev)).toEqual(events);
