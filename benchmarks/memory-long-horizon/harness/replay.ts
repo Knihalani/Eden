@@ -65,9 +65,12 @@ export interface ReplayOptions {
 export async function replay(options: ReplayOptions): Promise<{ summary: ReplaySummary; world: SimWorld }> {
   const plugin = loadPlugin(options.pluginDir);
   const { scenario } = options;
+  // Hooks read the simulated clock (`EDEN_NOW`), as the arms' do: the transcript's timestamps are simulated, and a
+  // hook that dates a row by its line (A4 §3.3) must compare it with a clock of the same kind.
   const world = new SimWorld({
     runDir: options.runDir,
     plugin,
+    clockEnv: true,
     seed: scenario.seed,
     flush: options.flush,
     env: options.env,
