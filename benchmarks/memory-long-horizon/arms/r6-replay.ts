@@ -268,6 +268,8 @@ export async function replayR6(options: {
           : step.kind === "stop"
             ? stopPayload(ctx, { lastAssistantMessage: step.lastAssistantMessage })
             : userPromptSubmitPayload(ctx, step.prompt);
+      // An async handler (D34's stop-sleep) exits before the next event, as in the simulator (`SimWorld.settle`).
+      await runner.settle();
       const invocations = await runner.dispatch(payload);
       for (const call of invocations) {
         if (call.exitCode !== 0) failOpen.nonZeroExit++;
@@ -288,6 +290,7 @@ export async function replayR6(options: {
       tally.bytes += Buffer.byteLength(packet, "utf8");
     }
   }
+  await runner.settle();
   const human = bySubmit.human;
   return {
     plugin: options.pluginDir,
