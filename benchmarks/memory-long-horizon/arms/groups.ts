@@ -9,7 +9,7 @@
  * slice runs on its arms, checks every state of every arm against `arms.json`.
  */
 export const GROUPS: Record<string, readonly string[]> = {
-  floor: ["cross-session", "worktree", "reload-stale", "rewind", "negation", "numbered-list", "poison"],
+  floor: ["cross-session", "worktree", "cross-repo", "reload-stale", "rewind", "negation", "numbered-list", "poison"],
   "floor-store": ["spawn-writers", "secrets", "migrate", "fail-open"],
   place: ["scoped", "cascade", "single-package", "fan-out", "r5-unit-rows"],
   delivery: ["nonhuman", "repeat", "compaction", "resume", "subagent", "first-touch", "residual", "shadow", "continue"],

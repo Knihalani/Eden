@@ -42,6 +42,30 @@
       }
     },
     {
+      "id": "cross-repo",
+      "group": "floor",
+      "slices": [
+        "P0.5"
+      ],
+      "a5": "repo A's fact never reaches repo B (D1; no A5 row: added from the P0.0c report's follow-up)",
+      "on": {
+        "state": "red",
+        "failed": [
+          "isolated",
+          "own-store"
+        ],
+        "why": "today's gist store (gists.jsonl at the memory root) is shared by every repo: repo A's next SessionStart briefs repo B's newer 'database is sqlite' gist, and A's own postgres is not met"
+      },
+      "off": {
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
+      },
+      "shadow": {
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
+      }
+    },
+    {
       "id": "spawn-writers",
       "group": "floor",
       "slices": [
