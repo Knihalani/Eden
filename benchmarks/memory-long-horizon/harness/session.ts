@@ -276,8 +276,8 @@ export class SimWorld {
   }
 
   /**
-   * Runs the event's hooks, with `env` added to their environment. The log entry is taken at dispatch, so
-   * concurrent events keep dispatch order.
+   * Runs the event's hooks, with `env` added to their environment, once the async handlers still running have
+   * exited (`settle`). The log entry is taken at dispatch, so concurrent events keep dispatch order.
    */
   async dispatch(payload: HookPayload, window: string, env: Record<string, string> = {}): Promise<Invocation[]> {
     const record: EventRecord = {
@@ -289,10 +289,16 @@ export class SimWorld {
       invocations: [],
     };
     this.log.push(record);
+    await this.settle();
     const clock: Record<string, string> = this.options.clockEnv ? { EDEN_NOW: String(this.clock.ms) } : {};
     record.invocations = await this.runner.dispatch(payload, { ...clock, ...env });
     this.records.set(record.invocations, record);
     return record.invocations;
+  }
+
+  /** Waits for the async handlers still running (`HookRunner.settle`): each event starts after them. */
+  settle(): Promise<void> {
+    return this.runner.settle();
   }
 
   /** The event a `dispatch` result belongs to. */
