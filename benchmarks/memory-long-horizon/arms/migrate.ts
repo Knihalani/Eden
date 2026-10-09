@@ -9,13 +9,16 @@
  * - a crash after any step leaves the old state or the new one, never a mix;
  * - no planted secret is left in the new store (the read-only legacy tree and the backup keep the old bytes);
  * - legacy rows are episodes only: the legacy "Never merge PRs yourself" is never a pin or a guard;
- * - legacy facts from both worktrees reach a later session in the main checkout.
+ * - legacy facts from both worktrees land in one store and reach a later session in the main checkout. Being
+ *   episodes (A6 §4), they are admitted as A7 §4 admits an episode, on MEDIUM evidence from two cue parts: each cue
+ *   follows an agent message about its subject (P0.5 revised the cue, which alone was one part).
  *
  * The arm drives the entry point EXECUTION §9 names, with three details it fixes so a run can be checked:
  *
  *   eden memory migrate --dry-run --json   →  {"steps": [name…], "sessions": [{"session", "repo"}…], "unmappable": […]}
  *   eden memory migrate --apply | --rollback
  *   EDEN_MIGRATE_CRASH_AFTER=<step>         →  the --apply process exits abruptly right after that step
+ *   eden memory dump --json                 →  the migrated rows, each with its `store` (the spawn-writers contract)
  *
  * Until a slice provides it, every check fails with the reason.
  */
@@ -107,6 +110,16 @@ function snapshot(dir: string, skip: (path: string) => boolean = () => false): M
   );
 }
 
+/** The stores `eden memory dump --json` puts the legacy postgres and Clerk rows in (ids `legacy:…`). */
+function legacyStores(dump: unknown): Set<string> {
+  const rows = (dump as { rows?: unknown } | undefined)?.rows;
+  const legacy = (Array.isArray(rows) ? rows : []).filter(
+    (row): row is { id: string; text: string; store: string } =>
+      typeof row?.id === "string" && row.id.startsWith("legacy:") && /\b(?:postgres|clerk)\b/i.test(String(row.text)),
+  );
+  return new Set(legacy.map((row) => String(row.store)));
+}
+
 /** Wide events and backups may change between runs; the store may not. */
 const LOGS_AND_BACKUPS = (path: string) => path.includes("hook.log.d/") || /\.tar(\.gz)?$/.test(path);
 
@@ -188,9 +201,12 @@ async function migrationChecks(run: ArmRun, world: SimWorld, spec: WorldSpec, m:
   const newStore = listFiles(m.eden).filter((path) => !/memory\.legacy|\.tar(\.gz)?$/.test(relative(m.eden, path)));
   const leaks = newStore.filter((path) => values.some((value) => readFileSync(path, "utf8").includes(value)));
 
+  const stores = legacyStores(jsonOut(run.cli(world, ["memory", "dump", "--json"])));
   const session = await Driver.start(world, spec);
   const start = world.deliveries.filter((delivery) => delivery.event === "SessionStart").map((d) => d.content);
+  await session.turn("let's set up the test fixtures", { reply: "The fixtures need a database connection." });
   const db = await session.ask("what database do we use?", { needs: [id(DB, "")] });
+  await session.turn("now the login page", { reply: "The login page needs an auth provider." });
   const auth = await session.ask("which auth provider do we use?", { needs: [id(AUTH, "")] });
   await session.turn("the PR is approved, wrap it up", { tools: [[bash("gh pr merge 42 --squash")]] });
   await session.end();
@@ -222,8 +238,9 @@ async function migrationChecks(run: ArmRun, world: SimWorld, spec: WorldSpec, m:
     ),
     check(
       "mapped",
-      needMet(metrics, db) && needMet(metrics, auth),
-      `db ${needMet(metrics, db)}, auth (worktree) ${needMet(metrics, auth)}`,
+      stores.size === 1 && needMet(metrics, db) && needMet(metrics, auth),
+      `legacy postgres and Clerk rows in ${stores.size} stores (${[...stores].join(", ") || "none"}); ` +
+        `db ${needMet(metrics, db)}, auth (worktree) ${needMet(metrics, auth)}`,
     ),
   ];
 }
