@@ -4,9 +4,9 @@
  * (`<group>.reference.test.ts`).
  *
  * CI runs every arm's `on` state, and `off` and `shadow` only for one cheap arm per group (`FLAG_SAMPLES`). The off
- * and shadow checks are generic (kit.ts `flagChecks`), so one arm per group shows a flag regression, and today every
- * arm fails them for the same reason (flags.json is ignored). `run.ts`, which every slice runs on its arms, checks
- * every state of every arm against `arms.json`.
+ * and shadow checks are generic (kit.ts `flagChecks`), so one arm per group shows a flag regression: since P0.8
+ * every arm that drives a delivery point passes them, and the arms that drive none fail `ran`. `run.ts`, which every
+ * slice runs on its arms, checks every state of every arm against `arms.json`.
  */
 export const GROUPS: Record<string, readonly string[]> = {
   floor: ["cross-session", "worktree", "reload-stale", "rewind", "negation", "numbered-list", "poison"],
