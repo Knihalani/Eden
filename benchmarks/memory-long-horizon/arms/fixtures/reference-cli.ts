@@ -5,7 +5,8 @@
  * what the run left on disk; it is not Eden and keeps no memory beyond what a contract needs.
  *
  *   memory remember --jsonl -          → {"remembered": N}                         (cuebench.ts, scale.ts)
- *   memory dump --json                 → rows and turn records, from the transcripts (writers.ts)
+ *   memory dump --json                 → rows and turn records, from the transcripts (writers.ts), and the rows this
+ *                                        reference's migrate wrote (migrate.ts)
  *   memory extract --jsonl -           → the E3 gold annotations as records        (extraction.ts)
  *   memory scopes --json <path>…       → R5 §9.3's expected scopes                 (scope-rows.ts)
  *   memory migrate --dry-run --json | --apply | --rollback, EDEN_MIGRATE_CRASH_AFTER   (migrate.ts)
@@ -13,7 +14,7 @@
  *   sleep …                            → exit 0
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { listFiles } from "../../harness/metrics";
 import { e3Items, parseGold } from "../extraction";
 import { ROWS } from "../scope-rows";
@@ -40,11 +41,30 @@ function dump(): unknown {
     const text = typeof content === "string" ? content : JSON.stringify(content ?? "");
     return text.includes("The build tag for module") ? [text] : [];
   });
-  const rows = texts.map((text, n) => ({ id: `row-${n}`, text }));
+  const rows = [...texts.map((text, n) => ({ id: `row-${n}`, text })), ...migratedRows()];
   const ledger = lines
     .filter((line) => (line.origin as { kind?: string } | undefined)?.kind === "human")
     .map((line) => ({ window: String(line.sessionId), k: "turn", prompt_id: String(line.promptId) }));
   return { rows, ledger };
+}
+
+/** The rows `migrate --apply` wrote, as legacy rows of their repo's store. */
+function migratedRows(): Record<string, unknown>[] {
+  const memory = join(eden, "memory");
+  return listFiles(join(memory, "repos"))
+    .filter((path) => path.endsWith("episodes.jsonl"))
+    .flatMap((path) =>
+      readFileSync(path, "utf8")
+        .split("\n")
+        .flatMap((line) => {
+          try {
+            const row = JSON.parse(line) as { id: string; text: string };
+            return [{ id: `legacy:${row.id}`, text: row.text, store: relative(memory, dirname(path)) }];
+          } catch {
+            return [];
+          }
+        }),
+    );
 }
 
 function extract(): string {
