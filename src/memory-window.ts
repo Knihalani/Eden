@@ -5,7 +5,8 @@
  *   (`memory-ledger.ts`).
  * - `delivery.shadow.log`: the same records from a point whose flag is `shadow` (X7), which delivers nothing. Turn
  *   records count from both logs, so `hturn` does not depend on which mode the Submits ran in.
- * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves.
+ * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves; and
+ *   the `cwd` of its SessionStart, which names the repo of a session outside git (D1, `memory-repo.ts`).
  *
  * Each record is one appended line under 4 KB, so concurrent appends do not interleave.
  */
@@ -111,4 +112,15 @@ export function recordCrons(dir: string, sessionCrons: unknown): void {
   const hashes = [...new Set(prompts)].sort();
   if (hashes.join() === cronHashes(dir).join()) return;
   appendRecord(dir, "ctx.log", { k: "crons", h: hashes });
+}
+
+/** The `cwd` of the window's SessionStart, when it recorded one. */
+export function startCwd(dir: string): string | undefined {
+  const last = windowRecords(dir, "ctx.log").findLast((record) => record.k === "start");
+  return typeof last?.cwd === "string" ? last.cwd : undefined;
+}
+
+/** Records a SessionStart's `cwd` unless it is the one already recorded. */
+export function recordStart(dir: string, cwd: string): void {
+  if (startCwd(dir) !== cwd) appendRecord(dir, "ctx.log", { k: "start", cwd });
 }

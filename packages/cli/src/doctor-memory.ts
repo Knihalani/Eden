@@ -21,7 +21,10 @@ import {
   type Flag,
 } from "../../../src/memory-flags";
 import { fallbackLogPath, readFallbacks } from "../../../plugins/eden-memory/scripts/fallback-log";
+import { legacyTree, repoIdentity, repoStoreDir } from "../../../src/memory-repo";
 import type { DoctorCheck } from "./doctor";
+import { memoryRoot } from "./memory-hook";
+import { legacySessions } from "./memory-migrate";
 import { edenHome } from "./home";
 
 /** A7 §8, D20: every hook path, Eden's load included, fits in 150 ms on Submit. */
@@ -276,14 +279,28 @@ export function fallbackCheck(loadsNow: boolean, path = fallbackLogPath(edenHome
   return { name: "fallback", ok: loadsNow, detail: `${count}, last ${last.t}: ${last.cause}${now} · ${path}` };
 }
 
-/** How the store is keyed today. Repo keys (D1), folder scopes (D3) and the policy guard (D18) come in later slices. */
-export function storeChecks(): DoctorCheck[] {
-  const dir = process.env.EDEN_MEMORY_DIR || join(edenHome(), "memory");
+/** How the store is keyed (D1). Folder scopes (D3) and the policy guard (D18) come in later slices. */
+export function storeChecks(cwd = process.cwd()): DoctorCheck[] {
   return [
-    { name: "repo key", ok: true, detail: `none · memory is kept per Claude session, in ${dir}` },
+    repoKeyCheck(memoryRoot(), cwd),
     { name: "scope catalog", ok: true, detail: "none · no folder scopes" },
     { name: "guard", ok: true, detail: "off · no PreToolUse policy guard" },
   ];
+}
+
+/**
+ * The repo a session in `cwd` remembers in (D1): its key and store, and the stores of the per-session layout before
+ * P0.5 that `eden memory migrate` has not moved yet.
+ */
+export function repoKeyCheck(root: string, cwd: string): DoctorCheck {
+  const repo = repoIdentity(cwd);
+  if (!repo) return { name: "repo key", ok: true, detail: `none · ${cwd} is not an absolute path` };
+  const of = repo.top ? `the repo at ${repo.top}` : `${cwd}, outside git (a session keeps the folder it starts in)`;
+  const legacy = existsSync(legacyTree(root)) ? [] : legacySessions(root);
+  const waiting = legacy.length
+    ? ` · ${legacy.length} per-session stores from before per-repo memory: eden memory migrate --dry-run`
+    : "";
+  return { name: "repo key", ok: true, detail: `${repo.key} · ${repoStoreDir(root, repo.key)}, for ${of}${waiting}` };
 }
 
 /**

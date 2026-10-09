@@ -9,19 +9,19 @@ import { memoryConsent } from "../../../src/memory-consent";
 import { declarativeBullet, renderPacket, shapePacket } from "../../../src/memory-hook-packet";
 import { tripIfOverBudget, takeNotice } from "../../../src/memory-breaker";
 import { appendWideEvent, errorTag, type WideEvent } from "../../../src/memory-events";
-import {
-  flagModes,
-  pointOf,
-  repoHash,
-  repoTop,
-  resolveFlags,
-  type FlagMode,
-  type FlagState,
-} from "../../../src/memory-flags";
+import { flagModes, pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
 import { ledgerKey, notRefractory, recordDeliveries, startEpoch, wouldPreempt } from "../../../src/memory-ledger";
 import { admitNotes } from "../../../src/memory-gate";
 import { isResidualNote, recentConversation, residualSentences, sentencesOf } from "../../../src/memory-residual";
 import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenance";
+import {
+  markStoreFormat,
+  readableStore,
+  repoIdentity,
+  repoStoreDir,
+  swapping,
+  type RepoIdentity,
+} from "../../../src/memory-repo";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   asksHistory,
@@ -39,6 +39,8 @@ import {
   humanTurns,
   ledgerFor,
   recordCrons,
+  recordStart,
+  startCwd,
   transcriptOffset,
   windowDir,
   type LedgerFile,
@@ -57,8 +59,8 @@ const MEMORY_EVENTS = new Set([
   "SubagentStop",
 ]);
 
-function hookMemory(opts: { dir?: string; session?: string; child: boolean; cwd?: string }) {
-  return openMemory(opts);
+function hookMemory(opts: { dir: string; session?: string; child: boolean; cwd?: string }) {
+  return openMemory({ ...opts, perRepo: true });
 }
 
 function asRec(v: unknown): Record<string, unknown> {
@@ -302,6 +304,8 @@ export function memoryHookResponse(raw: Record<string, unknown>): Record<string,
     event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     const consent = memoryConsent();
     if (consent === "off" || !MEMORY_EVENTS.has(event)) return null;
+    // `eden memory migrate` is between its two renames: the root is back in a moment, so nothing is written now.
+    if (swapping(memoryRoot())) return null;
     writes = consent === "on";
   } catch {
     return null;
@@ -336,8 +340,14 @@ function logInvocation(trace: Trace, flags: FlagState | undefined, ms: number): 
   } catch {}
 }
 
-/** The session a hook payload belongs to, and whether it is a subagent's (its child store). */
-function resolveSession(r: Record<string, unknown>, event: string): { session?: string; child: boolean } {
+/**
+ * The window a hook payload belongs to (D2): its session, or `session--agent` in a subagent (`child`), and the
+ * session it runs in (`parent`).
+ */
+function resolveSession(
+  r: Record<string, unknown>,
+  event: string,
+): { session?: string; parent?: string; child: boolean } {
   try {
     const parent = [
         r.session_id,
@@ -354,10 +364,23 @@ function resolveSession(r: Record<string, unknown>, event: string): { session?: 
         .find(Boolean);
     const asChild = event === "SubagentStop" || !!(childId && childId !== parent),
       session = asChild ? childSessionName(parent, childId || "sub") : parent;
-    return { session: asChild && session ? session : parent, child: !!(asChild && session) };
+    return { session: asChild && session ? session : parent, parent, child: !!(asChild && session) };
   } catch {
     return { child: false };
   }
+}
+
+/**
+ * The repo of an event (D1). Outside git it is the directory the session started in: SessionStart records it in
+ * the session's window (`starting`), and later events, a subagent's included, read it back.
+ */
+function eventRepo(cwd: string, sessionWin: string | undefined, starting: boolean): RepoIdentity | undefined {
+  const repo = repoIdentity(cwd, () => (starting || !sessionWin ? undefined : startCwd(sessionWin)));
+  if (repo && !repo.top && starting && sessionWin)
+    try {
+      recordStart(sessionWin, cwd);
+    } catch {}
+  return repo;
 }
 
 /** The breaker's notice as a message to the user (`systemMessage`), beside whatever the point delivers. */
@@ -375,19 +398,20 @@ function respond(
   const cwd = str(r.cwd);
   if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd"))
     return null;
+  const root = memoryRoot();
   const resolved = resolveSession(r, event);
-  const root = memoryRoot(),
-    win = resolved.child ? undefined : windowDir(root, resolved.session ?? ""),
+  const win = windowDir(root, resolved.session ?? ""),
+    sessionWin = windowDir(root, resolved.parent ?? ""),
     prompt = promptOf(r),
     point = pointOf(event),
     mode = point ? flags[point].mode : undefined,
-    top = repoTop(cwd);
+    repo = eventRepo(cwd ?? process.cwd(), sessionWin, event === "SessionStart" && writes && !resolved.child);
   Object.assign(trace, {
     ...(point ? { point, mode } : {}),
-    ...(top ? { repo: repoHash(top) } : {}),
+    ...(repo ? { repo: repo.key } : {}),
     ...(win ? { win: basename(win) } : {}),
   });
-  /** The ledger this point writes: none when it is off, read-only, or in a subagent's store. */
+  /** The ledger this point writes: none when it is off or read-only. */
   const ledgerOf = (m: FlagMode | undefined): Ledger | undefined => {
     const file = m && writes && win ? ledgerFor(m) : undefined;
     return file && win ? { dir: win, file } : undefined;
@@ -410,7 +434,14 @@ function respond(
       } catch {}
     return null;
   }
-  const mem = hookMemory({ dir: root, session: resolved.session, child: resolved.child, cwd });
+  const store = repo && repoStoreDir(root, repo.key);
+  // EXECUTION §9: a store in a format this code does not know is never read or written.
+  if (!store || !readableStore(store)) return null;
+  const mem = hookMemory({ dir: store, session: resolved.session, child: resolved.child, cwd });
+  if (writes)
+    try {
+      markStoreFormat(store);
+    } catch {}
   try {
     const transPath =
         typeof r.transcript_path === "string"

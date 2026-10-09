@@ -10,7 +10,7 @@
       "a5": "fact in session 1; cue in session 7 -> packs (D1)",
       "on": {
         "state": "green",
-        "why": "passes: today's gist store (gists.jsonl at the memory root, shared by every session and repo) carries 'database is postgres' to session 7's SessionStart"
+        "why": "passes since P0.5 through the repo's store (D1): session 7's cue retrieves the row session 1 wrote (the gist store moved into the repo store with it)"
       },
       "off": {
         "state": "green",
@@ -30,7 +30,7 @@
       "a5": "write from .claude/worktrees/agent-x; read from the main checkout -> the same store (D1)",
       "on": {
         "state": "green",
-        "why": "passes for the same reason as cross-session: the gist store is global, so the main checkout's session 7 gets the worktree session's gist"
+        "why": "passes since P0.5: a linked worktree's session writes to its main checkout's store (the common git dir keys both, D1), which the main checkout's session 7 reads"
       },
       "off": {
         "state": "green",
@@ -49,12 +49,8 @@
       ],
       "a5": "repo A's fact never reaches repo B (D1; no A5 row: added from the P0.0c report's follow-up)",
       "on": {
-        "state": "red",
-        "failed": [
-          "isolated",
-          "own-store"
-        ],
-        "why": "today's gist store (gists.jsonl at the memory root) is shared by every repo: repo A's next SessionStart briefs repo B's newer 'database is sqlite' gist, and A's own postgres is not met"
+        "state": "green",
+        "why": "passes since P0.5: each repo has its own store (D1), so neither repo's packets carry the other's database and each gets its own"
       },
       "off": {
         "state": "green",
@@ -186,17 +182,8 @@
       ],
       "a5": "fixture old stores -> --apply twice is a byte no-op; --rollback restores byte-identically; crash injection leaves old or new state; secret_bytes = 0; legacy rows never become slots, policies or pins",
       "on": {
-        "state": "red",
-        "failed": [
-          "apply-idempotent",
-          "crash-safe",
-          "dry-run",
-          "legacy-not-pinned",
-          "mapped",
-          "rollback-identical",
-          "secret-bytes"
-        ],
-        "why": "`eden memory migrate` does not exist (prints 'import: nothing to read')"
+        "state": "green",
+        "why": "passes since P0.5: eden memory migrate maps the six legacy sessions (R-7's snapshot, else the transcript's first cwd) to the one repo, stages the per-repo tree, verifies it and swaps it in; the old tree stays read-only as memory.legacy-v1, rollback restores it byte for byte, and legacy rows are sanitized episodes (src:legacy) that reach a cue with two cue parts (A7 §4)"
       }
     },
     {
@@ -239,8 +226,11 @@
       ],
       "a5": "web Clerk + postgres; cli none + sqlite at 4752 and 15840 turns, junk on disk",
       "on": {
-        "state": "green",
-        "why": "passes at CI scale (48 junk turns): the gist store carries both folders' statements, each naming its folder. junk-on-disk is a plain check since P0.3: its flakes were rows lost to pid-derived ids (#98); with ULIDs it held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175)"
+        "state": "red",
+        "failed": [
+          "no-leak"
+        ],
+        "why": "since P0.5 a later session's cue reads every earlier session's rows in the repo store, and rows have no folder scope until P3.1/P3.2: the apps/web cue's packet carries 'packages/cli has no auth, and its database is sqlite'. Before P0.5 no row crossed sessions at Submit (only SessionStart gists), so nothing could leak. junk-on-disk is a plain check since P0.3: its flakes were rows lost to pid-derived ids (#98); with ULIDs it held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175)"
       },
       "off": {
         "state": "green",
@@ -261,9 +251,9 @@
       "on": {
         "state": "red",
         "failed": [
-          "web-22"
+          "no-stale"
         ],
-        "why": "the apps/web override (node 22) does not reach the later session; the root's node 20 does, through the gist"
+        "why": "since P0.5 the apps/web override reaches the later session through the repo store (web-22 met), but the root's 'We use node 20 across the repo' is delivered at the apps/web cue too, stale there: cascade with override (D5) is P3.5's"
       },
       "off": {
         "state": "green",
@@ -444,10 +434,9 @@
         "state": "red",
         "failed": [
           "parallel-scopes",
-          "parent-scope",
           "subagent-packet"
         ],
-        "why": "no SubagentStart handler, so no subagent gets a packet; the parent's cli cue does not get 'packages/cli has no auth' either (fork-no-repeat passes: no fork packet). fork-no-repeat runs on a simulated fork (agent_type 'fork' starting with the parent's window, A4 §5.3); Claude Code 2.1.285 has no such agent type ('Agent type 'fork' not found', P0.0c end-to-end)"
+        "why": "no SubagentStart handler, so no subagent gets a packet (P2.5); since P0.5 the parent's cli cue gets 'packages/cli has no auth' through the repo store (parent-scope met). fork-no-repeat passes: no fork packet. fork-no-repeat runs on a simulated fork (agent_type 'fork' starting with the parent's window, A4 §5.3); Claude Code 2.1.285 has no such agent type ('Agent type 'fork' not found', P0.0c end-to-end)"
       },
       "off": {
         "state": "green",

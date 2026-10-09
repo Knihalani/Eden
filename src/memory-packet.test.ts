@@ -33,6 +33,7 @@ import {
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import * as edenMem from "./index";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
@@ -73,18 +74,20 @@ function withMem(fn: (mem: AgentMemory, dir: string) => void): void {
   }
 }
 
+/** A store at the hook's place for this process's repo (D1: a payload without `cwd` is keyed by `process.cwd()`). */
 async function withMemAsync<T>(
   prefix: string,
   fn: (mem: AgentMemory, dir: string) => T | Promise<T>,
   session?: string,
 ): Promise<T> {
-  const dir = tmpDir(prefix);
-  return withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY_CAP: undefined }, async () => {
+  const root = tmpDir(prefix);
+  const dir = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  return withEnv({ EDEN_MEMORY_DIR: root, EDEN_HOME: undefined, EDEN_MEMORY_CAP: undefined }, async () => {
     try {
-      const mem = openMemory({ dir, session });
+      const mem = openMemory({ dir, session, perRepo: true });
       return await fn(mem, dir);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     }
   });
 }

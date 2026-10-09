@@ -13,6 +13,7 @@ import { extractCandidates, type CandidateText } from "./assemble";
 import { MEMORY_MARK, encodeLane, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
 import * as edenMem from "./index";
 import { MEMORY_LANE_KINDS } from "./memory-lanes";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 import { isIclExemplar, isRecsysShot, SemanticStore } from "./semantic-store";
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
@@ -344,7 +345,8 @@ describe("M31.4 wrap + hook still silent inject", () => {
 
   test("withKnowFacts / Anthropic / UserPromptSubmit packet has movie titles, no MCP", async () => {
     const dir = tmpDir("eden-m314-wrap-");
-    const mem = openMemory({ dir });
+    // The wrap and the hook read one memory: the store the hook keeps for this process's repo (D1).
+    const mem = openMemory({ dir: repoStoreDir(dir, repoIdentity(process.cwd())!.key), perRepo: true });
     const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
     try {
       withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0" }, () => {

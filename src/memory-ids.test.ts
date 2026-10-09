@@ -18,6 +18,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, settlePendingRows, storeRows, superseded } from "./index";
 import { takePending } from "./memory-ids";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 import { readInvalidations } from "./memory-validity";
 import { ageInWords } from "./memory-hook-packet";
 import { provenanceBracket } from "./memory-provenance";
@@ -53,7 +54,12 @@ function tempRoot(): string {
 
 type DiskRow = Record<string, unknown> & { id: string; text: string };
 
-/** The rows of one session's store as they are on disk. */
+/** The store the hook keeps for this checkout's repo (D1): every hook process below runs with `cwd: REPO`. */
+function hookStore(root: string): string {
+  return repoStoreDir(root, repoIdentity(REPO)!.key);
+}
+
+/** The rows of one session's store (or, with `""`, of a repo's store) as they are on disk. */
 function diskRows(root: string, session: string): DiskRow[] {
   const path = join(root, session, "memories.jsonl");
   if (!existsSync(path)) return [];
@@ -87,7 +93,7 @@ describe("#98, A1 D2: row ids", () => {
     const root = tempRoot();
     submitAs(1022, root, "The build tag for module alpha is tag-alpha.");
     submitAs(1058, root, "The build tag for module beta is tag-beta.");
-    const rows = diskRows(root, "s98");
+    const rows = diskRows(hookStore(root), "");
     expect(rowWith(rows, "tag-alpha")).toBeDefined();
     expect(rowWith(rows, "tag-beta")).toBeDefined();
   });
@@ -249,7 +255,7 @@ describe("P0.2 follow-up: validity against real row times", () => {
     const packet = submit("where do we cache sessions?", T0 + 3 * DAY_MS);
     expect(packet).toContain("Redis again");
     expect(packet).not.toContain("We cache sessions in Redis.");
-    expect(existsSync(join(root, "validity.jsonl"))).toBe(true);
+    expect(existsSync(join(hookStore(root), "validity.jsonl"))).toBe(true);
   });
 });
 
@@ -365,7 +371,7 @@ describe("review round 2", () => {
     event("UserPromptSubmit", "The database is postgres.");
     event("Stop");
     event("UserPromptSubmit", "Reply with just OK.");
-    const live = storeRows(join(root, "s1", "memories.jsonl"))
+    const live = storeRows(join(hookStore(root), "memories.jsonl"))
       .filter((r) => r.kind === "fact" && /database is/i.test(r.text) && !superseded(r))
       .map((r) => r.text);
     expect(live).toEqual(["The database is postgres"]);
@@ -456,10 +462,12 @@ describe("SessionEnd encodes and does not sleep (Claude Code cancels it at 1.5 s
     const end = (hook_event_name: string, last_assistant_message: string) =>
       memoryHookResponse({ hook_event_name, session_id: "s1", cwd: REPO, transcript_path: "", last_assistant_message });
     end("Stop", "The build tag for module alpha is tag-alpha.");
-    const gists = () => (existsSync(join(root, "gists.jsonl")) ? readFileSync(join(root, "gists.jsonl"), "utf8") : "");
+    const store = hookStore(root);
+    const gists = () =>
+      existsSync(join(store, "gists.jsonl")) ? readFileSync(join(store, "gists.jsonl"), "utf8") : "";
     const afterStop = gists();
     end("SessionEnd", "The build tag for module beta is tag-beta.");
-    expect(storeRows(join(root, "s1", "memories.jsonl")).some((r) => r.text.includes("tag-beta"))).toBe(true);
+    expect(storeRows(join(store, "memories.jsonl")).some((r) => r.text.includes("tag-beta"))).toBe(true);
     expect(gists()).toBe(afterStop);
   });
 });

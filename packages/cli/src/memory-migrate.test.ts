@@ -74,6 +74,7 @@ function legacyStores(): void {
   jsonl(join(root, "s-worktree", "memories.jsonl"), [{ id: "t1", text: "The auth provider is Clerk", t: T0 }]);
   jsonl(join(root, "s-gone", "memories.jsonl"), [{ id: "g1", text: "The staging server is called orbit" }]);
   jsonl(join(root, "s-none", "memories.jsonl"), [{ id: "n1", text: "Releases are tagged on Fridays" }]);
+  jsonl(join(root, "memories.jsonl"), [{ id: "w1", text: "The wrap wrote this without a session" }]);
   jsonl(join(root, "gists.jsonl"), [{ text: "database is postgres", session: "e-main", t: T0, kind: "session" }]);
   jsonl(join(root, "validity.jsonl"), [{ k: "retract", o: "redis", t: T0 - DAY }]);
   transcript("s-worktree", worktree, T0 - DAY);
@@ -141,7 +142,12 @@ function snapshot(path: string, skip: (rel: string) => boolean = () => false): R
       .map((entry) => relative(path, join(entry.parentPath, entry.name)))
       .filter((rel) => !skip(rel))
       .sort()
-      .map((rel) => [rel, createHash("sha256").update(readFileSync(join(path, rel))).digest("hex")]),
+      .map((rel) => [
+        rel,
+        createHash("sha256")
+          .update(readFileSync(join(path, rel)))
+          .digest("hex"),
+      ]),
   );
 }
 
@@ -171,7 +177,7 @@ describe("eden memory migrate --dry-run", () => {
     expect(by["s-main"]).toMatchObject({ repo: key(), via: "session-map" });
     expect(by["s-main--agent-1"]).toMatchObject({ repo: key(), via: "session-map" });
     expect(by["s-worktree"]).toMatchObject({ repo: key(), via: "transcript" });
-    expect(plan.unmappable.sort()).toEqual(["s-gone", "s-none"]);
+    expect(plan.unmappable.sort()).toEqual(["(root)", "s-gone", "s-none"]);
     // The rule is left empty once its instruction is dropped (A6 §2.3).
     expect(plan.rows).toEqual({ in: 7, out: 4, corrupt: 1, superseded: 1, empty: 1, redacted: 1 });
     expect(snapshot(eden)).toEqual(before);
@@ -261,7 +267,12 @@ describe("eden memory migrate --rollback", () => {
 
   test("keeps what was written since the swap, without the legacy rows", () => {
     migrate(["--apply"]);
-    memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-new", cwd: app, prompt: "The CI is buildkite." });
+    memoryHookResponse({
+      hook_event_name: "UserPromptSubmit",
+      session_id: "s-new",
+      cwd: app,
+      prompt: "The CI is buildkite.",
+    });
     expect(migrate(["--rollback"]).code).toBe(0);
     const rows = readFileSync(join(store(), "memories.jsonl"), "utf8");
     expect(rows).toContain("The CI is buildkite");
