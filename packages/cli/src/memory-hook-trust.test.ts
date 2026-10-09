@@ -85,6 +85,8 @@ function semanticText(): string {
 
 describe("D12: authority by entry type", () => {
   test("rows the user typed carry src:user; rows from other entries are episodes with their source", () => {
+    // What the user typed arrives in its Submit's payload (A4 §3.3: the delta encoder leaves typed lines to it).
+    submit("The database is postgres.", { prompt_id: "p0" });
     const path = transcript([
       typed("The database is postgres."),
       reply("Checking the setup."),

@@ -139,6 +139,10 @@ export type MemoryRecord = {
   invalidBy?: string;
   validUntil?: number;
   heat?: number;
+  /** The transcript line the row came from, when there is one (A4 §1 `src_uuid`). */
+  srcUuid?: string;
+  /** The `promptId` of the turn the row was said in: a rewind that abandons the turn takes the row back (A4 §3.3). */
+  promptId?: string;
 };
 
 /** Whether a newer row has superseded this one (A4 §3.1). */
@@ -503,7 +507,10 @@ function pinsItself(text: string): boolean {
 const TEXT_SOURCES = new Set<string>(["user", "paste", "tool", "agent"]);
 
 /** A message as `observe` encodes it: its role, its source (A6 §2.1) and its text, whitespace collapsed. */
-type ObservedItem = { role: string; src?: TextSource; untyped: boolean; text: string };
+/** Where a message came from, when the caller knows: its transcript line, that line's time and turn (A4 §3.3). */
+type MessageOrigin = { at?: number; srcUuid?: string; promptId?: string };
+
+type ObservedItem = { role: string; src?: TextSource; untyped: boolean; text: string; origin: MessageOrigin };
 
 /**
  * A message's source: the one its caller marks (`src`), else `agent` for the assistant's text; a user message with
@@ -511,24 +518,39 @@ type ObservedItem = { role: string; src?: TextSource; untyped: boolean; text: st
  * claims for the user before it is stored (A6 §2.3, §2.6).
  */
 function observedItem(message: unknown): ObservedItem {
-  const fields = message && typeof message === "object" ? (message as { role?: unknown; src?: unknown }) : {};
+  const fields =
+    message && typeof message === "object"
+      ? (message as { role?: unknown; src?: unknown; at?: unknown; uuid?: unknown; promptId?: unknown })
+      : {};
   const role = String(fields.role || "user");
   const marked =
     typeof fields.src === "string" && TEXT_SOURCES.has(fields.src) ? (fields.src as TextSource) : undefined;
   const src = marked ?? (role === "assistant" ? "agent" : undefined);
   const untyped = src !== undefined && src !== "user";
   const raw = convBlob([message]).trim();
-  return { role, src, untyped, text: (untyped ? withoutInstructions(raw) : raw).trim().replace(/\s+/g, " ") };
+  const origin: MessageOrigin = {
+    ...(finite(fields.at) === undefined ? {} : { at: finite(fields.at) }),
+    ...(typeof fields.uuid === "string" && fields.uuid ? { srcUuid: fields.uuid } : {}),
+    ...(typeof fields.promptId === "string" && fields.promptId ? { promptId: fields.promptId } : {}),
+  };
+  const text = (untyped ? withoutInstructions(raw) : raw).trim().replace(/\s+/g, " ");
+  return { role, src, untyped, text, origin };
 }
 
 const finite = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
-/** A store file's row as a record: A4 §1's `t`, `seq`, `invalid_at`, `invalid_by` and `valid_until` mapped in. */
+/**
+ * A store file's row as a record: A4 §1's `t`, `seq`, `invalid_at`, `invalid_by`, `valid_until`, `src_uuid` and
+ * `prompt_id` mapped in.
+ */
 function fromDisk(parsed: unknown): MemoryRecord | undefined {
   if (Array.isArray(parsed)) return { id: parsed[0], text: parsed[1], at: parsed[2], kind: "episode" };
   if (!parsed || typeof parsed !== "object") return undefined;
-  const { t, seq, invalid_at, invalid_by, valid_until, ...rest } = parsed as Record<string, unknown>;
+  const { t, seq, invalid_at, invalid_by, valid_until, src_uuid, prompt_id, ...rest } = parsed as Record<
+    string,
+    unknown
+  >;
   const rec = { ...rest, kind: rest.kind || "fact" } as MemoryRecord;
   const at = finite(t),
     order = finite(seq),
@@ -539,12 +561,14 @@ function fromDisk(parsed: unknown): MemoryRecord | undefined {
   if (invalidAt !== undefined) rec.invalidAt = invalidAt;
   if (typeof invalid_by === "string") rec.invalidBy = invalid_by;
   if (validUntil !== undefined) rec.validUntil = validUntil;
+  if (typeof src_uuid === "string") rec.srcUuid = src_uuid;
+  if (typeof prompt_id === "string") rec.promptId = prompt_id;
   return rec;
 }
 
 /** A record as its store file holds it. A row written before P0.3 that is a bare episode keeps its compact form. */
 function toDisk(r: MemoryRecord): DiskRow | [string, string] {
-  const { at, seq, invalidAt, invalidBy, validUntil, ...rest } = r;
+  const { at, seq, invalidAt, invalidBy, validUntil, srcUuid, promptId, ...rest } = r;
   const bare = !r.tags && !r.lane && !r.ep && !r.heat && !r.sal && invalidAt === undefined && invalidBy === undefined;
   if (r.kind === "episode" && bare && at === undefined && seq === undefined && validUntil === undefined)
     return [r.id, r.text];
@@ -556,6 +580,8 @@ function toDisk(r: MemoryRecord): DiskRow | [string, string] {
     invalid_at: invalidAt,
     invalid_by: invalidBy,
     valid_until: validUntil,
+    src_uuid: srcUuid,
+    prompt_id: promptId,
   };
 }
 
@@ -895,11 +921,19 @@ export class AgentMemory {
     return scrubMemoryText(String(text ?? ""), { session: this.scrubSession, cwd: this.scrubCwd });
   }
 
+  /** Stores one row. `origin` names the transcript line it came from, whose time is the row's (A4 §3.3). */
   remember(
     text: string,
-    opts: { kind?: MemoryKind; tags?: string[]; id?: string; pin?: boolean; lane?: MemoryLaneKind } = {},
+    opts: {
+      kind?: MemoryKind;
+      tags?: string[];
+      id?: string;
+      pin?: boolean;
+      lane?: MemoryLaneKind;
+      origin?: MessageOrigin;
+    } = {},
   ): MemoryRecord {
-    const at = memoryNow();
+    const { at = memoryNow(), srcUuid, promptId } = opts.origin ?? {};
     const rec: MemoryRecord = {
       id: opts.id || ulid(at),
       text: this.persistText(String(text || "").trim()),
@@ -908,6 +942,8 @@ export class AgentMemory {
       at,
       ...(opts.lane ? { lane: opts.lane } : {}),
       ...(this.session ? { ep: opaqueId(this.session) } : {}),
+      ...(srcUuid ? { srcUuid } : {}),
+      ...(promptId ? { promptId } : {}),
     };
     try {
       if (this.consent() !== "on") return rec;
@@ -972,6 +1008,27 @@ export class AgentMemory {
     const forgets = records.filter(isForget);
     if (!forgets.length) return;
     const named = this.compiled.filter((c) => !superseded(c.rec) && !validText(c.rec.text, 0, forgets));
+    if (!named.length) return;
+    const seq = claimSeqs(this.dir, 1) ?? Math.max(0, ...this.compiled.map((c) => c.rec.seq ?? 0));
+    for (const c of named) {
+      c.rec.invalidAt = seq;
+      this.changed.add(c.rec.id);
+    }
+    this.post = null;
+    this.flush(true);
+  }
+
+  /**
+   * A4 §3.3: a rewind takes back what the abandoned turns said. Their rows go to history, invalid at the store's
+   * next `seq` with no successor, as a forget's do. A row whose text the current branch says again (`restated`)
+   * stays: the restatement found it already stored and wrote no row of its own.
+   */
+  abandon(promptIds: readonly string[], restated: readonly string[] = []): void {
+    const gone = new Set(promptIds);
+    const taken = this.compiled.filter((c) => c.rec.promptId && gone.has(c.rec.promptId) && !superseded(c.rec));
+    if (!taken.length) return;
+    const said = restated.map((text) => this.persistText(text).replace(/\s+/g, " ").toLowerCase());
+    const named = taken.filter((c) => !said.some((text) => text.includes(c.rec.text.toLowerCase())));
     if (!named.length) return;
     const seq = claimSeqs(this.dir, 1) ?? Math.max(0, ...this.compiled.map((c) => c.rec.seq ?? 0));
     for (const c of named) {
@@ -1049,6 +1106,7 @@ export class AgentMemory {
               kind: lane === "narrative" || it.untyped ? "episode" : "fact",
               lane,
               tags: srcTags(it),
+              origin: it.origin,
             });
             out.push(rec);
             try {
@@ -1116,7 +1174,7 @@ export class AgentMemory {
             } catch {
               kind = "episode";
             }
-          out.push(this.remember(text, { kind, pin, tags: srcTags(it) }));
+          out.push(this.remember(text, { kind, pin, tags: srcTags(it), origin: it.origin }));
           coveredChars += text.length;
         }
         try {
@@ -1135,7 +1193,7 @@ export class AgentMemory {
                 !out.some((r) => r.text.replace(/[.!?]+$/g, "").toLowerCase() === key) &&
                 ![...this.seenLower].some((s) => s.replace(/[.!?]+$/g, "") === key)
               )
-                out.push(this.remember(safe, { kind: "episode", tags: srcTags(it) }));
+                out.push(this.remember(safe, { kind: "episode", tags: srcTags(it), origin: it.origin }));
             }
           }
         } catch {}

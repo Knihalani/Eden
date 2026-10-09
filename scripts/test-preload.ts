@@ -9,6 +9,8 @@
  * - EDEN_HOME points inside it. Bun reads os.homedir() once at startup, so changing HOME here
  *   does not move in-process `EDEN_HOME || join(homedir(), ".eden")` fallbacks; EDEN_HOME does.
  *   A test that unsets EDEN_HOME still reaches the real ~/.eden: point it at a temp dir instead.
+ * - EDEN_SLEEP_IDLE is off, so no hook a test runs leaves a detached idle sleeper behind (D34). A test of the
+ *   sleeper or of idle timing sets it.
  *
  * Bun reads bunfig.toml from the working directory only: runs started in a subdirectory skip this.
  */
@@ -26,5 +28,6 @@ for (const key of Object.keys(process.env)) {
 const home = mkdtempSync(join(tmpdir(), "eden-test-home-"));
 process.env.HOME = home;
 process.env.EDEN_HOME = join(home, ".eden");
+process.env.EDEN_SLEEP_IDLE = "off";
 // A global hook: process "exit" handlers do not run under `bun test`.
 afterAll(() => rmSync(home, { recursive: true, force: true }));

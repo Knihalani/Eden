@@ -52,7 +52,7 @@ Consolidation budgets in `src/sleep.ts`.
 | Env | Unset | Other values |
 |---|---|---|
 | `EDEN_SLEEP_EVERY` | 32 turns | `0` / `off` disables. `"8"` is 8 turns. `"64k"` (also `kb` / `mb` / `b`) is a byte threshold and sets turns to 0 |
-| `EDEN_SLEEP_IDLE` | 5 min (300000 ms) | `0` / `off` disables idle full-sleep. A plain integer is milliseconds |
+| `EDEN_SLEEP_IDLE` | 5 min (300000 ms) | `0` / `off` disables idle full-sleep. A plain integer is milliseconds. The memory hook's idle sleeper (`eden memory sleep --idle`, which Stop and SessionEnd start detached) waits this long without hook activity in the repo |
 | `EDEN_SLEEP_BUDGET` | 25ms incremental budget | A non-negative number of milliseconds. Blank, non-finite, or negative stays 25 |
 
 ### Import

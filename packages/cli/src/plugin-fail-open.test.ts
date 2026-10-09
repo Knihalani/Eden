@@ -85,7 +85,16 @@ const QUIET: Ran = { code: 0, stdout: "", stderr: "" };
 describe("every registered entry point fails open (EXECUTION §5)", () => {
   test("hooks.json registers the memory events, each command ending in the fail-open suffix", () => {
     expect(ENTRY_POINTS.map((point) => point.event).sort()).toEqual(
-      ["PostToolUse", "PreCompact", "SessionEnd", "SessionStart", "Stop", "SubagentStop", "UserPromptSubmit"].sort(),
+      [
+        "PostToolBatch",
+        "PreCompact",
+        "SessionEnd",
+        "SessionStart",
+        "Stop",
+        "Stop",
+        "SubagentStop",
+        "UserPromptSubmit",
+      ].sort(),
     );
     for (const { command } of ENTRY_POINTS) expect(command).toEndWith(FAIL_OPEN_SUFFIX);
   });

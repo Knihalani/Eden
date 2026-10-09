@@ -46,7 +46,8 @@ describe("the canonical session through plugins/eden-memory", () => {
   test("every event the plugin registers ran, each invocation in its own process", () => {
     expect(first.invocations).toBeGreaterThan(50);
     expect(first.processes).toBe(first.invocations);
-    for (const point of ["SessionStart", "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStop", "PreCompact"]) {
+    const points = ["SessionStart", "UserPromptSubmit", "PostToolBatch", "Stop", "PreCompact", "SessionEnd"];
+    for (const point of [...points, "Stop (async)", "SubagentStop (async)"]) {
       expect(first.msByPoint[point]).toBeDefined();
     }
   });

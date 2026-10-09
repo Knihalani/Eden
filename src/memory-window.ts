@@ -1,22 +1,29 @@
 /**
- * A context window's own files (A4 §1 `<root>/windows/<win>/`), as far as P0.2 writes them:
+ * A context window's own files (A4 §1 `<root>/windows/<win>/`), as far as P0.6 writes them:
  * - `delivery.log`: one `turn` record per human Submit (A4 §4). `hturn` is the count of distinct `prompt_id`s among
  *   them, so two racing Submits of one prompt count once. The ledger's `deliver` and `epoch` records share the log
  *   (`memory-ledger.ts`).
  * - `delivery.shadow.log`: the same records from a point whose flag is `shadow` (X7), which delivers nothing. Turn
  *   records count from both logs, so `hturn` does not depend on which mode the Submits ran in.
- * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves; and
- *   the `cwd` of its SessionStart, which names the repo of a session outside git (D1, `memory-repo.ts`).
+ * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves; the
+ *   `cwd` of its SessionStart, which names the repo of a session outside git (D1, `memory-repo.ts`); and one
+ *   `batch` record per PostToolBatch (`memory-batch.ts`). `stop-sleep` compacts it (`compactContext`).
+ * - `qprev.json`: the agent's last message, written by `stop-fast` (A4 §5.7, A7 §3's `q_prev`).
+ * - `hwm.json`: the delta encoder's mark (`memory-delta.ts`).
  *
  * Each record is one appended line under 4 KB, so concurrent appends do not interleave.
  */
 import { appendFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomic } from "../packages/cli/src/home";
 import { memorySessionName } from "./index";
+import type { BatchRecord } from "./memory-batch";
 import type { FlagMode } from "./memory-flags";
 import { promptHash } from "./memory-turn";
 
 type WindowRecord = { k: string } & Record<string, unknown>;
+
+const CONTEXT = "ctx.log";
 
 export const LIVE_LEDGER = "delivery.log";
 export const SHADOW_LEDGER = "delivery.shadow.log";
@@ -98,7 +105,7 @@ export function humanTurns(dir: string): number {
 
 /** The cron prompt hashes of the window's last Stop that carried `session_crons`. */
 export function cronHashes(dir: string): string[] {
-  const last = windowRecords(dir, "ctx.log").findLast((record) => record.k === "crons");
+  const last = windowRecords(dir, CONTEXT).findLast((record) => record.k === "crons");
   return Array.isArray(last?.h) ? last.h.filter((hash): hash is string => typeof hash === "string") : [];
 }
 
@@ -111,16 +118,66 @@ export function recordCrons(dir: string, sessionCrons: unknown): void {
   });
   const hashes = [...new Set(prompts)].sort();
   if (hashes.join() === cronHashes(dir).join()) return;
-  appendRecord(dir, "ctx.log", { k: "crons", h: hashes });
+  appendRecord(dir, CONTEXT, { k: "crons", h: hashes });
 }
 
 /** The `cwd` of the window's SessionStart, when it recorded one. */
 export function startCwd(dir: string): string | undefined {
-  const last = windowRecords(dir, "ctx.log").findLast((record) => record.k === "start");
+  const last = windowRecords(dir, CONTEXT).findLast((record) => record.k === "start");
   return typeof last?.cwd === "string" ? last.cwd : undefined;
 }
 
 /** Records a SessionStart's `cwd` unless it is the one already recorded. */
 export function recordStart(dir: string, cwd: string): void {
-  if (startCwd(dir) !== cwd) appendRecord(dir, "ctx.log", { k: "start", cwd });
+  if (startCwd(dir) !== cwd) appendRecord(dir, CONTEXT, { k: "start", cwd });
+}
+
+/** Appends a PostToolBatch's record (`memory-batch.ts`). */
+export function recordBatch(dir: string, batch: BatchRecord): void {
+  appendRecord(dir, CONTEXT, { k: "batch", ...batch });
+}
+
+/** `ctx.log` is folded over the last 3 human turns (A4 §1): older batches are dropped when it is compacted. */
+const KEPT_TURNS = 3;
+/** Below this size `ctx.log` is left as it is: compaction rewrites the file, which only an outgrown log needs. */
+const COMPACT_BYTES = 32 * 1024;
+
+/**
+ * Compacts `ctx.log` at `stop-sleep` (A4 §1): the last `crons` and `start` records, and the batches of the last 3
+ * human turns (by `prompt_id`). The file is replaced by rename; a batch appended meanwhile can be lost, which costs a
+ * path signal, never a row.
+ */
+export function compactContext(dir: string): void {
+  const size = statSync(join(dir, CONTEXT), { throwIfNoEntry: false })?.size ?? 0;
+  if (size <= COMPACT_BYTES) return;
+  const records = windowRecords(dir, CONTEXT);
+  const turns = [...new Set(records.flatMap((record) => (record.k === "batch" ? [record.prompt_id] : [])))];
+  const recent = new Set(turns.slice(-KEPT_TURNS));
+  const kept = records.filter((record, at) =>
+    record.k === "batch" ? recent.has(record.prompt_id) : records.findLastIndex((other) => other.k === record.k) === at,
+  );
+  writeFileAtomic(join(dir, CONTEXT), kept.map((record) => `${JSON.stringify(record)}\n`).join(""), 0o600);
+}
+
+/** The agent's last message as `stop-fast` saw it (`last_assistant_message`), and when. */
+export interface LastAssistant {
+  t: number;
+  text: string;
+}
+
+const QPREV = "qprev.json";
+
+/** `stop-fast` (A4 §5.7): the agent's last message, written by rename so a reader never sees half of it. */
+export function writeLastAssistant(dir: string, last: LastAssistant): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  writeFileAtomic(join(dir, QPREV), JSON.stringify(last), 0o600);
+}
+
+export function readLastAssistant(dir: string): LastAssistant | undefined {
+  try {
+    const last = JSON.parse(readFileSync(join(dir, QPREV), "utf8")) as Partial<LastAssistant>;
+    return typeof last.t === "number" && typeof last.text === "string" ? { t: last.t, text: last.text } : undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -209,7 +209,9 @@ describe("M36.4 caller audit", () => {
     expect(hook).toMatch(/openMemory\(/);
     expect(hook).toMatch(/mem\.recall\(/);
     expect(hook).toMatch(/mem\.observe\(/);
-    expect(hook).toMatch(/\bconsolidate\(/);
+    // D34: Stop and SessionEnd sleep lightly; the full sleep runs in the detached idle sleeper.
+    expect(hook).toMatch(/\blightSleep\(/);
+    expect(read("packages/cli/src/memory-sleep.ts")).toMatch(/\bconsolidate\(/);
     expect(hook).toMatch(/export function memoryHookResponse\(/);
     expect(hook).toMatch(/export async function runMemoryHookStdin\(/);
     expect(cliHook).toMatch(/memoryHookResponse\(/);
