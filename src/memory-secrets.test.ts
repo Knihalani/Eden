@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { scrubMemoryText } from "./memory-scrub";
 import { goRegex, sanitizeForStore, secretHits, secretRules } from "./memory-secrets";
 
 const VENDORED = join(import.meta.dir, "vendor", "gitleaks", "gitleaks.toml");
@@ -161,5 +162,17 @@ describe("sanitizeForStore (D13, A6 §2.2): the value goes, what it is stays", (
 
   test("text with no secret is stored as it is", () => {
     for (const text of BENIGN) expect(sanitizeForStore(text)).toBe(text);
+  });
+});
+
+describe("scrubMemoryText scans a large text once (P0.4's follow-up, P0.6)", () => {
+  test("its own output passes through unchanged, and a new text with a secret is still redacted", () => {
+    const secret = `ghp_${"a1B2".repeat(9)}`;
+    const big = `${"log line without secrets\n".repeat(200)}token ${secret}\n`;
+    const once = scrubMemoryText(big);
+    expect(once).not.toContain(secret);
+    expect(scrubMemoryText(once)).toBe(once);
+    const other = `${big}one more line\n`;
+    expect(scrubMemoryText(other)).not.toContain(secret);
   });
 });

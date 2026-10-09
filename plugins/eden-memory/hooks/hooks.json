@@ -4,9 +4,16 @@
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "PreCompact": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" stop-fast 2>/dev/null || true" },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" stop-sleep 2>/dev/null || true", "async": true }
+        ]
+      }
+    ],
     "SessionEnd": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }]
+    "PostToolBatch": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "async": true }] }]
   }
 }

@@ -8,14 +8,20 @@
  * The residual is what the conversation already says: the current prompt, the last 2 typed prompts before it and
  * the assistant text between them, parsed from the complete transcript lines in its last 256 KB. Tool results,
  * attachments, meta lines, non-human submits (D24) and anything before a compaction never count.
+ *
+ * The same read gives the Submit its other views of the recent conversation (A4 §5.1 step 1): the tool results the
+ * paste rule compares the prompt with (A6 §2.1), and the agent's newest message, for when `qprev.json` is older.
  */
+import { toolResultText } from "./memory-authority";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
-import { contentWords, STATUS_WORDS, tailLines, textOf, typedPrompt } from "./memory-transcript";
+import { contentWords, STATUS_WORDS, tailLines, textOf, typedPrompt, type TranscriptLine } from "./memory-transcript";
 import { objectAsserted } from "./semantic-store";
 
 const TAIL_BYTES = 256 * 1024;
 const TYPED_PROMPTS = 2;
 const JACCARD = 0.6;
+/** The tool results before a prompt that the paste rule reads (A6 §2.1: the last 10 tool calls). */
+const RECENT_TOOL_RESULTS = 10;
 
 /** What the conversation just said, from one read of the transcript's tail (see the header). */
 export interface RecentConversation {
@@ -24,6 +30,27 @@ export interface RecentConversation {
   /** A7 §3's `q_turn`: the typed prompt before the current one, or "" (the current one's line may be written already,
    * R0 F8). */
   previousTyped: string;
+  /** The tail's last 10 tool results, oldest first. */
+  toolResults: string[];
+  /** The tail's newest assistant text, and its line's time (epoch ms; 0 when the line has none). */
+  lastAssistant?: { text: string; t: number };
+}
+
+/** The tail's last tool results and its newest assistant text (see `RecentConversation`). */
+function latest(lines: readonly TranscriptLine[]): Pick<RecentConversation, "toolResults" | "lastAssistant"> {
+  const toolResults: string[] = [];
+  let lastAssistant: RecentConversation["lastAssistant"];
+  for (let at = lines.length - 1; at >= 0 && (toolResults.length < RECENT_TOOL_RESULTS || !lastAssistant); at--) {
+    const line = lines[at]!;
+    if (line.isSidechain === true) continue;
+    const tool = toolResults.length < RECENT_TOOL_RESULTS ? toolResultText(line) : undefined;
+    if (tool) toolResults.unshift(tool);
+    if (lastAssistant || line.type !== "assistant") continue;
+    const text = textOf((line.message as { content?: unknown } | undefined)?.content)?.trim();
+    const t = typeof line.timestamp === "string" ? Date.parse(line.timestamp) : NaN;
+    if (text) lastAssistant = { text, t: Number.isFinite(t) ? t : 0 };
+  }
+  return { toolResults, ...(lastAssistant ? { lastAssistant } : {}) };
 }
 
 export function recentConversation(transcriptPath: string, prompt: string): RecentConversation {
@@ -33,6 +60,7 @@ export function recentConversation(transcriptPath: string, prompt: string): Rece
   let typed = 0;
   let sawCurrent = false;
   const lines = transcriptPath ? tailLines(transcriptPath, TAIL_BYTES) : [];
+  const { toolResults, lastAssistant } = latest(lines);
   for (let at = lines.length - 1; at >= 0 && typed < TYPED_PROMPTS; at--) {
     const line = lines[at]!;
     if (line.isSidechain === true) continue;
@@ -52,7 +80,7 @@ export function recentConversation(transcriptPath: string, prompt: string): Rece
     typed++;
     if (!previousTyped) previousTyped = text;
   }
-  return { residual, previousTyped };
+  return { residual, previousTyped, toolResults, ...(lastAssistant ? { lastAssistant } : {}) };
 }
 
 function contentTokens(text: string): Set<string> {

@@ -40,7 +40,7 @@ describe("D26: the residual", () => {
       typed("fix the cache test"),
       said("Done: the cache test passes."),
     ]);
-    expect(recentConversation(path, "what next?")).toEqual({
+    expect(recentConversation(path, "what next?")).toMatchObject({
       residual: [
         "what next?",
         "Done: the cache test passes.",
@@ -58,11 +58,12 @@ describe("D26: the residual", () => {
       { type: "user", isCompactSummary: true, message: { role: "user", content: "Summary: postgres." } },
       typed("run the tests"),
     ]);
-    expect(recentConversation(path, "and now?")).toEqual({
+    expect(recentConversation(path, "and now?")).toMatchObject({
       residual: ["and now?", "run the tests"],
       previousTyped: "run the tests",
     });
     expect(recentConversation(join(tmpdir(), "no-such-transcript.jsonl"), "hi")).toEqual({
+      toolResults: [],
       residual: ["hi"],
       previousTyped: "",
     });
@@ -70,10 +71,19 @@ describe("D26: the residual", () => {
 
   test("the current prompt's own line, when already written (R0 F8), is not one of the 2 earlier prompts", () => {
     const path = transcript([typed("first ask"), typed("second ask"), typed("third ask"), typed("the current ask")]);
-    expect(recentConversation(path, "the current ask")).toEqual({
+    expect(recentConversation(path, "the current ask")).toMatchObject({
       residual: ["the current ask", "third ask", "second ask"],
       previousTyped: "third ask",
     });
+  });
+
+  test("the same read gives the last 10 tool results, oldest first, and the newest assistant text with its time", () => {
+    const at = "2026-09-01T09:00:05.000Z";
+    const results = Array.from({ length: 12 }, (_, i) => toolResult(`result ${i}`));
+    const path = transcript([said("older"), ...results, { ...said("Shall I merge it?"), timestamp: at }]);
+    const recent = recentConversation(path, "yes");
+    expect(recent.toolResults).toEqual(Array.from({ length: 10 }, (_, i) => `result ${i + 2}`));
+    expect(recent.lastAssistant).toEqual({ text: "Shall I merge it?", t: Date.parse(at) });
   });
 
   test("an episode or rule is residual at content-token Jaccard ≥ 0.6 with one sentence", () => {

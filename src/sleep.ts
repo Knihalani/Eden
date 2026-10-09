@@ -873,6 +873,74 @@ function ownRows(mem: SleepMem, session: string | undefined): (id: string) => bo
   };
 }
 
+/** The store's live rows in store order: a superseded row is history (A4 §3.1), neither a candidate nor a loser. */
+function liveInStoreOrder(mem: SleepMem): { row: SleepRecord; t: number }[] {
+  return inStoreOrder(mem.memories().filter((r) => !superseded(r)));
+}
+
+/** Each live row's identity candidates, at its own time. */
+function identityCandidates(ordered: readonly { row: SleepRecord; t: number }[]): Triple[] {
+  const candidates: Triple[] = [];
+  for (const { row, t } of ordered) {
+    try {
+      for (const fact of extractIdentity({ ...row, at: t })) candidates.push(fact);
+    } catch {
+      // Fail-open: a bad episode must not abort the rest of the sleep.
+    }
+  }
+  return candidates;
+}
+
+/**
+ * The session gist: the winning value of each subject the session stated, then its pins. A4 §3.3, §5.1 step 5: it
+ * is rewritten at every sleep, later than what it states, so each source is checked against the validity log at its
+ * own time; SessionStart checks the gist again at the gist's time.
+ */
+function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: string | undefined): void {
+  const invalid = readInvalidations(mem.dir);
+  const own = ownRows(mem, session);
+  const facts: string[] = [];
+  for (const w of winners) {
+    if (w.recId && !own(w.recId)) continue;
+    const fact = validText(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`, w.t, invalid);
+    if (fact) facts.push(fact);
+  }
+  const pins = mem
+    .memories()
+    .filter((r) => r.kind === "constraint" && !isIcl(r.text) && own(r.id))
+    .slice(-8)
+    .map((r) => validText(r.text.replace(/\s+/g, " ").trim(), r.at, invalid))
+    .filter(Boolean);
+  const gist = [...facts, ...pins].join(". ").slice(0, 800);
+  if (gist) new GistStore(mem.dir).put(gist, session?.trim() ? session.trim() : "default", memoryNow());
+}
+
+/**
+ * Light sleep (D34, A4 §6), at `stop-sleep` and SessionEnd: pending rows get their `seq`, the session gist is
+ * rewritten, and the turn's verified tool run becomes a how-to, so the next turn's cue can retrieve both. Its cost is
+ * one pass over the live rows' identity statements and the tool traces since the last how-to; every pass that
+ * rewrites or rescans the store (narrative gists, aliases, postings, the miss taxonomy) is the idle sleeper's.
+ */
+export function lightSleep(mem: SleepMem, session: string | undefined): void {
+  try {
+    if (memoryConsent() !== "on" || mem.sealed) return;
+  } catch {
+    return;
+  }
+  try {
+    settlePendingRows(mem.dir);
+  } catch {}
+  const ordered = liveInStoreOrder(mem);
+  try {
+    writeSessionGist(mem, assemble(identityCandidates(ordered)), session);
+  } catch {}
+  promoteHowTo(
+    mem,
+    ordered.map(({ row }) => row),
+    sleepSession(mem, { session }),
+  );
+}
+
 export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   try {
     if (memoryConsent() !== "on" || mem.sealed) return;
@@ -886,17 +954,9 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   try {
     settlePendingRows(mem.dir);
   } catch {}
-  // A superseded row is history (A4 §3.1): it neither competes for its subject nor is superseded again.
-  const ordered = inStoreOrder(mem.memories().filter((r) => !superseded(r)));
+  const ordered = liveInStoreOrder(mem);
   const recs = ordered.map(({ row }) => row);
-  const candidates: Triple[] = [];
-  for (const { row, t } of ordered) {
-    try {
-      for (const fact of extractIdentity({ ...row, at: t })) candidates.push(fact);
-    } catch {
-      // Fail-open: a bad episode must not abort the rest of consolidate.
-    }
-  }
+  const candidates = identityCandidates(ordered);
   const winners = assemble(candidates);
   const mode: SleepMode = opts?.mode === "incremental" ? "incremental" : "full";
   // Incremental rest must not tombstone a fact the open goal still references.
@@ -983,29 +1043,7 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     } catch {}
   }
   if (incrementalExpired(opts)) return;
-  // A4 §3.3, §5.1 step 5: the session gist is rewritten at every sleep, later than what it states, so each source
-  // is checked against the validity log at its own time; SessionStart checks the gist again at the gist's time.
-  const invalid = readInvalidations(mem.dir);
-  const own = ownRows(mem, opts?.session);
-  const facts: string[] = [];
-  for (const w of winners) {
-    if (w.recId && !own(w.recId)) continue;
-    const fact = validText(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`, w.t, invalid);
-    if (fact) facts.push(fact);
-  }
-  const pins = mem
-    .memories()
-    .filter((r) => r.kind === "constraint" && !isIcl(r.text) && own(r.id))
-    .slice(-8)
-    .map((r) => validText(r.text.replace(/\s+/g, " ").trim(), r.at, invalid))
-    .filter(Boolean);
-  const gist = [...facts, ...pins].join(". ").slice(0, 800);
-  if (gist)
-    new GistStore(mem.dir).put(
-      gist,
-      typeof opts?.session === "string" && opts.session.trim() ? opts.session.trim() : "default",
-      memoryNow(),
-    );
+  writeSessionGist(mem, winners, opts?.session);
   if (incrementalExpired(opts)) return;
   try {
     promoteNarrativeGists(mem.dir);

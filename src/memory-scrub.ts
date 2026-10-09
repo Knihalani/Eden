@@ -50,11 +50,33 @@ function pathNeedles(p: string): string[] {
 }
 
 /**
+ * The large texts this gate produced last. One text reaches it several times on its way into the store (the row,
+ * its statements, its chunks), and the secret scan costs about 20 ms per 100 KB (P0.4): a text it already produced
+ * is returned as it is, so a large tool result is scanned once per process.
+ */
+const scrubbed = new Set<string>();
+const MEMO_MIN_CHARS = 1024;
+const MEMO_TEXTS = 64;
+
+/**
  * Memory text as a store may keep it: secrets redacted (D13), then identifiers stripped. Emails → `[email]`.
  * Provided session / cwd / `process.cwd()` → placeholders.
  */
 export function scrubMemoryText(text: string, ctx?: MemoryScrubCtx): string {
-  let s = String(text ?? "");
+  const raw = String(text ?? "");
+  if (raw.length < MEMO_MIN_CHARS || !scrubbed.has(raw)) return kept(scrubbedText(raw, ctx));
+  return raw;
+}
+
+function kept(text: string): string {
+  if (text.length < MEMO_MIN_CHARS) return text;
+  if (scrubbed.size >= MEMO_TEXTS) scrubbed.delete(scrubbed.values().next().value!);
+  scrubbed.add(text);
+  return text;
+}
+
+function scrubbedText(text: string, ctx?: MemoryScrubCtx): string {
+  let s = text;
   if (!s) return s;
   s = sanitizeForStore(s).replace(EMAIL_RE, "[email]");
   const session = typeof ctx?.session === "string" ? ctx.session.trim() : "";

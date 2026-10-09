@@ -39,6 +39,11 @@ export interface WideEvent {
   cids?: string[];
   drops?: Partial<Record<DropStage, number>>;
   would_preempt?: string[];
+  /** Which of Stop's two handlers ran (D34). */
+  stage?: "stop-fast" | "stop-sleep";
+  /** Texts the delta encoder read from the transcript (A4 §3.3), and the turns a rewind abandoned. */
+  encoded?: number;
+  abandoned?: number;
   /** Milliseconds inside the hook's handler (process start and module load are not in it). */
   ms: number;
   /** A budget abort (A5 `abort_rate`). The hook has no budget abort yet (P4.2), so it is always false. */

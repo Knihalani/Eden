@@ -140,7 +140,11 @@ export function netAllowCheck(raw: string | undefined = process.env.EDEN_NET_ALL
   return { name: "net-allow", ok: true, count: names.length, detail: `EDEN_NET_ALLOW ${names.join(", ")}` };
 }
 
-/** Same 7 events as `memory-hook.ts` MEMORY_EVENTS. Compile PreToolUse / PostToolBatch are not memory. */
+/**
+ * The 7 memory events `eden setup` installs (`memory-hook.ts` MEMORY_EVENTS handles them, and PostToolBatch).
+ * Compile PreToolUse is not memory. The plugin records tool results per batch (P0.6, A4 §3.3): its PostToolBatch
+ * fills the PostToolUse slot, and the check names the event it found.
+ */
 export const MEMORY_HOOK_EVENTS = [
   "UserPromptSubmit",
   "SessionStart",
@@ -219,21 +223,29 @@ export function memoryHooksCheck(settings: unknown, opts?: { pluginEvents?: stri
   const settingsPresent = new Set<MemoryHookEvent>();
   let settingsSetupSubmit = false;
   let settingsPluginSubmit = false;
+  // The tool-result slot: PostToolUse (`eden setup`), or the plugin's PostToolBatch, in settings or the plugin.
+  const batchInSettings = hookCommandsOf(hooks.PostToolBatch).some(isEdenMemoryCommand);
+  const batches = batchInSettings || (opts?.pluginEvents ?? []).includes("PostToolBatch");
   for (const event of MEMORY_HOOK_EVENTS) {
     const cmds = hookCommandsOf(hooks[event]);
     const eden = cmds.filter(isEdenMemoryCommand);
+    if (event === "PostToolUse" && batchInSettings) settingsPresent.add(event);
     if (eden.length) settingsPresent.add(event);
     if (event === "UserPromptSubmit") {
       settingsSetupSubmit = eden.some(isSetupMemoryCommand);
       settingsPluginSubmit = eden.some(isPluginMemoryCommand);
     }
   }
-  const pluginEvents = (opts?.pluginEvents ?? []).filter((e) => MEMORY_HOOK_EVENT_SET.has(e));
+  const pluginEvents = (opts?.pluginEvents ?? [])
+    .map((e) => (e === "PostToolBatch" ? "PostToolUse" : e))
+    .filter((e) => MEMORY_HOOK_EVENT_SET.has(e));
   const pluginSubmit = pluginEvents.includes("UserPromptSubmit");
   const present = new Set<MemoryHookEvent>(settingsPresent);
   for (const e of pluginEvents) present.add(e as MemoryHookEvent);
 
-  const listed = MEMORY_HOOK_EVENTS.filter((e) => present.has(e));
+  const usesEach = hookCommandsOf(hooks.PostToolUse).some(isEdenMemoryCommand);
+  const named = (e: MemoryHookEvent) => (e === "PostToolUse" && batches && !usesEach ? "PostToolBatch" : e);
+  const listed = MEMORY_HOOK_EVENTS.filter((e) => present.has(e)).map(named);
   const missing = MEMORY_HOOK_EVENTS.filter((e) => !present.has(e));
   const encodeGap =
     settingsPresent.has("UserPromptSubmit") &&
