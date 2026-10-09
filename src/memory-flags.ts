@@ -16,11 +16,11 @@
  * - **Lifecycle:** a release flag carries the date by which it is removed (a test fails once it passes); the kill
  *   switches (`guard.ask`, and the master `EDEN_MEMORY`, which `memory-consent.ts` reads) have none.
  */
-import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
 import { memoryNow } from "./memory-clock";
+import { gitPlace, mainCheckout } from "./memory-repo";
 
 export type FlagMode = "off" | "shadow" | "on";
 
@@ -118,29 +118,12 @@ export function breakerPath(home = edenHomeDir()): string {
 }
 
 /**
- * The top of the repo `cwd` is in: the nearest ancestor holding `.git`. A linked worktree's `.git` file names its
- * git dir; when that sits under the main repo's `.git/worktrees/`, the main checkout is the top, so every worktree
- * reads one repo file (D1 keys the store by the common git dir). A walk of stat calls, no git process.
+ * The checkout whose `.eden/flags.json` applies to `cwd`: the main checkout of its repo, so every linked worktree
+ * reads one repo file (D1 keys the store by the common git dir); a submodule is its own. No git process.
  */
 export function repoTop(cwd: string | undefined): string | undefined {
-  if (!cwd || !isAbsolute(cwd)) return undefined;
-  for (let dir = resolve(cwd); ; dir = dirname(dir)) {
-    const dotGit = join(dir, ".git");
-    try {
-      if (statSync(dotGit).isFile()) {
-        const gitdir = /^gitdir:\s*(.+)$/m.exec(readFileSync(dotGit, "utf8"))?.[1]?.trim();
-        const linked = gitdir && /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+$/.exec(resolve(dir, gitdir));
-        return linked ? linked[1] : dir;
-      }
-      return dir;
-    } catch {}
-    if (dirname(dir) === dir) return undefined;
-  }
-}
-
-/** A repo top as a wide event names it: 16 hex characters of its path's hash, never the path. */
-export function repoHash(top: string): string {
-  return createHash("sha256").update(top).digest("hex").slice(0, 16);
+  const place = gitPlace(cwd);
+  return place && mainCheckout(place);
 }
 
 export function repoFlagsPath(top: string): string {

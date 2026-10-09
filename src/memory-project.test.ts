@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { MEMORY_MARK, memoryInjectSwallows, openMemory, type AgentMemory } from "./index";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/58
 
@@ -268,7 +269,9 @@ describe("M44 project identity", () => {
       expect(stdout).toContain(MEMORY_MARK);
       expect(stdout).toMatch(/sqlite/i);
       expect(stdout).toMatch(FACT_OR_GIST);
-      expect(existsSync(join(dir, "semantic.jsonl")) || existsSync(join(dir, "memories.jsonl"))).toBe(true);
+      // D1: the wrap keeps the store of the repo it runs in.
+      const store = repoStoreDir(dir, repoIdentity(cwd)!.key);
+      expect(existsSync(join(store, "semantic.jsonl")) || existsSync(join(store, "memories.jsonl"))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -339,7 +342,8 @@ describe("M44 project identity", () => {
     }
   });
 
-  test.failing("session B does not resurrect postgres after sqlite overwrite", async () => {
+  // Out of quarantine since P0.5: both sessions run in this repo, whose one store (D1) session B reads.
+  test("session B does not resurrect postgres after sqlite overwrite", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {

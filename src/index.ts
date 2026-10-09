@@ -20,6 +20,7 @@ import { legacySlot } from "./memory-residual";
 import { isForget, recordSupersession, validText, type Invalidation } from "./memory-validity";
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 import {
   attachPlaceCues,
   hookLane,
@@ -210,7 +211,18 @@ export type ObserveOptions = {
   reread?: boolean;
 };
 
-export type MemoryOptions = { dir?: string; project?: string; session?: string; cwd?: string; child?: boolean };
+export type MemoryOptions = {
+  dir?: string;
+  project?: string;
+  session?: string;
+  cwd?: string;
+  child?: boolean;
+  /**
+   * `dir` is one repo's store (D1, `memory-repo.ts`): every session and subagent of the repo writes its rows there.
+   * The session still labels its rows (`ep`) and its gist, but has no directory of its own.
+   */
+  perRepo?: boolean;
+};
 
 export function memorySessionName(raw: unknown): string | undefined {
   const s = typeof raw === "string" ? raw.trim() : "";
@@ -805,6 +817,8 @@ export class AgentMemory {
   readonly child: boolean;
   private scrubSession?: string;
   private scrubCwd?: string;
+  /** The subdirectory the rows live in: the session's, or none in a per-repo store. */
+  private readonly subdir: string;
   private compiled: Compiled[];
   private path: string;
   private batch = 0;
@@ -832,15 +846,16 @@ export class AgentMemory {
     const session = memorySessionName(opts.session);
     this.session = session;
     this.child = opts.child === true;
-    if (session) mkdirSync(join(this.dir, session), { recursive: true });
-    this.path = join(this.dir, session || "", "memories.jsonl");
+    this.subdir = opts.perRepo ? "" : (session ?? "");
+    if (this.subdir) mkdirSync(join(this.dir, this.subdir), { recursive: true });
+    this.path = join(this.dir, this.subdir, "memories.jsonl");
     this.compiled = load(this.path);
     this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
   }
 
   get jsonlDir(): string {
-    return join(this.dir, this.session || "");
+    return join(this.dir, this.subdir);
   }
 
   private semantic(): SemanticStore {
@@ -1224,7 +1239,7 @@ export class AgentMemory {
    */
   private pend(rows: readonly MemoryRecord[]): void {
     const disk = rows.map(toDisk).filter((row): row is DiskRow => !Array.isArray(row));
-    if (!disk.length || !appendPending(this.dir, this.session ?? "", disk)) return;
+    if (!disk.length || !appendPending(this.dir, this.subdir, disk)) return;
     for (const r of rows) {
       if (this.unsaved.delete(r.id)) this.pended.add(r.id);
       this.changed.delete(r.id);
@@ -1524,12 +1539,14 @@ export function processMemory(): AgentMemory {
     parent = memorySessionName(process.env.EDEN_MEMORY_SESSION) ?? memorySessionName(process.env.EDEN_MEMORY_PARENT),
     childId = memorySessionName(process.env.EDEN_MEMORY_CHILD);
   const session = childId ? childSessionName(parent, childId) : parent,
-    child = !!childId;
-  if (proc && (proc.dir !== root || proc.session !== session || proc.child !== child)) {
+    child = !!childId,
+    // D1: the wrap remembers in the store of the repo it runs in, the store the hook reads.
+    store = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  if (proc && (proc.dir !== store || proc.session !== session || proc.child !== child)) {
     try {
       proc.close();
     } catch {}
     proc = undefined;
   }
-  return (proc ??= openMemory({ dir, session, child }));
+  return (proc ??= openMemory({ dir: store, session, child, perRepo: true }));
 }

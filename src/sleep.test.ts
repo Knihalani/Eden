@@ -10,6 +10,7 @@ import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, supe
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { SemanticStore } from "./semantic-store";
 import { GistStore } from "./gist-store";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import * as sleepMod from "./sleep";
 import {
@@ -55,6 +56,34 @@ async function withMem<T>(
       return await fn(mem, dir);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+/**
+ * The store the hook keeps for these tests (D1): their hook payloads carry no `cwd`, so it is the repo of
+ * `process.cwd()`, under the memory root.
+ */
+function hookStore(root: string): string {
+  const store = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  mkdirSync(store, { recursive: true });
+  return store;
+}
+
+/** `withMem` for a test that also drives the hook: the memory is the hook's repo store, and `dir` is that store. */
+async function withHookMem<T>(
+  prefix: string,
+  fn: (mem: AgentMemory, dir: string) => T | Promise<T>,
+  session?: string,
+): Promise<T> {
+  const root = tmpDir(prefix);
+  return withEnv({ EDEN_MEMORY_DIR: root, EDEN_HOME: undefined }, async () => {
+    try {
+      const store = hookStore(root);
+      const mem = openMemory({ dir: store, session, perRepo: true });
+      return await fn(mem, store);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 }
@@ -318,7 +347,7 @@ describe("M7.2 ICL exemplars skip SemanticStore", () => {
 describe("M7.3 gists + SessionStart", () => {
   test("long session + sleep: a gist exists and SessionStart injects it", async () => {
     const session = "s-m74-long";
-    await withMem(
+    await withHookMem(
       "eden-m74-gist-",
       async (mem, dir) => {
         mem.quiet(() => {
@@ -343,7 +372,7 @@ describe("M7.3 gists + SessionStart", () => {
 
   test("SessionStart has pin+gist, not last-k unpinned junk", async () => {
     const session = "s-m74-junk";
-    await withMem(
+    await withHookMem(
       "eden-m74-start-",
       async (mem, dir) => {
         mem.remember("Always run bun test before you push.", { kind: "constraint" });
@@ -370,7 +399,7 @@ describe("M7.3 gists + SessionStart", () => {
 
   test("SessionStart after a later sleep does not brief a tombstoned gist name", async () => {
     const session = "s-m74-gist-lww";
-    await withMem(
+    await withHookMem(
       "eden-m74-gist-lww-",
       async (mem, dir) => {
         mem.observe([{ role: "user", content: "The database is postgres." }]);
@@ -389,7 +418,7 @@ describe("M7.3 gists + SessionStart", () => {
 
   test("SessionStart transcript re-observe does not brief instead-of postgres", async () => {
     const session = "s-m74-start-trans";
-    await withMem(
+    await withHookMem(
       "eden-m74-start-trans-",
       async (mem, dir) => {
         mem.observe([{ role: "user", content: "The database is postgres." }]);
@@ -412,7 +441,7 @@ describe("M7.3 gists + SessionStart", () => {
         expect(ctx).toMatch(/sqlite/i);
         expect(ctx).not.toMatch(/postgres/i);
         const pkt = packetOf(
-          openMemory({ dir, session }).inject([{ role: "user", content: "what database do we use" }]),
+          openMemory({ dir, session, perRepo: true }).inject([{ role: "user", content: "what database do we use" }]),
         );
         expect(pkt).toMatch(/sqlite/i);
         expect(pkt).not.toMatch(/postgres/i);
@@ -472,7 +501,7 @@ describe("M7.3 gists + SessionStart", () => {
   });
 
   test("Stop/Start leftover system_prompt does not beat live sqlite", async () => {
-    await withMem("eden-m74-hook-sys-", async (mem, dir) => {
+    await withHookMem("eden-m74-hook-sys-", async (mem, dir) => {
       mem.observe([{ role: "user", content: "The database is postgres." }]);
       mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
       await sleep({ dir, mem });
@@ -488,7 +517,7 @@ describe("M7.3 gists + SessionStart", () => {
   });
 
   test("Stop/Start leftover content does not beat live sqlite", async () => {
-    await withMem("eden-m74-hook-content-", async (mem, dir) => {
+    await withHookMem("eden-m74-hook-content-", async (mem, dir) => {
       mem.observe([{ role: "user", content: "The database is postgres." }]);
       mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
       await sleep({ dir, mem });
@@ -555,7 +584,7 @@ describe("M7.1 Stop/SessionEnd runs sleep", () => {
             transcript_path: trans,
           });
           expect(stop).toBeNull();
-          const files = [join(dir, "semantic.jsonl"), join(dir, "gists.jsonl")];
+          const files = [join(hookStore(dir), "semantic.jsonl"), join(hookStore(dir), "gists.jsonl")];
           const wrote = files.some((p) => existsSync(p));
           const called = consSpy.mock.calls.length + sleepFnSpy.mock.calls.length + memSleep.mock.calls.length > 0;
           expect(wrote || called).toBe(true);
@@ -564,11 +593,12 @@ describe("M7.1 Stop/SessionEnd runs sleep", () => {
           const endDir = tmpDir("eden-m74-end-");
           try {
             await withEnv({ EDEN_MEMORY_DIR: endDir, EDEN_HOME: undefined }, () => {
-              const mem = openMemory({ dir: endDir });
+              const store = hookStore(endDir);
+              const mem = openMemory({ dir: store, perRepo: true });
               mem.remember("CI is GitHub Actions");
               mem.close();
               memoryHookResponse({ hook_event_name: "SessionEnd" });
-              expect(existsSync(join(endDir, "semantic.jsonl")) || existsSync(join(endDir, "gists.jsonl"))).toBe(true);
+              expect(existsSync(join(store, "semantic.jsonl")) || existsSync(join(store, "gists.jsonl"))).toBe(true);
             });
           } finally {
             rmSync(endDir, { recursive: true, force: true });

@@ -13,6 +13,7 @@ import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { MEMORY_MARK, encodeLane, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/36
 
@@ -1012,7 +1013,9 @@ describe("M21 SF code-pick (newest statement, tombstone, sleep agrees; A1 D8: li
   });
 
   test("wrap injectBody and hook Submit: basketball not ice hockey", async () => {
-    await withMem(async (mem, dir) => {
+    await withMem(async (_root, dir) => {
+      // The wrap and the hook read one memory: the store the hook keeps for this process's repo (D1).
+      const mem = openMemory({ dir: repoStoreDir(dir, repoIdentity(process.cwd())!.key), perRepo: true });
       const prev = process.env.EDEN_MEMORY_DIR;
       process.env.EDEN_MEMORY_DIR = dir;
       const procSpy = spyOn(edenMem, "processMemory").mockImplementation(() => mem);

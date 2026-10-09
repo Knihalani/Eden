@@ -14,6 +14,7 @@ import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
 import { GistStore } from "./gist-store";
 import * as forgetMod from "./memory-forget";
 import * as edenMem from "./index";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/42
 
@@ -46,14 +47,19 @@ async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T 
   }
 }
 
+/**
+ * A memory root in a fresh directory, and the store the hook reads in it: the one it keeps for this process's repo
+ * (D1: a payload without `cwd` is keyed by `process.cwd()`), so the wrap and the hook see one memory.
+ */
 async function withMem<T>(
   fn: (mem: AgentMemory, dir: string) => T | Promise<T>,
   extra: Record<string, string | undefined> = {},
 ): Promise<T> {
-  const dir = tmpDir();
+  const root = tmpDir();
+  const dir = repoStoreDir(root, repoIdentity(process.cwd())!.key);
   return withEnv(
     {
-      EDEN_MEMORY_DIR: dir,
+      EDEN_MEMORY_DIR: root,
       EDEN_HOME: undefined,
       EDEN_MEMORY: "on",
       EDEN_SLEEP_EVERY: "0",
@@ -63,10 +69,10 @@ async function withMem<T>(
     },
     async () => {
       try {
-        const mem = openMemory({ dir });
+        const mem = openMemory({ dir, perRepo: true });
         return await fn(mem, dir);
       } finally {
-        rmSync(dir, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
       }
     },
   );
