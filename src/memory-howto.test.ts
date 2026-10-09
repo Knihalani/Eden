@@ -25,7 +25,7 @@ import * as howtoMod from "./howto-store";
 import { retrieveHowTo, HOWTO_RETRIEVE_K, HOWTO_TOKEN_CAP, type HowToView } from "./howto-retrieve";
 import * as howtoRetrieve from "./howto-retrieve";
 import { AgentMemory, MEMORY_MARK, openMemory, sleep, superseded } from "./index";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
 import * as sleepMod from "./sleep";
@@ -78,7 +78,7 @@ async function withMem<T>(
  * `process.cwd()`, under the memory root.
  */
 function hookStore(root: string): string {
-  const store = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  const store = storeFor(root);
   mkdirSync(store, { recursive: true });
   return store;
 }

@@ -8,13 +8,8 @@ import { respondToHook } from "./hook";
 import { AgentMemory, childSessionName, MEMORY_MARK, openMemory } from "../../../src/index";
 import { HowToStore, howtoPath } from "../../../src/howto-store";
 import { observeToolTraces } from "../../wrap/src/tool-observe";
-import { repoIdentity, repoStoreDir } from "../../../src/memory-repo";
+import { storeFor } from "../../../src/memory-repo";
 import { opaqueId } from "../../../src/memory-scrub";
-
-/** The store the hook keeps a repo's rows in (D1): payloads without a `cwd` are the test process's repo. */
-function hookStore(root: string, cwd = process.cwd()): string {
-  return repoStoreDir(root, repoIdentity(cwd)!.key);
-}
 
 /** The windows (D2) the hook's wide events name, in order (`memory-events.ts`). */
 function loggedWindows(root: string): unknown[] {
@@ -157,7 +152,7 @@ describe("passive memory hooks", () => {
     expect(out.ok).toBe(true);
     expect(out.hookSpecificOutput).toBeUndefined();
 
-    const jsonl = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+    const jsonl = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
     expect(jsonl).toMatch(/FAIL/);
     expect(jsonl).toMatch(/auth\.test/);
     expect(jsonl).toMatch(/failing/);
@@ -178,7 +173,7 @@ describe("passive memory hooks", () => {
       tool_response: "FAIL src/auth.test.ts\nexit 1\nsk-abc123XYZ999\nghp_abc123XYZ999",
     });
     expect(r).toBeNull();
-    const jsonl = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+    const jsonl = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
     expect(jsonl).toMatch(/FAIL/);
     expect(jsonl).toMatch(/auth\.test/);
     expect(jsonl).toMatch(/exit 1/);
@@ -237,7 +232,7 @@ describe("passive memory hooks", () => {
     expect(out.ok).toBe(true);
     expect(out.hookSpecificOutput).toBeUndefined();
 
-    const jsonl = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+    const jsonl = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
     expect(jsonl).toMatch(/FAIL/);
     expect(jsonl).toMatch(/auth\.test/);
     expect(jsonl).toMatch(/exit 1/);
@@ -275,10 +270,10 @@ describe("passive memory hooks", () => {
     expect(r).toBeNull();
 
     // D1: a session's rows and traces are its repo's; the memory root itself holds neither.
-    const prose = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+    const prose = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
     expect(prose).toMatch(/Bash|auth\.ts|exit 0/);
 
-    const rows = readFileSync(join(hookStore(memDir), "traces.jsonl"), "utf8")
+    const rows = readFileSync(join(storeFor(memDir), "traces.jsonl"), "utf8")
       .split("\n")
       .filter(Boolean)
       .map(
@@ -308,7 +303,7 @@ describe("passive memory hooks", () => {
       tool_input: { command: "pytest tests/auth/session.test.ts -q" },
       tool_response: "passed auth.ts\nexit 0",
     });
-    const again = readFileSync(join(hookStore(memDir), "traces.jsonl"), "utf8")
+    const again = readFileSync(join(storeFor(memDir), "traces.jsonl"), "utf8")
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line) as { order?: number });
@@ -319,7 +314,7 @@ describe("passive memory hooks", () => {
     mkdirSync(chatDir, { recursive: true });
     process.env.EDEN_MEMORY_DIR = chatDir;
     memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: "Kai timezone is Pacific" });
-    expect(existsSync(join(hookStore(chatDir), "traces.jsonl"))).toBe(false);
+    expect(existsSync(join(storeFor(chatDir), "traces.jsonl"))).toBe(false);
 
     const rootDir = join(import.meta.dir, "../../.tmp-eden-mem-posttool-trace-root");
     rmSync(rootDir, { recursive: true, force: true });
@@ -331,9 +326,9 @@ describe("passive memory hooks", () => {
       tool_input: { command: "pytest tests/auth/session.test.ts -q" },
       tool_response: "passed auth.ts\nexit 0",
     });
-    expect(existsSync(join(hookStore(rootDir), "traces.jsonl"))).toBe(true);
+    expect(existsSync(join(storeFor(rootDir), "traces.jsonl"))).toBe(true);
     const rootRow = JSON.parse(
-      readFileSync(join(hookStore(rootDir), "traces.jsonl"), "utf8")
+      readFileSync(join(storeFor(rootDir), "traces.jsonl"), "utf8")
         .split("\n")
         .filter(Boolean)[0]!,
     );
@@ -393,7 +388,7 @@ describe("passive memory hooks", () => {
     });
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout || "{}")).toEqual({});
-    const jsonl = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+    const jsonl = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
     expect(jsonl).toMatch(/FAIL/);
     expect(jsonl).toMatch(/auth\.test/);
     rmSync(memDir, { recursive: true, force: true });
@@ -423,7 +418,7 @@ describe("passive memory hooks", () => {
       // D1, D2: the subagent's rows are its repo's; its window, not a store, is s-sub--sub.
       const child = childSessionName("s-sub", "sub");
       expect(child).toBe("s-sub--sub");
-      const jsonl = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+      const jsonl = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
       expect(jsonl.length).toBeGreaterThan(0);
       expect(jsonl).toMatch(/FAIL|auth\.test|failing|exit 1/);
       expect(existsSync(join(memDir, "s-sub"))).toBe(false);
@@ -461,7 +456,7 @@ describe("passive memory hooks", () => {
 
       const child = childSessionName("s-parent", "explore");
       expect(child).toBe("s-parent--explore");
-      const jsonl = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+      const jsonl = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
       expect(jsonl).toMatch(/Read/);
       expect(jsonl).toMatch(/FAIL|auth\.test|exit 1/);
       expect(existsSync(join(memDir, "s-parent"))).toBe(false);
@@ -507,7 +502,7 @@ describe("passive memory hooks", () => {
       expect(continued.ok).toBe(true);
       const child = childSessionName("s-cycle", "sub");
       expect(child).toBe("s-cycle--sub");
-      const jsonl = readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8");
+      const jsonl = readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8");
       expect(jsonl).toMatch(/FAIL|auth\.test|exit 1/);
       expect(loggedWindows(memDir)).toContain(child);
 
@@ -537,7 +532,7 @@ describe("passive memory hooks", () => {
       });
       expect(after).toBeNull();
       const afterChild = childSessionName("s-after", "explore")!;
-      expect(readFileSync(join(hookStore(memDir), "memories.jsonl"), "utf8")).toMatch(/FAIL|auth\.test|exit 1/);
+      expect(readFileSync(join(storeFor(memDir), "memories.jsonl"), "utf8")).toMatch(/FAIL|auth\.test|exit 1/);
       expect(loggedWindows(memDir).at(-1)).toBe(afterChild);
     } finally {
       if (prevDir === undefined) delete process.env.EDEN_MEMORY_DIR;
@@ -571,7 +566,7 @@ describe("passive memory hooks", () => {
     process.env.EDEN_MEMORY_DIR = dir;
     delete process.env.EDEN_HOME;
     try {
-      const mem = openMemory({ dir: hookStore(dir), perRepo: true });
+      const mem = openMemory({ dir: storeFor(dir), perRepo: true });
       mem.remember("CI is GitHub Actions");
       mem.remember("Kai timezone is Pacific");
       for (let i = 0; i < 8; i++) {
@@ -629,7 +624,7 @@ describe("passive memory hooks", () => {
     process.env.EDEN_MEMORY_DIR = dir;
     delete process.env.EDEN_HOME;
     try {
-      const mem = openMemory({ dir: hookStore(dir), perRepo: true });
+      const mem = openMemory({ dir: storeFor(dir), perRepo: true });
       mem.remember("1. The chairperson of the committee is Alice.");
       mem.remember("8. The chairperson of the committee is Bob.");
       mem.close();
@@ -698,7 +693,7 @@ describe("passive memory hooks", () => {
     process.env.EDEN_MEMORY_DIR = dir;
     delete process.env.EDEN_HOME;
     try {
-      const mem = openMemory({ dir: hookStore(dir), perRepo: true });
+      const mem = openMemory({ dir: storeFor(dir), perRepo: true });
       mem.remember("CI is GitHub Actions");
       mem.remember("Kai timezone is Pacific");
       for (let i = 0; i < 8; i++) {
@@ -842,7 +837,7 @@ describe("passive memory hooks", () => {
         session_id: "../etc",
         prompt: "Kai timezone is Pacific m52-etc-hook-sentinel",
       });
-      expect(readFileSync(join(hookStore(dir), "memories.jsonl"), "utf8")).toMatch(/m52-etc-hook-sentinel|Pacific/i);
+      expect(readFileSync(join(storeFor(dir), "memories.jsonl"), "utf8")).toMatch(/m52-etc-hook-sentinel|Pacific/i);
       if (existsSync(outside)) {
         expect(readFileSync(outside, "utf8")).not.toMatch(/m52-etc-hook-sentinel/);
       }
@@ -873,7 +868,7 @@ describe("passive memory hooks", () => {
         session_id,
         prompt: "CI is GitHub Actions",
       });
-      const jsonl = readFileSync(join(hookStore(dir), "memories.jsonl"), "utf8");
+      const jsonl = readFileSync(join(storeFor(dir), "memories.jsonl"), "utf8");
       const recs = jsonl
         .split("\n")
         .filter(Boolean)
@@ -882,7 +877,7 @@ describe("passive memory hooks", () => {
       const eps = new Set(recs.map((r) => r.ep).filter(Boolean));
       expect(eps.size).toBe(1);
 
-      const mem = openMemory({ dir: hookStore(dir), session: session_id, perRepo: true });
+      const mem = openMemory({ dir: storeFor(dir), session: session_id, perRepo: true });
       const notes = mem.notesFor("What GitHub Actions CI timezone is Kai in?");
       const blob = notes.map((n) => n.text).join("\n");
       expect(blob).toMatch(/Pacific/i);
@@ -910,7 +905,7 @@ describe("passive memory hooks", () => {
         prompt: "Kai timezone is Pacific",
       });
       // D1, D2: the alias names the session (its rows' ep, its window), not a store directory.
-      const rows = readFileSync(join(hookStore(dir), "memories.jsonl"), "utf8");
+      const rows = readFileSync(join(storeFor(dir), "memories.jsonl"), "utf8");
       expect(rows).toContain(`"ep":"${opaqueId("sCamel")}"`);
       expect(loggedWindows(dir)).toEqual(["sCamel"]);
       expect(existsSync(join(dir, "sCamel"))).toBe(false);
@@ -1052,7 +1047,7 @@ describe("M13 honest off switch (hook)", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m13-hook-ro-"));
     try {
       m13WithEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, () => {
-        const mem = openMemory({ dir: hookStore(dir), perRepo: true });
+        const mem = openMemory({ dir: storeFor(dir), perRepo: true });
         mem.remember(M13_SQLITE);
         mem.close();
       });
@@ -1086,7 +1081,7 @@ describe("M13 honest off switch (hook)", () => {
     try {
       for (const value of [undefined, "1", "on"] as const) {
         m13WithEnv({ EDEN_MEMORY: value, EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, () => {
-          const mem = openMemory({ dir: hookStore(dir), perRepo: true });
+          const mem = openMemory({ dir: storeFor(dir), perRepo: true });
           mem.remember(M13_SQLITE);
           mem.close();
           const later = memoryHookResponse({
@@ -1201,7 +1196,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
     try {
       await m13WithEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
         // D1: the writer opens the repo's store, as the hook does; the how-to lives there, not under the session.
-        const store = hookStore(dir);
+        const store = storeFor(dir);
         const mem = openMemory({ dir: store, session: M14_SESSION, perRepo: true });
         observeToolTraces(mem, m14PytestWindow());
         await mem.sleep();
@@ -1238,7 +1233,7 @@ describe("M14.4 hook Start/Submit share wrap-written how-to", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m14-hook-chat-"));
     try {
       await m13WithEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
-        const store = hookStore(dir);
+        const store = storeFor(dir);
         const mem = openMemory({ dir: store, perRepo: true });
         mem.observe([
           { role: "user", content: M13_CLERK },
@@ -1273,7 +1268,7 @@ describe("M17 hook encode lanes", () => {
     try {
       m13WithEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, () => {
         memoryHookResponse({ hook_event_name: "UserPromptSubmit", prompt: M17_ICL_LONG, session_id: "s-m17" });
-        const jsonl = readFileSync(join(hookStore(dir), "memories.jsonl"), "utf8");
+        const jsonl = readFileSync(join(storeFor(dir), "memories.jsonl"), "utf8");
         expect(jsonl).toContain(M17_ICL_LONG);
         expect(jsonl).toMatch(/"lane":"icl"/);
         const later = memoryHookResponse({
@@ -1302,7 +1297,7 @@ describe("M38.2 hook honors an omitted packet; Start still briefs", () => {
           EDEN_MEMORY_MIN: undefined,
         },
         async () => {
-          const mem = openMemory({ dir: hookStore(dir), session: "s-m38", perRepo: true });
+          const mem = openMemory({ dir: storeFor(dir), session: "s-m38", perRepo: true });
           mem.remember("Use sqlite.");
           mem.observe([{ role: "user", content: "Always run tests before committing." }]);
           await mem.sleep({ session: "s-m38" });

@@ -14,14 +14,7 @@ import { ledgerKey, notRefractory, recordDeliveries, startEpoch, wouldPreempt } 
 import { admitNotes } from "../../../src/memory-gate";
 import { isResidualNote, recentConversation, residualSentences, sentencesOf } from "../../../src/memory-residual";
 import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenance";
-import {
-  markStoreFormat,
-  readableStore,
-  repoIdentity,
-  repoStoreDir,
-  swapping,
-  type RepoIdentity,
-} from "../../../src/memory-repo";
+import { readableStore, repoIdentity, repoStoreDir, swapping, type RepoIdentity } from "../../../src/memory-repo";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   asksHistory,
@@ -438,10 +431,6 @@ function respond(
   // EXECUTION §9: a store in a format this code does not know is never read or written.
   if (!store || !readableStore(store)) return null;
   const mem = hookMemory({ dir: store, session: resolved.session, child: resolved.child, cwd });
-  if (writes)
-    try {
-      markStoreFormat(store);
-    } catch {}
   try {
     const transPath =
         typeof r.transcript_path === "string"

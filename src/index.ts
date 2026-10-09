@@ -20,7 +20,7 @@ import { legacySlot } from "./memory-residual";
 import { isForget, recordSupersession, validText, type Invalidation } from "./memory-validity";
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
 import {
   attachPlaceCues,
   hookLane,
@@ -819,6 +819,7 @@ export class AgentMemory {
   private scrubCwd?: string;
   /** The subdirectory the rows live in: the session's, or none in a per-repo store. */
   private readonly subdir: string;
+  private readonly perRepo: boolean;
   private compiled: Compiled[];
   private path: string;
   private batch = 0;
@@ -847,11 +848,29 @@ export class AgentMemory {
     this.session = session;
     this.child = opts.child === true;
     this.subdir = opts.perRepo ? "" : (session ?? "");
+    this.perRepo = opts.perRepo === true;
+    if (this.perRepo && !this.sealed && memoryConsent() === "on")
+      try {
+        markStoreFormat(this.dir);
+      } catch {}
     if (this.subdir) mkdirSync(join(this.dir, this.subdir), { recursive: true });
     this.path = join(this.dir, this.subdir, "memories.jsonl");
     this.compiled = load(this.path);
     this.knownIds = new Set(this.compiled.map((c) => c.rec.id));
     this.rebuildSeen();
+  }
+
+  /**
+   * A per-repo store in a format this code does not know (EXECUTION §9): neither read nor written. Checked at every
+   * use, so a long-lived process (the wrap) stops when a newer writer changes the format.
+   */
+  get sealed(): boolean {
+    return this.perRepo && !readableStore(this.dir);
+  }
+
+  /** The consent this store runs under: `off` when it is sealed. */
+  private consent(): ReturnType<typeof memoryConsent> {
+    return this.sealed ? "off" : memoryConsent();
   }
 
   get jsonlDir(): string {
@@ -891,7 +910,7 @@ export class AgentMemory {
       ...(this.session ? { ep: opaqueId(this.session) } : {}),
     };
     try {
-      if (memoryConsent() !== "on") return rec;
+      if (this.consent() !== "on") return rec;
     } catch {
       return rec;
     }
@@ -989,7 +1008,7 @@ export class AgentMemory {
   /** Encodes messages (`ObserveOptions`). */
   observe(messages: unknown[], opts: ObserveOptions = {}): MemoryRecord[] {
     try {
-      if (memoryConsent() !== "on") return [];
+      if (this.consent() !== "on") return [];
     } catch {
       return [];
     }
@@ -1175,7 +1194,7 @@ export class AgentMemory {
    */
   private persist() {
     try {
-      if (memoryConsent() !== "on") return;
+      if (this.consent() !== "on") return;
     } catch {
       return;
     }
@@ -1363,7 +1382,7 @@ export class AgentMemory {
   recall(messages: unknown[], encode?: unknown[]): MemoryRecord[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
-      if (memoryConsent() === "off") return [];
+      if (this.consent() === "off") return [];
     } catch {
       return [];
     }
@@ -1426,7 +1445,7 @@ export class AgentMemory {
 
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
     try {
-      if (memoryConsent() === "off") return body;
+      if (this.consent() === "off") return body;
     } catch {
       return body;
     }
@@ -1541,7 +1560,7 @@ export function processMemory(): AgentMemory {
   const session = childId ? childSessionName(parent, childId) : parent,
     child = !!childId,
     // D1: the wrap remembers in the store of the repo it runs in, the store the hook reads.
-    store = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+    store = storeFor(root);
   if (proc && (proc.dir !== store || proc.session !== session || proc.child !== child)) {
     try {
       proc.close();

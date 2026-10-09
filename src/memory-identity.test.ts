@@ -15,7 +15,7 @@ import { retrieveExperience } from "./experience-retrieve";
 import { GistStore, scrubTombstonedIdentity } from "./gist-store";
 import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
 import * as edenMem from "./index";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 import { SemanticStore } from "./semantic-store";
 
 const SESSION = "sess-m35-unique-session";
@@ -58,7 +58,7 @@ async function withMem<T>(
   const dir = tmpDir(prefix);
   return withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on" }, async () => {
     try {
-      const store = hook ? repoStoreDir(dir, repoIdentity(process.cwd())!.key) : dir;
+      const store = hook ? storeFor(dir) : dir;
       const mem = openMemory({ dir: store, session, cwd, perRepo: hook });
       return await fn(mem, store);
     } finally {
