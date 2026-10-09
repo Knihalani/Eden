@@ -6,9 +6,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { plainCue, type Cue } from "./cues";
-import { computeMetrics, judgeDeliveries, rate, wilson } from "./metrics";
+import { computeMetrics, judgeDeliveries, latencyByPoint, rate, wilson } from "./metrics";
 import { itemId } from "./oracle";
-import { tokensOf, type SimSession } from "./session";
+import { tokensOf, type SimSession, type SimWorld } from "./session";
 import { play } from "./shape";
 import { removeTempDirs, scriptedWorld, type Answer } from "./testkit";
 import { bashCall, readCall } from "./tools";
@@ -304,5 +304,24 @@ describe("the statistics", () => {
       "silence.real_negatives",
     ]);
     expect(metrics.p99_hook_ms.SessionStart).toMatchObject({ n: 1 });
+  });
+});
+
+describe("latency per point", () => {
+  /** A log of one event per sample: each takes `ms` from 0, synchronous unless `async`. */
+  const logOf = (event: string, samples: readonly number[], async = false) =>
+    samples.map((ms) => ({ event, invocations: [{ startedAt: 0, endedAt: ms, ...(async ? { async: true } : {}) }] }));
+
+  test("p99 of the first and the last quarter, in run order, shows a cost that grows over a session", () => {
+    const growing = Array.from({ length: 100 }, (_, i) => 10 + i);
+    const latency = latencyByPoint({ log: logOf("UserPromptSubmit", growing) } as unknown as SimWorld);
+    expect(latency.UserPromptSubmit).toMatchObject({ n: 100, quarters: { first: 34, last: 109 } });
+  });
+
+  test("an async handler's time is its own point: Claude Code does not wait for it", () => {
+    const log = [...logOf("Stop", [5, 6, 7, 8]), ...logOf("Stop", [900, 950, 990, 999], true)];
+    const latency = latencyByPoint({ log } as unknown as SimWorld);
+    expect(latency.Stop).toMatchObject({ n: 4, p99: 8 });
+    expect(latency["Stop (async)"]).toMatchObject({ n: 4, p99: 999, quarters: { first: 900, last: 999 } });
   });
 });

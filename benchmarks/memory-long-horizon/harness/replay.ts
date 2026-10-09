@@ -76,6 +76,7 @@ export async function replay(options: ReplayOptions): Promise<{ summary: ReplayS
     initialTruth: scenario.world?.initialTruth,
   });
   const results = await playScenario(scenario, world);
+  await world.settle();
   const skipped = results.reduce((n, result) => n + result.skipped, 0);
   return { summary: summarize(scenario, world, skipped), world };
 }

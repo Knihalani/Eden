@@ -4,8 +4,14 @@
  * documented timeouts, and stdout read by Claude Code's rules (exit codes, JSON vs plain text,
  * `additionalContext`, blocking). Matching handlers of one event run in parallel, as documented.
  *
+ * An `async: true` handler starts with the event's other handlers, and Claude Code does not wait for it (hooks
+ * reference, "Run hooks in the background"): it has no timeout, and its decisions have no effect. The simulator
+ * lets it finish before the world's next event (`settle`), as a user who reads the answer before typing again
+ * gives it time to; its invocation joins the event's record when it exits. Its output reaches Claude only on the
+ * next turn, which the simulator does not model, so context from an async handler is reported as an error.
+ *
  * Handler features the simulator does not model yet are rejected when the plugin loads, rather than
- * silently run differently: `if` filters (P2.3 needs them), `async` hooks, and non-command handler types.
+ * silently run differently: `if` filters (P2.3 needs them) and non-command handler types.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -17,6 +23,8 @@ export interface HookHandler {
   args?: string[];
   /** Seconds. */
   timeout?: number;
+  /** Runs in the background: Claude Code does not wait for it. */
+  async?: boolean;
 }
 
 export interface HookGroup {
@@ -30,7 +38,7 @@ export interface Plugin {
   hooks: Partial<Record<HookEvent, HookGroup[]>>;
 }
 
-const SUPPORTED_HANDLER_FIELDS = new Set(["type", "command", "args", "timeout", "statusMessage"]);
+const SUPPORTED_HANDLER_FIELDS = new Set(["type", "command", "args", "timeout", "statusMessage", "async"]);
 
 export function loadPlugin(root: string): Plugin {
   const manifest = join(root, ".claude-plugin", "plugin.json");
@@ -121,6 +129,8 @@ export interface Invocation {
   stdout: string;
   stderr: string;
   outcome: HookOutcome;
+  /** The handler ran in the background (`async: true`). */
+  async?: true;
 }
 
 /** Events whose `additionalContext` Claude Code inserts (hooks reference, "Add context for Claude"). */
@@ -228,16 +238,34 @@ export interface RunnerOptions {
 }
 
 export class HookRunner {
+  /** Async handlers still running: each adds its invocation to its event's list when it exits. */
+  private background: Promise<void>[] = [];
+
   constructor(private readonly options: RunnerOptions) {}
 
-  /** Runs every handler that matches the payload, in parallel, each in its own process, with `env` added. */
+  /**
+   * Runs every handler that matches the payload, in parallel, each in its own process, with `env` added. Returns
+   * once the synchronous handlers exit; the async ones join the returned list, after them and in handler order,
+   * when all of them have exited (`settle`).
+   */
   async dispatch(payload: HookPayload, env: Record<string, string> = {}): Promise<Invocation[]> {
     const event = payload.hook_event_name;
     const value = matchedField(payload);
     const handlers = (this.options.plugin.hooks[event] ?? [])
       .filter((group) => matcherAccepts(group.matcher, value))
       .flatMap((group) => group.hooks);
-    return Promise.all(handlers.map((handler) => this.run(event, handler, payload, env)));
+    const invocations: Invocation[] = [];
+    const later = handlers.filter((handler) => handler.async).map((handler) => this.run(event, handler, payload, env));
+    const now = Promise.all(handlers.filter((handler) => !handler.async).map((h) => this.run(event, h, payload, env)));
+    if (later.length)
+      this.background.push(Promise.all([now, ...later]).then(([, ...exited]) => void invocations.push(...exited)));
+    invocations.push(...(await now));
+    return invocations;
+  }
+
+  /** Waits until every async handler has exited. */
+  async settle(): Promise<void> {
+    while (this.background.length) await Promise.all(this.background.splice(0));
   }
 
   private async run(
@@ -264,13 +292,16 @@ export class HookRunner {
       detached: true,
     });
     let timedOut = false;
-    const timer = setTimeout(
-      () => {
-        timedOut = true;
-        killGroup(child.pid);
-      },
-      timeoutSeconds(event, handler) * 1000,
-    );
+    // Claude Code does not enforce `timeout` on an async command hook.
+    const timer = handler.async
+      ? undefined
+      : setTimeout(
+          () => {
+            timedOut = true;
+            killGroup(child.pid);
+          },
+          timeoutSeconds(event, handler) * 1000,
+        );
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
@@ -278,6 +309,7 @@ export class HookRunner {
     ]);
     clearTimeout(timer);
     const endedAt = performance.now();
+    const outcome = interpretOutput(event, timedOut ? null : exitCode, stdout, timedOut);
     return {
       command: handler.command,
       pid: child.pid,
@@ -287,9 +319,16 @@ export class HookRunner {
       timedOut,
       stdout,
       stderr,
-      outcome: interpretOutput(event, timedOut ? null : exitCode, stdout, timedOut),
+      ...(handler.async ? { outcome: inBackground(outcome), async: true as const } : { outcome }),
     };
   }
+}
+
+/** An async handler's outcome: it cannot block or decide, and its context would arrive a turn later. */
+function inBackground(outcome: HookOutcome): HookOutcome {
+  const { additionalContext, permissionDecision, permissionDecisionReason, ...rest } = outcome;
+  const late = additionalContext === undefined ? undefined : "async context arrives next turn, not modelled";
+  return { ...rest, blocked: false, ...(late ? { error: late } : {}) };
 }
 
 function killGroup(pid: number): void {
