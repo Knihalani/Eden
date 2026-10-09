@@ -312,9 +312,10 @@ export function breakerCheck(): DoctorCheck {
 /** EXECUTION §5's kill switches, narrowest first. */
 export function killSwitchesCheck(cwd = process.cwd()): DoctorCheck {
   const top = repoTop(cwd);
-  const files = top ? `${userFlagsPath()} or ${repoFlagsPath(top)}` : userFlagsPath();
+  // X7's precedence: the repo file beats the user file, so in a repo whose file sets a point, only it turns it off.
+  const files = top ? `${repoFlagsPath(top)} (wins in this repo) or ${userFlagsPath()}` : userFlagsPath();
   const switches = [
-    `1. a point's flag set to off in ${files} (from the next event)`,
+    `1. a point's flag set to off in ${files}, from the next event; an EDEN_FLAG_* variable beats both`,
     "2. EDEN_MEMORY=off in Claude Code's environment (from the next session)",
     '3. claude plugin disable eden-memory@eden, or "disableAllHooks": true in Claude Code settings',
   ];

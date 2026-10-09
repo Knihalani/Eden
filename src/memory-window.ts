@@ -38,6 +38,18 @@ export function appendRecord(dir: string, file: string, record: WindowRecord): v
   appendFileSync(join(dir, file), `${JSON.stringify(record)}\n`, { mode: 0o600 });
 }
 
+/** The ledger files a window already has. */
+export function existingLedgers(dir: string): LedgerFile[] {
+  const files: LedgerFile[] = [LIVE_LEDGER, SHADOW_LEDGER];
+  return files.filter((file) => {
+    try {
+      return statSync(join(dir, file)).isFile();
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** A window file's records; a torn line is skipped and a missing file has none. */
 export function windowRecords(dir: string, file: string): Record<string, unknown>[] {
   let text = "";

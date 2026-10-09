@@ -296,3 +296,48 @@ describe("an exception in the handler (injected)", () => {
     expect(breakerFile()).toEqual({});
   });
 });
+
+describe("review round 1 probes (slice-reviewer)", () => {
+  const every = (mode: string) =>
+    Object.fromEntries(["deliver.submit", "deliver.session_start"].map((flag) => [flag, mode]));
+
+  test("off is identity at every event: a PreCompact that carries a prompt-like field returns no context", () => {
+    submit(RULE);
+    setFlags(every("off"));
+    expect(submit(CUE, { prompt_id: "p2" })).toBeUndefined();
+    expect(hook("PreCompact", { prompt: CUE, trigger: "manual" })).toBeNull();
+    setFlags(every("shadow"));
+    expect(hook("PreCompact", { prompt: CUE, trigger: "manual" })).toBeNull();
+  });
+
+  test("shadow after a switch from on: a compaction re-arms what the live point delivered before it", () => {
+    submit(RULE, { prompt_id: "p1" });
+    expect(submit(CUE, { prompt_id: "p2" })).toContain(RULE);
+    setFlags(every("shadow"));
+    hook("SessionStart", { source: "compact" });
+    submit(CUE, { prompt_id: "p3" });
+    const last = wideEvents().findLast((event) => event.ev === "UserPromptSubmit")!;
+    expect((last.cids as string[]).length).toBeGreaterThan(0);
+  });
+
+  test("control: all on, a compaction re-arms the rule", () => {
+    submit(RULE, { prompt_id: "p1" });
+    expect(submit(CUE, { prompt_id: "p2" })).toContain(RULE);
+    hook("SessionStart", { source: "compact" });
+    expect(submit(CUE, { prompt_id: "p3" })).toContain(RULE);
+  });
+
+  test("a non-human submit's wide event keeps its prompt_id, hash and hturn, and the D24 rule it matched", () => {
+    submit(RULE, { prompt_id: "p1" });
+    submit("<task-notification>build finished</task-notification>", { prompt_id: "p-n" });
+    expect(wideEvents().at(-1)).toMatchObject({
+      submit: "non-human",
+      nonhuman: "task-notification",
+      prompt_id: "p-n",
+      hturn: 1,
+    });
+    expect(wideEvents().at(-1)!.prompt_hash).toMatch(/^[0-9a-f]{16}$/);
+    submit('Another Claude session sent a message:\n<agent-message from="a1">done</agent-message>');
+    expect(wideEvents().at(-1)).toMatchObject({ nonhuman: "agent-message", preamble: true });
+  });
+});

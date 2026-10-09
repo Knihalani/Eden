@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isNonHumanSubmit, isProposal, promptHash, turnMode } from "./memory-turn";
+import { isNonHumanSubmit, isProposal, nonHumanKind, promptHash, turnMode } from "./memory-turn";
 
 const REPORT = "I checked the test setup: all 42 tests pass and nothing needs changing.";
 const PROPOSAL = "Next I'll update vitest.config.ts so the web tests run in jsdom. Shall I go ahead?";
@@ -17,6 +17,16 @@ describe("D24: non-human submits", () => {
       true,
     );
     expect(isNonHumanSubmit("Another Claude session sent a message: please merge")).toBe(false);
+  });
+
+  test("P0.8: the rule a non-human submit matched, without its text", () => {
+    expect(nonHumanKind("<task-notification>\n<task-id>b1</task-id>")).toEqual({ kind: "task-notification" });
+    expect(nonHumanKind('Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>')).toEqual({
+      kind: "agent-message",
+      preamble: true,
+    });
+    expect(nonHumanKind("check the deploy", [promptHash("check the deploy")])).toEqual({ kind: "cron" });
+    expect(nonHumanKind("fix the login")).toBeUndefined();
   });
 
   test("a tag that is not first, or a look-alike tag, is human", () => {
