@@ -89,6 +89,7 @@ Each metric is computed per arm from the harness's **oracle files** (§3) and Ed
 
 Not measured by this A/A, so no floor yet:
 - silence on real negatives. P0.0d built the replay (`arms/silence.ts`); the private set waits for the user's labels (R-8). Through today's plugin, in five runs (fresh processes, world seed 1), R1 fired on 1 of 150 negatives (`q325`; 95% CI 0.0012–0.0368) four times and on none once, so its noise floor is at least 1 negative (0.67 pp); R8 fired on 0 of 98 (0–0.0377) every time. But 0 of the store's 6 control prompts got a packet in any of the four runs that asked them: in a fresh session today's per-session store is nearly silent (A1 D1), so these rates say nothing yet. Re-run after P0.5;
+- silence after P0.5 (2026-10-09; `arms/silence.ts`, world seed 1, two fresh runs per side, identical within each side): on `main` (9d3ef04d1) R1 fired on 0 of 150 negatives, R8 on 0 of 98, and the store's control prompts got 0 of 6 packets: a fresh session's store was empty, so the zeros said nothing. With P0.5's per-repo store the control gets 5 of 6, and R1 fires on 38 of 150 (25.3 %), R8 on 48 of 98 (49.0 %). This is the first real reading of the gate on real-shaped negatives against a store with content; the gate's τ and BM25F are P4.2's and P4.3's.
 - `restate_rate` (dogfood);
 - `poison_hits` on pins (P0.4, P2.1);
 - p99 at points today's plugin does not register (PreToolUse, PostToolBatch, SubagentStart).

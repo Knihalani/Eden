@@ -38,7 +38,7 @@ describe("resolveFlags", () => {
 
   test("env > repo file > user file > default", () => {
     const repo = join(dir, "repo");
-    mkdirSync(join(repo, ".git"), { recursive: true });
+    write(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
     write(join(home, "flags.json"), { "deliver.submit": "off", "deliver.session_start": "shadow" });
     write(join(repo, ".eden", "flags.json"), { "deliver.submit": "shadow" });
     const inRepo = resolveFlags(join(repo, "src"), env());
@@ -92,6 +92,7 @@ describe("resolveFlags", () => {
 describe("repoTop", () => {
   test("the nearest folder holding .git; a linked worktree belongs to its main checkout", () => {
     const main = join(dir, "main");
+    write(join(main, ".git", "HEAD"), "ref: refs/heads/main\n");
     // A linked worktree's git dir names the common dir in its `commondir` file, as `git worktree add` writes it.
     write(join(main, ".git", "worktrees", "feature", "commondir"), "../..\n");
     mkdirSync(join(main, "packages", "cli"), { recursive: true });

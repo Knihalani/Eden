@@ -50,6 +50,8 @@ export type SleepMem = {
   howtoDir?: string;
   /** Set by hook/wrap. A `--` in the session name is not enough. */
   child?: boolean;
+  /** A store in a format this code does not know: sleep writes nothing to it (EXECUTION §9). */
+  sealed?: boolean;
   memories(): SleepRecord[];
   dropWhere?(pred: (r: MemoryRecord) => boolean): void;
   rewriteWhere?(fn: (r: MemoryRecord) => string | undefined): void;
@@ -873,7 +875,7 @@ function ownRows(mem: SleepMem, session: string | undefined): (id: string) => bo
 
 export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   try {
-    if (memoryConsent() !== "on") return;
+    if (memoryConsent() !== "on" || mem.sealed) return;
   } catch {
     return;
   }

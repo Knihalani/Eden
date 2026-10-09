@@ -26,7 +26,7 @@ import {
   type AgentMemory as AgentMemoryType,
 } from "./index";
 import * as edenMem from "./index";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/57
 
@@ -73,11 +73,6 @@ async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T 
   }
 }
 
-/** The store the hook keeps for this process's repo under `root` (D1: a payload without `cwd` is keyed by it). */
-function hookStore(root: string): string {
-  return repoStoreDir(root, repoIdentity(process.cwd())!.key);
-}
-
 /**
  * A memory root in a fresh directory, and the store the hook reads in it (`hookStore`): the wrap and the hook probe
  * one memory.
@@ -88,7 +83,7 @@ async function withMem<T>(
   extra?: { session?: string; cwd?: string; cap?: string },
 ): Promise<T> {
   const root = tmpDir(prefix);
-  const dir = hookStore(root);
+  const dir = storeFor(root);
   return withEnv(
     {
       EDEN_MEMORY_DIR: root,
@@ -359,7 +354,7 @@ describe("M36.1 unicode path", () => {
       await withEnv(
         { EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_MEMORY_CAP: undefined },
         async () => {
-          const store = hookStore(dir);
+          const store = storeFor(dir);
           const mem = openMemory({ dir: store, perRepo: true });
           // Not "catalog token … is durable": D13's keyword rule redacts the word after "token … is" (P0.4).
           mem.observe([{ role: "user", content: "The unicode catalog entry M36UNI is durable." }]);

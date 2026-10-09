@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { migrationStage, repoIdentity, repoStoreDir } from "../../../src/memory-repo";
+import { migrationStage, repoIdentity, storeFor } from "../../../src/memory-repo";
 import { memoryHookResponse } from "./memory-hook";
 
 let dir = "";
@@ -60,7 +60,7 @@ function submit(session: string, cwd: string, prompt: string): string | undefine
 }
 
 function storeOf(cwd: string): string {
-  return repoStoreDir(root, repoIdentity(cwd)!.key);
+  return storeFor(root, cwd);
 }
 
 function rows(store: string): string {

@@ -98,6 +98,12 @@ describe("repoIdentity (D1)", () => {
     expect(repoIdentity(undefined)).toBeUndefined();
   });
 
+  test("a .git directory with no HEAD is passed over, as git passes over it", () => {
+    const main = repo(join(temp(), "main"));
+    mkdirSync(join(main, "packages", "cli", ".git"));
+    expect(repoIdentity(join(main, "packages", "cli"))?.key).toBe(gitKey(main));
+  });
+
   test("a repo's store is <root>/repos/<key>", () => {
     expect(repoStoreDir("/m", "0123456789abcdef")).toBe(join("/m", "repos", "0123456789abcdef"));
   });

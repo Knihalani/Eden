@@ -33,7 +33,7 @@ import {
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import * as edenMem from "./index";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 
 const INDEX_SRC = readFileSync(join(import.meta.dir, "index.ts"), "utf8");
 
@@ -81,7 +81,7 @@ async function withMemAsync<T>(
   session?: string,
 ): Promise<T> {
   const root = tmpDir(prefix);
-  const dir = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  const dir = storeFor(root);
   return withEnv({ EDEN_MEMORY_DIR: root, EDEN_HOME: undefined, EDEN_MEMORY_CAP: undefined }, async () => {
     try {
       const mem = openMemory({ dir, session, perRepo: true });

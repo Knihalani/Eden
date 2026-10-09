@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { repoIdentity, repoStoreDir } from "../../../src/memory-repo";
+import { storeFor } from "../../../src/memory-repo";
 import { memoryHookResponse } from "./memory-hook";
 
 const HEADER = "Eden memory, recalled from earlier sessions:";
@@ -170,7 +170,7 @@ describe("D14, D28: the packet's wording and shape", () => {
   test("a rule without a source is a plain bullet at SessionStart", () => {
     // A row written before P0.4 records no source. Payloads without a cwd are the test process's repo (D1).
     const legacy = { id: "r1", text: "Never commit .env or credentials.json", kind: "constraint", tags: ["pin"] };
-    const store = repoStoreDir(join(dir, "memory"), repoIdentity(process.cwd())!.key);
+    const store = storeFor(join(dir, "memory"));
     mkdirSync(store, { recursive: true });
     writeFileSync(join(store, "memories.jsonl"), JSON.stringify({ ...legacy, t: Date.now() }) + "\n");
     const out = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION, source: "startup" });
@@ -301,7 +301,7 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
     submit("You can push with ghp_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2Y now. We no longer use AKIAZZZZZZZZZZZZZZZZ.", {
       prompt_id: "p1",
     });
-    const store = repoStoreDir(join(dir, "memory"), repoIdentity(process.cwd())!.key);
+    const store = storeFor(join(dir, "memory"));
     const log = existsSync(join(store, "validity.jsonl")) ? readFileSync(join(store, "validity.jsonl"), "utf8") : "";
     expect(log).toContain('"k":"revoke"');
     expect(log.toLowerCase()).not.toContain("akiazzzzzzzzzzzzzzzz");

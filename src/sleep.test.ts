@@ -10,7 +10,7 @@ import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, supe
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { SemanticStore } from "./semantic-store";
 import { GistStore } from "./gist-store";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import * as sleepMod from "./sleep";
 import {
@@ -65,7 +65,7 @@ async function withMem<T>(
  * `process.cwd()`, under the memory root.
  */
 function hookStore(root: string): string {
-  const store = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  const store = storeFor(root);
   mkdirSync(store, { recursive: true });
   return store;
 }

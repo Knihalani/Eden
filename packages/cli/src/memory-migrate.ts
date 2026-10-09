@@ -51,6 +51,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { memorySessionName, storeRows } from "../../../src/index";
 import { withoutInstructions } from "../../../src/memory-authority";
+import { EXPERIENCE_DIRNAME } from "../../../src/experience-store";
 import { memoryNow } from "../../../src/memory-clock";
 import { edenHomeDir } from "../../../src/memory-flags";
 import { pendingRows } from "../../../src/memory-ids";
@@ -65,7 +66,7 @@ import {
 } from "../../../src/memory-repo";
 import { legacySlot } from "../../../src/memory-residual";
 import { scrubMemoryText } from "../../../src/memory-scrub";
-import { secretHits } from "../../../src/memory-secrets";
+import { sanitizeForStore, secretHits } from "../../../src/memory-secrets";
 import { recordSupersession } from "../../../src/memory-validity";
 import { memoryRoot } from "./memory-hook";
 
@@ -74,7 +75,14 @@ type Step = (typeof STEPS)[number];
 
 /** The per-repo layout's entries at the root: never legacy, carried into the new tree as they are. */
 const CURRENT_LAYOUT = new Set(["repos", "windows", "hook.log.d"]);
+/**
+ * Directories of the legacy root that hold no session's rows: they stay in the legacy tree, with the root's files
+ * (gists, semantic and how-to stores, traces, postings, the sleep clock).
+ */
+const ROOT_DIRS = new Set([EXPERIENCE_DIRNAME]);
 const LEGACY_TAG = "src:legacy";
+/** The mark on the validity records the migration adds. */
+const LEGACY_SRC = "legacy";
 /** How the plan names the root's own `memories.jsonl`. */
 const ROOT_STORE = "(root)";
 /** EXECUTION §9's verify: how many legacy rows are read back from the new tree. */
@@ -184,7 +192,9 @@ function lines(path: string): string[] {
 
 /** The legacy session directories: every directory at the root that names a session. */
 export function legacySessions(root: string): string[] {
-  return subdirs(root).filter((name) => !CURRENT_LAYOUT.has(name) && memorySessionName(name) === name);
+  return subdirs(root).filter(
+    (name) => !CURRENT_LAYOUT.has(name) && !ROOT_DIRS.has(name) && memorySessionName(name) === name,
+  );
 }
 
 /** The session a directory belongs to: a subagent's `<session>--<agent>` belongs to `<session>`. */
@@ -252,11 +262,6 @@ function finiteTime(value: unknown): number | undefined {
 
 function legacyId(session: string, id: string, text: string): string {
   return `legacy:${createHash("sha256").update(`${session}\0${id}\0${text}`).digest("hex").slice(0, 24)}`;
-}
-
-/** A legacy text through the store's gate and without instructions (A6 §2.1, §2.3); empty when nothing is left. */
-function sanitized(text: string, scrub: { session: string; cwd?: string }): string {
-  return withoutInstructions(scrubMemoryText(text, scrub)).replace(/\s+/g, " ").trim();
 }
 
 function emptyRepo(): RepoPlan {
@@ -331,15 +336,17 @@ export function buildPlan(paths: Paths): Plan {
         plan.rows.superseded++;
         continue;
       }
-      const text = sanitized(String(row.text), scrub);
+      const scrubbed = scrubMemoryText(String(row.text), scrub);
+      const text = withoutInstructions(scrubbed).replace(/\s+/g, " ").trim();
       if (!text) {
         plan.rows.empty++;
         continue;
       }
       if (secretHits(String(row.text)).length) plan.rows.redacted++;
       const t = finiteTime(row.t) ?? origin.t;
-      // A store line without a kind is a fact (`toDisk` leaves the default out).
-      const slot = legacySlot({ text: String(row.text), kind: typeof row.kind === "string" ? row.kind : "fact" });
+      // Read from the text past the gate, so no value it redacts reaches the validity log. A store line without a
+      // kind is a fact (`toDisk` leaves the default out).
+      const slot = legacySlot({ text: scrubbed, kind: typeof row.kind === "string" ? row.kind : "fact" });
       if (slot) slots.set(repo, [...(slots.get(repo) ?? []), { ...slot, t }]);
       target.rows.push({
         id: legacyId(name, String(row.id), String(row.text)),
@@ -417,6 +424,18 @@ function appendLines(path: string, rows: readonly unknown[]): void {
   writeFileSync(path, before + joint + rows.map((row) => `${JSON.stringify(row)}\n`).join(""), { mode: 0o600 });
 }
 
+/**
+ * The root's validity records, as each repo receives them: through the gate (a record whose text it would change is
+ * dropped: before P0.4 the log could hold a raw secret) and marked `src: "legacy"` for rollback.
+ */
+function legacyValidity(root: string): Record<string, unknown>[] {
+  return lines(join(root, "validity.jsonl")).flatMap((line) => {
+    const record = parsed(line)[0];
+    if (!record || typeof record !== "object" || sanitizeForStore(line) !== line) return [];
+    return [{ ...(record as Record<string, unknown>), src: LEGACY_SRC }];
+  });
+}
+
 /** The new tree: the per-repo layout as it is now, each repo's legacy rows and validity appended. */
 function stage(paths: Paths, plan: Plan): void {
   rmSync(paths.stage, { recursive: true, force: true });
@@ -424,7 +443,7 @@ function stage(paths: Paths, plan: Plan): void {
   for (const name of CURRENT_LAYOUT)
     if (existsSync(join(paths.root, name)))
       cpSync(join(paths.root, name), join(paths.stage, name), { recursive: true, preserveTimestamps: true });
-  const validity = lines(join(paths.root, "validity.jsonl"));
+  const validity = legacyValidity(paths.root);
   for (const [repo, target] of plan.repos) {
     const dir = repoStoreDir(paths.stage, repo);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -434,9 +453,8 @@ function stage(paths: Paths, plan: Plan): void {
       target.rows.map((row, at) => ({ ...row, seq: first + at })),
     );
     if (target.rows.length) writeFileSync(join(dir, "seq"), String(first + target.rows.length - 1), { mode: 0o600 });
-    const have = new Set(lines(join(dir, "validity.jsonl")));
-    appendLines(join(dir, "validity.jsonl"), validity.filter((line) => !have.has(line)).flatMap(parsed));
-    for (const slot of target.stale) recordSupersession(dir, slot, slot.t);
+    appendLines(join(dir, "validity.jsonl"), validity);
+    for (const slot of target.stale) recordSupersession(dir, slot, slot.t, LEGACY_SRC);
     markStoreFormat(dir);
   }
 }
@@ -515,6 +533,11 @@ function apply(paths: Paths, json: boolean): number {
       say(json, { applied: true, resumed: true }, "migrate: finished an interrupted swap");
       return 0;
     }
+    if (existsSync(paths.stage)) {
+      const why = `a staged tree is left at ${paths.stage} while ${paths.root} exists: move one aside and run again`;
+      say(json, { applied: false, why }, `migrate: ${why}`);
+      return 1;
+    }
     say(json, { applied: false, why: "already applied" }, `migrate: already applied (${paths.legacy} exists)`);
     return 0;
   }
@@ -545,17 +568,13 @@ function apply(paths: Paths, json: boolean): number {
   return 0;
 }
 
-/** A row file's lines without the rows the migration added. */
+/** A row or validity file's lines without what the migration added: `legacy:` rows and `src: "legacy"` records. */
 function withoutLegacy(text: string): string {
   return text
     .split("\n")
     .filter((line) => {
-      try {
-        const id = (JSON.parse(line) as { id?: unknown }).id;
-        return !(typeof id === "string" && id.startsWith("legacy:"));
-      } catch {
-        return true;
-      }
+      const row = parsed(line)[0] as { id?: unknown; src?: unknown } | undefined;
+      return !(row && ((typeof row.id === "string" && row.id.startsWith("legacy:")) || row.src === LEGACY_SRC));
     })
     .join("\n");
 }

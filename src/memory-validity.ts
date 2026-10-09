@@ -261,13 +261,19 @@ export function isForget(record: Invalidation): boolean {
 /**
  * D31's `stale_for` (A4 §3.2): when a typed statement supersedes a slot's value ("The database is postgres" after
  * "1. The database is sqlite"), older text that still gives the subject its old value is stale, episodes included.
- * It is logged as D7's switch is: a retraction of the old value, tied to the slot's subject words. Fails open.
+ * It is logged as D7's switch is: a retraction of the old value, tied to the slot's subject words. `src: "legacy"`
+ * marks one `eden memory migrate` derived, so its rollback can take it back. Fails open.
  */
-export function recordSupersession(root: string, slot: { subject: string; value: string }, t = memoryNow()): void {
+export function recordSupersession(
+  root: string,
+  slot: { subject: string; value: string },
+  t = memoryNow(),
+  src?: "legacy",
+): void {
   try {
     const subject = objectWords(slot.subject).filter((word) => !NO_SUBJECT.has(word));
     if (!subject.length) return;
-    const record: Invalidation = { k: "retract", ...retracted(slot.value), t, w: subject };
+    const record = { k: "retract", ...retracted(slot.value), t, w: subject, ...(src ? { src } : {}) };
     mkdirSync(root, { recursive: true });
     appendFileSync(join(root, FILE), `${JSON.stringify(record)}\n`, { mode: 0o600 });
   } catch {}
