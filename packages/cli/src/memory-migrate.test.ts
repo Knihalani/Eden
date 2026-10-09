@@ -163,6 +163,8 @@ function storeRows(): Record<string, unknown>[] {
 
 describe("eden memory migrate --dry-run", () => {
   test("maps each session through R-7's snapshot or its transcript, names the unmappable, writes nothing", () => {
+    // A store directory of the old root that is no session's.
+    jsonl(join(root, "experience", "index.jsonl"), [{ id: "x" }]);
     const before = snapshot(eden);
     const { code, out } = migrate(["--dry-run", "--json"]);
     expect(code).toBe(0);
@@ -211,6 +213,14 @@ describe("eden memory migrate --apply", () => {
     expect(tars).toEqual([`memory-v1-${T0}.tar`]);
     expect(statSync(join(eden, "migrate", tars[0]!)).mode & 0o777).toBe(0o600);
     expect(existsSync(migrationStage(root))).toBe(false);
+  });
+
+  test("a staged tree left beside a migrated root is reported, not passed over as applied", () => {
+    migrate(["--apply"]);
+    mkdirSync(migrationStage(root));
+    const { code, out } = migrate(["--apply"]);
+    expect(code).toBe(1);
+    expect(out).toContain("a staged tree is left");
   });
 
   test("a second --apply changes nothing", () => {
@@ -263,6 +273,22 @@ describe("eden memory migrate --rollback", () => {
     expect(migrate(["--rollback"]).code).toBe(0);
     expect(snapshot(root)).toEqual(old);
     expect(existsSync(legacyTree(root))).toBe(false);
+  });
+
+  test("takes back the validity records the migration added, with the legacy rows", () => {
+    jsonl(join(root, "s-worktree", "memories.jsonl"), [{ id: "t2", text: "The database is sqlite", t: T0 }]);
+    migrate(["--apply"]);
+    expect(readFileSync(join(store(), "validity.jsonl"), "utf8")).toContain('"src":"legacy"');
+    memoryHookResponse({
+      hook_event_name: "UserPromptSubmit",
+      session_id: "s-new",
+      cwd: app,
+      prompt: "We no longer use Kafka.",
+    });
+    expect(migrate(["--rollback"]).code).toBe(0);
+    const validity = readFileSync(join(store(), "validity.jsonl"), "utf8");
+    expect(validity).toContain("kafka");
+    expect(validity).not.toContain('"src":"legacy"');
   });
 
   test("keeps what was written since the swap, without the legacy rows", () => {

@@ -5,6 +5,7 @@ import { omitExperienceTree, putExperienceFromTool } from "../../../src/experien
 import { openMemory, type AgentMemory } from "../../../src/index";
 import { authoredTexts, type TextSource } from "../../../src/memory-authority";
 import { memoryConsent } from "../../../src/memory-consent";
+import { repoIdentity, repoStoreDir } from "../../../src/memory-repo";
 import { scrubMemoryText, scrubMemoryValue } from "../../../src/memory-scrub";
 import { classifyImportRecord, isBinaryImportBytes, type MemoryImportKind } from "./memory-import-kinds";
 
@@ -14,8 +15,10 @@ export function memoryImportHelp(): string {
        eden memory dump [--json]
        eden memory purge <regex>
        eden memory forget --secret <regex>
+       eden memory migrate [--dry-run | --apply | --rollback | --contract]
 
-Read a JSONL or JSON transcript file or directory into AgentMemory.
+Read a JSONL or JSON transcript file or directory into AgentMemory: each record into
+the store of the repo it ran in (its cwd, else this folder).
 Local only. Dry-run counts records and does not write.
 Missing or unreadable paths exit 0.
 `;
@@ -348,20 +351,24 @@ export async function importMemoryPath(
     }
     const cap = storeCap();
     let observed = 0;
-    let mem: AgentMemory | undefined;
-    const open = (): AgentMemory | undefined => {
-      if (mem || !writes) return mem;
+    const stores = new Map<string, AgentMemory>();
+    // D1: a record goes to the store of the repo it ran in (its `cwd`, else this folder), unless `dir` names one.
+    const open = (cwd: string | undefined): AgentMemory | undefined => {
+      if (!writes) return undefined;
+      const repo = repoIdentity(cwd) ?? repoIdentity(process.cwd())!;
+      const dir = opts?.dir ?? repoStoreDir(memoryDir(), repo.key);
       try {
-        mem = openMemory({ dir: memoryDir(opts?.dir) });
+        const mem = stores.get(dir) ?? openMemory({ dir, perRepo: !opts?.dir });
+        stores.set(dir, mem);
+        return mem;
       } catch {
-        mem = undefined;
+        return undefined;
       }
-      return mem;
     };
     for (const rec of records) {
       kinds[rec.kind] = (kinds[rec.kind] ?? 0) + 1;
       if (rec.kind === "skip" || observed >= cap) continue;
-      mem = open();
+      const mem = open(rec.cwd);
       if (!mem) continue;
       try {
         const ctx: ScrubEnv = { session: rec.session, cwd: rec.cwd };
@@ -386,9 +393,10 @@ export async function importMemoryPath(
         observed++;
       } catch {}
     }
-    try {
-      mem?.close();
-    } catch {}
+    for (const mem of stores.values())
+      try {
+        mem.close();
+      } catch {}
     return { observed, skip: kinds.skip ?? 0, kinds };
   } catch {
     return { observed: 0, skip: kinds.skip ?? 0, kinds };

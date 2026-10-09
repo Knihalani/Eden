@@ -26,7 +26,7 @@ import {
 } from "./index";
 import * as edenMem from "./index";
 import { loadToolTraces, type ToolTrace } from "./tool-trace";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/66
 
@@ -181,11 +181,6 @@ function failPytestWindow(): unknown[] {
     },
     { role: "tool", tool_call_id: "call_pytest_fail", content: FAIL_OUT, is_error: true },
   ];
-}
-
-/** The store the hook keeps for this process's repo under `root` (D1: a payload without `cwd` is keyed by it). */
-function hookStore(root: string): string {
-  return repoStoreDir(root, repoIdentity(process.cwd())!.key);
 }
 
 function tracesOf(dir: string, session: string): ToolTrace[] {
@@ -454,7 +449,7 @@ describe("M36.2 walkthrough 4 — failing pytest stored; flake cue retrieves it"
           tool_response: FAIL_OUT,
         }),
       ).toBeNull();
-      assertFailStored(hookStore(dir), "s-m36-4h");
+      assertFailStored(storeFor(dir), "s-m36-4h");
       assertFailRetrieved(hookSubmit("s-m36-4h", FLAKE_TEXT_CUE));
     });
   });
@@ -970,7 +965,7 @@ describe("M36.2 walkthrough 10 — ICL shot survives a novel-sized narrative ing
     await withSession("eden-m36-10h-", "s-m36-10h", async (_mem, dir) => {
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m36-10h", prompt: ICL_SHOT });
       memoryHookResponse({ hook_event_name: "UserPromptSubmit", session_id: "s-m36-10h", prompt: NOVEL });
-      const store = hookStore(dir);
+      const store = storeFor(dir);
       const later = openMemory({ dir: store, session: "s-m36-10h", perRepo: true });
       try {
         assertLaneStore(later, store);

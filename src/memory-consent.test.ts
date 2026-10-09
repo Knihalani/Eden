@@ -14,7 +14,7 @@ import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
 import { GistStore } from "./gist-store";
 import * as forgetMod from "./memory-forget";
 import * as edenMem from "./index";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/42
 
@@ -56,7 +56,7 @@ async function withMem<T>(
   extra: Record<string, string | undefined> = {},
 ): Promise<T> {
   const root = tmpDir();
-  const dir = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  const dir = storeFor(root);
   return withEnv(
     {
       EDEN_MEMORY_DIR: root,

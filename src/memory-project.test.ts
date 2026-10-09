@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { MEMORY_MARK, memoryInjectSwallows, openMemory, type AgentMemory } from "./index";
-import { repoIdentity, repoStoreDir } from "./memory-repo";
+import { storeFor } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/58
 
@@ -270,7 +270,7 @@ describe("M44 project identity", () => {
       expect(stdout).toMatch(/sqlite/i);
       expect(stdout).toMatch(FACT_OR_GIST);
       // D1: the wrap keeps the store of the repo it runs in.
-      const store = repoStoreDir(dir, repoIdentity(cwd)!.key);
+      const store = storeFor(dir, cwd);
       expect(existsSync(join(store, "semantic.jsonl")) || existsSync(join(store, "memories.jsonl"))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });

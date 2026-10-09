@@ -158,6 +158,7 @@ describe("deliver.submit (X7)", () => {
   test("the repo file beats the user file, from any folder of the repo", () => {
     const repo = join(dir, "repo");
     mkdirSync(join(repo, ".git"), { recursive: true });
+    writeFileSync(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
     mkdirSync(join(repo, "apps", "web"), { recursive: true });
     setFlags({ "deliver.submit": "off" }, join(repo, ".eden", "flags.json"));
     setFlags({ "deliver.submit": "on" });

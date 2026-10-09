@@ -13,8 +13,9 @@
  * few `stat` calls, under a millisecond, so there is no call to cache and no cached mapping to go stale.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { writeFileAtomic } from "../packages/cli/src/home";
 
 /** Where a path sits in git: its worktree root and the repo's common git dir, both as found (not resolved). */
 export interface GitPlace {
@@ -46,17 +47,22 @@ function commonDirOf(gitdir: string): string {
 }
 
 /**
- * The git place of an absolute path: the nearest ancestor holding `.git`. A path that no longer exists is placed by
- * its nearest existing ancestor, so a removed worktree inside a checkout still belongs to that checkout's repo.
+ * The git place of an absolute path: the nearest ancestor holding a `.git` directory with a `HEAD`, or a `.git` file
+ * naming a git dir. A `.git` that is neither is passed over, upward (git skips the first; it stops at the second with
+ * an error, which leaves the hook nothing to key). A path that no longer exists is placed by its nearest existing
+ * ancestor, so a removed worktree inside a checkout still belongs to that checkout's repo.
  */
 export function gitPlace(path: string | undefined): GitPlace | undefined {
   if (!path || !isAbsolute(path)) return undefined;
   for (let dir = resolve(path); ; dir = dirname(dir)) {
     const dotGit = join(dir, ".git");
     try {
-      if (statSync(dotGit).isDirectory()) return { top: dir, common: dotGit };
-      const gitdir = gitdirOf(dotGit);
-      if (gitdir) return { top: dir, common: commonDirOf(gitdir) };
+      if (statSync(dotGit).isDirectory()) {
+        if (existsSync(join(dotGit, "HEAD"))) return { top: dir, common: dotGit };
+      } else {
+        const gitdir = gitdirOf(dotGit);
+        if (gitdir) return { top: dir, common: commonDirOf(gitdir) };
+      }
     } catch {}
     if (dirname(dir) === dir) return undefined;
   }
@@ -97,23 +103,37 @@ export function repoStoreDir(root: string, key: string): string {
   return join(root, "repos", key);
 }
 
+/** The store a folder's sessions remember in (D1): its repo's, under the memory root. */
+export function storeFor(root: string, cwd = process.cwd()): string {
+  return repoStoreDir(root, repoIdentity(resolve(cwd))!.key);
+}
+
 /** The store format this code writes and reads (EXECUTION §9: every store carries `format.json`). */
 export const STORE_FORMAT = 2;
 
-/** Whether a store is in a format this code reads: a reader never injects from an unknown major version. */
+/**
+ * Whether a store is in a format this code reads: a reader never reads or writes a store of an unknown major version.
+ * A store with no `format.json` is this format (its writer predates the file); one this code cannot parse is unknown.
+ */
 export function readableStore(dir: string): boolean {
+  let text: string;
   try {
-    const major = (JSON.parse(readFileSync(join(dir, "format.json"), "utf8")) as { major?: unknown }).major;
-    return typeof major !== "number" || major <= STORE_FORMAT;
+    text = readFileSync(join(dir, "format.json"), "utf8");
   } catch {
     return true;
+  }
+  try {
+    const major = (JSON.parse(text) as { major?: unknown }).major;
+    return Number.isInteger(major) && (major as number) <= STORE_FORMAT;
+  } catch {
+    return false;
   }
 }
 
 /** Gives a store its `format.json` when it has none. */
 export function markStoreFormat(dir: string): void {
   const path = join(dir, "format.json");
-  if (!existsSync(path)) writeFileSync(path, `${JSON.stringify({ major: STORE_FORMAT })}\n`, { mode: 0o600 });
+  if (!existsSync(path)) writeFileAtomic(path, `${JSON.stringify({ major: STORE_FORMAT })}\n`, 0o600);
 }
 
 /** Where `eden memory migrate` keeps the tree it replaced (`memory-migrate.ts`). */
