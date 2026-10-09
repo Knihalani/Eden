@@ -102,8 +102,11 @@
       ],
       "a5": "\"db is postgres\" -> rewind -> \"db is sqlite\" -> postgres in history; a delivery on the abandoned branch re-injects once",
       "on": {
-        "state": "green",
-        "why": "passes since P0.3, through supersession rather than rewind detection: the new branch's 'The database is sqlite' is a later typed statement that supersedes postgres (A4 §3.1, persisted). An abandoned-branch statement the new branch does not restate would still be delivered until P0.6's delta encoder moves abandoned rows to history"
+        "state": "red",
+        "failed": [
+          "no-abandoned"
+        ],
+        "why": "P0.6 added `no-abandoned`: 'The test runner is jest.', said only on the abandoned branch, is still delivered after the rewind, because nothing moves an abandoned branch's rows to history (A4 §3.3, the delta encoder). `no-postgres` passes since P0.3 through supersession: the new branch's 'The database is sqlite' supersedes postgres (A4 §3.1)"
       },
       "off": {
         "state": "green",
