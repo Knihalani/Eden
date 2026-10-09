@@ -13,24 +13,12 @@
         "why": "passes: today's gist store (gists.jsonl at the memory root, shared by every session and repo) carries 'database is postgres' to session 7's SessionStart"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -45,24 +33,12 @@
         "why": "passes for the same reason as cross-session: the gist store is global, so the main checkout's session 7 gets the worktree session's gist"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -89,24 +65,12 @@
         "why": "passes since P0.2: the sleep checks a session gist's sources against the validity log at their own times, so after 'We switched auth from Auth0 to Clerk' no gist or row stating Auth0 reaches the cue (A4 §3.3, §5.1 step 5); P0.3's persisted invalid_at replaces the approximation"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -122,24 +86,12 @@
         "why": "passes since P0.3, through supersession rather than rewind detection: the new branch's 'The database is sqlite' is a later typed statement that supersedes postgres (A4 §3.1, persisted). An abandoned-branch statement the new branch does not restate would still be delivered until P0.6's delta encoder moves abandoned rows to history"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -154,24 +106,12 @@
         "why": "passes since P0.2: the row 'We use Redis for caching' is dropped at delivery, and the gist 'stack uses Redis', rewritten by the sleep after the retraction, no longer states it, because the sleep checks each source at its own time (A4 §3.3); P3.3's slots replace the approximation"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -186,24 +126,12 @@
         "why": "passes since P0.3: list numbers are not clocks (A1 D8), a heading's numbered list is stored item by item, so 'The database is postgres' supersedes '1. The database is sqlite' (invalid_at, persisted), and the superseded value is stale for older text that still states it (D31), the whole-prompt episode included"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -218,24 +146,12 @@
         "why": "passes since P0.4: every store writer passes D13's gate (sanitizeForStore, through scrubMemoryText): the vendored gitleaks rules, Eden's provider shapes, the keyword rule, URL userinfo and entropy with a keyword each redact their secret's span, so 0 of 360 cases reach a file or a packet"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -271,24 +187,12 @@
         "why": "passes since P0.4: text the user did not type (tool results, assistant text, compaction summaries, pastes) is stored as episodes with its source and without its instructions or claims for the user (A6 §2.3, §2.6), so neither a packet nor the next session's briefing carries a planted command"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -299,11 +203,8 @@
       ],
       "a5": "a throw in each hook entry point -> exit 0 with empty stdout and stderr",
       "on": {
-        "state": "red",
-        "failed": [
-          "empty-stdout"
-        ],
-        "why": "with the memory root broken, all 13 invocations exit 0 with empty stderr but print '{}'"
+        "state": "green",
+        "why": "passes since P0.8: the hook prints nothing when it has nothing to say (it printed '{}'), and hooks.json's commands end in `2>/dev/null || true`, so all 13 invocations exit 0 with empty stdout and stderr over a memory root that is a regular file"
       }
     },
     {
@@ -318,24 +219,12 @@
         "why": "passes at CI scale (48 junk turns): the gist store carries both folders' statements, each naming its folder. junk-on-disk is a plain check since P0.3: its flakes were rows lost to pid-derived ids (#98); with ULIDs it held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -353,24 +242,12 @@
         "why": "the apps/web override (node 22) does not reach the later session; the root's node 20 does, through the gist"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -385,24 +262,12 @@
         "why": "passes: the gist store carries both facts to the later session"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -421,24 +286,12 @@
         "why": "the cue's packet echoes the turn's Read results ('1 // packages/cli/src/login.ts 2'), and neither folder's auth value reaches the session"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -483,24 +336,12 @@
         "why": "passes: no task-notification submit gets a packet (D24, P0.2: 0 of 20), and the control still packs"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -518,24 +359,12 @@
         "why": "nothing is labelled 'Updated:' after the switch (P1.1)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -553,24 +382,12 @@
         "why": "after a summary that keeps 'The database is postgres', the fact is delivered again. b-rearmed and delivered-before are plain checks since P0.3: both held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175), with ids that no longer collide (#98)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -584,24 +401,12 @@
         "state": "green"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -621,24 +426,12 @@
         "why": "no SubagentStart handler, so no subagent gets a packet; the parent's cli cue does not get 'packages/cli has no auth' either (fork-no-repeat passes: no fork packet). fork-no-repeat runs on a simulated fork (agent_type 'fork' starting with the parent's window, A4 §5.3); Claude Code 2.1.285 has no such agent type ('Agent type 'fork' not found', P0.0c end-to-end)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -656,24 +449,12 @@
         "why": "no PostToolBatch handler"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -687,24 +468,12 @@
         "state": "green"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -722,24 +491,12 @@
         "why": "CLAUDE.md says pnpm, yet the gist 'package manager is pnpm' is delivered"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -754,24 +511,12 @@
         "why": "passes: 'continue' after a report is an ack and after a proposal a continuation (A7 §2); P0.2 gives neither a packet, since STRONG evidence from the previous assistant message needs the situation cue (P4.1)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -786,24 +531,12 @@
         "why": "passes at CI scale since P0.2 caps packets (D28): 3,974–4,043 tokens at most in an epoch over 100 human turns on 159c34503 / 2e9630c93 (three runs; 95 packets; 8,595 on 172b490d3). At full scale (300 turns) it still fails: 14,471–14,882 tokens on P0.2's code before review (29,749 on 172b490d3); the ledger's refractory (P1.1) owns that"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -821,24 +554,12 @@
         "why": "no wide events exist to hold message.usage. reeligible-401 and refractory-399 are plain checks since P0.3: both held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175); their flakes were the pin's row lost to pid-derived ids (#98)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -977,24 +698,12 @@
         "why": "no PreToolUse handler: no ask, no context, no label"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1016,24 +725,12 @@
         "why": "no PreToolUse handler in any mode (never-deny passes: nothing answers)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1052,24 +749,12 @@
         "why": "no PreToolUse handler: no response at all"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1090,24 +775,12 @@
         "why": "the global gist store shows every rule at every SessionStart from the first session on, in every repo: after one session, the 'not yet' intent, and repo A's rule in repo C before any proposal; no proposal is ever shown"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1125,24 +798,12 @@
         "why": "no PreToolUse handler: no ask while the intent is live"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1163,24 +824,12 @@
         "why": "no repo-fact mining: no packet states the package manager, and the user's 'bun' does not reach the later session"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1198,24 +847,12 @@
         "why": "no repo-fact mining: the Clerk fact mined from apps/web/package.json never packs (no citation exists to fail; skipped-after-removal holds only because nothing is delivered)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1233,22 +870,12 @@
         "why": "no PostToolUseFailure handler"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, and every human Submit appends a turn record to delivery.log (P0.2). Since P0.4 the arm gets no packet, so no-context passes: its one packet was a SessionStart gist of the tool's ERR_REQUIRE_ESM error text, which was stored as a fact; a tool result is an episode now (D12) and makes no such gist"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2). Since P0.4 the arm gets no packet, so no-context passes: its one packet was a SessionStart gist of the tool's ERR_REQUIRE_ESM error text, which was stored as a fact; a tool result is an episode now (D12) and makes no such gist"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1266,24 +893,12 @@
         "why": "'packages/cli uses postgres for its database' is delivered after the switch to sqlite. P0.2's validity reads only D7's own forms with a \"we\" subject and a capitalized or identifier-shaped value; \"packages/cli switched its database from postgres to sqlite\" has neither, so the switch waits for P3.3's slots and value classes"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-context",
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, its packets still arrive, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1301,22 +916,12 @@
         "why": "phrasing B never packs shipit, before or after sleep; `eden sleep` does not exist (exit 1)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -1334,22 +939,12 @@
         "why": "'yes do it' gets no packet: the cue is the prompt alone"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "no-ledger",
-          "quiet"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "no-live-ledger",
-          "quiet",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "flags.json is ignored (X7 flags land in P0.8): the plugin prints '{}' at every delivery point it handles, there is no shadow ledger or wide events, and every human Submit appends a turn record to delivery.log (P0.2)"
+        "state": "green",
+        "why": "passes since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
