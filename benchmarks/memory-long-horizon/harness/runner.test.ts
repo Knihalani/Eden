@@ -220,6 +220,7 @@ describe("processes (target 3)", () => {
         "CLAUDE_PROJECT_DIR",
         "EDEN_HOME",
         "EDEN_MEMORY_DIR",
+        "EDEN_SLEEP_IDLE",
         "HOME",
         "LANG",
         "PATH",
