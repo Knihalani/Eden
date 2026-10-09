@@ -3,7 +3,16 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promptHash } from "./memory-turn";
-import { appendTurn, cronHashes, humanTurns, recordCrons, transcriptOffset, windowDir } from "./memory-window";
+import {
+  appendTurn,
+  cronHashes,
+  humanTurns,
+  ledgerFor,
+  recordCrons,
+  SHADOW_LEDGER,
+  transcriptOffset,
+  windowDir,
+} from "./memory-window";
 
 const roots: string[] = [];
 
@@ -45,6 +54,19 @@ describe("A4 §4: turn records and hturn", () => {
     appendTurn(win, { prompt: "fix the login", off: 99 });
     expect(humanTurns(win)).toBe(2);
     expect(readFileSync(join(win, "delivery.log"), "utf8")).not.toContain("login");
+  });
+
+  test("X7: a turn in shadow is a turn; off writes no ledger", () => {
+    const win = windowDir(root(), "s1")!;
+    appendTurn(win, { promptId: "p1", prompt: "a", off: 0 });
+    appendTurn(win, { promptId: "p2", prompt: "b", off: 9 }, SHADOW_LEDGER);
+    appendTurn(win, { promptId: "p1", prompt: "a", off: 0 }, SHADOW_LEDGER);
+    expect(humanTurns(win)).toBe(2);
+    expect([ledgerFor("on"), ledgerFor("shadow"), ledgerFor("off")]).toEqual([
+      "delivery.log",
+      "delivery.shadow.log",
+      undefined,
+    ]);
   });
 
   test("a torn last line is skipped", () => {
