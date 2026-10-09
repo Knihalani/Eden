@@ -69,10 +69,11 @@ function humanTurns(): number {
 }
 
 /** Every file under the memory root, as one string. */
-function storeText(): string {
+/** Every file under the memory root, or (`logs`) only the wide events of `hook.log.d/` (P0.8), which name rules. */
+function storeText(logs = false): string {
   const root = join(dir, "memory");
   return readdirSync(root, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
+    .filter((entry) => entry.isFile() && entry.parentPath.includes("hook.log.d") === logs)
     .map((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8"))
     .join("\n");
 }
@@ -93,6 +94,7 @@ describe("D24: non-human submits are silent and do not count as turns", () => {
     expect(humanTurns()).toBe(2);
     expect(storeText()).not.toContain("task-notification");
     expect(storeText()).not.toContain("agent-message");
+    for (const word of ["Pacific", "ping", "release", "online"]) expect(storeText(true)).not.toContain(word);
   });
 
   test("a prompt equal to a cron of the window's last Stop is non-human; the cron text is kept only as a hash", () => {

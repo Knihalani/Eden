@@ -10,7 +10,7 @@
  * The transcript holds 200 typed notes (about 20 KB), or with `big` 200 tool results of about 10 KB each as
  * well. The prompts state no retraction or revocation. Prints p50, p90 and p99 per side, then the deltas.
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +34,12 @@ function transcriptLines(big: boolean): string[] {
   return lines;
 }
 
+/** The command a plugin's `hooks/hooks.json` runs on UserPromptSubmit, which `/bin/sh -c` runs as Claude Code does. */
+function submitCommand(pluginDir: string): string {
+  const hooks = JSON.parse(readFileSync(join(pluginDir, "hooks", "hooks.json"), "utf8")).hooks;
+  return hooks.UserPromptSubmit[0].hooks[0].command as string;
+}
+
 /** The q-th quantile of a sample, by the nearest-rank rule. */
 export function quantile(sample: readonly number[], q: number): number {
   const sorted = [...sample].sort((a, b) => a - b);
@@ -49,6 +55,7 @@ if (import.meta.main) {
     );
     process.exit(2);
   }
+  const commands = { base: submitCommand(plugins.base), next: submitCommand(plugins.next) };
   const runs = Number(argument(args, "--runs", "1000"));
   const big = argument(args, "--transcript", "small") === "big";
   const homes = {
@@ -69,9 +76,10 @@ if (import.meta.main) {
       prompt: `how many times does the billing service retry, case ${i % 7}?`,
     };
     const started = performance.now();
-    Bun.spawnSync(["/bin/sh", "-c", `bun --no-install "${plugins[side]}/scripts/hook.ts" || echo '{}'`], {
+    Bun.spawnSync(["/bin/sh", "-c", commands[side]], {
       env: {
         PATH: process.env.PATH!,
+        CLAUDE_PLUGIN_ROOT: plugins[side],
         HOME: home,
         TMPDIR: tmpdir(),
         EDEN_HOME: home,

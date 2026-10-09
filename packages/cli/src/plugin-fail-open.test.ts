@@ -9,11 +9,12 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { FAIL_OPEN_SUFFIX } from "./doctor-memory";
 
 const REPO = join(import.meta.dir, "../../..");
 const PLUGIN = join(REPO, "plugins", "eden-memory");
 const BUN_DIR = dirname(process.execPath);
+/** How each command ends, so that even a missing `bun` exits 0 silently (`doctor-memory.ts` strips it to probe). */
+const FAIL_OPEN_SUFFIX = " 2>/dev/null || true";
 
 const tmp = mkdtempSync(join(tmpdir(), "eden-fail-open-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
