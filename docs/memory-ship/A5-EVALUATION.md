@@ -89,10 +89,11 @@ Each metric is computed per arm from the harness's **oracle files** (§3) and Ed
 
 Not measured by this A/A, so no floor yet:
 - silence on real negatives. P0.0d built the replay (`arms/silence.ts`); the private set waits for the user's labels (R-8). Through today's plugin, in five runs (fresh processes, world seed 1), R1 fired on 1 of 150 negatives (`q325`; 95% CI 0.0012–0.0368) four times and on none once, so its noise floor is at least 1 negative (0.67 pp); R8 fired on 0 of 98 (0–0.0377) every time. But 0 of the store's 6 control prompts got a packet in any of the four runs that asked them: in a fresh session today's per-session store is nearly silent (A1 D1), so these rates say nothing yet. Re-run after P0.5;
-- `abort_rate` (P0.8);
 - `restate_rate` (dogfood);
 - `poison_hits` on pins (P0.4, P2.1);
 - p99 at points today's plugin does not register (PreToolUse, PostToolBatch, SubagentStart).
+
+**`abort_rate` and unhandled exceptions** (P0.8, 2026-10-09, [report](reports/P0.8.md)): the 1,000-turn soak (`replay.ts --soak 1000 --out`, P0.8's plugin at `9e88869b8`) wrote 2,988 wide events for its 2,988 hook invocations (1,000 UserPromptSubmit, 971 PostToolUse, 1,000 Stop, 6 SessionStart, 5 PreCompact, 5 SubagentStop, 1 SessionEnd): 0 aborts and 0 unhandled exceptions. The abort count is 0 by construction: the hook has no budget abort before P4.2, so `aborted` is always false. The exception count is a measurement.
 
 **Ship rule** (R3 F20):
 - Fixtures are deterministic. Seeds only vary the long-horizon schedule generator (3 seeds).
