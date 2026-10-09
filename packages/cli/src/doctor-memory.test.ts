@@ -64,7 +64,18 @@ async function doctorMemory(home: string): Promise<{ code: number; lines: Map<st
   return { code, lines };
 }
 
-const SECTION = ["memory", "plugin", "modules", "fallback", "repo key", "scope catalog", "guard"];
+const SECTION = [
+  "memory",
+  "plugin",
+  "modules",
+  "fallback",
+  "repo key",
+  "scope catalog",
+  "guard",
+  "flags",
+  "breaker",
+  "kill switches",
+];
 
 describe("eden doctor --memory", () => {
   test("the plugin installed from this checkout: every line ok, exit 0", async () => {
@@ -125,7 +136,7 @@ describe("eden doctor --memory", () => {
     expect(code).toBe(1);
   });
 
-  test("a hook that crashes before it loads Eden is not vouched for, though hooks.json turns it into `{}`", async () => {
+  test("a hook that crashes before it loads Eden is not vouched for, though hooks.json silences it", async () => {
     const crash = (copy: string) => {
       const hook = join(copy, "scripts", "hook.ts");
       const [shebang, ...rest] = readFileSync(hook, "utf8").split("\n");
@@ -159,5 +170,33 @@ describe("eden doctor --memory", () => {
     const { lines } = await doctorMemory(home);
     expect(lines.get("fallback")).toContain("1 cause logged");
     expect(lines.get("fallback")).toContain("Cannot find package '@eden/ir'");
+  });
+
+  test("the flags line resolves every delivery point with its source; the kill switches are listed", async () => {
+    const { lines } = await doctorMemory(homeWith({}));
+    expect(lines.get("flags")).toStartWith("ok deliver.submit on (default) · deliver.session_start on (default)");
+    expect(lines.get("flags")).toContain("guard.ask off (default)");
+    expect(lines.get("breaker")).toStartWith("ok none tripped");
+    const kill = lines.get("kill switches")!;
+    expect(kill).toContain("1. a point's flag set to off in");
+    expect(kill).toContain("2. EDEN_MEMORY=off");
+    expect(kill).toContain("3. claude plugin disable eden-memory@eden");
+  });
+
+  test("an unknown flag value and a tripped breaker are named, exit 1", async () => {
+    const home = homeWith({});
+    mkdirSync(join(home, ".eden"), { recursive: true });
+    writeFileSync(join(home, ".eden", "flags.json"), JSON.stringify({ "deliver.submit": "yes" }));
+    const until = Date.now() + 3_600_000;
+    const entry = { mode: "shadow", since: Date.now(), until, cause: "1 unhandled exception", announced: true };
+    writeFileSync(join(home, ".eden", "flags.auto.json"), JSON.stringify({ "deliver.session_start": entry }));
+    const { code, lines } = await doctorMemory(home);
+    expect(lines.get("flags")).toStartWith('!! deliver.submit shadow (user: unknown value "yes")');
+    expect(lines.get("flags")).toContain("deliver.session_start shadow (breaker)");
+    expect(lines.get("breaker")).toStartWith(
+      "!! SessionStart delivery (deliver.session_start) is in shadow mode until",
+    );
+    expect(lines.get("breaker")).toContain("/next stages");
+    expect(code).toBe(1);
   });
 });

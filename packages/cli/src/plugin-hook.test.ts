@@ -104,9 +104,8 @@ function fallbacks(home: string): Array<{ t: string; plugin: string; cause: stri
 }
 
 /**
- * Two Submits on one Eden home: the first stores the prompt's rule (and prints `{}`), the second, a prompt that cues
- * it, packs it. A crash would print `{}` too (`hooks.json`'s `|| echo '{}'`), but never the packet, and it writes to
- * stderr.
+ * Two Submits on one Eden home: the first stores the prompt's rule (and prints nothing), the second, a prompt that
+ * cues it, packs it. A crash would print nothing too (`hooks.json` fails open), but never the packet.
  */
 async function submitTwice(pluginRoot: string, extra: Record<string, string> = {}) {
   const first = await runHook(pluginRoot, extra);
@@ -127,7 +126,7 @@ const inPlace = await submitTwice(PLUGIN);
 describe("the plugin loads Eden in-process", () => {
   test("in place, from this checkout: the second Submit packs the rule the first stored", () => {
     expectLoaded(inPlace);
-    expect(inPlace.first.stdout).toBe("{}");
+    expect(inPlace.first.stdout).toBe("");
     expect(inPlace.second.stdout).toContain("Eden memory, recalled from earlier sessions:");
     expect(inPlace.second.stdout).toContain("we use pnpm in this repo, never npm");
   });
