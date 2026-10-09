@@ -19,9 +19,12 @@ export type TurnMode = "nonhuman" | "ack" | "continuation" | "imperative";
  * its `<agent-message>` (R0 F34), so the preamble may precede the tag.
  */
 const NONHUMAN = new RegExp(
-  String.raw`^(?:Another Claude session sent a message:\s*)?` +
-    String.raw`<(?:task-notification|agent-message|cross-session-message|teammate-message)\b`,
+  String.raw`^(Another Claude session sent a message:\s*)?` +
+    String.raw`<(task-notification|agent-message|cross-session-message|teammate-message)\b`,
 );
+
+/** Which D24 rule a non-human submit matched: its opening tag (`preamble` when R0 F34's line came first), or a cron. */
+export type NonHumanKind = { kind: string; preamble?: true };
 
 const ACK = ["ok", "thanks", "cool", "nice", "great", "got it", "sounds good"];
 const CONTINUE = ["continue", "keep going", "next", "go on"];
@@ -50,7 +53,14 @@ export function promptHash(text: string): string {
 
 /** D24: a submit no human typed. `cronHashes` are the prompt hashes of the window's last Stop `session_crons`. */
 export function isNonHumanSubmit(prompt: string, cronHashes: readonly string[] = []): boolean {
-  return NONHUMAN.test(prompt.trimStart()) || (cronHashes.length > 0 && cronHashes.includes(promptHash(prompt)));
+  return nonHumanKind(prompt, cronHashes) !== undefined;
+}
+
+/** The D24 rule a submit matched, or undefined for a human one. Text-free, so a wide event can hold it. */
+export function nonHumanKind(prompt: string, cronHashes: readonly string[] = []): NonHumanKind | undefined {
+  const tag = NONHUMAN.exec(prompt.trimStart());
+  if (tag) return tag[1] ? { kind: tag[2]!, preamble: true } : { kind: tag[2]! };
+  return cronHashes.length > 0 && cronHashes.includes(promptHash(prompt)) ? { kind: "cron" } : undefined;
 }
 
 export function isProposal(assistant: string): boolean {

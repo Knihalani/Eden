@@ -31,6 +31,9 @@ export interface WideEvent {
   prompt_id?: string;
   prompt_hash?: string;
   submit?: "human" | "non-human";
+  /** The D24 rule a non-human submit matched (`memory-turn.ts` `nonHumanKind`), and whether a preamble came first. */
+  nonhuman?: string;
+  preamble?: true;
   turn_mode?: string;
   /** The cids of the packet the point delivered, or in shadow would have. */
   cids?: string[];

@@ -22,7 +22,7 @@ import { ledgerKey, notRefractory, recordDeliveries, startEpoch, wouldPreempt } 
 import { admitNotes } from "../../../src/memory-gate";
 import { isResidualNote, recentConversation, residualSentences, sentencesOf } from "../../../src/memory-residual";
 import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenance";
-import { isNonHumanSubmit, promptHash, turnMode } from "../../../src/memory-turn";
+import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   asksHistory,
   isForget,
@@ -35,6 +35,7 @@ import {
 import {
   appendTurn,
   cronHashes,
+  existingLedgers,
   humanTurns,
   ledgerFor,
   recordCrons,
@@ -391,9 +392,22 @@ function respond(
     const file = m && writes && win ? ledgerFor(m) : undefined;
     return file && win ? { dir: win, file } : undefined;
   };
-  // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened.
-  if (event === "UserPromptSubmit" && isNonHumanSubmit(prompt, win ? cronHashes(win) : [])) {
-    trace.submit = "non-human";
+  // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened. Its wide event names the rule
+  // it matched, so the live shape of each kind can be checked from ids alone (R0 F34).
+  const nonHuman = event === "UserPromptSubmit" ? nonHumanKind(prompt, win ? cronHashes(win) : []) : undefined;
+  if (nonHuman) {
+    const promptId = str(r.prompt_id);
+    Object.assign(trace, {
+      submit: "non-human",
+      nonhuman: nonHuman.kind,
+      ...(nonHuman.preamble ? { preamble: true } : {}),
+      ...(promptId ? { prompt_id: promptId } : {}),
+      prompt_hash: promptHash(prompt),
+    });
+    if (win)
+      try {
+        trace.hturn = humanTurns(win);
+      } catch {}
     return null;
   }
   const mem = hookMemory({ dir: root, session: resolved.session, child: resolved.child, cwd });
@@ -470,12 +484,15 @@ function respond(
         ledger = ledgerOf(mode),
         compact = r.source === "compact";
       if (r.source === "resume") return withNotice(null, notice);
-      // The epoch belongs to the window: every ledger a built point writes in its mode starts one.
-      if (compact && win)
-        for (const file of new Set([mode, flags["deliver.submit"].mode].flatMap((m) => ledgerOf(m)?.file ?? [])))
+      // The epoch belongs to the window: each ledger it has, and each a built point writes in its mode, starts one,
+      // so a point that turned from on to shadow re-arms what it delivered live (A4 §4).
+      if (compact && win && writes) {
+        const modes = [mode, flags["deliver.submit"].mode].flatMap((m) => ledgerOf(m)?.file ?? []);
+        for (const file of new Set([...existingLedgers(win), ...modes]))
           try {
             startEpoch(win, "compact", off, file);
           } catch {}
+      }
       if (mode === "off") return withNotice(null, notice);
       const briefed = briefing(mem, resolved.session, !compact);
       const { packet, cids } = deliver(briefed, ledger, { off, att: "" });
@@ -509,7 +526,10 @@ function respond(
     const off = transcriptOffset(transPath),
       att = str(r.prompt_id) || `${promptHash(prompt)}@${off}`,
       submit = event === "UserPromptSubmit",
-      ledger = submit ? ledgerOf(mode) : undefined;
+      ledger = submit ? ledgerOf(mode) : undefined,
+      // PreCompact has no point of its own: a host that maps its compaction event here (hook.ts) is answered as a
+      // Submit would be, so `deliver.submit` decides; it writes no ledger.
+      answer = submit ? mode : flags["deliver.submit"].mode;
     if (ledger)
       try {
         appendTurn(ledger.dir, { promptId: att, prompt, off }, ledger.file);
@@ -542,7 +562,7 @@ function respond(
         const preempted = wouldPreempt(ledger.dir, [...own, ...own.flatMap(sentencesOf)], trace.hturn);
         if (preempted.length) trace.would_preempt = preempted;
       } catch {}
-    if (prompt && turn === "imperative" && mode !== "off") notes = mem.recall(cue, encode);
+    if (prompt && turn === "imperative" && answer !== "off") notes = mem.recall(cue, encode);
     else if (prompt) mem.observeCue(cue, undefined, encode);
     if (!notes.length) return null;
     // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
@@ -564,7 +584,7 @@ function respond(
       refractory: fresh - novel.length,
       shape: novel.length - cids.length,
     };
-    return mode === "shadow" ? null : additional(event, packet);
+    return answer === "shadow" ? null : additional(event, packet);
   } finally {
     try {
       mem.close();
