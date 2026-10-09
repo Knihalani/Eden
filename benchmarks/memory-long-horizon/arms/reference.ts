@@ -48,6 +48,12 @@ const MERGE_RULE = "Rule you set: pull requests are merged by you, not by the ag
 const TABLES: Record<string, Reference> = {
   "cross-session": { answers: [submit("what database do we use?", DATABASE)] },
   worktree: { answers: [submit("what database do we use?", DATABASE)] },
+  "cross-repo": {
+    answers: [
+      { ...submit("what database do we use?", DATABASE), once: true },
+      submit("what database do we use?", "Database: sqlite (you said)"),
+    ],
+  },
   "reload-stale": { answers: [submit("which auth provider do we use?", "Auth provider: Clerk (you said)")] },
   "numbered-list": { answers: [submit("what database do we use?", DATABASE)] },
   negation: { answers: [{ ...submit("how should we cache sessions?", "Cache: Redis (you said)"), once: true }] },

@@ -21,7 +21,9 @@ import {
   DAY_MS,
   Driver,
   judged,
+  metricsOf,
   needCheck,
+  needMet,
   noStale,
   packetsAt,
   pasted,
@@ -83,6 +85,55 @@ const worktree: Arm = {
   id: "worktree",
   flagged: true,
   run: async (run) => [await factAcrossSessions(run, true)],
+};
+
+/**
+ * Two repos never share memory (D1: one store per repo; added from the P0.0c report's follow-up, A5 has no cross-repo
+ * arm). Repo A's database is postgres and repo B's is sqlite, each said in its own first session; a day later each
+ * repo's next session asks. Each gets its own value (`own-store`), and no packet in either repo carries the other's
+ * (`isolated`), at SessionStart or at the cue.
+ */
+const crossRepo: Arm = {
+  id: "cross-repo",
+  flagged: true,
+  async run(run) {
+    const repos = [
+      { name: "repo-a", db: "postgres", other: "sqlite" },
+      { name: "repo-b", db: "sqlite", other: "postgres" },
+    ].map((repo) => {
+      const spec = monorepo();
+      return { ...repo, spec, world: run.world(spec, { projectName: repo.name }) };
+    });
+    for (const repo of repos) {
+      const first = await Driver.start(repo.world, repo.spec);
+      await first.say(`The database is ${repo.db}.`, [set(DB, "", repo.db)]);
+      await first.end();
+    }
+    repos[0]!.world.advance(DAY_MS);
+    const cues = [];
+    for (const repo of repos) {
+      const from = repo.world.deliveries.length;
+      const next = await Driver.start(repo.world, repo.spec);
+      const cue = await next.ask("what database do we use?", { needs: [id(DB, "")] });
+      await next.end();
+      const leaked = repo.world.deliveries
+        .slice(from)
+        .filter((d) => new RegExp(`\\b${repo.other}\\b`, "i").test(d.content));
+      cues.push({ repo, cue, leaked });
+    }
+    const met = cues.map(({ repo, cue }) => `${repo.name} ${needMet(metricsOf(repo.world, repo.spec), cue)}`);
+    const leaks = cues.flatMap(({ repo, leaked }) =>
+      leaked.map((d) => `${repo.name}: ${JSON.stringify(d.content.slice(0, 120))}`),
+    );
+    return [
+      check(
+        "own-store",
+        met.every((line) => line.endsWith("true")),
+        `own value met: ${met.join(", ")}`,
+      ),
+      check("isolated", leaks.length === 0, `packets with the other repo's value: ${leaks.join("; ") || "none"}`),
+    ];
+  },
 };
 
 const reloadStale: Arm = {
@@ -307,6 +358,7 @@ const failOpen: Arm = {
 export const FLOOR_ARMS: Arm[] = [
   crossSession,
   worktree,
+  crossRepo,
   reloadStale,
   rewind,
   negation,
