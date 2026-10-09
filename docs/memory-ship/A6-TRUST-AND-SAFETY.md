@@ -118,6 +118,6 @@ The guard is the only Eden path that touches control flow:
 ## 4. Migration of existing stores
 
 - Runs **after** the trust gate ships (R3 F8).
-- Each `<root>/<session>/` is mapped to a repo through the first line of `~/.claude/projects/*/<session>.jsonl` (`cwd` → D1 key). Unmappable sessions are not migrated.
+- Each `<root>/<session>/` is mapped to a repo through R-7's snapshot (`~/.eden/migrate/session-map.json`, taken before Claude Code's 30-day transcript sweep), else through the first `cwd` of `~/.claude/projects/*/<session>.jsonl` (`cwd` → D1 key). A subagent's `<session>--<agent>/` follows its session. Unmappable sessions (neither source, or a directory that is gone and was in no git repo) are not migrated. (Settled in P0.5: EXECUTION §9 named the snapshot, this section the transcript; both are read, the snapshot first.)
 - Every row passes `sanitizeForStore` and migrates as `src=legacy` **episodes**: no policies, no slot facts, no pins.
 - A local check on this machine (2026-09-29) found no provider-shaped tokens in `~/.eden/memory` (940 KB). Migration still runs the gate.

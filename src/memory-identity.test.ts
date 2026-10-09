@@ -15,6 +15,7 @@ import { retrieveExperience } from "./experience-retrieve";
 import { GistStore, scrubTombstonedIdentity } from "./gist-store";
 import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
 import * as edenMem from "./index";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 import { SemanticStore } from "./semantic-store";
 
 const SESSION = "sess-m35-unique-session";
@@ -43,17 +44,23 @@ async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T 
   }
 }
 
+/**
+ * A store in a fresh memory root. With `hook`, it is the store the hook keeps for this process's repo (D1: payloads
+ * without a `cwd` are keyed by `process.cwd()`), so what the test writes is what the hook reads.
+ */
 async function withMem<T>(
   prefix: string,
   fn: (mem: AgentMemory, dir: string) => T | Promise<T>,
   session?: string,
   cwd?: string,
+  hook = false,
 ): Promise<T> {
   const dir = tmpDir(prefix);
   return withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on" }, async () => {
     try {
-      const mem = openMemory({ dir, session, cwd });
-      return await fn(mem, dir);
+      const store = hook ? repoStoreDir(dir, repoIdentity(process.cwd())!.key) : dir;
+      const mem = openMemory({ dir: store, session, cwd, perRepo: hook });
+      return await fn(mem, store);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -301,6 +308,8 @@ describe("M35.3 wrap + hook leftover identity", () => {
         for (const p of experienceFiles(dir)) expect(existsSync(p)).toBe(true);
       },
       SESSION,
+      undefined,
+      true,
     );
   });
 
@@ -326,6 +335,8 @@ describe("M35.3 wrap + hook leftover identity", () => {
         expect(ctx).not.toMatch(/always use postgres/i);
       },
       SESSION,
+      undefined,
+      true,
     );
   });
 });
@@ -386,6 +397,8 @@ describe("M35.3 scrub does not destroy gold that merely contains postgres", () =
         });
       },
       SESSION,
+      undefined,
+      true,
     );
   });
 

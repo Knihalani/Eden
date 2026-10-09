@@ -26,6 +26,7 @@ import {
   type AgentMemory as AgentMemoryType,
 } from "./index";
 import * as edenMem from "./index";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/57
 
@@ -72,15 +73,25 @@ async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => T 
   }
 }
 
+/** The store the hook keeps for this process's repo under `root` (D1: a payload without `cwd` is keyed by it). */
+function hookStore(root: string): string {
+  return repoStoreDir(root, repoIdentity(process.cwd())!.key);
+}
+
+/**
+ * A memory root in a fresh directory, and the store the hook reads in it (`hookStore`): the wrap and the hook probe
+ * one memory.
+ */
 async function withMem<T>(
   prefix: string,
   fn: (mem: AgentMemoryType, dir: string) => T | Promise<T>,
   extra?: { session?: string; cwd?: string; cap?: string },
 ): Promise<T> {
-  const dir = tmpDir(prefix);
+  const root = tmpDir(prefix);
+  const dir = hookStore(root);
   return withEnv(
     {
-      EDEN_MEMORY_DIR: dir,
+      EDEN_MEMORY_DIR: root,
       EDEN_HOME: undefined,
       EDEN_MEMORY: "on",
       EDEN_MEMORY_CAP: extra?.cap,
@@ -88,10 +99,10 @@ async function withMem<T>(
     },
     async () => {
       try {
-        const mem = openMemory({ dir, session: extra?.session, cwd: extra?.cwd });
+        const mem = openMemory({ dir, session: extra?.session, cwd: extra?.cwd, perRepo: true });
         return await fn(mem, dir);
       } finally {
-        rmSync(dir, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
       }
     },
   );
@@ -348,11 +359,12 @@ describe("M36.1 unicode path", () => {
       await withEnv(
         { EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_MEMORY: "on", EDEN_MEMORY_CAP: undefined },
         async () => {
-          const mem = openMemory({ dir });
+          const store = hookStore(dir);
+          const mem = openMemory({ dir: store, perRepo: true });
           // Not "catalog token … is durable": D13's keyword rule redacts the word after "token … is" (P0.4).
           mem.observe([{ role: "user", content: "The unicode catalog entry M36UNI is durable." }]);
           mem.close();
-          const reloaded = openMemory({ dir });
+          const reloaded = openMemory({ dir: store, perRepo: true });
           expect(reloaded.memories().some((r) => r.text.includes("M36UNI"))).toBe(true);
           const list = [{ role: "user", content: "what is the unicode catalog token" }];
           let pkt = "";

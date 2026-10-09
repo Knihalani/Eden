@@ -91,7 +91,8 @@ describe("M50.1 ship locks", () => {
     }
   });
 
-  test.failing("hook session A Stop sqlite/Clerk, session B Submit injects them; math omits", () => {
+  // Out of quarantine since P0.5: both sessions run in this repo, whose one store (D1) session B reads.
+  test("hook session A Stop sqlite/Clerk, session B Submit injects them; math omits", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m50-m44-"));
     const prev = process.env.EDEN_MEMORY_DIR;
     const home = process.env.EDEN_HOME;

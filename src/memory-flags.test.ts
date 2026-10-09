@@ -92,7 +92,8 @@ describe("resolveFlags", () => {
 describe("repoTop", () => {
   test("the nearest folder holding .git; a linked worktree belongs to its main checkout", () => {
     const main = join(dir, "main");
-    mkdirSync(join(main, ".git", "worktrees", "feature"), { recursive: true });
+    // A linked worktree's git dir names the common dir in its `commondir` file, as `git worktree add` writes it.
+    write(join(main, ".git", "worktrees", "feature", "commondir"), "../..\n");
     mkdirSync(join(main, "packages", "cli"), { recursive: true });
     expect(repoTop(join(main, "packages", "cli"))).toBe(main);
     const linked = join(dir, "elsewhere", "feature");

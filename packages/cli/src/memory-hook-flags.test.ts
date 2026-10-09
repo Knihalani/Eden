@@ -164,6 +164,8 @@ describe("deliver.submit (X7)", () => {
     const cwd = join(repo, "apps", "web");
     submit(RULE, { cwd });
     expect(submit(CUE, { cwd })).toBeUndefined();
+    // Outside the repo the user file applies. That folder has its own store (D1), so the rule is said there too.
+    submit(RULE, { cwd: dir, prompt_id: "p-rule-elsewhere" });
     expect(submit(CUE, { cwd: dir, prompt_id: "p-elsewhere" })).toContain(RULE);
   });
 });

@@ -358,7 +358,7 @@ describe("M45 subagent share", () => {
     30_000,
   );
 
-  test("EDEN_MEMORY_PARENT alone does not suffix a parent Submit into parent--sub", async () => {
+  test("EDEN_MEMORY_PARENT alone does not make a parent Submit a parent--sub window (D2)", async () => {
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir, EDEN_MEMORY_PARENT: PARENT }, () => {
@@ -370,8 +370,8 @@ describe("M45 subagent share", () => {
         });
         expect(hookContext(hit)).toMatch(/sqlite/i);
       });
-      expect(existsSync(join(dir, PARENT, "memories.jsonl"))).toBe(true);
-      expect(existsSync(join(dir, `${PARENT}--sub`, "memories.jsonl"))).toBe(false);
+      expect(existsSync(join(dir, "windows", PARENT))).toBe(true);
+      expect(existsSync(join(dir, "windows", `${PARENT}--sub`))).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

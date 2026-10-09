@@ -25,6 +25,7 @@ import * as howtoMod from "./howto-store";
 import { retrieveHowTo, HOWTO_RETRIEVE_K, HOWTO_TOKEN_CAP, type HowToView } from "./howto-retrieve";
 import * as howtoRetrieve from "./howto-retrieve";
 import { AgentMemory, MEMORY_MARK, openMemory, sleep, superseded } from "./index";
+import { repoIdentity, repoStoreDir } from "./memory-repo";
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
 import * as sleepMod from "./sleep";
@@ -68,6 +69,34 @@ async function withMem<T>(
       return await fn(mem, dir);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+/**
+ * The store the hook keeps for these tests (D1): their hook payloads carry no `cwd`, so it is the repo of
+ * `process.cwd()`, under the memory root.
+ */
+function hookStore(root: string): string {
+  const store = repoStoreDir(root, repoIdentity(process.cwd())!.key);
+  mkdirSync(store, { recursive: true });
+  return store;
+}
+
+/** `withMem` for a test that also drives the hook: the memory is the hook's repo store, and `dir` is that store. */
+async function withHookMem<T>(
+  prefix: string,
+  fn: (mem: AgentMemory, dir: string) => T | Promise<T>,
+  session?: string,
+): Promise<T> {
+  const root = tmpDir(prefix);
+  return withEnv({ EDEN_MEMORY_DIR: root, EDEN_HOME: undefined }, async () => {
+    try {
+      const store = hookStore(root);
+      const mem = openMemory({ dir: store, session, perRepo: true });
+      return await fn(mem, store);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 }
@@ -387,7 +416,7 @@ describe("M9.4 ordered wrap traces reconstruct files/exit/order", () => {
 });
 
 describe("M9.4 hook PostToolUse writes the same trace shape", () => {
-  test("PostToolUse pytest/auth.ts/exit 0 lands traces.jsonl in the session subdir", async () => {
+  test("PostToolUse pytest/auth.ts/exit 0 lands traces.jsonl in the repo store (D1)", async () => {
     const dir = tmpDir("eden-m94-hook-");
     const session = "s-m94-pytest";
     await withEnv({ EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, async () => {
@@ -400,9 +429,11 @@ describe("M9.4 hook PostToolUse writes the same trace shape", () => {
           tool_response: PYTEST_OUT,
         });
         expect(out).toBeNull();
-        const traces = loadTraces(dir, session);
+        const store = hookStore(dir);
+        const traces = loadTraces(store);
         assertPytestFields(traces);
-        expect(existsSync(tracesPath(memoryTracesDir(dir, session)))).toBe(true);
+        expect(existsSync(tracesPath(store))).toBe(true);
+        expect(existsSync(join(store, session))).toBe(false);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -682,11 +713,11 @@ describe("M9.4 secrets never land in traces.jsonl", () => {
           tool_input: { command: PYTEST_CMD, api_key: "sk-abc123XYZ999secret" },
           tool_response: `${PYTEST_OUT}\nghp_abc123XYZ999abcdefghij`,
         });
-        const blob = JSON.stringify(loadTraces(dir, "s-sec"));
+        const blob = JSON.stringify(loadTraces(hookStore(dir)));
         expect(blob).not.toMatch(/\bsk-/);
         expect(blob).not.toMatch(/\bghp_/);
         expect(blob).not.toContain("sk-abc123XYZ999secret");
-        assertPytestFields(loadTraces(dir, "s-sec"));
+        assertPytestFields(loadTraces(hookStore(dir)));
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -1001,10 +1032,11 @@ describe("M10.4 hook Stop path", () => {
           }),
         ).toBeNull();
         expect(memoryHookResponse({ hook_event_name: "Stop", session_id: session })).toBeNull();
-        const skill = assertHowToSkill(howtos(dir, "auth pytest flake", 5));
+        const store = hookStore(dir);
+        const skill = assertHowToSkill(howtos(store, "auth pytest flake", 5));
         expect(String(skill.verify ?? "").toLowerCase()).toMatch(/pytest/);
         expect(hasAuthFile(skill.files)).toBe(true);
-        expect(tracesKept(dir, session)).toBe(true);
+        expect(tracesKept(store, session)).toBe(true);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -1059,8 +1091,8 @@ describe("M10 leftover identity: tool prose is not a fact", () => {
           tool_response: PYTEST_OUT,
         });
         memoryHookResponse({ hook_event_name: "Stop", session_id: session });
-        assertHowToSkill(howtos(dir, "auth pytest flake", 5));
-        assertNoToolIdentity(dir);
+        assertHowToSkill(howtos(hookStore(dir), "auth pytest flake", 5));
+        assertNoToolIdentity(hookStore(dir));
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -1626,7 +1658,7 @@ describe("M11.4 chat-only still zero how-to", () => {
 
 describe("M11.4 wrap/hook fail-open and no [procedure]", () => {
   test("OpenAI wrap, Anthropic wrap, hook Submit/Stop: Clerk injects; no [procedure]; throw fails open", async () => {
-    await withMem("eden-m114-wrap-hook-", async (mem) => {
+    await withHookMem("eden-m114-wrap-hook-", async (mem) => {
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
 
       const openai = injectBodyThenObserveTools(mem, { messages: [{ role: "user", content: "what is auth using?" }] });
@@ -1929,7 +1961,7 @@ describe("M12.4 fail-open", () => {
   });
 
   test("wrap injectBody throw fails open; how-to throw does not 500 OpenAI/Anthropic/hook", async () => {
-    await withMem("eden-m124-failopen-wrap-", async (mem, dir) => {
+    await withHookMem("eden-m124-failopen-wrap-", async (mem, dir) => {
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
       putFlakeSkill(dir);
 
@@ -2065,7 +2097,7 @@ describe("M12.4 latest sees step command values", () => {
 describe("M14.4 one dir / same how-to id", () => {
   test("wrap sleep writes join(dir, howto.jsonl) not session/; Start silent; Submit injects same id", async () => {
     const session = "s-m14-onedir";
-    await withMem(
+    await withHookMem(
       "eden-m14-onedir-",
       async (mem, dir) => {
         observeToolTraces(mem, pytestWindow());
@@ -2103,7 +2135,7 @@ describe("M14.4 one dir / same how-to id", () => {
   });
 
   test("wrap processMemory-style (no session) then hook Start: same how-to id on root", async () => {
-    await withMem("eden-m14-wrap-root-", async (mem, dir) => {
+    await withHookMem("eden-m14-wrap-root-", async (mem, dir) => {
       observeToolTraces(mem, pytestWindow());
       await mem.sleep();
       const stored = assertHowToSkill(new HowToStore(dir).latest("auth pytest flake", 5));
@@ -2119,7 +2151,9 @@ describe("M14.4 one dir / same how-to id", () => {
         prompt: FLAKE_TEXT_CUE,
       });
       assertHookFlakeProcedure(JSON.stringify(submit ?? {}));
-      expect(howtoPath(join(dir, "s-hook-after-wrap"))).toBe(join(dir, "howto.jsonl"));
+      // D1: the hook's session has no directory of its own; its how-to path is the repo store's.
+      expect(existsSync(join(dir, "s-hook-after-wrap"))).toBe(false);
+      expect(howtoPath(dir)).toBe(join(dir, "howto.jsonl"));
     });
   });
 
@@ -2186,7 +2220,7 @@ describe("M14.4 cross-host inject", () => {
 
 describe("M14.4 chat-only zero how-to", () => {
   test("user/assistant only: HowToStore empty; three hosts inject Clerk with no [procedure]", async () => {
-    await withMem("eden-m14-chat-", async (mem, dir) => {
+    await withHookMem("eden-m14-chat-", async (mem, dir) => {
       mem.observe([
         { role: "user", content: "Auth is Clerk" },
         { role: "assistant", content: "Understood, we use Clerk for auth." },
@@ -2224,7 +2258,7 @@ describe("M14.4 chat-only zero how-to", () => {
 
 describe("M14.4 fail-open and no BrainMemory product", () => {
   test("retrieveHowTo throw still pass-through on wrap injectBody, Anthropic, and hook", async () => {
-    await withMem("eden-m14-failopen-", async (mem, dir) => {
+    await withHookMem("eden-m14-failopen-", async (mem, dir) => {
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
       putFlakeSkill(dir);
       const boom = spyOn(howtoRetrieve, "retrieveHowTo").mockImplementation(() => {

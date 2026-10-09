@@ -18,7 +18,7 @@ import { promoteNarrativeGists } from "./gist-retrieve";
 import { HowToStore, mergeSharedPrefixHowTo, type HowTo, type HowToStep } from "./howto-store";
 import { memoryConsent } from "./memory-consent";
 import { isUntyped } from "./memory-provenance";
-import { scrubMemoryText } from "./memory-scrub";
+import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { readInvalidations, validText } from "./memory-validity";
 import { parseRuleTime, writeAliasTags, type MissClass } from "./memory-sota";
 import {
@@ -857,6 +857,20 @@ function incrementalExpired(opts?: ConsolidateOpts): boolean {
   return Date.now() >= deadline;
 }
 
+/**
+ * Whether a row is the slept session's own (its `ep`), as its gist states only what it said: a repo's store (D1)
+ * holds every session's rows. A row with no `ep`, or a sleep naming no session, counts as its own.
+ */
+function ownRows(mem: SleepMem, session: string | undefined): (id: string) => boolean {
+  const ep = session?.trim() ? opaqueId(session.trim()) : undefined;
+  if (!ep) return () => true;
+  const eps = new Map(mem.memories().map((r) => [r.id, r.ep]));
+  return (id) => {
+    const rowEp = eps.get(id);
+    return !rowEp || rowEp === ep;
+  };
+}
+
 export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   try {
     if (memoryConsent() !== "on") return;
@@ -970,14 +984,16 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   // A4 §3.3, §5.1 step 5: the session gist is rewritten at every sleep, later than what it states, so each source
   // is checked against the validity log at its own time; SessionStart checks the gist again at the gist's time.
   const invalid = readInvalidations(mem.dir);
+  const own = ownRows(mem, opts?.session);
   const facts: string[] = [];
   for (const w of winners) {
+    if (w.recId && !own(w.recId)) continue;
     const fact = validText(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`, w.t, invalid);
     if (fact) facts.push(fact);
   }
   const pins = mem
     .memories()
-    .filter((r) => r.kind === "constraint" && !isIcl(r.text))
+    .filter((r) => r.kind === "constraint" && !isIcl(r.text) && own(r.id))
     .slice(-8)
     .map((r) => validText(r.text.replace(/\s+/g, " ").trim(), r.at, invalid))
     .filter(Boolean);

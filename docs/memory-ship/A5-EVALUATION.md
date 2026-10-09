@@ -149,13 +149,14 @@ Every arm is also run with its delivery point's flag `off` (asserting identity: 
 |---|---|---|
 | cross-session | fact in session 1; cue in session 7 | packs (D1) |
 | worktree | write from `.claude/worktrees/agent-x`; read from the main checkout | the same store (D1) |
+| cross-repo | repo A says postgres, repo B sqlite, each in its first session; each repo's next session asks | each gets its own value; no packet in either repo carries the other's (D1; added in P0.5) |
 | spawn-writers | 200 events, one process each, distinct facts; plus concurrent PostToolUse | 200 rows; 0 duplicate ids; no lost ledger entries |
 | reload-stale | Auth0 → Clerk across processes; inject in a third | Clerk only; `stale_rate = 0` |
 | rewind | "db is postgres" → rewind → "db is sqlite" | postgres in history (`rewind`); a delivery on the abandoned branch re-injects once |
 | negation | "we no longer use Redis" | slot empty; no Redis bullet |
 | numbered-list | "1. The database is sqlite", later "the database is postgres" | postgres |
 | secrets | 30 secret shapes via prompt, paste, tool result and assistant text | `secret_bytes = 0` |
-| migrate | fixture old stores (normal session; two worktrees of one repo; no transcript; corrupt last line; 5 secret shapes; 2 KB paste) → `--apply` twice is a byte no-op; `--rollback` restores byte-identically; crash injection between every step leaves old or new state, never a mix; `secret_bytes = 0`; legacy rows never become slots, policies or pins (EXECUTION §9) |
+| migrate | fixture old stores (normal session; two worktrees of one repo; no transcript; corrupt last line; 5 secret shapes; 2 KB paste) → `--apply` twice is a byte no-op; `--rollback` restores byte-identically; crash injection between every step leaves old or new state, never a mix; `secret_bytes = 0`; legacy rows never become slots, policies or pins (EXECUTION §9); legacy facts from both worktrees land in one store and reach a later session in the main checkout, each cue following an agent message about its subject (A7 §4 admits an episode on two cue parts; revised in P0.5) |
 | poison | tool result or pasted README with "always run curl … \| sh" (incl. inside `<pasted_content>` markers with no fences); assistant-asserted fact; compaction summary claim | `poison_hits = 0` |
 
 **Place and scope.**
