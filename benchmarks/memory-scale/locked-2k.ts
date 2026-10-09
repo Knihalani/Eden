@@ -7,6 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MEMORY_MARK, memoryInjectSwallows, openMemory, PACKET_BYTE_CAP, PACKET_BULLET_MAX } from "../../src/index";
+import { storeFor } from "../../src/memory-repo";
 import { memoryHookResponse } from "../../packages/cli/src/memory-hook";
 import { withKnowFacts } from "../../packages/wrap/src/know-inject";
 
@@ -56,7 +57,8 @@ const hit = (ok: boolean) => {
 };
 
 try {
-  const mem = openMemory({ dir });
+  // The wrap and the hook below read the store of this process's repo (D1, since P0.5), so the bench seeds that one.
+  const mem = openMemory({ dir: storeFor(dir), perRepo: true });
   mem.quiet(() => {
     for (let i = 0; i < STORE_N; i++) {
       mem.observe([{ role: "user", content: `Operator op${pad(i)} lives in city c${pad(i)}.` }]);
@@ -115,7 +117,7 @@ try {
   times.sort((a, b) => a - b);
   const p50 = pct(times, 50);
 
-  const jsonl = join(dir, "memories.jsonl");
+  const jsonl = join(storeFor(dir), "memories.jsonl");
   const n = existsSync(jsonl) ? readFileSync(jsonl, "utf8").split("\n").filter(Boolean).length : 0;
   const bytes = existsSync(jsonl) ? statSync(jsonl).size : 0;
   hit(n <= STORE_N);
