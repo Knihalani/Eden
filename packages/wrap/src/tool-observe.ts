@@ -25,6 +25,8 @@ type ObserveHost = {
   jsonlDir?: string;
   session?: string;
   cwd?: string;
+  /** A store in a format this code does not know (EXECUTION §9): nothing is written to it. */
+  sealed?: boolean;
 };
 type InjectHost = ObserveHost & {
   injectBody(body: Record<string, unknown>): Record<string, unknown>;
@@ -323,7 +325,7 @@ function hostNeedle(mem: ObserveHost, keys: readonly string[]): string | undefin
 
 export function observeToolTraces(mem: ObserveHost, messages: unknown): void {
   try {
-    if (memoryConsent() !== "on") return;
+    if (memoryConsent() !== "on" || mem.sealed) return;
   } catch {
     return;
   }
