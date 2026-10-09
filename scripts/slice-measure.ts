@@ -33,6 +33,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { availableParallelism, loadavg } from "node:os";
 import { join, resolve } from "node:path";
+import type { Latency } from "../benchmarks/memory-long-horizon/harness/metrics";
 import { guardReport, readSide } from "./slice-guards";
 
 export type Measure = "arms" | "guards" | "r6" | "worlds" | "soak" | "bench" | "timing";
@@ -400,10 +401,12 @@ function worldLine(done: Done): string {
 function soakLine(side: string, log: string): string {
   const r = lastJson(readFileSync(log, "utf8"));
   if (!r?.msByPoint) return `- ${side}: no summary (see ${log})`;
-  const points = ["UserPromptSubmit", "PostToolUse", "Stop"].map((point) => {
-    const p = r.msByPoint[point] ?? {};
-    return `${point} p50 ${p.p50} p99 ${p.p99} (n ${p.n})`;
-  });
+  const points = Object.entries(r.msByPoint as Record<string, Latency>)
+    .filter(([, p]) => p.n >= 100)
+    .map(([point, p]) => {
+      const flat = p.quarters ? `, p99 first quarter ${p.quarters.first} → last ${p.quarters.last}` : "";
+      return `${point} p50 ${p.p50} p99 ${p.p99} (n ${p.n}${flat})`;
+    });
   return `- ${side}: ${points.join("; ")}; fail-open ${JSON.stringify(r.failOpen)}; digest ${String(r.digest).slice(0, 12)}`;
 }
 

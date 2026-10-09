@@ -59,6 +59,11 @@ export interface Latency {
   p50: number;
   p99: number;
   max: number;
+  /**
+   * p99 of the first and of the last quarter of the samples, in the order they ran: whether a point's cost grows
+   * over a long session (the 1,000-turn soak, ROADMAP P0.6's "p99 flat").
+   */
+  quarters?: { first: number; last: number };
 }
 
 /** One annotated cue's outcome, for paired comparisons between runs (McNemar on `missed`). */
@@ -364,16 +369,25 @@ export function listFiles(dir: string): string[] {
 }
 
 /** Wall time per hook invocation, spawn included, by delivery point. */
+/** Wall time per point, an async handler's under `<event> (async)`: Claude Code does not wait for it. */
 export function latencyByPoint(world: SimWorld): Record<string, Latency> {
   const byPoint = new Map<string, number[]>();
   for (const record of world.log) {
     for (const invocation of record.invocations) {
-      const samples = byPoint.get(record.event) ?? [];
+      const point = invocation.async ? `${record.event} (async)` : record.event;
+      const samples = byPoint.get(point) ?? [];
       samples.push(invocation.endedAt - invocation.startedAt);
-      byPoint.set(record.event, samples);
+      byPoint.set(point, samples);
     }
   }
-  return Object.fromEntries([...byPoint].map(([point, ms]) => [point, latency(ms)]));
+  return Object.fromEntries([...byPoint].map(([point, ms]) => [point, { ...latency(ms), quarters: quarters(ms) }]));
+}
+
+/** The p99 of the first and of the last quarter of samples in run order; none below 4 samples. */
+function quarters(values: readonly number[]): Latency["quarters"] {
+  const size = Math.floor(values.length / 4);
+  if (!size) return undefined;
+  return { first: latency(values.slice(0, size)).p99, last: latency(values.slice(-size)).p99 };
 }
 
 export function latency(values: readonly number[]): Latency {

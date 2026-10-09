@@ -22,6 +22,7 @@ import {
   timeoutSeconds,
   type HookGroup,
 } from "./runner";
+import { SimWorld } from "./session";
 import { PROBE_PLUGIN, probeWorld, removeTempDirs, tempDir } from "./testkit";
 import { readCall } from "./tools";
 
@@ -123,7 +124,7 @@ describe("timeouts (hooks reference, Common fields)", () => {
 
 describe("loading a plugin", () => {
   test("handler features the simulator does not model are refused, not run differently", () => {
-    for (const extra of [{ if: "Bash(git *)" }, { async: true }, { type: "prompt", prompt: "x" }]) {
+    for (const extra of [{ if: "Bash(git *)" }, { type: "prompt", prompt: "x" }]) {
       const root = pluginWith({ PreToolUse: [{ hooks: [probeHook(extra) as never] }] });
       expect(() => loadPlugin(root)).toThrow("does not model");
     }
@@ -261,6 +262,60 @@ describe("processes (target 3)", () => {
     const big = { ...ctx(out), lastAssistantMessage: "x".repeat(4_000_000) };
     const [invocation] = await runner.dispatch(stopPayload(big, { lastAssistantMessage: big.lastAssistantMessage }));
     expect(invocation!.exitCode).toBe(0);
+  });
+
+  test("an async handler runs beside the others, with no timeout, and joins the event's list when it exits", async () => {
+    const out = tempDir("eden-probe-out");
+    const slow = { type: "command" as const, command: `PROBE_MODE=slow PROBE_SLEEP=0.8 ${PROBE}`, timeout: 0.2 };
+    const root = pluginWith({ Stop: [{ hooks: [probeHook(), { ...slow, async: true }] }] });
+    const plugin = loadPlugin(root);
+    const env = hookEnv({ home: tempDir("eden-home"), projectDir: out, plugin, extra: { PROBE_OUT: out } });
+    const runner = new HookRunner({ plugin, env, projectDir: out });
+    const started = performance.now();
+    const invocations = await runner.dispatch(stopPayload(ctx(out), { lastAssistantMessage: "done" }));
+    expect(performance.now() - started).toBeLessThan(700);
+    expect(invocations).toHaveLength(1);
+    await runner.settle();
+    expect(invocations).toHaveLength(2);
+    const background = invocations[1]!;
+    expect(background.async).toBe(true);
+    expect(background.timedOut).toBe(false);
+    expect(background.exitCode).toBe(0);
+    expect(background.endedAt - background.startedAt).toBeGreaterThanOrEqual(700);
+  });
+
+  test("an async handler cannot block or decide, and its context is an error: it would arrive a turn later", async () => {
+    const context = JSON.stringify({ hookSpecificOutput: { hookEventName: "Stop", additionalContext: "late" } });
+    const plugin = loadPlugin(
+      pluginWith({ Stop: [{ hooks: [{ type: "command", command: `printf '%s' '${context}'`, async: true }] }] }),
+    );
+    const out = tempDir("eden-probe-out");
+    const env = hookEnv({ home: tempDir("eden-home"), projectDir: out, plugin });
+    const runner = new HookRunner({ plugin, env, projectDir: out });
+    const invocations = await runner.dispatch(stopPayload(ctx(out), { lastAssistantMessage: "done" }));
+    await runner.settle();
+    const [background] = invocations;
+    expect(background!.outcome.additionalContext).toBeUndefined();
+    expect(background!.outcome.blocked).toBe(false);
+    expect(background!.outcome.error).toContain("next turn");
+  });
+
+  test("the world's next event starts after the async handlers still running have exited", async () => {
+    const runDir = tempDir("eden-harness");
+    const out = join(runDir, "probe");
+    mkdirSync(out);
+    const slow = { type: "command" as const, command: `PROBE_MODE=slow PROBE_SLEEP=0.5 ${PROBE}`, async: true };
+    const plugin = loadPlugin(pluginWith({ Stop: [{ hooks: [slow] }], SessionEnd: [{ hooks: [probeHook()] }] }));
+    const world = new SimWorld({ seed: 7, runDir, plugin, env: { PROBE_OUT: out } });
+    const session = world.newSession();
+    await session.start();
+    await session.prompt("hello");
+    await session.stop();
+    await session.end();
+    const [stop] = world.log.filter((record) => record.event === "Stop").flatMap((record) => record.invocations);
+    const [end] = world.log.filter((record) => record.event === "SessionEnd").flatMap((record) => record.invocations);
+    expect(stop!.async).toBe(true);
+    expect(end!.startedAt).toBeGreaterThanOrEqual(stop!.endedAt);
   });
 
   test("an event with no matching handler runs nothing", async () => {
