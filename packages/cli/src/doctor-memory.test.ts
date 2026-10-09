@@ -7,6 +7,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { repoIdentity, repoStoreDir } from "../../../src/memory-repo";
+import { repoKeyCheck } from "./doctor-memory";
 
 const REPO = join(import.meta.dir, "../../..");
 const CLI = join(REPO, "packages", "cli", "src", "cli.ts");
@@ -198,5 +200,31 @@ describe("eden doctor --memory", () => {
     );
     expect(lines.get("breaker")).toContain("/next stages");
     expect(code).toBe(1);
+  });
+});
+
+describe("repo key (D1)", () => {
+  test("names the repo's key and store, and the per-session stores still to migrate", () => {
+    const base = mkdtempSync(join(tmpdir(), "eden-doctor-repo-"));
+    try {
+      const top = join(base, "app");
+      mkdirSync(join(top, "src"), { recursive: true });
+      Bun.spawnSync(["git", "init", "-q", top]);
+      const root = join(base, "memory");
+      const key = repoIdentity(top)!.key;
+      const line = repoKeyCheck(root, join(top, "src"));
+      expect(line).toEqual({
+        name: "repo key",
+        ok: true,
+        detail: `${key} · ${repoStoreDir(root, key)}, for the repo at ${top}`,
+      });
+      mkdirSync(join(root, "8f0c2a4e-1b3d-4c5e-9f7a-0b1c2d3e4f5a"), { recursive: true });
+      expect(repoKeyCheck(root, top).detail).toEndWith(
+        " · 1 per-session stores from before per-repo memory: eden memory migrate --dry-run",
+      );
+      expect(repoKeyCheck(root, base).detail).toContain(`, for ${base}, outside git`);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
