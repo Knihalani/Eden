@@ -14,14 +14,17 @@
  *   the branch.
  * - **Epochs**: SessionStart `compact` or `clear` starts a new one, which re-arms everything (P1.2 re-arms only what
  *   the compact summary dropped); `resume` keeps the ledger.
+ * - **Shadow** (X7): a point in `shadow` writes the same records to `delivery.shadow.log`, so its refractory rule is
+ *   simulated honestly: it reads what was delivered (the live log) and what it would have delivered (its own), each
+ *   folded by its own epochs. A live point reads only the live log. `wouldPreempt` is shadow mode's G1 estimate.
  *
- * P1.1 adds the `delivery.json` snapshot, the overflow policy and `hook.log.d/`.
+ * P1.1 adds the `delivery.json` snapshot, the overflow policy and `hook.log.d/`'s stage drops.
  */
 import { createHash } from "node:crypto";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { legacySlot } from "./memory-residual";
 import { contentWords, tailLines } from "./memory-transcript";
-import { appendRecord, windowRecords } from "./memory-window";
+import { appendRecord, LIVE_LEDGER, SHADOW_LEDGER, windowRecords, type LedgerFile } from "./memory-window";
 
 export const REFRACTORY_BYTES = { rule: 400_000, other: 1_200_000 } as const;
 
@@ -42,11 +45,16 @@ function words(text: string): string {
   return [...new Set(contentWords(text))].sort().join(" ");
 }
 
+/** The hash of a text's normalized content words: the ver of every row that is not a slot. */
+function contentHash(text: string): string {
+  return hash(words(stripPacketLabel(text).body));
+}
+
 /** A note's cid and ver (see the header). */
 export function ledgerKey(note: ProvenanceNote): LedgerKey {
   const slot = legacySlot(note);
   if (slot) return { cid: `s:${hash(words(slot.subject))}`, ver: hash(words(slot.value)), rule: false };
-  const content = hash(words(stripPacketLabel(String(note.text ?? "")).body));
+  const content = contentHash(String(note.text ?? ""));
   return noteKindToken(note) === "rule"
     ? { cid: `P:${content}`, ver: content, rule: true }
     : { cid: `E:${content}`, ver: content, rule: false };
@@ -57,24 +65,25 @@ export function recordDeliveries(
   dir: string,
   notes: readonly ProvenanceNote[],
   at: { off: number; att: string; ht: number },
+  file: LedgerFile = LIVE_LEDGER,
 ): void {
   for (const note of notes) {
     const { cid, ver } = ledgerKey(note);
-    appendRecord(dir, "delivery.log", { k: "deliver", cid, ver, off: at.off, att: at.att, ht: at.ht });
+    appendRecord(dir, file, { k: "deliver", cid, ver, off: at.off, att: at.att, ht: at.ht });
   }
 }
 
 /** Starts a new epoch (SessionStart `compact` or `clear`). */
-export function startEpoch(dir: string, source: string, off: number): void {
-  appendRecord(dir, "delivery.log", { k: "epoch", source, off });
+export function startEpoch(dir: string, source: string, off: number, file: LedgerFile = LIVE_LEDGER): void {
+  appendRecord(dir, file, { k: "epoch", source, off });
 }
 
-type Delivery = { cid: string; ver: string; off: number; att: string };
+type Delivery = { cid: string; ver: string; off: number; att: string; ht: number };
 
-/** This epoch's deliveries, oldest first. */
-function epochDeliveries(dir: string): Delivery[] {
+/** This epoch's deliveries in one ledger file, oldest first. */
+function epochDeliveries(dir: string, file: LedgerFile): Delivery[] {
   const out: Delivery[] = [];
-  for (const record of windowRecords(dir, "delivery.log")) {
+  for (const record of windowRecords(dir, file)) {
     if (record.k === "epoch") out.length = 0;
     else if (
       record.k === "deliver" &&
@@ -87,9 +96,15 @@ function epochDeliveries(dir: string): Delivery[] {
         ver: record.ver,
         off: record.off,
         att: typeof record.att === "string" ? record.att : "",
+        ht: typeof record.ht === "number" ? record.ht : 0,
       });
   }
   return out;
+}
+
+/** The ledgers a point's refractory rule reads (see the header). */
+function readLedgers(file: LedgerFile): LedgerFile[] {
+  return file === SHADOW_LEDGER ? [LIVE_LEDGER, SHADOW_LEDGER] : [LIVE_LEDGER];
 }
 
 /** The `promptId`s of a transcript tail's main-thread lines, and those on the current `parentUuid` chain. */
@@ -121,8 +136,9 @@ export function notRefractory<T extends ProvenanceNote>(
   dir: string,
   notes: readonly T[],
   now: { size: number; transcriptPath: string },
+  file: LedgerFile = LIVE_LEDGER,
 ): T[] {
-  const deliveries = epochDeliveries(dir);
+  const deliveries = readLedgers(file).flatMap((ledger) => epochDeliveries(dir, ledger));
   if (!deliveries.length) return [...notes];
   let branch: ReturnType<typeof branchPrompts> | undefined;
   const abandoned = (att: string) => {
@@ -136,4 +152,24 @@ export function notRefractory<T extends ProvenanceNote>(
       (d) => d.cid === key.cid && d.ver === key.ver && now.size - d.off < distance && !abandoned(d.att),
     );
   });
+}
+
+/** EXECUTION X7: how many human turns back a shadow packet counts as one that would have preempted a restatement. */
+const PREEMPT_TURNS = 3;
+
+/**
+ * `would_preempt` (X7): the cids of shadow deliveries from the last 3 human turns that the user now states again, in
+ * one of the prompt's `statements` (its sentences, and the whole prompt, which the store also keeps as a row). A slot
+ * counts when its value is the same (D30: equal to the visible value); other rows when their content words are,
+ * whatever kind the stored row had. Until P5.1 logs D30's `restate` events, this is the estimate.
+ */
+export function wouldPreempt(dir: string, statements: readonly string[], hturn: number): string[] {
+  const recent = epochDeliveries(dir, SHADOW_LEDGER).filter((d) => d.ht < hturn && d.ht >= hturn - PREEMPT_TURNS);
+  if (!recent.length) return [];
+  const slots = statements.map((text) => ledgerKey({ text, kind: "fact" })).filter((key) => key.cid.startsWith("s:"));
+  const contents = new Set(statements.map(contentHash));
+  const restated = recent.filter((d) =>
+    d.cid.startsWith("s:") ? slots.some((key) => key.cid === d.cid && key.ver === d.ver) : contents.has(d.ver),
+  );
+  return [...new Set(restated.map((d) => d.cid))];
 }

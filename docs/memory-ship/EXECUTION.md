@@ -181,6 +181,11 @@ Every holdout look is logged. The holdout is refreshed after ~20 looks or at eac
 - **Unknown values resolve to `off`** (`shadow` for `deliver.submit`). This reverses today's `memoryConsent` (unknown → on, `src/memory-consent.ts:14`).
 - **Flag lifecycle.** Each release flag has a removal date, and a test fails once it passes. Kill switches (`guard.ask`, the master) are exempt.
 
+**Built in P0.8** (`src/memory-flags.ts`, [report](reports/P0.8.md)):
+- The environment variables are `EDEN_FLAG_<FLAG>` (`EDEN_FLAG_DELIVER_SUBMIT`, …), and `EDEN_POLICY_GUARD` for `guard.ask`. The repo file is `<repo>/.eden/flags.json`, where the repo is the nearest folder of the event's `cwd` holding `.git`, or, for a linked worktree, its main checkout (no git process).
+- A flag no source sets takes its point's default, which is what the point did before flags existed: `deliver.submit` and `deliver.session_start` are `on`, the points not built yet `shadow`, `guard.ask` `off`. So merging P0.8 changed no delivery; stage 1 writes `shadow` into a flag file. "Unknown values" are values a source sets that are none of the three; they resolve as above. The master `EDEN_MEMORY` follows the same rule: any value other than the on words and `readonly` is `off`.
+- Only UserPromptSubmit and SessionStart deliver today; the other five flags have no reader until their points are built. Release flags are removed by 2027-06-30 (`src/memory-flags.test.ts` fails after it).
+
 **Shadow mode** runs the full pipeline inside the real latency budget and emits nothing. It writes a **shadow ledger** (`delivery.shadow.log`), so refractory behaviour is simulated honestly, plus a wide event.
 
 It measures:
@@ -193,6 +198,8 @@ It measures:
 | p99, aborts | real latency on the real code path |
 
 When a point is replaced, the old and new paths run side by side and log `match | mismatch` (Scientist pattern).
+
+**Built in P0.8**: a point in `shadow` writes its `turn`, `deliver` and `epoch` records to the window's `delivery.shadow.log` and prints nothing; its refractory rule reads both ledgers, a live point only the live one, and `hturn` counts turns from both. `off` writes no ledger and retrieves nothing, but the Submit is still encoded. `would_preempt` is logged at a shadow Submit: the cids of shadow deliveries from the last 3 human turns that a sentence of the prompt (or the whole prompt) states again, a slot only at the same value; D30's `restate` (P5.1) refines it. `would_ask` waits for the guard (P2.3).
 
 **X8. Stages** (canary = the user's own Eden sessions; **one point per stage**):
 
@@ -214,6 +221,7 @@ Dwell times are **[U]** until stage 1 measures the real prompt rate.
 - A test injects a throw into each entry point and asserts exit 0 with empty stdout and stderr.
 - Budget per point: `abort_rate` ≤ 0.5%, unhandled exceptions ≤ 0.1%, user-visible errors 0.
 - **Circuit breaker:** a point that exceeds its budget over its last 200 invocations is forced to `shadow` for 24 h via `~/.eden/flags.auto.json`. `eden doctor` and the next SessionStart say so once. Re-enabling needs a new stage evaluation (`/next stages`) that shows the cause is fixed.
+- **Built in P0.8** (`src/memory-breaker.ts`, `plugins/eden-memory/hooks/hooks.json`): every hook command ends in `2>/dev/null || true`, so even a missing `bun` exits 0 silently, and the hook prints nothing when it has nothing to say (it printed `{}`). The breaker's rates are over a fixed 200 (one unhandled exception trips it, two aborts do), checked only after an exception or an abort, at an `on` point. An entry expires after its 24 h; turning a point back on sooner is a stage evaluation's call. The notice is a `systemMessage` (shown to the user, not the model) at the next SessionStart whose flag is not `off`. There is no budget abort yet (P4.2), so `aborted` is always false and `abort_rate` is 0 by construction.
 
 **Kill switches**, narrowest first:
 1. per-point flag in `flags.json` (next event);
@@ -230,6 +238,8 @@ Dwell times are **[U]** until stage 1 measures the real prompt rate.
 - `ms`, `aborted`, `err`
 
 Always slice by point and by submit kind before comparing; non-human submits are 63% of all submits (R6), so pooled rates mislead. Nightly: run the A5 arms against the **installed** plugin build, not only the repo.
+
+**Built in P0.8** (`src/memory-events.ts`): `<memory root>/hook.log.d/<yyyy-mm-dd>.jsonl` (UTC), one line per memory hook invocation with `ev`, `point`, `mode`, `flags`, `repo` (a hash of the repo top until P0.5), `win`, `hturn`, `prompt_id`, `prompt_hash`, `submit` (`human`/`non-human`), `turn_mode`, `cids`, `drops` (validity, gate, residual, refractory, shape), `would_preempt`, `ms` (inside the handler; process start and module load are not in it), `aborted` and `err` (the error's class and throwing line, never its message). There is no score or τ before P4.2–P4.3. `EDEN_MEMORY=off` and `readonly` write none. Retention (90 days, then daily aggregates) is not built (P1.1).
 
 ---
 

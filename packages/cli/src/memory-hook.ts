@@ -1,15 +1,26 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
 import { childSessionName, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
 import { declarativeBullet, renderPacket, shapePacket } from "../../../src/memory-hook-packet";
-import { notRefractory, recordDeliveries, startEpoch } from "../../../src/memory-ledger";
+import { tripIfOverBudget, takeNotice } from "../../../src/memory-breaker";
+import { appendWideEvent, errorTag, type WideEvent } from "../../../src/memory-events";
+import {
+  flagModes,
+  pointOf,
+  repoHash,
+  repoTop,
+  resolveFlags,
+  type FlagMode,
+  type FlagState,
+} from "../../../src/memory-flags";
+import { ledgerKey, notRefractory, recordDeliveries, startEpoch, wouldPreempt } from "../../../src/memory-ledger";
 import { admitNotes } from "../../../src/memory-gate";
-import { isResidualNote, recentConversation, residualSentences } from "../../../src/memory-residual";
+import { isResidualNote, recentConversation, residualSentences, sentencesOf } from "../../../src/memory-residual";
 import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenance";
 import { isNonHumanSubmit, promptHash, turnMode } from "../../../src/memory-turn";
 import {
@@ -25,9 +36,11 @@ import {
   appendTurn,
   cronHashes,
   humanTurns,
+  ledgerFor,
   recordCrons,
   transcriptOffset,
   windowDir,
+  type LedgerFile,
 } from "../../../src/memory-window";
 import { consolidate } from "../../../src/sleep";
 import { memoryNow } from "../../../src/memory-clock";
@@ -113,18 +126,23 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
 }
 
 /**
- * Renders a packet and records what it delivered in the window ledger (A4 §4): the notes whose bullet made it
- * into the 900 bytes. A ledger that cannot be written leaves the packet as it is.
+ * Renders a packet and records what it delivered in the ledger (A4 §4): the notes whose bullet made it into the 900
+ * bytes. In shadow the ledger is the shadow one, and the caller prints nothing. A ledger that cannot be written leaves
+ * the packet as it is. Returns the packet and the cids it delivered.
  */
-function deliver(notes: readonly ProvenanceNote[], win: string | undefined, at: { off: number; att: string }): string {
+function deliver(
+  notes: readonly ProvenanceNote[],
+  ledger: Ledger | undefined,
+  at: { off: number; att: string },
+): { packet: string; cids: string[] } {
   const now = memoryNow();
   const packet = renderPacket(notes, now);
-  if (packet && win)
+  const delivered = packet ? notes.filter((note) => packet.includes(`\n- ${declarativeBullet(note, now)}`)) : [];
+  if (delivered.length && ledger)
     try {
-      const delivered = notes.filter((note) => packet.includes(`\n- ${declarativeBullet(note, now)}`));
-      recordDeliveries(win, delivered, { ...at, ht: humanTurns(win) });
+      recordDeliveries(ledger.dir, delivered, { ...at, ht: humanTurns(ledger.dir) }, ledger.file);
     } catch {}
-  return packet;
+  return { packet, cids: delivered.map((note) => ledgerKey(note).cid) };
 }
 
 /**
@@ -264,190 +282,293 @@ function payloadMessages(r: Record<string, unknown>): { role: string; content: s
   });
 }
 
+/** What one invocation logs (`memory-events.ts`), filled in as the handler runs. */
+type Trace = Omit<WideEvent, "t" | "ms" | "aborted" | "flags">;
+
+/** The window a point records its ledger in, and the ledger file of its mode (X7); none when it is `off`. */
+type Ledger = { dir: string; file: LedgerFile };
+
+/**
+ * The memory hook for one event. It fails open: whatever throws, it returns null (so nothing is printed). Each
+ * invocation appends one wide event, and an exception at an `on` delivery point lets the circuit breaker check that
+ * point's budget (`memory-breaker.ts`). With `EDEN_MEMORY=off` it does nothing at all; read-only, it writes nothing.
+ */
 export function memoryHookResponse(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const started = performance.now();
+  let writes: boolean, r: Record<string, unknown>, event: string;
   try {
+    r = asRec(raw);
+    event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
     const consent = memoryConsent();
-    if (consent === "off") return null;
-    const r = asRec(raw),
-      event = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
-    if (!MEMORY_EVENTS.has(event)) return null;
-    const writes = consent === "on",
-      cwd = typeof r.cwd === "string" && r.cwd ? r.cwd : undefined;
-    if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd"))
-      return null;
-    let resolved: { session?: string; child: boolean } = { child: false };
-    try {
-      const parent = [
-          r.session_id,
-          r.sessionID,
-          r.sessionId,
-          r.parent_session_id,
-          process.env.EDEN_MEMORY_PARENT,
-          process.env.EDEN_MEMORY_SESSION,
-        ]
-          .map((v) => (typeof v === "string" ? v.trim() : ""))
-          .find(Boolean),
-        childId = [
-          r.agent_id,
-          r.agentId,
-          r.subagent_id,
-          r.subagentId,
-          r.child_session_id,
-          process.env.EDEN_MEMORY_CHILD,
-        ]
-          .map((v) => (typeof v === "string" ? v.trim() : ""))
-          .find(Boolean);
-      const asChild = event === "SubagentStop" || !!(childId && childId !== parent),
-        session = asChild ? childSessionName(parent, childId || "sub") : parent;
-      resolved = { session: asChild && session ? session : parent, child: !!(asChild && session) };
-    } catch {
-      resolved = { child: false };
-    }
+    if (consent === "off" || !MEMORY_EVENTS.has(event)) return null;
+    writes = consent === "on";
+  } catch {
+    return null;
+  }
+  const trace: Trace = { ev: event };
+  let flags: FlagState | undefined;
+  let out: Record<string, unknown> | null = null;
+  try {
+    flags = resolveFlags(str(r.cwd));
+    out = respond(r, event, writes, flags, trace);
+  } catch (err) {
+    trace.err = errorTag(err);
+    out = null;
+  }
+  if (writes) logInvocation(trace, flags, performance.now() - started);
+  return out;
+}
+
+/** Appends the invocation's wide event; after an exception at a delivery point, the breaker checks its budget. */
+function logInvocation(trace: Trace, flags: FlagState | undefined, ms: number): void {
+  try {
     const root = memoryRoot(),
-      win = resolved.child ? undefined : windowDir(root, resolved.session ?? ""),
-      prompt = promptOf(r);
-    // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened.
-    if (event === "UserPromptSubmit" && isNonHumanSubmit(prompt, win ? cronHashes(win) : [])) return null;
-    const mem = hookMemory({ dir: root, session: resolved.session, child: resolved.child, cwd });
-    try {
-      const transPath =
-          typeof r.transcript_path === "string"
-            ? r.transcript_path
-            : typeof r.transcriptPath === "string"
-              ? r.transcriptPath
-              : "",
-        fromFile = messagesFromTranscript(transPath),
-        fromPayload = payloadMessages(r),
-        prior = (fromPayload.length ? fromPayload : fromFile).slice(-40);
-      if (event === "PostToolUse" || event === "SubagentStop") {
+      t = memoryNow();
+    appendWideEvent(root, {
+      t,
+      ...trace,
+      ...(flags ? { flags: flagModes(flags) } : {}),
+      ms: Math.round(ms * 100) / 100,
+      aborted: false,
+    });
+    if (trace.err && trace.point && flags) tripIfOverBudget(root, trace.point, flags, t);
+  } catch {}
+}
+
+/** The session a hook payload belongs to, and whether it is a subagent's (its child store). */
+function resolveSession(r: Record<string, unknown>, event: string): { session?: string; child: boolean } {
+  try {
+    const parent = [
+        r.session_id,
+        r.sessionID,
+        r.sessionId,
+        r.parent_session_id,
+        process.env.EDEN_MEMORY_PARENT,
+        process.env.EDEN_MEMORY_SESSION,
+      ]
+        .map((v) => (typeof v === "string" ? v.trim() : ""))
+        .find(Boolean),
+      childId = [r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD]
+        .map((v) => (typeof v === "string" ? v.trim() : ""))
+        .find(Boolean);
+    const asChild = event === "SubagentStop" || !!(childId && childId !== parent),
+      session = asChild ? childSessionName(parent, childId || "sub") : parent;
+    return { session: asChild && session ? session : parent, child: !!(asChild && session) };
+  } catch {
+    return { child: false };
+  }
+}
+
+/** The breaker's notice as a message to the user (`systemMessage`), beside whatever the point delivers. */
+function withNotice(out: Record<string, unknown> | null, notice: string | undefined): Record<string, unknown> | null {
+  return notice ? { ...(out ?? {}), systemMessage: notice } : out;
+}
+
+function respond(
+  r: Record<string, unknown>,
+  event: string,
+  writes: boolean,
+  flags: FlagState,
+  trace: Trace,
+): Record<string, unknown> | null {
+  const cwd = str(r.cwd);
+  if (!writes && (event === "PostToolUse" || event === "SubagentStop" || event === "Stop" || event === "SessionEnd"))
+    return null;
+  const resolved = resolveSession(r, event);
+  const root = memoryRoot(),
+    win = resolved.child ? undefined : windowDir(root, resolved.session ?? ""),
+    prompt = promptOf(r),
+    point = pointOf(event),
+    mode = point ? flags[point].mode : undefined,
+    top = repoTop(cwd);
+  Object.assign(trace, {
+    ...(point ? { point, mode } : {}),
+    ...(top ? { repo: repoHash(top) } : {}),
+    ...(win ? { win: basename(win) } : {}),
+  });
+  /** The ledger this point writes: none when it is off, read-only, or in a subagent's store. */
+  const ledgerOf = (m: FlagMode | undefined): Ledger | undefined => {
+    const file = m && writes && win ? ledgerFor(m) : undefined;
+    return file && win ? { dir: win, file } : undefined;
+  };
+  // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened.
+  if (event === "UserPromptSubmit" && isNonHumanSubmit(prompt, win ? cronHashes(win) : [])) {
+    trace.submit = "non-human";
+    return null;
+  }
+  const mem = hookMemory({ dir: root, session: resolved.session, child: resolved.child, cwd });
+  try {
+    const transPath =
+        typeof r.transcript_path === "string"
+          ? r.transcript_path
+          : typeof r.transcriptPath === "string"
+            ? r.transcriptPath
+            : "",
+      fromFile = messagesFromTranscript(transPath),
+      fromPayload = payloadMessages(r),
+      prior = (fromPayload.length ? fromPayload : fromFile).slice(-40);
+    if (event === "PostToolUse" || event === "SubagentStop") {
+      try {
+        const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as
+            string | undefined,
+          original = r.tool_response ?? r.tool_output ?? r.result ?? r.output,
+          result = flattenContent(original == null || original === "" ? "" : redact(original)),
+          text = result ? `The ${name || "subagent"} tool result is ${result}.` : "";
+        if (text) mem.observe([{ role: "user", content: text, src: "tool" }]);
+        else if (event === "SubagentStop" && prior.length) mem.observe(prior, { reread: true });
         try {
-          const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as
-              string | undefined,
-            original = r.tool_response ?? r.tool_output ?? r.result ?? r.output,
-            result = flattenContent(original == null || original === "" ? "" : redact(original)),
-            text = result ? `The ${name || "subagent"} tool result is ${result}.` : "";
-          if (text) mem.observe([{ role: "user", content: text, src: "tool" }]);
-          else if (event === "SubagentStop" && prior.length) mem.observe(prior, { reread: true });
-          try {
-            persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
-          } catch {}
+          persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
         } catch {}
-        return null;
-      }
-      const stop = event === "Stop" || event === "SessionEnd",
-        extra = [
-          r.prompt,
-          r.text,
-          r.input,
-          r.message,
-          r.body,
-          r.query,
-          r.user_message,
-          r.prompt_response,
-          r.response,
-          r.output,
-          r.completion,
-          r.result,
-          r.answer,
-          r.reply,
-          r.last_user_message,
-          r.user_text,
-          r.assistant_message,
-          r.last_assistant_message,
-          r.final_response,
-          r.assistant_text,
-          r.content,
-        ]
-          .filter((x) => typeof x === "string" && x)
-          .join("\n");
-      if (event === "SessionStart") {
-        if (writes && (prior.length || extra))
+      } catch {}
+      return null;
+    }
+    const stop = event === "Stop" || event === "SessionEnd",
+      extra = [
+        r.prompt,
+        r.text,
+        r.input,
+        r.message,
+        r.body,
+        r.query,
+        r.user_message,
+        r.prompt_response,
+        r.response,
+        r.output,
+        r.completion,
+        r.result,
+        r.answer,
+        r.reply,
+        r.last_user_message,
+        r.user_text,
+        r.assistant_message,
+        r.last_assistant_message,
+        r.final_response,
+        r.assistant_text,
+        r.content,
+      ]
+        .filter((x) => typeof x === "string" && x)
+        .join("\n");
+    if (event === "SessionStart") {
+      if (writes && (prior.length || extra))
+        try {
+          mem.observe(extra ? [...prior, agentText(extra)] : prior, {
+            keepLiveIdentity: true,
+            reread: true,
+          });
+        } catch {}
+      // The breaker's notice is for the user, not a delivery: it goes out unless the point is off (identity).
+      let notice: string | undefined;
+      if (writes && mode !== "off")
+        try {
+          notice = takeNotice(memoryNow());
+        } catch {}
+      // A4 §5.2: a resumed session still holds the packets it had (R0 F5), so resume brings nothing new and keeps
+      // the ledger. A compaction re-arms (a new epoch, A4 §4): its pins come back on their next cue, not here.
+      // The gists, the legacy carrier between sessions, stay at every other SessionStart until P0.5 and P2.5.
+      // `/clear` opens a new session: a new window, with an empty ledger.
+      const off = transcriptOffset(transPath),
+        ledger = ledgerOf(mode),
+        compact = r.source === "compact";
+      if (r.source === "resume") return withNotice(null, notice);
+      // The epoch belongs to the window: every ledger a built point writes in its mode starts one.
+      if (compact && win)
+        for (const file of new Set([mode, flags["deliver.submit"].mode].flatMap((m) => ledgerOf(m)?.file ?? [])))
           try {
+            startEpoch(win, "compact", off, file);
+          } catch {}
+      if (mode === "off") return withNotice(null, notice);
+      const briefed = briefing(mem, resolved.session, !compact);
+      const { packet, cids } = deliver(briefed, ledger, { off, att: "" });
+      Object.assign(trace, { cids, drops: { shape: briefed.length - cids.length } });
+      return withNotice(mode === "on" ? additional(event, packet) : null, notice);
+    }
+    if (stop) {
+      if (writes) {
+        if (event === "Stop" && win)
+          try {
+            recordCrons(win, r.session_crons);
+          } catch {}
+        // Claude Code cancels SessionEnd hooks after 1.5 s (R0), and the Stop that ended the last turn has just
+        // slept over everything up to it, so SessionEnd only encodes; the next sleep takes what it adds.
+        const ending = event === "SessionEnd";
+        try {
+          if (prior.length || extra)
             mem.observe(extra ? [...prior, agentText(extra)] : prior, {
               keepLiveIdentity: true,
               reread: true,
+              deferSleep: ending,
             });
-          } catch {}
-        // A4 §5.2: a resumed session still holds the packets it had (R0 F5), so resume brings nothing new and keeps
-        // the ledger. A compaction re-arms (a new epoch, A4 §4): its pins come back on their next cue, not here.
-        // The gists, the legacy carrier between sessions, stay at every other SessionStart until P0.5 and P2.5.
-        // `/clear` opens a new session: a new window, with an empty ledger.
-        const off = transcriptOffset(transPath),
-          ledger = writes ? win : undefined,
-          compact = r.source === "compact";
-        if (r.source === "resume") return null;
-        if (compact && ledger)
-          try {
-            startEpoch(ledger, "compact", off);
-          } catch {}
-        return additional(event, deliver(briefing(mem, resolved.session, !compact), ledger, { off, att: "" }));
-      }
-      if (stop) {
-        if (writes) {
-          if (event === "Stop" && win)
-            try {
-              recordCrons(win, r.session_crons);
-            } catch {}
-          // Claude Code cancels SessionEnd hooks after 1.5 s (R0), and the Stop that ended the last turn has just
-          // slept over everything up to it, so SessionEnd only encodes; the next sleep takes what it adds.
-          const ending = event === "SessionEnd";
-          try {
-            if (prior.length || extra)
-              mem.observe(extra ? [...prior, agentText(extra)] : prior, {
-                keepLiveIdentity: true,
-                reread: true,
-                deferSleep: ending,
-              });
-          } catch {}
-          if (!ending)
-            try {
-              consolidate(mem, { session: resolved.session, mode: "full" });
-            } catch {}
-        }
-        return null;
-      }
-      const off = transcriptOffset(transPath),
-        att = str(r.prompt_id) || `${promptHash(prompt)}@${off}`,
-        ledger = event === "UserPromptSubmit" && writes ? win : undefined;
-      if (ledger)
-        try {
-          appendTurn(ledger, { promptId: att, prompt, off });
         } catch {}
-      const previousAssistant = prior.findLast((m) => m.role === "assistant")?.content ?? "",
-        mode = event === "UserPromptSubmit" ? turnMode(prompt, { previousAssistant }) : "imperative",
-        cue = [{ role: "user", content: prompt }];
-      let notes: MemoryRecord[] = [];
-      // A4 §5.1: every human submit is encoded (step 1); the turn mode decides only whether it is answered (step 2).
-      // A4 §3.1: what the user just retracted or revoked is invalid from this Submit on (A4 §3.0: typed text only).
-      // Read after the store's own secret redaction, so the log can hold no token a stored row would not.
-      // A typed forget also sends the rows it names to history (A6 §3).
-      if (writes && prompt && event === "UserPromptSubmit")
-        mem.forget(recordInvalidations(mem.dir, mem.storableText(prompt)));
-      // The conversation so far is encoded before the prompt (which `recall` encodes after retrieving), so what the
-      // prompt states is newer than every transcript line it supersedes.
-      if (writes && prior.length) mem.observe(prior, { reread: true });
-      const tools = fromFile.filter((m) => m.src === "tool").map((m) => m.content),
-        encode = promptMessages(prompt, tools.slice(-RECENT_TOOL_RESULTS));
-      if (prompt && mode === "imperative") notes = mem.recall(cue, encode);
-      else if (prompt) mem.observeCue(cue, undefined, encode);
-      if (!notes.length) return null;
-      // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
-      // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).
-      const recent = recentConversation(transPath, prompt);
-      const parts = { prompt, turn: recent.previousTyped, prev: previousAssistant };
-      const residual = residualSentences(recent.residual);
-      let novel = admitNotes(stillValid(notes, readInvalidations(mem.dir), prompt), parts).filter(
-        (note) => !isResidualNote(note, residual),
-      );
-      if (win) novel = notRefractory(win, novel, { size: off, transcriptPath: transPath });
-      return additional(event, deliver(shapePacket(novel), ledger, { off, att }));
-    } finally {
-      try {
-        mem.close();
-      } catch {}
+        if (!ending)
+          try {
+            consolidate(mem, { session: resolved.session, mode: "full" });
+          } catch {}
+      }
+      return null;
     }
-  } catch {
-    return null;
+    const off = transcriptOffset(transPath),
+      att = str(r.prompt_id) || `${promptHash(prompt)}@${off}`,
+      submit = event === "UserPromptSubmit",
+      ledger = submit ? ledgerOf(mode) : undefined;
+    if (ledger)
+      try {
+        appendTurn(ledger.dir, { promptId: att, prompt, off }, ledger.file);
+      } catch {}
+    const previousAssistant = prior.findLast((m) => m.role === "assistant")?.content ?? "",
+      turn = submit ? turnMode(prompt, { previousAssistant }) : "imperative",
+      cue = [{ role: "user", content: prompt }];
+    if (submit) {
+      Object.assign(trace, { submit: "human", turn_mode: turn, prompt_id: att, prompt_hash: promptHash(prompt) });
+      if (win)
+        try {
+          trace.hturn = humanTurns(win);
+        } catch {}
+    }
+    let notes: MemoryRecord[] = [];
+    // A4 §5.1: every human submit is encoded (step 1); the turn mode decides only whether it is answered (step 2),
+    // and the point's flag whether it is answered at all (X7: off answers nothing and writes no ledger).
+    // A4 §3.1: what the user just retracted or revoked is invalid from this Submit on (A4 §3.0: typed text only).
+    // Read after the store's own secret redaction, so the log can hold no token a stored row would not.
+    // A typed forget also sends the rows it names to history (A6 §3).
+    if (writes && prompt && submit) mem.forget(recordInvalidations(mem.dir, mem.storableText(prompt)));
+    // The conversation so far is encoded before the prompt (which `recall` encodes after retrieving), so what the
+    // prompt states is newer than every transcript line it supersedes.
+    if (writes && prior.length) mem.observe(prior, { reread: true });
+    const tools = fromFile.filter((m) => m.src === "tool").map((m) => m.content),
+      encode = promptMessages(prompt, tools.slice(-RECENT_TOOL_RESULTS));
+    if (mode === "shadow" && ledger && trace.hturn !== undefined)
+      try {
+        const own = encode.filter((m) => m.src === "user").map((m) => m.content);
+        const preempted = wouldPreempt(ledger.dir, [...own, ...own.flatMap(sentencesOf)], trace.hturn);
+        if (preempted.length) trace.would_preempt = preempted;
+      } catch {}
+    if (prompt && turn === "imperative" && mode !== "off") notes = mem.recall(cue, encode);
+    else if (prompt) mem.observeCue(cue, undefined, encode);
+    if (!notes.length) return null;
+    // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
+    // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).
+    const recent = recentConversation(transPath, prompt);
+    const parts = { prompt, turn: recent.previousTyped, prev: previousAssistant };
+    const residual = residualSentences(recent.residual);
+    const valid = stillValid(notes, readInvalidations(mem.dir), prompt);
+    const admitted = admitNotes(valid, parts);
+    let novel = admitted.filter((note) => !isResidualNote(note, residual));
+    const fresh = novel.length;
+    if (win) novel = notRefractory(win, novel, { size: off, transcriptPath: transPath }, ledger?.file);
+    const { packet, cids } = deliver(shapePacket(novel), ledger, { off, att });
+    trace.cids = cids;
+    trace.drops = {
+      validity: notes.length - valid.length,
+      gate: valid.length - admitted.length,
+      residual: admitted.length - fresh,
+      refractory: fresh - novel.length,
+      shape: novel.length - cids.length,
+    };
+    return mode === "shadow" ? null : additional(event, packet);
+  } finally {
+    try {
+      mem.close();
+    } catch {}
   }
 }
 
@@ -463,9 +584,9 @@ export async function runMemoryHookStdin(): Promise<void> {
       })) || "{}",
     ) as Record<string, unknown>;
   } catch {}
+  // Fail open (EXECUTION §5): nothing to say prints nothing, and so does an error.
   try {
-    process.stdout.write(JSON.stringify(memoryHookResponse(body) ?? {}));
-  } catch {
-    process.stdout.write("{}");
-  }
+    const out = memoryHookResponse(body);
+    if (out) process.stdout.write(JSON.stringify(out));
+  } catch {}
 }

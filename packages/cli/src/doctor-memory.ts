@@ -1,12 +1,25 @@
 /**
  * The checks behind `eden doctor`'s memory section (P0.1): which eden-memory plugin Claude Code runs, whether that
  * copy is current and loads Eden in-process within the Submit budget, what it logged when it could not, and how the
- * store is keyed. `doctor.ts` assembles them with the hook-registration check.
+ * store is keyed. Since P0.8, also the delivery-point flags, the circuit breaker and the kill switches (EXECUTION
+ * §5). `doctor.ts` assembles them with the hook-registration check.
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { findEdenRoot } from "../../../plugins/eden-memory/scripts/eden-root";
+import { breakerLine } from "../../../src/memory-breaker";
+import {
+  breakerPath,
+  FLAG_NAMES,
+  readBreaker,
+  repoFlagsPath,
+  repoTop,
+  resolveFlags,
+  userFlagsPath,
+  type BreakerEntry,
+  type Flag,
+} from "../../../src/memory-flags";
 import { fallbackLogPath, readFallbacks } from "../../../plugins/eden-memory/scripts/fallback-log";
 import type { DoctorCheck } from "./doctor";
 import { edenHome } from "./home";
@@ -146,12 +159,19 @@ function errorLine(stderr: string): string {
 }
 
 /**
- * Runs the plugin's Submit hook command as Claude Code does, in fresh processes with a throwaway Eden home. Eden
- * loaded in-process when every run exits 0 within the timeout, writes nothing to stderr and logs no fallback: the
- * command's `|| echo '{}'` hides a crash's exit status, not its stack trace. `ms` is the median wall time, shell and
- * process start included.
+ * How `hooks/hooks.json` ends each command so that a hook fails open whatever happens, even with no `bun` on PATH:
+ * exit 0, and nothing on stderr (EXECUTION §5).
  */
-function probePluginHook(pluginRoot: string, command: string): HookProbe {
+export const FAIL_OPEN_SUFFIX = " 2>/dev/null || true";
+
+/**
+ * Runs the plugin's Submit hook command as Claude Code does, in fresh processes with a throwaway Eden home, but
+ * without the fail-open suffix, which would hide a crash's stack trace and exit status. Eden loaded in-process when
+ * every run exits 0 within the timeout, writes nothing to stderr and logs no fallback. `ms` is the median wall time,
+ * shell and process start included.
+ */
+function probePluginHook(pluginRoot: string, hookCommand: string): HookProbe {
+  const command = hookCommand.endsWith(FAIL_OPEN_SUFFIX) ? hookCommand.slice(0, -FAIL_OPEN_SUFFIX.length) : hookCommand;
   const home = mkdtempSync(join(tmpdir(), "eden-doctor-probe-"));
   try {
     const env: Record<string, string> = {
@@ -264,4 +284,39 @@ export function storeChecks(): DoctorCheck[] {
     { name: "scope catalog", ok: true, detail: "none · no folder scopes" },
     { name: "guard", ok: true, detail: "off · no PreToolUse policy guard" },
   ];
+}
+
+/**
+ * The delivery-point flags (X7) as the next event in `cwd` resolves them, each with its source. An unknown value is
+ * named: it resolves to `off` (`shadow` for `deliver.submit`), which may not be what was meant.
+ */
+export function flagsCheck(cwd = process.cwd()): DoctorCheck {
+  const state = resolveFlags(cwd);
+  const unknown = FLAG_NAMES.filter((flag) => state[flag].unknown !== undefined);
+  const parts = FLAG_NAMES.map((flag) => {
+    const { mode, source, unknown: raw } = state[flag];
+    return `${flag} ${mode} (${source}${raw === undefined ? "" : `: unknown value ${JSON.stringify(raw)}`})`;
+  });
+  return { name: "flags", ok: unknown.length === 0, detail: parts.join(" · ") };
+}
+
+/** The points the circuit breaker holds in shadow (EXECUTION §5). */
+export function breakerCheck(): DoctorCheck {
+  const forced = Object.entries(readBreaker()) as [Flag, BreakerEntry][];
+  if (!forced.length) return { name: "breaker", ok: true, detail: `none tripped · ${breakerPath()}` };
+  const lines = forced.map(([point, entry]) => breakerLine(point, entry));
+  const fix = "a stage evaluation (/next stages) that shows the cause is fixed turns a point back on early";
+  return { name: "breaker", ok: false, detail: `${lines.join(" · ")} · ${fix} · ${breakerPath()}` };
+}
+
+/** EXECUTION §5's kill switches, narrowest first. */
+export function killSwitchesCheck(cwd = process.cwd()): DoctorCheck {
+  const top = repoTop(cwd);
+  const files = top ? `${userFlagsPath()} or ${repoFlagsPath(top)}` : userFlagsPath();
+  const switches = [
+    `1. a point's flag set to off in ${files} (from the next event)`,
+    "2. EDEN_MEMORY=off in Claude Code's environment (from the next session)",
+    '3. claude plugin disable eden-memory@eden, or "disableAllHooks": true in Claude Code settings',
+  ];
+  return { name: "kill switches", ok: true, detail: switches.join(" · ") };
 }
