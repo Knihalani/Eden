@@ -27,7 +27,7 @@ import {
 } from "../harness/metrics";
 import { itemId, type Effect } from "../harness/oracle";
 import type { HookEvent } from "../harness/payloads";
-import { hookEnv, loadPlugin } from "../harness/runner";
+import { hookEnv, idleSleepOf, loadPlugin } from "../harness/runner";
 import {
   simClock,
   SimWorld,
@@ -146,6 +146,7 @@ export class ArmRun {
       plugin: loadPlugin(this.options.pluginDir),
       seed: this.seed++,
       clockEnv: true,
+      idleSleep: idleSleepOf(this.options.pluginDir),
       env: this.options.env,
       projectFiles: spec.projectFiles,
       subjects: spec.subjects,

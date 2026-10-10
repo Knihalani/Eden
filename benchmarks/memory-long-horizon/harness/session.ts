@@ -132,6 +132,23 @@ export interface WorldOptions {
    * given none keeps its own, starting at the simulation epoch.
    */
   clock?: SimClock;
+  /**
+   * The product's idle-sleep command (Eden: `eden sleep --idle --after 0`, A4 §6, D34), run in each folder a session
+   * used since the last run, with `--session` and that session's id, whenever the simulated clock shows 5 minutes
+   * without an event. The product starts its sleeper detached, to wait out real minutes a simulation never spends;
+   * the world runs it at the simulated moment instead, before the event that ends the idle time.
+   */
+  idleSleep?: readonly string[];
+}
+
+/** D34: the idle sleeper sleeps after 5 minutes without hook activity. */
+const IDLE_MS = 300_000;
+
+/** One run of the idle-sleep command: when, where, and its exit code. */
+export interface IdleSleep {
+  at: number;
+  cwd: string;
+  exitCode: number | null;
 }
 
 /** Simulated time in epoch milliseconds, shared by the worlds that hold it. */
@@ -209,6 +226,12 @@ export class SimWorld {
   private readonly runner: HookRunner;
   private readonly records = new WeakMap<Invocation[], EventRecord>();
   private readonly clock: SimClock;
+  private readonly hookEnvironment: Record<string, string>;
+  /** The simulated time of the last event, and the folders (with their session) used since the last idle sleep. */
+  private lastEventAt?: number;
+  private readonly active = new Map<string, string>();
+  /** Every run of `idleSleep`. */
+  readonly idleSleeps: IdleSleep[] = [];
 
   constructor(readonly options: WorldOptions) {
     this.runDir = realpathSync(options.runDir);
@@ -220,11 +243,13 @@ export class SimWorld {
     this.oracle = new Oracle(options.subjects ?? []);
     this.oracle.apply(options.initialTruth ?? [], "init", this.at());
     mkdirSync(join(this.home, ".claude", "plugins", "data", options.plugin.name), { recursive: true });
-    this.runner = new HookRunner({
-      plugin: options.plugin,
-      env: hookEnv({ home: this.home, projectDir: this.projectDir, plugin: options.plugin, extra: options.env }),
+    this.hookEnvironment = hookEnv({
+      home: this.home,
       projectDir: this.projectDir,
+      plugin: options.plugin,
+      extra: options.env,
     });
+    this.runner = new HookRunner({ plugin: options.plugin, env: this.hookEnvironment, projectDir: this.projectDir });
   }
 
   get permissionMode(): PermissionMode {
@@ -289,11 +314,32 @@ export class SimWorld {
       invocations: [],
     };
     this.log.push(record);
+    const idle = this.lastEventAt !== undefined && this.clock.ms - this.lastEventAt >= IDLE_MS;
+    this.lastEventAt = this.clock.ms;
     await this.settle();
+    if (idle) this.sleepIdle();
+    if (typeof payload.cwd === "string") this.active.set(payload.cwd, String(payload.session_id));
     const clock: Record<string, string> = this.options.clockEnv ? { EDEN_NOW: String(this.clock.ms) } : {};
     record.invocations = await this.runner.dispatch(payload, { ...clock, ...env });
     this.records.set(record.invocations, record);
     return record.invocations;
+  }
+
+  /** Runs `idleSleep` in each folder used since the last run (see `WorldOptions.idleSleep`). */
+  private sleepIdle(): void {
+    const command = this.options.idleSleep;
+    if (!command?.length) return;
+    for (const [cwd, session] of this.active) {
+      const run = Bun.spawnSync([...command, "--session", session], {
+        cwd: existsSync(cwd) ? cwd : this.projectDir,
+        env: { ...this.hookEnvironment, EDEN_NOW: String(this.clock.ms) },
+        stdout: "ignore",
+        stderr: "ignore",
+        timeout: 120_000,
+      });
+      this.idleSleeps.push({ at: this.clock.ms, cwd, exitCode: run.exitCode });
+    }
+    this.active.clear();
   }
 
   /** Waits for the async handlers still running (`HookRunner.settle`): each event starts after them. */

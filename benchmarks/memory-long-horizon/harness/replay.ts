@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { computeMetrics, countBy, latencyByPoint, listFiles, type Corpus, type Latency, type Metrics } from "./metrics";
 import { projectSlug } from "./rng";
-import { loadPlugin, type Invocation } from "./runner";
+import { idleSleepOf, loadPlugin, type Invocation } from "./runner";
 import { SimWorld, type EventRecord } from "./session";
 import { canonicalSession, generateSession, shapeStats, soakSession } from "./shape";
 import { generateWorldScenario, playScenario, sessionScenario, type Scenario } from "./world";
@@ -49,6 +49,8 @@ export interface ReplaySummary {
   contexts: number;
   blocked: number;
   msByPoint: Record<string, Latency>;
+  /** Runs of the product's idle sleep at simulated idle points (`WorldOptions.idleSleep`), and how many failed. */
+  idleSleeps: { runs: number; nonZeroExit: number };
   transcript: { files: number; lines: number; bytes: number };
   digest: string;
   metrics: Metrics;
@@ -71,6 +73,7 @@ export async function replay(options: ReplayOptions): Promise<{ summary: ReplayS
     runDir: options.runDir,
     plugin,
     clockEnv: true,
+    idleSleep: idleSleepOf(options.pluginDir),
     seed: scenario.seed,
     flush: options.flush,
     env: options.env,
@@ -120,6 +123,10 @@ function summarize(scenario: Scenario, world: SimWorld, skipped: number): Replay
     contexts: invocations.filter((invocation) => invocation.outcome.additionalContext !== undefined).length,
     blocked: invocations.filter((invocation) => invocation.outcome.blocked).length,
     msByPoint: latencyByPoint(world),
+    idleSleeps: {
+      runs: world.idleSleeps.length,
+      nonZeroExit: world.idleSleeps.filter((run) => run.exitCode !== 0).length,
+    },
     transcript: {
       files: transcripts.length,
       lines: transcripts.reduce((n, path) => n + readFileSync(path, "utf8").split("\n").filter(Boolean).length, 0),
