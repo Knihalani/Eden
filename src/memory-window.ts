@@ -8,7 +8,8 @@
  * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves; the
  *   `cwd` of its SessionStart, which names the repo of a session outside git (D1, `memory-repo.ts`); and one
  *   `batch` record per PostToolBatch (`memory-batch.ts`). `stop-sleep` compacts it (`compactContext`).
- * - `qprev.json`: the agent's last message, written by `stop-fast` (A4 §5.7, A7 §3's `q_prev`).
+ * - `qprev.json`: the end of the agent's last message, written by `stop-fast` (A4 §5.7, A7 §3's `q_prev`) through the
+ *   store's secret gate, as every text under the memory root is (A6 §2.2).
  * - `hwm.json`: the delta encoder's mark (`memory-delta.ts`).
  *
  * Each record is one appended line under 4 KB, so concurrent appends do not interleave.
@@ -17,6 +18,7 @@ import { appendFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../packages/cli/src/home";
 import { memorySessionName } from "./index";
+import { scrubMemoryText } from "./memory-scrub";
 import type { BatchRecord } from "./memory-batch";
 import type { FlagMode } from "./memory-flags";
 import { promptHash } from "./memory-turn";
@@ -166,11 +168,20 @@ export interface LastAssistant {
 }
 
 const QPREV = "qprev.json";
+/**
+ * How much of the agent's last message `stop-fast` keeps: its end, where a proposal or question sits (A7 §2), and
+ * small enough for the secret gate to fit its 15 ms budget (D34).
+ */
+const QPREV_CHARS = 8_000;
 
-/** `stop-fast` (A4 §5.7): the agent's last message, written by rename so a reader never sees half of it. */
+/**
+ * `stop-fast` (A4 §5.7): the end of the agent's last message, cut at a space so no token is split, through the
+ * secret gate (A6 §2.2), written by rename so a reader never sees half of it.
+ */
 export function writeLastAssistant(dir: string, last: LastAssistant): void {
+  const end = last.text.length > QPREV_CHARS ? last.text.slice(-QPREV_CHARS).replace(/^\S*\s*/, "") : last.text;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  writeFileAtomic(join(dir, QPREV), JSON.stringify(last), 0o600);
+  writeFileAtomic(join(dir, QPREV), JSON.stringify({ t: last.t, text: scrubMemoryText(end) }), 0o600);
 }
 
 export function readLastAssistant(dir: string): LastAssistant | undefined {

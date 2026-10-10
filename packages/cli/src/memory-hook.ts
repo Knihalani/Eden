@@ -520,18 +520,28 @@ function stopFast(r: Record<string, unknown>, win: string | undefined): void {
  * (R0), so it does the same light work and leaves the full sleep to the idle sleeper too.
  */
 function sleepAfterTurn(ctx: HookContext): void {
-  encodeConversation(ctx);
-  encodePayloadText(ctx);
-  lightSleep(ctx.mem, ctx.session);
-  if (ctx.win)
-    try {
-      compactContext(ctx.win);
-    } catch {}
-  spawnIdleSleeper(ctx.store, ctx.session);
+  inTurn(
+    () => encodeConversation(ctx),
+    () => encodePayloadText(ctx),
+    () => lightSleep(ctx.mem, ctx.session),
+    () => ctx.win && compactContext(ctx.win),
+    () => spawnIdleSleeper(ctx.store, ctx.session),
+  );
 }
 
-/** A PostToolUse (hosts other than the plugin, which records batches): the result is encoded from the payload. */
-function toolResult(ctx: HookContext, tool = "tool"): void {
+/** Runs each step of a handler in order; one that throws is skipped, never the steps after it (fail open). */
+function inTurn(...steps: (() => unknown)[]): void {
+  for (const step of steps)
+    try {
+      step();
+    } catch {}
+}
+
+/**
+ * A PostToolUse (hosts other than the plugin, which records batches): the result is encoded from the payload.
+ * Returns whether the payload carried one.
+ */
+function toolResult(ctx: HookContext, tool = "tool"): boolean {
   const { r, mem } = ctx;
   const name = [r.tool_name, r.toolName, r.tool].find((x) => typeof x === "string" && String(x).trim()) as
     string | undefined;
@@ -544,6 +554,7 @@ function toolResult(ctx: HookContext, tool = "tool"): void {
   try {
     persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
   } catch {}
+  return !!result;
 }
 
 /**
@@ -551,32 +562,33 @@ function toolResult(ctx: HookContext, tool = "tool"): void {
  * window's delta. A subagent's lines are its own transcript's, which SubagentStop encodes.
  */
 function toolBatch(ctx: HookContext): void {
-  if (ctx.win)
-    try {
-      recordBatch(ctx.win, batchRecord(ctx.r));
-    } catch {}
-  try {
-    persistToolTraces(ctx.mem.jsonlDir, parseHookToolTraces(ctx.r));
-  } catch {}
-  if (!ctx.child) encodeConversation(ctx);
+  inTurn(
+    () => ctx.win && recordBatch(ctx.win, batchRecord(ctx.r)),
+    () => persistToolTraces(ctx.mem.jsonlDir, parseHookToolTraces(ctx.r)),
+    () => ctx.child || encodeConversation(ctx),
+  );
 }
 
 /**
  * SubagentStop (A4 §5.7b): the child window's delta, from its own transcript, and its last message; a host that
- * sends the subagent's result as a tool result has it encoded as one.
+ * sends the subagent's result as a tool result has it encoded as that, once.
  */
 function subagentStop(ctx: HookContext): void {
-  toolResult(ctx, "subagent");
-  encodeConversation(ctx, str(ctx.r.agent_transcript_path) ?? "");
-  encodePayloadText(ctx);
+  let asTool = false;
+  inTurn(
+    () => (asTool = toolResult(ctx, "subagent")),
+    () => encodeConversation(ctx, str(ctx.r.agent_transcript_path) ?? ""),
+    () => asTool || encodePayloadText(ctx),
+  );
 }
 
 function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   const { r, writes, win, mode, flags, mem, trace } = ctx;
-  if (writes) {
-    encodeConversation(ctx);
-    encodePayloadText(ctx);
-  }
+  if (writes)
+    inTurn(
+      () => encodeConversation(ctx),
+      () => encodePayloadText(ctx),
+    );
   // The breaker's notice is for the user, not a delivery: it goes out unless the point is off (identity).
   let notice: string | undefined;
   if (writes && mode !== "off")
@@ -633,7 +645,7 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     } catch {}
   // A4 §5.1 step 1: the delta before the prompt (which `recall` encodes after retrieving), so what the prompt
   // states is newer than every transcript line it supersedes, and a forget below reaches the delta's rows too.
-  if (writes) encodeConversation(ctx);
+  if (writes) inTurn(() => encodeConversation(ctx));
   const recent = recentConversation(transcriptPath, prompt);
   const prev = previousAssistant(win, recent),
     turn = human ? turnMode(prompt, { previousAssistant: prev }) : "imperative",

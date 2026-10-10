@@ -181,17 +181,20 @@ function inodeAt(lockPath: string): number | null {
   }
 }
 
-/** Runs `fn` holding the lock file, waiting at most `waitMs` for it; throws when the lock stays taken. */
+/**
+ * Runs `fn` holding the lock file, trying at least once and waiting at most `waitMs` for it (0: one try, no wait);
+ * throws when the lock stays taken.
+ */
 export function withFileLock<T>(lockPath: string, fn: () => T, waitMs = LOCK_WAIT_MS): T {
   mkdirSync(dirname(lockPath), { recursive: true });
   const t0 = Date.now();
-  while (Date.now() - t0 < waitMs) {
+  for (let tried = false; !tried || Date.now() - t0 < waitMs; tried = true) {
     let fd: number | undefined;
     try {
       fd = openSync(lockPath, "wx");
     } catch {
       breakIfAbandoned(lockPath);
-      sleepBriefly();
+      if (Date.now() - t0 < waitMs) sleepBriefly();
       continue;
     }
     let ino: number | null = null;

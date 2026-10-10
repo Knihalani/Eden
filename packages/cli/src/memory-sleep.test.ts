@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory } from "../../../src/index";
-import { memorySleepCli, noteRepoActivity, spawnIdleSleeper } from "./memory-sleep";
+import { sleepCli, noteRepoActivity, spawnIdleSleeper } from "./memory-sleep";
 
 let dir = "";
 let store = "";
@@ -38,7 +38,7 @@ describe("D34: the idle sleeper", () => {
     noteRepoActivity(store);
     const started = Date.now();
     const touch = setTimeout(() => noteRepoActivity(store), 300);
-    await memorySleepCli(["--idle", "--after", "0.5", "--store", store, "--session", "s1"]);
+    await sleepCli(["--idle", "--after", "0.5", "--store", store, "--session", "s1"]);
     clearTimeout(touch);
     expect(Date.now() - started).toBeGreaterThanOrEqual(750);
     expect(slept()).toBe(true);
@@ -48,16 +48,16 @@ describe("D34: the idle sleeper", () => {
   test("a sleeper that finds another one named in sleep.pending leaves the store to it", async () => {
     noteRepoActivity(store);
     const claim = setTimeout(() => writeFileSync(join(store, "sleep.pending"), JSON.stringify({ pid: 1 })), 100);
-    await memorySleepCli(["--idle", "--after", "0.3", "--store", store]);
+    await sleepCli(["--idle", "--after", "0.3", "--store", store]);
     clearTimeout(claim);
     expect(slept()).toBe(false);
     expect(JSON.parse(readFileSync(join(store, "sleep.pending"), "utf8"))).toEqual({ pid: 1 });
   });
 
   test("without --idle it sleeps now; a missing store is left alone", async () => {
-    await memorySleepCli(["--store", store, "--session", "s1"]);
+    await sleepCli(["--store", store, "--session", "s1"]);
     expect(slept()).toBe(true);
-    await memorySleepCli(["--idle", "--after", "0", "--store", join(dir, "missing")]);
+    await sleepCli(["--idle", "--after", "0", "--store", join(dir, "missing")]);
     expect(existsSync(join(dir, "missing"))).toBe(false);
   });
 
