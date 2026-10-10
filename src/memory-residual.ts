@@ -34,23 +34,46 @@ export interface RecentConversation {
   toolResults: string[];
   /** The tail's newest assistant text, and its line's time (epoch ms; 0 when the line has none). */
   lastAssistant?: { text: string; t: number };
+  /**
+   * The context size the newest assistant `message.usage` reports (input, cache creation and cache read tokens):
+   * logged beside the transcript's bytes so A4 §4's distances can be refit (A5 `re-eligibility`).
+   */
+  contextTokens?: number;
 }
 
-/** The tail's last tool results and its newest assistant text (see `RecentConversation`). */
-function latest(lines: readonly TranscriptLine[]): Pick<RecentConversation, "toolResults" | "lastAssistant"> {
+/** A line's `message.usage` as one context size, when it has one. */
+function usageTokens(line: TranscriptLine): number | undefined {
+  const usage = (line.message as { usage?: Record<string, unknown> } | undefined)?.usage;
+  if (!usage || typeof usage !== "object") return undefined;
+  const count = (key: string) => (typeof usage[key] === "number" ? (usage[key] as number) : 0);
+  return count("input_tokens") + count("cache_creation_input_tokens") + count("cache_read_input_tokens");
+}
+
+/** The tail's last tool results, its newest assistant text and its context size (see `RecentConversation`). */
+function latest(
+  lines: readonly TranscriptLine[],
+): Pick<RecentConversation, "toolResults" | "lastAssistant" | "contextTokens"> {
   const toolResults: string[] = [];
   let lastAssistant: RecentConversation["lastAssistant"];
-  for (let at = lines.length - 1; at >= 0 && (toolResults.length < RECENT_TOOL_RESULTS || !lastAssistant); at--) {
+  let contextTokens: number | undefined;
+  const done = () => toolResults.length >= RECENT_TOOL_RESULTS && lastAssistant && contextTokens !== undefined;
+  for (let at = lines.length - 1; at >= 0 && !done(); at--) {
     const line = lines[at]!;
     if (line.isSidechain === true) continue;
     const tool = toolResults.length < RECENT_TOOL_RESULTS ? toolResultText(line) : undefined;
     if (tool) toolResults.unshift(tool);
-    if (lastAssistant || line.type !== "assistant") continue;
+    if (line.type !== "assistant") continue;
+    contextTokens ??= usageTokens(line);
+    if (lastAssistant) continue;
     const text = textOf((line.message as { content?: unknown } | undefined)?.content)?.trim();
     const t = typeof line.timestamp === "string" ? Date.parse(line.timestamp) : NaN;
     if (text) lastAssistant = { text, t: Number.isFinite(t) ? t : 0 };
   }
-  return { toolResults, ...(lastAssistant ? { lastAssistant } : {}) };
+  return {
+    toolResults,
+    ...(lastAssistant ? { lastAssistant } : {}),
+    ...(contextTokens !== undefined ? { contextTokens } : {}),
+  };
 }
 
 export function recentConversation(transcriptPath: string, prompt: string): RecentConversation {
@@ -60,7 +83,7 @@ export function recentConversation(transcriptPath: string, prompt: string): Rece
   let typed = 0;
   let sawCurrent = false;
   const lines = transcriptPath ? tailLines(transcriptPath, TAIL_BYTES) : [];
-  const { toolResults, lastAssistant } = latest(lines);
+  const { toolResults, lastAssistant, contextTokens } = latest(lines);
   for (let at = lines.length - 1; at >= 0 && typed < TYPED_PROMPTS; at--) {
     const line = lines[at]!;
     if (line.isSidechain === true) continue;
@@ -80,7 +103,13 @@ export function recentConversation(transcriptPath: string, prompt: string): Rece
     typed++;
     if (!previousTyped) previousTyped = text;
   }
-  return { residual, previousTyped, toolResults, ...(lastAssistant ? { lastAssistant } : {}) };
+  return {
+    residual,
+    previousTyped,
+    toolResults,
+    ...(lastAssistant ? { lastAssistant } : {}),
+    ...(contextTokens !== undefined ? { contextTokens } : {}),
+  };
 }
 
 function contentTokens(text: string): Set<string> {

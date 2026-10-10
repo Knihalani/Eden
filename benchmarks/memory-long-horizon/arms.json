@@ -366,11 +366,8 @@
       ],
       "a5": "the same auth cue on 3 human turns -> packets 1, empty, empty; an update -> `Updated:`",
       "on": {
-        "state": "red",
-        "failed": [
-          "updated"
-        ],
-        "why": "nothing is labelled 'Updated:' after the switch (P1.1)"
+        "state": "green",
+        "why": "passes since P1.1 (A4 §4): the switch's row comes back as an Updated item (\"Updated: We switched auth from Auth0 to Clerk (you said, 1 hour ago)\"): its text switches away from the auth value the window was given (D7), so the ledger marks it; turns 2 and 3 stay empty"
       },
       "off": {
         "state": "green",
@@ -541,7 +538,7 @@
       "a5": "a 300-human-turn soak -> tokens_per_epoch <= 6k",
       "on": {
         "state": "green",
-        "why": "passes at CI scale since P0.2 caps packets (D28): 3,974–4,043 tokens at most in an epoch over 100 human turns on 159c34503 / 2e9630c93 (three runs; 95 packets; 8,595 on 172b490d3). At full scale (300 turns) it still fails: 14,471–14,882 tokens on P0.2's code before review (29,749 on 172b490d3); the ledger's refractory (P1.1) owns that"
+        "why": "passes at CI scale since P0.2 caps packets (D28): 3,974–4,043 tokens at most in an epoch over 100 human turns on 159c34503 / 2e9630c93 (three runs; 95 packets; 8,595 on 172b490d3). Since P0.3–P0.6 the full scale passes too: 610 tokens at most over 300 turns on fa357ba97 (477 over 100), measured in P1.1, which adds A4 §4's cap: past 6k tokens in an epoch only Updated items are delivered"
       },
       "off": {
         "state": "green",
@@ -560,11 +557,8 @@
       ],
       "a5": "a pin delivered at off=0 is refractory at 399 KB, re-eligible at 401 KB with a fresh cue, and not without one; message.usage context tokens logged beside bytes",
       "on": {
-        "state": "red",
-        "failed": [
-          "usage-logged"
-        ],
-        "why": "no wide events exist to hold message.usage. reeligible-401 and refractory-399 are plain checks since P0.3: both held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175); their flakes were the pin's row lost to pid-derived ids (#98)"
+        "state": "green",
+        "why": "passes since P1.1: each human Submit's wide event logs the transcript's bytes (`off`) and the context tokens of its last `message.usage` (`ctx_tokens`) side by side. reeligible-401 and refractory-399 are plain checks since P0.3: both held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175)"
       },
       "off": {
         "state": "green",

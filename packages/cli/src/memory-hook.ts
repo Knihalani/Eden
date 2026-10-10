@@ -7,11 +7,23 @@ import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
 import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
 import { tripIfOverBudget, takeNotice } from "../../../src/memory-breaker";
-import { appendWideEvent, errorTag, type WideEvent } from "../../../src/memory-events";
+import { appendWideEvent, errorTag, retainEvents, type WideEvent } from "../../../src/memory-events";
 import { flagModes, pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
 import { batchRecord } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
-import { ledgerKey, notRefractory, recordDeliveries, startEpoch, wouldPreempt } from "../../../src/memory-ledger";
+import {
+  epochTokens,
+  foldWindow,
+  humanTurns,
+  ledgerKey,
+  liveDeliveries,
+  novelNotes,
+  packetTokens,
+  recordPacket,
+  startEpoch,
+  withinBudget,
+  wouldPreempt,
+} from "../../../src/memory-ledger";
 import { isPinnedIntention, selectNotes } from "../../../src/memory-delivery";
 import { recentConversation, sentencesOf, type RecentConversation } from "../../../src/memory-residual";
 import { tailLines } from "../../../src/memory-transcript";
@@ -24,7 +36,6 @@ import {
   compactContext,
   cronHashes,
   existingLedgers,
-  humanTurns,
   ledgerFor,
   readLastAssistant,
   recordBatch,
@@ -123,20 +134,22 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
 
 /**
  * Renders a packet and records what it delivered in the ledger (A4 §4): the notes whose bullet made it into the 900
- * bytes. In shadow the ledger is the shadow one, and the caller prints nothing. A ledger that cannot be written leaves
- * the packet as it is. Returns the packet and the cids it delivered.
+ * bytes, and the packet's tokens. In shadow the ledger is the shadow one, and the caller prints nothing. A ledger that
+ * cannot be written leaves the packet as it is. Returns the packet, the cids it delivered and their rows' ids.
  */
 function deliver(
   notes: readonly ProvenanceNote[],
   ledger: Ledger | undefined,
-  at: { off: number; att: string },
-): { packet: string; cids: string[] } {
+  at: { off: number; att: string; repo?: string },
+): { packet: string; cids: string[]; ids: string[] } {
   const { packet, delivered } = packetOf(notes, memoryNow());
+  const keys = delivered.map((note) => ledgerKey(note, at.repo));
   if (delivered.length && ledger)
     try {
-      recordDeliveries(ledger.dir, delivered, { ...at, ht: humanTurns(ledger.dir) }, ledger.file);
+      const moment = { off: at.off, att: at.att, ht: humanTurns(ledger.dir) };
+      recordPacket(ledger.dir, { keys, tokens: packetTokens(packet) }, moment, ledger.file);
     } catch {}
-  return { packet, cids: delivered.map((note) => ledgerKey(note).cid) };
+  return { packet, cids: keys.map((key) => key.cid), ids: delivered.map((note) => String(note.id ?? "")) };
 }
 
 /**
@@ -404,6 +417,8 @@ interface HookContext {
   trace: Trace;
   mem: ReturnType<typeof hookMemory>;
   store: string;
+  /** The repo key (D1): its first 8 characters prefix the ledger's cids. */
+  repo?: string;
   /** The window (D2) and its session, and the session it runs in. */
   win?: string;
   session?: string;
@@ -479,7 +494,8 @@ function stopFast(r: Record<string, unknown>, win: string | undefined): void {
 
 /**
  * Async `stop-sleep` (D34, A4 §5.7), and SessionEnd: the delta and the agent's last message are encoded, the light
- * sleep runs, `ctx.log` is compacted, and the idle sleeper is started for the rest. SessionEnd shares a 1.5 s budget
+ * sleep runs, `ctx.log` is compacted, the window's ledger folded into its snapshot (D25), day files of `hook.log.d`
+ * past their 90 days aggregated (X11), and the idle sleeper is started for the rest. SessionEnd shares a 1.5 s budget
  * (R0), so it does the same light work and leaves the full sleep to the idle sleeper too.
  */
 function sleepAfterTurn(ctx: HookContext): void {
@@ -488,6 +504,8 @@ function sleepAfterTurn(ctx: HookContext): void {
     () => encodePayloadText(ctx),
     () => lightSleep(ctx.mem, ctx.session),
     () => ctx.win && compactContext(ctx.win),
+    () => ctx.win && foldWindow(ctx.win),
+    () => retainEvents(memoryRoot(), memoryNow()),
     () => spawnIdleSleeper(ctx.store, ctx.session),
   );
 }
@@ -535,7 +553,8 @@ function toolBatch(ctx: HookContext): void {
 }
 
 /**
- * SubagentStop (A4 §5.7b): the subagent's last message, or the result a host sends as a tool result, encoded once.
+ * SubagentStop (A4 §5.7b): the subagent's last message, or the result a host sends as a tool result, encoded once,
+ * and the child window's ledger folded (D25).
  * Its own transcript is not encoded yet: what it holds reaches the parent as the Agent call and its result, which
  * the parent's delta encodes, and until P1.3's shadow set a child's rows come back to the parent as bullets it
  * already holds (`redundant_rate` +4.42 pp in P0.6's guard runs).
@@ -547,6 +566,7 @@ function subagentStop(ctx: HookContext): void {
     () => {
       if (!asTool) encodePayloadText(ctx);
     },
+    () => ctx.win && foldWindow(ctx.win),
   );
 }
 
@@ -582,8 +602,8 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   }
   if (mode === "off") return withNotice(null, notice);
   const briefed = briefing(mem, ctx.session, !compact);
-  const { packet, cids } = deliver(briefed, ledger, { off, att: "" });
-  Object.assign(trace, { cids, drops: { shape: briefed.length - cids.length } });
+  const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
+  Object.assign(trace, { cids, ids, drops: { shape: briefed.length - cids.length } });
   return withNotice(mode === "on" ? additional(ctx.event, packet) : null, notice);
 }
 
@@ -619,7 +639,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     turn = human ? turnMode(prompt, { previousAssistant: prev }) : "imperative",
     cue = [{ role: "user", content: prompt }];
   if (human) {
-    Object.assign(trace, { submit: "human", turn_mode: turn, prompt_id: att, prompt_hash: promptHash(prompt) });
+    Object.assign(trace, { submit: "human", turn_mode: turn, prompt_id: att, prompt_hash: promptHash(prompt), off });
+    if (recent.contextTokens !== undefined) trace.ctx_tokens = recent.contextTokens;
     if (win)
       try {
         trace.hturn = humanTurns(win);
@@ -636,22 +657,27 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   if (mode === "shadow" && ledger && trace.hturn !== undefined)
     try {
       const own = encode.filter((m) => m.src === "user").map((m) => m.content);
-      const preempted = wouldPreempt(ledger.dir, [...own, ...own.flatMap(sentencesOf)], trace.hturn);
+      const preempted = wouldPreempt(ledger.dir, [...own, ...own.flatMap(sentencesOf)], trace.hturn, ctx.repo);
       if (preempted.length) trace.would_preempt = preempted;
     } catch {}
   if (prompt && turn === "imperative" && answer !== "off") notes = mem.recall(cue, encode);
   else if (prompt) mem.observeCue(cue, undefined, encode);
   if (!notes.length) return null;
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
-  // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).
+  // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
+  // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
   const parts = { prompt, turn: recent.previousTyped, prev };
   const against = { prompt, parts, residual: recent.residual, invalid: readInvalidations(mem.dir) };
   const { notes: novel, drops } = selectNotes(notes, against, (fresh) =>
-    win ? notRefractory(win, fresh, off, ledger?.file) : fresh,
+    win
+      ? novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid: against.invalid })
+      : fresh,
   );
-  const { packet, cids } = deliver(shapePacket(novel), ledger, { off, att });
-  trace.cids = cids;
-  trace.drops = { ...drops, shape: novel.length - cids.length };
+  const tokens = win ? epochTokens(win, ledger?.file) : 0;
+  const allowed = withinBudget(novel, tokens);
+  const { packet, cids, ids } = deliver(shapePacket(allowed), ledger, { off, att, repo: ctx.repo });
+  Object.assign(trace, { cids, ids, tokens_epoch: tokens });
+  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: allowed.length - cids.length };
   return answer === "shadow" ? null : additional(event, packet);
 }
 
@@ -720,6 +746,7 @@ function respond(
     trace,
     mem,
     store,
+    repo: repo?.key,
     win,
     session: resolved.session,
     child: resolved.child,

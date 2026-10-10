@@ -21,19 +21,46 @@
  *   process has never seen (it restarted mid-conversation) is read again (`reread`) and records no forgets.
  * - **Delivery.** A new turn is answered as the hook answers a Submit (A4 §5.1): the user's forgets, the turn mode,
  *   retrieval, validity, the episode gate and the residual of the request's own messages (D26), then the window's
- *   refractory rule, read from the packets the request still carries (A4 §4's distances, in the bytes after the
- *   message carrying each), and the shape and wording (D28, D14).
+ *   refractory rule and `Updated:` items, read from the packets the request still carries (A4 §4's distances, in the
+ *   bytes after the message carrying each), A4 §4's budget over them, and the shape and wording (D28, D14).
+ * - **Flag (X7).** `deliver.submit` governs the wrap as it governs the hook's Submit: `off` encodes the turn and
+ *   answers nothing; `shadow` answers it but attaches no packet, and its refractory rule reads the packets attached and
+ *   those it would have attached; `on` attaches. The mode is read from the flag files at each new turn.
+ * - **Ledger (A4 §4).** Each conversation is a window, `windows/wrap-<key of its first message>/`: a new turn appends
+ *   its `turn` and `deliver` records to the ledger of its mode, and a wide event (`ev: "wrap"`, `memory-events.ts`) is
+ *   logged, so shadow measures and `would_preempt` see wrap traffic. The ledger is for those measures: the request
+ *   itself is the truth of what the window holds.
+ * - **Restarts.** A turn's tail is also kept in its window (`tails.jsonl`, an hour like the memo), so a restarted
+ *   wrap puts every earlier turn's packet back where it was: the cached prefix holds.
  */
 import { createHash } from "node:crypto";
+import { statSync } from "node:fs";
+import { basename, join } from "node:path";
+import { writeFileAtomic } from "../packages/cli/src/home";
 import type { MemoryRecord, ObserveOptions } from "./index";
 import { authoredTexts, splitPastes, userTyped, type TextSource } from "./memory-authority";
 import { memoryNow } from "./memory-clock";
-import { selectNotes } from "./memory-delivery";
+import { selectNotes, type DeliveryDrops } from "./memory-delivery";
+import { appendWideEvent, type DropStage } from "./memory-events";
+import { resolveFlags, type FlagMode } from "./memory-flags";
 import { packetOf, shapePacket } from "./memory-hook-packet";
-import { ledgerKey, REFRACTORY_BYTES, type LedgerKey } from "./memory-ledger";
+import {
+  humanTurns,
+  inWindow,
+  ledgerKey,
+  novelNotes,
+  packetTokens,
+  recordPacket,
+  withinBudget,
+  wouldPreempt,
+  type LedgerKey,
+  type LiveDelivery,
+} from "./memory-ledger";
+import { sentencesOf } from "./memory-residual";
 import { MEMORY_PACKET_MARKS } from "./memory-sota";
-import { nonHumanKind, turnMode } from "./memory-turn";
+import { nonHumanKind, promptHash, turnMode } from "./memory-turn";
 import { readInvalidations, recordInvalidations, withoutForgets, type Invalidation } from "./memory-validity";
+import { appendRecords, appendTurn, ledgerFor, SHADOW_LEDGER, windowDir, windowRecords } from "./memory-window";
 
 /** Fields a wrap request may carry place paths in: they name what is open, not what was said. */
 export const PLACE_FIELDS = [
@@ -63,6 +90,10 @@ const MAX_SEEN = 65_536;
 export interface TurnTail {
   texts: string[];
   given: LedgerKey[];
+  /** The packet's tokens: A4 §4's budget counts them while the request carries the turn. */
+  tokens: number;
+  /** The mode `deliver.submit` answered the turn in (X7): a `shadow` turn's packet is not in `texts`. */
+  mode: FlagMode;
 }
 
 /** The wrap's memory of one process: the tail of each turn, and the messages it has encoded. Both are bounded. */
@@ -105,6 +136,9 @@ function evict(map: Map<string, unknown>, max: number): void {
 /** What the wrap needs of a memory (`AgentMemory`). */
 export interface WrapMemory {
   readonly dir: string;
+  /** The memory root its conversations' windows live under, and the repo key that prefixes their cids. */
+  readonly windowsRoot: string;
+  readonly repoKey?: string;
   readonly turns: WrapTurns;
   recall(messages: unknown[], encode?: unknown[]): MemoryRecord[];
   observeCue(messages: unknown[], cue?: string, encode?: unknown[]): void;
@@ -340,21 +374,34 @@ function conversationBefore(reads: readonly Read[], at: number, prompt: string) 
   return { residual, previousTyped, prev };
 }
 
-/** A4 §4's refractory rule over the packets the request still carries: a note one of them gave is not given again. */
-function refractoryOf(reads: readonly Read[], tails: Map<number, TurnTail>, at: number) {
-  const given: { key: LedgerKey; after: number }[] = [];
+/**
+ * What the window still holds of the packets the request carries (A4 §4): each one's deliveries still within their
+ * distance, in the bytes after the message carrying it, and the tokens of them all (the budget). A live point reads
+ * the packets attached; a shadow point also those it would have attached.
+ */
+function heldBefore(reads: readonly Read[], tails: Map<number, TurnTail>, at: number, mode: FlagMode) {
+  const live: LiveDelivery[] = [];
+  let tokens = 0;
   for (const [h, tail] of tails) {
-    if (h >= at) continue;
+    if (h >= at || (tail.mode !== "on" && mode !== "shadow")) continue;
     let after = 0;
     for (let i = h + 1; i <= at; i++) after += reads[i]!.bytes;
-    for (const key of tail.given) given.push({ key, after });
+    tokens += tail.tokens;
+    for (const { cid, ver } of tail.given) if (inWindow(cid, 0, after)) live.push({ cid, ver });
   }
-  return (notes: MemoryRecord[]) =>
-    notes.filter((note) => {
-      const key = ledgerKey(note);
-      const distance = key.rule ? REFRACTORY_BYTES.rule : REFRACTORY_BYTES.other;
-      return !given.some((g) => g.key.cid === key.cid && g.key.ver === key.ver && g.after < distance);
-    });
+  return { live, tokens };
+}
+
+/** A new turn's answer: its tail, and what its wide event logs. */
+interface Answer {
+  tail: TurnTail;
+  prompt: string;
+  turnMode: string;
+  ids: string[];
+  drops: Partial<Record<DropStage, number>>;
+  tokensEpoch: number;
+  /** The user's own words, which `would_preempt` compares with recent shadow deliveries. */
+  said: string[];
 }
 
 /** A new turn's tail (A4 §5.1 as the hook runs it; see the header). */
@@ -365,7 +412,8 @@ function answerTurn(
   tails: Map<number, TurnTail>,
   opts: InjectOptions,
   newPrompt: boolean,
-): TurnTail {
+  mode: FlagMode,
+): Answer {
   const prompt = reads[at]!.typed!;
   const tools = toolsBefore(reads, at);
   const { residual, previousTyped, prev } = conversationBefore(reads, at, prompt);
@@ -373,22 +421,131 @@ function answerTurn(
   if (newPrompt && mem.writable()) mem.forget(recordInvalidations(mem.dir, mem.storableText(prompt)));
   const encode = newPrompt ? promptMessages(prompt, tools) : [];
   const cue = [{ role: "user", content: prompt, ...(opts.paths?.length ? { open_files: [...opts.paths] } : {}) }];
+  const mood = turnMode(prompt, { previousAssistant: prev });
   let notes: MemoryRecord[] = [];
-  if (turnMode(prompt, { previousAssistant: prev }) === "imperative") notes = mem.recall(cue, encode);
+  // X7: an `off` point answers nothing, but the turn is still encoded.
+  if (mood === "imperative" && mode !== "off") notes = mem.recall(cue, encode);
   else mem.observeCue(cue, undefined, encode);
-  const against = {
-    prompt,
-    parts: { prompt, turn: previousTyped, prev },
-    residual,
-    invalid: readInvalidations(mem.dir),
-  };
-  const selected = notes.length ? selectNotes(notes, against, refractoryOf(reads, tails, at)).notes : [];
-  const { packet, delivered } = packetOf(shapePacket(selected), memoryNow());
+  const invalid = readInvalidations(mem.dir);
+  const against = { prompt, parts: { prompt, turn: previousTyped, prev }, residual, invalid };
+  const { live, tokens } = heldBefore(reads, tails, at, mode);
+  const novelty = (fresh: MemoryRecord[]) => novelNotes(fresh, live, { repo: mem.repoKey, invalid });
+  const selected: { notes: MemoryRecord[]; drops?: DeliveryDrops } = notes.length
+    ? selectNotes(notes, against, novelty)
+    : { notes: [] };
+  const allowed = withinBudget(selected.notes, tokens);
+  const { packet, delivered } = packetOf(shapePacket(allowed), memoryNow());
   let extra: string | undefined;
   try {
     extra = opts.extra?.();
   } catch {}
-  return { texts: [packet, extra ?? ""].filter(Boolean), given: delivered.map(ledgerKey) };
+  const shown = mode === "on" ? packet : "";
+  const tail: TurnTail = {
+    texts: [shown, extra ?? ""].filter(Boolean),
+    given: delivered.map((note) => ledgerKey(note, mem.repoKey)),
+    tokens: packet ? packetTokens(packet) : 0,
+    mode,
+  };
+  const budget = selected.notes.length - allowed.length;
+  return {
+    tail,
+    prompt,
+    turnMode: mood,
+    ids: delivered.map((note) => String(note.id ?? "")),
+    drops: { ...selected.drops, budget, shape: allowed.length - delivered.length },
+    tokensEpoch: tokens,
+    said: encode.filter((message) => message.src === "user").map((message) => message.content),
+  };
+}
+
+/** A conversation's window (see the header): keyed by its first message, which every request repeats. */
+function conversationWindow(mem: WrapMemory, reads: readonly Read[]): string | undefined {
+  return reads.length ? windowDir(mem.windowsRoot, `wrap-${reads[0]!.key.slice(0, 16)}`) : undefined;
+}
+
+/**
+ * A new turn in its window's ledger and in a wide event (see the header), as the hook's Submit records it: the turn,
+ * `would_preempt` in shadow, then the packet's deliveries. Nothing is written while memory is read-only.
+ */
+function recordAnswer(
+  mem: WrapMemory,
+  win: string | undefined,
+  reads: readonly Read[],
+  at: number,
+  answer: Answer,
+  ms: number,
+): void {
+  if (!mem.writable()) return;
+  const { tail } = answer;
+  const att = reads[at]!.key;
+  const off = reads.slice(0, at + 1).reduce((sum, read) => sum + read.bytes, 0);
+  const file = ledgerFor(tail.mode);
+  let hturn: number | undefined;
+  let preempted: string[] = [];
+  if (win && file) {
+    appendTurn(win, { promptId: att, prompt: answer.prompt, off }, file);
+    hturn = humanTurns(win);
+    if (file === SHADOW_LEDGER)
+      preempted = wouldPreempt(win, [...answer.said, ...answer.said.flatMap(sentencesOf)], hturn, mem.repoKey);
+    if (tail.given.length) recordPacket(win, { keys: tail.given, tokens: tail.tokens }, { off, att, ht: hturn }, file);
+  }
+  appendWideEvent(mem.windowsRoot, {
+    t: memoryNow(),
+    ev: "wrap",
+    point: "deliver.submit",
+    mode: tail.mode,
+    ...(mem.repoKey ? { repo: mem.repoKey } : {}),
+    ...(win ? { win: basename(win) } : {}),
+    ...(hturn !== undefined ? { hturn } : {}),
+    prompt_id: att,
+    prompt_hash: promptHash(answer.prompt),
+    submit: "human",
+    turn_mode: answer.turnMode,
+    cids: tail.given.map((key) => key.cid),
+    ids: answer.ids,
+    drops: answer.drops,
+    ...(preempted.length ? { would_preempt: preempted } : {}),
+    off,
+    tokens_epoch: answer.tokensEpoch,
+    ms: Math.round(ms * 100) / 100,
+    aborted: false,
+  });
+}
+
+const TAILS = "tails.jsonl";
+/** Above this size `tails.jsonl` is rewritten with only the tails still within their hour. */
+const TAILS_COMPACT_BYTES = 256 * 1024;
+
+function isTail(value: unknown): value is TurnTail {
+  const tail = record(value);
+  return (
+    !!tail &&
+    Array.isArray(tail.texts) &&
+    tail.texts.every((text) => typeof text === "string") &&
+    Array.isArray(tail.given) &&
+    typeof tail.tokens === "number" &&
+    (tail.mode === "on" || tail.mode === "shadow" || tail.mode === "off")
+  );
+}
+
+/** The tails a window keeps that are still within their hour, newest per turn (see the header). */
+function storedTails(win: string | undefined, now: number): Map<string, TurnTail> {
+  const out = new Map<string, TurnTail>();
+  if (!win) return out;
+  for (const entry of windowRecords(win, TAILS)) {
+    const { key, t, tail } = entry;
+    if (typeof key === "string" && typeof t === "number" && now - t <= TURN_TTL_MS && isTail(tail)) out.set(key, tail);
+  }
+  return out;
+}
+
+/** Keeps a turn's tail in its window, compacting the file once it has outgrown what an hour of turns needs. */
+function storeTail(win: string | undefined, key: string, tail: TurnTail, now: number): void {
+  if (!win) return;
+  appendRecords(win, TAILS, [{ k: "tail", key, t: now, tail }]);
+  if ((statSync(join(win, TAILS), { throwIfNoEntry: false })?.size ?? 0) <= TAILS_COMPACT_BYTES) return;
+  const kept = [...storedTails(win, now)].map(([k, t]) => JSON.stringify({ k: "tail", key: k, t: now, tail: t }));
+  writeFileAtomic(join(win, TAILS), kept.map((line) => `${line}\n`).join(""), 0o600);
 }
 
 /** The memory packets a message list carries at its turns' tails: what `inject` attached, or a client echoed. */
@@ -432,17 +589,29 @@ export function placeTurnTails(mem: WrapMemory, messages: readonly unknown[], op
   // an earlier one did, and a retry says nothing a store does not already hold.
   const opening = last === reads.length - 1;
   const fresh = freshness(mem, reads, opening ? last : undefined);
+  const win = conversationWindow(mem, reads);
+  let stored: Map<string, TurnTail> | undefined;
   const tails = new Map<number, TurnTail>();
   for (const h of humans) {
-    const tail = h === last && opening ? undefined : mem.turns.tail(reads[h]!.key, now);
+    if (h === last && opening) continue;
+    const key = reads[h]!.key;
+    let tail = mem.turns.tail(key, now);
+    // A restarted wrap finds the tails it attached in the conversation's window (see the header).
+    if (!tail && (tail = (stored ??= storedTails(win, now)).get(key))) mem.turns.setTail(key, tail, now);
     if (tail) tails.set(h, tail);
   }
   let encoded = encodeNew(mem, reads, 0, last, fresh);
   if (last < reads.length && !tails.has(last)) {
-    const tail = answerTurn(mem, reads, last, tails, opts, opening);
+    const started = performance.now();
+    const mode = resolveFlags(process.cwd())["deliver.submit"].mode;
+    const answer = answerTurn(mem, reads, last, tails, opts, opening, mode);
     if (opening && mem.writable()) mem.turns.markEncoded(reads[last]!.key);
-    mem.turns.setTail(reads[last]!.key, tail, now);
-    tails.set(last, tail);
+    mem.turns.setTail(reads[last]!.key, answer.tail, now);
+    tails.set(last, answer.tail);
+    if (mem.writable()) {
+      storeTail(win, reads[last]!.key, answer.tail, now);
+      recordAnswer(mem, win, reads, last, answer, performance.now() - started);
+    }
   }
   encoded += encodeNew(mem, reads, last, reads.length, fresh);
   if (encoded || opening) mem.noteActivity();

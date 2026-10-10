@@ -6,6 +6,10 @@
  *              "pending"?}…],
  *    "ledger": [{"window", "k", …the record}…]}
  *
+ * A window's ledger is listed as its readers fold it (D25, since P1.1): a `{"k": "snapshot", "epoch", "turns",
+ * "tokens_epoch", "entries"}` summary of its `delivery.json`, when a Stop has written one, then the records no
+ * snapshot holds yet.
+ *
  * A row's `store` is the directory it lives in, relative to the memory root: `repos/<repo>` for a repo's store (D1),
  * and a session directory or `""` (the root) for rows written in the layout before P0.5. Rows still waiting in a
  * `pending.jsonl` for their `seq` are listed with `pending: true`. Read-only: nothing is written.
@@ -14,7 +18,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { storeRows, type MemoryRecord } from "../../../src/index";
 import { pendingRows, type DiskRow } from "../../../src/memory-ids";
-import { windowRecords } from "../../../src/memory-window";
+import { ledgerListing } from "../../../src/memory-ledger";
 import { memoryRoot } from "./memory-hook";
 
 export interface MemoryDump {
@@ -74,7 +78,7 @@ export function memoryDump(root: string): MemoryDump {
   ];
   const windows = join(root, "windows");
   const ledger = subdirs(windows).flatMap((window) =>
-    windowRecords(join(windows, window), "delivery.log").map((record) => ({ window, ...record })),
+    ledgerListing(join(windows, window)).map((record) => ({ window, ...record })),
   );
   return { rows, ledger };
 }
