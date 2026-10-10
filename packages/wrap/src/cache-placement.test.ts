@@ -9,8 +9,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as edenMem from "../../../src/index";
 import { MEMORY_PACKET_MARKS } from "../../../src/memory-sota";
-import { measure, packetsOf, requests, SEED, type Body } from "../../../benchmarks/wrap-cache/prefix";
+import {
+  measure,
+  packetsOf,
+  requests,
+  SEED,
+  viaAnthropicProxy,
+  type Body,
+} from "../../../benchmarks/wrap-cache/prefix";
+import { handleAnthropicMessages } from "./anthropic";
 import { withKnowFacts, withKnowFactsAnthropic } from "./know-inject";
+import { createState } from "./wrap-tools";
 
 const ENV = ["EDEN_HOME", "EDEN_MEMORY_DIR", "EDEN_MEMORY", "EDEN_SLEEP_EVERY", "EDEN_SLEEP_IDLE", "EDEN_KNOW"];
 let saved: Record<string, string | undefined> = {};
@@ -54,15 +63,22 @@ type AnthropicBody = Parameters<typeof withKnowFactsAnthropic>[0];
 const anthropic = (body: Body) => viaWrap(() => withKnowFactsAnthropic(body as AnthropicBody) as Body);
 const openai = (body: Body) => viaWrap(() => withKnowFacts(body) as Body);
 const library = (body: Body) => ({ ...body, messages: mem.inject(body.messages) as Body["messages"] });
+/** The Anthropic proxy end to end: its cache breakpoints, then the body it sends upstream. */
+const proxy = (body: Body) => {
+  const send = viaAnthropicProxy(handleAnthropicMessages, createState({ programs: [] }));
+  const proc = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
+  return send(body).finally(() => proc.mockRestore());
+};
 
 describe("P0.7 cache-safe placement (D29)", () => {
   for (const [name, send, style] of [
     ["the Anthropic wrap", anthropic, "anthropic"],
     ["the OpenAI wrap", openai, "openai"],
     ["AgentMemory.inject", library, "openai"],
+    ["the Anthropic proxy, with its cache breakpoints", proxy, "anthropic"],
   ] as const)
-    test(`${name}: every request keeps the previous request's prefix, and every turn gets its fact`, () => {
-      const result = measure(send, style, MEMORY_PACKET_MARKS);
+    test(`${name}: every request keeps the previous request's prefix, and every turn gets its fact`, async () => {
+      const result = await measure(send, style, MEMORY_PACKET_MARKS);
       expect(result.pairs).toBe(11);
       expect(result.break_at).toEqual([]);
       expect(result.prefix_breaks).toBe(0);
