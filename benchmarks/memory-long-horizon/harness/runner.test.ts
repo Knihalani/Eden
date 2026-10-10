@@ -3,7 +3,7 @@
  * matcher rules, timeouts, environment, and stdout read by the documented rules.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   postToolUsePayload,
@@ -317,6 +317,28 @@ describe("processes (target 3)", () => {
     const [end] = world.log.filter((record) => record.event === "SessionEnd").flatMap((record) => record.invocations);
     expect(stop!.async).toBe(true);
     expect(end!.startedAt).toBeGreaterThanOrEqual(stop!.endedAt);
+  });
+
+  test("after 5 simulated minutes without an event, the world runs idleSleep once per folder used, then the event", async () => {
+    const runDir = tempDir("eden-harness");
+    const out = join(runDir, "probe");
+    mkdirSync(out);
+    const plugin = loadPlugin(pluginWith({ UserPromptSubmit: [{ hooks: [probeHook()] }] }));
+    const marker = join(out, "idle.log");
+    const idleSleep = ["sh", "-c", `echo "$1 $2 $(pwd)" >> '${marker}'`, "idle"];
+    const world = new SimWorld({ seed: 7, runDir, plugin, env: { PROBE_OUT: out }, idleSleep });
+    const session = world.newSession();
+    await session.start();
+    await session.prompt("first");
+    world.advance(60_000);
+    await session.prompt("a minute later");
+    expect(world.idleSleeps).toHaveLength(0);
+    world.advance(300_000);
+    await session.prompt("after five minutes");
+    expect(world.idleSleeps).toHaveLength(1);
+    expect(world.idleSleeps[0]).toMatchObject({ cwd: world.projectDir, exitCode: 0 });
+    const runs = readFileSync(marker, "utf8").trim().split("\n");
+    expect(runs).toEqual([`--session ${world.log.at(-1)!.sessionId} ${realpathSync(world.projectDir)}`]);
   });
 
   test("an event with no matching handler runs nothing", async () => {
