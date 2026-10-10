@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   } else if (cmd === "hook") {
     const hookdP = import("./hookd").then((m) => m.startHookdBackground());
     const { runHook } = await import("./hook");
-    await runHook();
+    await runHook(rest[0]);
     await hookdP;
   } else if (cmd === "mcp") {
     const { runMcp } = await import("./mcp");

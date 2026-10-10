@@ -12,6 +12,7 @@ import {
   writeFileAtomic,
 } from "./home";
 import { ensureHookdKey, hookdKeyPath } from "./hookd-key";
+import type { HookArg } from "./hook";
 
 /** Live `HOME` so a changed env (tests, redirected home) is not stuck on the cached `os.homedir()`. */
 function userHome(): string {
@@ -28,10 +29,16 @@ function shq(v: string): string {
   return `'${v.replaceAll("'", `'\\''`)}'`;
 }
 
+/**
+ * A hook command's fail-open end (EXECUTION §5): when every call before it fails, the hook still exits 0 and prints
+ * nothing. A failed `curl --fail` prints nothing either.
+ */
+const FAIL_OPEN = "|| true";
+
 export function preHookCommand(hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
   const hookd = `http://127.0.0.1:${hookdPort}/hook`;
-  const curl = `curl -sS --max-time 1 ${hookdKeyArg()} -H 'content-type: application/json'`;
-  return `${curl} --data-binary @- ${hookd} || echo '{}'`;
+  const curl = `curl -sS --max-time 1 --fail ${hookdKeyArg()} -H 'content-type: application/json'`;
+  return `${curl} --data-binary @- ${hookd} ${FAIL_OPEN}`;
 }
 
 /** curl reads hookd's key header from its 0600 file, so the key is never in argv. No file: curl fails. */
@@ -39,45 +46,56 @@ function hookdKeyArg(): string {
   return `-H @${shq(hookdKeyPath())}`;
 }
 
+/**
+ * The memory hook command: hookd, else `eden hook` in process. `stage` names the handler, as the plugin's
+ * `hooks.json` does (`HookArg`): it reaches hookd as `?stage=` and `eden hook` as its argument.
+ */
 export function hookCommand(
   cliPath: string,
   hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794),
-  opts: { failOpen?: boolean } = {},
+  opts: { failOpen?: boolean; stage?: HookArg } = {},
 ): string {
-  const hookd = `http://127.0.0.1:${hookdPort}/hook`;
-  const bunHook = `bun ${shq(cliPath)} hook`;
+  const hookd = `http://127.0.0.1:${hookdPort}/hook${opts.stage ? `?stage=${opts.stage}` : ""}`;
+  const bunHook = `bun ${shq(cliPath)} hook${opts.stage ? ` ${opts.stage}` : ""}`;
   const ms = Number(process.env.EDEN_HOOKD_TIMEOUT_MS || 8000);
   const sec = Math.min(60, Math.max(2, Math.ceil((Number.isFinite(ms) ? ms : 8000) / 1000)));
   // --fail: when hookd refuses the key (it changes on every hookd start), the hook falls through
   // to the in-process `bun cli.ts hook` rather than printing hookd's `{}`.
   const curl = `curl -sS --max-time ${sec} --fail ${hookdKeyArg()} -H 'content-type: application/json'`;
   const core = `${edenHomeExport()}; ${curl} --data-binary @- ${hookd} || ${bunHook}`;
-  return opts.failOpen === false ? core : `${core} || echo '{}'`;
+  return opts.failOpen === false ? core : `${core} ${FAIL_OPEN}`;
 }
 
 function edenHomeExport(): string {
   return `export EDEN_HOME=${shq(edenHome())}`;
 }
 
+/** A hook command for each handler's stage (`hookCommand`), or one command for every handler. */
+export type HookCommandFor = string | ((stage?: HookArg) => string);
+
 /**
- * Claude hooks `eden setup` writes.
- *
- * Memory events (fail-open; EDEN_MEMORY=0|readonly|on): UserPromptSubmit,
- * SessionStart, PreCompact, Stop, SessionEnd, PostToolUse, SubagentStop.
- * Compile-only (not memory): PreToolUse, PostToolBatch.
+ * Claude hooks `eden setup` writes: memory runs as the plugin runs it (`plugins/eden-memory/hooks/hooks.json`).
+ * - Memory events (fail-open; EDEN_MEMORY=0|readonly|on): UserPromptSubmit, SessionStart, PreCompact, Stop,
+ *   SessionEnd, PostToolBatch, SubagentStop. PostToolBatch records each batch (A4 §5.5), so PostToolUse runs only
+ *   Eden's compiled-tool work (`batched`). Stop is a sync `stop-fast` and an async `stop-sleep` (D34), and
+ *   SubagentStop is async, so Claude does not wait for the light sleep.
+ * - Compile-only (not memory): PreToolUse.
  * Prune by deleting the store or EDEN_MEMORY=0 — operator-driven, not an HTTP route.
  */
-export function installedHooks(hookCmd: string, preCmd: string = preHookCommand()) {
+export function installedHooks(hookCmd: HookCommandFor, preCmd: string = preHookCommand()) {
+  const command = (stage?: HookArg) => (typeof hookCmd === "string" ? hookCmd : hookCmd(stage));
+  const handler = (stage?: HookArg) => ({ type: "command" as const, command: command(stage) });
+  const background = (stage?: HookArg) => ({ ...handler(stage), async: true as const });
   return {
     PreToolUse: [{ hooks: [{ type: "command" as const, command: preCmd }] }],
-    PostToolUse: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    PostToolBatch: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    UserPromptSubmit: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    PreCompact: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    Stop: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    SessionStart: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    SessionEnd: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
-    SubagentStop: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
+    PostToolUse: [{ hooks: [handler("batched")] }],
+    PostToolBatch: [{ hooks: [handler()] }],
+    UserPromptSubmit: [{ hooks: [handler()] }],
+    PreCompact: [{ hooks: [handler()] }],
+    Stop: [{ hooks: [handler("stop-fast"), background("stop-sleep")] }],
+    SessionStart: [{ hooks: [handler()] }],
+    SessionEnd: [{ hooks: [handler()] }],
+    SubagentStop: [{ hooks: [background()] }],
   };
 }
 
@@ -149,7 +167,7 @@ function hookHandler(command: string, timeout: number): { type: "command"; comma
 /**
  * Current Codex schema (`~/.codex/hooks.json`): SessionStart / PostToolUse / Stop
  * with `type = "command"`. The old `[hooks.eden] post_tool` table is dead — Codex
- * never runs it. Fail-open: hookCmd already ends with `|| echo '{}'`.
+ * never runs it. Fail-open: hookCmd already ends with `|| true`. One Stop hook, so it runs both of Stop's stages.
  * Trust is still operator `/hooks` (COMPETITORS: Codex hooks can fail silently).
  */
 export function codexHooksJson(
@@ -408,6 +426,7 @@ export async function setup(args: string[]): Promise<void> {
 
   const cliPath = installedCliPath();
   const hookCmd = hookCommand(cliPath);
+  const stagedHookCmd = (stage?: HookArg) => hookCommand(cliPath, undefined, { stage });
   const preCmd = preHookCommand();
   // The hooks send hookd's key from its file. Made here, it also lets them reach a hookd started
   // before this version, which would never create it; without it they take the slower bun path.
@@ -421,7 +440,7 @@ export async function setup(args: string[]): Promise<void> {
 
   const settingsPath = join(userClaude, "settings.json");
   const settings = readSettings(settingsPath);
-  settings.hooks = mergeHooks(settings.hooks, installedHooks(hookCmd, preCmd));
+  settings.hooks = mergeHooks(settings.hooks, installedHooks(stagedHookCmd, preCmd));
   writeFileAtomic(settingsPath, JSON.stringify(settings, null, 2));
 
   const allAgents = args.includes("--all-agents");

@@ -115,28 +115,15 @@ describe("P0.7: the wrap answers a turn as the hook answers a Submit (A4 §5.1)"
 });
 
 describe("P0.7: the wrap reads a request's messages by source (D12)", () => {
-  test("a tool result is a tool episode, never the user's fact", () => {
+  test("a tool result is not stored as the user's: the tool-trace observer records tool output", () => {
     mem.inject([
       user("Check the config."),
       assistant([{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "a.json" } }]),
       user([{ type: "tool_result", tool_use_id: "t1", content: "The database is MongoDB." }]),
-    ]);
-    const rows = rowsWith(/MongoDB/);
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) {
-      expect(row.tags ?? []).toContain("src:tool");
-      expect(row.kind).toBe("episode");
-    }
-  });
-
-  test("an OpenAI tool message is a tool episode", () => {
-    mem.inject([
-      user("Check the config."),
-      { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "cat" } }] },
       { role: "tool", tool_call_id: "c1", content: "The queue is RabbitMQ." },
     ]);
-    for (const row of rowsWith(/RabbitMQ/)) expect(row.tags ?? []).toContain("src:tool");
-    expect(rowsWith(/RabbitMQ/).length).toBeGreaterThan(0);
+    expect(rowsWith(/MongoDB|RabbitMQ/)).toEqual([]);
+    expect(ask("Which database and queue do we use?")).not.toMatch(/MongoDB|RabbitMQ/);
   });
 
   test("a body's system prompt is the host's text, not memory", () => {

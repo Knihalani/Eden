@@ -21,7 +21,7 @@ import {
 import * as experienceStore from "./experience-store";
 import { GistStore } from "./gist-store";
 import { HowToStore } from "./howto-store";
-import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep } from "./index";
+import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, injectedPackets } from "./index";
 import * as edenMem from "./index";
 import * as sleepMod from "./sleep";
 
@@ -168,12 +168,7 @@ function gistHay(root: string): string {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 /**

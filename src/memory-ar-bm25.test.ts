@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CHUNK_TARGET_TOKENS, ChunkStore, chunkText, estimateTokens } from "./chunk-store";
 import { bm25Rank, retrieveNarrativeChunks } from "./chunk-retrieve";
-import { encodeLane, MEMORY_MARK, openMemory } from "./index";
+import { encodeLane, MEMORY_MARK, openMemory, injectedPackets } from "./index";
 
 const NEEDLE = "The special magic number of zebra-quark-17 is 48291.";
 const GOLD = "48291";
@@ -95,12 +95,7 @@ function haystack(buryAt: number): string {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function goldIn(texts: string[]): boolean {

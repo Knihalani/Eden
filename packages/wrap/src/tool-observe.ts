@@ -4,6 +4,7 @@ import { redact, redactString } from "@eden/ir";
 import { omitExperienceTree, putExperienceFromTool } from "../../../src/experience-store";
 import { attachPlaceCues, cueFor, MEMORY_MARK, placePathsFrom } from "../../../src/index";
 import { memoryConsent } from "../../../src/memory-consent";
+import { PLACE_FIELDS } from "../../../src/memory-wrap";
 import {
   exitFromResult,
   filesFromTool,
@@ -468,18 +469,6 @@ function cueFromInjected(body: Record<string, unknown>): string {
   }
 }
 
-const UPSTREAM_PLACE_KEYS = [
-  "open_files",
-  "openFiles",
-  "files",
-  "file_paths",
-  "filePaths",
-  "file_path",
-  "filePath",
-  "recently_viewed_files",
-  "recentlyViewedFiles",
-] as const;
-
 function sanitizePlaceField(v: unknown): unknown {
   if (typeof v === "string") return placePathsFrom(v).length ? v : undefined;
   if (Array.isArray(v)) {
@@ -512,7 +501,7 @@ function sanitizeMessageList(list: unknown): unknown {
     const o = m as Record<string, unknown>;
     let msgDirty = false;
     const next: Record<string, unknown> = { ...o };
-    for (const k of UPSTREAM_PLACE_KEYS) {
+    for (const k of PLACE_FIELDS) {
       if (!(k in o)) continue;
       const sanitized = sanitizePlaceField(o[k]);
       if (sanitized === undefined) {
@@ -534,7 +523,7 @@ function sanitizeMessageList(list: unknown): unknown {
 export function stripUpstreamPlaceFields(body: Record<string, unknown>): Record<string, unknown> {
   try {
     let dirty = false;
-    for (const k of UPSTREAM_PLACE_KEYS) {
+    for (const k of PLACE_FIELDS) {
       if (k in body) {
         dirty = true;
         break;
@@ -545,7 +534,7 @@ export function stripUpstreamPlaceFields(body: Record<string, unknown>): Record<
     if (messages !== body.messages || contents !== body.contents) dirty = true;
     if (!dirty) return body;
     const out = { ...body };
-    for (const k of UPSTREAM_PLACE_KEYS) delete out[k];
+    for (const k of PLACE_FIELDS) delete out[k];
     if (messages !== body.messages) out.messages = messages;
     if (contents !== body.contents) out.contents = contents;
     return out;

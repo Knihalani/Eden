@@ -145,7 +145,8 @@ describe("hookd requires its key (#85)", () => {
     expect((await handleHookd(post({ [HOOKD_KEY_HEADER]: "0".repeat(64) }))).status).toBe(401);
     const ok = await handleHookd(post({ [HOOKD_KEY_HEADER]: key }));
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ ok: true });
+    // A hook with nothing to say prints nothing (EXECUTION §5), so hookd answers with an empty body.
+    expect(await ok.text()).toBe("");
   });
 
   test("with no key file hookd serves no hook, and /health still answers", async () => {
@@ -172,11 +173,12 @@ describe("hookd requires its key (#85)", () => {
         expect(cmd).toContain(`-H @'${hookdKeyPath()}'`);
         expect(cmd).not.toContain(key);
         const out = await run(["sh", "-c", cmd], clientEnv(home, port), PRE_TOOL);
-        expect(out).toEqual({ stdout: JSON.stringify({ ok: true }), code: 0 });
+        expect(out).toEqual({ stdout: "", code: 0 });
       }
       expect(statuses).toEqual([200, 200]);
       rmSync(hookdKeyPath());
-      expect(await run(["sh", "-c", pre], clientEnv(home, port), PRE_TOOL)).toEqual({ stdout: "{}", code: 0 });
+      // Refused (401): `curl --fail` prints nothing, and the command still exits 0.
+      expect(await run(["sh", "-c", pre], clientEnv(home, port), PRE_TOOL)).toEqual({ stdout: "", code: 0 });
       expect(statuses).toEqual([200, 200]);
     });
   });

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
-import { MEMORY_MARK, memoryInjectSwallows, openMemory, type AgentMemory } from "./index";
+import { MEMORY_MARK, memoryInjectSwallows, openMemory, type AgentMemory, injectedPackets } from "./index";
 import { storeFor } from "./memory-repo";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/58
@@ -61,12 +61,7 @@ const QUIET = {
 } as const;
 
 function packet(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {
@@ -268,7 +263,8 @@ describe("M44 project identity", () => {
       }
       expect(stdout).toContain(MEMORY_MARK);
       expect(stdout).toMatch(/sqlite/i);
-      expect(stdout).toMatch(FACT_OR_GIST);
+      // The wrap words its packet as the hook does since P0.7 (D14): a plain bullet, no kind tag.
+      expect(injectedPackets(JSON.parse(stdout) as unknown[]).join("\n")).toMatch(HOOK_FACT_OR_GIST);
       // D1: the wrap keeps the store of the repo it runs in.
       const store = storeFor(dir, cwd);
       expect(existsSync(join(store, "semantic.jsonl")) || existsSync(join(store, "memories.jsonl"))).toBe(true);

@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, openMemory } from "./index";
+import { MEMORY_MARK, openMemory, injectedPackets } from "./index";
 import { memoryConsent } from "./memory-consent";
 
 const SESSION = "sess-m132-abc";
@@ -70,12 +70,7 @@ function jsonlContents(root: string): string {
 }
 
 function packet(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 describe("M13 AgentMemory off / readonly / on", () => {
@@ -114,7 +109,7 @@ describe("M13 AgentMemory off / readonly / on", () => {
     }
   });
 
-  test("readonly: existing sqlite [fact] injects; Auth is Clerk is not persisted", () => {
+  test("readonly: existing sqlite fact injects; Auth is Clerk is not persisted", () => {
     const dir = tmpDir("eden-m13-ro-");
     try {
       withEnv({ EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined }, () => {
@@ -130,7 +125,7 @@ describe("M13 AgentMemory off / readonly / on", () => {
           const pkt = packet(out as unknown[]);
           expect(pkt).toContain(MEMORY_MARK);
           expect(pkt).toMatch(/sqlite/i);
-          expect(pkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(pkt).toMatch(/^- Use sqlite\.? \(just now\)$/m);
 
           mem.observe([{ role: "user", content: CLERK }]);
           mem.remember(CLERK);
@@ -157,7 +152,7 @@ describe("M13 AgentMemory off / readonly / on", () => {
           const pkt = packet(out as unknown[]);
           expect(pkt).toContain(MEMORY_MARK);
           expect(pkt).toMatch(/sqlite/i);
-          expect(pkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(pkt).toMatch(/^- Use sqlite\.? \(just now\)$/m);
           mem.close();
         });
       }

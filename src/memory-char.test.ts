@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, openMemory, type AgentMemory } from "./index";
+import { MEMORY_MARK, openMemory, type AgentMemory, injectedPackets } from "./index";
 import { pathCues } from "./memory-sota";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
@@ -35,24 +35,13 @@ function hasText(mem: AgentMemory, needle: string): boolean {
   return storedTexts(mem).some((t) => t.toLowerCase().includes(n));
 }
 
-function memorySystemText(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+function memoryPacketText(messages: unknown[]): string {
+  return injectedPackets(messages).join("\n");
 }
 
-function anthropicMemoryText(body: { system?: unknown }): string {
-  const sys = body.system;
-  const parts =
-    typeof sys === "string"
-      ? [sys]
-      : Array.isArray(sys)
-        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-        : [];
-  return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
+/** The memory packets a wrapped body carries: since P0.7 at its turns' tails (D29), never in `system`. */
+function anthropicMemoryText(body: { messages?: unknown[] }): string {
+  return injectedPackets(body.messages ?? []).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {
@@ -157,7 +146,7 @@ describe("M1.3 (4) Anthropic retrieve then observe", () => {
   test("Anthropic and OpenAI retrieve before observe (no this-turn echo)", () => {
     withMem((mem) => {
       const injected = mem.inject([{ role: "user", content: fact }]);
-      expect(memorySystemText(injected)).not.toContain("Clerk");
+      expect(memoryPacketText(injected)).not.toContain("Clerk");
       expect(hasText(mem, "Clerk")).toBe(true);
     });
 
@@ -167,8 +156,8 @@ describe("M1.3 (4) Anthropic retrieve then observe", () => {
 });
 
 describe("M1.3 injectBody system observe", () => {
-  test("today: injectBody still observes body.system as a user turn (after inject; fail-open catch wraps it)", () => {
-    expect(INDEX_SRC).toMatch(/injectBody[\s\S]*observe\(typeof sys === "string" \? \[\{ role: "user"/);
+  test("since P0.7 injectBody never observes body.system: it is the host's text (D12); a throw still fails open", () => {
+    expect(INDEX_SRC).not.toMatch(/observe\(typeof sys === "string" \? \[\{ role: "user"/);
     expect(INDEX_SRC).toMatch(/injectBody[\s\S]*catch \{\s*memoryInjectSwallows\.n\+\+/);
   });
 });

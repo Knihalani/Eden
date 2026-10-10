@@ -24,6 +24,7 @@ import {
   openMemory,
   sleep,
   type AgentMemory as AgentMemoryType,
+  injectedPackets,
 } from "./index";
 import * as edenMem from "./index";
 import { storeFor } from "./memory-repo";
@@ -104,12 +105,7 @@ async function withMem<T>(
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function anthropicText(body: { system?: unknown; messages?: unknown[] }): string {

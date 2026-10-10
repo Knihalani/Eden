@@ -8,7 +8,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, openMemory, type AgentMemory } from "./index";
+import { MEMORY_MARK, openMemory, type AgentMemory, injectedPackets } from "./index";
 import { routeMemory } from "./memory-router";
 import * as memoryRouter from "./memory-router";
 
@@ -43,12 +43,7 @@ function withMem(fn: (mem: AgentMemory, dir: string) => void): void {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 /** ICL shots and an EventQA-class miller/zebra paragraph, plus a chat fact. */

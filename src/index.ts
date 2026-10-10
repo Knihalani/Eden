@@ -25,7 +25,6 @@ import {
   attachPlaceCues,
   hookLane,
   isNoopCue,
-  packNotes,
   parseRuleTime,
   placePathsFrom,
   stripMemoryPacket,
@@ -34,8 +33,10 @@ import {
   MEMORY_PACKET_MARK,
   MEMORY_PACKET_MARKS,
   PACKET_BYTE_CAP,
-  PACKET_BULLET_MAX,
 } from "./memory-sota";
+import { placeTurnTails, WrapTurns, type InjectOptions } from "./memory-wrap";
+
+export { injectedPackets, type InjectOptions } from "./memory-wrap";
 
 export {
   attachPlaceCues,
@@ -852,6 +853,8 @@ export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
   readonly child: boolean;
+  /** The wrap's turns and the messages it has encoded (`memory-wrap.ts`). */
+  readonly turns = new WrapTurns();
   private scrubSession?: string;
   private scrubCwd?: string;
   /** The subdirectory the rows live in: the session's, or none in a per-repo store. */
@@ -1224,14 +1227,7 @@ export class AgentMemory {
     } finally {
       this.batch--;
       this.flush(false);
-      if (!opts.deferSleep) {
-        try {
-          noteSleepActivity(this);
-        } catch {}
-        try {
-          scheduleIncrementalSleep(this, { session: this.session });
-        } catch {}
-      }
+      if (!opts.deferSleep) this.noteActivity();
     }
   }
 
@@ -1454,8 +1450,8 @@ export class AgentMemory {
 
   /**
    * The notes a message list's cue retrieves, ranked and labelled, before any packing; then the list is observed
-   * (`observeCue`). Nothing is retrieved for a no-op cue, or when the list already carries a packet. `inject` packs
-   * these into its system message; the memory hook shapes and words them itself (`memory-hook-packet.ts`). Fails
+   * (`observeCue`). Nothing is retrieved for a no-op cue, or when the list already carries a packet. The memory hook
+   * and `inject` (`memory-wrap.ts`) select, shape and word them (`memory-delivery.ts`, `memory-hook-packet.ts`). Fails
    * open: a throw is counted in `memoryInjectSwallows` and recalls nothing. `encode` replaces what is encoded when
    * the caller knows more of its sources than the cue shows (the hook splits a prompt's pasted spans off, D12).
    */
@@ -1508,58 +1504,55 @@ export class AgentMemory {
     } catch {}
   }
 
-  inject(messages: unknown[]): unknown[] {
+  /**
+   * The messages with each turn's packet at the tail of its human message (D29, `memory-wrap.ts`): what the wrap
+   * sends upstream. Encodes what the list adds. Fails open: a throw is counted in `memoryInjectSwallows` and the list
+   * is returned as it came.
+   */
+  inject(messages: unknown[], opts?: InjectOptions): unknown[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
-      const packed = packNotes(this.recall(list), PACKET_BYTE_CAP, Math.min(PACKET_BULLET_MAX, memoryRetrieveCap()));
-      if (!packed.length) return list;
-      const note = { role: "system", content: MEMORY_MARK + packed.map((m) => `\n- ${m.text}`).join("") },
-        next = list.slice(),
-        i = next.findIndex((m) => (m as { role?: string })?.role !== "system");
-      return (next.splice(i < 0 ? next.length : i, 0, note), next);
+      if (this.consent() === "off") return list;
+      return placeTurnTails(this, list, opts);
     } catch {
       memoryInjectSwallows.n++;
       return list;
     }
   }
 
+  /**
+   * `inject` on a request body's `messages` (OpenAI) or `contents` (Gemini), with the paths the body names as place
+   * cues. Its system prompt is the host's text, not memory (D12).
+   */
   injectBody(body: Record<string, unknown>): Record<string, unknown> {
+    const key = Array.isArray(body.contents) && !Array.isArray(body.messages) ? "contents" : "messages",
+      list = Array.isArray(body[key]) ? (body[key] as unknown[]) : [];
     try {
-      if (this.consent() === "off") return body;
-    } catch {
-      return body;
-    }
-    const key = Array.isArray(body.messages) ? "messages" : Array.isArray(body.contents) ? "contents" : "messages",
-      m = Array.isArray(body[key]) ? (body[key] as unknown[]) : [],
-      sys = body.systemInstruction ?? body.system_instruction ?? body.system ?? body.system_prompt ?? body.systemPrompt;
-    try {
-      const paths = placePathsFrom(body);
-      let msgs = m;
-      if (paths.length) {
-        msgs = m.slice();
-        const idx = msgs.findLastIndex((o) => {
-          if (!o || typeof o !== "object") return false;
-          const role = String((o as { role?: unknown }).role ?? "").toLowerCase();
-          return role === "user" || role === "human";
-        });
-        if (idx >= 0) {
-          const last = { ...(msgs[idx] as Record<string, unknown>) };
-          last.open_files = [...placePathsFrom(last), ...paths];
-          msgs[idx] = last;
-        }
-      }
-      const next = this.inject(msgs);
-      if (sys)
-        try {
-          this.observe(typeof sys === "string" ? [{ role: "user", content: sys }] : Array.isArray(sys) ? sys : [sys], {
-            keepLiveIdentity: true,
-          });
-        } catch {}
-      return next === m ? body : { ...body, [key]: next };
+      const next = this.inject(list, { paths: placePathsFrom(body) });
+      return next === list ? body : { ...body, [key]: next };
     } catch {
       memoryInjectSwallows.n++;
       return body;
     }
+  }
+
+  /** Whether memory may be written: `EDEN_MEMORY` is on, not read-only or off. */
+  writable(): boolean {
+    try {
+      return this.consent() === "on";
+    } catch {
+      return false;
+    }
+  }
+
+  /** Notes a turn's activity on the sleep clock and schedules the incremental sleep, as `observe` does by default. */
+  noteActivity(): void {
+    try {
+      noteSleepActivity(this);
+    } catch {}
+    try {
+      scheduleIncrementalSleep(this, { session: this.session });
+    } catch {}
   }
 
   quiet(fn: () => void) {

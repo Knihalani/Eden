@@ -10,7 +10,7 @@ import { CHUNK_TARGET_TOKENS, ChunkStore, chunkText, estimateTokens } from "./ch
 import { bm25Rank, retrieveNarrativeChunks } from "./chunk-retrieve";
 import { fuseArHits } from "./cls/controller";
 import * as controller from "./cls/controller";
-import { encodeLane, MEMORY_MARK, openMemory, type AgentMemory } from "./index";
+import { encodeLane, MEMORY_MARK, openMemory, type AgentMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { injectBodyThenObserveTools } from "../packages/wrap/src/tool-observe";
@@ -69,12 +69,7 @@ function withMem(fn: (mem: AgentMemory, dir: string) => void): void {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function pad(seed: number, minToks: number): string {

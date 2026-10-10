@@ -361,7 +361,8 @@ describe("injectBodyThenObserveTools", () => {
     try {
       process.env.EDEN_MEMORY_INJECT_LOG = log;
       mem.observe([{ role: "user", content: "Postgres is the session store." }]);
-      const body = { messages: [{ role: "user", content: "What store is postgres?" }] };
+      // A cue naming the value would be its own residual (D26, the wrap's since P0.7).
+      const body = { messages: [{ role: "user", content: "Which session store do we use?" }] };
       const out = injectBodyThenObserveTools(mem, structuredClone(body));
       expect(JSON.stringify(out)).toContain(MEMORY_MARK);
       expect(JSON.stringify(out)).toMatch(/postgres/i);

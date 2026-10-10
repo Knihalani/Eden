@@ -10,7 +10,15 @@ import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { extractCandidates, type CandidateText } from "./assemble";
-import { MEMORY_MARK, encodeLane, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
+import {
+  MEMORY_MARK,
+  encodeLane,
+  memoryInjectSwallows,
+  openMemory,
+  sleep,
+  type AgentMemory,
+  injectedPackets,
+} from "./index";
 import * as edenMem from "./index";
 import { MEMORY_LANE_KINDS } from "./memory-lanes";
 import { storeFor } from "./memory-repo";
@@ -79,12 +87,7 @@ async function withMem<T>(prefix: string, fn: (mem: AgentMemory, dir: string) =>
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookCtx(raw: Record<string, unknown> | null): string {
