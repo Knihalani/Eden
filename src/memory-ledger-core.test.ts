@@ -20,6 +20,7 @@ import {
   startEpoch,
   withinBudget,
 } from "./memory-ledger";
+import { invalidationsIn } from "./memory-validity";
 import { appendTurn, LIVE_LEDGER, SHADOW_LEDGER } from "./memory-window";
 
 const dirs: string[] = [];
@@ -56,11 +57,6 @@ describe("A4 §4: cids carry the repo", () => {
     expect(ledgerKey(episode("We switched auth to Clerk"), REPO).cid).not.toBe(
       ledgerKey(episode("We switched auth to Clerk"), "ffffffff00000000").cid,
     );
-  });
-
-  test("a slot's key keeps its value, for an Updated item's (was …)", () => {
-    expect(ledgerKey(fact("The database is postgres"), REPO).val).toBe("postgres");
-    expect(ledgerKey(episode("We switched auth to Clerk"), REPO).val).toBeUndefined();
   });
 });
 
@@ -205,32 +201,53 @@ describe("D25: overflow above 256 entries", () => {
 });
 
 describe("A4 §4: refractory and Updated items, against the live deliveries", () => {
+  /** P0.3's log of a supersession ("The database is postgres" after "… sqlite"), and D7's switch. */
+  const superseded = [{ k: "retract" as const, o: "sqlite", t: 1, w: ["database"] }];
+  const switched = invalidationsIn("We switched auth from Auth0 to Clerk.", 2);
+
   test("a live delivery keeps its cid from coming back at the same ver; at another ver it comes back as Updated", () => {
     const win = tempDir();
     deliver(win, [fact("The database is sqlite")], { off: 0, att: "p1", ht: 1 });
     const live = liveDeliveries(win, 100);
-    expect(novelNotes([fact("The database is sqlite")], live, REPO)).toEqual([]);
-    const [updated] = novelNotes([fact("The database is postgres")], live, REPO);
-    expect(updated).toMatchObject({ id: "The database is postgres", was: "sqlite" });
+    expect(novelNotes([fact("The database is sqlite")], live, { repo: REPO })).toEqual([]);
+    const [updated] = novelNotes([fact("The database is postgres")], live, { repo: REPO, invalid: superseded });
+    expect(updated).toMatchObject({ id: "The database is postgres", update: { was: "sqlite" } });
+    const [unknown] = novelNotes([fact("The database is postgres")], live, { repo: REPO });
+    expect(unknown?.update).toEqual({});
   });
 
   test("a row stating a switch away from a delivered value is its Updated item", () => {
     const win = tempDir();
     deliver(win, [fact("Our auth provider is Auth0")], { off: 0, att: "p1", ht: 1 });
-    const [updated] = novelNotes([episode("We switched auth from Auth0 to Clerk")], liveDeliveries(win, 100), REPO);
-    expect(updated).toMatchObject({ was: "Auth0" });
-    const [plain] = novelNotes([episode("We switched the queue from Kafka to SQS")], liveDeliveries(win, 100), REPO);
-    expect(plain?.was).toBeUndefined();
+    const live = liveDeliveries(win, 100);
+    const [updated] = novelNotes([episode("We switched auth from Auth0 to Clerk")], live, {
+      repo: REPO,
+      invalid: switched,
+    });
+    expect(updated).toMatchObject({ update: { was: "Auth0" } });
+    const [plain] = novelNotes([episode("We switched the queue from Kafka to SQS")], live, {
+      repo: REPO,
+      invalid: switched,
+    });
+    expect(plain?.update).toBeUndefined();
+  });
+
+  test("the ledger holds no text: the old value comes from the invalidation log", () => {
+    const win = tempDir();
+    deliver(win, [fact("Our auth provider is Auth0")], { off: 0, att: "p1", ht: 1 });
+    expect(readFileSync(join(win, "delivery.log"), "utf8")).not.toMatch(/auth0/i);
   });
 
   test("a delivery out of the window, or of an earlier epoch, is no longer live: plain bullets again", () => {
     const win = tempDir();
     deliver(win, [fact("The database is sqlite")], { off: 0, att: "p1", ht: 1 });
-    expect(
-      novelNotes([fact("The database is postgres")], liveDeliveries(win, 1_300_000), REPO)[0]?.was,
-    ).toBeUndefined();
+    const far = novelNotes([fact("The database is postgres")], liveDeliveries(win, 1_300_000), {
+      repo: REPO,
+      invalid: superseded,
+    });
+    expect(far[0]?.update).toBeUndefined();
     startEpoch(win, "compact", 50);
-    expect(novelNotes([fact("The database is sqlite")], liveDeliveries(win, 100), REPO)).toHaveLength(1);
+    expect(novelNotes([fact("The database is sqlite")], liveDeliveries(win, 100), { repo: REPO })).toHaveLength(1);
   });
 
   test("a shadow point's live deliveries are both ledgers'", () => {
@@ -241,8 +258,9 @@ describe("A4 §4: refractory and Updated items, against the live deliveries", ()
       { off: 0, att: "p1", ht: 1 },
       SHADOW_LEDGER,
     );
-    expect(novelNotes([fact("The database is sqlite")], liveDeliveries(win, 10), REPO)).toHaveLength(1);
-    expect(novelNotes([fact("The database is sqlite")], liveDeliveries(win, 10, SHADOW_LEDGER), REPO)).toEqual([]);
+    const sqlite = [fact("The database is sqlite")];
+    expect(novelNotes(sqlite, liveDeliveries(win, 10), { repo: REPO })).toHaveLength(1);
+    expect(novelNotes(sqlite, liveDeliveries(win, 10, SHADOW_LEDGER), { repo: REPO })).toEqual([]);
   });
 });
 
@@ -250,7 +268,10 @@ describe("A4 §4: the 6k-token epoch budget", () => {
   test("past 6k tokens in the epoch only Updated items pass; a new epoch resets it", () => {
     const win = tempDir();
     deliver(win, [episode("a long note epsilon")], { off: 0, att: "p1", ht: 1 }, EPOCH_TOKEN_CAP);
-    const notes = [{ ...episode("another note zeta") }, { ...fact("The database is postgres"), was: "sqlite" }];
+    const notes = [
+      { ...episode("another note zeta") },
+      { ...fact("The database is postgres"), update: { was: "sqlite" } },
+    ];
     expect(withinBudget(notes, readLedger(win).tokensEpoch).map((note) => note.id)).toEqual([
       "The database is postgres",
     ]);

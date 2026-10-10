@@ -152,7 +152,7 @@ describe("packets in either wording: today's header and the one before P0.2", ()
 });
 
 describe("P1.1: Updated items (A4 §4, D28's hard limit)", () => {
-  const updated = <T extends ProvenanceNote>(note: T, was: string) => ({ ...note, was });
+  const updated = <T extends ProvenanceNote>(note: T, was?: string) => ({ ...note, update: was ? { was } : {} });
 
   test("an Updated item says so, and names the value it replaces unless its text already does", () => {
     expect(declarativeBullet(updated(fromUser(fact("The database is postgres")), "sqlite"), NOW)).toBe(
@@ -160,6 +160,9 @@ describe("P1.1: Updated items (A4 §4, D28's hard limit)", () => {
     );
     expect(declarativeBullet(updated(fromUser(episode("We switched auth from Auth0 to Clerk")), "Auth0"), NOW)).toBe(
       "Updated: We switched auth from Auth0 to Clerk (you said, 1 hour ago)",
+    );
+    expect(declarativeBullet(updated(fact("The database is postgres")), NOW)).toBe(
+      "Updated: The database is postgres (1 hour ago)",
     );
   });
 
