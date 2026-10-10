@@ -1,0 +1,61 @@
+/**
+ * A4 §4's value tokens: the words `compact_summary` must still name for a delivered item to stay habituated after a
+ * compaction (R0 F14). Everything else the window was given is re-armed.
+ * - **Slot:** the words of its value ("postgres", "node 22").
+ * - **Rule** (policies and intents): the class verb stem and the object of its first clause that names an action
+ *   class (A7 §5's verbs, `ACTION_VERBS`): "Don't merge PRs yourself" is `integrate` and "pr". A summary names the
+ *   class with any of its verbs, inflected ("not to be merging PRs"). A rule without a class verb keeps its object
+ *   words (D9), all of which the summary must name.
+ * - **Other kinds** have none: no summary keeps them, so a compaction always re-arms them.
+ * The ledger keeps the tokens hashed (X11); this module compares them as words.
+ */
+import { contentWords } from "./memory-transcript";
+import { ACTION_VERBS, objectWords } from "./memory-validity";
+
+/** A class token, which no word of a text can be: words are `[a-z0-9]+`. */
+function classToken(cls: string): string {
+  return `@${cls}`;
+}
+
+/** Each inflection of an action verb ("merge", "merges", "merged", "merging"; "commit", "committed") to its class. */
+const VERB_FORMS: ReadonlyMap<string, string> = new Map(
+  Object.entries(ACTION_VERBS)
+    .filter(([verb]) => /^[a-z]+$/.test(verb))
+    .flatMap(([verb, cls]) => {
+      const base = verb.endsWith("e") ? verb.slice(0, -1) : verb;
+      const doubled = verb + verb.at(-1);
+      const forms = [verb, `${verb}s`, `${base}es`, `${base}ed`, `${base}ing`, `${doubled}ed`, `${doubled}ing`];
+      return forms.map((form): [string, string] => [form, cls]);
+    }),
+);
+
+/** Words that mark a sentence as a rule, not what it is about. */
+const RULE_WORDS = new Set(["always", "never", "don", "dont", "must", "avoid"]);
+
+/** A slot's value tokens: the words of its value. */
+export function slotValueTokens(value: string): string[] {
+  return [...new Set(contentWords(value))];
+}
+
+/** A rule's value tokens (see the header). */
+export function ruleValueTokens(text: string): string[] {
+  for (const clause of text.split(/[,;:.!?]/)) {
+    const words = clause.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+    const at = words.findIndex((word) => VERB_FORMS.has(word));
+    if (at < 0) continue;
+    const object = objectWords(words.slice(at + 1).join(" "));
+    return [...new Set([classToken(VERB_FORMS.get(words[at]!)!), ...object])];
+  }
+  const content = contentWords(text).filter((word) => !RULE_WORDS.has(word));
+  return [...new Set(objectWords(content.join(" ")))];
+}
+
+/** What a summary names, as value tokens are written: its words, their singular forms, and the classes of its verbs. */
+export function summaryTokens(summary: string): Set<string> {
+  const words = contentWords(summary);
+  const classes = words.flatMap((word) => {
+    const cls = VERB_FORMS.get(word);
+    return cls ? [classToken(cls)] : [];
+  });
+  return new Set([...words, ...objectWords(summary), ...classes]);
+}

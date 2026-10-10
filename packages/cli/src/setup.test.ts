@@ -382,17 +382,17 @@ describe("multi-agent installer", () => {
 });
 
 describe("M49 memory hooks install without a wrap key", () => {
-  test("installedHooks contains all 7 MEMORY_HOOK_EVENTS and doctor lists them", () => {
+  test("installedHooks contains all 8 MEMORY_HOOK_EVENTS and doctor lists them", () => {
     const hookCmd = hookCommand("/abs/cli.ts");
     const hooks = installedHooks(hookCmd);
     for (const ev of MEMORY_HOOK_EVENTS) {
       expect(ev in hooks).toBe(true);
       expect(String(hooks[ev]![0]!.hooks[0]!.command)).toContain("bun '/abs/cli.ts' hook");
     }
-    expect(MEMORY_HOOK_EVENTS).toHaveLength(7);
+    expect(MEMORY_HOOK_EVENTS).toHaveLength(8);
     const check = memoryHooksCheck({ hooks });
     expect(check.ok).toBe(true);
-    expect(check.count).toBe(7);
+    expect(check.count).toBe(8);
     for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev);
   });
 
@@ -404,7 +404,7 @@ describe("M49 memory hooks install without a wrap key", () => {
     expect(blob).not.toContain("/forget");
   });
 
-  test("setup with no wrap key still writes the 7 events and does not touch the real home", async () => {
+  test("setup with no wrap key still writes the 8 events and does not touch the real home", async () => {
     const prev = {
       home: process.env.HOME,
       eden: process.env.EDEN_HOME,
@@ -447,7 +447,7 @@ describe("M49 memory hooks install without a wrap key", () => {
       const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as unknown;
       const check = memoryHooksCheck(settings);
       expect(check.ok).toBe(true);
-      expect(check.count).toBe(7);
+      expect(check.count).toBe(8);
       // Setup's PostToolUse leaves memory to its PostToolBatch (P0.7), which the check names in that slot.
       for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev === "PostToolUse" ? "PostToolBatch" : ev);
       expect(existsSync(join(cwd, ".mcp.json"))).toBe(false);
@@ -479,7 +479,7 @@ describe("M49 memory hooks install without a wrap key", () => {
     }
   });
 
-  test("setup --dev still writes the 7 events plus wrap config inside an isolated home", async () => {
+  test("setup --dev still writes the 8 events plus wrap config inside an isolated home", async () => {
     const prev = {
       home: process.env.HOME,
       eden: process.env.EDEN_HOME,
@@ -507,7 +507,7 @@ describe("M49 memory hooks install without a wrap key", () => {
       const settings = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8")) as unknown;
       const check = memoryHooksCheck(settings);
       expect(check.ok).toBe(true);
-      expect(check.count).toBe(7);
+      expect(check.count).toBe(8);
       // Setup's PostToolUse leaves memory to its PostToolBatch (P0.7), which the check names in that slot.
       for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev === "PostToolUse" ? "PostToolBatch" : ev);
       const cfg = JSON.parse(readFileSync(join(eden, "config.json"), "utf8")) as { api_key?: string };

@@ -5,7 +5,8 @@
  * - **Records.** A window's `delivery.log` is append-only. It holds `turn` records (human Submits,
  *   `memory-window.ts`); one `deliver` record per bullet, `{cid, ver, off, att, ht}`, where `off` is the transcript's
  *   size, `att` the Submit's `prompt_id` and `ht` the human-turn count; one `packet` record with the packet's tokens;
- *   and `epoch` records (SessionStart `compact` or `clear`). Records hold ids and hashes, never row text (X11).
+ *   `epoch` records (SessionStart `compact` or `clear`); and `held` records (PostCompact, below). Records hold ids and
+ *   hashes, never row text (X11).
  * - **Snapshot.** At Stop and SubagentStop the log is folded under `delivery.lock`: it is rotated by rename
  *   (`delivery.log.<n>`), the snapshot and every rotated log it does not hold yet are folded into a new
  *   `delivery.json`, written by rename, and the rotated logs are removed. A line a writer appended to a rotated log
@@ -32,6 +33,12 @@
  *   stating the same change is refractory. The value an item replaces is named from what the store logged
  *   (`validity.jsonl`) or the switch's own text: the ledger keeps only hashes. Until P3.3's keyed slots, a switch is
  *   how a legacy row carries a slot's new value.
+ * - **Epochs** (A4 §4 "Re-arm", D25). SessionStart `compact` and `clear` start an epoch, which re-arms everything.
+ *   PostCompact, which Claude Code runs right after SessionStart(compact) (R0 F32), then holds what `compact_summary`
+ *   still names: each delivery of the epoch the compaction closed whose value tokens (`memory-value-tokens.ts`, kept
+ *   hashed as `vt`) the summary names in full moves to the new epoch, as if delivered at the summary (its `off`), on
+ *   the current branch (`att` ""). A kind without value tokens is always re-armed. `resume` keeps the ledger as it
+ *   is; a fork copies its parent's (`inheritLedger`, `memory-fork.ts`).
  * - **Budget.** After 6k tokens in an epoch, only `Updated:` items are delivered (A4 §4).
  * - **Shadow** (X7): a point in `shadow` writes the same records to `delivery.shadow.log` (snapshot
  *   `delivery.shadow.json`), so its refractory rule is simulated honestly: it reads what was delivered (the live log)
@@ -47,6 +54,7 @@ import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-p
 import { legacySlot } from "./memory-residual";
 import { contentWords } from "./memory-transcript";
 import { invalidationsIn, subjectWords, type Invalidation } from "./memory-validity";
+import { ruleValueTokens, slotValueTokens, summaryTokens } from "./memory-value-tokens";
 import {
   appendRecords,
   existingLedgers,
@@ -71,6 +79,8 @@ export interface LedgerKey {
   rule: boolean;
   /** A slot's subject words, each hashed: what ties a switch to the slot it switches (see the header). */
   sw?: string[];
+  /** Its value tokens, each hashed: what a compaction summary must name for it to stay habituated (see the header). */
+  vt?: string[];
 }
 
 function hash(text: string): string {
@@ -86,9 +96,14 @@ function contentHash(text: string): string {
   return hash(words(stripPacketLabel(text).body));
 }
 
-/** A subject word as the ledger keeps it: a hash, never the word (X11). */
+/** A subject word or value token as the ledger keeps it: a hash, never the word (X11). */
 function wordHash(word: string): string {
   return hash(word).slice(0, 8);
+}
+
+/** Hashed value tokens, as a key carries them: none for a kind without value tokens. */
+function hashedTokens(tokens: readonly string[]): { vt?: string[] } {
+  return tokens.length ? { vt: tokens.map(wordHash) } : {};
 }
 
 /** The hash a slot's value is its ver by. */
@@ -102,11 +117,13 @@ export function ledgerKey(note: ProvenanceNote, repo?: string): LedgerKey {
   const slot = legacySlot(note);
   if (slot) {
     const sw = subjectWords(slot.subject).map(wordHash);
-    return { cid: `${prefix}s:${hash(words(slot.subject))}`, ver: valueHash(slot.value), rule: false, sw };
+    const cid = `${prefix}s:${hash(words(slot.subject))}`;
+    return { cid, ver: valueHash(slot.value), rule: false, sw, ...hashedTokens(slotValueTokens(slot.value)) };
   }
-  const content = contentHash(String(note.text ?? ""));
+  const text = String(note.text ?? "");
+  const content = contentHash(text);
   return noteKindToken(note) === "rule"
-    ? { cid: `${prefix}P:${content}`, ver: content, rule: true }
+    ? { cid: `${prefix}P:${content}`, ver: content, rule: true, ...hashedTokens(ruleValueTokens(text)) }
     : { cid: `${prefix}E:${content}`, ver: content, rule: false };
 }
 
@@ -141,7 +158,7 @@ export function recordPacket(
   at: Moment,
   file: LedgerFile = LIVE_LEDGER,
 ): void {
-  const delivered = packet.keys.map(({ cid, ver, sw }) => ({
+  const delivered = packet.keys.map(({ cid, ver, sw, vt }) => ({
     k: "deliver",
     cid,
     ver,
@@ -149,6 +166,7 @@ export function recordPacket(
     att: at.att,
     ht: at.ht,
     ...(sw?.length ? { sw } : {}),
+    ...(vt?.length ? { vt } : {}),
   }));
   const tokens = packet.tokens > 0 ? [{ k: "packet", tok: packet.tokens, off: at.off }] : [];
   appendRecords(dir, file, [...delivered, ...tokens]);
@@ -169,6 +187,7 @@ export interface Delivered {
   /** How many times the cid was delivered. */
   n: number;
   sw?: string[];
+  vt?: string[];
 }
 
 /** One ledger file folded (see the header). */
@@ -184,6 +203,11 @@ function emptyState(): LedgerState {
   return { epoch: 0, delivered: new Map(), tokensEpoch: 0, turns: 0, recentTurns: [] };
 }
 
+/** A record's list of hashes (`sw`, `vt`): its strings, none when it has no list. */
+function hashList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 function applyRecord(state: LedgerState, record: Record<string, unknown>): void {
   if (record.k === "epoch") {
     state.epoch++;
@@ -195,6 +219,11 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
     state.recentTurns = [...state.recentTurns, id].slice(-RECENT_TURNS);
   } else if (record.k === "packet") {
     if (typeof record.tok === "number") state.tokensEpoch += record.tok;
+  } else if (record.k === "held" && typeof record.off === "number") {
+    for (const cid of hashList(record.cids)) {
+      const entry = state.delivered.get(cid);
+      if (entry) Object.assign(entry, { epoch: state.epoch, off: record.off, att: "" });
+    }
   } else if (
     record.k === "deliver" &&
     typeof record.cid === "string" &&
@@ -208,7 +237,8 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
       prior.n = n;
       return;
     }
-    const sw = Array.isArray(record.sw) ? record.sw.filter((word): word is string => typeof word === "string") : [];
+    const sw = hashList(record.sw);
+    const vt = hashList(record.vt);
     state.delivered.set(record.cid, {
       ver: record.ver,
       epoch: state.epoch,
@@ -217,6 +247,7 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
       ht: typeof record.ht === "number" ? record.ht : 0,
       n,
       ...(sw.length ? { sw } : {}),
+      ...(vt.length ? { vt } : {}),
     });
   }
 }
@@ -379,6 +410,48 @@ export function foldWindow(dir: string): void {
   for (const file of existingLedgers(dir)) foldLedger(dir, file);
 }
 
+/**
+ * PostCompact (see the header): appends one `held` record with the deliveries of the epoch the compaction closed
+ * that `summary` still names. Returns their cids, and how many of that epoch's deliveries stay re-armed.
+ */
+export function holdSummarized(
+  dir: string,
+  summary: string,
+  off: number,
+  file: LedgerFile = LIVE_LEDGER,
+): { held: string[]; rearmed: number } {
+  const state = readLedger(dir, file);
+  const closed = [...state.delivered].filter(([, entry]) => entry.epoch === state.epoch - 1);
+  if (!closed.length) return { held: [], rearmed: 0 };
+  const named = new Set([...summaryTokens(summary)].map(wordHash));
+  const held = closed.flatMap(([cid, entry]) => (entry.vt?.every((token) => named.has(token)) ? [cid] : []));
+  if (held.length) appendRecords(dir, file, [{ k: "held", cids: held, off }]);
+  return { held, rearmed: closed.length - held.length };
+}
+
+/**
+ * A fork's copy of its parent's ledger (D25, `memory-fork.ts`): each ledger file the parent has, the deliveries of its
+ * current epoch that are on its branch and were not made at a prompt in `after` (the parent's prompts after the fork
+ * point), and the tokens of its epoch. They go to the fork's ledger of the same file, in the fork's own epoch, with
+ * no human turn (`ht` 0). Returns how many deliveries were copied.
+ */
+export function inheritLedger(parent: string, fork: string, after: ReadonlySet<string>): number {
+  const abandoned = abandonedPrompts(parent);
+  let copied = 0;
+  for (const file of existingLedgers(parent)) {
+    const state = readLedger(parent, file);
+    const delivered = [...state.delivered].flatMap(([cid, entry]) => {
+      if (entry.epoch !== state.epoch || after.has(entry.att) || abandoned.has(entry.att)) return [];
+      const { ver, off, att, sw, vt } = entry;
+      return [{ k: "deliver", cid, ver, off, att, ht: 0, ...(sw ? { sw } : {}), ...(vt ? { vt } : {}) }];
+    });
+    const tokens = state.tokensEpoch > 0 ? [{ k: "packet", tok: state.tokensEpoch }] : [];
+    appendRecords(fork, file, [...delivered, ...tokens]);
+    copied += delivered.length;
+  }
+  return copied;
+}
+
 /** The ledgers a point reads (see the header). */
 function readLedgers(file: LedgerFile): LedgerFile[] {
   return file === SHADOW_LEDGER ? [LIVE_LEDGER, SHADOW_LEDGER] : [LIVE_LEDGER];
@@ -430,6 +503,8 @@ interface SlotChange {
   /** The live slot it changes, and the ver it gives it: the new value's hash, or the empty value's. */
   slot: LiveDelivery;
   to: string;
+  /** The value it switches to, as typed ("" for a retraction). */
+  value: string;
   /** The value it replaces, as the note types it. */
   was: string;
 }
@@ -450,7 +525,7 @@ function slotChange(note: ProvenanceNote, slots: readonly LiveDelivery[]): SlotC
       (s) => (s.ver === from || s.ver === to) && subject.every((word) => s.sw?.includes(word) ?? false),
     );
     const typed = body.split(/[^\w@.+-]+/).find((token) => token.toLowerCase() === record.o);
-    if (slot) return { slot, to, was: typed ?? record.f ?? record.o };
+    if (slot) return { slot, to, value: record.n ?? "", was: typed ?? record.f ?? record.o };
   }
   return undefined;
 }
@@ -493,6 +568,7 @@ export function novelNotes<T extends ProvenanceNote>(
       ver: change.to,
       rule: false,
       ...(change.slot.sw ? { sw: change.slot.sw } : {}),
+      ...hashedTokens(slotValueTokens(change.value)),
     };
     held.push(renews);
     return [{ ...note, update: { was: change.was, renews } }];
