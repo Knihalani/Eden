@@ -220,13 +220,25 @@ describe("P0.7 review round 1: turns, restarts and read-only", () => {
     expect(packet).not.toMatch(/Redis/);
   });
 
-  test("history the client edited is read again, so an old statement does not flip the value back", () => {
+  test("history the client edited: an old statement after the edit does not flip the value back", () => {
     const a = [user("The cache is Redis."), assistant("Noted."), user("Run the tests.")];
     mem.inject(a);
     mem.inject([user("The cache is Memcached.")]);
     // The client trims an old message, which changes the key of every message after it.
     const edited = [user("The cache is Redis."), assistant("(trimmed)"), user("Run the tests.")];
     mem.inject([...edited, assistant("Done."), user("Add a cache test.")]);
+    const packet = ask("Which cache do we use?");
+    expect(packet).toMatch(/Memcached/);
+    expect(packet).not.toMatch(/Redis/);
+  });
+
+  test("history the client edited before a statement: the statement encoded again does not flip it back", () => {
+    const head = [user("Check the config."), assistant(`Here is the whole config file: ${"x ".repeat(50)}`)];
+    const a = [...head, user("The cache is Redis."), assistant("Noted."), user("Run the tests.")];
+    mem.inject(a);
+    mem.inject([user("The cache is Memcached.")]);
+    const trimmed = [head[0]!, assistant("(old output trimmed)"), ...a.slice(2)];
+    mem.inject([...trimmed, assistant("Done."), user("Add a cache test.")]);
     const packet = ask("Which cache do we use?");
     expect(packet).toMatch(/Memcached/);
     expect(packet).not.toMatch(/Redis/);
