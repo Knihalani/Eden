@@ -29,7 +29,7 @@ import {
   omitExperienceTree,
   putExperience,
 } from "../../src/experience-store.ts";
-import { MEMORY_MARK, openMemory, type AgentMemory } from "../../src/index.ts";
+import { injectedPackets, MEMORY_MARK, openMemory, type AgentMemory } from "../../src/index.ts";
 import { goldInPacket, scorePrediction, extractBoxedAnswer, type JudgeFn } from "./score.ts";
 
 export const HOLD_DIR = import.meta.dir;
@@ -514,13 +514,9 @@ export async function ingestDomain(
   return { records, states, chars, ms: Date.now() - t0, experience_files, experience_bytes_cap: bytesCap };
 }
 
+/** The packet `inject` attached (since P0.7 at the tail of the turn's message, D29). */
 function packetOf(injected: unknown[]): string {
-  for (const m of injected) {
-    if (!m || typeof m !== "object") continue;
-    const o = m as { role?: string; content?: unknown };
-    if (o.role === "system" && typeof o.content === "string" && o.content.includes(MEMORY_MARK)) return o.content;
-  }
-  return "";
+  return injectedPackets(injected)[0] ?? "";
 }
 
 function nimPost(

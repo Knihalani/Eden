@@ -11,7 +11,7 @@ import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { respondToHook } from "../../packages/cli/src/hook.ts";
-import { MEMORY_MARK, memoryRetrieveCap, openMemory } from "../../src/index.ts";
+import { injectedPackets, MEMORY_MARK, memoryRetrieveCap, openMemory } from "../../src/index.ts";
 import { loadHoldoutFixture, type HoldoutCase } from "./run-holdout.ts";
 import { additionalContextOf, hitsIn } from "./run-tools.ts";
 
@@ -158,15 +158,9 @@ function armEnv(arm: "on" | "off", home: string, memDir: string): Record<string,
   };
 }
 
+/** The packets `inject` attached (since P0.7 at the tail of the turn's message, D29). */
 function packetFromMessages(list: unknown[]): string {
-  const out: string[] = [];
-  for (const m of list) {
-    if (!m || typeof m !== "object") continue;
-    const role = String((m as { role?: unknown }).role ?? "");
-    const content = (m as { content?: unknown }).content;
-    if (role === "system" && typeof content === "string" && content.includes(MEMORY_MARK)) out.push(content);
-  }
-  return out.join("\n");
+  return injectedPackets(list).join("\n");
 }
 
 function hookPacket(out: unknown): string {
