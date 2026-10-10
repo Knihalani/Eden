@@ -61,7 +61,9 @@ describe("A4 §4: value tokens", () => {
     expect(ruleValueTokens("Never push to the main branch")).toEqual(["@push-upstream", "main", "branch"]);
     expect(ruleValueTokens("Always run the tests with vitest")).toEqual(["run", "test", "vitest"]);
     expect(ruleValueTokens("[rule · 0m · user] Don't merge PRs yourself.")).toEqual(["@integrate", "pr"]);
-    expect(ruleValueTokens("Run the tests before you commit.")).toEqual(["@commit", "run", "test", "before"]);
+    expect(ruleValueTokens("Run the tests before you commit.")).toEqual(["@commit", "run", "test"]);
+    expect(ruleValueTokens("Before you deploy, ask me")).toEqual([]);
+    expect(ruleValueTokens("Never merge without approval")).toEqual(["@integrate", "approval"]);
     expect(ruleValueTokens("Never deploy.")).toEqual([]);
     expect(ledgerKey(CLERK, REPO).vt).toBeUndefined();
     expect(ledgerKey(POSTGRES, REPO).vt).toHaveLength(1);

@@ -32,8 +32,25 @@ const VERB_FORMS: ReadonlyMap<string, string> = new Map(
     }),
 );
 
-/** Words that mark a sentence as a rule, not what it is about. */
-const RULE_WORDS = new Set(["always", "never", "don", "dont", "must", "avoid"]);
+/**
+ * Words that mark a sentence as a rule or link its clauses, never what it is about: "Before you deploy, ask me" has
+ * no object beside its class, so no summary holds it.
+ */
+const RULE_WORDS = new Set([
+  "always",
+  "never",
+  "don",
+  "dont",
+  "must",
+  "avoid",
+  "before",
+  "after",
+  "without",
+  "until",
+  "unless",
+  "once",
+  "while",
+]);
 
 /** A slot's value tokens: the words of its value. */
 export function slotValueTokens(value: string): string[] {
