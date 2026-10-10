@@ -60,13 +60,18 @@ function windowFile(name: string): string {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
-/** `hturn` as A4 §4 defines it: distinct `prompt_id`s among the window's `turn` records. */
+/**
+ * `hturn` as A4 §4 defines it: distinct `prompt_id`s among the window's `turn` records, with those a Stop folded into
+ * the `delivery.json` snapshot (D25, since P1.1), which keeps their count.
+ */
 function humanTurns(): number {
   const records = windowFile("delivery.log")
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line) as { k: string; prompt_id: string });
-  return new Set(records.filter((record) => record.k === "turn").map((record) => record.prompt_id)).size;
+  const snapshot = windowFile("delivery.json");
+  const folded = snapshot ? (JSON.parse(snapshot) as { turns: number }).turns : 0;
+  return folded + new Set(records.filter((record) => record.k === "turn").map((record) => record.prompt_id)).size;
 }
 
 /** Every file under the memory root, or (`logs`) only the wide events of `hook.log.d/` (P0.8), which name rules. */

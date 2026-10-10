@@ -21,7 +21,7 @@ import {
   withinBudget,
 } from "./memory-ledger";
 import { invalidationsIn } from "./memory-validity";
-import { appendTurn, LIVE_LEDGER, SHADOW_LEDGER } from "./memory-window";
+import { appendTurn, LIVE_LEDGER, SHADOW_LEDGER, type LedgerFile } from "./memory-window";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -44,7 +44,7 @@ function deliver(win: string, notes: { text: string }[], at: { off: number; att:
 }
 
 /** What a fold yields, comparable across a snapshot. */
-function folded(win: string, file = LIVE_LEDGER) {
+function folded(win: string, file: LedgerFile = LIVE_LEDGER) {
   const state = readLedger(win, file);
   return { ...state, delivered: Object.fromEntries(state.delivered) };
 }

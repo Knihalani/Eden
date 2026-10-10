@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { assembleNotes, listUnderHeading, splitNumberedItems } from "./assemble";
 import { noteSleepActivity, scheduleIncrementalSleep } from "./sleep";
@@ -917,6 +917,16 @@ export class AgentMemory {
 
   get jsonlDir(): string {
     return join(this.dir, this.subdir);
+  }
+
+  /** The memory root that holds context windows (A4 §1 `<root>/windows/`): above a per-repo store, else the store. */
+  get windowsRoot(): string {
+    return this.perRepo ? dirname(dirname(this.dir)) : this.dir;
+  }
+
+  /** The repo key of a per-repo store (D1), which prefixes the ledger's cids; none for another store. */
+  get repoKey(): string | undefined {
+    return this.perRepo ? basename(this.dir) : undefined;
   }
 
   private semantic(): SemanticStore {

@@ -1,33 +1,65 @@
 /**
- * The window ledger's refractory rule (A4 §4, D25), as far as P0.2 needs it: a bullet already delivered in this
- * window is not delivered again while it is still in the live window.
+ * The window ledger (A4 §4, D25): what a context window was given, so a bullet is not given again while it is still
+ * in the live window, and comes back as an `Updated:` item when its value changed.
  *
- * - **Deliveries** are appended to the window's `delivery.log` next to its `turn` records:
- *   `{"k":"deliver","cid":…,"ver":…,"off":…,"att":…,"ht":…}`. `off` is the transcript's size at delivery, `att`
- *   the Submit's `prompt_id`, `ht` the human-turn count.
- * - **cid / ver.** A slot (`legacySlot`) is keyed by its subject, `s:<hash>`, with its value as `ver`, so two rows
- *   saying the same value share a cid. A rule is `P:<hash>` and anything else `E:<hash>`, both of
- *   their normalized content words, so near-identical text gets one cid. P2.1 and P3.3 bring the real keys.
- * - **Still in the window**: the same epoch, the same `ver`, the transcript grown by less than 400 KB (rules) or
- *   1.2 MB (everything else) since `off`, and `att` not on an abandoned branch: a prompt the delta encoder found
- *   abandoned by a rewind (A4 §3.3, `memory-delta.ts`). A prompt whose line it has not read yet counts as on the
- *   branch.
- * - **Epochs**: SessionStart `compact` or `clear` starts a new one, which re-arms everything (P1.2 re-arms only what
- *   the compact summary dropped); `resume` keeps the ledger.
- * - **Shadow** (X7): a point in `shadow` writes the same records to `delivery.shadow.log`, so its refractory rule is
- *   simulated honestly: it reads what was delivered (the live log) and what it would have delivered (its own), each
- *   folded by its own epochs. A live point reads only the live log. `wouldPreempt` is shadow mode's G1 estimate.
- *
- * P1.1 adds the `delivery.json` snapshot, the overflow policy and `hook.log.d/`'s stage drops.
+ * - **Records.** A window's `delivery.log` is append-only. It holds `turn` records (human Submits,
+ *   `memory-window.ts`); one `deliver` record per bullet, `{cid, ver, off, att, ht}`, where `off` is the transcript's
+ *   size, `att` the Submit's `prompt_id` and `ht` the human-turn count; one `packet` record with the packet's tokens;
+ *   and `epoch` records (SessionStart `compact` or `clear`). Records hold ids and hashes, never row text (X11).
+ * - **Snapshot.** At Stop and SubagentStop the log is folded under `delivery.lock`: it is rotated by rename
+ *   (`delivery.log.<n>`), the snapshot and every rotated log it does not hold yet are folded into a new
+ *   `delivery.json`, written by rename, and the rotated logs are removed. A line a writer appended to a rotated log
+ *   after the fold read it goes back to the live log (the writer opened the file before the rename). Readers fold the
+ *   snapshot, the rotated logs past its `through`, then the live log.
+ * - **The fold** keeps each cid's latest delivery (offsets only grow: the transcript is append-only), the epoch, the
+ *   tokens delivered in it, and the human turns: their count and the last 16 `prompt_id`s, so a Submit repeated after
+ *   a fold still counts once (`hturn` is folded from `turn` records, never a counter a Submit increments).
+ * - **Overflow.** Above 256 entries a fold evicts deliveries of older epochs first, oldest first, then the least
+ *   recent episodes.
+ * - **cid / ver.** `cid = <repo8>/<kind letter>:<key>`, `repo8` being the first 8 hex characters of the repo key
+ *   (D1). Until P2.1 and P3.3 bring keys, a slot (`legacySlot`) is keyed `s:` by its subject, with its value as `ver`,
+ *   and a rule (`P:`) or anything else (`E:`) by a hash of its normalized content words, so near-identical text gets
+ *   one cid.
+ * - **Live.** A delivery is still in the window when it is of the current epoch, the transcript has grown by less
+ *   than 400 KB (rules) or 1.2 MB (everything else) since `off`, and `att` is not on an abandoned branch: a prompt the
+ *   delta encoder found abandoned by a rewind (A4 §3.3, `memory-delta.ts`). A prompt whose line it has not read yet
+ *   counts as on the branch. A child window's `off` is measured on its own transcript (P2.5 brings child delivery).
+ * - **Novelty.** A candidate whose cid a live delivery holds at the same `ver` is dropped (refractory). One whose cid
+ *   it holds at another `ver`, or whose text retracts or switches away from a live slot's value (D7, A4 §3.1), is an
+ *   `Updated:` item. The value it replaces is named from what the store logged (`validity.jsonl`): the ledger keeps
+ *   only hashes. Until P3.3's keyed slots, a switch is how a legacy row carries a slot's new value.
+ * - **Budget.** After 6k tokens in an epoch, only `Updated:` items are delivered (A4 §4).
+ * - **Shadow** (X7): a point in `shadow` writes the same records to `delivery.shadow.log` (snapshot
+ *   `delivery.shadow.json`), so its refractory rule is simulated honestly: it reads what was delivered (the live log)
+ *   and what it would have delivered (its own), each folded by its own epochs. A live point reads only the live log.
+ *   `wouldPreempt` is shadow mode's G1 estimate.
  */
 import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { abandonedPrompts } from "./memory-delta";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { legacySlot } from "./memory-residual";
 import { contentWords } from "./memory-transcript";
-import { appendRecord, LIVE_LEDGER, SHADOW_LEDGER, windowRecords, type LedgerFile } from "./memory-window";
+import { invalidationsIn, type Invalidation } from "./memory-validity";
+import {
+  appendRecords,
+  existingLedgers,
+  LIVE_LEDGER,
+  parseRecords,
+  SHADOW_LEDGER,
+  windowRecords,
+  type LedgerFile,
+} from "./memory-window";
 
 export const REFRACTORY_BYTES = { rule: 400_000, other: 1_200_000 } as const;
+/** A4 §4: past this many tokens in an epoch, only `Updated:` items are delivered. */
+export const EPOCH_TOKEN_CAP = 6_000;
+/** D25: the entries a snapshot keeps. */
+export const OVERFLOW_ENTRIES = 256;
+/** The `prompt_id`s a fold keeps, against which a repeated Submit is told apart. */
+const RECENT_TURNS = 16;
 
 export interface LedgerKey {
   cid: string;
@@ -48,80 +80,367 @@ function contentHash(text: string): string {
   return hash(words(stripPacketLabel(text).body));
 }
 
-/** A note's cid and ver (see the header). */
-export function ledgerKey(note: ProvenanceNote): LedgerKey {
-  const slot = legacySlot(note);
-  if (slot) return { cid: `s:${hash(words(slot.subject))}`, ver: hash(words(slot.value)), rule: false };
-  const content = contentHash(String(note.text ?? ""));
-  return noteKindToken(note) === "rule"
-    ? { cid: `P:${content}`, ver: content, rule: true }
-    : { cid: `E:${content}`, ver: content, rule: false };
+/** The hash a slot's value is its ver by. */
+function valueHash(value: string): string {
+  return hash(words(value));
 }
 
-/** Appends the deliveries of one packet. */
-export function recordDeliveries(
+/** A note's cid and ver (see the header); `repo` is the repo key (D1), whose first 8 characters prefix the cid. */
+export function ledgerKey(note: ProvenanceNote, repo?: string): LedgerKey {
+  const prefix = repo ? `${repo.slice(0, 8)}/` : "";
+  const slot = legacySlot(note);
+  if (slot) return { cid: `${prefix}s:${hash(words(slot.subject))}`, ver: valueHash(slot.value), rule: false };
+  const content = contentHash(String(note.text ?? ""));
+  return noteKindToken(note) === "rule"
+    ? { cid: `${prefix}P:${content}`, ver: content, rule: true }
+    : { cid: `${prefix}E:${content}`, ver: content, rule: false };
+}
+
+/** The kind letter of a cid (`s`, `P`, `E`, …), after its repo prefix. */
+function kindLetter(cid: string): string {
+  return cid.slice(cid.indexOf("/") + 1, cid.indexOf("/") + 2);
+}
+
+function refractoryBytes(cid: string): number {
+  return kindLetter(cid) === "P" ? REFRACTORY_BYTES.rule : REFRACTORY_BYTES.other;
+}
+
+/** A packet's size in tokens, as A5's `tokens_per_epoch` counts them: what A4 §4's budget adds up. */
+export function packetTokens(packet: string): number {
+  return Math.ceil(packet.length / 4);
+}
+
+/** Where and when a packet was delivered. */
+export interface Moment {
+  off: number;
+  att: string;
+  ht: number;
+}
+
+/** Appends one packet's records: a `deliver` record per bullet and the packet's tokens, in one write. */
+export function recordPacket(
   dir: string,
-  notes: readonly ProvenanceNote[],
-  at: { off: number; att: string; ht: number },
+  packet: { keys: readonly LedgerKey[]; tokens: number },
+  at: Moment,
   file: LedgerFile = LIVE_LEDGER,
 ): void {
-  for (const note of notes) {
-    const { cid, ver } = ledgerKey(note);
-    appendRecord(dir, file, { k: "deliver", cid, ver, off: at.off, att: at.att, ht: at.ht });
-  }
+  const delivered = packet.keys.map(({ cid, ver }) => ({
+    k: "deliver",
+    cid,
+    ver,
+    off: at.off,
+    att: at.att,
+    ht: at.ht,
+  }));
+  const tokens = packet.tokens > 0 ? [{ k: "packet", tok: packet.tokens, off: at.off }] : [];
+  appendRecords(dir, file, [...delivered, ...tokens]);
 }
 
 /** Starts a new epoch (SessionStart `compact` or `clear`). */
 export function startEpoch(dir: string, source: string, off: number, file: LedgerFile = LIVE_LEDGER): void {
-  appendRecord(dir, file, { k: "epoch", source, off });
+  appendRecords(dir, file, [{ k: "epoch", source, off }]);
 }
 
-type Delivery = { cid: string; ver: string; off: number; att: string; ht: number };
+/** A cid's latest delivery. */
+export interface Delivered {
+  ver: string;
+  epoch: number;
+  off: number;
+  att: string;
+  ht: number;
+  /** How many times the cid was delivered. */
+  n: number;
+}
 
-/** This epoch's deliveries in one ledger file, oldest first. */
-function epochDeliveries(dir: string, file: LedgerFile): Delivery[] {
-  const out: Delivery[] = [];
-  for (const record of windowRecords(dir, file)) {
-    if (record.k === "epoch") out.length = 0;
-    else if (
-      record.k === "deliver" &&
-      typeof record.cid === "string" &&
-      typeof record.ver === "string" &&
-      typeof record.off === "number"
-    )
-      out.push({
-        cid: record.cid,
-        ver: record.ver,
-        off: record.off,
-        att: typeof record.att === "string" ? record.att : "",
-        ht: typeof record.ht === "number" ? record.ht : 0,
-      });
+/** One ledger file folded (see the header). */
+export interface LedgerState {
+  epoch: number;
+  delivered: Map<string, Delivered>;
+  tokensEpoch: number;
+  turns: number;
+  recentTurns: string[];
+}
+
+function emptyState(): LedgerState {
+  return { epoch: 0, delivered: new Map(), tokensEpoch: 0, turns: 0, recentTurns: [] };
+}
+
+function applyRecord(state: LedgerState, record: Record<string, unknown>): void {
+  if (record.k === "epoch") {
+    state.epoch++;
+    state.tokensEpoch = 0;
+  } else if (record.k === "turn") {
+    const id = record.prompt_id;
+    if (typeof id !== "string" || !id || state.recentTurns.includes(id)) return;
+    state.turns++;
+    state.recentTurns = [...state.recentTurns, id].slice(-RECENT_TURNS);
+  } else if (record.k === "packet") {
+    if (typeof record.tok === "number") state.tokensEpoch += record.tok;
+  } else if (
+    record.k === "deliver" &&
+    typeof record.cid === "string" &&
+    typeof record.ver === "string" &&
+    typeof record.off === "number"
+  ) {
+    const n = (state.delivered.get(record.cid)?.n ?? 0) + 1;
+    state.delivered.set(record.cid, {
+      ver: record.ver,
+      epoch: state.epoch,
+      off: record.off,
+      att: typeof record.att === "string" ? record.att : "",
+      ht: typeof record.ht === "number" ? record.ht : 0,
+      n,
+    });
   }
-  return out;
 }
 
-/** The ledgers a point's refractory rule reads (see the header). */
+function snapshotName(file: LedgerFile): string {
+  return file.replace(/\.log$/, ".json");
+}
+
+function lockName(file: LedgerFile): string {
+  return file.replace(/\.log$/, ".lock");
+}
+
+/** The snapshot on disk: the fold of every rotated log up to `through`. */
+interface Snapshot {
+  v: 2;
+  epoch: number;
+  delivered: Record<string, Delivered>;
+  tokens_epoch: number;
+  turns: number;
+  recent_turns: string[];
+  through: number;
+}
+
+function readSnapshot(dir: string, file: LedgerFile): { state: LedgerState; through: number } | undefined {
+  try {
+    const raw = JSON.parse(readFileSync(join(dir, snapshotName(file)), "utf8")) as Partial<Snapshot>;
+    if (raw.v !== 2 || typeof raw.through !== "number" || !raw.delivered || typeof raw.delivered !== "object")
+      return undefined;
+    const state: LedgerState = {
+      epoch: Number(raw.epoch) || 0,
+      delivered: new Map(Object.entries(raw.delivered)),
+      tokensEpoch: Number(raw.tokens_epoch) || 0,
+      turns: Number(raw.turns) || 0,
+      recentTurns: Array.isArray(raw.recent_turns) ? raw.recent_turns.filter((id) => typeof id === "string") : [],
+    };
+    return { state, through: raw.through };
+  } catch {
+    return undefined;
+  }
+}
+
+function snapshotOf(state: LedgerState, through: number): Snapshot {
+  return {
+    v: 2,
+    epoch: state.epoch,
+    delivered: Object.fromEntries(state.delivered),
+    tokens_epoch: state.tokensEpoch,
+    turns: state.turns,
+    recent_turns: state.recentTurns,
+    through,
+  };
+}
+
+/** The rotated logs of a ledger file, oldest first, with their number. */
+function rotatedLogs(dir: string, file: LedgerFile): { name: string; n: number }[] {
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const prefix = `${file}.`;
+  return names
+    .filter((name) => name.startsWith(prefix) && /^\d+$/.test(name.slice(prefix.length)))
+    .map((name) => ({ name, n: Number(name.slice(prefix.length)) }))
+    .sort((a, b) => a.n - b.n);
+}
+
+/** One ledger file folded: its snapshot, the rotated logs past the snapshot, then the live log (see the header). */
+export function readLedger(dir: string, file: LedgerFile = LIVE_LEDGER): LedgerState {
+  const snapshot = readSnapshot(dir, file);
+  const state = snapshot?.state ?? emptyState();
+  const through = snapshot?.through ?? 0;
+  for (const { name, n } of rotatedLogs(dir, file))
+    if (n > through) for (const record of windowRecords(dir, name)) applyRecord(state, record);
+  for (const record of windowRecords(dir, file)) applyRecord(state, record);
+  return state;
+}
+
+/**
+ * A ledger file as `eden memory dump` lists it: a summary of its snapshot (`k: "snapshot"`, counts only), then the
+ * records no snapshot holds yet, in order.
+ */
+export function ledgerListing(dir: string, file: LedgerFile = LIVE_LEDGER): Record<string, unknown>[] {
+  const snapshot = readSnapshot(dir, file);
+  const through = snapshot?.through ?? 0;
+  const head = snapshot
+    ? [
+        {
+          k: "snapshot",
+          epoch: snapshot.state.epoch,
+          turns: snapshot.state.turns,
+          tokens_epoch: snapshot.state.tokensEpoch,
+          entries: snapshot.state.delivered.size,
+        },
+      ]
+    : [];
+  const unfolded = rotatedLogs(dir, file).flatMap((log) => (log.n > through ? windowRecords(dir, log.name) : []));
+  return [...head, ...unfolded, ...windowRecords(dir, file)];
+}
+
+/** D25's overflow policy, on a fold above 256 entries: older epochs first, then the least recent episodes. */
+function evictOverflow(state: LedgerState): void {
+  const excess = state.delivered.size - OVERFLOW_ENTRIES;
+  if (excess <= 0) return;
+  const entries = [...state.delivered];
+  const older = entries
+    .filter(([, entry]) => entry.epoch < state.epoch)
+    .sort(([, a], [, b]) => a.epoch - b.epoch || a.off - b.off);
+  const episodes = entries
+    .filter(([cid, entry]) => entry.epoch === state.epoch && kindLetter(cid) === "E")
+    .sort(([, a], [, b]) => a.off - b.off);
+  for (const [cid] of [...older, ...episodes].slice(0, excess)) state.delivered.delete(cid);
+}
+
+/**
+ * Folds a ledger file into its snapshot (see the header), at Stop and SubagentStop. Returns whether it wrote one;
+ * false when there was nothing to fold or another hook holds the lock (the next fold takes it).
+ */
+export function foldLedger(dir: string, file: LedgerFile): boolean {
+  try {
+    return withFileLock(join(dir, lockName(file)), () => foldLocked(dir, file), 0);
+  } catch {
+    return false;
+  }
+}
+
+function foldLocked(dir: string, file: LedgerFile): boolean {
+  const snapshot = readSnapshot(dir, file);
+  const through = snapshot?.through ?? 0;
+  const logs = rotatedLogs(dir, file);
+  const live = join(dir, file);
+  if (existsSync(live) && statSync(live).size > 0) {
+    const n = Math.max(through, ...logs.map((log) => log.n)) + 1;
+    renameSync(live, join(dir, `${file}.${n}`));
+    logs.push({ name: `${file}.${n}`, n });
+  }
+  const pending = logs.filter((log) => log.n > through);
+  // A fold that stopped after writing its snapshot left logs it had folded: they go without being read again.
+  for (const log of logs) if (log.n <= through) rmSync(join(dir, log.name), { force: true });
+  if (!pending.length) return false;
+  const state = snapshot?.state ?? emptyState();
+  const taken = pending.map((log) => {
+    const bytes = readFileSync(join(dir, log.name));
+    for (const record of parseRecords(bytes.toString("utf8"))) applyRecord(state, record);
+    return { ...log, read: bytes.length };
+  });
+  evictOverflow(state);
+  writeFileAtomic(join(dir, snapshotName(file)), JSON.stringify(snapshotOf(state, taken.at(-1)!.n)), 0o600);
+  for (const log of taken) {
+    const late = readFileSync(join(dir, log.name)).subarray(log.read);
+    if (late.length) appendFileSync(live, late, { mode: 0o600 });
+    rmSync(join(dir, log.name), { force: true });
+  }
+  return true;
+}
+
+/** Folds every ledger file a window has (Stop, SubagentStop). */
+export function foldWindow(dir: string): void {
+  for (const file of existingLedgers(dir)) foldLedger(dir, file);
+}
+
+/** The ledgers a point reads (see the header). */
 function readLedgers(file: LedgerFile): LedgerFile[] {
   return file === SHADOW_LEDGER ? [LIVE_LEDGER, SHADOW_LEDGER] : [LIVE_LEDGER];
 }
 
-/** The notes still eligible: those not delivered in this window's live part (see the header). */
-export function notRefractory<T extends ProvenanceNote>(
-  dir: string,
-  notes: readonly T[],
-  size: number,
-  file: LedgerFile = LIVE_LEDGER,
-): T[] {
-  const deliveries = readLedgers(file).flatMap((ledger) => epochDeliveries(dir, ledger));
-  if (!deliveries.length) return [...notes];
-  const abandoned = abandonedPrompts(dir);
-  return notes.filter((note) => {
-    const key = ledgerKey(note);
-    const distance = key.rule ? REFRACTORY_BYTES.rule : REFRACTORY_BYTES.other;
-    return !deliveries.some(
-      (d) => d.cid === key.cid && d.ver === key.ver && size - d.off < distance && !abandoned.has(d.att),
-    );
+/**
+ * `hturn` (A4 §4): the human turns this window has seen, in either ledger. A Submit's turn goes to one ledger; a
+ * `prompt_id` in both (a repeated Submit across a flag change) counts once.
+ */
+export function humanTurns(dir: string): number {
+  const live = readLedger(dir, LIVE_LEDGER);
+  const shadow = readLedger(dir, SHADOW_LEDGER);
+  const both = live.recentTurns.filter((id) => shadow.recentTurns.includes(id)).length;
+  return live.turns + shadow.turns - both;
+}
+
+/** The tokens delivered in this epoch, in the ledgers a point reads: A4 §4's budget. */
+export function epochTokens(dir: string, file: LedgerFile = LIVE_LEDGER): number {
+  return readLedgers(file).reduce((sum, ledger) => sum + readLedger(dir, ledger).tokensEpoch, 0);
+}
+
+/** A delivery still in the window (see the header), from a ledger or from the packets a request carries. */
+export interface LiveDelivery {
+  cid: string;
+  ver: string;
+}
+
+/** Whether a delivery made `off` bytes in is still in a window `size` bytes long. */
+export function inWindow(cid: string, off: number, size: number): boolean {
+  return size - off < refractoryBytes(cid);
+}
+
+/** The deliveries still in this window's live part, in the ledgers a point reads (see the header). */
+export function liveDeliveries(dir: string, size: number, file: LedgerFile = LIVE_LEDGER): LiveDelivery[] {
+  let abandoned: Set<string> | undefined;
+  return readLedgers(file).flatMap((ledger) => {
+    const state = readLedger(dir, ledger);
+    return [...state.delivered].flatMap(([cid, entry]) => {
+      if (entry.epoch !== state.epoch || !inWindow(cid, entry.off, size)) return [];
+      abandoned ??= abandonedPrompts(dir);
+      return abandoned.has(entry.att) ? [] : [{ cid, ver: entry.ver }];
+    });
   });
+}
+
+/** What a note retracts or switches away from (D7, A4 §3.1): each value with its hash, as the note types it. */
+function valuesLeft(note: ProvenanceNote): { hash: string; value: string }[] {
+  const body = stripPacketLabel(String(note.text ?? "")).body;
+  return invalidationsIn(body, 0).flatMap((record) => {
+    if (record.k !== "retract" || record.r === "forget") return [];
+    const typed = body.split(/[^\w@.+-]+/).find((token) => token.toLowerCase() === record.o);
+    return [{ hash: valueHash(record.o), value: typed ?? record.f ?? record.o }];
+  });
+}
+
+/** The value an invalidation logged for a slot's ver, in the form it was typed. */
+function loggedValue(ver: string, invalid: readonly Invalidation[]): string | undefined {
+  const record = invalid.findLast((r) => r.k === "retract" && r.r !== "forget" && valueHash(r.o) === ver);
+  return record?.k === "retract" ? (record.f ?? record.o) : undefined;
+}
+
+/**
+ * Novelty against the live deliveries (see the header): the notes not refractory, each `Updated:` item marked with
+ * the value it replaces when the store logged it. `invalid` is the store's invalidation log.
+ */
+export function novelNotes<T extends ProvenanceNote>(
+  notes: readonly T[],
+  live: readonly LiveDelivery[],
+  opts: { repo?: string; invalid?: readonly Invalidation[] } = {},
+): (T & Pick<ProvenanceNote, "update">)[] {
+  if (!live.length) return [...notes];
+  const slots = live.filter((delivery) => kindLetter(delivery.cid) === "s");
+  return notes.flatMap((note) => {
+    const key = ledgerKey(note, opts.repo);
+    const held = live.filter((delivery) => delivery.cid === key.cid);
+    if (held.some((delivery) => delivery.ver === key.ver)) return [];
+    const changed = held.find((delivery) => kindLetter(delivery.cid) === "s");
+    if (changed) {
+      const was = loggedValue(changed.ver, opts.invalid ?? []);
+      return [{ ...note, update: was ? { was } : {} }];
+    }
+    const left = slots.length ? valuesLeft(note).find((value) => slots.some((s) => s.ver === value.hash)) : undefined;
+    return [left ? { ...note, update: { was: left.value } } : note];
+  });
+}
+
+/** A4 §4's budget: past 6k tokens in the epoch, only `Updated:` items. */
+export function withinBudget<T extends ProvenanceNote>(notes: readonly T[], tokensEpoch: number): T[] {
+  return tokensEpoch < EPOCH_TOKEN_CAP ? [...notes] : notes.filter((note) => note.update);
 }
 
 /** EXECUTION X7: how many human turns back a shadow packet counts as one that would have preempted a restatement. */
@@ -133,13 +452,19 @@ const PREEMPT_TURNS = 3;
  * counts when its value is the same (D30: equal to the visible value); other rows when their content words are,
  * whatever kind the stored row had. Until P5.1 logs D30's `restate` events, this is the estimate.
  */
-export function wouldPreempt(dir: string, statements: readonly string[], hturn: number): string[] {
-  const recent = epochDeliveries(dir, SHADOW_LEDGER).filter((d) => d.ht < hturn && d.ht >= hturn - PREEMPT_TURNS);
-  if (!recent.length) return [];
-  const slots = statements.map((text) => ledgerKey({ text, kind: "fact" })).filter((key) => key.cid.startsWith("s:"));
-  const contents = new Set(statements.map(contentHash));
-  const restated = recent.filter((d) =>
-    d.cid.startsWith("s:") ? slots.some((key) => key.cid === d.cid && key.ver === d.ver) : contents.has(d.ver),
+export function wouldPreempt(dir: string, statements: readonly string[], hturn: number, repo?: string): string[] {
+  const state = readLedger(dir, SHADOW_LEDGER);
+  const recent = [...state.delivered].filter(
+    ([, entry]) => entry.epoch === state.epoch && entry.ht < hturn && entry.ht >= hturn - PREEMPT_TURNS,
   );
-  return [...new Set(restated.map((d) => d.cid))];
+  if (!recent.length) return [];
+  const slots = statements
+    .map((text) => ledgerKey({ text, kind: "fact" }, repo))
+    .filter((key) => kindLetter(key.cid) === "s");
+  const contents = new Set(statements.map(contentHash));
+  return recent
+    .filter(([cid, entry]) =>
+      kindLetter(cid) === "s" ? slots.some((key) => key.cid === cid && key.ver === entry.ver) : contents.has(entry.ver),
+    )
+    .map(([cid]) => cid);
 }

@@ -1,8 +1,8 @@
 /**
  * A context window's own files (A4 §1 `<root>/windows/<win>/`), as far as P0.6 writes them:
  * - `delivery.log`: one `turn` record per human Submit (A4 §4). `hturn` is the count of distinct `prompt_id`s among
- *   them, so two racing Submits of one prompt count once. The ledger's `deliver` and `epoch` records share the log
- *   (`memory-ledger.ts`).
+ *   them, so two racing Submits of one prompt count once (`humanTurns`, `memory-ledger.ts`, which folds the log and
+ *   its snapshot). The ledger's `deliver`, `packet` and `epoch` records share the log.
  * - `delivery.shadow.log`: the same records from a point whose flag is `shadow` (X7), which delivers nothing. Turn
  *   records count from both logs, so `hturn` does not depend on which mode the Submits ran in.
  * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves; the
@@ -44,8 +44,14 @@ export function windowDir(root: string, win: string): string | undefined {
 
 /** Appends one record to a window file, creating the window owner-only. */
 export function appendRecord(dir: string, file: string, record: WindowRecord): void {
+  appendRecords(dir, file, [record]);
+}
+
+/** Appends records to a window file in one write, creating the window owner-only. */
+export function appendRecords(dir: string, file: string, records: readonly WindowRecord[]): void {
+  if (!records.length) return;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  appendFileSync(join(dir, file), `${JSON.stringify(record)}\n`, { mode: 0o600 });
+  appendFileSync(join(dir, file), records.map((record) => `${JSON.stringify(record)}\n`).join(""), { mode: 0o600 });
 }
 
 /** The ledger files a window already has. */
@@ -68,6 +74,11 @@ export function windowRecords(dir: string, file: string): Record<string, unknown
   } catch {
     return [];
   }
+  return parseRecords(text);
+}
+
+/** The records of a window file's text, one per line; a torn line is skipped. */
+export function parseRecords(text: string): Record<string, unknown>[] {
   return text.split("\n").flatMap((line) => {
     try {
       const record: unknown = JSON.parse(line);
@@ -95,14 +106,6 @@ export function appendTurn(
 ): void {
   const promptId = turn.promptId || `${promptHash(turn.prompt)}@${turn.off}`;
   appendRecord(dir, file, { k: "turn", prompt_id: promptId, off: turn.off });
-}
-
-/** `hturn` (A4 §4): the number of human turns this window has seen, in either ledger. */
-export function humanTurns(dir: string): number {
-  const ids = [LIVE_LEDGER, SHADOW_LEDGER].flatMap((file) =>
-    windowRecords(dir, file).flatMap((record) => (record.k === "turn" ? [record.prompt_id] : [])),
-  );
-  return new Set(ids).size;
 }
 
 /** The cron prompt hashes of the window's last Stop that carried `session_crons`. */

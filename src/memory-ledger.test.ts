@@ -4,14 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ledgerKey,
-  notRefractory,
-  recordDeliveries,
+  liveDeliveries,
+  novelNotes,
+  recordPacket,
   REFRACTORY_BYTES,
   startEpoch,
   wouldPreempt,
+  type Moment,
 } from "./memory-ledger";
 import { encodeDelta } from "./memory-delta";
-import { SHADOW_LEDGER } from "./memory-window";
+import type { ProvenanceNote } from "./memory-provenance";
+import { SHADOW_LEDGER, type LedgerFile } from "./memory-window";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -21,6 +24,14 @@ function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "eden-ledger-"));
   dirs.push(dir);
   return dir;
+}
+
+/** P0.2's calls on P1.1's API: one packet's deliveries, and the notes still eligible against the live ones. */
+function recordDeliveries(win: string, notes: readonly ProvenanceNote[], at: Moment, file?: LedgerFile): void {
+  recordPacket(win, { keys: notes.map((note) => ledgerKey(note)), tokens: 0 }, at, file);
+}
+function notRefractory<T extends ProvenanceNote>(win: string, notes: readonly T[], size: number, file?: LedgerFile) {
+  return novelNotes(notes, liveDeliveries(win, size, file));
 }
 
 const fact = (text: string) => ({ id: text, text: `[fact · 0m] ${text}` });
