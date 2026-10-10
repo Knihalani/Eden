@@ -424,17 +424,22 @@ export function novelNotes<T extends ProvenanceNote>(
 ): (T & Pick<ProvenanceNote, "update">)[] {
   if (!live.length) return [...notes];
   const slots = live.filter((delivery) => kindLetter(delivery.cid) === "s");
+  // One Updated item per changed delivery: a second row stating the same change (the legacy store keeps a prompt
+  // whole beside its sentences) would say it again.
+  const renewed = new Set<string>();
   return notes.flatMap((note) => {
     const key = ledgerKey(note, opts.repo);
     const held = live.filter((delivery) => delivery.cid === key.cid);
     if (held.some((delivery) => delivery.ver === key.ver)) return [];
     const changed = held.find((delivery) => kindLetter(delivery.cid) === "s");
-    if (changed) {
-      const was = loggedValue(changed.ver, opts.invalid ?? []);
-      return [{ ...note, update: was ? { was } : {} }];
-    }
-    const left = slots.length ? valuesLeft(note).find((value) => slots.some((s) => s.ver === value.hash)) : undefined;
-    return [left ? { ...note, update: { was: left.value } } : note];
+    const left =
+      changed || !slots.length ? undefined : valuesLeft(note).find((v) => slots.some((s) => s.ver === v.hash));
+    const target = changed?.cid ?? slots.find((s) => s.ver === left?.hash)?.cid;
+    if (!target) return [note];
+    if (renewed.has(target)) return [];
+    renewed.add(target);
+    const was = changed ? loggedValue(changed.ver, opts.invalid ?? []) : left!.value;
+    return [{ ...note, update: was ? { was } : {} }];
   });
 }
 

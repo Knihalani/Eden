@@ -232,6 +232,18 @@ describe("A4 §4: refractory and Updated items, against the live deliveries", ()
     expect(plain?.update).toBeUndefined();
   });
 
+  test("one Updated item per changed delivery: a second row stating the same switch is not delivered (P1.1 e2e)", () => {
+    const win = tempDir();
+    deliver(win, [fact("Our auth provider is Auth0")], { off: 0, att: "p1", ht: 1 });
+    const rows = [
+      episode("We switched auth from Auth0 to Clerk. Reply with just OK."),
+      episode("We switched auth from Auth0 to Clerk"),
+    ];
+    const novel = novelNotes(rows, liveDeliveries(win, 100), { repo: REPO, invalid: switched });
+    expect(novel.map((note) => note.id)).toEqual([rows[0]!.id]);
+    expect(novel[0]?.update).toEqual({ was: "Auth0" });
+  });
+
   test("the ledger holds no text: the old value comes from the invalidation log", () => {
     const win = tempDir();
     deliver(win, [fact("Our auth provider is Auth0")], { off: 0, att: "p1", ht: 1 });
