@@ -4,7 +4,10 @@
  * history sends it (each request repeats the history the client holds, never what the wrap added):
  * - `anthropic`: the Anthropic wrap (`withKnowFactsAnthropic`);
  * - `openai`: the OpenAI-shaped wrap (`withKnowFacts`, which reaches `AgentMemory.injectBody`);
- * - `inject`: the library API `AgentMemory.inject` on an OpenAI message list.
+ * - `inject`: the library API `AgentMemory.inject` on an OpenAI message list;
+ * - `anthropic-proxy`: the Anthropic proxy's handler (`handleAnthropicMessages`), which also sets the request's cache
+ *   breakpoints, read from the body it sends upstream (added after the pre-registration: the handler reshapes the
+ *   last message, which the `anthropic` path does not see).
  *
  * For each pair of consecutive requests it compares the earlier request's cacheable prefix (tools, system, then each
  * message, `cache_control` markers left out) with the later request's, block by block: a **prefix break** is a pair
@@ -116,7 +119,11 @@ export interface PathResult {
 }
 
 /** Sends the conversation through one path (`send`) and counts its prefix breaks and need hits. */
-export function measure(send: (body: Body) => Body, style: Style, marks: readonly string[]): PathResult {
+export async function measure(
+  send: (body: Body) => Body | Promise<Body>,
+  style: Style,
+  marks: readonly string[],
+): Promise<PathResult> {
   const result: PathResult = { requests: 0, pairs: 0, prefix_breaks: 0, break_at: [], turns: 0, need_hits: 0 };
   let previous: Body | undefined;
   let lastTurn = -1;
@@ -125,7 +132,7 @@ export function measure(send: (body: Body) => Body, style: Style, marks: readonl
       style === "anthropic"
         ? { system: SYSTEM, tools: TOOLS, messages }
         : { tools: TOOLS, messages: [{ role: "system", content: SYSTEM }, ...messages] };
-    const sent = send(structuredClone(body));
+    const sent = await send(structuredClone(body));
     result.requests++;
     if (previous) {
       result.pairs++;
@@ -149,6 +156,28 @@ export function measure(send: (body: Body) => Body, style: Style, marks: readonl
   return result;
 }
 
+type Handler<S> = (req: Request, opts: { state: S; fetch: typeof fetch }) => Promise<Response>;
+
+/** The Anthropic proxy as a path: each request through its handler, and the body it sends upstream. */
+export function viaAnthropicProxy<S>(handle: Handler<S>, state: S): (body: Body) => Promise<Body> {
+  return async (body) => {
+    let upstream: Body | undefined;
+    const reply = { id: "m", type: "message", role: "assistant", content: [{ type: "text", text: "ok" }] };
+    const fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+      upstream = JSON.parse(String(init?.body ?? "{}")) as Body;
+      return Response.json({ ...reply, stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } });
+    }) as typeof globalThis.fetch;
+    const req = new Request("http://local/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": "k" },
+      body: JSON.stringify({ model: "m", max_tokens: 10, ...body }),
+    });
+    await handle(req, { state, fetch });
+    if (!upstream) throw new Error("the proxy sent nothing upstream");
+    return upstream;
+  };
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const flag = (name: string): string | undefined => {
@@ -165,17 +194,26 @@ async function main(): Promise<void> {
     const index = await import(join(root, "src/index.ts"));
     const sota = await import(join(root, "src/memory-sota.ts"));
     const know = await import(join(root, "packages/wrap/src/know-inject.ts"));
+    const proxy = await import(join(root, "packages/wrap/src/anthropic.ts"));
+    const tools = await import(join(root, "packages/wrap/src/wrap-tools.ts"));
     const marks: string[] = sota.MEMORY_PACKET_MARKS;
     const seed = SEED.map((content) => ({ role: "user", content }));
-    index.processMemory().observe(seed);
+    // Each wrap path gets a store of its own, so none reads the turns another path's conversation left.
+    const seeded = (name: string) => {
+      process.env.EDEN_MEMORY_DIR = join(home, name);
+      index.processMemory().observe(seed);
+    };
     const library = index.openMemory({ dir: join(home, "library") });
     library.observe(seed);
-    const out = {
-      root,
-      anthropic: measure((b) => know.withKnowFactsAnthropic(b), "anthropic", marks),
-      openai: measure((b) => know.withKnowFacts(b) as Body, "openai", marks),
-      inject: measure((b) => ({ ...b, messages: library.inject(b.messages) }), "openai", marks),
-    };
+    seeded("anthropic");
+    const anthropic = await measure((b) => know.withKnowFactsAnthropic(b), "anthropic", marks);
+    seeded("openai");
+    const openai = await measure((b) => know.withKnowFacts(b) as Body, "openai", marks);
+    const inject = await measure((b) => ({ ...b, messages: library.inject(b.messages) }), "openai", marks);
+    seeded("anthropic-proxy");
+    const state = tools.createState({ programs: [] });
+    const anthropicProxy = await measure(viaAnthropicProxy(proxy.handleAnthropicMessages, state), "anthropic", marks);
+    const out = { root, anthropic, openai, inject, "anthropic-proxy": anthropicProxy };
     const json = JSON.stringify(out, null, 2);
     const file = flag("--out");
     if (file) writeFileSync(file, json + "\n");
