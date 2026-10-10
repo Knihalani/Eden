@@ -15,7 +15,8 @@
  * - **Events**: SessionStart(startup) when a session opens; a Stop with the last assistant text before each
  *   submit that follows assistant work; a UserPromptSubmit for every submit, with the transcript as it stood
  *   before that submit (the prompt arrives in the payload, R0 F8). Tool events are not replayed: a Submit or Stop
- *   reads the tool results from the transcript.
+ *   reads the tool results from the transcript. After each session the plugin checkout's idle sleep runs
+ *   (`eden sleep --idle --after 0`, D34), as the repo then sits idle.
  * - **Submits** are classed by the transcript, never by the plugin: `human` as R6 §1.2 defines a human prompt
  *   (typed, queued, skill invocations, not meta, not a local command or an interrupt), and the non-human
  *   `task-notification` and `peer` lines (`origin.kind`). A skill invocation is submitted as `/name args`.
@@ -47,7 +48,7 @@ import {
   type PermissionMode,
 } from "../harness/payloads";
 import { projectSlug } from "../harness/rng";
-import { HookRunner, hookEnv, loadPlugin, type Invocation } from "../harness/runner";
+import { HookRunner, hookEnv, idleSleepOf, loadPlugin, type Invocation } from "../harness/runner";
 import { bulletsOf } from "../harness/statements";
 import { EDEN_PLUGIN } from "./kit";
 
@@ -238,7 +239,9 @@ export async function replayR6(options: {
   const home = join(options.runDir, "home");
   const projectDir = join(options.runDir, "project");
   mkdirSync(projectDir, { recursive: true });
-  const runner = new HookRunner({ plugin, projectDir, env: hookEnv({ home, projectDir, plugin }) });
+  const env = hookEnv({ home, projectDir, plugin });
+  const runner = new HookRunner({ plugin, projectDir, env });
+  const idleSleep = idleSleepOf(options.pluginDir);
   const transcripts = findTranscripts(options.sessions, options.projects);
   const bySubmit = Object.fromEntries(SUBMIT_CLASSES.map((name) => [name, emptyTally()])) as Record<SubmitClass, Tally>;
   const sessionStart = emptyTally();
@@ -289,8 +292,17 @@ export async function replayR6(options: {
       tally.bullets += bulletsOf(packet).length;
       tally.bytes += Buffer.byteLength(packet, "utf8");
     }
+    // The repo sits idle after a session, so the product's idle sleeper runs (D34): `SimWorld.idleSleep`'s model.
+    await runner.settle();
+    if (idleSleep)
+      Bun.spawnSync([...idleSleep, "--session", id], {
+        cwd: existsSync(cwd) ? cwd : projectDir,
+        env,
+        stdout: "ignore",
+        stderr: "ignore",
+        timeout: 120_000,
+      });
   }
-  await runner.settle();
   const human = bySubmit.human;
   return {
     plugin: options.pluginDir,

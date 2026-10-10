@@ -340,6 +340,15 @@ function killGroup(pid: number): void {
 }
 
 /**
+ * The idle-sleep command (`eden sleep --idle --after 0`, D34) of the Eden checkout a plugin sits in, when that
+ * checkout's CLI exists; `SimWorld` runs it at simulated idle points (`WorldOptions.idleSleep`).
+ */
+export function idleSleepOf(pluginDir: string): string[] | undefined {
+  const cli = join(pluginDir, "..", "..", "packages", "cli", "src", "cli.ts");
+  return existsSync(cli) ? ["bun", cli, "sleep", "--idle", "--after", "0"] : undefined;
+}
+
+/**
  * A hook process's environment: a minimal base (PATH, TMPDIR, LANG) plus Claude Code's hook variables, with
  * HOME, EDEN_HOME and EDEN_MEMORY_DIR inside the run directory, so no hook can reach a real store. Nothing
  * else is inherited, so runs do not depend on the caller's shell. `EDEN_SLEEP_IDLE` is off: a simulated session
