@@ -171,3 +171,98 @@ describe("P0.7: each message is encoded once (P0.3 review round 3)", () => {
     expect(packet).not.toMatch(/Redis/);
   });
 });
+
+describe("P0.7 review round 1: turns, restarts and read-only", () => {
+  const store = () => join(home, "store");
+
+  test("a value restated word for word in a new conversation is the current value again", () => {
+    mem.inject([user("The cache is Redis.")]);
+    mem.inject([user("The cache is Memcached.")]);
+    mem.inject([user("The cache is Redis.")]);
+    const packet = ask("Which cache do we use?");
+    expect(packet).toMatch(/Redis/);
+    expect(packet).not.toMatch(/Memcached/);
+  });
+
+  test("a forget typed word for word again, in a new conversation, applies again", () => {
+    mem.inject([user("We use Postgres for the database.")]);
+    mem.inject([user("Forget that we use Postgres.")]);
+    mem.inject([user("We use Postgres for the database.")]);
+    mem.inject([user("Forget that we use Postgres.")]);
+    expect(ask("Add an index to the database users table.")).not.toMatch(/use Postgres/);
+  });
+
+  test("a forget typed through the wrap hides the value from the next conversation", () => {
+    mem.inject([user("We use Postgres for the database.")]);
+    expect(ask("Write a migration for the database.")).toMatch(/Postgres/);
+    mem.inject([user("Forget that we use Postgres.")]);
+    expect(ask("Add an index to the database users table.")).not.toMatch(/Postgres/);
+  });
+
+  test("a new conversation opening as an earlier one did is answered from the store as it is now", () => {
+    // Known limit, by choice: the earlier conversation's next request then carries this packet on its first message
+    // too, one prefix break, rather than a packet that could still hold what the user has since forgotten (A6 §3).
+    mem.inject([user("We use Clerk for auth in apps/web.")]);
+    const opening = [user("Add a login check with the auth provider in apps/web.")];
+    expect(newPacket([], mem.inject(opening))).not.toMatch(/Auth0/);
+    mem.inject([user("We moved auth to Auth0 in apps/web.")]);
+    expect(newPacket([], mem.inject(opening))).toMatch(/Auth0/);
+  });
+
+  test("restart mid-conversation: the history read again does not flip the value back", () => {
+    const a = [user("The cache is Redis.")];
+    mem.inject(a);
+    mem.inject([user("The cache is Memcached.")]);
+    const restarted = openMemory({ dir: store() });
+    restarted.inject([...a, assistant("Noted."), user("Add a cache test.")]);
+    const packet = packets(restarted.inject([user("Which cache do we use?")])).join("\n");
+    expect(packet).toMatch(/Memcached/);
+    expect(packet).not.toMatch(/Redis/);
+  });
+
+  test("history the client edited is read again, so an old statement does not flip the value back", () => {
+    const a = [user("The cache is Redis."), assistant("Noted."), user("Run the tests.")];
+    mem.inject(a);
+    mem.inject([user("The cache is Memcached.")]);
+    // The client trims an old message, which changes the key of every message after it.
+    const edited = [user("The cache is Redis."), assistant("(trimmed)"), user("Run the tests.")];
+    mem.inject([...edited, assistant("Done."), user("Add a cache test.")]);
+    const packet = ask("Which cache do we use?");
+    expect(packet).toMatch(/Memcached/);
+    expect(packet).not.toMatch(/Redis/);
+  });
+
+  test("restart mid tool loop: the turn's message keeps the bytes it was first sent with", () => {
+    mem.inject([user("We use Clerk for auth in apps/web.")]);
+    const opening = [user("Add a login check with the auth provider in apps/web.")];
+    const sent = mem.inject(opening);
+    const call = { id: "c", type: "function", function: { name: "Bash", arguments: "{}" } };
+    const step = [
+      ...opening,
+      { role: "assistant", content: null, tool_calls: [call] },
+      { role: "tool", content: "ok" },
+    ];
+    expect(openMemory({ dir: store() }).inject(step)[0]).toEqual(sent[0]);
+  });
+
+  test("Gemini contents: the packet goes on the human parts and stays there on the next step", () => {
+    mem.inject([user("We use Clerk for auth in apps/web.")]);
+    const contents = [{ role: "user", parts: [{ text: "Add a login check with the auth provider in apps/web." }] }];
+    const first = mem.injectBody({ contents }).contents as Message[];
+    const call = { role: "model", parts: [{ functionCall: { name: "ls", args: {} } }] };
+    const result = { role: "user", parts: [{ functionResponse: { name: "ls", response: { out: "a" } } }] };
+    const next = mem.injectBody({ contents: [...contents, call, result] }).contents as Message[];
+    expect(packets(first).join("\n")).toMatch(/Clerk/);
+    expect(next[0]).toEqual(first[0]);
+    expect(packets([next[2]])).toEqual([]);
+  });
+
+  test("read-only, then on: a message first seen read-only is still stored once writes are allowed", () => {
+    process.env.EDEN_MEMORY = "readonly";
+    mem.inject([user("The deploy target is fly.io.")]);
+    expect(rowsWith(/fly\.io/)).toEqual([]);
+    process.env.EDEN_MEMORY = "on";
+    mem.inject([user("The deploy target is fly.io."), assistant("ok"), user("Ship it.")]);
+    expect(rowsWith(/fly\.io/).length).toBeGreaterThan(0);
+  });
+});

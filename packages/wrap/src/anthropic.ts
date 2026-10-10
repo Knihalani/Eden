@@ -70,10 +70,11 @@ export function applyCacheBreakpoints(body: AnthropicRequest): void {
   }
   const msgs = body.messages;
   if (Array.isArray(msgs) && msgs.length > 0) {
+    // Every string content becomes its one text block, so a message has one shape in every request (D29): the
+    // breakpoint below needs a block on the last message, which the next request sends back as a string.
+    for (const msg of msgs) if (typeof msg.content === "string") msg.content = [{ type: "text", text: msg.content }];
     const lastMsg = msgs[msgs.length - 1]!;
-    if (typeof lastMsg.content === "string") {
-      lastMsg.content = [{ type: "text", text: lastMsg.content, cache_control: { type: "ephemeral" } }];
-    } else if (Array.isArray(lastMsg.content) && lastMsg.content.length > 0) {
+    if (Array.isArray(lastMsg.content) && lastMsg.content.length > 0) {
       const lastBlock = lastMsg.content[lastMsg.content.length - 1]!;
       (lastBlock as { cache_control?: { type: "ephemeral" } }).cache_control = { type: "ephemeral" };
     }
