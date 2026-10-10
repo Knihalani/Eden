@@ -101,6 +101,8 @@ export interface TurnTail {
 export class WrapTurns {
   private tails = new Map<string, { tail: TurnTail; used: number }>();
   private encoded = new Map<string, true>();
+  /** When each tail's line in its window was last written: a used tail's line is renewed (`keepTail`). */
+  private stamps = new Map<string, number>();
 
   tail(key: string, now: number): TurnTail | undefined {
     const hit = this.tails.get(key);
@@ -114,6 +116,16 @@ export class WrapTurns {
     this.tails.delete(key);
     this.tails.set(key, { tail, used: now });
     evict(this.tails, MAX_TURNS);
+  }
+
+  stampedAt(key: string): number | undefined {
+    return this.stamps.get(key);
+  }
+
+  stamp(key: string, t: number): void {
+    this.stamps.delete(key);
+    this.stamps.set(key, t);
+    evict(this.stamps, MAX_TURNS);
   }
 
   wasEncoded(key: string): boolean {
@@ -517,6 +529,8 @@ function recordAnswer(
 const TAILS = "tails.jsonl";
 /** How often a process looks for other conversations' tails past their hour. */
 const SWEEP_MS = 10 * 60_000;
+/** How stale a used tail's line may get before it is written again, so the file forgets it an hour unused. */
+const RENEW_MS = 10 * 60_000;
 let lastSweep = 0;
 /** No Stop reaches a wrap window, so its ledger is folded once its log has outgrown a few turns (D25). */
 const WRAP_FOLD_BYTES = 32 * 1024;
@@ -533,20 +547,22 @@ function isTail(value: unknown): value is TurnTail {
   );
 }
 
-/** The tails a window keeps that are still within their hour, newest per turn (see the header). */
-function storedTails(win: string | undefined, now: number): Map<string, TurnTail> {
-  const out = new Map<string, TurnTail>();
+/** The tails a window keeps that were used within the hour, each with when its line was last written. */
+function storedTails(win: string | undefined, now: number): Map<string, { tail: TurnTail; t: number }> {
+  const out = new Map<string, { tail: TurnTail; t: number }>();
   if (!win) return out;
   for (const entry of windowRecords(win, TAILS)) {
     const { key, t, tail } = entry;
-    if (typeof key === "string" && typeof t === "number" && now - t <= TURN_TTL_MS && isTail(tail)) out.set(key, tail);
+    if (typeof key === "string" && typeof t === "number" && now - t <= TURN_TTL_MS && isTail(tail))
+      out.set(key, { tail, t });
   }
   return out;
 }
 
 /**
- * Keeps a turn's tail in its window (X11: packet text, kept the hour the memo keeps it). A file holding a tail past its
- * hour is rewritten with only the live ones; other conversations' files untouched for an hour are removed.
+ * Keeps a turn's tail in its window (X11: packet text, kept until it has gone an hour unused, as the memo keeps it).
+ * A file holding a line past its hour is rewritten with only each live tail's newest line; other conversations'
+ * files untouched for an hour are removed.
  */
 function storeTail(mem: WrapMemory, win: string | undefined, key: string, tail: TurnTail, now: number): void {
   if (!win) return;
@@ -556,13 +572,22 @@ function storeTail(mem: WrapMemory, win: string | undefined, key: string, tail: 
   );
   if (!expired) appendRecords(win, TAILS, [entry]);
   else {
-    const kept = [...storedTails(win, now)].map(([k, t]) => ({ k: "tail", key: k, t: now, tail: t }));
+    const kept = [...storedTails(win, now)].flatMap(([k, line]) =>
+      k === key ? [] : [{ k: "tail", key: k, t: line.t, tail: line.tail }],
+    );
     writeFileAtomic(join(win, TAILS), [...kept, entry].map((line) => `${JSON.stringify(line)}\n`).join(""), 0o600);
   }
+  mem.turns.stamp(key, now);
   if (now - lastSweep >= SWEEP_MS) {
     lastSweep = now;
     sweepTails(join(mem.windowsRoot, "windows"), now);
   }
+}
+
+/** Writes a used tail's line again once it is 10 minutes old, so the file's hour counts from its last use. */
+function keepTail(mem: WrapMemory, win: string | undefined, key: string, tail: TurnTail, now: number): void {
+  const stamped = mem.turns.stampedAt(key);
+  if (stamped === undefined || now - stamped >= RENEW_MS) storeTail(mem, win, key, tail, now);
 }
 
 /** Removes the tails of wrap conversations untouched for longer than their hour. */
@@ -616,15 +641,25 @@ export function placeTurnTails(mem: WrapMemory, messages: readonly unknown[], op
   const opening = last === reads.length - 1;
   const fresh = freshness(mem, reads, opening ? last : undefined);
   const win = conversationWindow(mem, reads);
-  let stored: Map<string, TurnTail> | undefined;
+  let stored: ReturnType<typeof storedTails> | undefined;
   const tails = new Map<number, TurnTail>();
   for (const h of humans) {
     if (h === last && opening) continue;
     const key = reads[h]!.key;
     let tail = mem.turns.tail(key, now);
     // A restarted wrap finds the tails it attached in the conversation's window (see the header).
-    if (!tail && (tail = (stored ??= storedTails(win, now)).get(key))) mem.turns.setTail(key, tail, now);
-    if (tail) tails.set(h, tail);
+    const line = tail ? undefined : (stored ??= storedTails(win, now)).get(key);
+    if (line) {
+      tail = line.tail;
+      mem.turns.setTail(key, tail, now);
+      mem.turns.stamp(key, line.t);
+    }
+    if (!tail) continue;
+    tails.set(h, tail);
+    if (mem.writable())
+      try {
+        keepTail(mem, win, key, tail, now);
+      } catch {}
   }
   let encoded = encodeNew(mem, reads, 0, last, fresh);
   if (last < reads.length && !tails.has(last)) {
