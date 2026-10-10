@@ -7,11 +7,14 @@
  * Rows, ids and ledger entries are inside Eden's store, which the harness never parses. It reads them through an
  * entry point the arm defines, the way a user would inspect a store:
  *
- *   eden memory dump --json   →   {"rows": [{"id", "text"}…], "ledger": [{"window", "k", "prompt_id"?}…]}
+ *   eden memory dump --json   →   {"rows": [{"id", "text"}…], "ledger": [{"window", "k", "prompt_id"?, "turns"?}…]}
  *
  * run in the repo with the hooks' environment. P0.3 provides it (`packages/cli/src/memory-dump.ts`) and confirms the
  * contract: a row may carry more fields (`store`, `kind`, `seq`, `t`, `invalid_at`, `valid_until`), and a row still
- * waiting in `pending.jsonl` for its seq is listed with `pending: true`; it is a row all the same. A5 asks
+ * waiting in `pending.jsonl` for its seq is listed with `pending: true`; it is a row all the same. P1.1 revises the
+ * ledger's part: a Stop folds a window's log into its `delivery.json` snapshot (D25), which the dump lists as one
+ * `{"k": "snapshot", "turns"}` entry before the records folded after it, so a window's turns are its snapshot's plus
+ * the distinct `prompt_id`s of the `turn` records after it. A5 asks
  * concurrency arms for ≥ 20 repetitions with 0 failures; CI runs one, `--scale full` runs 20, each in a home of its
  * own and checked on its own.
  */
@@ -25,7 +28,7 @@ const READ_PAIRS = 50;
 
 export interface Dump {
   rows: { id: string; text: string }[];
-  ledger: { window: string; k: string; prompt_id?: string }[];
+  ledger: { window: string; k: string; prompt_id?: string; turns?: number }[];
 }
 
 /** The dump entry point's answer, when it gave one in the contract's shape. */
@@ -95,7 +98,9 @@ function repetitionFailures(rep: Repetition): Map<string, string> {
   }
   const ids = rep.dump.rows.map((row) => row.id);
   if (new Set(ids).size !== ids.length) out.set("unique-ids", `${ids.length - new Set(ids).size} duplicate ids`);
-  const turns = new Set(rep.dump.ledger.filter((entry) => entry.k === "turn").map((entry) => entry.prompt_id)).size;
+  const folded = rep.dump.ledger.reduce((sum, entry) => sum + (entry.k === "snapshot" ? (entry.turns ?? 0) : 0), 0);
+  const logged = new Set(rep.dump.ledger.filter((entry) => entry.k === "turn").map((entry) => entry.prompt_id)).size;
+  const turns = folded + logged;
   if (turns < PROMPTS) out.set("ledger", `${turns} turn records for ${PROMPTS} human prompts`);
   return out;
 }
