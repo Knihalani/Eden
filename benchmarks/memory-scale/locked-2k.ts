@@ -16,6 +16,7 @@ const EXTRA = 80;
 const GOLD = 42;
 const EARLY = 5;
 
+/** The packet text: since P0.7 it ends the turn's message (D29), so it is read from its header on. */
 function packetOf(list: unknown[]): string {
   return (Array.isArray(list) ? list : [])
     .flatMap((m) => {
@@ -24,6 +25,7 @@ function packetOf(list: unknown[]): string {
       return typeof c === "string" ? [c] : [];
     })
     .filter((c) => c.includes(MEMORY_MARK))
+    .map((c) => c.slice(c.indexOf(MEMORY_MARK)))
     .join("\n");
 }
 
