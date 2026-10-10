@@ -565,7 +565,9 @@ function toolBatch(ctx: HookContext): void {
   inTurn(
     () => ctx.win && recordBatch(ctx.win, batchRecord(ctx.r)),
     () => persistToolTraces(ctx.mem.jsonlDir, parseHookToolTraces(ctx.r)),
-    () => ctx.child || encodeConversation(ctx),
+    () => {
+      if (!ctx.child) encodeConversation(ctx);
+    },
   );
 }
 
@@ -578,7 +580,9 @@ function subagentStop(ctx: HookContext): void {
   inTurn(
     () => (asTool = toolResult(ctx, "subagent")),
     () => encodeConversation(ctx, str(ctx.r.agent_transcript_path) ?? ""),
-    () => asTool || encodePayloadText(ctx),
+    () => {
+      if (!asTool) encodePayloadText(ctx);
+    },
   );
 }
 
