@@ -173,15 +173,22 @@ const QPREV = "qprev.json";
  * small enough for the secret gate to fit its 15 ms budget (D34).
  */
 const QPREV_CHARS = 8_000;
+/**
+ * What the secret gate reads before the kept end: past the reach of a keyword rule (D13: a keyword, up to 20
+ * characters, a separator, then a value of up to 150), so a cut never separates a value from its keyword.
+ */
+const QPREV_GATE_MARGIN = 512;
 
 /**
- * `stop-fast` (A4 §5.7): the end of the agent's last message, cut at a space so no token is split, through the
- * secret gate (A6 §2.2), written by rename so a reader never sees half of it.
+ * `stop-fast` (A4 §5.7): the end of the agent's last message, written by rename so a reader never sees half of it.
+ * The secret gate (A6 §2.2) reads it first, with a margin before the kept part; the kept part then starts at a space,
+ * so no token is split.
  */
 export function writeLastAssistant(dir: string, last: LastAssistant): void {
-  const end = last.text.length > QPREV_CHARS ? last.text.slice(-QPREV_CHARS).replace(/^\S*\s*/, "") : last.text;
+  const gated = scrubMemoryText(last.text.slice(-(QPREV_CHARS + QPREV_GATE_MARGIN)));
+  const end = gated.length > QPREV_CHARS ? gated.slice(-QPREV_CHARS).replace(/^\S*\s*/, "") : gated;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  writeFileAtomic(join(dir, QPREV), JSON.stringify({ t: last.t, text: scrubMemoryText(end) }), 0o600);
+  writeFileAtomic(join(dir, QPREV), JSON.stringify({ t: last.t, text: end }), 0o600);
 }
 
 export function readLastAssistant(dir: string): LastAssistant | undefined {
