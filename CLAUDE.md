@@ -1,12 +1,12 @@
 # Eden — agent instructions
 
-Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `main`. CI (`.github/workflows/test.yml`) runs four steps:
+Bun/TypeScript monorepo. The repo is `Knihalani/Eden`, and all work targets `main`. CI is four steps (`.github/workflows/test.yml` lists them):
 1. `bun run format:check` (`scripts/format.sh`; `bun run format` fixes all but long comments)
 2. `bun run typecheck`
 3. `bun run test` (`scripts/test.sh`)
 4. `EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh`. Without the variable, build-cli runs typecheck and the whole suite again first.
 
-In CI, steps 1, 2 and 4 run in one job, and step 3 runs in six parallel shards (`EDEN_TEST_SHARD=k/6`). `scripts/test-shard.ts` balances the shards by each test file's measured time (`scripts/test-times.txt`). When you add a test file that takes more than a few seconds, refresh the table (the command is in its header). A run takes about as long as its slowest shard. Locally, `bun run test:parallel` runs the same six shards at once (`scripts/test-parallel.sh`).
+**GitHub Actions is off** (since 2026-10-10: the user does not pay for Actions minutes; the `test` and `stability` workflows are disabled). CI runs **locally** and gates every merge: the four steps, once, on the final tree, in a checkout outside the repo. `bun run test:parallel` runs step 3 as six parallel shards (`scripts/test-parallel.sh`, `EDEN_TEST_SHARD=k/6`), balanced by each test file's measured time (`scripts/test-shard.ts`, `scripts/test-times.txt`; refresh the table when you add a test file that takes more than a few seconds), then the latency-gated files of `scripts/test-serial.txt` alone. A latency-gated file that fails under load is re-run alone on a quiet machine, and the report says so. Local runs are macOS only: name any test whose behaviour depends on the platform.
 
 ## The memory program (most work here)
 
@@ -42,9 +42,9 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
 5. **Verify.** Cheap checks while the code changes; the full measurement once, on the commit the code review approved (step 6). Details and commands: `.claude/commands/slice.md` §5.
    - While iterating, run only the affected test files, the slice's arms (`arms/run.ts --arm <id>`) and the earlier review rounds' probes (committed as tests). For behaviour changes, add one kept world replay and the real-session end-to-end (minutes each). No full measurement chain while the code is still changing.
    - Measure with `bun run measure:slice` (`scripts/slice-measure.ts`). It runs the count-only measures in parallel (arms in every flag state, the nine guard runs, R6 replays) and the timing-sensitive ones alone on a quiet machine (soak, bench). After a later change, `--changed <last measured commit>` re-runs only what that change can affect; the report lists what was skipped and why.
-   - Run CI's four steps locally once, on the final tree, all green, with `bun run test:parallel` for step 3. Don't repeat them for each small fix: re-run the affected files, and let GitHub CI cover the final push.
+   - Run CI's four steps locally once, on the final tree, all green, with `bun run test:parallel` for step 3, in a checkout outside the repo. Don't repeat them for each small fix: re-run the affected files. Keep the logs: the reviewer's evidence check reads them.
    - Run the slice's arms twice (the measure script runs `on` twice, as separate fresh processes); both runs must match `arms.json`.
-   - Run both flag states: `--flags off` (identity) and `--flags shadow` (shadow ledger only). CI gates them for one sample arm per group, so a slice that changes flag behaviour runs both on every arm and updates `arms.json`.
+   - Run both flag states: `--flags off` (identity) and `--flags shadow` (shadow ledger only). The suite gates them for one sample arm per group, so a slice that changes flag behaviour runs both on every arm and updates `arms.json`.
    - Run the end-to-end scenario in a **real Claude Code session** with the plugin built from this worktree. Run it headless: `claude -p … --plugin-dir ./plugins/eden-memory`, with a temp `EDEN_MEMORY_DIR` (details in `.claude/commands/slice.md`).
    - Record the numbers exactly as the commands printed them.
 6. **Independent review.**
@@ -52,8 +52,8 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
    - Fix every correctness, spec or test-honesty finding and re-run it, and commit the reviewer's probes as regression tests. Stop after 3 code-review rounds: ask the user whether to allow one more; otherwise mark the slice `blocked`.
    - Also run `/security-review` for P0.4, P0.5, P2.3, any migration, and anything touching secrets or permissions.
 7. **Merge.**
-   - Rebase on `origin/main`, push, open the PR with the report as its body. Put related fixes in one PR, so CI runs once rather than once per PR, and push only when you need CI's evidence: each push runs seven CI jobs.
-   - Wait for CI (`gh pr checks --watch`); it must be green. Until P0.−1 lands, CI is red on `main`; then require "no new failures versus `main`" instead.
+   - Rebase on `origin/main`, push, open the PR with the report as its body. Put related fixes in one PR.
+   - Local CI on the final tree must be green. If the rebase changed files the slice touches or imports, run it again on the rebased tree. No GitHub run exists to wait for.
    - `gh pr merge --rebase --delete-branch`.
    - Never force-push `main`. Never rewrite published history.
 8. **Record.**
@@ -91,7 +91,7 @@ Run slices with `/next` (picks the next unblocked slice) or `/slice <id>`. Both 
 
 ## Evidence
 - Arms: <red→green list, with the command run>
-- CI: <local + GitHub run link>
+- CI: <local: the four steps' results on the final tree, with the commit>
 - End-to-end: <scenario, what happened in the real session, hook.log ids>
 - Review: <reviewer verdict, rounds, findings fixed>
 

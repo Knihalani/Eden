@@ -66,7 +66,6 @@ Follow `CLAUDE.md` steps 2–5 exactly. Additional requirements:
   4. **After a later change**, re-measure only what that change can affect: `--changed <last measured commit>` selects from the changed files (docs and tests: nothing; `arms.json`: the arms; code the hook may load or the harness: everything). Copy its "selected"/"skipped" lines into the report. You may skip a measure it selected only for a reason a counter shows (e.g. the R6 replay records no invalidation, so a change confined to validity cannot move it), stated in the report.
   5. **Local CI once**, on the final tree, in the outside checkout: `bun run format:check && bun run typecheck && bun run test:parallel && EDEN_SKIP_CHECKS=1 bash scripts/build-cli.sh`.
   6. **A quiet machine for timing.** Never run two measurements, or a measurement and the local suite, at once. Check `uptime` before timing work, and report the load next to every latency number.
-  7. **Batch pushes.** Push when you need GitHub CI's evidence (before the evidence check and the merge), not after each fix: each push runs seven CI jobs.
 - **End-to-end means a real Claude Code session**, not a unit test. Run it headless against the worktree's plugin, with an isolated store:
   ```bash
   export EDEN_MEMORY_DIR=$(mktemp -d)
@@ -97,16 +96,14 @@ Two phases, so the slow measurement runs once, on approved code:
    - A numbers-only finding: fix the report; it is not a new round.
    - A finding that needs a code change: a new code-review round, and re-measure with `--changed`.
 - At most 3 code-review rounds. If the reviewer still requests changes, ask the user whether to allow one more round; otherwise mark the slice `blocked` with the unresolved findings. Do not merge.
-- The reviewer relies on GitHub CI's run for the full suite rather than re-running it.
+- The reviewer relies on your local CI logs for the full suite rather than re-running it (GitHub Actions is off).
 - Also run `/security-review` where `CLAUDE.md` requires it.
 
 ## 7. Merge
 
-1. Rebase on `origin/main`. Re-run CI's four steps locally only if the rebase changed files your change touches or imports; otherwise GitHub CI covers it.
-2. Push, and open the PR titled `<slice id>: <title>`, with the report as its body.
-3. `gh pr checks --watch`.
-   - CI must be green.
-   - Exception: until P0.−1 is merged, `main` is red, so require "no new failures versus `main`" and show the comparison.
+1. Rebase on `origin/main`. Re-run CI's four steps locally if the rebase changed files your change touches or imports.
+2. Local CI on the final tree must be green (§5). GitHub Actions is off, so there is no run to wait for.
+3. Push, and open the PR titled `<slice id>: <title>`, with the report as its body.
 4. `gh pr merge --rebase --delete-branch`.
 5. Record the merge commit sha.
 6. Remove the worktree, the scratch checkouts (`git worktree remove`), and any private copy (such as an R6 snapshot).
