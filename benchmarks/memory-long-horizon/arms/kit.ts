@@ -9,6 +9,8 @@
  * `flagChecks` instead of the arm's own:
  * - `off` is identity: exit 0, nothing printed at a delivery point, no context or decision anywhere, no ledger;
  * - `shadow` prints nothing at a delivery point but writes the shadow ledger and wide events, and no live ledger.
+ *   Since P1.1 a Stop folds a ledger's log into its snapshot (D25: `delivery.json`, `delivery.shadow.json`), so a
+ *   ledger is its log or its snapshot.
  *
  * Every arm world hands hooks the simulated clock as `EDEN_NOW` (session.ts `clockEnv`), and the product CLI the
  * same environment as the hooks, so a product that honours it sees the days a script skips.
@@ -249,15 +251,16 @@ export function flagChecks(worlds: readonly SimWorld[], state: Exclude<FlagState
     check("quiet", loud.length === 0, `${loud.length} delivery-point invocations printed something`),
     check("no-context", acting.length === 0, `${acting.length} invocations returned context, a decision or a block`),
   ];
+  const shadowLedger = [...named("delivery.shadow.log"), ...named("delivery.shadow.json")];
   if (state === "off") {
-    const ledgers = [...live, ...named("delivery.shadow.log")];
+    const ledgers = [...live, ...shadowLedger];
     return [...checks, check("no-ledger", ledgers.length === 0, `${ledgers.length} ledger files`)];
   }
-  const shadow = nonEmpty(named("delivery.shadow.log"));
+  const shadow = nonEmpty(shadowLedger);
   const wide = nonEmpty(files.filter((path) => path.includes("/hook.log.d/")));
   return [
     ...checks,
-    check("shadow-ledger", shadow.length > 0, `${shadow.length} non-empty delivery.shadow.log files`),
+    check("shadow-ledger", shadow.length > 0, `${shadow.length} non-empty shadow ledger files (log or snapshot)`),
     check("wide-events", wide.length > 0, `${wide.length} non-empty files under hook.log.d/`),
     check("no-live-ledger", live.length === 0, `${live.length} live ledger files`),
   ];
