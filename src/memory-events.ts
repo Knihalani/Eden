@@ -4,15 +4,19 @@
  * and times; never prompt or row text. An error is logged as its class and the source line it was thrown from.
  *
  * Read them by point and by submit kind before comparing rates: non-human submits are most submits (R6).
+ *
+ * Retention (X11): a day file is kept 90 days, then replaced by its daily aggregate, `daily/<yyyy-mm-dd>.json`:
+ * per event, point and submit kind, the count, packets, cids, drops by stage, `ms` quantiles, aborts and errors.
  */
-import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
+import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import type { Flag, FlagMode } from "./memory-flags";
 
 export const EVENTS_DIR = "hook.log.d";
 
-/** The A4 §5.1 stages that drop notes between retrieval and the packet. */
-export type DropStage = "validity" | "gate" | "residual" | "refractory" | "shape";
+/** The A4 §5.1 stages that drop notes between retrieval and the packet; `budget` is A4 §4's epoch cap. */
+export type DropStage = "validity" | "gate" | "residual" | "refractory" | "budget" | "shape";
 
 export interface WideEvent {
   /** Epoch ms, by the memory clock. */
@@ -35,8 +39,14 @@ export interface WideEvent {
   nonhuman?: string;
   preamble?: true;
   turn_mode?: string;
-  /** The cids of the packet the point delivered, or in shadow would have. */
+  /** The cids of the packet the point delivered, or in shadow would have, and the ids of their rows. */
   cids?: string[];
+  ids?: string[];
+  /** The transcript's size at a Submit (the ledger's `off`), and the context tokens of its last `message.usage`. */
+  off?: number;
+  ctx_tokens?: number;
+  /** The tokens delivered in this epoch before the packet (A4 §4's budget). */
+  tokens_epoch?: number;
   drops?: Partial<Record<DropStage, number>>;
   would_preempt?: string[];
   /** Which of Stop's two handlers ran (D34). */
@@ -102,4 +112,115 @@ export function recentEvents(root: string, point: Flag, n: number): WideEvent[] 
     }
   }
   return out.reverse();
+}
+
+/** X11: how long a day file is kept before it becomes a daily aggregate. */
+const RETAIN_DAYS = 90;
+const DAY_MS = 86_400_000;
+const DAILY_DIR = "daily";
+
+/** One group of a day's events (see the header). */
+interface DailyGroup {
+  ev: string;
+  point?: Flag;
+  submit?: WideEvent["submit"];
+  n: number;
+  packets: number;
+  cids: number;
+  drops: Partial<Record<DropStage, number>>;
+  ms: { p50: number; p99: number; max: number };
+  aborted: number;
+  errors: number;
+}
+
+function nearestRank(sorted: readonly number[], q: number): number {
+  return sorted[Math.max(0, Math.ceil(q * sorted.length) - 1)] ?? 0;
+}
+
+/** A day's events as aggregates: counts and times only, no ids or hashes. */
+function aggregate(events: readonly WideEvent[]): DailyGroup[] {
+  const groups = new Map<string, { group: DailyGroup; ms: number[] }>();
+  for (const event of events) {
+    const key = [event.ev, event.point ?? "", event.submit ?? ""].join("|");
+    let entry = groups.get(key);
+    if (!entry) {
+      const group: DailyGroup = {
+        ev: event.ev,
+        ...(event.point ? { point: event.point } : {}),
+        ...(event.submit ? { submit: event.submit } : {}),
+        n: 0,
+        packets: 0,
+        cids: 0,
+        drops: {},
+        ms: { p50: 0, p99: 0, max: 0 },
+        aborted: 0,
+        errors: 0,
+      };
+      groups.set(key, (entry = { group, ms: [] }));
+    }
+    const { group } = entry;
+    group.n++;
+    if (event.cids?.length) group.packets++;
+    group.cids += event.cids?.length ?? 0;
+    for (const [stage, count] of Object.entries(event.drops ?? {}) as [DropStage, number][])
+      if (count) group.drops[stage] = (group.drops[stage] ?? 0) + count;
+    if (event.aborted) group.aborted++;
+    if (event.err) group.errors++;
+    if (typeof event.ms === "number") entry.ms.push(event.ms);
+  }
+  return [...groups.values()].map(({ group, ms }) => {
+    const sorted = ms.sort((a, b) => a - b);
+    return { ...group, ms: { p50: nearestRank(sorted, 0.5), p99: nearestRank(sorted, 0.99), max: sorted.at(-1) ?? 0 } };
+  });
+}
+
+function parseEvents(text: string): WideEvent[] {
+  return text.split("\n").flatMap((line) => {
+    try {
+      const event = JSON.parse(line) as WideEvent;
+      return event && typeof event === "object" && typeof event.ev === "string" ? [event] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/**
+ * X11's retention (see the header), run at `stop-sleep`: each day file older than 90 days (by the memory clock) is
+ * written as its aggregate, by rename, then removed. Under a lock taken without waiting: another hook doing it leaves
+ * nothing to do. Fails open.
+ */
+export function retainEvents(root: string, now: number): void {
+  const dir = eventsDir(root);
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return;
+  }
+  const cutoff = new Date(now - RETAIN_DAYS * DAY_MS).toISOString().slice(0, 10);
+  const expired = names.filter((name) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(name) && name.slice(0, 10) < cutoff);
+  if (!expired.length) return;
+  try {
+    withFileLock(
+      join(dir, ".retain.lock"),
+      () => {
+        mkdirSync(join(dir, DAILY_DIR), { recursive: true, mode: 0o700 });
+        for (const name of expired) {
+          const day = name.slice(0, 10);
+          let text: string;
+          try {
+            text = readFileSync(join(dir, name), "utf8");
+          } catch {
+            continue;
+          }
+          const events = parseEvents(text);
+          const body = JSON.stringify({ day, events: events.length, groups: aggregate(events) });
+          writeFileAtomic(join(dir, DAILY_DIR, `${day}.json`), body, 0o600);
+          rmSync(join(dir, name), { force: true });
+        }
+      },
+      0,
+    );
+  } catch {}
 }

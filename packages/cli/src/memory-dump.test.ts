@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory } from "../../../src/index";
+import { foldLedger } from "../../../src/memory-ledger";
 import { appendTurn, windowDir } from "../../../src/memory-window";
 
 const CLI = join(import.meta.dir, "cli.ts");
@@ -62,6 +63,22 @@ describe("eden memory dump --json (the spawn-writers arm's contract)", () => {
     const rows = (JSON.parse(dump(root).out) as { rows: { id: string; invalid_at?: number }[] }).rows;
     expect(rows.map((row) => row.id).sort()).toEqual([waiting.id, stored.id].sort());
     expect(rows.find((row) => row.id === waiting.id)?.invalid_at).toBe(9);
+  });
+
+  test("a window's folded ledger is listed as its snapshot's summary, then the records folded after it (P1.1)", () => {
+    const base = mkdtempSync(join(tmpdir(), "eden-dump-"));
+    dirs.push(base);
+    const root = join(base, "memory");
+    const win = windowDir(root, "s1")!;
+    appendTurn(win, { promptId: "p1", prompt: "hello there", off: 0 });
+    appendTurn(win, { promptId: "p2", prompt: "and again", off: 9 });
+    foldLedger(win, "delivery.log");
+    appendTurn(win, { promptId: "p3", prompt: "once more", off: 20 });
+    const ledger = (JSON.parse(dump(root).out) as { ledger: Record<string, unknown>[] }).ledger;
+    expect(ledger).toEqual([
+      { window: "s1", k: "snapshot", epoch: 0, turns: 2, tokens_epoch: 0, entries: 0 },
+      { window: "s1", k: "turn", prompt_id: "p3", off: 20 },
+    ]);
   });
 
   test("an empty or missing store dumps as empty lists", () => {

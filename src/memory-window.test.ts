@@ -2,11 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { humanTurns } from "./memory-ledger";
 import { promptHash } from "./memory-turn";
 import {
   appendTurn,
   cronHashes,
-  humanTurns,
   ledgerFor,
   recordCrons,
   SHADOW_LEDGER,
