@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
-import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
+import { AgentMemory, MEMORY_MARK, openMemory, sleep, injectedPackets } from "./index";
 import { GistStore } from "./gist-store";
 import * as forgetMod from "./memory-forget";
 import * as edenMem from "./index";
@@ -79,12 +79,7 @@ async function withMem<T>(
 }
 
 function packet(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {
@@ -487,7 +482,8 @@ describe("M43 adversarial forget", () => {
       mem.observe([{ role: "user", content: shot }]);
       mem.observe([{ role: "user", content: PG }]);
       mem.observe([{ role: "user", content: FORGET_PG }]);
-      const pkt = packet(mem.inject([{ role: "user", content: shot }]));
+      // Not the shot itself: a cue repeating a row is its own residual (D26, the wrap's since P0.7).
+      const pkt = packet(mem.inject([{ role: "user", content: "The movie was great. label:" }]));
       expect(pkt).toMatch(/label:\s*postgres/i);
       expect(packet(mem.inject([{ role: "user", content: PG_CUE }]))).not.toMatch(/use postgres/i);
     });

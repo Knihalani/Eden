@@ -13,7 +13,7 @@ import { injectBodyThenObserveTools } from "../packages/wrap/src/tool-observe";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { retrieveExperience } from "./experience-retrieve";
 import { GistStore, scrubTombstonedIdentity } from "./gist-store";
-import { AgentMemory, MEMORY_MARK, openMemory, sleep } from "./index";
+import { AgentMemory, MEMORY_MARK, openMemory, sleep, injectedPackets } from "./index";
 import * as edenMem from "./index";
 import { storeFor } from "./memory-repo";
 import { SemanticStore } from "./semantic-store";
@@ -68,12 +68,7 @@ async function withMem<T>(
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {
@@ -186,9 +181,9 @@ describe("M35.3 leftover identity — packet, gists, experience", () => {
       await sleep({ dir, mem });
       const pkt = packetOf(mem.inject([{ role: "user", content: "what is auth" }]));
       expect(pkt).toContain(MEMORY_MARK);
-      expect(pkt).toMatch(/Clerk/);
-      expect(pkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
-      expect(pkt).not.toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+      // Worded as the hook words it (D14, the wrap's since P0.7): the fact, and no procedure step.
+      expect(pkt).toMatch(/^- Auth is Clerk\.? \(just now\)$/m);
+      expect(pkt).not.toMatch(/\b(?:verify|unknown): /);
       expect(existsSync(join(dir, EXPERIENCE_DIRNAME))).toBe(false);
     });
   });

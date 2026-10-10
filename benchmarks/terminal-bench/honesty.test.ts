@@ -406,7 +406,8 @@ describe("M32.4 remain-silent: on-cue still injects; math omit is allowed/requir
       mem.observe([{ role: "user", content: "Use sqlite." }]);
       const retrieved = mem.notesFor("What store is postgres?", 10);
       expect(retrieved.length).toBeGreaterThan(0);
-      const cue = [{ role: "user" as const, content: "What store is postgres?" }];
+      // A cue naming the value would be its own residual (D26, the wrap's since P0.7).
+      const cue = [{ role: "user" as const, content: "Which session store do we use?" }];
       const out = mem.inject(cue);
       const blob = (Array.isArray(out) ? out : [])
         .map((m) => (m && typeof m === "object" ? String((m as { content?: unknown }).content ?? "") : ""))

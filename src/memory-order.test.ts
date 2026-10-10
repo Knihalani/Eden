@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
-import { cueFor, MEMORY_MARK, memoryInjectSwallows, openMemory, placePathsFrom } from "./index";
+import { cueFor, MEMORY_MARK, memoryInjectSwallows, openMemory, placePathsFrom, injectedPackets } from "./index";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/56
 
@@ -34,13 +34,8 @@ const AUTH_RULE = "never mock src/lib/auth.ts in unit tests.";
 const FILE_SECRET = "export const SECRET = 1";
 const HUGE_FN = "export default function huge() {\n  return 1;\n}";
 
-function memorySystemText(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+function memoryPacketText(messages: unknown[]): string {
+  return injectedPackets(messages).join("\n");
 }
 
 describe("M3 cueFor this turn", () => {
@@ -77,7 +72,7 @@ describe("M3 inject retrieve then encode", () => {
     withMem((mem) => {
       const list = [{ role: "user", content: "Auth is Clerk" }];
       const injected = mem.inject(list);
-      expect(memorySystemText(injected)).not.toContain("Clerk");
+      expect(memoryPacketText(injected)).not.toContain("Clerk");
       expect(mem.memories().some((r) => /Clerk/i.test(r.text))).toBe(true);
     });
   });
@@ -93,13 +88,13 @@ describe("M3 inject retrieve then encode", () => {
       const bare = [...pacificTurns(), { role: "user", content: "What CI do we use?" }];
       expect(cueFor(bare)).toBe("What CI do we use?");
       expect(cueFor(bare)).not.toMatch(/Pacific/i);
-      expect(memorySystemText(mem.inject(bare))).not.toMatch(/Pacific/i);
+      expect(memoryPacketText(mem.inject(bare))).not.toMatch(/Pacific/i);
 
-      // "GitHub Actions" in the cue so the current lexical ranker can complete
-      // (bare "ci" is two letters; that is M4, not this wave).
-      const messages = [...pacificTurns(), { role: "user", content: "What GitHub Actions CI do we use?" }];
-      expect(cueFor(messages)).toBe("What GitHub Actions CI do we use?");
-      const packet = memorySystemText(mem.inject(messages));
+      // "GitHub" in the cue so the current lexical ranker can complete (bare "ci" is two letters; that is M4,
+      // not this wave), but not the whole value: a cue stating it is its own residual (D26, the wrap's since P0.7).
+      const messages = [...pacificTurns(), { role: "user", content: "Which GitHub workflow runs our CI?" }];
+      expect(cueFor(messages)).toBe("Which GitHub workflow runs our CI?");
+      const packet = memoryPacketText(mem.inject(messages));
       expect(packet).toMatch(/GitHub|Actions/i);
       expect(packet).not.toMatch(/Pacific/i);
     });
@@ -109,11 +104,11 @@ describe("M3 inject retrieve then encode", () => {
     withMem((mem) => {
       mem.remember("Kai timezone is Pacific");
       const injected = mem.inject([{ role: "assistant", content: "working" }]);
-      expect(memorySystemText(injected)).not.toMatch(/Pacific/i);
+      expect(memoryPacketText(injected)).not.toMatch(/Pacific/i);
       expect(cueFor([{ role: "assistant", content: "working" }])).toBe("");
       const pathsOnly = mem.inject([{ role: "assistant", content: "working" }]);
-      expect(memorySystemText(pathsOnly)).not.toMatch(/Pacific/i);
-      expect(memorySystemText(pathsOnly)).not.toMatch(/auth\.ts/i);
+      expect(memoryPacketText(pathsOnly)).not.toMatch(/Pacific/i);
+      expect(memoryPacketText(pathsOnly)).not.toMatch(/auth\.ts/i);
     });
   });
 
@@ -139,19 +134,19 @@ describe("M3 inject retrieve then encode", () => {
       ];
       const out = mem.inject(list);
       expect(out).toBe(list);
-      expect(memorySystemText(out).split(MEMORY_MARK).length - 1).toBe(1);
+      expect(memoryPacketText(out).split(MEMORY_MARK).length - 1).toBe(1);
       expect(mem.memories().some((r) => /Clerk/i.test(r.text))).toBe(true);
     });
   });
 
-  test("injectBody does not echo this-turn system* as memory; still encodes it", () => {
+  test("injectBody neither echoes nor stores a body's system prompt: it is the host's text (D12)", () => {
     withMem((mem) => {
       const out = mem.injectBody({
         system: "Auth is Clerk for every login at the company.",
         messages: [{ role: "user", content: "What auth provider do we use for Clerk?" }],
       });
-      expect(memorySystemText(out.messages as unknown[])).not.toMatch(/Clerk/i);
-      expect(mem.memories().some((r) => /Clerk/i.test(r.text))).toBe(true);
+      expect(memoryPacketText(out.messages as unknown[])).not.toMatch(/Clerk/i);
+      expect(mem.memories().some((r) => /for every login at the company/i.test(r.text))).toBe(false);
     });
   });
 
@@ -166,10 +161,10 @@ describe("M3 inject retrieve then encode", () => {
       const ranked = mem.injectBody({
         contents: [
           ...pacificTurns().map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
-          { role: "user", parts: [{ text: "What GitHub Actions CI do we use?" }] },
+          { role: "user", parts: [{ text: "Which GitHub workflow runs our CI?" }] },
         ],
       });
-      const rankedPkt = memorySystemText(ranked.contents as unknown[]);
+      const rankedPkt = memoryPacketText(ranked.contents as unknown[]);
       expect(rankedPkt).toMatch(/GitHub|Actions/i);
       expect(rankedPkt).not.toMatch(/Pacific/i);
 
@@ -178,7 +173,7 @@ describe("M3 inject retrieve then encode", () => {
         contents: [{ role: "user", parts: [{ text: "Auth is Clerk" }] }],
       };
       const out = mem.injectBody(marked);
-      const pkt = memorySystemText((out.contents as unknown[]) || []);
+      const pkt = memoryPacketText((out.contents as unknown[]) || []);
       expect(pkt).not.toContain(MEMORY_MARK);
       expect(String(out.systemInstruction).split(MEMORY_MARK).length - 1).toBe(1);
       expect(mem.memories().some((r) => /Clerk/i.test(r.text))).toBe(true);
@@ -246,7 +241,7 @@ describe("M41 place cues", () => {
       expect(cueFor(list)).toBe("fix this");
       expect(cueFor(list)).not.toContain("src/lib/auth.ts");
       expect(cueFor(list)).not.toContain(FILE_SECRET);
-      const packet = memorySystemText(mem.inject(list));
+      const packet = memoryPacketText(mem.inject(list));
       expect(packet).toContain(MEMORY_MARK);
       expect(packet).toMatch(/auth\.ts/i);
       expect(packet).toMatch(/never mock/i);
@@ -267,7 +262,7 @@ describe("M41 place cues", () => {
       ];
       expect(cueFor(list)).toBe("fix this");
       expect(cueFor(list)).not.toMatch(/Pacific/i);
-      const packet = memorySystemText(mem.inject(list));
+      const packet = memoryPacketText(mem.inject(list));
       expect(packet).toContain(MEMORY_MARK);
       expect(packet).toMatch(/auth\.ts/i);
       expect(packet).toMatch(/never mock/i);
@@ -285,8 +280,8 @@ describe("M41 place cues", () => {
       const long = [{ role: "user", content: "fix this", files: [dump] }];
       expect(cueFor(huge)).toBe("fix this");
       expect(cueFor(long)).toBe("fix this");
-      const hugePkt = memorySystemText(mem.inject(huge));
-      const longPkt = memorySystemText(mem.inject(long));
+      const hugePkt = memoryPacketText(mem.inject(huge));
+      const longPkt = memoryPacketText(mem.inject(long));
       expect(hugePkt).not.toContain("export default function huge");
       expect(hugePkt).not.toContain("return 1");
       expect(longPkt).not.toContain(dump);
@@ -305,7 +300,7 @@ describe("M41 place cues", () => {
       const ranked = mem.injectBody({
         messages: [...pacificTurns(), { role: "user", content: "What GitHub Actions CI do we use?" }],
       });
-      const rankedPkt = memorySystemText(ranked.messages as unknown[]);
+      const rankedPkt = memoryPacketText(ranked.messages as unknown[]);
       expect(rankedPkt).toMatch(/GitHub|Actions/i);
       expect(rankedPkt).not.toMatch(/Pacific/i);
 
@@ -318,7 +313,7 @@ describe("M41 place cues", () => {
       const messages = out.messages as { role?: string; content?: string }[];
       const lastUser = [...messages].reverse().find((m) => m.role === "user");
       expect(lastUser?.content).toBe("fix this");
-      const packet = memorySystemText(messages);
+      const packet = memoryPacketText(messages);
       expect(packet).toContain(MEMORY_MARK);
       expect(packet).toMatch(/auth\.ts/i);
       expect(packet).toMatch(/never mock/i);

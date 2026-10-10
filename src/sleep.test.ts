@@ -6,7 +6,15 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, superseded } from "./index";
+import {
+  AgentMemory,
+  MEMORY_MARK,
+  memoryInjectSwallows,
+  openMemory,
+  sleep,
+  superseded,
+  injectedPackets,
+} from "./index";
 import { EXPERIENCE_DIRNAME, putExperience } from "./experience-store";
 import { SemanticStore } from "./semantic-store";
 import { GistStore } from "./gist-store";
@@ -89,12 +97,7 @@ async function withHookMem<T>(
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openMemory, storeRows, type MemoryRecord } from "../../../src/index";
+import { injectedPackets, openMemory, storeRows, type MemoryRecord } from "../../../src/index";
 import { memoryHookResponse } from "./memory-hook";
 
 const SESSION = "s-trust";
@@ -203,11 +203,11 @@ describe("A6 §2.6: the wrap's packets claim no user source for the agent's text
     const mem = openMemory({ dir: join(dir, "memory") });
     try {
       mem.observe([{ role: "assistant", content: "The deploy target for zorbservice is fly.io in region ams." }]);
-      const packet = JSON.stringify(
-        mem.inject([{ role: "user", content: "what is the deploy target for zorbservice?" }]),
-      );
-      expect(packet).toContain("zorbservice is fly.io");
-      expect(packet).not.toMatch(/· user\]/);
+      // The agent's words pass A7 §4's gate on an identifier the prompt shares (fly.io); since P0.7 the wrap words
+      // them as the hook does (D14), with no source the row does not show.
+      const packet = injectedPackets(mem.inject([{ role: "user", content: "which fly.io region is zorbservice in?" }]));
+      expect(packet.join("\n")).toContain("zorbservice is fly.io");
+      expect(packet.join("\n")).not.toMatch(/you said|· user\]/);
     } finally {
       mem.close();
     }

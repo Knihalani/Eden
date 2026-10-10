@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { storeRows } from "../../../src/index";
 import { storeFor } from "../../../src/memory-repo";
-import { respondToHook } from "./hook";
+import { respondToHook, type HookIn } from "./hook";
 import { hookCommand, installedHooks, preHookCommand } from "./setup";
 
 const CLI = join(import.meta.dir, "cli.ts");
@@ -41,7 +41,10 @@ const handlers = (hooks: Record<string, { hooks: Handler[] }[]>, event: string):
   (hooks[event] ?? []).flatMap((entry) => entry.hooks);
 
 describe("P0.7: eden setup's Claude hooks run memory as the plugin does", () => {
-  const hooks = installedHooks(hookCommand("/abs/cli.ts", 8794)) as unknown as Record<string, { hooks: Handler[] }[]>;
+  const hooks = installedHooks((stage) => hookCommand("/abs/cli.ts", 8794, { stage })) as unknown as Record<
+    string,
+    { hooks: Handler[] }[]
+  >;
 
   test("Stop is a sync stop-fast and an async stop-sleep; SubagentStop is async (D34)", () => {
     const [fast, sleep, ...rest] = handlers(hooks, "Stop");
@@ -72,7 +75,8 @@ describe("P0.7: eden setup's Claude hooks run memory as the plugin does", () => 
 function runHook(payload: Record<string, unknown>, stage?: string) {
   const proc = Bun.spawnSync(["bun", CLI, "hook", ...(stage ? [stage] : [])], {
     stdin: new TextEncoder().encode(JSON.stringify(payload)),
-    env: { ...process.env, EDEN_HOOKD_PORT: "9" },
+    // No hookd: `eden hook` would start one in the background and wait for it.
+    env: { ...process.env, EDEN_HOOKD: "0" },
     cwd: dir,
   });
   return { code: proc.exitCode, stdout: proc.stdout.toString() };
@@ -105,7 +109,7 @@ describe("P0.7: respondToHook records batches and honours the stage", () => {
       tool_calls: [
         { tool_name: "Bash", tool_input: { command: "make" }, tool_use_id: "t1", tool_response: "Exit code 2\nerror" },
       ],
-    });
+    } as HookIn);
     const ctx = join(dir, "memory", "windows", "s-batch", "ctx.log");
     expect(existsSync(ctx)).toBe(true);
     expect(readFileSync(ctx, "utf8")).toContain('"k":"batch"');

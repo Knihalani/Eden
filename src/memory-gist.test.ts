@@ -17,7 +17,7 @@ import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know
 import { CHUNK_TARGET_TOKENS, ChunkStore, chunkText, estimateTokens } from "./chunk-store";
 import * as completeMod from "./cls/complete";
 import { GistStore } from "./gist-store";
-import { encodeLane, MEMORY_MARK, openMemory, sleep, type AgentMemory } from "./index";
+import { encodeLane, MEMORY_MARK, openMemory, sleep, type AgentMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
 import { isIclExemplar } from "./semantic-store";
 
@@ -202,12 +202,7 @@ async function withSleptBook<T>(
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function packetNotes(pkt: string): string[] {

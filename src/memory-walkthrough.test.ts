@@ -23,6 +23,7 @@ import {
   openMemory,
   queryHay,
   sleep,
+  injectedPackets,
 } from "./index";
 import * as edenMem from "./index";
 import { loadToolTraces, type ToolTrace } from "./tool-trace";
@@ -53,7 +54,8 @@ const LOSER = "1. Lacrosse originated in Scotland.";
 const WINNER = "8. Lacrosse originated in Canada.";
 const HOP_CUE = "What country is the sport of Zane from?";
 const ICL_SHOT = "The movie was great. label: 28";
-const ICL_CUE = "The movie was great. label: 28";
+// Not the shot itself: a cue repeating a row is its own residual (D26, the wrap's since P0.7).
+const ICL_CUE = "The movie was great. label:";
 const HOOK_ICL_CUE = "The movie was great. label:";
 const NOVEL =
   "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. " +
@@ -128,12 +130,7 @@ async function withProcessMem<T>(mem: AgentMemory, fn: () => T | Promise<T>): Pr
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {

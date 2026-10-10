@@ -12,7 +12,15 @@ import { CHUNK_TARGET_TOKENS, chunkText, estimateTokens } from "./chunk-store";
 import * as completeMod from "./cls/complete";
 import { GistStore } from "./gist-store";
 import { isBookQaCue, retrieveGists } from "./gist-retrieve";
-import { encodeLane, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
+import {
+  encodeLane,
+  MEMORY_MARK,
+  memoryInjectSwallows,
+  openMemory,
+  sleep,
+  type AgentMemory,
+  injectedPackets,
+} from "./index";
 import * as edenMem from "./index";
 import { isIclExemplar } from "./semantic-store";
 
@@ -193,12 +201,7 @@ async function withSleptBook<T>(fn: (mem: AgentMemory, dir: string, story: strin
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function packetNotes(pkt: string): string[] {

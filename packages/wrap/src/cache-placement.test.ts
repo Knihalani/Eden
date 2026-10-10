@@ -50,7 +50,8 @@ function viaWrap<T>(fn: () => T): T {
   }
 }
 
-const anthropic = (body: Body) => viaWrap(() => withKnowFactsAnthropic(body) as Body);
+type AnthropicBody = Parameters<typeof withKnowFactsAnthropic>[0];
+const anthropic = (body: Body) => viaWrap(() => withKnowFactsAnthropic(body as AnthropicBody) as Body);
 const openai = (body: Body) => viaWrap(() => withKnowFacts(body) as Body);
 const library = (body: Body) => ({ ...body, messages: mem.inject(body.messages) as Body["messages"] });
 

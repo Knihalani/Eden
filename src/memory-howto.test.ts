@@ -24,7 +24,8 @@ import {
 import * as howtoMod from "./howto-store";
 import { retrieveHowTo, HOWTO_RETRIEVE_K, HOWTO_TOKEN_CAP, type HowToView } from "./howto-retrieve";
 import * as howtoRetrieve from "./howto-retrieve";
-import { AgentMemory, MEMORY_MARK, openMemory, sleep, superseded } from "./index";
+import { AgentMemory, MEMORY_MARK, openMemory, sleep, superseded, injectedPackets } from "./index";
+import { PACKET_SOFT_BULLETS } from "./memory-hook-packet";
 import { storeFor } from "./memory-repo";
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
@@ -102,12 +103,7 @@ async function withHookMem<T>(
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function pytestWindow(): unknown[] {
@@ -1765,17 +1761,20 @@ function packetBullets(pkt: string): string[] {
 }
 
 function procedureSpans(pkt: string): string[] {
-  return packetBullets(pkt).filter((l) => /\[procedure(?:\s*·[^\]]*)?\]/i.test(l));
+  return packetBullets(pkt).filter((l) => HOOK_PROCEDURE.test(l));
 }
 
 function assertFlakeProcedure(hay: string): void {
-  expect(hay).toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+  expect(hay).toMatch(HOOK_PROCEDURE);
   expect(hay).toMatch(/auth\.ts/);
   expect(hay).toMatch(/pytest/i);
   expect(hay).toMatch(/tests\/auth\/session\.test\.ts/);
 }
 
-/** A procedure bullet in a hook packet: the hook words bullets without kind tags (D14), so its `verify:` names it. */
+/**
+ * A procedure bullet in a packet: the hook, and since P0.7 the wrap, word bullets without kind tags (D14), so its
+ * `verify:` or `unknown:` step names it.
+ */
 const HOOK_PROCEDURE = /\b(?:verify|unknown): /;
 
 function assertHookFlakeProcedure(hay: string): void {
@@ -2015,7 +2014,7 @@ describe("M12.4 fail-open", () => {
 });
 
 describe("M12.4 k total", () => {
-  test("packet bullets ≤ 10 and [procedure] ≤ ~1200 chars", async () => {
+  test("packet bullets ≤ 4 (D28) and a procedure bullet ≤ ~1200 chars", async () => {
     await withMem("eden-m124-k-", async (mem, dir) => {
       putFlakeSkill(dir);
       mem.quiet(() => {
@@ -2023,13 +2022,12 @@ describe("M12.4 k total", () => {
           mem.remember(`Auth pytest flake note ${n} lives in auth.ts session tests.`);
         }
       });
+      // D28 (the wrap's shape since P0.7): 4 bullets in retrieval order, nothing pulled in. Twenty on-cue facts
+      // rank above the procedure here, so whether it makes the four is the ranker's; a procedure that does is bounded.
       const pkt = packetOf(mem.inject([{ role: "user", content: FLAKE_TEXT_CUE }]));
-      assertFlakeProcedure(pkt);
-      expect(packetBullets(pkt).length).toBeLessThanOrEqual(10);
-      const procs = procedureSpans(pkt);
-      expect(procs.length).toBeGreaterThan(0);
-      for (const line of procs) {
-        const body = line.replace(/^\s*-\s*\[procedure(?:\s*·[^\]]*)?\]\s*/i, "");
+      expect(packetBullets(pkt).length).toBeLessThanOrEqual(PACKET_SOFT_BULLETS);
+      for (const line of procedureSpans(pkt)) {
+        const body = line.replace(/^- /, "").replace(/ \([^()]*\)$/, "");
         expect(body.length).toBeLessThanOrEqual(1200);
       }
     });

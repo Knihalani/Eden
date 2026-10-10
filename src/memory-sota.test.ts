@@ -94,15 +94,14 @@ describe("P0 empty-arm and NOOP", () => {
 });
 
 describe("P0 pack on inject", () => {
-  test("labeled [fact] packet; skip-not-evict; never clips a copula", () => {
+  test("worded packet (D14, the wrap's since P0.7); skip-not-evict; never clips a copula", () => {
     const dir = tmpDir();
     try {
       const mem = openMemory({ dir });
       mem.observe([{ role: "user", content: "auth.provider is Clerk." }]);
       const pkt = packetOf(mem.inject([{ role: "user", content: "what is auth.provider?" }]));
       expect(pkt).toContain(MEMORY_MARK);
-      expect(pkt).toMatch(/\[fact(?:\s*[·|][^\]]*)?\]/);
-      expect(pkt).toMatch(/Clerk/);
+      expect(pkt).toMatch(/^- auth\.provider is Clerk\.? \(just now\)$/m);
       expect(pkt).toMatch(/auth\.provider/i);
       expect(Buffer.byteLength(pkt, "utf8")).toBeLessThanOrEqual(PACKET_BYTE_CAP);
       expect(pkt.split("\n").filter((l) => /^\s*-\s+/.test(l)).length).toBeLessThanOrEqual(PACKET_BULLET_MAX);
@@ -194,7 +193,8 @@ describe("P0 source id on the bullet", () => {
     try {
       const mem = openMemory({ dir });
       mem.observe([{ role: "user", content: "The flake is in src/auth.test.ts." }]);
-      const pkt = packetOf(mem.inject([{ role: "user", content: "src/auth.test.ts flake" }]));
+      // A cue that restates the row is its own residual (D26, the wrap's since P0.7): this one names the file only.
+      const pkt = packetOf(mem.inject([{ role: "user", content: "src/auth.test.ts failed on main again" }]));
       expect(pkt).toContain(MEMORY_MARK);
       expect(pkt).toMatch(/src\/auth\.test\.ts/);
       expect(readFileSync(join(dir, "memories.jsonl"), "utf8")).toMatch(/src\/auth\.test\.ts/);

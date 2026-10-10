@@ -87,8 +87,8 @@ describe("hookd refuses drive-by callers", () => {
   test("still serves the local hook caller", async () => {
     const res = await handleHookd(post());
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok?: boolean };
-    expect(body.ok).toBe(true);
+    // Served, with nothing to say: an empty body, which the hook prints as nothing (EXECUTION §5).
+    expect(await res.text()).toBe("");
   });
 
   test("rejects a rebound hostname even though it looks same-origin", async () => {
