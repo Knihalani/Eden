@@ -45,7 +45,7 @@ Read, in this order:
      - the slice's arms twice and in both flag states, as separate processes run in parallel (`bun benchmarks/memory-long-horizon/arms/run.ts --arm <id> --flags on|off|shadow`; every run uses fresh processes);
      - your own adversarial probes. Save them under `<scratchpad>/review-probes/<slice>/`, so the author can commit them as regression tests.
 
-     For the full suite, check that GitHub CI's run on the head is green (`gh pr checks`); re-run `bun run test:parallel` only when there is no run or it is red.
+     For the full suite, read the author's local CI log for the final tree (GitHub Actions is off); re-run `bun run test:parallel` in a checkout outside the repo only when there is no log, it is red, or it is for another commit.
    - **Evidence check:** re-derive every number in the draft report from the measurement artifacts: `summary.md`, each task's log and JSON, and `bun scripts/slice-guards.ts --base … --new …` for the guard table. Re-run a long measure only when an artifact is missing or inconsistent, and then in the background.
    - **Any mismatch with the draft report is a finding.**
    - Keep every foreground command under about 8 minutes. Run longer ones with `run_in_background` and poll their output: a long foreground command has stalled a review before.
@@ -74,7 +74,7 @@ FINDINGS (ordered by severity; empty if none)
 
 RE-RUN EVIDENCE
 - phase: <code review | evidence check>
-- format: <pass/fail>   typecheck: <pass/fail>   test: <GitHub CI run id: pass/fail; affected files: pass/fail>   build-cli: <pass/fail/not run>
+- format: <pass/fail>   typecheck: <pass/fail>   test: <local suite log, commit: pass/fail; affected files: pass/fail>   build-cli: <pass/fail/not run>
 - arms: <name: result, run 1 / run 2>
 - flag states: <off / shadow / on results>
 - numbers vs draft report: <match | list of mismatches>
