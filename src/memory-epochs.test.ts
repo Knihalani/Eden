@@ -60,6 +60,9 @@ describe("A4 §4: value tokens", () => {
     expect(ruleValueTokens("Don't merge PRs yourself.")).toEqual(["@integrate", "pr"]);
     expect(ruleValueTokens("Never push to the main branch")).toEqual(["@push-upstream", "main", "branch"]);
     expect(ruleValueTokens("Always run the tests with vitest")).toEqual(["run", "test", "vitest"]);
+    expect(ruleValueTokens("[rule · 0m · user] Don't merge PRs yourself.")).toEqual(["@integrate", "pr"]);
+    expect(ruleValueTokens("Run the tests before you commit.")).toEqual(["@commit", "run", "test", "before"]);
+    expect(ruleValueTokens("Never deploy.")).toEqual([]);
     expect(ledgerKey(CLERK, REPO).vt).toBeUndefined();
     expect(ledgerKey(POSTGRES, REPO).vt).toHaveLength(1);
   });
@@ -135,7 +138,7 @@ describe("A4 §4: PostCompact holds what the summary still names", () => {
 });
 
 describe("D25: a fork copies its parent's ledger", () => {
-  test("inheritLedger: the parent's current epoch, on its branch, before the fork point, with its tokens", () => {
+  test("inheritLedger: the parent's current epoch, on its branch, before the fork point; its tokens, whole", () => {
     const parent = tempDir();
     const fork = tempDir();
     deliver(parent, [CLERK], { off: 10, att: "p0" });
