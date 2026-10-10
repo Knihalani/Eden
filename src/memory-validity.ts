@@ -39,11 +39,12 @@ import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript"
 
 /**
  * A retraction or switch (`retract`) of value `o`, with its typed form `f` when its capitals alone shape it; a switch
- * also keeps the scope it names (`s`, a path) and its subject words (`w`). A revocation (`revoke`) of action class `c`
+ * also keeps the scope it names (`s`, a path), its subject words (`w`) and the value it switches to (`n`, as typed,
+ * when that is value-shaped). A revocation (`revoke`) of action class `c`
  * on object words `o`.
  */
 export type Invalidation =
-  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; r?: "forget" }
+  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; n?: string; r?: "forget" }
   | { k: "revoke"; c: string; o: string[]; t: number };
 type Retraction = Extract<Invalidation, { k: "retract" }>;
 type Revocation = Extract<Invalidation, { k: "revoke" }>;
@@ -71,7 +72,7 @@ const FORGET = new RegExp(
 );
 /** D7's switch: the words between the verb and "from" name the slot's subject or scope ("apps/web", "the queue"). */
 const SWITCH = new RegExp(
-  String.raw`\bwe(?:'ve| have)? (?:switched|moved|migrated)\b([^.!?;\n]*?)\bfrom ${VALUE} to \S`,
+  String.raw`\bwe(?:'ve| have)? (?:switched|moved|migrated)\b([^.!?;\n]*?)\bfrom ${VALUE} to (?:the |our |a |an )?(\S+)`,
   "gi",
 );
 const PATH = /[\w@.-]*\/[\w@./-]*\w/g;
@@ -233,12 +234,14 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
       const middle = match[1]!;
       const scope = middle.match(PATH)?.[0]?.toLowerCase();
       const subject = subjectWords(middle.replace(PATH, " "));
+      const to = match[3]!.replace(/^[`'"(]+|[`'".!?;,:)]+$/g, "");
       found.push({
         k: "retract",
         ...retracted(match[2]!),
         t,
         ...(scope ? { s: scope } : {}),
         ...(subject.length ? { w: subject } : {}),
+        ...(valueShaped(to) ? { n: to } : {}),
       });
     }
     const revoked = REVOKE.exec(sentence);
@@ -307,7 +310,8 @@ export function readInvalidations(root: string): Invalidation[] {
           ? { w: record.w.filter((word): word is string => typeof word === "string") }
           : {};
         const forget = record.r === "forget" ? { r: "forget" as const } : {};
-        return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...forget }];
+        const to = typeof record.n === "string" ? { n: record.n } : {};
+        return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...to, ...forget }];
       }
       if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
         return [

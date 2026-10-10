@@ -131,7 +131,10 @@ export interface Moment {
   ht: number;
 }
 
-/** Appends one packet's records: a `deliver` record per bullet and the packet's tokens, in one write. */
+/**
+ * Appends one packet's records: a `deliver` record per key and the packet's tokens, in one write. A delivery point
+ * records each delivered note's `deliveredKeys`, so an `Updated:` item also renews the slot it changes.
+ */
 export function recordPacket(
   dir: string,
   packet: { keys: readonly LedgerKey[]; tokens: number },
@@ -431,15 +434,6 @@ interface SlotChange {
   was: string;
 }
 
-const ARTICLE = String.raw`(?:the |our |a |an )?`;
-
-/** A switch's new value, read after its old one ("from Auth0 to Clerk"); none for a retraction. */
-function switchedTo(body: string, from: string): string | undefined {
-  const old = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const to = new RegExp(String.raw`\bfrom ${ARTICLE}${old} to ${ARTICLE}([A-Za-z0-9@][\w@.+-]*[A-Za-z0-9])`, "i");
-  return to.exec(body)?.[1];
-}
-
 /**
  * The live slot a note changes: one holding the value it retracts or switches away from (or the value it switches
  * to), whose subject words hold every subject word the change names. A retraction names none, and validity applies
@@ -451,7 +445,7 @@ function slotChange(note: ProvenanceNote, slots: readonly LiveDelivery[]): SlotC
     if (record.k !== "retract" || record.r === "forget") continue;
     const subject = (record.w ?? []).map(wordHash);
     const from = valueHash(record.o);
-    const to = valueHash(switchedTo(body, record.o) ?? "");
+    const to = valueHash(record.n ?? "");
     const slot = slots.find(
       (s) => (s.ver === from || s.ver === to) && subject.every((word) => s.sw?.includes(word) ?? false),
     );

@@ -43,11 +43,15 @@ describe("P1.1 review: one Updated item per changed delivery, across turns", () 
   test("a second row stating the same switch, retrieved a turn later, is not a second Updated item", () => {
     const win = tempDir();
     const switched = invalidationsIn("We switched auth from Auth0 to Clerk.", 2);
-    recordPacket(win, { keys: [ledgerKey(fact("Our auth provider is Auth0"), REPO)], tokens: 0 }, {
-      off: 0,
-      att: "p1",
-      ht: 1,
-    });
+    recordPacket(
+      win,
+      { keys: [ledgerKey(fact("Our auth provider is Auth0"), REPO)], tokens: 0 },
+      {
+        off: 0,
+        att: "p1",
+        ht: 1,
+      },
+    );
     const sentence = episode("We switched auth from Auth0 to Clerk");
     const whole = episode("We switched auth from Auth0 to Clerk. Keep the old tenant until Friday.");
     const [first] = novelNotes([sentence], liveDeliveries(win, 100), { repo: REPO, invalid: switched });
@@ -62,11 +66,15 @@ describe("P1.1 review: one Updated item per changed delivery, across turns", () 
 describe("P1.1 review: a switch is an Updated item only for the slot it switches", () => {
   test("a switch away from the same value on another subject is a plain bullet, and is not dropped", () => {
     const win = tempDir();
-    recordPacket(win, { keys: [ledgerKey(fact("Our CI provider is GitHub"), REPO)], tokens: 0 }, {
-      off: 0,
-      att: "p1",
-      ht: 1,
-    });
+    recordPacket(
+      win,
+      { keys: [ledgerKey(fact("Our CI provider is GitHub"), REPO)], tokens: 0 },
+      {
+        off: 0,
+        att: "p1",
+        ht: 1,
+      },
+    );
     const docs = episode("We migrated the docs site from GitHub to GitLab");
     const cache = episode("We moved the build cache from GitHub to S3");
     const timeout = episode("We moved the request timeout from 3000 to 5000 ms");
