@@ -90,6 +90,21 @@ function readMark(win: string): Mark | undefined {
   }
 }
 
+/**
+ * A window's turn map as its mark holds it: its last lines in order, each with its turn (a typed prompt's uuid, null
+ * before the first one, "" when unresolved), and its typed prompts in order. A fork's parent is found by it
+ * (`memory-fork.ts`).
+ */
+export interface TurnMap {
+  lines: Map<string, string | null>;
+  prompts: readonly { u: string; id?: string }[];
+}
+
+export function turnMap(win: string): TurnMap | undefined {
+  const mark = readMark(win);
+  return mark && { lines: new Map(mark.lines), prompts: mark.prompts };
+}
+
 /** The `promptId`s a rewind abandoned in this window (the ledger's branch check, A4 §4). */
 export function abandonedPrompts(win: string): Set<string> {
   return new Set(readMark(win)?.abandoned ?? []);

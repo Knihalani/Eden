@@ -79,8 +79,11 @@ const PATH = /[\w@.-]*\/[\w@./-]*\w/g;
 /** Words between a switch's verb and "from" that name no subject. */
 const NO_SUBJECT = new Set(["everything", "things", "stuff", "over", "back", "all", "entirely", "fully"]);
 
-/** A7 §5's action-class verbs that a revocation can name: the class is what a rule and its revocation share. */
-const ACTION_VERBS: Record<string, string> = {
+/**
+ * A7 §5's action-class verbs that a revocation can name: the class is what a rule and its revocation share, and what
+ * a compaction summary must name for a rule to stay habituated (`memory-value-tokens.ts`).
+ */
+export const ACTION_VERBS: Record<string, string> = {
   merge: "integrate",
   land: "integrate",
   ship: "integrate",
@@ -186,7 +189,8 @@ function singular(word: string): string {
   return stem.length >= 4 && /(?:ch|sh|ss|x|z)e$/.test(stem) ? stem.slice(0, -1) : stem;
 }
 
-function objectWords(text: string): string[] {
+/** The object words of a text (D9): content words, singular, without words that name no object. */
+export function objectWords(text: string): string[] {
   return contentWords(text)
     .filter((word) => !NO_OBJECT.has(word))
     .map(singular);

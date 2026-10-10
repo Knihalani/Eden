@@ -47,6 +47,8 @@ export type HookIn = {
   prompt?: string;
   transcript_path?: string;
   source?: string;
+  /** PostCompact's summary (A4 §4: what it still names stays habituated). */
+  compact_summary?: string;
 };
 
 export type HookHost = "claude" | "gemini" | "opencode" | "codex" | "unknown";
@@ -176,6 +178,7 @@ function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost 
     eventRaw === "SessionStart" ||
     eventRaw === "UserPromptSubmit" ||
     eventRaw === "PreCompact" ||
+    eventRaw === "PostCompact" ||
     eventRaw === "PostToolBatch"
   ) {
     return "claude";
@@ -385,7 +388,8 @@ export async function respondToHook(
   if (
     body.hook_event_name === "UserPromptSubmit" ||
     body.hook_event_name === "SessionStart" ||
-    body.hook_event_name === "PreCompact"
+    body.hook_event_name === "PreCompact" ||
+    body.hook_event_name === "PostCompact"
   ) {
     try {
       const mem = memoryHookResponse(body as Record<string, unknown>);

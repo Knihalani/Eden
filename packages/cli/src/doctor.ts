@@ -141,7 +141,7 @@ export function netAllowCheck(raw: string | undefined = process.env.EDEN_NET_ALL
 }
 
 /**
- * The 7 memory events `eden setup` installs (`memory-hook.ts` MEMORY_EVENTS handles them, and PostToolBatch).
+ * The 8 memory events `eden setup` installs (`memory-hook.ts` MEMORY_EVENTS handles them, and PostToolBatch).
  * Compile PreToolUse is not memory. The plugin records tool results per batch (P0.6, A4 §3.3): its PostToolBatch
  * fills the PostToolUse slot, and the check names the event it found.
  */
@@ -149,6 +149,7 @@ export const MEMORY_HOOK_EVENTS = [
   "UserPromptSubmit",
   "SessionStart",
   "PreCompact",
+  "PostCompact",
   "Stop",
   "SessionEnd",
   "PostToolUse",

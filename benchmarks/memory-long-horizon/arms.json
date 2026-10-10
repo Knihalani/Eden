@@ -386,11 +386,8 @@
       ],
       "a5": "the compact summary keeps fact A and drops rule B -> only B re-arms",
       "on": {
-        "state": "red",
-        "failed": [
-          "a-not-rearmed"
-        ],
-        "why": "after a summary that keeps 'The database is postgres', the fact is delivered again. b-rearmed and delivered-before are plain checks since P0.3: both held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175), with ids that no longer collide (#98)"
+        "state": "green",
+        "why": "passes since P1.2: SessionStart(compact) starts an epoch, and PostCompact then holds each delivery of the closed epoch whose value tokens (A4 §4: a slot's value; a rule's class verb stem and object) compact_summary names in full, so 'The database is postgres' stays habituated after a summary that keeps it (a-not-rearmed) and the merge rule, which the summary dropped, comes back on its cue (b-rearmed)"
       },
       "off": {
         "state": "green",

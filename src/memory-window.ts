@@ -6,8 +6,9 @@
  * - `delivery.shadow.log`: the same records from a point whose flag is `shadow` (X7), which delivers nothing. Turn
  *   records count from both logs, so `hturn` does not depend on which mode the Submits ran in.
  * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves; the
- *   `cwd` of its SessionStart, which names the repo of a session outside git (D1, `memory-repo.ts`); and one
- *   `batch` record per PostToolBatch (`memory-batch.ts`). `stop-sleep` compacts it (`compactContext`).
+ *   `cwd` of its SessionStart, which names the repo of a session outside git (D1, `memory-repo.ts`); one `batch`
+ *   record per PostToolBatch (`memory-batch.ts`); and a forked session's `fork` records (`memory-fork.ts`).
+ *   `stop-sleep` compacts it (`compactContext`).
  * - `qprev.json`: the end of the agent's last message, written by `stop-fast` (A4 §5.7, A7 §3's `q_prev`) through the
  *   store's secret gate, as every text under the memory root is (A6 §2.2).
  * - `hwm.json`: the delta encoder's mark (`memory-delta.ts`).
@@ -142,6 +143,31 @@ export function startCwd(dir: string): string | undefined {
 /** Records a SessionStart's `cwd` unless it is the one already recorded. */
 export function recordStart(dir: string, cwd: string): void {
   if (startCwd(dir) !== cwd) appendRecord(dir, CONTEXT, { k: "start", cwd });
+}
+
+/**
+ * A forked session's mark (`memory-fork.ts`): pending from its SessionStart, with when the parent last answered
+ * (`last`, epoch ms) when the payload says; resolved once its parent was looked for (`from`, the parent's window name,
+ * "" when none was found).
+ */
+export interface ForkMark {
+  last?: number;
+  from?: string;
+}
+
+/** The window's latest fork mark, if it was forked. */
+export function forkMark(dir: string): ForkMark | undefined {
+  const last = windowRecords(dir, CONTEXT).findLast((record) => record.k === "fork");
+  if (!last) return undefined;
+  return {
+    ...(typeof last.last === "number" ? { last: last.last } : {}),
+    ...(typeof last.from === "string" ? { from: last.from } : {}),
+  };
+}
+
+/** Appends a fork mark. */
+export function recordFork(dir: string, mark: ForkMark): void {
+  appendRecord(dir, CONTEXT, { k: "fork", ...mark });
 }
 
 /** Appends a PostToolBatch's record (`memory-batch.ts`). */
