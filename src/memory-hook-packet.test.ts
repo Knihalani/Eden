@@ -150,3 +150,25 @@ describe("packets in either wording: today's header and the one before P0.2", ()
     }
   });
 });
+
+describe("P1.1: Updated items (A4 §4, D28's hard limit)", () => {
+  const updated = <T extends ProvenanceNote>(note: T, was: string) => ({ ...note, was });
+
+  test("an Updated item says so, and names the value it replaces unless its text already does", () => {
+    expect(declarativeBullet(updated(fromUser(fact("The database is postgres")), "sqlite"), NOW)).toBe(
+      "Updated: The database is postgres (was sqlite; you said, 1 hour ago)",
+    );
+    expect(declarativeBullet(updated(fromUser(episode("We switched auth from Auth0 to Clerk")), "Auth0"), NOW)).toBe(
+      "Updated: We switched auth from Auth0 to Clerk (you said, 1 hour ago)",
+    );
+  });
+
+  test("Updated items may pass the soft limit of 4, never the hard limit of 6; kind limits do not count them", () => {
+    const facts = ["a", "b", "c", "d"].map((text) => fact(`fact ${text}`));
+    const updates = ["u", "v", "w"].map((text) => updated(episode(`episode ${text}`), "old"));
+    const shaped = shapePacket([...facts, ...updates]).map((note) => note.id);
+    expect(shaped).toHaveLength(6);
+    expect(shaped.slice(0, 4)).toEqual(facts.map((note) => note.id));
+    expect(shaped.slice(4)).toEqual(["episode u", "episode v"]);
+  });
+});

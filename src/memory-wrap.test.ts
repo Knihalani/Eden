@@ -4,7 +4,7 @@
  * each message once (P0.3's interleaved-conversation flip).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, type AgentMemory } from "./index";
@@ -12,7 +12,15 @@ import { MEMORY_PACKET_MARK, MEMORY_PACKET_MARKS } from "./memory-sota";
 
 type Message = Record<string, unknown>;
 
-const ENV = ["EDEN_HOME", "EDEN_MEMORY_DIR", "EDEN_MEMORY", "EDEN_SLEEP_EVERY", "EDEN_SLEEP_IDLE", "EDEN_KNOW"];
+const ENV = [
+  "EDEN_HOME",
+  "EDEN_MEMORY_DIR",
+  "EDEN_MEMORY",
+  "EDEN_SLEEP_EVERY",
+  "EDEN_SLEEP_IDLE",
+  "EDEN_KNOW",
+  "EDEN_FLAG_DELIVER_SUBMIT",
+];
 let saved: Record<string, string | undefined> = {};
 let home = "";
 let mem: AgentMemory;
@@ -276,5 +284,60 @@ describe("P0.7 review round 1: turns, restarts and read-only", () => {
     process.env.EDEN_MEMORY = "on";
     mem.inject([user("The deploy target is fly.io."), assistant("ok"), user("Ship it.")]);
     expect(rowsWith(/fly\.io/).length).toBeGreaterThan(0);
+  });
+});
+
+describe("P1.1: the wrap's ledger, its flag and its restarts (P0.7's follow-up)", () => {
+  const FACT = "We use Clerk for auth in apps/web.";
+  const CUE = "Add a login check with the auth provider in apps/web.";
+
+  /** The ledger records of the wrap's conversation windows, from one ledger file. */
+  function wrapRecords(file: string): Record<string, unknown>[] {
+    const windows = join(home, "store", "windows");
+    if (!existsSync(windows)) return [];
+    return readdirSync(windows)
+      .filter((name) => name.startsWith("wrap-") && existsSync(join(windows, name, file)))
+      .flatMap((name) =>
+        readFileSync(join(windows, name, file), "utf8")
+          .split("\n")
+          .filter(Boolean),
+      )
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  test("on (the default): the conversation's window ledger holds the turn and what its packet delivered", () => {
+    mem.inject([user(FACT)]);
+    expect(ask(CUE)).toMatch(/Clerk/);
+    const records = wrapRecords("delivery.log");
+    expect(records.filter((record) => record.k === "turn").length).toBeGreaterThan(0);
+    expect(records.filter((record) => record.k === "deliver").length).toBeGreaterThan(0);
+  });
+
+  test("deliver.submit off: the turn is encoded but gets no packet, and no ledger is written", () => {
+    process.env.EDEN_FLAG_DELIVER_SUBMIT = "off";
+    mem.inject([user(FACT)]);
+    expect(ask(CUE)).toBe("");
+    expect(wrapRecords("delivery.log")).toEqual([]);
+    expect(wrapRecords("delivery.shadow.log")).toEqual([]);
+    process.env.EDEN_FLAG_DELIVER_SUBMIT = "on";
+    expect(ask(`${CUE} Now.`)).toMatch(/Clerk/);
+  });
+
+  test("deliver.submit shadow: no packet; the shadow ledger holds what it would have delivered", () => {
+    process.env.EDEN_FLAG_DELIVER_SUBMIT = "shadow";
+    mem.inject([user(FACT)]);
+    expect(ask(CUE)).toBe("");
+    expect(wrapRecords("delivery.log")).toEqual([]);
+    expect(wrapRecords("delivery.shadow.log").some((record) => record.k === "deliver")).toBe(true);
+  });
+
+  test("restart between turns: the earlier turn's message keeps the packet it was sent with", () => {
+    mem.inject([user(FACT)]);
+    const turn1 = [user(CUE)];
+    const sent1 = mem.inject(turn1);
+    expect(newPacket([], sent1)).toMatch(/Clerk/);
+    const turn2 = [...turn1, assistant("Added."), user("Now run the tests.")];
+    const sent2 = openMemory({ dir: join(home, "store") }).inject(turn2);
+    expect(sent2[0]).toEqual(sent1[0]);
   });
 });
