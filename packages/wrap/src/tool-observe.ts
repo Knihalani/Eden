@@ -17,7 +17,8 @@ export const TOOL_TRACE_MAX = 4000;
 const NAME_MAX = 64;
 const SNIPPET_MAX = 320;
 
-export type ToolTraceMessage = { role: "user"; content: string };
+/** A tool call and its result as the observer encodes it: tool output, so an episode only (D12, A6 §2.3). */
+export type ToolTraceMessage = { role: "user"; content: string; src: "tool" };
 export type { ToolTrace };
 
 type ObserveHost = {
@@ -258,7 +259,7 @@ function collect(messages: unknown): { prose: ToolTraceMessage[]; traces: Assemb
   }
 
   return {
-    prose: traces.map((content) => ({ role: "user" as const, content })),
+    prose: traces.map((content) => ({ role: "user" as const, content, src: "tool" as const })),
     traces: assembleTraces(calls, results),
   };
 }

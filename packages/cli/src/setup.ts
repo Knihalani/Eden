@@ -30,15 +30,16 @@ function shq(v: string): string {
 }
 
 /**
- * A hook command's fail-open end (EXECUTION §5): when every call before it fails, the hook still exits 0 and prints
- * nothing. A failed `curl --fail` prints nothing either.
+ * Fail-open (EXECUTION §5), as the plugin's commands do it: each call's stderr is dropped (`QUIET`), and when every
+ * call fails the hook still exits 0 (`FAIL_OPEN`). A failed `curl --fail` prints nothing on stdout.
  */
+const QUIET = "2>/dev/null";
 const FAIL_OPEN = "|| true";
 
 export function preHookCommand(hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
   const hookd = `http://127.0.0.1:${hookdPort}/hook`;
   const curl = `curl -sS --max-time 1 --fail ${hookdKeyArg()} -H 'content-type: application/json'`;
-  return `${curl} --data-binary @- ${hookd} ${FAIL_OPEN}`;
+  return `${curl} --data-binary @- ${hookd} ${QUIET} ${FAIL_OPEN}`;
 }
 
 /** curl reads hookd's key header from its 0600 file, so the key is never in argv. No file: curl fails. */
@@ -62,7 +63,7 @@ export function hookCommand(
   // --fail: when hookd refuses the key (it changes on every hookd start), the hook falls through
   // to the in-process `bun cli.ts hook` rather than printing hookd's `{}`.
   const curl = `curl -sS --max-time ${sec} --fail ${hookdKeyArg()} -H 'content-type: application/json'`;
-  const core = `${edenHomeExport()}; ${curl} --data-binary @- ${hookd} || ${bunHook}`;
+  const core = `${edenHomeExport()}; ${curl} --data-binary @- ${hookd} ${QUIET} || ${bunHook} ${QUIET}`;
   return opts.failOpen === false ? core : `${core} ${FAIL_OPEN}`;
 }
 

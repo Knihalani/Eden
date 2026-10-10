@@ -1064,7 +1064,8 @@ function assertNoToolIdentity(dir: string) {
 }
 
 describe("M10 leftover identity: tool prose is not a fact", () => {
-  test.failing("wrap pytest + sleep: how-to writes; SemanticStore/gist skip Tool Bash result is …", async () => {
+  // Out of quarantine (#51) since P0.7: the wrap's tool prose is `src:tool`, an episode, never a fact (D12).
+  test("wrap pytest + sleep: how-to writes; SemanticStore/gist skip Tool Bash result is …", async () => {
     await withMem("eden-m104-noidentity-wrap-", async (mem, dir) => {
       observeToolTraces(mem, pytestWindow());
       await mem.sleep();
