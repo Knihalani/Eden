@@ -44,7 +44,7 @@ This is the single source of truth for what is done and what is next. `/next` re
 | P0.6 | Delta encode, PostToolBatch recording, rewind detection, stop-fast | P0.5 | M | `rewind`; p99 flat over 1,000 turns | done (`rewind` green; p99 flat: Submit +48.0 ms over 1,000 turns vs main's +541.7, `stop-fast` 8.56 ms; R6 `packet_rate` 50/122 missed, filed to P4.3; child-transcript encode deferred to P1.3 by the user; 4 review rounds, the 4th allowed by the user) | #127 | [reports/P0.6.md](reports/P0.6.md) |
 | P0.7 | Cache-safe placement (wrap / OpenAI inject) | P0.1 | S | cached-prefix test | done (0 prefix breaks in 11 request pairs on each of 4 wrap paths, main 7; the 5 follow-up rows closed; 2 review rounds) | #128 | [reports/P0.7.md](reports/P0.7.md) |
 | P1.1 | Ledger core | P0.6, P0.8 | M | `repeat`, `budget`, `re-eligibility` | done (`repeat`, `re-eligibility` green, `budget` 477 / 610 tokens; a Submit reads 17,319 B of ledger after 300 soak turns, `main` 52,216; the wrap follows `deliver.submit` and keeps its prefix across restarts; guards identical to `main`; 3 review rounds; 4 follow-up rows closed, 4 filed) | #129 | [reports/P1.1.md](reports/P1.1.md) |
-| P1.2 | Epochs: clear, selective PostCompact re-arm, resume, fork, rewind | P1.1 | M | `compaction`, `resume`, `rewind` | todo | | |
+| P1.2 | Epochs: clear, selective PostCompact re-arm, resume, fork, rewind | P1.1 | M | `compaction`, `resume`, `rewind` | in-progress (`mem/P1.2-epochs`) | | |
 | P1.3 | Residual + per-window shadow set | P1.2 | M | `residual`, `shadow` | todo | | |
 | P2.1 | Policy & intent extraction (regex, D9 incl. R8 fixes) | P0.4 | M | `extraction` (E3 set) | todo | | |
 | P2.2 | Compiled triggers (`classes.json`) | P2.1 | S | `policy-trigger` | todo | | |
