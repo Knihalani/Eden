@@ -92,6 +92,9 @@ async function main(): Promise<void> {
   } else if (cmd === "import") {
     const { importTraces } = await import("./import");
     process.exit(await importTraces(rest));
+  } else if (cmd === "sleep") {
+    const { sleepCli } = await import("./memory-sleep");
+    process.exit(await sleepCli(rest));
   } else if (cmd === "memory") {
     const { memoryCli } = await import("./memory-import");
     process.exit(await memoryCli(rest));

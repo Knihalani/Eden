@@ -425,10 +425,6 @@ export async function memoryCli(args: string[]): Promise<number> {
     const { memoryMigrateCli } = await import("./memory-migrate");
     return memoryMigrateCli(args.slice(1));
   }
-  if (args[0] === "sleep") {
-    const { memorySleepCli } = await import("./memory-sleep");
-    return memorySleepCli(args.slice(1));
-  }
   if (args[0] === "dump") {
     const { memoryDumpCli } = await import("./memory-dump");
     return memoryDumpCli(args.slice(1));

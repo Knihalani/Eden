@@ -1,5 +1,5 @@
 /**
- * `eden memory sleep` (D34, A4 §6): a repo store's full sleep, off the hook path.
+ * `eden sleep` (D34, A4 §6): a repo store's full sleep, off the hook path.
  *
  * - `--idle` is the detached sleeper that `stop-sleep` and SessionEnd start (`spawnIdleSleeper`). It waits until
  *   the repo's hooks have been quiet for `--after` seconds (default `EDEN_SLEEP_IDLE`, 5 minutes), then sleeps.
@@ -69,7 +69,6 @@ export function spawnIdleSleeper(store: string, session: string | undefined): vo
     cmd: [
       process.execPath,
       ...(existsSync(script) ? [script] : []),
-      "memory",
       "sleep",
       "--idle",
       "--store",
@@ -112,10 +111,10 @@ function option(args: readonly string[], name: string): string | undefined {
 }
 
 /**
- * `eden memory sleep [--idle] [--after SECONDS] [--store DIR] [--session ID]`: sleeps over the store of `--store`,
+ * `eden sleep [--idle] [--after SECONDS] [--store DIR] [--session ID]`: sleeps over the store of `--store`,
  * else of the repo the command runs in. Exits 0 whatever happens: a failed sleep leaves the store as it was.
  */
-export async function memorySleepCli(args: readonly string[]): Promise<number> {
+export async function sleepCli(args: readonly string[]): Promise<number> {
   try {
     const cwdRepo = repoIdentity(process.cwd());
     const store = option(args, "--store") ?? (cwdRepo ? repoStoreDir(memoryRoot(), cwdRepo.key) : undefined);

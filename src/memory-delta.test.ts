@@ -1,6 +1,6 @@
 /** P0.6: the delta encoder (A4 §3.3): each line once, its turn and time, and rewinds found by `parentUuid`. */
 import { afterEach, describe, expect, test } from "bun:test";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { abandonedPrompts, encodeDelta, TURN_MAP_LINES, type Delta } from "./memory-delta";
@@ -102,6 +102,15 @@ describe("A4 §3.3: each complete line once, from the mark", () => {
     expect(contents(delta)).toContain("Newest.");
     expect(contents(delta)).not.toContain(`old 0 ${"x".repeat(900)}`);
     expect(delta.messages.length).toBeLessThan(300);
+  });
+
+  test("a read that finds nothing new leaves the mark as it is", () => {
+    const { win, path } = setup([typed("u1", null, "p1", "first"), said("a1", "u1", "One.")]);
+    read(win, path);
+    const before = statSync(join(win, "hwm.json")).mtimeMs;
+    Bun.sleepSync(20);
+    expect(read(win, path).messages).toEqual([]);
+    expect(statSync(join(win, "hwm.json")).mtimeMs).toBe(before);
   });
 
   test("a delta whose encoder throws is still marked read: one bad line cannot stall the window", () => {
