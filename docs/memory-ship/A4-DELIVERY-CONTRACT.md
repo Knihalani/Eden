@@ -233,7 +233,7 @@ Row `id`s are ULIDs and never carry a prefix.
 **Built in P1.1** (`src/memory-ledger.ts`; D25's note has the mechanics). Where it reads this section narrowly:
 - The snapshot keeps `turns` (the count of distinct `prompt_id`s folded) and the last 16 `prompt_id`s: a fold of `turn` records, never a counter a Submit increments, so two racing Submits still count once.
 - The ledger holds ids and hashes only (X11). A `deliver` record has no value, so `Updated: … (was …)` takes the old value from `validity.jsonl`, and says only "Updated: …" when none was logged.
-- Until P3.3's keyed slots, "`ver` changed" also covers a row whose text retracts or switches away from a value the window was given (D7: "we switched auth from Auth0 to Clerk" after "Our auth provider is Auth0"), since a switch has no slot key of its own. One `Updated:` item per changed delivery.
+- Until P3.3's keyed slots, "`ver` changed" also covers a row whose text retracts or switches away from a value the window was given (D7: "we switched auth from Auth0 to Clerk" after "Our auth provider is Auth0"), since a switch has no slot key of its own. The switch must name only subject words of that slot ("auth" of "auth provider"), and its delivery records the slot at the new value, so the change is given once.
 - `Updated:` items come on the cue that retrieves the new value. A non-human submit carries none, and SessionStart's are P2.5's: without keyed slots there is no lookup from a delivered cid to its current value.
 - `tokens_epoch` adds one `packet` record per packet (A5's count: a quarter of its characters).
 

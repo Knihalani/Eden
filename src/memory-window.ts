@@ -14,7 +14,7 @@
  *
  * Each record is one appended line under 4 KB, so concurrent appends do not interleave.
  */
-import { appendFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../packages/cli/src/home";
 import { memorySessionName } from "./index";
@@ -54,15 +54,22 @@ export function appendRecords(dir: string, file: string, records: readonly Windo
   appendFileSync(join(dir, file), records.map((record) => `${JSON.stringify(record)}\n`).join(""), { mode: 0o600 });
 }
 
-/** The ledger files a window already has. */
+/**
+ * The ledgers a window already has: one exists while its log, its snapshot or a rotated log of it does (a Stop folds
+ * the log away into the snapshot, D25).
+ */
 export function existingLedgers(dir: string): LedgerFile[] {
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
   const files: LedgerFile[] = [LIVE_LEDGER, SHADOW_LEDGER];
   return files.filter((file) => {
-    try {
-      return statSync(join(dir, file)).isFile();
-    } catch {
-      return false;
-    }
+    const snapshot = file.replace(/\.log$/, ".json");
+    const rotated = (name: string) => name.startsWith(`${file}.`) && /^\d+$/.test(name.slice(file.length + 1));
+    return names.some((name) => name === file || name === snapshot || rotated(name));
   });
 }
 

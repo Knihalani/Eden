@@ -11,7 +11,7 @@
  *   `delivery.json`, written by rename, and the rotated logs are removed. A line a writer appended to a rotated log
  *   after the fold read it goes back to the live log (the writer opened the file before the rename). Readers fold the
  *   snapshot, the rotated logs past its `through`, then the live log.
- * - **The fold** keeps each cid's latest delivery (offsets only grow: the transcript is append-only), the epoch, the
+ * - **The fold** keeps each cid's latest delivery (a union keeping max(`off`) within an epoch), the epoch, the
  *   tokens delivered in it, and the human turns: their count and the last 16 `prompt_id`s, so a Submit repeated after
  *   a fold still counts once (`hturn` is folded from `turn` records, never a counter a Submit increments).
  * - **Overflow.** Above 256 entries a fold evicts deliveries of older epochs first, oldest first, then the least
@@ -26,8 +26,12 @@
  *   counts as on the branch. A child window's `off` is measured on its own transcript (P2.5 brings child delivery).
  * - **Novelty.** A candidate whose cid a live delivery holds at the same `ver` is dropped (refractory). One whose cid
  *   it holds at another `ver`, or whose text retracts or switches away from a live slot's value (D7, A4 §3.1), is an
- *   `Updated:` item. The value it replaces is named from what the store logged (`validity.jsonl`): the ledger keeps
- *   only hashes. Until P3.3's keyed slots, a switch is how a legacy row carries a slot's new value.
+ *   `Updated:` item. A switch is tied to the slot by subject: every subject word it names is one of the slot's (slot
+ *   keys keep their subject words hashed, `sw`), so "the docs site from GitHub to GitLab" is not the CI provider's
+ *   change. Delivering a switch's item also records the slot at its new value (`deliveredKeys`), so a second row
+ *   stating the same change is refractory. The value an item replaces is named from what the store logged
+ *   (`validity.jsonl`) or the switch's own text: the ledger keeps only hashes. Until P3.3's keyed slots, a switch is
+ *   how a legacy row carries a slot's new value.
  * - **Budget.** After 6k tokens in an epoch, only `Updated:` items are delivered (A4 §4).
  * - **Shadow** (X7): a point in `shadow` writes the same records to `delivery.shadow.log` (snapshot
  *   `delivery.shadow.json`), so its refractory rule is simulated honestly: it reads what was delivered (the live log)
@@ -42,7 +46,7 @@ import { abandonedPrompts } from "./memory-delta";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { legacySlot } from "./memory-residual";
 import { contentWords } from "./memory-transcript";
-import { invalidationsIn, type Invalidation } from "./memory-validity";
+import { invalidationsIn, subjectWords, type Invalidation } from "./memory-validity";
 import {
   appendRecords,
   existingLedgers,
@@ -65,6 +69,8 @@ export interface LedgerKey {
   cid: string;
   ver: string;
   rule: boolean;
+  /** A slot's subject words, each hashed: what ties a switch to the slot it switches (see the header). */
+  sw?: string[];
 }
 
 function hash(text: string): string {
@@ -80,6 +86,11 @@ function contentHash(text: string): string {
   return hash(words(stripPacketLabel(text).body));
 }
 
+/** A subject word as the ledger keeps it: a hash, never the word (X11). */
+function wordHash(word: string): string {
+  return hash(word).slice(0, 8);
+}
+
 /** The hash a slot's value is its ver by. */
 function valueHash(value: string): string {
   return hash(words(value));
@@ -89,7 +100,10 @@ function valueHash(value: string): string {
 export function ledgerKey(note: ProvenanceNote, repo?: string): LedgerKey {
   const prefix = repo ? `${repo.slice(0, 8)}/` : "";
   const slot = legacySlot(note);
-  if (slot) return { cid: `${prefix}s:${hash(words(slot.subject))}`, ver: valueHash(slot.value), rule: false };
+  if (slot) {
+    const sw = subjectWords(slot.subject).map(wordHash);
+    return { cid: `${prefix}s:${hash(words(slot.subject))}`, ver: valueHash(slot.value), rule: false, sw };
+  }
   const content = contentHash(String(note.text ?? ""));
   return noteKindToken(note) === "rule"
     ? { cid: `${prefix}P:${content}`, ver: content, rule: true }
@@ -124,13 +138,14 @@ export function recordPacket(
   at: Moment,
   file: LedgerFile = LIVE_LEDGER,
 ): void {
-  const delivered = packet.keys.map(({ cid, ver }) => ({
+  const delivered = packet.keys.map(({ cid, ver, sw }) => ({
     k: "deliver",
     cid,
     ver,
     off: at.off,
     att: at.att,
     ht: at.ht,
+    ...(sw?.length ? { sw } : {}),
   }));
   const tokens = packet.tokens > 0 ? [{ k: "packet", tok: packet.tokens, off: at.off }] : [];
   appendRecords(dir, file, [...delivered, ...tokens]);
@@ -150,6 +165,7 @@ export interface Delivered {
   ht: number;
   /** How many times the cid was delivered. */
   n: number;
+  sw?: string[];
 }
 
 /** One ledger file folded (see the header). */
@@ -182,7 +198,14 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
     typeof record.ver === "string" &&
     typeof record.off === "number"
   ) {
-    const n = (state.delivered.get(record.cid)?.n ?? 0) + 1;
+    const prior = state.delivered.get(record.cid);
+    const n = (prior?.n ?? 0) + 1;
+    // A union keeping max(off): a line a fold moved back to the live log late is older than what follows it there.
+    if (prior && prior.epoch === state.epoch && prior.off > record.off) {
+      prior.n = n;
+      return;
+    }
+    const sw = Array.isArray(record.sw) ? record.sw.filter((word): word is string => typeof word === "string") : [];
     state.delivered.set(record.cid, {
       ver: record.ver,
       epoch: state.epoch,
@@ -190,6 +213,7 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
       att: typeof record.att === "string" ? record.att : "",
       ht: typeof record.ht === "number" ? record.ht : 0,
       n,
+      ...(sw.length ? { sw } : {}),
     });
   }
 }
@@ -377,6 +401,7 @@ export function epochTokens(dir: string, file: LedgerFile = LIVE_LEDGER): number
 export interface LiveDelivery {
   cid: string;
   ver: string;
+  sw?: string[];
 }
 
 /** Whether a delivery made `off` bytes in is still in a window `size` bytes long. */
@@ -392,19 +417,48 @@ export function liveDeliveries(dir: string, size: number, file: LedgerFile = LIV
     return [...state.delivered].flatMap(([cid, entry]) => {
       if (entry.epoch !== state.epoch || !inWindow(cid, entry.off, size)) return [];
       abandoned ??= abandonedPrompts(dir);
-      return abandoned.has(entry.att) ? [] : [{ cid, ver: entry.ver }];
+      return abandoned.has(entry.att) ? [] : [{ cid, ver: entry.ver, ...(entry.sw ? { sw: entry.sw } : {}) }];
     });
   });
 }
 
-/** What a note retracts or switches away from (D7, A4 §3.1): each value with its hash, as the note types it. */
-function valuesLeft(note: ProvenanceNote): { hash: string; value: string }[] {
+/** A slot value a note retracts or switches away from (D7, A4 §3.1), tied to the live slot it changes. */
+interface SlotChange {
+  /** The live slot it changes, and the ver it gives it: the new value's hash, or the empty value's. */
+  slot: LiveDelivery;
+  to: string;
+  /** The value it replaces, as the note types it. */
+  was: string;
+}
+
+const ARTICLE = String.raw`(?:the |our |a |an )?`;
+
+/** A switch's new value, read after its old one ("from Auth0 to Clerk"); none for a retraction. */
+function switchedTo(body: string, from: string): string | undefined {
+  const old = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const to = new RegExp(String.raw`\bfrom ${ARTICLE}${old} to ${ARTICLE}([A-Za-z0-9@][\w@.+-]*[A-Za-z0-9])`, "i");
+  return to.exec(body)?.[1];
+}
+
+/**
+ * The live slot a note changes: one holding the value it retracts or switches away from (or the value it switches
+ * to), whose subject words hold every subject word the change names. A retraction names none, and validity applies
+ * it to every subject too.
+ */
+function slotChange(note: ProvenanceNote, slots: readonly LiveDelivery[]): SlotChange | undefined {
   const body = stripPacketLabel(String(note.text ?? "")).body;
-  return invalidationsIn(body, 0).flatMap((record) => {
-    if (record.k !== "retract" || record.r === "forget") return [];
+  for (const record of invalidationsIn(body, 0)) {
+    if (record.k !== "retract" || record.r === "forget") continue;
+    const subject = (record.w ?? []).map(wordHash);
+    const from = valueHash(record.o);
+    const to = valueHash(switchedTo(body, record.o) ?? "");
+    const slot = slots.find(
+      (s) => (s.ver === from || s.ver === to) && subject.every((word) => s.sw?.includes(word) ?? false),
+    );
     const typed = body.split(/[^\w@.+-]+/).find((token) => token.toLowerCase() === record.o);
-    return [{ hash: valueHash(record.o), value: typed ?? record.f ?? record.o }];
-  });
+    if (slot) return { slot, to, was: typed ?? record.f ?? record.o };
+  }
+  return undefined;
 }
 
 /** The value an invalidation logged for a slot's ver, in the form it was typed. */
@@ -415,7 +469,9 @@ function loggedValue(ver: string, invalid: readonly Invalidation[]): string | un
 
 /**
  * Novelty against the live deliveries (see the header): the notes not refractory, each `Updated:` item marked with
- * the value it replaces when the store logged it. `invalid` is the store's invalidation log.
+ * the value it replaces when the store logged it. `invalid` is the store's invalidation log. A switch's item also
+ * names the slot entry it renews (`renews`), which the caller records with it (`deliveredKeys`), so the slot is then
+ * held at its new value: a second row stating the same change, in this packet or a later one, is refractory.
  */
 export function novelNotes<T extends ProvenanceNote>(
   notes: readonly T[],
@@ -423,24 +479,36 @@ export function novelNotes<T extends ProvenanceNote>(
   opts: { repo?: string; invalid?: readonly Invalidation[] } = {},
 ): (T & Pick<ProvenanceNote, "update">)[] {
   if (!live.length) return [...notes];
-  const slots = live.filter((delivery) => kindLetter(delivery.cid) === "s");
-  // One Updated item per changed delivery: a second row stating the same change (the legacy store keeps a prompt
-  // whole beside its sentences) would say it again.
-  const renewed = new Set<string>();
+  const held = [...live];
   return notes.flatMap((note) => {
     const key = ledgerKey(note, opts.repo);
-    const held = live.filter((delivery) => delivery.cid === key.cid);
-    if (held.some((delivery) => delivery.ver === key.ver)) return [];
-    const changed = held.find((delivery) => kindLetter(delivery.cid) === "s");
-    const left =
-      changed || !slots.length ? undefined : valuesLeft(note).find((v) => slots.some((s) => s.ver === v.hash));
-    const target = changed?.cid ?? slots.find((s) => s.ver === left?.hash)?.cid;
-    if (!target) return [note];
-    if (renewed.has(target)) return [];
-    renewed.add(target);
-    const was = changed ? loggedValue(changed.ver, opts.invalid ?? []) : left!.value;
-    return [{ ...note, update: was ? { was } : {} }];
+    const same = held.filter((delivery) => delivery.cid === key.cid);
+    if (same.some((delivery) => delivery.ver === key.ver)) return [];
+    const changed = same.find((delivery) => kindLetter(delivery.cid) === "s");
+    if (changed) {
+      held.push(key);
+      const was = loggedValue(changed.ver, opts.invalid ?? []);
+      return [{ ...note, update: was ? { was } : {} }];
+    }
+    const slots = held.filter((delivery) => kindLetter(delivery.cid) === "s");
+    const change = slotChange(note, slots);
+    if (!change) return [note];
+    if (held.some((delivery) => delivery.cid === change.slot.cid && delivery.ver === change.to)) return [];
+    const renews = {
+      cid: change.slot.cid,
+      ver: change.to,
+      rule: false,
+      ...(change.slot.sw ? { sw: change.slot.sw } : {}),
+    };
+    held.push(renews);
+    return [{ ...note, update: { was: change.was, renews } }];
   });
+}
+
+/** What delivering a note records: its own key, and the slot entry an `Updated:` item renews (`novelNotes`). */
+export function deliveredKeys(note: ProvenanceNote, repo?: string): LedgerKey[] {
+  const renews = note.update?.renews;
+  return [ledgerKey(note, repo), ...(renews ? [renews] : [])];
 }
 
 /** A4 §4's budget: past 6k tokens in the epoch, only `Updated:` items. */

@@ -191,6 +191,14 @@ function objectWords(text: string): string[] {
     .map(singular);
 }
 
+/**
+ * The words a slot's subject is matched by, as a switch's subject words (`w`) are kept: content words, singular,
+ * without words that name no object or no subject.
+ */
+export function subjectWords(text: string): string[] {
+  return objectWords(text).filter((word) => !NO_SUBJECT.has(word));
+}
+
 /** The forget a sentence states, if it states one. */
 function forgetIn(sentence: string, t: number): Retraction | undefined {
   const value = FORGET.exec(sentence)?.[1];
@@ -224,7 +232,7 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
       if (!valueShaped(match[2]!)) continue;
       const middle = match[1]!;
       const scope = middle.match(PATH)?.[0]?.toLowerCase();
-      const subject = objectWords(middle.replace(PATH, " ")).filter((word) => !NO_SUBJECT.has(word));
+      const subject = subjectWords(middle.replace(PATH, " "));
       found.push({
         k: "retract",
         ...retracted(match[2]!),
@@ -271,7 +279,7 @@ export function recordSupersession(
   src?: "legacy",
 ): void {
   try {
-    const subject = objectWords(slot.subject).filter((word) => !NO_SUBJECT.has(word));
+    const subject = subjectWords(slot.subject);
     if (!subject.length) return;
     const record = { k: "retract", ...retracted(slot.value), t, w: subject, ...(src ? { src } : {}) };
     mkdirSync(root, { recursive: true });

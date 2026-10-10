@@ -34,7 +34,7 @@
  *   wrap puts every earlier turn's packet back where it was: the cached prefix holds.
  */
 import { createHash } from "node:crypto";
-import { statSync } from "node:fs";
+import { readdirSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { writeFileAtomic } from "../packages/cli/src/home";
 import type { MemoryRecord, ObserveOptions } from "./index";
@@ -45,9 +45,10 @@ import { appendWideEvent, type DropStage } from "./memory-events";
 import { resolveFlags, type FlagMode } from "./memory-flags";
 import { packetOf, shapePacket } from "./memory-hook-packet";
 import {
+  deliveredKeys,
+  foldLedger,
   humanTurns,
   inWindow,
-  ledgerKey,
   novelNotes,
   packetTokens,
   recordPacket,
@@ -442,7 +443,7 @@ function answerTurn(
   const shown = mode === "on" ? packet : "";
   const tail: TurnTail = {
     texts: [shown, extra ?? ""].filter(Boolean),
-    given: delivered.map((note) => ledgerKey(note, mem.repoKey)),
+    given: delivered.flatMap((note) => deliveredKeys(note, mem.repoKey)),
     tokens: packet ? packetTokens(packet) : 0,
     mode,
   };
@@ -488,6 +489,7 @@ function recordAnswer(
     if (file === SHADOW_LEDGER)
       preempted = wouldPreempt(win, [...answer.said, ...answer.said.flatMap(sentencesOf)], hturn, mem.repoKey);
     if (tail.given.length) recordPacket(win, { keys: tail.given, tokens: tail.tokens }, { off, att, ht: hturn }, file);
+    if ((statSync(join(win, file), { throwIfNoEntry: false })?.size ?? 0) > WRAP_FOLD_BYTES) foldLedger(win, file);
   }
   appendWideEvent(mem.windowsRoot, {
     t: memoryNow(),
@@ -513,8 +515,11 @@ function recordAnswer(
 }
 
 const TAILS = "tails.jsonl";
-/** Above this size `tails.jsonl` is rewritten with only the tails still within their hour. */
-const TAILS_COMPACT_BYTES = 256 * 1024;
+/** How often a process looks for other conversations' tails past their hour. */
+const SWEEP_MS = 10 * 60_000;
+let lastSweep = 0;
+/** No Stop reaches a wrap window, so its ledger is folded once its log has outgrown a few turns (D25). */
+const WRAP_FOLD_BYTES = 32 * 1024;
 
 function isTail(value: unknown): value is TurnTail {
   const tail = record(value);
@@ -539,13 +544,34 @@ function storedTails(win: string | undefined, now: number): Map<string, TurnTail
   return out;
 }
 
-/** Keeps a turn's tail in its window, compacting the file once it has outgrown what an hour of turns needs. */
-function storeTail(win: string | undefined, key: string, tail: TurnTail, now: number): void {
+/**
+ * Keeps a turn's tail in its window (X11: packet text, kept the hour the memo keeps it). A file holding a tail past its
+ * hour is rewritten with only the live ones; other conversations' files untouched for an hour are removed.
+ */
+function storeTail(mem: WrapMemory, win: string | undefined, key: string, tail: TurnTail, now: number): void {
   if (!win) return;
-  appendRecords(win, TAILS, [{ k: "tail", key, t: now, tail }]);
-  if ((statSync(join(win, TAILS), { throwIfNoEntry: false })?.size ?? 0) <= TAILS_COMPACT_BYTES) return;
-  const kept = [...storedTails(win, now)].map(([k, t]) => JSON.stringify({ k: "tail", key: k, t: now, tail: t }));
-  writeFileAtomic(join(win, TAILS), kept.map((line) => `${line}\n`).join(""), 0o600);
+  const entry = { k: "tail", key, t: now, tail };
+  const expired = windowRecords(win, TAILS).some(
+    (record) => typeof record.t !== "number" || now - record.t > TURN_TTL_MS,
+  );
+  if (!expired) appendRecords(win, TAILS, [entry]);
+  else {
+    const kept = [...storedTails(win, now)].map(([k, t]) => ({ k: "tail", key: k, t: now, tail: t }));
+    writeFileAtomic(join(win, TAILS), [...kept, entry].map((line) => `${JSON.stringify(line)}\n`).join(""), 0o600);
+  }
+  if (now - lastSweep >= SWEEP_MS) {
+    lastSweep = now;
+    sweepTails(join(mem.windowsRoot, "windows"), now);
+  }
+}
+
+/** Removes the tails of wrap conversations untouched for longer than their hour. */
+function sweepTails(windows: string, now: number): void {
+  for (const name of readdirSync(windows).filter((entry) => entry.startsWith("wrap-"))) {
+    const file = join(windows, name, TAILS);
+    const touched = statSync(file, { throwIfNoEntry: false })?.mtimeMs;
+    if (touched !== undefined && now - touched > TURN_TTL_MS) rmSync(file, { force: true });
+  }
 }
 
 /** The memory packets a message list carries at its turns' tails: what `inject` attached, or a client echoed. */
@@ -608,9 +634,14 @@ export function placeTurnTails(mem: WrapMemory, messages: readonly unknown[], op
     if (opening && mem.writable()) mem.turns.markEncoded(reads[last]!.key);
     mem.turns.setTail(reads[last]!.key, answer.tail, now);
     tails.set(last, answer.tail);
+    // Each write fails open on its own: the tail is already in the memo, and the request goes out with it.
     if (mem.writable()) {
-      storeTail(win, reads[last]!.key, answer.tail, now);
-      recordAnswer(mem, win, reads, last, answer, performance.now() - started);
+      try {
+        storeTail(mem, win, reads[last]!.key, answer.tail, now);
+      } catch {}
+      try {
+        recordAnswer(mem, win, reads, last, answer, performance.now() - started);
+      } catch {}
     }
   }
   encoded += encodeNew(mem, reads, last, reads.length, fresh);

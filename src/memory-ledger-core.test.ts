@@ -241,7 +241,7 @@ describe("A4 §4: refractory and Updated items, against the live deliveries", ()
     ];
     const novel = novelNotes(rows, liveDeliveries(win, 100), { repo: REPO, invalid: switched });
     expect(novel.map((note) => note.id)).toEqual([rows[0]!.id]);
-    expect(novel[0]?.update).toEqual({ was: "Auth0" });
+    expect(novel[0]?.update).toMatchObject({ was: "Auth0" });
   });
 
   test("the ledger holds no text: the old value comes from the invalidation log", () => {

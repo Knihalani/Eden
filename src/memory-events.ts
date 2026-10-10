@@ -106,7 +106,8 @@ export function recentEvents(root: string, point: Flag, n: number): WideEvent[] 
     for (const line of lines) {
       try {
         const event = JSON.parse(line) as WideEvent;
-        if (event?.point === point) out.push(event);
+        // The wrap's events (`ev: "wrap"`) share `deliver.submit` but are not the hook's invocations.
+        if (event?.point === point && event.ev !== "wrap") out.push(event);
       } catch {}
       if (out.length >= n) return out.reverse();
     }

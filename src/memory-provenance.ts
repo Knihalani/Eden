@@ -18,8 +18,11 @@ export type ProvenanceNote = {
   tags?: string[];
   lane?: string;
   at?: number;
-  /** An `Updated:` item (A4 §4): the window was given this item's earlier value, named when the store logged it. */
-  update?: { was?: string };
+  /**
+   * An `Updated:` item (A4 §4): the window was given this item's earlier value, named when the store logged it, and
+   * the slot entry its delivery renews (`memory-ledger.ts`).
+   */
+  update?: { was?: string; renews?: { cid: string; ver: string; rule: boolean; sw?: string[] } };
 };
 
 /** Times are epoch ms (~1.7e12); a smaller number is a list serial a store from before P0.3 kept, not a time. */
