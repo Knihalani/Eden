@@ -237,6 +237,13 @@ Row `id`s are ULIDs and never carry a prefix.
 - `Updated:` items come on the cue that retrieves the new value. A non-human submit carries none, and SessionStart's are P2.5's: without keyed slots there is no lookup from a delivered cid to its current value.
 - `tokens_epoch` adds one `packet` record per packet (A5's count: a quarter of its characters).
 
+**Built in P1.2** (`src/memory-ledger.ts`, `src/memory-value-tokens.ts`, `src/memory-fork.ts`; D25's note has the mechanics). Where it reads "Re-arm" narrowly:
+- SessionStart(compact) starts the epoch, which re-arms everything, as before. PostCompact, which Claude Code runs right after it (R0 F32), then holds what the summary still names: the deliveries of the epoch the compaction closed whose value tokens all appear in `compact_summary`. A held delivery counts its distance from the summary's offset and is on every branch. A host without PostCompact re-arms everything.
+- Value tokens are kept hashed (X11). A rule's class verb stem is matched by any verb of its A7 §5 class in any inflection ("merging" for "merge"), and its object words in the singular, so "PRs" and "PR" are one; a class's default object is not widened ("pull requests" does not name "pr"). A rule with no class verb keeps its object words. Episodes, gotchas and procedures have no value tokens, so a compaction always re-arms them.
+- `clear` starts an epoch. Claude Code gives `/clear` a new session (a new, empty window), so this matters only for a host that keeps the id.
+- `fork` brings nothing at SessionStart, like `resume`. No payload names the parent, and Claude Code (2.1.294) writes the fork's transcript only after its first turn, keeping the parent's line `uuid`s. So the copy happens at the fork's first `stop-sleep`: the parent is the window, among those of the transcripts beside the fork's (at most 32), whose turn map holds the newest of the fork's lines, and the deliveries made at its prompts after that line's turn are not copied. The fork's first turn runs on an empty ledger. A fork subagent's copy waits for SubagentStart (P2.5).
+- The internal compaction agent's SubagentStop (`agent_type: ""`) writes nothing: its last message is the summary, which the main transcript also carries.
+
 ---
 
 ## 5. Delivery points (D23)
