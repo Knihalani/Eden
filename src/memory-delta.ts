@@ -5,6 +5,7 @@
  * - **`hwm.json`** (the window's directory) holds the byte offset after the last complete line read, the window's
  *   typed prompts, a rolling map of the last 5,000 lines to their turn, and the `promptId`s a rewind abandoned. It is
  *   advanced only under `hwm.lock`, taken without waiting: a hook that finds it held leaves the delta to the holder.
+ *   A hook that finds nothing new leaves the mark as it is.
  *   A window with no mark starts at its transcript's last 256 KB, the most the hook read before P0.6.
  * - **Turns.** A line's turn is its nearest typed-prompt ancestor by `parentUuid` (`logicalParentUuid` across a
  *   compaction's boundary, whose `parentUuid` is null). A typed prompt is a user line that carries the user's
@@ -234,6 +235,7 @@ export function encodeDelta(win: string, transcriptPath: string, encode: (delta:
         const held = readMark(win);
         const mark = held?.path === transcriptPath ? held : emptyMark(transcriptPath, firstOffset(transcriptPath));
         const { text, end } = completeLines(transcriptPath, mark.off);
+        if (mark === held && end === held.off) return { messages: [], abandoned: [], branchTexts: [] };
         mark.off = end;
         const delta = readLines(mark, text);
         try {
@@ -243,7 +245,7 @@ export function encodeDelta(win: string, transcriptPath: string, encode: (delta:
         }
         return delta;
       },
-      1,
+      0,
     );
   } catch {
     return undefined;

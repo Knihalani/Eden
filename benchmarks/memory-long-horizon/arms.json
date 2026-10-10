@@ -926,7 +926,7 @@
         "failed": [
           "b-packs-after-sleep"
         ],
-        "why": "phrasing B never packs shipit, before or after sleep; `eden sleep` does not exist (exit 1)"
+        "why": "phrasing B never packs shipit, before or after sleep: since P0.6 `eden sleep --idle --after 0` exists and exits 0 (D34's full sleep), but no sleep pass learns from a restatement until P5.3"
       },
       "off": {
         "state": "green",
