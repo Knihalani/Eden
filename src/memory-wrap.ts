@@ -310,8 +310,9 @@ function encodeNew(
 
 /**
  * Which messages are new to the conversation: those after the last one this process encoded, and a turn's human
- * message ending the request. The rest is history read again (`reread`): a conversation first seen after a restart,
- * or history the client edited (trimming an old tool result changes every later message's key).
+ * message ending the request. The rest is history read again (`reread`), as in a conversation first seen after a
+ * restart. When a client edits earlier history, every message after the edit has a new key and is encoded again as
+ * new; a statement the store already holds is then kept as it is (tests: "history the client edited").
  */
 function freshness(mem: WrapMemory, reads: readonly Read[], newTurn: number | undefined): boolean[] {
   const lastEncoded = reads.findLastIndex((read) => mem.turns.wasEncoded(read.key));
