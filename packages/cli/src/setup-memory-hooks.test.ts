@@ -59,7 +59,7 @@ describe("P0.7: eden setup's Claude hooks run memory as the plugin does", () => 
 
   test("PostToolBatch records memory, so PostToolUse leaves it to the batch (A4 §5.5)", () => {
     expect(handlers(hooks, "PostToolUse")[0]!.command).toContain("bun '/abs/cli.ts' hook batched");
-    expect(handlers(hooks, "PostToolBatch")[0]!.command).toMatch(/hook \|\| true$/);
+    expect(handlers(hooks, "PostToolBatch")[0]!.command).toMatch(/' hook 2>\/dev\/null \|\| true$/);
   });
 
   test("no command prints on failure: each ends in `|| true` (EXECUTION §5)", () => {
@@ -68,6 +68,21 @@ describe("P0.7: eden setup's Claude hooks run memory as the plugin does", () => 
       expect(handler.command.endsWith("|| true")).toBe(true);
     }
     expect(preHookCommand(9001).endsWith("|| true")).toBe(true);
+  });
+
+  test("a command whose every call fails exits 0 and writes nothing, stderr included (review round 1)", () => {
+    // No hookd on the port, no key file, and a CLI path that does not exist: curl and bun both fail.
+    for (const command of [hookCommand("/nonexistent/cli.ts", 9, { stage: "stop-fast" }), preHookCommand(9)]) {
+      const run = Bun.spawnSync(["sh", "-c", command], {
+        stdin: new TextEncoder().encode(JSON.stringify({ hook_event_name: "Stop", session_id: "s" })),
+        env: { ...process.env, EDEN_HOOKD: "0" },
+      });
+      expect({ code: run.exitCode, stdout: run.stdout.toString(), stderr: run.stderr.toString() }).toEqual({
+        code: 0,
+        stdout: "",
+        stderr: "",
+      });
+    }
   });
 });
 

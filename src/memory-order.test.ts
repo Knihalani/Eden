@@ -298,7 +298,7 @@ describe("M41 place cues", () => {
         mem.remember(`Kai timezone is Pacific office slot ${i} for standup hours.`);
       }
       const ranked = mem.injectBody({
-        messages: [...pacificTurns(), { role: "user", content: "What GitHub Actions CI do we use?" }],
+        messages: [...pacificTurns(), { role: "user", content: "Which GitHub workflow runs our CI?" }],
       });
       const rankedPkt = memoryPacketText(ranked.messages as unknown[]);
       expect(rankedPkt).toMatch(/GitHub|Actions/i);
@@ -311,8 +311,9 @@ describe("M41 place cues", () => {
       };
       const out = mem.injectBody(body);
       const messages = out.messages as { role?: string; content?: string }[];
+      // The packet ends the user's message (D29, since P0.7): the user's own text still opens it.
       const lastUser = [...messages].reverse().find((m) => m.role === "user");
-      expect(lastUser?.content).toBe("fix this");
+      expect(String(lastUser?.content).split(`\n\n${MEMORY_MARK}`)[0]).toBe("fix this");
       const packet = memoryPacketText(messages);
       expect(packet).toContain(MEMORY_MARK);
       expect(packet).toMatch(/auth\.ts/i);

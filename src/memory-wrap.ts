@@ -123,11 +123,6 @@ export interface InjectOptions {
   extra?: () => string | undefined;
   /** The marks `extra`'s texts begin with, so a client that echoes a tail back is recognised. */
   extraMarks?: readonly string[];
-  /**
-   * Attach the tail as text blocks, a string content becoming its one block (Anthropic): the message then has one
-   * shape whether or not it ends the request, where the proxy turns the last message's string into blocks.
-   */
-  blocks?: boolean;
 }
 
 type Message = Record<string, unknown>;
@@ -283,9 +278,8 @@ function toolsBefore(reads: readonly Read[], at: number): string[] {
 }
 
 /**
- * Encodes the messages no request carried before, from `from` to `to` (exclusive), in order; returns how many. A
- * message is new to the conversation when it follows one this process encoded or a new one, or is a new turn's
- * human message ending the request; the rest is history read again (`reread`).
+ * Encodes the messages no request carried before, from `from` to `to` (exclusive), in order; returns how many.
+ * Nothing is encoded, or marked as encoded, while memory is read-only.
  */
 function encodeNew(
   mem: WrapMemory,
@@ -294,6 +288,7 @@ function encodeNew(
   to: number,
   fresh: readonly boolean[],
 ): number {
+  if (!mem.writable()) return 0;
   let count = 0;
   const groups: { reread: boolean; messages: Authored[] }[] = [];
   for (let i = from; i < to; i++) {
@@ -313,14 +308,14 @@ function encodeNew(
   return count;
 }
 
-/** Which messages are new to the conversation (see `encodeNew`). */
+/**
+ * Which messages are new to the conversation: those after the last one this process encoded, and a turn's human
+ * message ending the request. The rest is history read again (`reread`): a conversation first seen after a restart,
+ * or history the client edited (trimming an old tool result changes every later message's key).
+ */
 function freshness(mem: WrapMemory, reads: readonly Read[], newTurn: number | undefined): boolean[] {
-  const fresh: boolean[] = [];
-  reads.forEach((_, i) => {
-    const before = i > 0 ? reads[i - 1]! : undefined;
-    fresh.push(i === newTurn || (before !== undefined && (mem.turns.wasEncoded(before.key) || fresh[i - 1]!)));
-  });
-  return fresh;
+  const lastEncoded = reads.findLastIndex((read) => mem.turns.wasEncoded(read.key));
+  return reads.map((_, i) => i === newTurn || (lastEncoded >= 0 && i > lastEncoded));
 }
 
 /** D26's residual and A7 §3's cue parts, read from the messages before the turn's human message. */
@@ -411,14 +406,13 @@ export function injectedPackets(messages: readonly unknown[]): string[] {
   return out;
 }
 
-/** A message with texts appended at its tail, in its own content shape (or as blocks, `InjectOptions.blocks`). */
-function withTail(message: Message, texts: readonly string[], blocks: boolean): Message {
+/** A message with texts appended at its tail, in its own content shape. */
+function withTail(message: Message, texts: readonly string[]): Message {
   if (Array.isArray(message.parts))
     return { ...message, parts: [...message.parts, ...texts.map((text) => ({ text }))] };
   const content = message.content;
-  const tail = texts.map((text) => ({ type: "text", text }));
-  if (Array.isArray(content)) return { ...message, content: [...content, ...tail] };
-  if (blocks) return { ...message, content: [{ type: "text", text: String(content ?? "") }, ...tail] };
+  if (Array.isArray(content))
+    return { ...message, content: [...content, ...texts.map((text) => ({ type: "text", text }))] };
   return { ...message, content: [String(content ?? ""), ...texts].join("\n\n") };
 }
 
@@ -432,10 +426,11 @@ export function placeTurnTails(mem: WrapMemory, messages: readonly unknown[], op
   const reads = readMessages(messages, marks);
   const humans = reads.flatMap((read, i) => (read.typed !== undefined ? [i] : []));
   const last = humans.at(-1) ?? reads.length;
-  // A turn's first request ends with its human message; one that follows it is a tool-loop step.
+  // A turn's first request ends with its human message; one that follows it is a tool-loop step. The message is
+  // encoded and its forgets recorded at every opening (A4 §5.1 step 1): a new conversation may open with the words
+  // an earlier one did, and a retry says nothing a store does not already hold.
   const opening = last === reads.length - 1;
-  const newPrompt = opening && !mem.turns.wasEncoded(reads[last]!.key);
-  const fresh = freshness(mem, reads, newPrompt ? last : undefined);
+  const fresh = freshness(mem, reads, opening ? last : undefined);
   const tails = new Map<number, TurnTail>();
   for (const h of humans) {
     const tail = h === last && opening ? undefined : mem.turns.tail(reads[h]!.key, now);
@@ -443,18 +438,18 @@ export function placeTurnTails(mem: WrapMemory, messages: readonly unknown[], op
   }
   let encoded = encodeNew(mem, reads, 0, last, fresh);
   if (last < reads.length && !tails.has(last)) {
-    const tail = answerTurn(mem, reads, last, tails, opts, newPrompt);
-    if (newPrompt) mem.turns.markEncoded(reads[last]!.key);
+    const tail = answerTurn(mem, reads, last, tails, opts, opening);
+    if (opening && mem.writable()) mem.turns.markEncoded(reads[last]!.key);
     mem.turns.setTail(reads[last]!.key, tail, now);
     tails.set(last, tail);
   }
   encoded += encodeNew(mem, reads, last, reads.length, fresh);
-  if (encoded || newPrompt) mem.noteActivity();
+  if (encoded || opening) mem.noteActivity();
   let out: unknown[] | undefined;
   for (const [h, tail] of tails) {
     if (!tail.texts.length || reads[h]!.tailed) continue;
     out ??= messages.slice();
-    out[h] = withTail(record(messages[h])!, tail.texts, opts.blocks === true);
+    out[h] = withTail(record(messages[h])!, tail.texts);
   }
   return out ?? (messages as unknown[]);
 }
