@@ -20,7 +20,14 @@ const FACT_CUE = "what database do we use?";
 const RULE_CUE = "merge the PRs once CI passes";
 
 let dir = "";
-const ENV_KEYS = ["EDEN_MEMORY_DIR", "EDEN_HOME", "EDEN_MEMORY", "EDEN_NOW", "EDEN_FLAG_DELIVER_SUBMIT"] as const;
+const ENV_KEYS = [
+  "EDEN_MEMORY_DIR",
+  "EDEN_HOME",
+  "EDEN_MEMORY",
+  "EDEN_NOW",
+  "EDEN_FLAG_DELIVER_SUBMIT",
+  "EDEN_FLAG_DELIVER_SESSION_START",
+] as const;
 const prev = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
 beforeEach(() => {
@@ -30,6 +37,7 @@ beforeEach(() => {
   process.env.EDEN_NOW = String(NOW);
   delete process.env.EDEN_MEMORY;
   delete process.env.EDEN_FLAG_DELIVER_SUBMIT;
+  delete process.env.EDEN_FLAG_DELIVER_SESSION_START;
 });
 
 afterEach(() => {
@@ -114,6 +122,7 @@ describe("A4 §4: PostCompact re-arms only what compact_summary dropped (R0 F14)
 
   test("with every point in shadow, PostCompact holds in the shadow ledger, by its own epochs", () => {
     process.env.EDEN_FLAG_DELIVER_SUBMIT = "shadow";
+    process.env.EDEN_FLAG_DELIVER_SESSION_START = "shadow";
     submit(FACT, "p1");
     submit(FACT_CUE, "p2");
     compact("The database is postgres.");
