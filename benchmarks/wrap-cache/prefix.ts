@@ -5,6 +5,8 @@
  * - `anthropic`: the Anthropic wrap (`withKnowFactsAnthropic`);
  * - `openai`: the OpenAI-shaped wrap (`withKnowFacts`, which reaches `AgentMemory.injectBody`);
  * - `inject`: the library API `AgentMemory.inject` on an OpenAI message list;
+ * - `inject-restart`: the same API with a fresh memory on the same store for every request, as a wrap restarted
+ *   between requests (added in P1.1: the turns' tails outlive the process);
  * - `anthropic-proxy`: the Anthropic proxy's handler (`handleAnthropicMessages`), which also sets the request's cache
  *   breakpoints, read from the body it sends upstream (added after the pre-registration: the handler reshapes the
  *   last message, which the `anthropic` path does not see).
@@ -210,10 +212,18 @@ async function main(): Promise<void> {
     seeded("openai");
     const openai = await measure((b) => know.withKnowFacts(b) as Body, "openai", marks);
     const inject = await measure((b) => ({ ...b, messages: library.inject(b.messages) }), "openai", marks);
+    // A wrap that restarts before every request: a fresh memory on the same store each time (P1.1).
+    const restarted = join(home, "restart");
+    index.openMemory({ dir: restarted }).observe(seed);
+    const restart = await measure(
+      (b) => ({ ...b, messages: index.openMemory({ dir: restarted }).inject(b.messages) }),
+      "openai",
+      marks,
+    );
     seeded("anthropic-proxy");
     const state = tools.createState({ programs: [] });
     const anthropicProxy = await measure(viaAnthropicProxy(proxy.handleAnthropicMessages, state), "anthropic", marks);
-    const out = { root, anthropic, openai, inject, "anthropic-proxy": anthropicProxy };
+    const out = { root, anthropic, openai, inject, "inject-restart": restart, "anthropic-proxy": anthropicProxy };
     const json = JSON.stringify(out, null, 2);
     const file = flag("--out");
     if (file) writeFileSync(file, json + "\n");
