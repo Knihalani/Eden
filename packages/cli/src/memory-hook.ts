@@ -478,7 +478,8 @@ const REREAD_MESSAGES = 40;
  * rewind abandoned. A host that sends the conversation in its payload, or names no session, has no mark: its last 40
  * messages are read again (`reread`), as every host's were before P0.6.
  */
-function encodeConversation(ctx: HookContext, transcriptPath = ctx.transcriptPath): void {
+function encodeConversation(ctx: HookContext): void {
+  const { transcriptPath } = ctx;
   const sent = payloadMessages(ctx.r);
   if (!sent.length && ctx.win && transcriptPath) {
     const delta = encodeDelta(ctx.win, transcriptPath, ({ messages, abandoned, branchTexts }) => {
@@ -572,14 +573,15 @@ function toolBatch(ctx: HookContext): void {
 }
 
 /**
- * SubagentStop (A4 §5.7b): the child window's delta, from its own transcript, and its last message; a host that
- * sends the subagent's result as a tool result has it encoded as that, once.
+ * SubagentStop (A4 §5.7b): the subagent's last message, or the result a host sends as a tool result, encoded once.
+ * Its own transcript is not encoded yet: what it holds reaches the parent as the Agent call and its result, which
+ * the parent's delta encodes, and until P1.3's shadow set a child's rows come back to the parent as bullets it
+ * already holds (`redundant_rate` +4.42 pp in P0.6's guard runs).
  */
 function subagentStop(ctx: HookContext): void {
   let asTool = false;
   inTurn(
     () => (asTool = toolResult(ctx, "subagent")),
-    () => encodeConversation(ctx, str(ctx.r.agent_transcript_path) ?? ""),
     () => {
       if (!asTool) encodePayloadText(ctx);
     },
