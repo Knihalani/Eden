@@ -154,7 +154,15 @@ describe("eden doctor --memory", () => {
   test("hooks from eden setup: modules says there is no plugin to probe", async () => {
     const home = homeWith(null);
     const setupHook = { hooks: [{ type: "command", command: "eden hook" }] };
-    const events = ["UserPromptSubmit", "SessionStart", "PreCompact", "Stop", "SessionEnd", "PostToolUse"];
+    const events = [
+      "UserPromptSubmit",
+      "SessionStart",
+      "PreCompact",
+      "PostCompact",
+      "Stop",
+      "SessionEnd",
+      "PostToolUse",
+    ];
     const hooks = Object.fromEntries([...events, "SubagentStop"].map((event) => [event, [setupHook]]));
     writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ hooks }));
     const { code, lines } = await doctorMemory(home);

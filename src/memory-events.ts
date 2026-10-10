@@ -54,6 +54,12 @@ export interface WideEvent {
   /** Texts the delta encoder read from the transcript (A4 §3.3), and the turns a rewind abandoned. */
   encoded?: number;
   abandoned?: number;
+  /** PostCompact (A4 §4): the cids `compact_summary` held, and how many of the closed epoch's it left re-armed. */
+  held?: string[];
+  rearmed?: number;
+  /** A fork's copy of its parent's ledger (D25): the parent's window ("" when none was found), and its deliveries. */
+  forked_from?: string;
+  copied?: number;
   /** Milliseconds inside the hook's handler (process start and module load are not in it). */
   ms: number;
   /** A budget abort (A5 `abort_rate`). The hook has no budget abort yet (P4.2), so it is always false. */

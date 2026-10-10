@@ -11,10 +11,12 @@ import { appendWideEvent, errorTag, retainEvents, type WideEvent } from "../../.
 import { flagModes, pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
 import { batchRecord } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
+import { inheritFork, markFork } from "../../../src/memory-fork";
 import {
   deliveredKeys,
   epochTokens,
   foldWindow,
+  holdSummarized,
   humanTurns,
   ledgerKey,
   liveDeliveries,
@@ -57,6 +59,7 @@ const MEMORY_EVENTS = new Set([
   "UserPromptSubmit",
   "SessionStart",
   "PreCompact",
+  "PostCompact",
   "Stop",
   "SessionEnd",
   "PostToolUse",
@@ -503,6 +506,7 @@ function stopFast(r: Record<string, unknown>, win: string | undefined): void {
 function sleepAfterTurn(ctx: HookContext): void {
   inTurn(
     () => encodeConversation(ctx),
+    () => inheritParent(ctx),
     () => encodePayloadText(ctx),
     () => lightSleep(ctx.mem, ctx.session),
     () => ctx.win && compactContext(ctx.win),
@@ -510,6 +514,16 @@ function sleepAfterTurn(ctx: HookContext): void {
     () => retainEvents(memoryRoot(), memoryNow()),
     () => spawnIdleSleeper(ctx.store, ctx.session),
   );
+}
+
+/**
+ * A forked session's copy of its parent's ledger (D25, `memory-fork.ts`), once the delta encoder has read the fork's
+ * transcript: Claude Code writes it only after the fork's first turn.
+ */
+function inheritParent(ctx: HookContext): void {
+  if (!ctx.win || ctx.child) return;
+  const inherited = inheritFork(memoryRoot(), ctx.win, ctx.transcriptPath);
+  if (inherited) Object.assign(ctx.trace, { forked_from: inherited.from, copied: inherited.copied });
 }
 
 /** Runs each step of a handler in order; one that throws is skipped, never the steps after it (fail open). */
@@ -586,20 +600,30 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
       notice = takeNotice(memoryNow());
     } catch {}
   // A4 §5.2: a resumed session still holds the packets it had (R0 F5), so resume brings nothing new and keeps
-  // the ledger. A compaction re-arms (a new epoch, A4 §4): its pins come back on their next cue, not here.
-  // The gists, the legacy carrier between sessions, stay at every other SessionStart until P2.5.
-  // `/clear` opens a new session: a new window, with an empty ledger.
+  // the ledger. A fork holds its parent's context the same way: it brings nothing, and copies the parent's ledger
+  // once its transcript names the parent (`inheritParent`). `clear` and a compaction start an epoch (A4 §4), which
+  // re-arms everything; PostCompact then holds what the summary still names, and a compaction's pins come back on
+  // their next cue, not here. The gists, the legacy carrier between sessions, stay at every other SessionStart until
+  // P2.5.
   const off = transcriptOffset(ctx.transcriptPath),
     ledger = ctx.ledgerOf(mode),
-    compact = r.source === "compact";
-  if (r.source === "resume") return withNotice(null, notice);
+    source = r.source,
+    compact = source === "compact";
+  if (source === "resume") return withNotice(null, notice);
+  if (source === "fork") {
+    if (win && writes)
+      try {
+        markFork(win, memoryNow(), r.seconds_since_last_response);
+      } catch {}
+    return withNotice(null, notice);
+  }
   // The epoch belongs to the window: each ledger it has, and each a built point writes in its mode, starts one,
   // so a point that turned from on to shadow re-arms what it delivered live (A4 §4).
-  if (compact && win && writes) {
+  if ((compact || source === "clear") && win && writes) {
     const modes = [mode, flags["deliver.submit"].mode].flatMap((m) => ctx.ledgerOf(m)?.file ?? []);
     for (const file of new Set([...existingLedgers(win), ...modes]))
       try {
-        startEpoch(win, "compact", off, file);
+        startEpoch(win, String(source), off, file);
       } catch {}
   }
   if (mode === "off") return withNotice(null, notice);
@@ -607,6 +631,25 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
   Object.assign(trace, { cids, ids, drops: { shape: briefed.length - cids.length } });
   return withNotice(mode === "on" ? additional(ctx.event, packet) : null, notice);
+}
+
+/**
+ * PostCompact (A4 §4, R0 F14): SessionStart(compact), which Claude Code runs just before it (R0 F32), started a new
+ * epoch in every ledger the window has; what `compact_summary` still names stays habituated in each. It reads no
+ * store.
+ */
+function postCompact(r: Record<string, unknown>, win: string, trace: Trace): void {
+  const summary = str(r.compact_summary);
+  if (!summary) return;
+  const off = transcriptOffset(transcriptOf(r));
+  const held: string[] = [];
+  let rearmed = 0;
+  for (const file of existingLedgers(win)) {
+    const kept = holdSummarized(win, summary, off, file);
+    held.push(...kept.held);
+    rearmed += kept.rearmed;
+  }
+  Object.assign(trace, { held, rearmed });
 }
 
 /**
@@ -684,7 +727,7 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
 }
 
 /** Events that only write: read-only consent leaves them nothing to do. */
-const WRITING_EVENTS = new Set(["PostToolUse", "PostToolBatch", "SubagentStop", "Stop", "SessionEnd"]);
+const WRITING_EVENTS = new Set(["PostToolUse", "PostToolBatch", "SubagentStop", "Stop", "SessionEnd", "PostCompact"]);
 
 function respond(
   r: Record<string, unknown>,
@@ -714,6 +757,13 @@ function respond(
     stopFast(r, win);
     if (stage === "stop-fast") return null;
   }
+  if (event === "PostCompact") {
+    if (win) postCompact(r, win, trace);
+    return null;
+  }
+  // R0 F32: `/compact` runs an internal agent (`agent_type: ""`) with no transcript of its own. Its last message is
+  // the summary, which the main transcript's compact summary line already carries to the delta encoder.
+  if (event === "SubagentStop" && r.agent_type === "") return null;
   // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened. Its wide event names the rule
   // it matched, so the live shape of each kind can be checked from ids alone (R0 F34).
   const nonHuman = event === "UserPromptSubmit" ? nonHumanKind(prompt, win ? cronHashes(win) : []) : undefined;
