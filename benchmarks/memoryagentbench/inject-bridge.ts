@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { MEMORY_MARK, openMemory, consolidate, type AgentMemory } from "../../src/index.ts";
+import { injectedPackets, MEMORY_MARK, openMemory, consolidate, type AgentMemory } from "../../src/index.ts";
 import { atomize } from "./atoms.ts";
 
 const SENTINEL = "@@EDEN@@";
@@ -41,15 +41,9 @@ function ensure(): AgentMemory {
   return mem;
 }
 
+/** The packets `inject` attached (since P0.7 at the tail of the turn's message, D29). */
 function extractPacket(injected: unknown[]): string {
-  const notes: string[] = [];
-  for (const m of Array.isArray(injected) ? injected : []) {
-    if (!m || typeof m !== "object") continue;
-    const role = String((m as { role?: string }).role ?? "");
-    const content = String((m as { content?: unknown }).content ?? "");
-    if (role === "system" && content.includes(MEMORY_MARK)) notes.push(content);
-  }
-  return notes.join("\n");
+  return injectedPackets(Array.isArray(injected) ? injected : []).join("\n");
 }
 
 function ingestPending() {

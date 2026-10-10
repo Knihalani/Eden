@@ -16,7 +16,7 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_MARK, memoryRetrieveCap, openMemory } from "../../src/index.ts";
+import { injectedPackets, MEMORY_MARK, memoryRetrieveCap, openMemory } from "../../src/index.ts";
 import { memoryConsent } from "../../src/memory-consent.ts";
 
 export const HOLD_DIR = import.meta.dir;
@@ -213,22 +213,13 @@ function assertProtocol(): void {
   if (k !== 6) throw new Error(`memoryRetrieveCap ${k} !== 6`);
 }
 
-function systemTexts(list: unknown[]): string[] {
-  if (!Array.isArray(list)) return [];
-  const out: string[] = [];
-  for (const m of list) {
-    if (!m || typeof m !== "object") continue;
-    const role = String((m as { role?: unknown }).role ?? "");
-    const content = (m as { content?: unknown }).content;
-    if (role === "system" && typeof content === "string") out.push(content);
-  }
-  return out;
+/** What `inject` added: since P0.7 the packet at the tail of the turn's message (D29), never a system message. */
+function addedTexts(list: unknown[]): string[] {
+  return injectedPackets(Array.isArray(list) ? list : []);
 }
 
 function memoryPacket(list: unknown[]): string {
-  return systemTexts(list)
-    .filter((s) => s.includes(MEMORY_MARK))
-    .join("\n");
+  return addedTexts(list).join("\n");
 }
 
 function byteLen(s: string): number {
@@ -269,7 +260,7 @@ function probeArm(dir: string, arm: Arm, cue: string, needles: string[]): Probe 
     mem.close();
     const list = Array.isArray(out) ? out : [];
     const packet = memoryPacket(list);
-    const added = systemTexts(list).join("\n");
+    const added = addedTexts(list).join("\n");
     return {
       consent: memoryConsent(),
       k: memoryRetrieveCap(),

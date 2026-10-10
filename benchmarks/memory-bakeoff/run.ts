@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openMemory, MEMORY_MARK, type AgentMemory } from "../../src/index";
+import { injectedPackets, openMemory, MEMORY_MARK, type AgentMemory } from "../../src/index";
 import { injectFromText, injectNote } from "../../packages/know/src/inject";
 import { knowQuery } from "../../packages/know/src/query";
 import { CAPTURE, DISTRACTORS, JUNK, KNOW_INJECT, type Want } from "./cases";
@@ -119,11 +119,8 @@ function sentences(text: string): string[] {
 
 function injectedNotes(mem: AgentMemory, asked: string): string {
   const orig = [{ role: "user" as const, content: asked }];
-  const next = mem.inject(orig);
-  return next
-    .filter((m) => m && typeof m === "object" && (m as { role?: string }).role === "system")
-    .map((m) => String((m as { content?: string }).content || ""))
-    .join("\n");
+  // Since P0.7 the packet is at the tail of the turn's message (D29).
+  return injectedPackets(mem.inject(orig)).join("\n");
 }
 
 class EdenSys implements Sys {
