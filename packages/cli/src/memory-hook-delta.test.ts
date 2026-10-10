@@ -163,6 +163,24 @@ describe("D34: Stop's two handlers", () => {
   });
 });
 
+describe("A4 §5.7b: SubagentStop", () => {
+  test("stores the subagent's last message, not its own transcript (P0.6: deferred to P1.3's shadow set)", () => {
+    const child = join(dir, "agent-explore.jsonl");
+    writeFileSync(child, `${JSON.stringify(said("c1", "c0", "The child read the scheduler module."))}\n`);
+    memoryHookResponse({
+      hook_event_name: "SubagentStop",
+      session_id: SESSION,
+      agent_id: "explore",
+      agent_type: "Explore",
+      transcript_path: transcript,
+      agent_transcript_path: child,
+      last_assistant_message: "The scheduler retries three times before failing.",
+    });
+    expect(live("The scheduler retries three times before failing")).toHaveLength(1);
+    expect(live("The child read the scheduler module")).toHaveLength(0);
+  });
+});
+
 describe("the plugin's registrations", () => {
   const hooks = JSON.parse(
     readFileSync(join(import.meta.dir, "../../../plugins/eden-memory/hooks/hooks.json"), "utf8"),
