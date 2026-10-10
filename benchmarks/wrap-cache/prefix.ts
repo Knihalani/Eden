@@ -15,23 +15,18 @@
  *   bun benchmarks/wrap-cache/prefix.ts [--root <checkout>] [--out <file.json>]
  *
  * `--root` measures another checkout's code (the baseline); the default is this one. The store is a temp dir.
+ * `packages/wrap/src/cache-placement.test.ts` runs the same scenario (`measure`) as CI's gate.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 type Message = Record<string, unknown>;
-type Body = { system?: unknown; tools?: unknown; messages: Message[] };
-
-const args = process.argv.slice(2);
-const flag = (name: string): string | undefined => {
-  const at = args.indexOf(name);
-  return at >= 0 ? args[at + 1] : undefined;
-};
-const root = resolve(flag("--root") ?? join(import.meta.dir, "../.."));
+export type Body = { system?: unknown; tools?: unknown; messages: Message[] };
+export type Style = "anthropic" | "openai";
 
 /** What the user told an earlier session: one fact per later turn, typed. */
-const SEED = [
+export const SEED = [
   "We use Clerk for auth in apps/web.",
   "The database is Postgres 16.",
   "Our tests run with vitest.",
@@ -50,7 +45,7 @@ const SYSTEM = "You are a coding agent working in the acme monorepo. Be concise.
 const TOOLS = [{ name: "Bash", description: "Run a shell command", input_schema: { type: "object" } }];
 
 /** A client's history after each request: the request's messages plus the reply and tool results it got. */
-function* requests(style: "anthropic" | "openai"): Generator<{ turn: number; messages: Message[] }> {
+export function* requests(style: Style): Generator<{ turn: number; messages: Message[] }> {
   const history: Message[] = [];
   for (const [turn, spec] of TURNS.entries()) {
     history.push({ role: "user", content: spec.prompt });
@@ -94,7 +89,7 @@ function prefixBlocks(body: Body): string[] {
 }
 
 /** Every packet text a request carries, wherever it sits. */
-function packetsOf(body: Body, marks: readonly string[]): string[] {
+export function packetsOf(body: Body, marks: readonly string[]): string[] {
   const out: string[] = [];
   const visit = (value: unknown) => {
     if (typeof value === "string") {
@@ -110,7 +105,7 @@ function packetsOf(body: Body, marks: readonly string[]): string[] {
   return out;
 }
 
-interface PathResult {
+export interface PathResult {
   requests: number;
   pairs: number;
   prefix_breaks: number;
@@ -120,7 +115,8 @@ interface PathResult {
   need_hits: number;
 }
 
-function measure(send: (body: Body) => Body, style: "anthropic" | "openai", marks: readonly string[]): PathResult {
+/** Sends the conversation through one path (`send`) and counts its prefix breaks and need hits. */
+export function measure(send: (body: Body) => Body, style: Style, marks: readonly string[]): PathResult {
   const result: PathResult = { requests: 0, pairs: 0, prefix_breaks: 0, break_at: [], turns: 0, need_hits: 0 };
   let previous: Body | undefined;
   let lastTurn = -1;
@@ -154,6 +150,12 @@ function measure(send: (body: Body) => Body, style: "anthropic" | "openai", mark
 }
 
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const flag = (name: string): string | undefined => {
+    const at = args.indexOf(name);
+    return at >= 0 ? args[at + 1] : undefined;
+  };
+  const root = resolve(flag("--root") ?? join(import.meta.dir, "../.."));
   const home = mkdtempSync(join(tmpdir(), "eden-wrap-cache-"));
   const work = mkdtempSync(join(tmpdir(), "eden-wrap-cwd-"));
   process.env.EDEN_HOME = home;
@@ -184,4 +186,4 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (import.meta.main) await main();
