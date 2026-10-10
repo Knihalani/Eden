@@ -318,7 +318,7 @@ Eden memory (apps/web), recalled from earlier sessions:
 ### 5.9 Placement
 
 - **Hook:** at the tail, which is cache-safe.
-- **Wrap / OpenAI-shaped inject:** attach to the last **human** user message and keep it there for every tool-loop step of the turn (D29).
+- **Wrap / OpenAI-shaped inject:** attach to the last **human** user message and keep it there for every tool-loop step of the turn (D29). Built in P0.7: every later request of the conversation carries it on that message too, as the hook's packet stays in the transcript (`src/memory-wrap.ts`).
 
 ---
 
