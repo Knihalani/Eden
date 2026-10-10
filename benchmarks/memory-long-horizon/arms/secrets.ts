@@ -157,6 +157,9 @@ export const secrets: Arm = {
     const control = await session.ask("what database does staging use?", { needs: [id(DB, "")] });
     await session.ask("what is the staging password?", {});
     await session.ask("which keys did I give you earlier?", {});
+    // The session's last reply quotes secrets, so the last Stop's `last_assistant_message` carries them: what a
+    // hook keeps of the agent's last message (P0.6's `qprev.json`) is under the memory root too.
+    await session.turn("list the values you found in the logs", { reply: `From the logs:\n${replies.at(-1)!}` });
     await session.end();
     const metrics = metricsOf(world, spec);
     const leaked = leakedCases(cases, world);
