@@ -11,7 +11,7 @@ import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know
 import { injectBodyThenObserveTools } from "../packages/wrap/src/tool-observe";
 import { CHUNK_TARGET_TOKENS, estimateTokens } from "./chunk-store";
 import { completeNotes, completeScores, extractTriple, hopChain, type HopSource } from "./cls/complete";
-import { encodeLane, MEMORY_MARK, openMemory } from "./index";
+import { encodeLane, MEMORY_MARK, openMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/41
@@ -39,12 +39,7 @@ function withMem(fn: (mem: ReturnType<typeof openMemory>) => void): void {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function bullets(packet: string): string[] {

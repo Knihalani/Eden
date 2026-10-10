@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { HowToStore } from "./howto-store";
-import { MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
+import { MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, type AgentMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
 import { dropHarmed, harmedPath, loadHarmedIds, markHarmed } from "./memory-harmed";
 import * as harmedMod from "./memory-harmed";
@@ -93,12 +93,7 @@ function user(content: string): { role: "user"; content: string }[] {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {

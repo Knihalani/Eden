@@ -201,8 +201,8 @@ describe("M36.4 caller audit", () => {
     expect(know).toMatch(/injectBodyThenObserveTools\(\s*processMemory\(\)/);
     expect(know).toMatch(/export function withKnowFactsAnthropic\(/);
     expect(know).toMatch(/processMemory\(\)/);
+    // Since P0.7 `inject` encodes what a request adds (D29's turns): the Anthropic wrap calls no `observe` itself.
     expect(know).toMatch(/mem\.inject\(/);
-    expect(know).toMatch(/mem\.observe\(/);
     expect(anth).toMatch(/withKnowFactsAnthropic\(/);
     expect(tools).toMatch(/mem\.injectBody\(/);
     expect(tools).toMatch(/mem\.observe\(/);

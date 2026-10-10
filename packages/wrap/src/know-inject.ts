@@ -1,11 +1,10 @@
-import { alreadyInjected, injectFromRequest, injectNote } from "../../know/src/inject";
-import { MEMORY_MARK, placePathsFrom, processMemory } from "../../../src/index";
-import { MEMORY_PACKET_MARKS } from "../../../src/memory-sota";
+import { alreadyInjected, injectFromRequest, injectNote, KNOW_INJECT_MARK } from "../../know/src/inject";
+import { placePathsFrom, processMemory } from "../../../src/index";
 import { memoryConsent } from "../../../src/memory-consent";
 import { messageText } from "./intent";
 import { injectBodyThenObserveTools, observeToolTraces, stripUpstreamPlaceFields } from "./tool-observe";
 
-function toolNames(body: Record<string, unknown>): string[] {
+function toolNames(body: { tools?: unknown }): string[] {
   const tools = body.tools;
   if (!Array.isArray(tools)) return [];
   const out: string[] = [];
@@ -52,35 +51,6 @@ function toolCalls(messages: unknown[]): { name: string; args: string }[] {
   return out;
 }
 
-function messagesForPlaceInject(messages: unknown[], body: object): unknown[] {
-  try {
-    const list = Array.isArray(messages) ? messages : [];
-    const extra = placePathsFrom(body);
-    if (!extra.length) return list;
-    let idx = -1;
-    for (let i = list.length - 1; i >= 0; i--) {
-      const m = list[i];
-      if (!m || typeof m !== "object" || Array.isArray(m)) continue;
-      const role = String((m as { role?: unknown }).role ?? "").toLowerCase();
-      if (role === "user" || role === "human") {
-        idx = i;
-        break;
-      }
-    }
-    if (idx < 0) return list;
-    const last = list[idx] as Record<string, unknown>;
-    const files = [...placePathsFrom(last), ...extra]
-      .filter((n, i, a) => a.findIndex((x) => x.toLowerCase() === n.toLowerCase()) === i)
-      .slice(0, 8);
-    if (!files.length) return list;
-    const copy = list.slice();
-    copy[idx] = { ...last, files };
-    return copy;
-  } catch {
-    return Array.isArray(messages) ? messages : [];
-  }
-}
-
 export function withKnowFacts(body: Record<string, unknown>): Record<string, unknown> {
   try {
     if (memoryConsent() === "off") return body;
@@ -90,6 +60,11 @@ export function withKnowFacts(body: Record<string, unknown>): Record<string, unk
   }
 }
 
+/**
+ * The Anthropic wrap: a turn's memory packet and Know card go at the tail of its human message, never into `system`
+ * (D29), where a new packet would invalidate the cached conversation. `inject` keeps them there for every later
+ * request of the conversation and encodes what the request adds.
+ */
 export function withKnowFactsAnthropic(body: {
   system?: string | Array<{ type: string; text?: string; cache_control?: { type: "ephemeral" } }>;
   messages?: unknown[];
@@ -97,44 +72,19 @@ export function withKnowFactsAnthropic(body: {
 }): typeof body {
   try {
     if (memoryConsent() === "off") return body;
-    const sys = typeof body.system === "string" ? body.system : (body.system ?? []).map((b) => b.text || "").join("\n");
-    const messages = body.messages ?? [];
-    const blob = `${sys}\n${messageText(messages)}`;
-    const extras: Array<{ type: "text"; text: string }> = [];
     const mem = processMemory();
-    if (alreadyInjected(blob) || MEMORY_PACKET_MARKS.some((mark) => blob.includes(mark))) {
-      mem.observe(messages);
-      observeToolTraces(mem, body.messages);
-      return stripUpstreamPlaceFields(body) as typeof body;
-    }
-    const injected = mem.inject(messagesForPlaceInject(messages, body));
-    for (const m of injected) {
-      if (!m || typeof m !== "object") continue;
-      const o = m as { role?: string; content?: unknown };
-      if (o.role !== "system" || typeof o.content !== "string") continue;
-      if (o.content.includes(MEMORY_MARK) || o.content.includes("Eden Know:"))
-        extras.push({ type: "text", text: o.content });
-    }
-    if (!extras.some((e) => e.text.includes("Eden Know:"))) {
-      const card = injectFromRequest({
-        text: blob,
-        tools: toolNames(body as Record<string, unknown>),
-        calls: toolCalls(messages),
-      });
-      if (card) extras.push({ type: "text", text: injectNote(card) });
-    }
+    const messages = body.messages ?? [];
+    const knowCard = () => {
+      const sys =
+        typeof body.system === "string" ? body.system : (body.system ?? []).map((b) => b.text || "").join("\n");
+      const blob = `${sys}\n${messageText(messages)}`;
+      if (alreadyInjected(blob)) return undefined;
+      const card = injectFromRequest({ text: blob, tools: toolNames(body), calls: toolCalls(messages) });
+      return card ? injectNote(card) : undefined;
+    };
+    const next = mem.inject(messages, { paths: placePathsFrom(body), extra: knowCard, extraMarks: [KNOW_INJECT_MARK] });
     observeToolTraces(mem, body.messages);
-    if (!extras.length) return stripUpstreamPlaceFields(body) as typeof body;
-    if (typeof body.system === "string") {
-      return stripUpstreamPlaceFields({
-        ...body,
-        system: [{ type: "text", text: body.system }, ...extras],
-      }) as typeof body;
-    }
-    return stripUpstreamPlaceFields({
-      ...body,
-      system: [...(Array.isArray(body.system) ? body.system : []), ...extras],
-    }) as typeof body;
+    return stripUpstreamPlaceFields(next === messages ? body : { ...body, messages: next }) as typeof body;
   } catch {
     return body;
   }

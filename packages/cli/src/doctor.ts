@@ -190,6 +190,7 @@ function hookCommandsOf(value: unknown): string[] {
 }
 
 const PLUGIN_MEMORY_CMD = /eden-memory|CLAUDE_PLUGIN_ROOT|scripts\/hook\.ts/;
+const BATCHED_CMD = /\bhook['"]?\s+batched\b|[?&]stage=batched\b/;
 const SETUP_MEMORY_CMD = /\b(?:cli\.ts|eden\.js)\b['"]?\s+hook\b|(?:^|[\s'"/])eden['"]?\s+hook\b/;
 
 function isEdenMemoryCommand(command: string): boolean {
@@ -243,7 +244,8 @@ export function memoryHooksCheck(settings: unknown, opts?: { pluginEvents?: stri
   const present = new Set<MemoryHookEvent>(settingsPresent);
   for (const e of pluginEvents) present.add(e as MemoryHookEvent);
 
-  const usesEach = hookCommandsOf(hooks.PostToolUse).some(isEdenMemoryCommand);
+  // `eden setup`'s PostToolUse runs as `batched`: its PostToolBatch records the results.
+  const usesEach = hookCommandsOf(hooks.PostToolUse).some((c) => isEdenMemoryCommand(c) && !BATCHED_CMD.test(c));
   const named = (e: MemoryHookEvent) => (e === "PostToolUse" && batches && !usesEach ? "PostToolBatch" : e);
   const listed = MEMORY_HOOK_EVENTS.filter((e) => present.has(e)).map(named);
   const missing = MEMORY_HOOK_EVENTS.filter((e) => !present.has(e));

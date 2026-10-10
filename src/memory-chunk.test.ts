@@ -10,7 +10,7 @@ import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import { CHUNK_TARGET_TOKENS, ChunkStore, chunkText, reconstruct } from "./chunk-store";
 import { retrieveNarrativeChunks } from "./chunk-retrieve";
-import { encodeLane, MEMORY_MARK, openMemory, queryHay, type AgentMemory } from "./index";
+import { encodeLane, MEMORY_MARK, openMemory, queryHay, type AgentMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/40
@@ -110,12 +110,7 @@ function bannedRetrieveNames(src: string): string[] {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function packetNotes(pkt: string): string[] {
@@ -359,7 +354,8 @@ describe("M18.1 secrets + fail-open + chat", () => {
       }).not.toThrow();
       let out: unknown[] = [];
       expect(() => {
-        out = mem.inject([{ role: "user", content: "What auth provider do we use for Clerk?" }]) as unknown[];
+        // A cue naming Clerk would be its own residual (D26, the wrap's since P0.7).
+        out = mem.inject([{ role: "user", content: "What auth provider do we use?" }]) as unknown[];
       }).not.toThrow();
       expect(packetOf(out)).toMatch(/Clerk/);
       expect(mem.memories().some((r) => /Clerk/.test(r.text))).toBe(true);
@@ -405,7 +401,7 @@ describe("M18 leftover identity + empty cue + torn JSONL", () => {
     });
   });
 
-  test("keepLiveIdentity: system novel+Alice does not leftover Alice when live is Bob", () => {
+  test("a body's system novel+Alice is the host's text (D12): nothing of it is stored; live Bob still injects", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: "The chairperson of the committee is Bob." }]);
       mem.injectBody({
@@ -413,7 +409,7 @@ describe("M18 leftover identity + empty cue + torn JSONL", () => {
         system: `${NOVEL} The chairperson of the committee is Alice.`,
       });
       expect(mem.memories().some((r) => /Alice/.test(r.text))).toBe(false);
-      expect(mem.memories().some((r) => r.lane === "narrative" && /miller of Blackford/.test(r.text))).toBe(true);
+      expect(mem.memories().some((r) => /miller of Blackford/.test(r.text))).toBe(false);
       const pkt = packetOf(mem.inject([{ role: "user", content: "who is the chairperson" }]));
       expect(pkt).toMatch(/Bob/);
       expect(pkt).not.toMatch(/Alice/);

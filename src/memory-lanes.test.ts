@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hopChain } from "./cls/complete";
-import { MEMORY_MARK, memoryInjectSwallows, openMemory } from "./index";
+import { MEMORY_MARK, memoryInjectSwallows, openMemory, injectedPackets } from "./index";
 import {
   MEMORY_LANE_KINDS,
   type ArHopMechanism,
@@ -233,12 +233,7 @@ const ICL_NEAR = [
 ] as const;
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function mergeNarrativeLaneBody(src: string): string {
@@ -280,12 +275,13 @@ describe("M27.3 SH retrieve does not read icl-index", () => {
     expect(body).not.toMatch(/icl-index/);
   });
 
-  test("chat fact cue Auth is Clerk does not pull ICL shots", () => {
+  test("a chat fact cue about auth does not pull ICL shots", () => {
     withMem((mem) => {
       mem.observe([{ role: "user", content: ICL_GOLD }]);
       for (const shot of ICL_NEAR) mem.observe([{ role: "user", content: shot }]);
       mem.observe([{ role: "user", content: "Auth is Clerk" }]);
-      const pkt = packetOf(mem.inject([{ role: "user", content: "Auth is Clerk" }]));
+      // A cue restating "Auth is Clerk" would be its own residual (D26, the wrap's since P0.7).
+      const pkt = packetOf(mem.inject([{ role: "user", content: "what is auth" }]));
       expect(pkt).toMatch(/Clerk/);
       expect(pkt).not.toMatch(/label:\s*28/);
       expect(pkt).not.toMatch(/The movie was great/i);

@@ -5,34 +5,20 @@ import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory
 import { childSessionName, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
-import { declarativeBullet, renderPacket, shapePacket } from "../../../src/memory-hook-packet";
+import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
 import { tripIfOverBudget, takeNotice } from "../../../src/memory-breaker";
 import { appendWideEvent, errorTag, type WideEvent } from "../../../src/memory-events";
 import { flagModes, pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
 import { batchRecord } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
 import { ledgerKey, notRefractory, recordDeliveries, startEpoch, wouldPreempt } from "../../../src/memory-ledger";
-import { admitNotes } from "../../../src/memory-gate";
-import {
-  isResidualNote,
-  recentConversation,
-  residualSentences,
-  sentencesOf,
-  type RecentConversation,
-} from "../../../src/memory-residual";
+import { isPinnedIntention, selectNotes } from "../../../src/memory-delivery";
+import { recentConversation, sentencesOf, type RecentConversation } from "../../../src/memory-residual";
 import { tailLines } from "../../../src/memory-transcript";
-import { noteKindToken, type ProvenanceNote } from "../../../src/memory-provenance";
+import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoIdentity, repoStoreDir, swapping, type RepoIdentity } from "../../../src/memory-repo";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
-import {
-  asksHistory,
-  isForget,
-  readInvalidations,
-  recordInvalidations,
-  validText,
-  withoutForgets,
-  type Invalidation,
-} from "../../../src/memory-validity";
+import { readInvalidations, recordInvalidations, validText, withoutForgets } from "../../../src/memory-validity";
 import {
   appendTurn,
   compactContext,
@@ -87,12 +73,6 @@ function flattenContent(content: unknown): string {
   const field = o.text ?? o.content ?? o.stdout ?? o.stderr ?? o.output ?? o.message ?? o.error ?? o.llmContent;
   // A nested result (the Agent tool's `content` blocks) is read through, never stored as "[object Object]".
   return field == null ? "" : typeof field === "object" ? flattenContent(field) : String(field);
-}
-
-const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
-
-function isPinnedIntention(r: MemoryRecord): boolean {
-  return r.kind === "constraint" || (r.tags ?? []).some((t) => t.toLowerCase() === "pin" || INTENTION_TAG.test(t));
 }
 
 /** SessionStart briefs the 3 latest valid gists, looking through at most 12. */
@@ -151,30 +131,12 @@ function deliver(
   ledger: Ledger | undefined,
   at: { off: number; att: string },
 ): { packet: string; cids: string[] } {
-  const now = memoryNow();
-  const packet = renderPacket(notes, now);
-  const delivered = packet ? notes.filter((note) => packet.includes(`\n- ${declarativeBullet(note, now)}`)) : [];
+  const { packet, delivered } = packetOf(notes, memoryNow());
   if (delivered.length && ledger)
     try {
       recordDeliveries(ledger.dir, delivered, { ...at, ht: humanTurns(ledger.dir) }, ledger.file);
     } catch {}
   return { packet, cids: delivered.map((note) => ledgerKey(note).cid) };
-}
-
-/**
- * A4 §5.1 step 5: each note without the sentences an invalidation has made invalid; a note left empty is dropped.
- * A rule sentence yields only to a revocation (`validText`). When the cue asks about history, episodes keep what they
- * say (D31 `stale_for`), except what the user asked to forget (A6 §3); facts and rules do not.
- */
-function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
-  if (!invalid.length) return notes;
-  const history = asksHistory(prompt);
-  return notes.flatMap((note) => {
-    const kind = noteKindToken(note);
-    const episode = kind !== "rule" && kind !== "fact" && !isPinnedIntention(note);
-    const text = validText(note.text, note.at, history && episode ? invalid.filter(isForget) : invalid);
-    return text ? [{ ...note, text }] : [];
-  });
 }
 
 /**
@@ -683,21 +645,13 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
   // what the last turns already say (D26), then what this window was already given (the ledger); shape (step 8).
   const parts = { prompt, turn: recent.previousTyped, prev };
-  const residual = residualSentences(recent.residual);
-  const valid = stillValid(notes, readInvalidations(mem.dir), prompt);
-  const admitted = admitNotes(valid, parts);
-  let novel = admitted.filter((note) => !isResidualNote(note, residual));
-  const fresh = novel.length;
-  if (win) novel = notRefractory(win, novel, off, ledger?.file);
+  const against = { prompt, parts, residual: recent.residual, invalid: readInvalidations(mem.dir) };
+  const { notes: novel, drops } = selectNotes(notes, against, (fresh) =>
+    win ? notRefractory(win, fresh, off, ledger?.file) : fresh,
+  );
   const { packet, cids } = deliver(shapePacket(novel), ledger, { off, att });
   trace.cids = cids;
-  trace.drops = {
-    validity: notes.length - valid.length,
-    gate: valid.length - admitted.length,
-    residual: admitted.length - fresh,
-    refractory: fresh - novel.length,
-    shape: novel.length - cids.length,
-  };
+  trace.drops = { ...drops, shape: novel.length - cids.length };
   return answer === "shadow" ? null : additional(event, packet);
 }
 

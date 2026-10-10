@@ -17,7 +17,7 @@ import {
 } from "./experience-retrieve";
 import { EXPERIENCE_DIRNAME, ExperienceStore, putExperience } from "./experience-store";
 import { extractCandidates } from "./assemble";
-import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep } from "./index";
+import { AgentMemory, MEMORY_MARK, memoryInjectSwallows, openMemory, sleep, injectedPackets } from "./index";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/46
 
@@ -77,12 +77,7 @@ async function withMem<T>(
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookHay(raw: Record<string, unknown> | null): string {

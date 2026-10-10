@@ -6,6 +6,8 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PACKET_SOFT_BULLETS } from "./memory-hook-packet";
+import { PACKET_BYTE_CAP } from "./memory-sota";
 import { GistStore } from "./gist-store";
 import { HowToStore } from "./howto-store";
 import {
@@ -29,6 +31,7 @@ import {
   relativeMemoryAge,
   sleep,
   type AgentMemory,
+  injectedPackets,
 } from "./index";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
@@ -93,12 +96,7 @@ async function withMemAsync<T>(
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {
@@ -134,8 +132,15 @@ function kindPrefix(kind: string): RegExp {
   return new RegExp(`^${kindLabel(kind)}\\s+`);
 }
 
-function bulletPrefix(kind: string): RegExp {
-  return new RegExp(`^-\\s*${kindLabel(kind)}(?:\\s|$)`);
+/**
+ * Since P0.7 the wrap words a packet as the hook does (D14, `memory-hook-packet.ts`): no `[kind · age · src]` tag,
+ * the row's text and its age; a row with no recorded source claims none (A6 §2.1).
+ */
+const KIND_TAG = /\[(?:rule|fact|episode|gist|procedure)\b[^\]]*\]/;
+
+function worded(text: string): RegExp {
+  const source = "(?:you said|from a tool result|earlier session notes), ";
+  return new RegExp(`^- ${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.? \\((?:${source})?just now\\)$`);
 }
 
 function notDoublePrefixed(kind: string, text: string): void {
@@ -144,12 +149,11 @@ function notDoublePrefixed(kind: string, text: string): void {
 
 /** Relative age inside a provenance bracket: 0m / Nm / Nh / Nd / Nw. */
 const REL_AGE = /\d+[mhdw]/;
-const PROVENANCE_SOURCE = /\b(?:user|tool|sleep)\b/;
 /** Label growth vs `[fact] ` so M20 body caps still hold after `[fact · 59m · sleep]`. */
 const PROVENANCE_SLACK = " · 59m · sleep".length;
 
 describe("M8.4 labeled inject packet", () => {
-  test("inject packet has the packet header, then labeled [rule] + [fact] (+ episode)", () => {
+  test("inject packet has the packet header, then a rule, a fact and an episode in D14's words", () => {
     withMem((mem) => {
       mem.remember(RULE, { kind: "constraint" });
       mem.remember(FACT, { kind: "fact" });
@@ -160,16 +164,12 @@ describe("M8.4 labeled inject packet", () => {
       const ruleLine = bullets.find((l) => l.includes(RULE)) ?? "";
       const factLine = bullets.find((l) => l.includes(FACT)) ?? "";
       const episodeLine = bullets.find((l) => l.includes(EPISODE)) ?? "";
-      expect(ruleLine).toMatch(bulletPrefix("rule"));
-      expect(factLine).toMatch(bulletPrefix("fact"));
-      expect(factLine).toContain(FACT);
-      expect(episodeLine).toMatch(bulletPrefix("episode"));
-      expect(episodeLine).toContain(EPISODE);
-      expect(ruleLine).toContain(RULE);
-      expect(pkt).not.toMatch(/\[procedure\b/);
-      notDoublePrefixed("fact", factLine);
+      expect(ruleLine).toMatch(worded(RULE));
+      expect(factLine).toMatch(worded(FACT));
+      expect(episodeLine).toMatch(worded(EPISODE));
+      expect(pkt).not.toMatch(KIND_TAG);
       expect(MEMORY_MARK).toBe("Eden memory, recalled from earlier sessions:");
-      expect(bullets.filter((l) => /^-\s\[(rule|fact|episode|gist)\b/.test(l)).length).toBe(3);
+      expect(bullets).toHaveLength(3);
     });
   });
 
@@ -186,7 +186,7 @@ describe("M8.4 labeled inject packet", () => {
     });
   });
 
-  test("hop-chain inject keeps [fact] on the winner (store must not strip labels)", () => {
+  test("hop-chain inject delivers the winner, worded (D14), and never the loser", () => {
     withMem((mem) => {
       mem.remember("1. The chairperson of the committee is Alice.");
       mem.remember("8. The chairperson of the committee is Bob.");
@@ -194,20 +194,22 @@ describe("M8.4 labeled inject packet", () => {
       const first = pkt.split("\n").find((l) => l.startsWith("- ")) ?? "";
       expect(pkt).toMatch(/Bob/);
       expect(pkt).not.toMatch(/Alice/);
-      expect(first).toMatch(bulletPrefix("fact"));
-      expect(first).toMatch(/Bob/);
+      expect(first).toMatch(worded("8. The chairperson of the committee is Bob."));
       const body = mem.injectBody({ messages: [{ role: "user", content: "who is the chairperson of the committee" }] });
       const bodyPkt = packetOf(body.messages as unknown[]);
-      expect(bodyPkt).toMatch(new RegExp(`${kindLabel("fact")}.*Bob`));
-      expect(bodyPkt).not.toMatch(/Alice/);
+      expect(bodyPkt).toMatch(/Bob/);
+      expect(bodyPkt).not.toMatch(/Alice|\[fact/);
     });
   });
 
-  test("procedure kind is labeled [procedure] (M12)", () => {
+  test("procedure kind is labeled [procedure] (M12) in notesFor, and worded in the packet (D14)", () => {
     withMem((mem) => {
       mem.remember("fix failing auth test → tests/auth/session.test.ts", { kind: "procedure" });
-      const pkt = packetOf(mem.inject([{ role: "user", content: "fix failing auth test session.test.ts" }]));
-      expect(pkt).toMatch(new RegExp(kindLabel("procedure")));
+      // A cue that restated the procedure would be its own residual (D26), so this one names only its file.
+      const pkt = packetOf(mem.inject([{ role: "user", content: "session.test.ts is red in CI" }]));
+      expect(pkt.split("\n")).toContainEqual(
+        expect.stringMatching(worded("fix failing auth test → tests/auth/session.test.ts")),
+      );
       const hit = mem.notesFor("fix failing auth test session.test.ts").find((r) => /session\.test\.ts/.test(r.text));
       expect(hit).toBeTruthy();
       expect(hit!.text).toMatch(kindPrefix("procedure"));
@@ -229,10 +231,9 @@ describe("M8.4 retrieveText does not rewrite rules", () => {
       expect(hit!.text).not.toMatch(/never no/i);
       expect(hit!.text).not.toMatch(/Never 0/);
       expect(hit!.text).not.toMatch(/Never no/);
-      const pkt = packetOf(mem.inject([{ role: "user", content: "should we console.log in production" }]));
-      expect(pkt).toMatch(
-        new RegExp(`-\\s*${kindLabel("rule")}\\s+${NEVER_LOG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-      );
+      // D26: a cue restating the rule is its own residual; this one shares its subject only.
+      const pkt = packetOf(mem.inject([{ role: "user", content: "add debug output to the production build" }]));
+      expect(pkt.split("\n")).toContainEqual(expect.stringMatching(worded(NEVER_LOG)));
       expect(pkt).not.toMatch(/never no/i);
       expect(pkt).not.toMatch(/Never 0/);
     });
@@ -250,7 +251,7 @@ describe("M8.4 retrieveText does not rewrite rules", () => {
 });
 
 describe("M8.4 episode kind", () => {
-  test("episode kind is labeled [episode] in notesFor and inject", () => {
+  test("episode kind is labeled [episode] in notesFor, and worded in the packet (D14)", () => {
     withMem((mem) => {
       mem.remember(EPISODE, { kind: "episode" });
       const hit = mem.notesFor("the flake is in src/auth.test.ts").find((r) => /auth\.test\.ts/.test(r.text));
@@ -258,10 +259,8 @@ describe("M8.4 episode kind", () => {
       expect(hit?.text).toMatch(
         new RegExp(`^${kindLabel("episode")}\\s+${EPISODE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
       );
-      const pkt = packetOf(mem.inject([{ role: "user", content: "the flake is in src/auth.test.ts" }]));
-      expect(pkt).toMatch(
-        new RegExp(`-\\s*${kindLabel("episode")}\\s+${EPISODE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-      );
+      const pkt = packetOf(mem.inject([{ role: "user", content: "src/auth.test.ts failed again on main" }]));
+      expect(pkt.split("\n")).toContainEqual(expect.stringMatching(worded(EPISODE)));
     });
   });
 });
@@ -331,8 +330,8 @@ describe("M8.4 k default 6–10", () => {
         expect(notes.length).toBeLessThanOrEqual(10);
         const pkt = packetOf(mem.inject([{ role: "user", content: "alpha catalog" }]));
         const bullets = pkt.split("\n").filter((l) => l.startsWith("- "));
-        expect(bullets.length).toBeLessThanOrEqual(k);
-        expect(bullets.length).toBe(notes.length);
+        // The packet keeps D28's shape (since P0.7 the wrap's too): at most 4 bullets of the k retrieved.
+        expect(bullets.length).toBe(Math.min(notes.length, PACKET_SOFT_BULLETS));
       });
     });
   });
@@ -361,7 +360,7 @@ describe("M20.3 packet size bound", () => {
   const FACT_CAP = factCharCap();
   const FACT_LINE_MAX = FACT_CAP + "[fact] ".length + "- ".length + PROVENANCE_SLACK;
 
-  test("huge fact is labeled [fact] and bounded; Clerk stays full; bullets ≤ k", () => {
+  test("huge fact is labeled [fact] and bounded in notesFor; the packet skips it whole (D28); Clerk stays full", () => {
     expect(FACT_CAP).toBeGreaterThan(0);
     expect(FACT_CAP).toBeLessThanOrEqual(1200);
     const k = defaultNotesForK();
@@ -386,24 +385,25 @@ describe("M20.3 packet size bound", () => {
         new RegExp(`^${kindLabel("fact")}\\s+${FACT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
       );
 
+      // D28 (the hook's packet, the wrap's since P0.7): a bullet that does not fit 900 bytes is skipped, never cut.
       const pkt = packetOf(mem.inject([{ role: "user", content: "widget catalog" }]));
-      const bullets = pkt.split("\n").filter((l) => l.startsWith("- "));
-      const factLine = bullets.find((l) => /widget catalog/i.test(l)) ?? "";
-      expect(factLine).toMatch(bulletPrefix("fact"));
-      expect(factLine.length).toBeLessThanOrEqual(FACT_LINE_MAX);
-      expect(pkt.length).toBeLessThan(262_000);
+      expect(pkt).not.toMatch(/widget catalog/i);
+      expect(Buffer.byteLength(pkt, "utf8")).toBeLessThanOrEqual(PACKET_BYTE_CAP);
+      expect(packetOf(mem.inject([{ role: "user", content: "which auth.provider do we use" }]))).toContain(
+        "auth.provider = Clerk  (as of 2026-09-10)",
+      );
 
       mem.quiet(() => {
         for (let n = 1; n <= 20; n++) mem.remember(`Widget slot ${n} belongs to the alpha catalog.`);
       });
       const crowded = packetOf(mem.inject([{ role: "user", content: "alpha catalog" }]));
       const crowdedBullets = crowded.split("\n").filter((l) => l.startsWith("- "));
+      expect(crowdedBullets.length).toBeLessThanOrEqual(PACKET_SOFT_BULLETS);
       expect(crowdedBullets.length).toBeLessThanOrEqual(k);
-      expect(crowdedBullets.length).toBeLessThanOrEqual(10);
     });
   });
 
-  test("already-labeled huge [fact] is not double-prefixed and body is still capped", () => {
+  test("already-labeled huge [fact] is not double-prefixed and body is still capped; the packet skips it (D28)", () => {
     const huge = "[fact] The widget catalog is " + "x".repeat(4_000);
     withMem((mem) => {
       mem.remember(huge, { kind: "fact" });
@@ -413,14 +413,11 @@ describe("M20.3 packet size bound", () => {
       notDoublePrefixed("fact", hit!.text);
       expect(hit!.text.length).toBeLessThanOrEqual(FACT_LINE_MAX);
       const pkt = packetOf(mem.inject([{ role: "user", content: "widget catalog" }]));
-      const factLine = pkt.split("\n").find((l) => l.startsWith("- ") && /widget catalog/i.test(l)) ?? "";
-      expect(factLine).toMatch(bulletPrefix("fact"));
-      notDoublePrefixed("fact", factLine);
-      expect(factLine.length).toBeLessThanOrEqual(FACT_LINE_MAX);
+      expect(pkt).not.toMatch(/widget catalog|\[fact/i);
     });
   });
 
-  test("ICL exemplar is not truncated; label: stays", () => {
+  test("ICL exemplar is not truncated; label: stays; past 900 bytes the packet skips it whole (D28)", () => {
     const padding = "word ".repeat(400);
     const icl = `The movie was great. ${padding}label: 28`;
     expect(icl.length).toBeGreaterThan(FACT_CAP);
@@ -432,11 +429,11 @@ describe("M20.3 packet size bound", () => {
       expect(hit!.text).toMatch(/label:\s*28/);
       expect(hit!.text.length).toBeGreaterThan(FACT_CAP);
       const pkt = packetOf(mem.inject([{ role: "user", content: "The movie was great. label: 28" }]));
-      expect(pkt).toMatch(/label:\s*28/);
+      expect(pkt).not.toMatch(/movie was great/);
     });
   });
 
-  test("numbered fact list is not capped before assemble; serial 8 survives [fact] relabel", () => {
+  test("numbered fact list is not capped before assemble; serial 8 survives [fact] relabel in notesFor", () => {
     const list = `1. Remember this padding ${"x".repeat(2_000)}\n8. The chairperson of the committee is Bob.`;
     expect(list.length).toBeGreaterThan(FACT_CAP);
     withMem((mem) => {
@@ -444,11 +441,10 @@ describe("M20.3 packet size bound", () => {
       const notes = mem.notesFor("who is the chairperson");
       expect(notes.some((r) => /8[.)]\s+The chairperson[\s\S]*Bob/i.test(r.text) || /Bob/.test(r.text))).toBe(true);
       expect(notes.some((r) => /\[fact(?:\s*·[^\]]*)?\]\s+\[fact\b/.test(r.text))).toBe(false);
+      // The assembled list is past 900 bytes: D28 skips it whole rather than cut it.
       const pkt = packetOf(mem.inject([{ role: "user", content: "who is the chairperson" }]));
-      expect(pkt).toMatch(new RegExp(kindLabel("fact")));
-      notDoublePrefixed("fact", pkt);
-      expect(pkt).toMatch(/Bob/);
-      expect(pkt).toMatch(/8[.)]\s+The chairperson/i);
+      expect(Buffer.byteLength(pkt, "utf8")).toBeLessThanOrEqual(PACKET_BYTE_CAP);
+      expect(pkt).not.toMatch(KIND_TAG);
     });
   });
 });
@@ -501,9 +497,10 @@ describe("M34.3 packet budget", () => {
       expect(body).not.toContain("step ".repeat(400));
       const pkt = packetOf(mem.inject([{ role: "user", content: "edenpacketbudgettoken" }]));
       const line = pkt.split("\n").find((l) => l.startsWith("- ") && /edenpacketbudgettoken/.test(l)) ?? "";
-      expect(line).toMatch(bulletPrefix("procedure"));
+      expect(line).not.toMatch(KIND_TAG);
       expect(line).toContain("verify:");
-      const lineBody = line.replace(/^-\s*\[procedure(?:\s*·[^\]]*)?\]\s*/, "");
+      const lineBody = line.replace(/^- /, "").replace(/ \([^()]*just now\)$/, "");
+      expect(lineBody).toBe(body);
       expect(lineBody.length).toBeLessThanOrEqual(PROCEDURE_CHAR_CAP);
     });
   });
@@ -533,8 +530,7 @@ describe("M34.3 packet budget", () => {
         const bullets = packetOf(mem.inject([{ role: "user", content: "alpha catalog" }]))
           .split("\n")
           .filter((l) => l.startsWith("- "));
-        expect(bullets.length).toBeLessThanOrEqual(k);
-        expect(bullets.length).toBe(notes.length);
+        expect(bullets.length).toBe(Math.min(notes.length, PACKET_SOFT_BULLETS));
       });
     });
   });
@@ -598,8 +594,8 @@ describe("M39 diverse packet", () => {
       const sqliteLines = bulletsOf(pkt).filter((l) => /sqlite/i.test(l));
       expect(pkt).toContain(MEMORY_MARK);
       expect(sqliteLines.length).toBe(1);
-      expect(sqliteLines[0]).toMatch(new RegExp(kindLabel("fact")));
-      expect(bulletsOf(pkt).length).toBeLessThanOrEqual(10);
+      expect(sqliteLines[0]).not.toMatch(KIND_TAG);
+      expect(bulletsOf(pkt).length).toBeLessThanOrEqual(PACKET_SOFT_BULLETS);
     });
   });
 
@@ -639,16 +635,16 @@ describe("M39 diverse packet", () => {
 
       const pkt = packetOf(mem.inject([{ role: "user", content: MIX_CUE }]));
       const bullets = bulletsOf(pkt);
-      const factLines = bullets.filter((l) => new RegExp(kindLabel("fact")).test(l));
-      const procLines = bullets.filter((l) => new RegExp(kindLabel("procedure")).test(l));
+      // D14 words bullets without kind tags: the procedure is the one with its verify step.
+      const procLines = bullets.filter((l) => l.includes(verify));
+      const factLines = bullets.filter((l) => facts.some((fact) => l.startsWith(`- ${fact}`)));
       expect(pkt).toContain(MEMORY_MARK);
+      expect(pkt).not.toMatch(KIND_TAG);
       expect(factLines.length).toBeGreaterThanOrEqual(1);
-      expect(procLines.length).toBeGreaterThanOrEqual(1);
-      expect(factLines.length).toBeLessThan(10);
+      expect(procLines).toHaveLength(1);
       expect(new Set(factLines).size).toBe(factLines.length);
-      expect(bullets.length).toBeLessThanOrEqual(PACKET_CHAT_K_MAX);
-      expect(bullets.length).toBeLessThanOrEqual(10);
-      const procBody = procLines[0]!.replace(/^-\s*\[procedure(?:\s*·[^\]]*)?\]\s*/, "");
+      expect(bullets.length).toBeLessThanOrEqual(PACKET_SOFT_BULLETS);
+      const procBody = procLines[0]!.replace(/^- /, "").replace(/ \([^()]*just now\)$/, "");
       expect(procBody.length).toBeLessThanOrEqual(PROCEDURE_CHAR_CAP);
       expect(procBody.length).toBeLessThanOrEqual(PROCEDURE_TOKEN_CAP * 4);
       expect(procBody).toContain("verify:");
@@ -701,6 +697,14 @@ describe("M40 provenance", () => {
     return text.match(/\[[^\]]+\]/g) ?? [];
   }
 
+  /** The closing parenthetical of each bullet: D14's source and age. */
+  function provenanceOf(packet: string): string[] {
+    return packet
+      .split("\n")
+      .filter((line) => line.startsWith("- "))
+      .flatMap((line) => line.match(/\(([^()]*)\)$/)?.slice(1) ?? []);
+  }
+
   function captureStderr(fn: () => void): string {
     const chunks: string[] = [];
     const errSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -735,18 +739,14 @@ describe("M40 provenance", () => {
       mem.observe([{ role: "user", content: PG }]);
       mem.observe([{ role: "user", content: SQLITE }]);
       const pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
-      expect(pkt).toMatch(/\[fact[^\]]*\]/);
       expect(pkt).toMatch(/sqlite/i);
       expect(pkt).not.toMatch(/postgres/i);
-      const factLabels = bracketsOf(pkt).filter((b) => /^\[fact\b/i.test(b));
-      expect(factLabels.length).toBeGreaterThan(0);
-      expect(factLabels.some((b) => REL_AGE.test(b))).toBe(true);
-      expect(factLabels.every((b) => PROVENANCE_SOURCE.test(b))).toBe(true);
-      for (const b of factLabels) {
-        expect(b).not.toMatch(/postgres/i);
-        expect(b).not.toContain(EMAIL);
-        expect(b).not.toContain(CWD);
-        expect(b).not.toContain(SESSION);
+      // D14 (the wrap's wording since P0.7): the provenance is the bullet's closing words, its age.
+      const provenance = provenanceOf(pkt);
+      expect(provenance.length).toBeGreaterThan(0);
+      for (const words of provenance) {
+        expect(words).toMatch(/just now|ago$/);
+        for (const id of [EMAIL, CWD, SESSION]) expect(words).not.toContain(id);
       }
     });
   });
@@ -784,9 +784,9 @@ describe("M40 provenance", () => {
         },
       ]);
       const pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
-      expect(pkt).toMatch(/\[fact[^\]]*\]/);
+      expect(pkt).not.toMatch(KIND_TAG);
       expect(pkt).toMatch(/sqlite/i);
-      const labels = bracketsOf(pkt);
+      const labels = [...bracketsOf(pkt), ...provenanceOf(pkt)];
       for (const id of [EMAIL, CWD, SESSION]) {
         for (const b of labels) expect(b).not.toContain(id);
       }
@@ -839,7 +839,7 @@ describe("M40 provenance", () => {
           pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
         });
         expect(pkt).toContain(MEMORY_MARK);
-        expect(pkt).toMatch(/\[fact[^\]]*\]/);
+        expect(pkt).toMatch(/sqlite/);
         expect(pkt).not.toContain(LOG_ID);
         expect(stderr).toContain(LOG_ID);
         expect(stderr).toMatch(REL_AGE);
@@ -847,7 +847,7 @@ describe("M40 provenance", () => {
     });
   });
 
-  test("wrap labels its notes and the hook words them (D14), both without log chrome", async () => {
+  test("the wrap and the hook both word their notes (D14), without log chrome", async () => {
     const dir = tmpDir("eden-m40-host-");
     await withEnv(
       { EDEN_MEMORY: "on", EDEN_MEMORY_DIR: dir, EDEN_HOME: undefined, EDEN_KNOW: "0", EDEN_MEMORY_LOG: undefined },
@@ -859,15 +859,15 @@ describe("M40 provenance", () => {
           const body = mem.injectBody({ model: "gpt-4o", messages });
           const openai = packetOf((body.messages ?? []) as unknown[]);
           expect(openai).toContain(MEMORY_MARK);
-          expect(openai).toMatch(/\[fact[^\]]*\]/);
-          expect(openai).toMatch(/sqlite/i);
+          expect(openai).toMatch(/^- (?!Rule ).*sqlite/im);
+          expect(openai).not.toMatch(KIND_TAG);
           expect(openai).not.toContain(LOG_ID);
           await withProcessMem(mem, () => {
             const anth = withKnowFactsAnthropic({ system: "You are a coding agent.", messages });
             const anthHay = JSON.stringify(anth);
             expect(anthHay).toContain(MEMORY_MARK);
-            expect(anthHay).toMatch(/\[fact[^\]]*\]/);
             expect(anthHay).toMatch(/sqlite/i);
+            expect(anthHay).not.toMatch(KIND_TAG);
             expect(anthHay).not.toContain(LOG_ID);
             const hook = memoryHookResponse({
               hook_event_name: "UserPromptSubmit",
@@ -930,10 +930,10 @@ describe("M40 provenance", () => {
       mem.observe([{ role: "user", content: "The deploy tool is kubectl." }]);
       mem.observe([{ role: "user", content: SQLITE }]);
       const pkt = packetOf(mem.inject([{ role: "user", content: CUE }]));
-      expect(pkt).toMatch(/\[fact · \d+[mhdw] · user\]/);
-      expect(pkt).toMatch(/sqlite/i);
+      // A row `observe` took with no source claims none in the packet (D14, A6 §2.1); notesFor still labels it.
+      expect(pkt).toMatch(/^- The database is sqlite\.? \(just now\)$/m);
       expect(pkt).not.toMatch(/postgres/i);
-      expect(pkt).not.toMatch(/\[fact[^\]]*\]\s+\[fact\b/i);
+      expect(pkt).not.toMatch(KIND_TAG);
       const sleep = mem.notesFor("sleep interval thirty").find((r) => /sleep interval/i.test(r.text));
       const tool = mem.notesFor("deploy tool kubectl").find((r) => /kubectl/i.test(r.text));
       expect(sleep?.text).toMatch(/^\[fact · \d+[mhdw] · user\]/);
@@ -978,7 +978,7 @@ describe("M40 provenance", () => {
       });
       const pkt = packetOf(mem.inject([{ role: "user", content: "the flake is in auth.ts" }]));
       expect(pkt).toMatch(/unknown:/);
-      expect(pkt).not.toMatch(/\[procedure · verified\]/);
+      expect(pkt).not.toMatch(/verified/);
     });
     const dir = tmpDir("eden-m40-serial-");
     try {

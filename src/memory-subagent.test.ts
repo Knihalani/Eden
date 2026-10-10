@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { HowToStore } from "./howto-store";
-import { childSessionName, MEMORY_MARK, openMemory } from "./index";
+import { childSessionName, MEMORY_MARK, openMemory, injectedPackets } from "./index";
 import { SemanticStore } from "./semantic-store";
 
 const PARENT = "parent";
@@ -54,12 +54,7 @@ const QUIET = {
 } as const;
 
 function packet(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function hookContext(raw: Record<string, unknown> | null): string {

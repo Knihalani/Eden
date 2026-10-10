@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFacts, withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
 import * as iclIndex from "./icl-index";
-import { MEMORY_MARK, encodeLane, openMemory, queryHay, type AgentMemory } from "./index";
+import { MEMORY_MARK, encodeLane, openMemory, queryHay, type AgentMemory, injectedPackets } from "./index";
 import * as edenMem from "./index";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/52
@@ -45,31 +45,16 @@ function withMem(fn: (mem: AgentMemory, dir: string) => void): void {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function openaiMemoryText(body: Record<string, unknown>): string {
-  const messages = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: unknown }[]) : [];
-  return messages
-    .filter((m) => m.role === "system" && typeof m.content === "string" && String(m.content).includes(MEMORY_MARK))
-    .map((m) => String(m.content))
-    .join("\n");
+  return injectedPackets(Array.isArray(body.messages) ? body.messages : []).join("\n");
 }
 
-function anthropicMemoryText(body: { system?: unknown }): string {
-  const sys = body.system;
-  const parts =
-    typeof sys === "string"
-      ? [sys]
-      : Array.isArray(sys)
-        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-        : [];
-  return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
+/** The memory packets a wrapped body carries: since P0.7 at its turns' tails (D29), never in `system`. */
+function anthropicMemoryText(body: { messages?: unknown[] }): string {
+  return injectedPackets(body.messages ?? []).join("\n");
 }
 
 function hookCtx(out: Record<string, unknown> | null): string {

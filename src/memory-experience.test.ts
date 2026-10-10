@@ -17,7 +17,7 @@ import {
   putExperienceFromTool,
   readExperience,
 } from "./experience-store";
-import { AgentMemory, MEMORY_MARK, openMemory } from "./index";
+import { AgentMemory, MEMORY_MARK, openMemory, injectedPackets } from "./index";
 
 // Quarantined tests are marked test.failing (P0.-1): https://github.com/Knihalani/Eden/issues/48
 
@@ -153,12 +153,7 @@ function experienceEmpty(root: string): boolean {
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function openaiAxWindow(marker: string): unknown[] {
@@ -436,8 +431,9 @@ describe("M23.2 wrap + hook write AX to files, not extractDurable JSONL", () => 
   test("withKnowFactsAnthropic calls observeToolTraces on the tool_result path", () => {
     const src = readFileSync(join(import.meta.dir, "../packages/wrap/src/know-inject.ts"), "utf8");
     expect(src).not.toMatch(/\bextractDurable\b/);
+    // One call on every path since P0.7 (the wrap no longer branches on a packet already in the request).
     const calls = src.match(/observeToolTraces\(\s*mem\s*,\s*body\.messages\s*\)/g) ?? [];
-    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls.length).toBe(1);
   });
 });
 

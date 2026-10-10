@@ -10,7 +10,15 @@ import { assemble, assembleNotes, extractCandidates } from "./assemble";
 import { hopChain } from "./cls/complete";
 import { memoryHookResponse } from "../packages/cli/src/memory-hook";
 import { withKnowFactsAnthropic } from "../packages/wrap/src/know-inject";
-import { MEMORY_MARK, encodeLane, memoryInjectSwallows, openMemory, sleep, type AgentMemory } from "./index";
+import {
+  MEMORY_MARK,
+  encodeLane,
+  memoryInjectSwallows,
+  openMemory,
+  sleep,
+  type AgentMemory,
+  injectedPackets,
+} from "./index";
 import * as edenMem from "./index";
 import { SemanticStore } from "./semantic-store";
 import { storeFor } from "./memory-repo";
@@ -34,12 +42,7 @@ function withMem(fn: (mem: AgentMemory, dir: string) => void | Promise<void>): P
 }
 
 function packetOf(messages: unknown[]): string {
-  return (Array.isArray(messages) ? messages : [])
-    .map((m) => (m && typeof m === "object" ? (m as { role?: string; content?: unknown }) : {}))
-    .filter((m) => m.role === "system" && typeof m.content === "string")
-    .map((m) => String(m.content))
-    .filter((c) => c.includes(MEMORY_MARK))
-    .join("\n");
+  return injectedPackets(messages).join("\n");
 }
 
 function laterThan(at: number): void {
@@ -703,7 +706,7 @@ describe("M17.4 FC-SH observe overwrite still latest", () => {
     });
   });
 
-  test("keepLiveIdentity: system novel+Alice does not leftover Alice when live is Bob", async () => {
+  test("a body's system novel+Alice is the host's text (D12): nothing of it is stored; live Bob still injects", async () => {
     const novel =
       "In the year 1847 the miller of Blackford walked beside the river that ran through the valley. He " +
       "remembered the flood of his childhood and the oak that had fallen across the millrace. The " +
@@ -715,7 +718,7 @@ describe("M17.4 FC-SH observe overwrite still latest", () => {
         system: `${novel} The chairperson of the committee is Alice.`,
       });
       expect(mem.memories().some((r) => /Alice/.test(r.text))).toBe(false);
-      expect(mem.memories().some((r) => r.lane === "narrative" && /miller of Blackford/.test(r.text))).toBe(true);
+      expect(mem.memories().some((r) => /miller of Blackford/.test(r.text))).toBe(false);
       const pkt = packetOf(mem.inject([{ role: "user", content: "who is the chairperson" }]));
       expect(pkt).toMatch(/Bob/);
       expect(pkt).not.toMatch(/Alice/);
@@ -1038,13 +1041,9 @@ describe("M21 SF code-pick (newest statement, tombstone, sleep agrees; A1 D8: li
         expect(ctx).toMatch(/basketball/i);
         expect(ctx).not.toMatch(/ice hockey/i);
         const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: "what is the sport of Alice" }] });
-        const sys = anth && typeof anth === "object" ? (anth as { system?: unknown }).system : undefined;
-        const anthText =
-          typeof sys === "string"
-            ? sys
-            : Array.isArray(sys)
-              ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
-              : "";
+        // Since P0.7 the Anthropic wrap's packet is at the tail of the turn's message (D29), not in `system`.
+        expect(anth.system).toBeUndefined();
+        const anthText = packetOf(anth.messages ?? []);
         expect(anthText).toMatch(/basketball/i);
         expect(anthText).not.toMatch(/ice hockey/i);
       } finally {

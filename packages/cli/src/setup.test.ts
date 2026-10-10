@@ -23,7 +23,7 @@ describe("setup hookd", () => {
     const cmd = hookCommand("/abs/cli.ts", 8794);
     expect(cmd).toContain("http://127.0.0.1:8794/hook");
     expect(cmd).toContain("bun '/abs/cli.ts' hook");
-    expect(cmd).toContain("|| echo '{}'");
+    expect(cmd.endsWith("|| true")).toBe(true);
     expect(cmd).toContain("--max-time 8");
     expect(cmd.startsWith("export EDEN_HOME=")).toBe(true);
     expect(cmd).toContain("curl -sS --max-time 8");
@@ -46,7 +46,7 @@ describe("setup hookd", () => {
     const hooks = installedHooks(hookCommand("/abs/cli.ts", 8794));
     const pre = String(hooks.PreToolUse[0]!.hooks[0]!.command);
     expect(pre).toContain("--max-time 1");
-    expect(pre).toContain("|| echo '{}'");
+    expect(pre.endsWith("|| true")).toBe(true);
     expect(pre).not.toContain("bun ");
     for (const event of [
       "PostToolUse",
@@ -62,14 +62,14 @@ describe("setup hookd", () => {
       expect(cmd).toContain("--max-time 8");
       expect(cmd).toContain("bun '/abs/cli.ts' hook");
     }
-    expect(String(hooks.PostToolUse[0]!.hooks[0]!.command)).toContain("echo '{}'");
+    expect(String(hooks.PostToolUse[0]!.hooks[0]!.command).endsWith("|| true")).toBe(true);
   });
 
   test("preHookCommand is explicit and installedHooks accepts an explicit pre command", () => {
     const pre = preHookCommand(9001);
     expect(pre).toContain("http://127.0.0.1:9001/hook");
     expect(pre).toContain("--max-time 1");
-    expect(pre.endsWith("|| echo '{}'")).toBe(true);
+    expect(pre.endsWith("|| true")).toBe(true);
     const preCmd = "my-own-pre-hook --fast";
     const hooks = installedHooks("warm-chain-cmd", preCmd);
     expect(hooks.PreToolUse[0]!.hooks[0]!.command).toBe(preCmd);
@@ -86,8 +86,8 @@ describe("setup hookd", () => {
 });
 
 describe("eden setup does not disarm the user's own hooks", () => {
-  const warmCmd = "curl -sS http://127.0.0.1:8794/hook || bun '/abs/cli.ts' hook || echo '{}'";
-  const ours = installedHooks(warmCmd, warmCmd.replace(/ \|\| echo '\{\}'$/, ""));
+  const warmCmd = "curl -sS http://127.0.0.1:8794/hook || bun '/abs/cli.ts' hook || true";
+  const ours = installedHooks(warmCmd, warmCmd.replace(/ \|\| true$/, ""));
 
   const usersOwn = {
     PreToolUse: [{ hooks: [{ type: "command", command: "/usr/local/bin/allowlist-guard" }] }],
@@ -236,11 +236,11 @@ describe("multi-agent installer", () => {
     expect(toml).not.toContain("[hooks.eden]");
     const hooks = codexHooksJson(hookCmd, preCmd);
     expect(JSON.stringify(hooks.hooks.PostToolUse)).toContain("EDEN_HOME");
-    expect(JSON.stringify(hooks.hooks.PostToolUse)).toContain("|| echo '{}'");
+    expect(JSON.stringify(hooks.hooks.PostToolUse)).toContain("|| true");
     expect(JSON.stringify(hooks.hooks.SessionStart)).toContain("EDEN_HOME");
     expect(JSON.stringify(hooks.hooks.Stop)).toContain("EDEN_HOME");
     expect(JSON.stringify(hooks.hooks.PreToolUse)).not.toContain("bun ");
-    expect(JSON.stringify(hooks.hooks.PreToolUse)).toContain("echo '{}'");
+    expect(JSON.stringify(hooks.hooks.PreToolUse)).toContain("|| true");
 
     const src = opencodePluginSource(cli);
     expect(src).toContain("const EDEN_HOME =");
@@ -448,7 +448,8 @@ describe("M49 memory hooks install without a wrap key", () => {
       const check = memoryHooksCheck(settings);
       expect(check.ok).toBe(true);
       expect(check.count).toBe(7);
-      for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev);
+      // Setup's PostToolUse leaves memory to its PostToolBatch (P0.7), which the check names in that slot.
+      for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev === "PostToolUse" ? "PostToolBatch" : ev);
       expect(existsSync(join(cwd, ".mcp.json"))).toBe(false);
       expect(existsSync(join(eden, "config.json"))).toBe(false);
       const written = readFileSync(settingsPath, "utf8") + lines.join("\n");
@@ -507,7 +508,8 @@ describe("M49 memory hooks install without a wrap key", () => {
       const check = memoryHooksCheck(settings);
       expect(check.ok).toBe(true);
       expect(check.count).toBe(7);
-      for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev);
+      // Setup's PostToolUse leaves memory to its PostToolBatch (P0.7), which the check names in that slot.
+      for (const ev of MEMORY_HOOK_EVENTS) expect(check.detail).toContain(ev === "PostToolUse" ? "PostToolBatch" : ev);
       const cfg = JSON.parse(readFileSync(join(eden, "config.json"), "utf8")) as { api_key?: string };
       expect(cfg.api_key).toBe("eden_dev");
       expect(existsSync(join(cwd, ".mcp.json"))).toBe(true);
@@ -536,10 +538,10 @@ describe("M14 Codex PostToolUse fail-open / cursor not invented", () => {
   test("codex hooks.json PostToolUse stays fail-open; cursor hooks are not invented", () => {
     const hookCmd = hookCommand("/abs/cli.ts", 8794);
     const preCmd = preHookCommand(8794);
-    expect(hookCmd).toContain("|| echo '{}'");
+    expect(hookCmd.endsWith("|| true")).toBe(true);
     const hooks = JSON.stringify(codexHooksJson(hookCmd, preCmd));
     expect(hooks).toContain("PostToolUse");
-    expect(hooks).toContain("|| echo '{}'");
+    expect(hooks).not.toContain("echo");
     expect(hooks).toContain("SessionStart");
     expect(hooks).toContain("Stop");
     expect(applyCodexToml("", hookCmd, preCmd)).not.toContain("post_tool =");

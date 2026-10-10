@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isLoopbackHost, looksBrowserDriven } from "@eden/ir";
-import { respondToHook, type HookIn } from "./hook";
+import { hookArg, hookStdout, respondToHook, type HookArg, type HookIn } from "./hook";
 import { edenHome, ensureHome, withFileLockAsync } from "./home";
 import { HOOKD_KEY_HEADER, hookdKeyMatches, rotateHookdKey } from "./hookd-key";
 
@@ -98,7 +98,7 @@ export async function handleHookd(req: Request): Promise<Response> {
     return Response.json({ ok: true, service: "eden-hookd", pid: process.pid });
   }
   if (req.method !== "POST") {
-    return Response.json({});
+    return answer({});
   }
   const host = req.headers.get("host");
   // A missing Host (HTTP/1.0) is allowed: a browser always sends one.
@@ -117,23 +117,27 @@ export async function handleHookd(req: Request): Promise<Response> {
   try {
     input = (await req.json()) as HookIn;
   } catch {
-    return Response.json({});
+    return answer({});
   }
-  const done = enqueue(input);
+  const done = enqueue(input, hookArg(new URL(req.url).searchParams.get("stage")));
   try {
-    const out = await done;
-    return Response.json(out);
+    return answer(await done);
   } catch (err) {
     process.stderr.write(`eden hookd: ${(err as Error)?.message ?? String(err)}\n`);
-    return Response.json({});
+    return answer({});
   }
 }
 
+/** A hook's answer as the hook prints it (`hookStdout`): curl passes the body through, an empty one included. */
+function answer(out: Record<string, unknown>): Response {
+  return new Response(hookStdout(out), { headers: { "content-type": "application/json" } });
+}
+
 let tail: Promise<unknown> = Promise.resolve();
-function enqueue(input: HookIn): Promise<Record<string, unknown>> {
+function enqueue(input: HookIn, stage: HookArg | undefined): Promise<Record<string, unknown>> {
   const work = tail.then(
-    () => Promise.resolve(respondToHook(input, withFileLockAsync)),
-    () => Promise.resolve(respondToHook(input, withFileLockAsync)),
+    () => Promise.resolve(respondToHook(input, withFileLockAsync, stage)),
+    () => Promise.resolve(respondToHook(input, withFileLockAsync, stage)),
   );
   tail = work.catch(() => undefined);
   return Promise.race([

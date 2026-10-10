@@ -32,7 +32,7 @@ import {
   remainderDenyReason,
 } from "./remainder";
 import { mapHostToolName } from "./shapes";
-import { memoryHookResponse } from "./memory-hook";
+import { memoryHookResponse, type HookStage } from "./memory-hook";
 
 export type HookIn = {
   hook_event_name?: string;
@@ -50,6 +50,26 @@ export type HookIn = {
 };
 
 export type HookHost = "claude" | "gemini" | "opencode" | "codex" | "unknown";
+
+/**
+ * The handler a hook command names (`eden hook <arg>`, hookd's `?stage=`), as `eden setup` registers them: Stop's
+ * two stages (D34), or `batched`, a PostToolUse whose results the host's PostToolBatch hook records (A4 §5.5), so
+ * memory skips it. A command that names none runs the whole event, as a host with one hook per event needs.
+ */
+export type HookArg = HookStage | "batched";
+
+export function hookArg(raw: unknown): HookArg | undefined {
+  return raw === "stop-fast" || raw === "stop-sleep" || raw === "batched" ? raw : undefined;
+}
+
+/**
+ * What a hook prints (EXECUTION §5): nothing when it has nothing to say, else its answer without the internal
+ * `ok` and `eden_timeout` fields.
+ */
+export function hookStdout(out: Record<string, unknown>): string {
+  const { ok: _ok, eden_timeout: _timeout, ...answer } = out;
+  return Object.keys(answer).length ? JSON.stringify(answer) : "";
+}
 
 const EVENT_ALIASES: Record<string, string> = {
   AfterToolUse: "PostToolUse",
@@ -211,7 +231,7 @@ function readStdin(): Promise<string> {
   });
 }
 
-export async function runHook(): Promise<void> {
+export async function runHook(arg?: string): Promise<void> {
   const raw = await readStdin();
   let body: HookIn = {};
   try {
@@ -221,18 +241,22 @@ export async function runHook(): Promise<void> {
   }
   const HOOK_TIMEOUT_MS = 2_500;
   let out: Record<string, unknown> = { ok: true };
+  // Cleared once the answer is in, so the process exits then rather than when the budget would have run out.
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     out = await Promise.race([
-      respondToHook(body),
-      new Promise<Record<string, unknown>>((resolve) =>
-        setTimeout(() => resolve({ ok: true, eden_timeout: true }), HOOK_TIMEOUT_MS),
-      ),
+      respondToHook(body, withFileLock, hookArg(arg)),
+      new Promise<Record<string, unknown>>((resolve) => {
+        timer = setTimeout(() => resolve({ ok: true, eden_timeout: true }), HOOK_TIMEOUT_MS);
+      }),
     ]);
   } catch (err) {
     process.stderr.write(`eden hook: ${(err as Error)?.message ?? String(err)}\n`);
     out = {};
+  } finally {
+    clearTimeout(timer);
   }
-  process.stdout.write(JSON.stringify(out));
+  process.stdout.write(hookStdout(out));
 }
 
 export type HookLocker = <T>(lockPath: string, fn: () => T) => T | Promise<T>;
@@ -348,7 +372,11 @@ export function recordAppendedEvent(path: string, append: () => void): number {
   return lines;
 }
 
-export async function respondToHook(raw: HookIn, locker: HookLocker = withFileLock): Promise<Record<string, unknown>> {
+export async function respondToHook(
+  raw: HookIn,
+  locker: HookLocker = withFileLock,
+  stage?: HookArg,
+): Promise<Record<string, unknown>> {
   const { hook: body, host } = normalizeHookIn(raw);
   ensureHome();
   const session = body.session_id || "local";
@@ -365,7 +393,7 @@ export async function respondToHook(raw: HookIn, locker: HookLocker = withFileLo
     } catch {}
     return { ok: true };
   }
-  if (body.hook_event_name === "PostToolUse") {
+  if (body.hook_event_name === "PostToolUse" && stage !== "batched") {
     try {
       memoryHookResponse(body as Record<string, unknown>);
     } catch {}
@@ -422,6 +450,9 @@ export async function respondToHook(raw: HookIn, locker: HookLocker = withFileLo
   }
   if (body.hook_event_name === "PostToolBatch") {
     try {
+      memoryHookResponse(body as Record<string, unknown>);
+    } catch {}
+    try {
       const parsed = parseToolCalls(body.tool_calls);
       if (!parsed) return {};
       const calls = parsed.map((c) => ({
@@ -460,12 +491,17 @@ export async function respondToHook(raw: HookIn, locker: HookLocker = withFileLo
           "",
       );
       const subagent = orig === "SubagentStop" || orig === "subagent_stop" || orig === "subagent-stop";
-      memoryHookResponse({
-        ...(raw as Record<string, unknown>),
-        ...(body as Record<string, unknown>),
-        hook_event_name: subagent ? "SubagentStop" : body.hook_event_name,
-      });
+      memoryHookResponse(
+        {
+          ...(raw as Record<string, unknown>),
+          ...(body as Record<string, unknown>),
+          hook_event_name: subagent ? "SubagentStop" : body.hook_event_name,
+        },
+        stage === "batched" ? undefined : stage,
+      );
     } catch {}
+    // D34: the sync stage only hands the next Submit what it needs; the rest waits for `stop-sleep`.
+    if (stage === "stop-fast") return { ok: true };
     await locker(`${outboxPath()}.lock`, () =>
       appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),
     );

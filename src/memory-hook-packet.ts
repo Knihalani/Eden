@@ -89,10 +89,21 @@ export function shapePacket<T extends ProvenanceNote>(notes: readonly T[]): T[] 
 
 /** The packet text, or "" when no bullet fits. */
 export function renderPacket(notes: readonly ProvenanceNote[], now = memoryNow()): string {
+  return packetOf(notes, now).packet;
+}
+
+/** The packet text ("" when no bullet fits) and the notes whose bullet made it in, in order. */
+export function packetOf<T extends ProvenanceNote>(
+  notes: readonly T[],
+  now = memoryNow(),
+): { packet: string; delivered: T[] } {
   let packet = MEMORY_PACKET_MARK;
+  const delivered: T[] = [];
   for (const note of notes) {
     const line = `\n- ${declarativeBullet(note, now)}`;
-    if (Buffer.byteLength(packet + line, "utf8") <= PACKET_BYTE_CAP) packet += line;
+    if (Buffer.byteLength(packet + line, "utf8") > PACKET_BYTE_CAP) continue;
+    packet += line;
+    delivered.push(note);
   }
-  return packet === MEMORY_PACKET_MARK ? "" : packet;
+  return delivered.length ? { packet, delivered } : { packet: "", delivered };
 }

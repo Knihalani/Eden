@@ -12,7 +12,7 @@ import {
 import { handleChatCompletions } from "./proxy";
 import { createState } from "./wrap-tools";
 import { KNOW_INJECT_MARK } from "../../know/src/inject";
-import { AgentMemory, cueFor, MEMORY_MARK, openMemory } from "../../../src/index";
+import { AgentMemory, cueFor, injectedPackets, MEMORY_MARK, openMemory } from "../../../src/index";
 import * as edenMem from "../../../src/index";
 import { HowToStore, howtoPath } from "../../../src/howto-store";
 
@@ -119,27 +119,17 @@ describe("withKnowFacts", () => {
   });
 });
 
-function anthropicMemoryText(body: { system?: unknown }): string {
-  const sys = body.system;
-  const parts =
-    typeof sys === "string"
-      ? [sys]
-      : Array.isArray(sys)
-        ? sys.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? "")))
-        : [];
-  return parts.filter((p) => p.includes(MEMORY_MARK)).join("\n");
+/** The memory packets a wrapped body carries: since P0.7 at its turns' tails (D29), never in `system`. */
+/** D14 (the wrap's wording since P0.7): a bullet carries no `[kind · age · src]` tag. */
+const KIND_TAG = /\[(?:rule|fact|episode|gist|procedure)\b[^\]]*\]/;
+
+function anthropicMemoryText(body: { messages?: unknown[] }): string {
+  return injectedPackets(body.messages ?? []).join("\n");
 }
 
-function markCount(body: { system?: unknown }): number {
-  const raw =
-    anthropicMemoryText(body) ||
-    (typeof body.system === "string"
-      ? body.system
-      : Array.isArray(body.system)
-        ? body.system.map((b) => (typeof b === "string" ? b : String((b as { text?: string })?.text ?? ""))).join("\n")
-        : "");
-  if (!raw.includes(MEMORY_MARK)) return 0;
-  return raw.split(MEMORY_MARK).length - 1;
+/** How many packet headers a body carries anywhere, `system` included. */
+function markCount(body: { system?: unknown; messages?: unknown[] }): number {
+  return JSON.stringify([body.system ?? null, body.messages ?? []]).split(MEMORY_MARK).length - 1;
 }
 
 describe("withKnowFactsAnthropic M3 order", () => {
@@ -218,7 +208,7 @@ describe("withKnowFactsAnthropic M3 order", () => {
       expect(pkt).toContain(MEMORY_MARK);
       expect(pkt).toMatch(/Bob/);
       expect(pkt).not.toMatch(/Alice/);
-      expect(pkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+      expect(pkt).not.toMatch(KIND_TAG);
     } finally {
       inject.mockRestore();
       mem.close();
@@ -249,11 +239,7 @@ function m13WithEnv<T>(vars: Record<string, string | undefined>, fn: () => T): T
 }
 
 function openaiMemoryText(body: Record<string, unknown>): string {
-  const messages = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: unknown }[]) : [];
-  return messages
-    .filter((m) => m.role === "system" && typeof m.content === "string" && String(m.content).includes(MEMORY_MARK))
-    .map((m) => String(m.content))
-    .join("\n");
+  return injectedPackets(Array.isArray(body.messages) ? body.messages : []).join("\n");
 }
 
 function redirectMemory(mem: AgentMemory): () => void {
@@ -261,9 +247,9 @@ function redirectMemory(mem: AgentMemory): () => void {
   const realBody = AgentMemory.prototype.injectBody;
   const inject = spyOn(AgentMemory.prototype, "inject").mockImplementation(function (
     this: AgentMemory,
-    messages: unknown[],
+    ...args: Parameters<AgentMemory["inject"]>
   ) {
-    return realInject.call(mem, messages);
+    return realInject.apply(mem, args);
   });
   const injectBody = spyOn(AgentMemory.prototype, "injectBody").mockImplementation(function (
     this: AgentMemory,
@@ -317,7 +303,7 @@ describe("M13 honest off switch (wrap)", () => {
     }
   });
 
-  test("readonly: existing sqlite [fact] injects on OpenAI and Anthropic; Auth is Clerk is not persisted", () => {
+  test("readonly: existing sqlite fact injects on OpenAI and Anthropic; Auth is Clerk is not persisted", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-m13-wrap-ro-"));
     const mem = openMemory({ dir });
     const restore = redirectMemory(mem);
@@ -331,13 +317,13 @@ describe("M13 honest off switch (wrap)", () => {
           const openaiPkt = openaiMemoryText(openai);
           expect(openaiPkt).toContain(MEMORY_MARK);
           expect(openaiPkt).toMatch(/sqlite/i);
-          expect(openaiPkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(openaiPkt).not.toMatch(KIND_TAG);
 
           const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: M13_SQLITE_Q }] });
           const anthPkt = anthropicMemoryText(anth);
           expect(anthPkt).toContain(MEMORY_MARK);
           expect(anthPkt).toMatch(/sqlite/i);
-          expect(anthPkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(anthPkt).not.toMatch(KIND_TAG);
 
           withKnowFacts({ messages: [{ role: "user", content: M13_CLERK }] });
           withKnowFactsAnthropic({ messages: [{ role: "user", content: M13_CLERK }] });
@@ -366,13 +352,13 @@ describe("M13 honest off switch (wrap)", () => {
           const openaiPkt = openaiMemoryText(openai);
           expect(openaiPkt).toContain(MEMORY_MARK);
           expect(openaiPkt).toMatch(/sqlite/i);
-          expect(openaiPkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(openaiPkt).not.toMatch(KIND_TAG);
 
           const anth = withKnowFactsAnthropic({ messages: [{ role: "user", content: M13_SQLITE_Q }] });
           const anthPkt = anthropicMemoryText(anth);
           expect(anthPkt).toContain(MEMORY_MARK);
           expect(anthPkt).toMatch(/sqlite/i);
-          expect(anthPkt).toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(anthPkt).not.toMatch(KIND_TAG);
         });
       }
     } finally {
@@ -434,7 +420,7 @@ function m14PytestWindow(): unknown[] {
 }
 
 function m14AssertFlake(hay: string): void {
-  expect(hay).toMatch(/\[procedure(?:\s*·[^\]]*)?\]/);
+  expect(hay).not.toMatch(KIND_TAG);
   expect(hay).toMatch(/auth\.ts/);
   expect(hay).toMatch(/pytest/i);
   expect(hay).toMatch(/tests\/auth\/session\.test\.ts/);
@@ -552,7 +538,7 @@ describe("M38.2 wrap honors an omitted packet", () => {
           const openai = withKnowFacts(openaiBody);
           expect(openai).toBe(openaiBody);
           expect(JSON.stringify(openai)).not.toContain(MEMORY_MARK);
-          expect(JSON.stringify(openai)).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(JSON.stringify(openai)).not.toMatch(KIND_TAG);
           expect(JSON.stringify(openai)).not.toMatch(/sqlite/i);
 
           const anthBody = { system: "be brief", messages: [{ role: "user", content: "what's 2+2?" }] };
@@ -560,7 +546,7 @@ describe("M38.2 wrap honors an omitted packet", () => {
           expect(anth).toBe(anthBody);
           expect(anth.system).toBe("be brief");
           expect(JSON.stringify(anth)).not.toContain(MEMORY_MARK);
-          expect(JSON.stringify(anth)).not.toMatch(/\[fact(?:\s*·[^\]]*)?\]/);
+          expect(JSON.stringify(anth)).not.toMatch(KIND_TAG);
           expect(JSON.stringify(anth)).not.toMatch(/sqlite/i);
 
           const directBody = { messages: [{ role: "user", content: "what's 2+2?" }] };
@@ -585,7 +571,8 @@ describe("M38.2 wrap honors an omitted packet", () => {
   });
 });
 
-const CI_Q = "What GitHub Actions CI do we use?";
+// It names the subject but not the whole value: a cue stating it is the fact's residual (D26, the wrap's since P0.7).
+const CI_Q = "Which GitHub workflow runs our CI?";
 const AUTH_SOURCE = 'export function login() {\n  return "session-secret-body";\n}\n';
 
 function pacificTurns(): { role: string; content: string }[] {
