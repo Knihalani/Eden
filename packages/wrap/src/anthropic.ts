@@ -234,8 +234,9 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   const wantsStream = Boolean(body.stream);
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
 
-  applyCacheBreakpoints(body);
+  // Memory first (D29): a turn's packet ends its message, so the last breakpoint then covers it.
   if (opts.memory !== false) body = withKnowFactsAnthropic(body) as AnthropicRequest;
+  applyCacheBreakpoints(body);
 
   const fn = opts.fetch ?? fetch;
   const anthropicKey = req.headers.get("x-api-key") || opts.upstreamKey || process.env.ANTHROPIC_API_KEY || "";

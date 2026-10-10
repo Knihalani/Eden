@@ -123,6 +123,11 @@ export interface InjectOptions {
   extra?: () => string | undefined;
   /** The marks `extra`'s texts begin with, so a client that echoes a tail back is recognised. */
   extraMarks?: readonly string[];
+  /**
+   * Attach the tail as text blocks, a string content becoming its one block (Anthropic): the message then has one
+   * shape whether or not it ends the request, where the proxy turns the last message's string into blocks.
+   */
+  blocks?: boolean;
 }
 
 type Message = Record<string, unknown>;
@@ -406,13 +411,14 @@ export function injectedPackets(messages: readonly unknown[]): string[] {
   return out;
 }
 
-/** A message with texts appended at its tail, in its own content shape. */
-function withTail(message: Message, texts: readonly string[]): Message {
+/** A message with texts appended at its tail, in its own content shape (or as blocks, `InjectOptions.blocks`). */
+function withTail(message: Message, texts: readonly string[], blocks: boolean): Message {
   if (Array.isArray(message.parts))
     return { ...message, parts: [...message.parts, ...texts.map((text) => ({ text }))] };
   const content = message.content;
-  if (Array.isArray(content))
-    return { ...message, content: [...content, ...texts.map((text) => ({ type: "text", text }))] };
+  const tail = texts.map((text) => ({ type: "text", text }));
+  if (Array.isArray(content)) return { ...message, content: [...content, ...tail] };
+  if (blocks) return { ...message, content: [{ type: "text", text: String(content ?? "") }, ...tail] };
   return { ...message, content: [String(content ?? ""), ...texts].join("\n\n") };
 }
 
@@ -448,7 +454,7 @@ export function placeTurnTails(mem: WrapMemory, messages: readonly unknown[], op
   for (const [h, tail] of tails) {
     if (!tail.texts.length || reads[h]!.tailed) continue;
     out ??= messages.slice();
-    out[h] = withTail(record(messages[h])!, tail.texts);
+    out[h] = withTail(record(messages[h])!, tail.texts, opts.blocks === true);
   }
   return out ?? (messages as unknown[]);
 }
