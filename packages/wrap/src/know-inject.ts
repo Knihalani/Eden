@@ -82,7 +82,12 @@ export function withKnowFactsAnthropic(body: {
       const card = injectFromRequest({ text: blob, tools: toolNames(body), calls: toolCalls(messages) });
       return card ? injectNote(card) : undefined;
     };
-    const next = mem.inject(messages, { paths: placePathsFrom(body), extra: knowCard, extraMarks: [KNOW_INJECT_MARK] });
+    const next = mem.inject(messages, {
+      paths: placePathsFrom(body),
+      extra: knowCard,
+      extraMarks: [KNOW_INJECT_MARK],
+      blocks: true,
+    });
     observeToolTraces(mem, body.messages);
     return stripUpstreamPlaceFields(next === messages ? body : { ...body, messages: next }) as typeof body;
   } catch {

@@ -101,10 +101,11 @@ describe("P0.7 cache-safe placement (D29)", () => {
       }
       opening = carried;
       turn = at;
-      const typed = messages[human]!.content as string;
-      const text = carried.content as string;
-      expect(text.startsWith(`${typed}\n\n`)).toBe(true);
-      expect(MEMORY_PACKET_MARKS.some((mark) => text.slice(typed.length + 2).startsWith(mark))).toBe(true);
+      // Text blocks, the typed string first (`InjectOptions.blocks`): the message has this shape in every request.
+      const [typed, packet, ...rest] = carried.content as { type: string; text: string }[];
+      expect(typed).toEqual({ type: "text", text: messages[human]!.content as string });
+      expect(MEMORY_PACKET_MARKS.some((mark) => packet!.text.startsWith(mark))).toBe(true);
+      expect(rest).toEqual([]);
     }
   });
 
