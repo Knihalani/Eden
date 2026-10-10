@@ -3,12 +3,15 @@
  * compaction (R0 F14). Everything else the window was given is re-armed.
  * - **Slot:** the words of its value ("postgres", "node 22").
  * - **Rule** (policies and intents): the class verb stem and the object of its first clause that names an action
- *   class (A7 §5's verbs, `ACTION_VERBS`): "Don't merge PRs yourself" is `integrate` and "pr". A summary names the
- *   class with any of its verbs, inflected ("not to be merging PRs"). A rule without a class verb keeps its object
- *   words (D9), all of which the summary must name.
+ *   class (A7 §5's verbs, `ACTION_VERBS`): "Don't merge PRs yourself" is `integrate` and "pr". The object is what
+ *   follows the verb, or, when the verb ends its clause ("Run the tests before you commit"), the clause's other words.
+ *   A rule whose clause names nothing but its class has no value tokens: any summary mentioning a commit would hold
+ *   it, so it is always re-armed. A summary names the class with any of its verbs, inflected ("not to be merging
+ *   PRs"). A rule without a class verb keeps its object words (D9), all of which the summary must name.
  * - **Other kinds** have none: no summary keeps them, so a compaction always re-arms them.
  * The ledger keeps the tokens hashed (X11); this module compares them as words.
  */
+import { stripPacketLabel } from "./memory-provenance";
 import { contentWords } from "./memory-transcript";
 import { ACTION_VERBS, objectWords } from "./memory-validity";
 
@@ -37,17 +40,23 @@ export function slotValueTokens(value: string): string[] {
   return [...new Set(contentWords(value))];
 }
 
-/** A rule's value tokens (see the header). */
+/** The object words among `words`, without the words that only mark a rule. */
+function objectOf(words: readonly string[]): string[] {
+  return objectWords(words.filter((word) => !RULE_WORDS.has(word)).join(" "));
+}
+
+/** A rule's value tokens (see the header); its packet label, when it has one, is not part of it. */
 export function ruleValueTokens(text: string): string[] {
-  for (const clause of text.split(/[,;:.!?]/)) {
+  const body = stripPacketLabel(text).body;
+  for (const clause of body.split(/[,;:.!?]/)) {
     const words = clause.toLowerCase().match(/[a-z0-9]+/g) ?? [];
     const at = words.findIndex((word) => VERB_FORMS.has(word));
     if (at < 0) continue;
-    const object = objectWords(words.slice(at + 1).join(" "));
-    return [...new Set([classToken(VERB_FORMS.get(words[at]!)!), ...object])];
+    const after = words.slice(at + 1);
+    const object = objectOf(after.length ? after : words.filter((_, index) => index !== at));
+    return object.length ? [...new Set([classToken(VERB_FORMS.get(words[at]!)!), ...object])] : [];
   }
-  const content = contentWords(text).filter((word) => !RULE_WORDS.has(word));
-  return [...new Set(objectWords(content.join(" ")))];
+  return [...new Set(objectOf(contentWords(body)))];
 }
 
 /** What a summary names, as value tokens are written: its words, their singular forms, and the classes of its verbs. */
