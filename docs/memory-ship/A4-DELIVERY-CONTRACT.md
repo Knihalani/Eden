@@ -63,6 +63,7 @@ Each error type has its **own control**. That is the lesson from biology (A3 §4
   episodes/seg-*.jsonl             # append-only diary; never rewritten (except purge)
   scopes.json  shadowfacts.json  tau.json  aliases.jsonl  last_read.json
   hook.log.d/<yyyy-mm-dd>.jsonl  miss.jsonl  pending.jsonl  .lock
+  activity  sleep.pending          # mtime of the repo's last hook; the idle sleeper's pid (D34, `eden sleep --idle`)
 <root>/windows/<win>/
   delivery.log  delivery.json      # ledger (§4)
   ctx.log                          # append-only {k: paths|exit|sig|crons}; folded on read (last 3 human turns), compacted at Stop

@@ -12,6 +12,7 @@ import {
   SHADOW_LEDGER,
   transcriptOffset,
   windowDir,
+  writeLastAssistant,
 } from "./memory-window";
 
 const roots: string[] = [];
@@ -109,5 +110,26 @@ describe("D24: the crons of the window's last Stop", () => {
     expect(cronHashes(win)).toEqual([promptHash("check the deploy")]);
     recordCrons(win, [null, { prompt: 7 }, { prompt: "  " }]);
     expect(cronHashes(win)).toEqual([]);
+  });
+});
+
+describe("qprev.json (P0.6 review round 2): the secret gate reads before the cut", () => {
+  test("a keyword secret whose keyword the 8,000-character cut would split is still redacted", () => {
+    const value = "Zq8vR2mK7pL4xN9wTb";
+    for (const [keyword, sep] of [
+      ["password", " = "],
+      ["password", ": "],
+      ["aws_secret_access_key", " = "],
+    ] as const) {
+      let rest = `${sep}${value} `;
+      while (rest.length < 7997) rest += "word ";
+      // The last 8,000 characters start 3 characters before the keyword's end.
+      const text = `intro ${keyword}${rest.slice(0, 7997)}`;
+      const dir = root();
+      writeLastAssistant(dir, { t: 1, text });
+      const kept = readFileSync(join(dir, "qprev.json"), "utf8");
+      expect(kept.includes(value)).toBe(false);
+      expect(JSON.parse(kept).text.length).toBeLessThanOrEqual(8000);
+    }
   });
 });
