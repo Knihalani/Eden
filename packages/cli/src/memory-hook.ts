@@ -12,6 +12,7 @@ import { flagModes, pointOf, resolveFlags, type FlagMode, type FlagState } from 
 import { batchRecord } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
 import {
+  deliveredKeys,
   epochTokens,
   foldWindow,
   humanTurns,
@@ -143,13 +144,14 @@ function deliver(
   at: { off: number; att: string; repo?: string },
 ): { packet: string; cids: string[]; ids: string[] } {
   const { packet, delivered } = packetOf(notes, memoryNow());
-  const keys = delivered.map((note) => ledgerKey(note, at.repo));
   if (delivered.length && ledger)
     try {
       const moment = { off: at.off, att: at.att, ht: humanTurns(ledger.dir) };
+      const keys = delivered.flatMap((note) => deliveredKeys(note, at.repo));
       recordPacket(ledger.dir, { keys, tokens: packetTokens(packet) }, moment, ledger.file);
     } catch {}
-  return { packet, cids: keys.map((key) => key.cid), ids: delivered.map((note) => String(note.id ?? "")) };
+  const cids = delivered.map((note) => ledgerKey(note, at.repo).cid);
+  return { packet, cids, ids: delivered.map((note) => String(note.id ?? "")) };
 }
 
 /**

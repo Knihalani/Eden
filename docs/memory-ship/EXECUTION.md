@@ -318,6 +318,7 @@ Decided in DECISIONS **D37** from `research/R8-nim-experiments.md`.
 |---|---|---|---|
 | `hook.log.d/` | ids, cids, counts, stage drops, scores, ms, flags, **hashes** of prompt text; **no text** | on | 90 days, then daily aggregates |
 | `delivery.shadow.log` | cid, ver, offset | in shadow | until the point flips |
+| `windows/wrap-*/tails.jsonl` | the packet text a wrap attached to a turn (rows already through the secret gate), so a restart keeps it in place (P1.1) | with `eden wrap` | 1 hour: rewritten at the conversation's next turn, or removed by another conversation's sweep |
 | `dogfood/prompts.jsonl` | human prompt text after `sanitizeForStore`, pastes stripped | **opt-in** (`log.text`) | 30 days |
 | `eval/real-negatives.vN.jsonl` | curated, reviewed negatives | explicit command | versioned by sha256; **never in git** |
 

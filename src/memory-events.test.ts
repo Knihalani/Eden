@@ -85,3 +85,10 @@ test("retention is idempotent and leaves the breaker's reader alone", () => {
   expect(existsSync(join(root(), EVENTS_DIR))).toBe(false);
   retainEvents(join(root(), "none"), NOW);
 });
+
+test("the breaker's reader leaves out the wrap's events, which share deliver.submit (P1.1 review)", () => {
+  const dir = root();
+  appendWideEvent(dir, event(NOW - 2));
+  appendWideEvent(dir, event(NOW - 1, { ev: "wrap" }));
+  expect(recentEvents(dir, "deliver.submit", 10).map((e) => e.ev)).toEqual(["UserPromptSubmit"]);
+});
