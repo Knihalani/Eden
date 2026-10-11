@@ -12,7 +12,7 @@
  */
 import type { MemoryRecord } from "./index";
 import { admitNotes, type CueParts } from "./memory-gate";
-import { noteKindToken } from "./memory-provenance";
+import { noteKindToken, type ProvenanceNote } from "./memory-provenance";
 import { isResidualNote, residualSentences, unsaidText, type Said } from "./memory-residual";
 import { asksHistory, isForget, validText, type Invalidation } from "./memory-validity";
 
@@ -60,7 +60,7 @@ export interface DeliveryDrops {
 }
 
 /** The notes with what the window already states left out (`unsaidText`); a note it states in full is dropped. */
-export function unsaidNotes<T extends MemoryRecord>(notes: readonly T[], said: readonly Said[]): T[] {
+export function unsaidNotes<T extends ProvenanceNote>(notes: readonly T[], said: readonly Said[]): T[] {
   return notes.flatMap((note) => {
     const text = unsaidText(note, said);
     if (text === note.text) return [note];
