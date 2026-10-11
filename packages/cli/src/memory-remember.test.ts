@@ -70,4 +70,20 @@ describe("eden memory remember", () => {
     });
     expect(rowsOf(repoA)).toEqual([]);
   });
+
+  test("--global keeps a rule for every repo (D11), in the user-global store only", () => {
+    expect(remember(["--global", "Never", "force-push."]).out).toBe("remembered: 1");
+    const kept = storeRows(join(dir, "memory", "_user", "policies.jsonl"));
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ text: "Never force-push.", kind: "constraint" });
+    expect(kept[0]!.rules?.map((rule) => rule.k)).toEqual(["history-rewrite|neg|*"]);
+    expect(kept[0]!.tags).toContain("all-projects");
+    expect(rowsOf(repoA)).toEqual([]);
+  });
+
+  test("--global keeps no fact and no intent: user-global holds policies only (D11)", () => {
+    const input = ['{"text": "We use pnpm."}', '{"text": "Don\'t open the PR yet."}'].join("\n");
+    expect(JSON.parse(remember(["--global", "--jsonl", "-"], input).out)).toEqual({ remembered: 0 });
+    expect(storeRows(join(dir, "memory", "_user", "policies.jsonl"))).toEqual([]);
+  });
 });
