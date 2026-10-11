@@ -26,7 +26,7 @@ const EXIT_CODE = /^Exit code (\d+)\b/;
 const ERROR_LINE = /\b(?:error|failed|failure|exception|cannot|could not|not found|denied|ERR_[A-Z_]+)\b/i;
 
 /** A result's text as the model sees it: a string, or its text blocks. */
-function resultText(response: unknown): string {
+export function resultText(response: unknown): string {
   if (typeof response === "string") return response;
   if (!Array.isArray(response)) return "";
   return response

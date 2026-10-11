@@ -14,6 +14,43 @@
       }
     ],
     "SessionEnd": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard destructive-db 1 2>/dev/null || true", "if": "Bash(*migrate reset*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard destructive-db 2 2>/dev/null || true", "if": "Bash(*db drop*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard destructive-db 3 2>/dev/null || true", "if": "Bash(psql*DROP*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard history-rewrite 1 2>/dev/null || true", "if": "Bash(git push --force*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard history-rewrite 2 2>/dev/null || true", "if": "Bash(git push -f*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard history-rewrite 3 2>/dev/null || true", "if": "Bash(git push *+*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard history-rewrite 4 2>/dev/null || true", "if": "Bash(git rebase*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard history-rewrite 5 2>/dev/null || true", "if": "Bash(git commit --amend*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard dependency 1 2>/dev/null || true", "if": "Bash(npm i*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard dependency 2 2>/dev/null || true", "if": "Bash(pnpm add*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard dependency 3 2>/dev/null || true", "if": "Bash(yarn add*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard dependency 4 2>/dev/null || true", "if": "Bash(bun add*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard dependency 5 2>/dev/null || true", "if": "Bash(pip install*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard dependency 6 2>/dev/null || true", "if": "Bash(cargo add*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard deploy 1 2>/dev/null || true", "if": "Bash(*deploy*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard deploy 2 2>/dev/null || true", "if": "Bash(vercel*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard deploy 3 2>/dev/null || true", "if": "Bash(fly deploy*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard deploy 4 2>/dev/null || true", "if": "Bash(kubectl apply*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard delete 1 2>/dev/null || true", "if": "Bash(rm -rf*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard delete 2 2>/dev/null || true", "if": "Bash(rm -fr*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard delete 3 2>/dev/null || true", "if": "Bash(rm -r*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard delete 4 2>/dev/null || true", "if": "Bash(git branch -D*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard delete 5 2>/dev/null || true", "if": "Bash(git push * --delete*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard push-upstream 1 2>/dev/null || true", "if": "Bash(git push*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard push-upstream 2 2>/dev/null || true", "if": "Bash(gh pr merge --auto*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard integrate 1 2>/dev/null || true", "if": "Bash(git merge*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard integrate 2 2>/dev/null || true", "if": "Bash(gh pr merge*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard review 1 2>/dev/null || true", "if": "Bash(gh pr create*)", "timeout": 5 },
+          { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard commit 1 2>/dev/null || true", "if": "Bash(git commit*)", "timeout": 5 }
+        ]
+      },
+      { "matcher": "mcp__.*__merge.*", "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard integrate 3 2>/dev/null || true", "timeout": 5 }] }
+    ],
     "PostToolBatch": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "SubagentStop": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "async": true }] }],
     "InstructionsLoaded": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "async": true }] }]
