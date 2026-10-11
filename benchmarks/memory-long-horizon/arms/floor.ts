@@ -309,7 +309,8 @@ const SIMULATED_EVENTS = new Set<string>(HOOK_EVENTS);
 /**
  * A fault in every entry point (A5 `fail-open`, EXECUTION §5): the memory root is a regular file, so any read or
  * write of the store throws. The script fires every event the simulator models (`covered` checks the plugin's
- * registered ones among them all ran; FileChanged and CwdChanged are not modelled, and are named if registered).
+ * registered ones among them all ran; FileChanged and CwdChanged are not modelled, and are named if registered),
+ * with a command the PreToolUse guard's `if` rules match (`git commit`), so the guard runs too.
  */
 const failOpen: Arm = {
   id: "fail-open",
@@ -321,7 +322,11 @@ const failOpen: Arm = {
     writeFileSync(join(world.home, ".eden", "memory"), "not a directory\n");
     const session = await Driver.start(world, spec);
     await session.turn("check the login code", {
-      tools: [[read("apps/web/app/login.ts", "export function login() {}\n")], [bash("bun test", 1, "1 test failed")]],
+      tools: [
+        [read("apps/web/app/login.ts", "export function login() {}\n")],
+        [bash("bun test", 1, "1 test failed")],
+        [bash("git commit -m wip", 0, "[feature 1a2b3c4] wip")],
+      ],
     });
     await session.subagent({ agentType: "general-purpose", task: "review apps/web/app/login.ts" }, [
       [read("apps/web/app/login.ts", "export function login() {}\n")],
