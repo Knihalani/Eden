@@ -5,10 +5,10 @@
  * - **InstructionsLoaded** appends a `load` record: the file, why Claude Code loaded it, and the `prompt_id` of a lazy
  *   load. It runs async and opens no store; a record the window already holds since its last epoch is not appended
  *   again (an eager CLAUDE.md is reported at every process start, twice on a resume).
- * - **Epochs.** SessionStart `compact` and `clear` append an `epoch` record. Captured on Claude Code 2.1.294: lazily
- *   loaded files (`nested_traversal`, `path_glob_match`) leave the context at a compaction, which reloads nothing, while
- *   eagerly loaded ones (`session_start`, `include`, `compact`) stay. So a lazy load counts only after the last epoch,
- *   and only while its prompt is on the current branch (a rewind abandons it, `memory-delta.ts`).
+ * - **Epochs.** SessionStart `compact` and `clear` append an `epoch` record. Captured on Claude Code 2.1.294:
+ *   lazily loaded files (`nested_traversal`, `path_glob_match`) leave the context at a compaction, which reloads
+ *   nothing, while eagerly loaded ones (`session_start`, `include`, `compact`) stay. So a lazy load counts only after
+ *   the last epoch, and only while its prompt is on the current branch (a rewind abandons it, `memory-delta.ts`).
  * - **From disk** (no InstructionsLoaded fires for them): AGENTS.md, which Claude Code loads by default only where the
  *   project has no CLAUDE.md of its own, from the session's folder up to the repo's top (captured: with a CLAUDE.md it
  *   was not in context, without one it was); and auto-memory `MEMORY.md` beside the session's transcript, of which
