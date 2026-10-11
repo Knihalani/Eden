@@ -50,10 +50,10 @@ export const CLASS_WORDS: readonly (readonly [ActionClass, RegExp])[] = ACTION_C
   new RegExp(ENTRIES[cls].words, "i"),
 ]);
 
-/** Each class and the words a cue fires it by, in R8's order. */
+/** Each class and the words a cue fires it by, in R8's order (global: a cue is read for every match). */
 export const CUE_WORDS: readonly (readonly [ActionClass, RegExp])[] = ACTION_CLASSES.map((cls) => [
   cls,
-  new RegExp(ENTRIES[cls].cue ?? ENTRIES[cls].words, "i"),
+  new RegExp(ENTRIES[cls].cue ?? ENTRIES[cls].words, "gi"),
 ]);
 
 /** Each verb a revocation or a compaction summary may name a class by, to its class. */
