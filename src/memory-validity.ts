@@ -63,7 +63,8 @@ import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript"
 export type Invalidation =
   | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; n?: string; r?: "forget" }
   | { k: "revoke"; c: string; o: string[]; t: number }
-  | { k: "oppose"; r: string; t: number };
+  | { k: "oppose"; r: string; t: number }
+  | { k: "end"; r: string; t: number; of: "intent" | "rule" };
 type Retraction = Extract<Invalidation, { k: "retract" }>;
 type Revocation = Extract<Invalidation, { k: "revoke" }>;
 
@@ -227,6 +228,9 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
 export function counteredKeys(text: string): string[] {
   return invalidationsIn(text, 0).flatMap((record) => (record.k === "oppose" ? [record.r] : []));
 }
+
+/** Appends the ends of rules to the store's validity log (P2.3). Red first: a stub. */
+export function recordRuleEnds(_root: string, _rules: readonly string[], _of: "intent" | "rule", _t?: number): void {}
 
 /** Appends the invalidations of a human prompt to the store's validity log, and returns them. Fails open. */
 export function recordInvalidations(root: string, prompt: string, t = memoryNow()): Invalidation[] {
@@ -439,6 +443,7 @@ function otherRules(sentence: string, records: readonly Invalidation[]): string[
 function invalidates(record: Invalidation, sentence: string): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
   if (record.k === "oppose") return statesRule(sentence, record.r);
+  if (record.k === "end") return false;
   if (RULE_SENTENCE.test(sentence)) return false;
   if (!mentions(sentence, record)) return false;
   if (!sameScope(sentence, record.s) || !namesSubject(sentence, record.w)) return false;

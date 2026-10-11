@@ -4,7 +4,9 @@
  * - D9's extraction reads a class's words after a rule's trigger (`memory-policy.ts`);
  * - a compiled trigger fires a class on its words in the user's prompt (`memory-triggers.ts`);
  * - a revocation and a compaction summary name a class by its verbs (`memory-validity.ts`, `memory-value-tokens.ts`);
- * - D9 fix 3 keys a rule on its class's default object as `*`.
+ * - D9 fix 3 keys a rule on its class's default object as `*`;
+ * - the PreToolUse guard registers one handler per class command pattern (`hooks.json`) and re-checks each command
+ *   against its class (A7 §5, `memory-guard.ts`).
  *
  * The classes are listed in R8's order of specificity, which breaks a tie between two classes whose words start at
  * one place (`push --force` is history-rewrite, `drop the tables` destructive-db).
@@ -37,9 +39,21 @@ interface ClassEntry {
   verbs?: string[];
   /** The class's default object (D9 fix 3), then its other names. */
   object?: string[];
+  guard?: ClassGuard;
+}
+
+/** A class's PreToolUse map (A7 §5). */
+export interface ClassGuard {
+  /** Permission rules for Bash commands (`git merge*`): `hooks.json` registers one handler each. */
+  if: string[];
+  /** The re-check of each subcommand (case-insensitive): `if` is best-effort. */
+  check: string;
+  /** A tool-name matcher with no `if` (`mcp__.*__merge.*`). */
+  tools?: string;
 }
 
 const ENTRIES = lexicon.classes as Record<ActionClass, ClassEntry>;
+const GUARD = lexicon.guard as { severity: ActionClass[]; irreversible: ActionClass[] };
 
 /** The classes, in R8's order of specificity. */
 export const ACTION_CLASSES = Object.keys(ENTRIES) as ActionClass[];
@@ -69,4 +83,19 @@ export function defaultObject(cls: string): string | undefined {
 /** Every name of a class's default object ("pr", "pull request"); none for a class without one. */
 export function defaultObjectNames(cls: string): readonly string[] {
   return ENTRIES[cls as ActionClass]?.object ?? [];
+}
+
+/** The classes the guard acts for, each with its PreToolUse map, in the lexicon's order. */
+export const GUARDED_CLASSES: readonly (readonly [ActionClass, ClassGuard])[] = ACTION_CLASSES.flatMap((cls) => {
+  const guard = ENTRIES[cls].guard;
+  return guard ? [[cls, guard] as const] : [];
+});
+
+/** The classes whose prohibition asks before the call (D19). */
+export const IRREVERSIBLE: ReadonlySet<ActionClass> = new Set(GUARD.irreversible);
+
+/** A7 §5's severity: the listed classes first, most severe first, then the rest in the lexicon's order. */
+export function severityRank(cls: ActionClass): number {
+  const listed = GUARD.severity.indexOf(cls);
+  return listed >= 0 ? listed : GUARD.severity.length + ACTION_CLASSES.indexOf(cls);
 }
