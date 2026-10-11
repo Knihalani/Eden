@@ -3,11 +3,7 @@
  * it would break, and whether to ask before it runs. The hook around it (`packages/cli/src/memory-guard-hook.ts`) adds
  * the flags, the deduplication across parallel handlers, the ledger and the wide event.
  *
- * - **Which classes a call is.** A Bash command is read as Claude Code reads an `if` rule (subcommands at `&&`, `||`,
- *   `;`, `|`, `&` and line breaks outside quotes; commands inside `$()` and backticks; leading `VAR=value` stripped),
- *   and each subcommand is re-checked against each class's `check` (`memory-classes.json`), since `if` is
- *   best-effort. A subcommand whose command name is a variable (`$GH pr merge`) names no class: what it runs cannot be
- *   read. Another tool is matched by a class's `tools` (`mcp__github__merge_pull_request` is integrate).
+ * - **Which classes a call is:** `memory-guard-match.ts`.
  * - **Which rules apply.** The rows of the store's rule index (`memory-rule-index.ts`) with a rule of the class, as
  *   every delivery point reads them: past `valid_until`, an intent after 7 days, and what an invalidation newer than
  *   the row took (a revocation, an opposition, an end) are gone. A rule applies when the call names its object (`*`
@@ -25,7 +21,7 @@
  *   user put on the agent alone ("… yourself") of a class's default object is said as who does it: "pull requests are
  *   merged by you, not by the agent".
  */
-import { ACTION_VERBS, GUARDED_CLASSES, IRREVERSIBLE, severityRank, type ActionClass } from "./memory-classes";
+import { ACTION_VERBS, IRREVERSIBLE, type ActionClass } from "./memory-classes";
 import { memoryNow } from "./memory-clock";
 import { ageInWords } from "./memory-hook-packet";
 import {
@@ -38,15 +34,10 @@ import {
   rulesIn,
   type RuleRef,
 } from "./memory-policy";
+import { callClasses, CHECKS, commandOf, partsOf, type GuardCall } from "./memory-guard-match";
 import { knownNoteSource } from "./memory-provenance";
 import { readRuleIndex, type IndexedRow } from "./memory-rule-index";
 import { readInvalidations, validText, withoutExpiredIntents, type Invalidation } from "./memory-validity";
-
-/** A tool call as a PreToolUse payload carries it. */
-export interface GuardCall {
-  tool: string;
-  input: Record<string, unknown>;
-}
 
 /** The permission modes in which an `ask` reaches the user (D19). */
 const ASKING_MODES = new Set(["default", "acceptEdits", "plan", "auto"]);
@@ -75,71 +66,6 @@ const PER_CLASS = 2;
 const CONTEXT_HEADER = "Eden memory, a rule you set for this command:";
 /** A rule's longest text in an answer: the reason is a prompt line, not a document. */
 const RULE_CHARS = 300;
-
-/** The subcommands of a Bash command line (see the header), and commands inside `$()` and backticks. */
-export function subcommandsOf(command: string): string[] {
-  const parts: string[] = [];
-  const inner: string[] = [];
-  let current = "";
-  let quote: "'" | '"' | undefined;
-  for (let at = 0; at < command.length; at++) {
-    const char = command[at]!;
-    const substitution = char === "$" && command[at + 1] === "(" && quote !== "'";
-    if (substitution || (char === "`" && !quote)) {
-      const end = substitution ? closingParen(command, at + 1) : command.indexOf("`", at + 1);
-      const stop = end < 0 ? command.length : end;
-      inner.push(...subcommandsOf(command.slice(at + (substitution ? 2 : 1), stop)));
-      current += command.slice(at, stop + 1);
-      at = stop;
-    } else if (quote) {
-      if (char === quote) quote = undefined;
-      current += char;
-    } else if (char === "'" || char === '"') {
-      quote = char;
-      current += char;
-    } else if (/[;&|\n]/.test(char)) {
-      parts.push(current);
-      current = "";
-    } else current += char;
-  }
-  parts.push(current);
-  return [...parts, ...inner]
-    .map((part) => part.replace(/^(?:\s*[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)+/, "").trim())
-    .filter(Boolean);
-}
-
-function closingParen(command: string, open: number): number {
-  let depth = 0;
-  for (let at = open; at < command.length; at++) {
-    if (command[at] === "(") depth++;
-    else if (command[at] === ")" && --depth === 0) return at;
-  }
-  return command.length;
-}
-
-const CHECKS = GUARDED_CLASSES.map(([cls, guard]) => ({
-  cls,
-  check: new RegExp(guard.check, "i"),
-  tools: guard.tools ? new RegExp(`^(?:${guard.tools})$`) : undefined,
-}));
-
-/** A call's Bash command, if it is one. */
-function commandOf(call: GuardCall): string | undefined {
-  return call.tool === "Bash" && typeof call.input.command === "string" ? call.input.command : undefined;
-}
-
-/** The subcommands of a call that a class's check matches, readable ones only (see the header). */
-function partsOf(call: GuardCall, check: RegExp): string[] {
-  const command = commandOf(call);
-  return command === undefined ? [] : subcommandsOf(command).filter((part) => !/^\$/.test(part) && check.test(part));
-}
-
-/** The classes a call is, most severe first. */
-export function callClasses(call: GuardCall): ActionClass[] {
-  return CHECKS.filter(({ check, tools }) => (tools ? tools.test(call.tool) : false) || partsOf(call, check).length)
-    .map(({ cls }) => cls)
-    .sort((a, b) => severityRank(a) - severityRank(b));
-}
 
 /** The history-rewrite actions of a call: `git push --force` force-pushes, `git rebase` rebases, … */
 function historyActions(call: GuardCall): Set<string> {
@@ -184,7 +110,6 @@ function applying(
   call: GuardCall,
   invalid: readonly Invalidation[],
   now: number,
-  cap = PER_CLASS,
 ): Applying[] {
   const actions = cls === "history-rewrite" ? historyActions(call) : undefined;
   const found: Applying[] = [];
@@ -204,7 +129,7 @@ function applying(
     if (rule) found.push({ row, text, rule });
   }
   const own = (row: IndexedRow) => (knownNoteSource(row) === "user" ? 0 : 1);
-  return found.sort((a, b) => own(a.row) - own(b.row) || (b.row.at ?? 0) - (a.row.at ?? 0)).slice(0, cap);
+  return found.sort((a, b) => own(a.row) - own(b.row) || (b.row.at ?? 0) - (a.row.at ?? 0)).slice(0, PER_CLASS);
 }
 
 /** Who does what, for a prohibition the user put on the agent alone (see the header). */
@@ -231,19 +156,6 @@ function ruleWords(found: Applying, now: number): string {
     .trim();
   const text = plain.length > RULE_CHARS ? `${plain.slice(0, RULE_CHARS - 1).trimEnd()}…` : plain;
   return `Rule you set${age ? ` (${age})` : ""}: ${text}`;
-}
-
-/** The live intents a call carries out, by `ruleIdentity`, every class of it: once it ran, they are done (D9). */
-export function intentsDoneBy(store: string, call: GuardCall, now = memoryNow()): string[] {
-  const classes = callClasses(call);
-  if (!classes.length) return [];
-  const rows = readRuleIndex(store).filter((row) => row.rules?.some((rule) => rule.q !== undefined));
-  const invalid = rows.length ? readInvalidations(store) : [];
-  return classes.flatMap((cls) =>
-    applying(rows, cls, call, invalid, now, Infinity).flatMap((item) =>
-      item.rule.q !== undefined ? [ruleIdentity(item.rule)] : [],
-    ),
-  );
 }
 
 /**

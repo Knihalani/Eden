@@ -14,9 +14,11 @@ import {
   CUE_WORDS,
   defaultObject,
   defaultObjectNames,
+  GUARD_IF_RULES,
+  GUARD_TOOL_MATCHERS,
   GUARDED_CLASSES,
 } from "./memory-classes";
-import { callClasses } from "./memory-guard";
+import { callClasses } from "./memory-guard-match";
 import { extractRules, ruleKey } from "./memory-policy";
 
 const keys = (text: string) => extractRules(text).map(ruleKey);
@@ -87,25 +89,39 @@ describe("the action-class lexicon", () => {
 
 describe("the PreToolUse map (A7 §5)", () => {
   const hooks = JSON.parse(readFileSync(join(import.meta.dir, "../plugins/eden-memory/hooks/hooks.json"), "utf8"));
-  const command = (cls: string, n: number) =>
-    `bun --no-install "\${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts" guard ${cls} ${n} 2>/dev/null || true`;
+  const command = (n: number) =>
+    `bun --no-install "\${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts" guard ${n} 2>/dev/null || true`;
 
-  test("hooks.json registers one handler per (class, pattern), its class an argument, and the tool matchers", () => {
-    const bash = GUARDED_CLASSES.flatMap(([cls, guard]) =>
-      guard.if.map((rule, n) => ({ type: "command", command: command(cls, n + 1), if: `Bash(${rule})`, timeout: 5 })),
-    );
-    const tools = GUARDED_CLASSES.flatMap(([cls, guard]) =>
-      guard.tools
-        ? [
-            {
-              matcher: guard.tools,
-              hooks: [{ type: "command", command: command(cls, guard.if.length + 1), timeout: 5 }],
-            },
-          ]
-        : [],
-    );
+  test("hooks.json registers one handler per command a pattern starts with, wildcard patterns as written", () => {
+    expect(GUARD_IF_RULES).toEqual([
+      "*migrate reset*",
+      "*db drop*",
+      "psql *",
+      "git *",
+      "npm *",
+      "pnpm *",
+      "yarn *",
+      "bun *",
+      "pip *",
+      "cargo *",
+      "*deploy*",
+      "vercel *",
+      "fly *",
+      "kubectl *",
+      "rm *",
+      "gh *",
+    ]);
+    const bash = GUARD_IF_RULES.map((rule, n) => ({
+      type: "command",
+      command: command(n + 1),
+      if: `Bash(${rule})`,
+      timeout: 5,
+    }));
+    const tools = GUARD_TOOL_MATCHERS.map((matcher, n) => ({
+      matcher,
+      hooks: [{ type: "command", command: command(GUARD_IF_RULES.length + n + 1), timeout: 5 }],
+    }));
     expect(hooks.hooks.PreToolUse).toEqual([{ matcher: "Bash", hooks: bash }, ...tools]);
-    expect(bash).toHaveLength(29);
   });
 
   /** A command each `if` rule spawns its handler for. */
@@ -141,11 +157,21 @@ describe("the PreToolUse map (A7 §5)", () => {
     "psql*DROP*": "psql -c 'DROP TABLE users'",
   };
 
-  test("the guard re-checks each rule's commands as its class", () => {
+  /** Whether a registered `if` rule starts a handler for a plain command (no `$()`, no variable command name). */
+  const spawns = (rule: string, sample: string) =>
+    new RegExp(
+      `^${rule
+        .split("*")
+        .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".*")}$`,
+    ).test(sample);
+
+  test("each class pattern's command starts a registered handler, and the guard re-checks it as its class", () => {
     const missed = GUARDED_CLASSES.flatMap(([cls, guard]) =>
-      guard.if.flatMap((rule) => {
-        const sample = SPAWNS[rule];
-        return sample && callClasses({ tool: "Bash", input: { command: sample } }).includes(cls) ? [] : [rule];
+      guard.if.flatMap((pattern) => {
+        const sample = SPAWNS[pattern];
+        const spawned = sample !== undefined && GUARD_IF_RULES.some((rule) => spawns(rule, sample));
+        return spawned && callClasses({ tool: "Bash", input: { command: sample } }).includes(cls) ? [] : [pattern];
       }),
     );
     expect(missed).toEqual([]);

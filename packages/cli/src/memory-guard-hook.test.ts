@@ -1,7 +1,7 @@
 /**
  * P2.3 at the hook (D19, A4 §5.4–5.5, A6 §2.5, X7): what each flag state prints and records, one answer per call
- * across parallel handlers, the class re-check, consent, the labels a later PostToolBatch reads, and the rules the
- * user's words or a completed action end.
+ * across its handlers, the class re-check, consent, the labels a later PostToolBatch reads, and the rules the user's
+ * words or an approved call end.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
@@ -59,21 +59,18 @@ function submit(prompt: string, session = "s-earlier"): void {
 let calls = 0;
 type Said = { context?: string; decision?: string; reason?: string } | null;
 
-/** One PreToolUse handler of `cls` for `command`; `id` names the call, a fresh one by default. */
-function guard(cls: string, command: string, extra: Record<string, unknown> = {}): Said {
-  const out = guardHookResponse(
-    {
-      session_id: "s-now",
-      cwd: project,
-      hook_event_name: "PreToolUse",
-      tool_name: "Bash",
-      tool_input: { command },
-      tool_use_id: `toolu_${++calls}`,
-      permission_mode: "default",
-      ...extra,
-    },
-    cls,
-  );
+/** One PreToolUse handler for `command`; `id` names the call, a fresh one by default. */
+function guard(command: string, extra: Record<string, unknown> = {}): Said {
+  const out = guardHookResponse({
+    session_id: "s-now",
+    cwd: project,
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command },
+    tool_use_id: `toolu_${++calls}`,
+    permission_mode: "default",
+    ...extra,
+  });
   const said = out?.hookSpecificOutput as Record<string, string> | undefined;
   return said
     ? { context: said.additionalContext, decision: said.permissionDecision, reason: said.permissionDecisionReason }
@@ -105,7 +102,7 @@ const windowFile = (name: string) => join(dir, "memory", "windows", "s-now", nam
 describe("flags (X7)", () => {
   test("default: guard.context shadow and guard.ask off print nothing, and record what was due", () => {
     submit("Don't merge PRs yourself.");
-    expect(guard("integrate", "gh pr merge 1")).toBeNull();
+    expect(guard("gh pr merge 1")).toBeNull();
     expect(guardEvents().at(-1)).toMatchObject({ guard_class: "integrate", would_ask: true, mode: "shadow" });
     expect(readFileSync(windowFile("delivery.shadow.log"), "utf8")).toContain('"k":"deliver"');
     expect(existsSync(windowFile("delivery.log"))).toBe(false);
@@ -114,14 +111,14 @@ describe("flags (X7)", () => {
   test("guard.context on tells only; guard.ask on asks with the context; context off asks alone", () => {
     submit("Don't merge PRs yourself.");
     flags({ "guard.context": "on" });
-    const told = guard("integrate", "gh pr merge 1");
+    const told = guard("gh pr merge 1");
     expect(told?.decision).toBeUndefined();
     expect(told?.context).toContain("pull requests are merged by you, not by the agent");
     expect(readFileSync(windowFile("delivery.log"), "utf8")).toContain('"k":"deliver"');
     flags({ "guard.context": "shadow", "guard.ask": "on" });
-    expect(guard("integrate", "gh pr merge 1")).toMatchObject({ decision: "ask", context: expect.any(String) });
+    expect(guard("gh pr merge 1")).toMatchObject({ decision: "ask", context: expect.any(String) });
     flags({ "guard.context": "off", "guard.ask": "on" });
-    expect(guard("integrate", "gh pr merge 1")).toEqual({
+    expect(guard("gh pr merge 1")).toEqual({
       decision: "ask",
       context: undefined,
       reason: expect.any(String),
@@ -131,7 +128,7 @@ describe("flags (X7)", () => {
   test("both off: nothing printed, no guard.log, no ledger", () => {
     submit("Don't merge PRs yourself.");
     flags({ "guard.context": "off", "guard.ask": "off" });
-    expect(guard("integrate", "gh pr merge 1")).toBeNull();
+    expect(guard("gh pr merge 1")).toBeNull();
     expect(existsSync(windowFile("guard.log"))).toBe(false);
     expect(existsSync(windowFile("delivery.shadow.log"))).toBe(false);
   });
@@ -140,28 +137,29 @@ describe("flags (X7)", () => {
     submit("Don't merge PRs yourself.");
     flags({ "guard.context": "on", "guard.ask": "on" });
     process.env.EDEN_POLICY_GUARD = "off";
-    expect(guard("integrate", "gh pr merge 1")?.decision).toBeUndefined();
+    expect(guard("gh pr merge 1")?.decision).toBeUndefined();
   });
 });
 
 describe("one answer per call", () => {
-  test("parallel handlers of one call: the first answers for the most severe class, the rest stay silent", () => {
+  test("handlers of one call: the first answers for the most severe class, the rest stay silent", () => {
     submit("Never force-push.");
     submit("Don't push without asking me.");
     flags({ "guard.context": "on", "guard.ask": "on" });
     const call = { tool_use_id: "toolu_same" };
-    const answers = ["push-upstream", "history-rewrite", "history-rewrite"].map((cls) =>
-      guard(cls, "git push --force origin feature", call),
-    );
+    // `git push --force && gh pr view 1` starts the `git *` and the `gh *` handlers.
+    const answers = [1, 2, 3].map(() => guard("git push --force origin feature && gh pr view 1", call));
     expect(answers.filter(Boolean)).toHaveLength(1);
     expect(answers[0]?.reason).toBe("Eden: rule you set (2 minutes ago): Never force-push");
     expect(guardEvents().filter((event) => event.guard_dup)).toHaveLength(2);
   });
 
-  test("a handler whose class the call is not answers nothing (the re-check)", () => {
+  test("a call no class is (the re-check) answers nothing and logs nothing", () => {
     submit("Don't merge PRs yourself.");
     flags({ "guard.context": "on", "guard.ask": "on" });
-    expect(guard("delete", "gh pr merge 1")).toBeNull();
+    for (const command of ["gh pr view 1", "git merge-base main HEAD", "echo $HOME", "gh pr merge --help"])
+      expect(guard(command)).toBeNull();
+    expect(guardEvents()).toEqual([]);
   });
 });
 
@@ -171,7 +169,7 @@ describe("consent", () => {
     flags({ "guard.context": "on", "guard.ask": "on" });
     for (const consent of ["readonly", "off"]) {
       process.env.EDEN_MEMORY = consent;
-      expect(guard("integrate", "gh pr merge 1")).toBeNull();
+      expect(guard("gh pr merge 1")).toBeNull();
     }
     expect(existsSync(windowFile("guard.log"))).toBe(false);
   });
@@ -180,7 +178,7 @@ describe("consent", () => {
     rmSync(join(dir, "memory"), { recursive: true, force: true });
     writeFileSync(join(dir, "memory"), "not a directory\n");
     flags({ "guard.context": "on", "guard.ask": "on" });
-    expect(guard("integrate", "gh pr merge 1")).toBeNull();
+    expect(guard("gh pr merge 1")).toBeNull();
   });
 });
 
@@ -188,13 +186,13 @@ describe("after the call (A4 §5.5, A6 §2.5)", () => {
   test("the next PostToolBatch labels an ask declined or approved, once", () => {
     submit("Don't merge PRs yourself.");
     flags({ "guard.context": "on", "guard.ask": "on" });
-    guard("integrate", "gh pr merge 1", { tool_use_id: "toolu_no" });
-    guard("integrate", "gh pr merge 2", { tool_use_id: "toolu_yes" });
+    guard("gh pr merge 1", { tool_use_id: "toolu_no" });
+    guard("gh pr merge 2", { tool_use_id: "toolu_yes" });
     batch("toolu_no", "gh pr merge 1", DECLINED);
     batch("toolu_yes", "gh pr merge 2", "Merged pull request #2");
     batch("toolu_yes", "gh pr merge 2", "Merged pull request #2");
     // `claude -p` has no one to ask: Claude Code 2.1.294 denied the call with the ask's reason as its error.
-    guard("integrate", "gh pr merge 3", { tool_use_id: "toolu_headless" });
+    guard("gh pr merge 3", { tool_use_id: "toolu_headless" });
     batch(
       "toolu_headless",
       "gh pr merge 3",
@@ -211,7 +209,7 @@ describe("after the call (A4 §5.5, A6 §2.5)", () => {
   test("an ask no PostToolBatch saw is labelled at sleep, from the transcript's tool result", () => {
     submit("Don't merge PRs yourself.");
     flags({ "guard.context": "on", "guard.ask": "on" });
-    guard("integrate", "gh pr merge 1", { tool_use_id: "toolu_interrupted" });
+    guard("gh pr merge 1", { tool_use_id: "toolu_interrupted" });
     const transcript = join(dir, "t.jsonl");
     const result = { type: "tool_result", tool_use_id: "toolu_interrupted", content: DECLINED, is_error: true };
     writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { role: "user", content: [result] } })}\n`);
@@ -225,17 +223,17 @@ describe("after the call (A4 §5.5, A6 §2.5)", () => {
   test("an intent ends once the call carrying out its action has run", () => {
     submit("Don't open the PR yet.");
     flags({ "guard.context": "on", "guard.ask": "on" });
-    expect(guard("review", "gh pr create --fill", { tool_use_id: "toolu_pr" })?.decision).toBe("ask");
+    expect(guard("gh pr create --fill", { tool_use_id: "toolu_pr" })?.decision).toBe("ask");
     batch("toolu_pr", "gh pr create --fill", "https://github.com/o/r/pull/7");
-    expect(guard("review", "gh pr create --fill")).toBeNull();
+    expect(guard("gh pr create --fill")).toBeNull();
   });
 
   test("a declined call carries nothing out: the intent stays", () => {
     submit("Don't open the PR yet.");
     flags({ "guard.context": "on", "guard.ask": "on" });
-    guard("review", "gh pr create --fill", { tool_use_id: "toolu_pr" });
+    guard("gh pr create --fill", { tool_use_id: "toolu_pr" });
     batch("toolu_pr", "gh pr create --fill", DECLINED);
-    expect(guard("review", "gh pr create --fill")?.decision).toBe("ask");
+    expect(guard("gh pr create --fill")?.decision).toBe("ask");
   });
 });
 
@@ -244,16 +242,16 @@ describe("what the user's words end", () => {
     submit("Don't open the PR yet.");
     flags({ "guard.context": "on", "guard.ask": "on" });
     submit("Open it now.");
-    expect(guard("review", "gh pr create --fill")).toBeNull();
+    expect(guard("gh pr create --fill")).toBeNull();
   });
 
   test('"that rule is gone" ends the rules the guard last showed in the window, a narrowed one included', () => {
     submit("Don't push without asking me.");
     submit("Never merge PRs yourself.");
     flags({ "guard.context": "on", "guard.ask": "on" });
-    expect(guard("push-upstream", "git push origin feature")?.decision).toBe("ask");
+    expect(guard("git push origin feature")?.decision).toBe("ask");
     submit("ok, that rule is gone", "s-now");
-    expect(guard("push-upstream", "git push origin feature")).toBeNull();
-    expect(guard("integrate", "gh pr merge 1")?.decision).toBe("ask");
+    expect(guard("git push origin feature")).toBeNull();
+    expect(guard("gh pr merge 1")?.decision).toBe("ask");
   });
 });
