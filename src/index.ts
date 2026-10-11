@@ -1314,7 +1314,7 @@ export class AgentMemory {
           const lastTypedHere = lastTyped.get(restatementKey(text) ?? "") === `${i}:${j}`;
           const learnAgain = !opts.reread && this.restated(text, lastTypedHere);
           if (this.seenLower.has(text.toLowerCase()) && !learnAgain) {
-            if (!it.untyped) this.noteRuleSaidAgain(text);
+            if (!it.untyped && !opts.reread) this.noteRuleSaidAgain(text, it.origin.srcUuid);
             continue;
           }
           // A4 §3.0: text the user did not type is an episode, never a fact, a rule or a pin.
@@ -1396,15 +1396,16 @@ export class AgentMemory {
    */
   /**
    * D9's recurrence of a rule typed again word for word, which the store keeps as one row: each row stating it records
-   * the session that said it again (`eps`), so sleep counts both sessions (`memory-pins.ts`).
+   * the session that said it again (`eps`), so sleep counts both sessions (`memory-pins.ts`). A transcript line read
+   * again (a re-read, or a fork's copy of its parent's line, which keeps its uuid) is no new statement.
    */
-  private noteRuleSaidAgain(text: string): void {
+  private noteRuleSaidAgain(text: string, srcUuid: string | undefined): void {
     const ep = this.episode;
     const lower = text.toLowerCase();
     if (!ep) return;
     for (const { rec: row } of this.compiled) {
       if (!row.rules?.length || row.text.toLowerCase() !== lower || !row.ep || row.ep === ep) continue;
-      if (row.eps?.includes(ep) || superseded(row)) continue;
+      if (row.eps?.includes(ep) || superseded(row) || (srcUuid && row.srcUuid === srcUuid)) continue;
       row.eps = [...(row.eps ?? []), ep].slice(-RECURRING_SESSIONS);
       this.changed.add(row.id);
       this.flush(true);
