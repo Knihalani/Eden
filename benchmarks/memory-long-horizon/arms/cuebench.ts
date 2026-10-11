@@ -9,7 +9,10 @@
  *   eden memory remember --jsonl -   (stdin: {"text", "scope"?, "kind"?, "cwd"?} per line)   →   {"remembered": N}
  *
  * A row is a statement the user asked Eden to keep (src=user), in `cwd`'s repo, with `scope` and `kind` as hints.
- * Until a slice provides it, nothing is planted and the arms' checks fail with the reason.
+ * Until a slice provides it, nothing is planted and the arms' checks fail with the reason. P2.2 provides it: each
+ * line is one row in the user's words, a rule row (D9 keys) when it states a rule, else of `kind` (a fact without
+ * one); `scope` is read and ignored until rows carry a scope (the catalog is P3.1's); a line with no `text` is not
+ * counted, and `remembered` is 0 when memory is off.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
