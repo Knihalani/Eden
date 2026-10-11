@@ -1,0 +1,66 @@
+{
+  "about": "A7 §5's action-class lexicon (D18), D18's stash and D9 fix 4's protected-path, in R8's order of specificity (memory-classes.ts). words: the class's words, one case-insensitive regex; a word that names its object captures it as group 1. cue: the words a cue fires the class by, where they differ. verbs: what a revocation or a compaction summary names the class by. object: the class's default object (D9 fix 3), then its other names.",
+  "classes": {
+    "destructive-db": {
+      "words": "\\b(?:drop|truncate|reset|wipe)\\b([^,;]*?\\b(?:db|database|table|schema)s?)\\b|\\b(?:db|database|table|schema)s?\\b[^,;.]*?\\b(?:drop|truncate|reset|wipe)\\b|\\bmigrate reset\\b",
+      "verbs": ["truncate", "reset", "wipe"]
+    },
+    "history-rewrite": {
+      "words": "\\b(?:squash\\w*|rebas\\w*|amend\\w*|force[- ]?push\\w*)\\b|\\bpush(?:es|ed|ing)?\\s+(?:--force|-f)\\b",
+      "verbs": ["squash", "rebase", "amend", "force-push"],
+      "object": ["branch"]
+    },
+    "stash": {
+      "words": "\\bstash\\w*\\b"
+    },
+    "generated": {
+      "words": "\\bdist\\/|\\.gen\\.ts\\b|\\bgenerated\\b"
+    },
+    "billing": {
+      "words": "\\b(?:billing|invoic\\w*|payments?|stripe)\\b"
+    },
+    "dependency": {
+      "words": "\\b(?:add(?:s|ed|ing)?\\s+(?:(?:a|an|any|the|new|another|some)\\s+)*(?:(?!(?:to|for|in|into|from|with|on|of|at)\\b)[\\w-]+\\s+){0,3}?(?:deps?|dependenc(?:y|ies)|packages?|librar(?:y|ies))|install\\w*|npm i|pnpm add|bump\\w*|upgrad\\w*)\\b",
+      "verbs": ["install", "bump", "upgrade"],
+      "object": ["package"]
+    },
+    "deploy": {
+      "words": "\\b(?:deploy\\w*|releas\\w*|prod|production|publish\\w*|roll(?:ing)? (?:it |this |that )?out)\\b",
+      "verbs": ["deploy", "release", "publish"],
+      "object": ["prod", "production"]
+    },
+    "delete": {
+      "words": "\\b(?:delet\\w*|remov\\w*|rm|clean up|prun\\w*|drop(?:s|ped|ping)?)\\b",
+      "verbs": ["delete", "remove", "prune", "drop"]
+    },
+    "push-upstream": {
+      "words": "\\b(?:push(?:es|ed|ing)?|upload the branch)\\b",
+      "verbs": ["push"],
+      "object": ["branch"]
+    },
+    "integrate": {
+      "words": "\\b(?:merg(?:e|es|ed|ing)|land(?:s|ed|ing)?(?!\\s+page)|ship(?:s|ped|ping)?|get it in|close (?:it |this |that )?out|finish up|wrap (?:it |this |that )?up)\\b",
+      "verbs": ["merge", "land", "ship"],
+      "object": ["pr", "pull request"]
+    },
+    "review": {
+      "words": "\\b(?:prs?|pull requests?|review(?:s|ed|ing)?|put up)\\b",
+      "object": ["pr", "pull request"]
+    },
+    "commit": {
+      "words": "\\b(?:commit(?:s|ted|ting)?|sync)\\b",
+      "verbs": ["commit"]
+    },
+    "branch": {
+      "words": "\\b(?:branch(?:es)?|main|master|checkout)\\b",
+      "cue": "\\b(?:branch(?:es)?|checkout)\\b|\\b(?:to|on|onto|into|from|off|against|of)\\s+(?:main|master)\\b|\\b(?:main|master)\\s+branch\\b",
+      "object": ["branch"]
+    },
+    "complete": {
+      "words": "\\b(?:done|finished|good to go|ready|all set)\\b"
+    },
+    "protected-path": {
+      "words": "(?<![\\w/])\\.env(?:\\.(?!example\\b|sample\\b|template\\b|dist\\b)\\w+)?(?![\\w-]|\\.\\w)|\\binfra\\/|\\b(?:pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock|bun\\.lockb?|cargo\\.lock|poetry\\.lock|gemfile\\.lock|composer\\.lock|lockfiles?)\\b"
+    }
+  }
+}
