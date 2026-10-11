@@ -12,6 +12,7 @@ import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
+import type { RuleRef } from "./memory-policy";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { withoutInstructions, type TextSource } from "./memory-authority";
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
@@ -144,6 +145,8 @@ export type MemoryRecord = {
   srcUuid?: string;
   /** The `promptId` of the turn the row was said in: a rewind that abandons the turn takes the row back (A4 §3.3). */
   promptId?: string;
+  /** D9: the rules the row states, by key. */
+  rules?: RuleRef[];
 };
 
 /** Whether a newer row has superseded this one (A4 §3.1). */
