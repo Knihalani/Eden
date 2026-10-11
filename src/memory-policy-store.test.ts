@@ -181,6 +181,14 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     expect(validText("Always delete the thing7 files. Never push to main.", 1, many)).toBe("Never push to main.");
   });
 
+  test("validText drops an intent's clause 7 days after the text was said (A4 §5.1 step 5)", () => {
+    const mixed = "Never force-push, and don't open the PR yet.";
+    process.env.EDEN_NOW = String(T0 + INTENT_TTL_MS - 1);
+    expect(validText(mixed, T0, [])).toBe(mixed);
+    process.env.EDEN_NOW = String(T0 + INTENT_TTL_MS);
+    expect(validText(mixed, T0, [])).toBe("Never force-push.");
+  });
+
   test("text the user did not type supersedes nothing", () => {
     const mem = store();
     mem.observe([typed("Always squash when merging.")]);

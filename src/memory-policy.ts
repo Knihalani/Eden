@@ -105,7 +105,7 @@ const CLASS_WORDS: readonly (readonly [ActionClass, RegExp])[] = [
   ["complete", /\b(?:done|finished|good to go|ready|all set)\b/i],
   [
     "protected-path",
-    /(?<![\w/])\.env(?![.\w-])|\binfra\/|\b(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|gemfile\.lock|composer\.lock|lockfiles?)\b/i,
+    /(?<![\w/])\.env(?:\.(?!example\b|sample\b|template\b|dist\b)\w+)?(?![\w-]|\.\w)|\binfra\/|\b(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|gemfile\.lock|composer\.lock|lockfiles?)\b/i,
   ],
 ];
 
@@ -373,20 +373,25 @@ function qualifierOf(said: string): Qualifier {
 const TIME =
   /^\s*(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|the weekend|next \w+|this \w+|end of|\d)/i;
 const EVENT = /^\s*(?:(?:the|this|that|our|my|your|a|an|next)\s+\w+|launch|lunch|standup|release|the demo|qa)\b/i;
-const VERB_MARK = /\b(?:is|are|was|were|be|been|being|has|have|had|gets|got|goes|went|does|did)\b/i;
+const VERB_MARK =
+  /\b(?:is|are|was|were|be|been|being|has|have|had|gets|got|goes|went|does|did|go|get|run|pass|fail|finish|land|ship|merge|end|start|come|sign|say|look|turn|clear|wrap)\b/i;
+
+const DETERMINER = /^(?:the|this|that|our|my|your|a|an|next)$/i;
 
 /**
  * Fix 1: whether `before`/`after` is followed by a time or an event ("before friday", "after this commit", "after
- * launch"), which makes an intent, rather than a precondition ("before you push", "before merging", "after CI passes",
- * "before commit"), which keeps a standing policy. An event is a noun phrase with no verb in it: a verb ("is", or an
- * `-s`/`-ed` word after the event's noun, "the build finishes") makes it a precondition.
+ * launch", "before the design review"), which makes an intent, rather than a precondition ("before you push", "before
+ * merging", "after CI passes", "before commit"), which keeps a standing policy. An event is a noun phrase with no verb
+ * after its noun: a verb ("is", "go", or an `-s`/`-ed` word: "the build finishes", "the checks go green") makes it a
+ * precondition.
  */
 function eventFollows(rest: string): boolean {
-  const phrase = rest.split(/[,;.!?]/)[0]!;
+  const phrase = rest.split(/[,;.!?]/)[0]!.trim();
   if (TIME.test(phrase)) return true;
-  if (!EVENT.test(phrase) || VERB_MARK.test(phrase)) return false;
-  const words = phrase.trim().split(/\s+/);
-  return !words.slice(2).some((word) => /^[a-z]+(?:s|ed)$/i.test(word) && !/^(?:on|in|at)$/i.test(word));
+  if (!EVENT.test(phrase)) return false;
+  const words = phrase.split(/\s+/);
+  const after = words.slice(DETERMINER.test(words[0]!) ? 2 : 1);
+  return !after.some((word) => VERB_MARK.test(word) || /^[a-z]+(?:s|ed)$/i.test(word));
 }
 
 /** The temporal qualifier a clause states, if any (D9, fix 1). */
@@ -459,19 +464,56 @@ export function rulesIn(text: string): Rule[] {
   const rules: Rule[] = [];
   for (const sentence of sentencesOf(String(text ?? ""))) {
     if (isQuestion(sentence)) continue;
-    const clauses = clausesOf(sentence.replace(TAG_QUESTION, ""));
-    const bare = clauses.map(bareQualifier);
-    clauses.forEach((clause, at) => {
-      const qualifier = qualifierIn(clause) ?? bare[at - 1] ?? bare[at + 1];
-      for (const hit of triggersIn(clause)) {
-        const rule = ruleAt(clause, hit, qualifier);
-        if (!rule) continue;
-        if (!rules.some((known) => ruleKey(known) === ruleKey(rule) && known.kind === rule.kind)) rules.push(rule);
-        break;
-      }
-    });
+    for (const { rule } of readClauses(sentence))
+      if (rule && !rules.some((known) => ruleKey(known) === ruleKey(rule) && known.kind === rule.kind))
+        rules.push(rule);
   }
   return rules;
+}
+
+/** A clause as `rulesIn` reads it: the rule it states, if any, and whether it is nothing but a qualifier. */
+interface ClauseReading {
+  clause: string;
+  rule?: Rule;
+  bare: boolean;
+}
+
+/** A sentence's clauses, each with the rule its first trigger that names a class states. */
+function readClauses(sentence: string): ClauseReading[] {
+  const clauses = clausesOf(sentence.replace(TAG_QUESTION, ""));
+  const bare = clauses.map(bareQualifier);
+  return clauses.map((clause, at) => {
+    const qualifier = qualifierIn(clause) ?? bare[at - 1] ?? bare[at + 1];
+    for (const hit of triggersIn(clause)) {
+      const rule = ruleAt(clause, hit, qualifier);
+      if (rule) return { clause, rule, bare: false };
+    }
+    return { clause, bare: !!bare[at] };
+  });
+}
+
+/**
+ * A text without its intents (D9: an intent expires after 7 days): each clause that states one goes, with a bare
+ * qualifier beside it ("not yet, don't commit"); the other clauses stay ("Never force-push, and don't open the PR yet"
+ * keeps "Never force-push."). A text stating no intent is returned as it is.
+ */
+export function withoutIntents(text: string): string {
+  let dropped = false;
+  const kept = sentencesOf(String(text ?? "")).flatMap((sentence) => {
+    if (isQuestion(sentence)) return [sentence];
+    const readings = readClauses(sentence);
+    const intent = (at: number) => readings[at]?.rule?.kind === "intent";
+    const left = readings.filter(({ bare }, at) => !intent(at) && !(bare && (intent(at - 1) || intent(at + 1))));
+    if (left.length === readings.length) return [sentence];
+    dropped = true;
+    if (!left.length) return [];
+    const joined = left
+      .map(({ clause }) => clause.trim())
+      .join(", ")
+      .replace(/^(?:and|but|so|then|or)\s+/i, "");
+    return [/[.!?;]$/.test(joined) ? joined : `${joined}${/[.!?;]$/.test(sentence) ? sentence.at(-1) : ""}`];
+  });
+  return dropped ? kept.join(" ") : text;
 }
 
 /** The rules of a whole utterance: pasted spans, fenced code and quotes stripped first (D12, A4 §3.0). */

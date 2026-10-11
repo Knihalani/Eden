@@ -1,6 +1,6 @@
 /**
- * P2.1 review round 1: the reviewer's probes, kept as regression tests. Each states the behaviour D9 / A4 §3.1 / L8
- * asks for (findings 2–6, 8, 9, 11, 13).
+ * P2.1 review rounds 1 and 2: the reviewer's probes, kept as regression tests. Each states the behaviour D9 / A4 §3.1
+ * / L8 asks for (round 1: findings 2–6, 8, 9, 11, 13; round 2: findings 1–3, and a restatement).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
@@ -111,5 +111,45 @@ describe("P2.1 review probes", () => {
   test("A4 §3.1: a revocation reaches every class the extractor keys (review, protected-path)", () => {
     expect(counteredKeys("You can open the PR now.")).toContain("review|neg|*");
     expect(counteredKeys("You can edit the .env file now.")).toContain("protected-path|neg|.env");
+  });
+});
+
+describe("P2.1 review probes, round 2", () => {
+  const stop = (session: string) => {
+    memoryHookResponse(
+      { session_id: session, cwd: project, hook_event_name: "Stop", last_assistant_message: "OK." },
+      "stop-sleep",
+    );
+    process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 60_000);
+  };
+
+  test("D9: the intent clause of a mixed row is not briefed after 7 days; its policy is", () => {
+    submit("Never force-push, and don't open the PR yet.");
+    stop("s1");
+    expect(start("s-next")).toContain("open the PR yet");
+    process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 8 * 86_400_000);
+    const packet = start("s-later");
+    expect(packet).toContain("force-push");
+    expect(packet).not.toContain("open the PR yet");
+  });
+
+  test("fix 4: a secrets variant (.env.local, .env.production) is protected; only example/sample/template are not", () => {
+    expect(keys("Never edit .env.local.")).toEqual(["policy:protected-path|neg|.env.local"]);
+    expect(keys("Never commit .env.production.")).toEqual(["policy:commit|neg|.env.production"]);
+    expect(keys("Don't touch .env.example.")).toEqual([]);
+  });
+
+  test("fix 1: a plural subject with a base-form verb is a precondition", () => {
+    expect(rulesIn("Always merge after the checks go green.").map((r) => r.kind)).toEqual(["policy"]);
+    expect(rulesIn("Don't deploy before the migrations run.").map((r) => r.kind)).toEqual(["policy"]);
+    expect(rulesIn("Don't merge before the design review.").map((r) => r.kind)).toEqual(["intent"]);
+  });
+
+  test("a rule typed again after it was overturned is learned again", () => {
+    submit("Always squash when merging.");
+    submit("Never squash.");
+    submit("Always squash when merging.");
+    const squash = rows().filter((r) => r.text.startsWith("Always squash when merging"));
+    expect(squash.some((r) => !superseded(r))).toBe(true);
   });
 });
