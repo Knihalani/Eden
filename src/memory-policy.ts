@@ -5,27 +5,34 @@
  * - **A rule** is an imperative trigger (`don't`, `never`, `always`, `without asking`, `ask before`, `only … after`;
  *   fix 2's `hold off`, `no <verb>ing`, `leave … unmerged / as a draft / alone`, `wait before/for`, `without checking
  *   with me`) followed by a word of an action class (A7 §5's lexicon, D18's `stash`, fix 4's `protected-path`). The
- *   class is the one whose word comes first after the trigger; a tie (`push --force`, `drop tables`) goes to the more
- *   specific class, in R8's order. Where nothing after the trigger names a class, a leading subordinate clause may
- *   ("before you merge, wait for my ok").
- * - **Not a rule** (fix 2): `don't forget to`, `never mind`, a question, and a descriptive clause, whose trigger
- *   follows a subject other than "you" ("we always forget …", "the deploy always breaks"). "You never merge" is a
- *   rule.
+ *   class is the one whose word comes first after the trigger, before any `when`/`if`/`unless`/`because` clause; a tie
+ *   (`push --force`, `drop tables`) goes to the more specific class, in R8's order. Where nothing after the trigger
+ *   names a class, a leading subordinate clause may ("before you merge, wait for my ok").
+ * - **Not a rule** (fix 2): `don't forget to`, `never mind`, `don't worry / bother / hesitate`, a question (a tag such
+ *   as ", ok?" aside), and a descriptive clause, whose trigger follows a subject other than "you" ("we always forget
+ *   …", "the deploy always breaks", "the API never returns …"). "You never merge" and "I want you to never push" are
+ *   rules.
  * - **Polarity:** `always` is positive; every other trigger negative. `never` and `always` are explicit: a policy so
  *   said is a pin (D9).
- * - **Intent:** a sentence with a temporal qualifier (`yet`, `for now`, `until`, `this time`, `in this PR`, `today`,
- *   `this week`, `before`/`after`) states intents. Fix 1: `before`/`after` qualify only when a time or event follows
- *   ("before friday", "after this commit"); a precondition clause ("before you …", "before merging", "after CI is
- *   green") keeps a standing policy, and a trigger's own `before`/`after` ("ask before") is no qualifier.
+ * - **Intent:** a clause with a temporal qualifier (`yet`, `for now`, `until`, `this time`, `in this PR`, `today`,
+ *   `this week`, `before`/`after`) states an intent; a clause that is nothing but one ("not yet, don't commit")
+ *   qualifies the clauses beside it. Fix 1: `before`/`after` qualify only when a time ("before friday") or an event
+ *   follows ("after this commit", "after launch"); a precondition ("before you …", "before merging", "after CI
+ *   passes", "before commit") keeps a standing policy, and a trigger's own `before`/`after` ("ask before") is none.
  * - **Object:** the noun phrase after the class word (after a leading preposition: "push to main"), singular,
  *   synonyms named one way (`pr`, `main`, `prod`, `db`, `package`), its words joined by `-`. Fix 3: `*` when there is
  *   none ("don't merge it yourself") or it is the class's default object alone (integrate and review: `pr`;
  *   push-upstream, history-rewrite and branch: `branch`; dependency: `package`; deploy: `prod`). Named with other
  *   words, the default object is dropped ("the main branch" is `main`). A protected path is its own object (`.env`,
  *   `infra`, `pnpm-lock.yaml`).
+ * - **Overturning** (A4 §3.1, L8): a rule is stated *outright* when its class word is its own verb (not inside "run
+ *   the tests before you push") and nothing narrows it (no precondition, no `when`/`if`/`without`/`unless` clause, no
+ *   qualifying phrase cut from its object: "merge PRs from dependabot"). Only a policy stated outright overturns the
+ *   opposite rule on its key, and it overturns a prohibition only one stated outright: "never squash" overturns
+ *   "always squash when merging", while "you can merge now" leaves "never merge PRs without a review" standing.
  */
 import { stripPastes } from "./memory-authority";
-import { contentWords } from "./memory-transcript";
+import { FUNCTION_WORDS } from "./memory-transcript";
 
 export type ActionClass =
   | "integrate"
@@ -57,12 +64,15 @@ export interface Rule {
   qualifier?: Qualifier;
   /** Said with `never` or `always`: a policy so said is a pin (D9). */
   explicit: boolean;
+  /** It states its action outright, unnarrowed (see the header). */
+  outright: boolean;
 }
 
-/** A rule as a row keeps it: its key, and the qualifier that makes it an intent. */
+/** A rule as a row keeps it: its key, the qualifier that makes it an intent, and `c` when it is narrowed. */
 export interface RuleRef {
   k: string;
   q?: Qualifier;
+  c?: true;
 }
 
 /** D9: an intent expires after 7 days, if its action has not completed first. */
@@ -70,10 +80,10 @@ export const INTENT_TTL_MS = 7 * 86_400_000;
 
 /**
  * A7 §5's action classes and their words, in R8's order of specificity, which breaks a tie between two classes whose
- * words start at one place. A class word that names its object (`drop tables`) captures it as `o`.
+ * words start at one place. A class word that names its object (`drop the test table`) captures it as group 1.
  */
 const CLASS_WORDS: readonly (readonly [ActionClass, RegExp])[] = [
-  ["destructive-db", /\b(?:drop|truncate|reset|wipe)\b[^,;]*?\b(?<o>db|database|table|schema)s?\b|\bmigrate reset\b/i],
+  ["destructive-db", /\b(?:drop|truncate|reset|wipe)\b([^,;]*?\b(?:db|database|table|schema)s?)\b|\bmigrate reset\b/i],
   ["history-rewrite", /\b(?:squash\w*|rebas\w*|amend\w*|force[- ]?push\w*)\b|\bpush(?:es|ed|ing)?\s+(?:--force|-f)\b/i],
   ["stash", /\bstash\w*\b/i],
   ["generated", /\bdist\/|\.gen\.ts\b|\bgenerated\b/i],
@@ -95,7 +105,7 @@ const CLASS_WORDS: readonly (readonly [ActionClass, RegExp])[] = [
   ["complete", /\b(?:done|finished|good to go|ready|all set)\b/i],
   [
     "protected-path",
-    /(?<![\w/])\.env\b|\binfra\/|\b(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|gemfile\.lock|composer\.lock|lockfiles?)\b/i,
+    /(?<![\w/])\.env(?![.\w-])|\binfra\/|\b(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|gemfile\.lock|composer\.lock|lockfiles?)\b/i,
   ],
 ];
 
@@ -128,7 +138,7 @@ interface Trigger {
 const TRIGGERS: readonly Trigger[] = [
   { pattern: /\bnever\b(?!\s+(?:mind|forget)\b)/gi, polarity: "neg", explicit: true },
   { pattern: /\balways\b/gi, polarity: "pos", explicit: true },
-  { pattern: /\b(?:don['’]?t|do not)\b(?!\s+forget\b)/gi, polarity: "neg" },
+  { pattern: /\b(?:don['’]?t|do not)\b(?!\s+(?:forget|worry|bother|hesitate|mind)\b)/gi, polarity: "neg" },
   { pattern: /\bwithout (?:asking|checking with me)\b/gi, polarity: "neg", around: true },
   { pattern: /\bask (?:me )?before\b/gi, polarity: "neg" },
   { pattern: /\bonly\b(?=(?:\s+[\w'-]+){1,3}?\s+(?:after|once)\b)/gi, polarity: "neg" },
@@ -150,8 +160,8 @@ export function withoutExcludedWording(text: string): string {
   return String(text ?? "").replace(NOT_A_RULE, " ");
 }
 
-/** A trigger's own `before` or `after`, which is no qualifier (fix 1). */
-const OWNED_QUALIFIER = /\b(?:ask (?:me )?|wait )(?<q>before)\b|\bonly\b(?:\s+[\w'-]+){1,3}?\s+(?<q2>after)\b/dgi;
+/** A trigger's own `before` or `after` ("ask before", "only merge after"), which is no qualifier (fix 1). */
+const OWNED_QUALIFIER = /\b(?:ask (?:me )?|wait )before\b|\bonly\b(?:\s+[\w'-]+){1,3}?\s+after\b/gi;
 const QUALIFIER = /\b(?:yet|for now|until|before|after|this time|in this (?:pr|pull request)|today|this week)\b/gi;
 const QUALIFIER_NAMES: Record<string, Qualifier> = {
   yet: "yet",
@@ -170,13 +180,24 @@ const QUESTION = new RegExp(
     String.raw`(?:it|you|i|we|they|he|she|there|the|this|that|these|those)\b)`,
   "i",
 );
+/** A tag that asks only for assent ("…, ok?"): the sentence before it still instructs. */
+const TAG_QUESTION = /,\s*(?:ok|okay|right|yeah|alright|got it|understood|clear)\s*\?+\s*$/i;
 /** Words that open a sentence or clause without being its subject. */
 const DISCOURSE =
   /^(?:(?:please|pls|plz|just|also|and|so|but|then|ok|okay|now|again|seriously|btw|fyi|remember|note|hey|from now on|going forward|rule|reminder)\b[\s,:!.-]*)+/i;
 /** A subject other than "you": a clause opening with one describes, it does not instruct (fix 2). */
 const SUBJECT =
   /^(?:i|we|it|they|he|she|this|that|these|those|there|the|a|an|my|our|their|his|her|its|everyone|everybody|someone|somebody|nobody|everything|something|nothing)\b/i;
+/** A subject right before the trigger ("make sure the API never …", "… so it never …"). */
+const SUBJECT_BEFORE =
+  /(?:^|\s)(?:(?:the|a|an|this|that|these|those|our|my|their|its|his|her)\s+[\w-]+|it|we|i|they|he|she)$/i;
+/** "I want you to never …": "you" is the trigger's subject. */
+const YOU_BEFORE = /\byou(?:\s+to)?$/i;
 const SUBORDINATE = /^(?:before|after|until|once|when|whenever|unless|if|while)\b/i;
+/** A clause inside the rule that is not its action ("never returns a 500 when the branch is missing"). */
+const INNER_CLAUSE = /\b(?:when|whenever|if|unless|because|while|since|so that)\b/i;
+/** Words that narrow a rule to some cases ("never merge PRs without a review"). */
+const NARROWING = /\b(?:when|whenever|if|unless|because|while|since|without|except|once)\b/i;
 
 /** A sentence ends at `.`, `!`, `?` or `;` before a space, or at a line break. */
 function sentencesOf(text: string): string[] {
@@ -199,14 +220,18 @@ function clausesOf(sentence: string): string[] {
 }
 
 function isQuestion(sentence: string): boolean {
-  const said = sentence.trim();
+  const said = sentence.trim().replace(TAG_QUESTION, "");
   return said.endsWith("?") || QUESTION.test(said.replace(DISCOURSE, ""));
 }
 
-/** Whether the words before a trigger leave it an instruction: no subject but "you" opens its clause. */
+/** Whether the words before a trigger leave it an instruction: no subject but "you" governs it. */
 function instructs(lead: string): boolean {
-  const own = lead.split(/[,;:]|\b(?:and|but|so|then|or)\b/i).at(-1)!;
-  return !SUBJECT.test(own.trim().replace(DISCOURSE, ""));
+  const own = lead
+    .split(/[,;:]|\b(?:and|but|so|then|or)\b/i)
+    .at(-1)!
+    .trim();
+  if (YOU_BEFORE.test(own)) return true;
+  return !SUBJECT.test(own.replace(DISCOURSE, "")) && !SUBJECT_BEFORE.test(own);
 }
 
 interface Hit {
@@ -248,10 +273,17 @@ function singular(word: string): string {
   return stem.length >= 4 && /(?:ch|sh|ss|x|z)e$/.test(stem) ? stem.slice(0, -1) : stem;
 }
 
-/** The object words of a text (D9): content words, singular, without words that name no object. */
+/**
+ * The object words of a text (D9): lowercased words of letters and digits, a dotted version kept whole ("v1.2"),
+ * without function words, single characters or words that name no object, singular.
+ */
 export function objectWords(text: string): string[] {
-  return contentWords(text)
-    .filter((word) => !NO_OBJECT.has(word))
+  return (
+    String(text ?? "")
+      .toLowerCase()
+      .match(/[a-z0-9]+(?:\.\d+)*/g) ?? []
+  )
+    .filter((word) => word.length > 1 && !FUNCTION_WORDS.has(word) && !NO_OBJECT.has(word))
     .map(singular);
 }
 
@@ -266,13 +298,13 @@ export function oneNamePerObject(text: string): string {
 }
 
 /**
- * Where an object's noun phrase ends: a qualifier, a conjunction, a word that names no object, punctuation (a period
- * only before a space: `.env` and `v1.2` are words).
+ * Where an object's noun phrase ends: a qualifier, a conjunction, a relative pronoun, a word that names no object,
+ * punctuation (a period only before a space: `.env` and `v1.2` are words).
  */
 const PHRASE_END = new RegExp(
   String.raw`\b(?:yet|until|before|after|for now|this time|in this pr|today|this week|and|but|or|so|then|when|` +
-    String.raw`whenever|while|unless|if|once|because|since|without|yourself|yourselves|ever|first|on your own|` +
-    String.raw`from your side|by hand)\b|[,;:!?()]|\.(?=\s|$)`,
+    String.raw`whenever|while|unless|if|once|because|since|without|that|which|who|whose|yourself|yourselves|ever|` +
+    String.raw`first|on your own|from your side|by hand)\b|[,;:!?()]|\.(?=\s|$)`,
   "i",
 );
 const LEADING_WORDS =
@@ -280,12 +312,20 @@ const LEADING_WORDS =
 const LEADING_PREPOSITION = /^\s*(?:to|into|onto|on|under|in|from|against|off|at)\b/i;
 const INNER_PREPOSITION = /\s(?:of|for|with|in|on|to|at|by|from|under|into|via|using|across)\s.*$/i;
 
+/** A noun phrase: its words, and whether a qualifying prepositional phrase was cut from it. */
+interface Phrase {
+  words: string;
+  cut: boolean;
+}
+
 /** The noun phrase a text opens with, after its articles and adverbs, or after one leading preposition. */
-function nounPhrase(text: string, again = true): string {
+function nounPhrase(text: string, again = true): Phrase {
   const end = PHRASE_END.exec(text);
   const phrase = ` ${(end ? text.slice(0, end.index) : text).replace(LEADING_WORDS, "").trim()} `;
-  if (LEADING_PREPOSITION.test(phrase)) return again ? nounPhrase(phrase.replace(LEADING_PREPOSITION, ""), false) : "";
-  return phrase.replace(INNER_PREPOSITION, "").trim();
+  if (LEADING_PREPOSITION.test(phrase))
+    return again ? nounPhrase(phrase.replace(LEADING_PREPOSITION, ""), false) : { words: "", cut: false };
+  const words = phrase.replace(INNER_PREPOSITION, "").trim();
+  return { words, cut: words !== phrase.trim() };
 }
 
 /** A protected path's own name: `.env`, `infra`, a lockfile's name. */
@@ -298,7 +338,7 @@ function pathName(word: string): string {
  * Object words as a key holds them (fix 3): `*` for none or for the class's default object alone ("PRs"); a default
  * object named with other words keys by them ("the main branch" is `main`, "the feature branch" `feature`).
  */
-export function keyedObject(cls: string, words: readonly string[]): string {
+function keyedObject(cls: string, words: readonly string[]): string {
   const named = words.slice(0, 3);
   const kept = named.length > 1 && named.at(-1) === defaultObject(cls) ? named.slice(0, -1) : named;
   return !kept.length || (kept.length === 1 && kept[0] === defaultObject(cls)) ? "*" : kept.join("-");
@@ -309,52 +349,66 @@ const PROTECTED_PATH = CLASS_WORDS.find(([cls]) => cls === "protected-path")![1]
 
 /**
  * A rule's object: a protected path or a branch name its class word names, the object its class word captured
- * (`drop tables`), or the noun phrase after it, which is a protected path when it names one ("never commit .env
- * files" is `.env`).
+ * (`drop the test table`), or the noun phrase after it, which is a protected path when it names one ("never commit .env
+ * files" is `.env`). `cut` tells whether a qualifying phrase was cut from it ("PRs from dependabot").
  */
-function objectOf(cls: ActionClass, rest: string, word?: RegExpExecArray): string {
-  if (word && cls === "protected-path") return pathName(word[0].trim());
-  if (word && cls === "branch" && /^(?:main|master)$/i.test(word[0])) return "main";
-  const phrase = word?.groups?.o ?? nounPhrase(rest);
-  const path = PROTECTED_PATH.exec(phrase);
-  if (path) return pathName(path[0].trim());
-  return keyedObject(cls, objectWords(oneNamePerObject(phrase)));
+function objectOf(cls: ActionClass, rest: string, word?: RegExpExecArray): { object: string; cut: boolean } {
+  if (word && cls === "protected-path") return { object: pathName(word[0].trim()), cut: false };
+  if (word && cls === "branch" && /^(?:main|master)$/i.test(word[0])) return { object: "main", cut: false };
+  const phrase = nounPhrase(word?.[1] ?? rest);
+  const path = PROTECTED_PATH.exec(phrase.words);
+  if (path) return { object: pathName(path[0].trim()), cut: phrase.cut };
+  return { object: keyedObject(cls, objectWords(oneNamePerObject(phrase.words))), cut: phrase.cut };
 }
 
-function qualifierOf(match: RegExpMatchArray): Qualifier {
-  const said = match[0].toLowerCase();
-  return said.startsWith("in this") ? "in-this-pr" : QUALIFIER_NAMES[said]!;
+/** Words before a rule's class word that leave it the rule's own verb ("never git push", "don't open the PR"). */
+const VERB_LEAD =
+  /^(?:\s*\b(?:please|just|ever|again|really|actually|directly|yourself|git|gh|go|open|create|make|file|raise|touch|edit|modify|change|a|an|the|any|my|our|your|new)\b)*\s*$/i;
+
+function qualifierOf(said: string): Qualifier {
+  const name = said.toLowerCase();
+  return name.startsWith("in this") ? "in-this-pr" : QUALIFIER_NAMES[name]!;
 }
+
+const TIME =
+  /^\s*(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|the weekend|next \w+|this \w+|end of|\d)/i;
+const EVENT = /^\s*(?:(?:the|this|that|our|my|your|a|an|next)\s+\w+|launch|lunch|standup|release|the demo|qa)\b/i;
+const VERB_MARK = /\b(?:is|are|was|were|be|been|being|has|have|had|gets|got|goes|went|does|did)\b/i;
 
 /**
- * Fix 1: whether what follows `before`/`after` is a precondition clause (a subject pronoun, a gerund, or a verb such
- * as "is"), which keeps a standing policy, rather than a time or an event.
+ * Fix 1: whether `before`/`after` is followed by a time or an event ("before friday", "after this commit", "after
+ * launch"), which makes an intent, rather than a precondition ("before you push", "before merging", "after CI passes",
+ * "before commit"), which keeps a standing policy. An event is a noun phrase with no verb in it: a verb ("is", or an
+ * `-s`/`-ed` word after the event's noun, "the build finishes") makes it a precondition.
  */
-function precondition(rest: string): boolean {
+function eventFollows(rest: string): boolean {
   const phrase = rest.split(/[,;.!?]/)[0]!;
-  return (
-    /^\s*(?:you|i|we|they|he|she|someone|anyone|everyone)\b/i.test(phrase) ||
-    /^\s*\w+ing\b/i.test(phrase) ||
-    /\b(?:is|are|was|were|be|been|has|have|had|gets|got)\b/i.test(phrase)
-  );
+  if (TIME.test(phrase)) return true;
+  if (!EVENT.test(phrase) || VERB_MARK.test(phrase)) return false;
+  const words = phrase.trim().split(/\s+/);
+  return !words.slice(2).some((word) => /^[a-z]+(?:s|ed)$/i.test(word) && !/^(?:on|in|at)$/i.test(word));
 }
 
-/** The temporal qualifier a sentence states, if any (D9, fix 1). */
-function qualifierIn(sentence: string): Qualifier | undefined {
+/** The temporal qualifier a clause states, if any (D9, fix 1). */
+function qualifierIn(clause: string): Qualifier | undefined {
   const owned = new Set(
-    [...sentence.matchAll(OWNED_QUALIFIER)].flatMap((m) => {
-      const at = m.indices?.groups?.q ?? m.indices?.groups?.q2;
-      return at ? [at[0]] : [];
-    }),
+    [...clause.matchAll(OWNED_QUALIFIER)].map((m) => m.index + m[0].length - (/before$/i.test(m[0]) ? 6 : 5)),
   );
-  for (const match of sentence.matchAll(QUALIFIER)) {
+  for (const match of clause.matchAll(QUALIFIER)) {
     const said = match[0].toLowerCase();
     if (said === "before" || said === "after") {
-      if (owned.has(match.index) || precondition(sentence.slice(match.index + said.length))) continue;
+      if (owned.has(match.index) || !eventFollows(clause.slice(match.index + said.length))) continue;
     }
-    return qualifierOf(match);
+    return qualifierOf(said);
   }
   return undefined;
+}
+
+/** A clause that is nothing but a qualifier ("not yet"): it qualifies the clauses beside it. */
+function bareQualifier(clause: string): Qualifier | undefined {
+  const qualifier = qualifierIn(clause);
+  const rest = clause.replace(QUALIFIER, " ").replace(DISCOURSE, "");
+  return qualifier && !/\w/.test(rest.replace(/\b(?:not|no|ok|okay)\b/gi, "")) ? qualifier : undefined;
 }
 
 /** What a trigger that names its class says after its object ("leave it unmerged"). */
@@ -367,25 +421,33 @@ function ruleAt(clause: string, hit: Hit, qualifier: Qualifier | undefined): Rul
   const after = clause.slice(hit.end);
   const named = hit.trigger.names?.(after);
   let cls: ActionClass;
-  let object: string;
+  let object: { object: string; cut: boolean };
+  let ownVerb = true;
   if (named) {
     cls = named;
     object = objectOf(named, after.replace(NAMING_TAIL, ""));
   } else {
-    const found =
-      classIn(hit.trigger.around ? `${lead} ${after}` : after) ??
-      (SUBORDINATE.test(lead.trim()) ? classIn(lead) : undefined);
-    if (!found) return undefined;
-    cls = found.cls;
-    object = objectOf(cls, found.match.input.slice(found.match.index + found.match[0].length), found.match);
+    const window = hit.trigger.around ? `${lead} ${after}` : after;
+    const inner = INNER_CLAUSE.exec(window);
+    const found = classIn(inner ? window.slice(0, inner.index) : window);
+    const fromLead = !found && SUBORDINATE.test(lead.trim()) ? classIn(lead) : undefined;
+    const used = found ?? fromLead;
+    if (!used) return undefined;
+    cls = used.cls;
+    object = objectOf(cls, used.match.input.slice(used.match.index + used.match[0].length), used.match);
+    ownVerb = !!found && VERB_LEAD.test(window.slice(0, found.match.index)) && !inner;
   }
+  const timed = qualifier === "before" || qualifier === "after";
+  const precondition = (!timed && /\b(?:before|after)\b/i.test(clause)) || SUBORDINATE.test(lead.trim());
+  const narrowed = NARROWING.test(after) || hit.trigger.around || precondition || object.cut;
   return {
     kind: qualifier ? "intent" : "policy",
     class: cls,
     polarity: hit.trigger.polarity,
-    object,
+    object: object.object,
     ...(qualifier ? { qualifier } : {}),
     explicit: hit.trigger.explicit === true,
+    outright: ownVerb && !narrowed,
   };
 }
 
@@ -397,15 +459,17 @@ export function rulesIn(text: string): Rule[] {
   const rules: Rule[] = [];
   for (const sentence of sentencesOf(String(text ?? ""))) {
     if (isQuestion(sentence)) continue;
-    const qualifier = qualifierIn(sentence);
-    for (const clause of clausesOf(sentence)) {
+    const clauses = clausesOf(sentence.replace(TAG_QUESTION, ""));
+    const bare = clauses.map(bareQualifier);
+    clauses.forEach((clause, at) => {
+      const qualifier = qualifierIn(clause) ?? bare[at - 1] ?? bare[at + 1];
       for (const hit of triggersIn(clause)) {
         const rule = ruleAt(clause, hit, qualifier);
         if (!rule) continue;
         if (!rules.some((known) => ruleKey(known) === ruleKey(rule) && known.kind === rule.kind)) rules.push(rule);
         break;
       }
-    }
+    });
   }
   return rules;
 }
@@ -425,7 +489,12 @@ export function ruleRefs(rules: readonly Rule[]): RuleRef[] {
   const refs: RuleRef[] = [];
   for (const rule of rules) {
     const k = ruleKey(rule);
-    if (!refs.some((ref) => ref.k === k)) refs.push(rule.qualifier ? { k, q: rule.qualifier } : { k });
+    if (!refs.some((ref) => ref.k === k))
+      refs.push({
+        k,
+        ...(rule.qualifier ? { q: rule.qualifier } : {}),
+        ...(rule.outright ? {} : { c: true as const }),
+      });
   }
   return refs;
 }
@@ -434,4 +503,22 @@ export function ruleRefs(rules: readonly Rule[]): RuleRef[] {
 export function oppositeKey(key: string): string {
   const [cls, polarity, object] = key.split("|");
   return `${cls}|${polarity === "neg" ? "pos" : "neg"}|${object}`;
+}
+
+/**
+ * The keys a typed sentence overturns (A4 §3.1, L8): the opposite of each policy it states outright, and, for a
+ * revocation ("you can merge PRs yourself now", "you can open the PR now"), the prohibition of what it permits, read
+ * by this module's own classes.
+ */
+export function overturnedKeys(sentence: string): string[] {
+  const permitted = /^you (?:can|may|are allowed to|are free to) (.+?)\s+now\b/i.exec(sentence.trim());
+  if (permitted) return rulesIn(`don't ${permitted[1]}`).map(ruleKey);
+  return rulesIn(sentence).flatMap((rule) =>
+    rule.kind === "policy" && rule.outright ? [oppositeKey(ruleKey(rule))] : [],
+  );
+}
+
+/** Whether a stated rule yields to an overturning of its key: any positive rule, a prohibition only stated outright. */
+export function overturnable(rule: RuleRef): boolean {
+  return rule.k.includes("|pos|") || !rule.c;
 }

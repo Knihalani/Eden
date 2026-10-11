@@ -120,10 +120,13 @@ describe("D7: a switch stays within its scope and subject", () => {
 });
 
 describe("A4 §3.1, D9: what revokes a rule", () => {
-  test("'you can <action> … now' with an A7 §5 action verb, keeping its object", () => {
-    expect(shown("You can merge PRs yourself now.")).toEqual(["revoke:integrate:pr"]);
-    expect(shown("You can merge now.")).toEqual(["revoke:integrate:"]);
-    expect(shown("You can push the feature branch now.")).toEqual(["revoke:push-upstream:feature+branch"]);
+  test("'you can <action> … now' with an A7 §5 action verb, keeping its object, and the prohibition it lifts (P2.1)", () => {
+    expect(shown("You can merge PRs yourself now.")).toEqual(["revoke:integrate:pr", "oppose:integrate|neg|*"]);
+    expect(shown("You can merge now.")).toEqual(["revoke:integrate:", "oppose:integrate|neg|*"]);
+    expect(shown("You can push the feature branch now.")).toEqual([
+      "revoke:push-upstream:feature+branch",
+      "oppose:push-upstream|neg|feature",
+    ]);
   });
 
   test("other verbs, questions and statements about the user are no revocation", () => {
@@ -220,6 +223,7 @@ describe("the validity log", () => {
     expect(readInvalidations(root)).toEqual([
       { k: "retract", o: "redis", t: 2, f: "Redis" },
       { k: "revoke", c: "integrate", o: ["pr"], t: 2 },
+      { k: "oppose", r: "integrate|neg|*", t: 2 },
     ]);
     expect(statSync(join(root, "validity.jsonl")).mode & 0o777).toBe(0o600);
     expect(readFileSync(join(root, "validity.jsonl"), "utf8")).not.toContain("We no longer");
