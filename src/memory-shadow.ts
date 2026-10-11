@@ -18,10 +18,10 @@
  * D27) waits for SubagentStart delivery (P2.5). The records hold paths, never file text; the files are read at each
  * delivery, so an edit counts at once.
  */
-import { closeSync, existsSync, openSync, readdirSync, readSync, realpathSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { abandonedPrompts } from "./memory-delta";
-import { gitPlace, mainCheckout, type GitPlace } from "./memory-repo";
+import { gitPlace, mainCheckout, realpathOrSelf, type GitPlace } from "./memory-repo";
 import { residualSentences, type Said } from "./memory-residual";
 import { appendRecord, windowRecords } from "./memory-window";
 
@@ -114,14 +114,6 @@ function agentsFiles(cwd: string, top: string | undefined): string[] {
   return folders.flatMap((folder) => AGENTS_FILES.map((name) => join(folder, name))).filter((path) => existsSync(path));
 }
 
-function realpathOrSelf(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
-}
-
 /**
  * The auto-memory index Claude Code loads into the session (2.1.294's `defaultPath`): `MEMORY.md` in the `memory`
  * folder of the project's folder under `projects/`, beside the session's own folder (the transcript's). The project is
@@ -136,8 +128,12 @@ function memoryIndex(cwd: string, git: GitPlace | undefined, transcriptPath: str
   const name = realpathOrSelf(git ? mainCheckout(git) : cwd).replace(/[^a-zA-Z0-9]/g, "-");
   if (name.length <= PROJECT_NAME_LENGTH) return join(projects, name, "memory", "MEMORY.md");
   const prefix = `${name.slice(0, PROJECT_NAME_LENGTH)}-`;
-  const folder = readdirSync(projects).find((entry) => entry.startsWith(prefix));
-  return folder ? join(projects, folder, "memory", "MEMORY.md") : undefined;
+  try {
+    const folder = readdirSync(projects).find((entry) => entry.startsWith(prefix));
+    return folder ? join(projects, folder, "memory", "MEMORY.md") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** A file's first `bytes`, or "" when it cannot be read. */
