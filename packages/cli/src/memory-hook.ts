@@ -11,7 +11,7 @@ import { appendWideEvent, errorTag, retainEvents, type WideEvent } from "../../.
 import { flagModes, pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
 import { batchRecord } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
-import { inheritFork, markFork } from "../../../src/memory-fork";
+import { inheritFork, markFork, parentLines } from "../../../src/memory-fork";
 import {
   deliveredKeys,
   epochTokens,
@@ -27,11 +27,12 @@ import {
   withinBudget,
   wouldPreempt,
 } from "../../../src/memory-ledger";
-import { isPinnedIntention, selectNotes } from "../../../src/memory-delivery";
+import { isPinnedIntention, selectNotes, unsaidNotes } from "../../../src/memory-delivery";
 import { recentConversation, sentencesOf, type RecentConversation } from "../../../src/memory-residual";
 import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoIdentity, repoStoreDir, swapping, type RepoIdentity } from "../../../src/memory-repo";
+import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import { readInvalidations, recordInvalidations, validText, withoutForgets } from "../../../src/memory-validity";
 import {
@@ -65,6 +66,7 @@ const MEMORY_EVENTS = new Set([
   "PostToolUse",
   "PostToolBatch",
   "SubagentStop",
+  "InstructionsLoaded",
 ]);
 
 /**
@@ -429,6 +431,8 @@ interface HookContext {
   session?: string;
   child: boolean;
   transcriptPath: string;
+  /** Where the session runs, for its shadow set's files on disk (D27). */
+  place: ShadowPlace;
   /** The delivery point's mode; undefined at an event that delivers nothing. */
   mode?: FlagMode;
   ledgerOf: (mode: FlagMode | undefined) => Ledger | undefined;
@@ -464,11 +468,22 @@ function encodeConversation(ctx: HookContext): void {
   const { transcriptPath } = ctx;
   const sent = payloadMessages(ctx.r);
   if (!sent.length && ctx.win && transcriptPath) {
-    const delta = encodeDelta(ctx.win, transcriptPath, ({ messages, abandoned, branchTexts }) => {
-      if (messages.length) ctx.mem.observe(messages, { keepLiveIdentity: true, deferSleep: true });
+    const win = ctx.win;
+    let encoded = 0;
+    const delta = encodeDelta(win, transcriptPath, ({ messages, abandoned, branchTexts }) => {
+      // A fork's first delta holds its parent's conversation, which the parent's delta encoded (`parentLines`).
+      const copied = parentLines(
+        memoryRoot(),
+        win,
+        transcriptPath,
+        messages.flatMap((m) => m.uuid ?? []),
+      );
+      const own = copied.size ? messages.filter((message) => !message.uuid || !copied.has(message.uuid)) : messages;
+      encoded = own.length;
+      if (own.length) ctx.mem.observe(own, { keepLiveIdentity: true, deferSleep: true });
       if (abandoned.length) ctx.mem.abandon(abandoned, branchTexts);
     });
-    if (delta?.messages.length) ctx.trace.encoded = delta.messages.length;
+    if (encoded) ctx.trace.encoded = encoded;
     if (delta?.abandoned.length) ctx.trace.abandoned = delta.abandoned.length;
     return;
   }
@@ -625,11 +640,20 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
       try {
         startEpoch(win, String(source), off, file);
       } catch {}
+    try {
+      startShadowEpoch(win);
+    } catch {}
   }
   if (mode === "off") return withNotice(null, notice);
-  const briefed = briefing(mem, ctx.session, !compact);
+  // A4 §5.1 step 7 holds here too: what the window's instruction files state is never briefed (D27).
+  const notes = briefing(mem, ctx.session, !compact);
+  const briefed = unsaidNotes(notes, shadowSentences(win, ctx.place));
   const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
-  Object.assign(trace, { cids, ids, drops: { shape: briefed.length - cids.length } });
+  Object.assign(trace, {
+    cids,
+    ids,
+    drops: { shadow: notes.length - briefed.length, shape: briefed.length - cids.length },
+  });
   return withNotice(mode === "on" ? additional(ctx.event, packet) : null, notice);
 }
 
@@ -712,7 +736,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
   const parts = { prompt, turn: recent.previousTyped, prev };
-  const against = { prompt, parts, residual: recent.residual, invalid: readInvalidations(mem.dir) };
+  const shadow = shadowSentences(win, ctx.place);
+  const against = { prompt, parts, residual: recent.residual, shadow, invalid: readInvalidations(mem.dir) };
   const { notes: novel, drops } = selectNotes(notes, against, (fresh) =>
     win
       ? novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid: against.invalid })
@@ -727,7 +752,15 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
 }
 
 /** Events that only write: read-only consent leaves them nothing to do. */
-const WRITING_EVENTS = new Set(["PostToolUse", "PostToolBatch", "SubagentStop", "Stop", "SessionEnd", "PostCompact"]);
+const WRITING_EVENTS = new Set([
+  "PostToolUse",
+  "PostToolBatch",
+  "SubagentStop",
+  "Stop",
+  "SessionEnd",
+  "PostCompact",
+  "InstructionsLoaded",
+]);
 
 function respond(
   r: Record<string, unknown>,
@@ -741,8 +774,16 @@ function respond(
   if (!writes && WRITING_EVENTS.has(event)) return null;
   const root = memoryRoot();
   const resolved = resolveSession(r, event);
-  const win = windowDir(root, resolved.session ?? ""),
-    sessionWin = windowDir(root, resolved.parent ?? ""),
+  const win = windowDir(root, resolved.session ?? "");
+  // D27: InstructionsLoaded only records the file in its window's shadow set; it opens no store.
+  if (event === "InstructionsLoaded") {
+    if (win) {
+      trace.win = basename(win);
+      recordInstructions(win, r);
+    }
+    return null;
+  }
+  const sessionWin = windowDir(root, resolved.parent ?? ""),
     prompt = promptOf(r),
     point = pointOf(event),
     mode = point ? flags[point].mode : undefined,
@@ -803,6 +844,7 @@ function respond(
     session: resolved.session,
     child: resolved.child,
     transcriptPath: transcriptOf(r),
+    place: { cwd: cwd ?? process.cwd(), top: repo?.top, transcriptPath: transcriptOf(r) },
     mode,
     /** The ledger this point writes: none when it is off or read-only. */
     ledgerOf: (m) => {

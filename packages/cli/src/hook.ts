@@ -179,7 +179,8 @@ function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost 
     eventRaw === "UserPromptSubmit" ||
     eventRaw === "PreCompact" ||
     eventRaw === "PostCompact" ||
-    eventRaw === "PostToolBatch"
+    eventRaw === "PostToolBatch" ||
+    eventRaw === "InstructionsLoaded"
   ) {
     return "claude";
   }
@@ -389,7 +390,8 @@ export async function respondToHook(
     body.hook_event_name === "UserPromptSubmit" ||
     body.hook_event_name === "SessionStart" ||
     body.hook_event_name === "PreCompact" ||
-    body.hook_event_name === "PostCompact"
+    body.hook_event_name === "PostCompact" ||
+    body.hook_event_name === "InstructionsLoaded"
   ) {
     try {
       const mem = memoryHookResponse(body as Record<string, unknown>);

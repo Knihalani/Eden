@@ -163,7 +163,9 @@ describe("eden doctor --memory", () => {
       "SessionEnd",
       "PostToolUse",
     ];
-    const hooks = Object.fromEntries([...events, "SubagentStop"].map((event) => [event, [setupHook]]));
+    const hooks = Object.fromEntries(
+      [...events, "SubagentStop", "InstructionsLoaded"].map((event) => [event, [setupHook]]),
+    );
     writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ hooks }));
     const { code, lines } = await doctorMemory(home);
     expect(lines.get("memory")).toStartWith("ok memory hooks: UserPromptSubmit");

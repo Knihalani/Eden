@@ -491,11 +491,7 @@
       ],
       "a5": "an InstructionsLoaded CLAUDE.md says \"use pnpm\" -> the pnpm fact is never injected",
       "on": {
-        "state": "red",
-        "failed": [
-          "never-injected"
-        ],
-        "why": "CLAUDE.md says pnpm, yet the gist 'package manager is pnpm' is delivered"
+        "state": "green"
       },
       "off": {
         "state": "green",

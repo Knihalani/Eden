@@ -16,6 +16,9 @@
  *   deliveries are not copied (`inheritLedger`).
  * The fork's first turn therefore runs on its own, empty ledger. A fork subagent's copy waits for a delivery point in
  * the child window (P2.5).
+ *
+ * The same parent tells the fork's first delta which of its lines are copies (`parentLines`): the parent's own delta
+ * encoded them, so the fork encodes only its own turn.
  */
 import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -57,9 +60,11 @@ function candidates(root: string, win: string, transcriptPath: string, last?: nu
     });
 }
 
-/** The parent, and the newest of the fork's lines its turn map holds (see the header). */
-function findParent(fork: TurnMap, found: readonly Candidate[]): { parent: Candidate; line: string } | undefined {
-  const lines = [...fork.lines.keys()];
+/** The parent, and the newest of the fork's lines (uuids, in order) its turn map holds (see the header). */
+function findParent(
+  lines: readonly string[],
+  found: readonly Candidate[],
+): { parent: Candidate; line: string } | undefined {
   let best: { parent: Candidate; line: string; at: number; forked: boolean } | undefined;
   for (const parent of found) {
     const at = lines.findLastIndex((uuid) => parent.map.lines.has(uuid));
@@ -103,9 +108,20 @@ export function inheritFork(
   if (!mark || mark.from !== undefined || !transcriptPath) return undefined;
   const fork = turnMap(win);
   if (!fork?.lines.size) return undefined;
-  const found = findParent(fork, candidates(root, win, transcriptPath, mark.last));
+  const found = findParent([...fork.lines.keys()], candidates(root, win, transcriptPath, mark.last));
   const copied = found ? inheritLedger(found.parent.dir, win, promptsAfter(found.parent.map, found.line)) : 0;
   const from = found ? basename(found.parent.dir) : "";
   recordFork(win, { from });
   return { from, copied };
+}
+
+/**
+ * The lines of a pending fork's first delta that its parent's turn map holds: the parent's conversation, copied with
+ * its uuids, which the parent's delta encoded. Empty for a window that is not a pending fork.
+ */
+export function parentLines(root: string, win: string, transcriptPath: string, uuids: readonly string[]): Set<string> {
+  const mark = forkMark(win);
+  if (!mark || mark.from !== undefined || !uuids.length) return new Set();
+  const found = findParent(uuids, candidates(root, win, transcriptPath, mark.last));
+  return new Set(found ? uuids.filter((uuid) => found.parent.map.lines.has(uuid)) : []);
 }

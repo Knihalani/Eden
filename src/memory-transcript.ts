@@ -3,6 +3,7 @@
  * transcript, telling a typed prompt from the other user lines, and the word lists the steps compare with.
  */
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
+import { isHuman } from "./memory-authority";
 import { isNonHumanSubmit } from "./memory-turn";
 
 export type TranscriptLine = Record<string, unknown>;
@@ -73,9 +74,14 @@ export function textOf(content: unknown): string | undefined {
     .join("\n");
 }
 
-/** A typed prompt's text (R6 §1.2, A6 §2.1's `user` lines), or undefined for any other line. */
+/**
+ * A typed prompt's text (R6 §1.2, A6 §2.1's `user` lines), or undefined for any other line. Claude Code marks a typed
+ * prompt `origin.kind: "human"`; a line with no origin (older versions) counts too.
+ */
 export function typedPrompt(line: TranscriptLine): string | undefined {
-  if (line.type !== "user" || line.isMeta === true || line.isCompactSummary === true || line.origin) return undefined;
+  if (line.type !== "user" || line.isMeta === true || line.isCompactSummary === true || !isHuman(line.origin)) {
+    return undefined;
+  }
   const text = textOf((line.message as { content?: unknown } | undefined)?.content)?.trim();
   if (!text || /^(?:<command-|<local-command-|\[Request interrupted)/.test(text) || isNonHumanSubmit(text)) {
     return undefined;
