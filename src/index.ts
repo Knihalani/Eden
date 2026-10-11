@@ -15,6 +15,7 @@ import { type MemoryLaneKind } from "./memory-lanes";
 import {
   INTENT_TTL_MS,
   overturnable,
+  ruleIdentity,
   ruleRefs,
   rulesIn,
   withoutExcludedWording,
@@ -1061,7 +1062,7 @@ export class AgentMemory {
       if (row.id === incoming.id || superseded(row) || isUntyped(row) || !row.rules?.length) continue;
       // A row of the same prompt is never overturned by it: "Don't merge PRs. Always merge PRs from dependabot."
       const samePrompt = (row.at ?? 0) >= incoming.at || (!!row.promptId && row.promptId === incoming.promptId);
-      if (samePrompt || !row.rules.every((rule) => countered.has(rule.k) && overturnable(rule))) continue;
+      if (samePrompt || !row.rules.every((rule) => countered.has(ruleIdentity(rule)) && overturnable(rule))) continue;
       row.invalidBy = incoming.id;
       this.changed.add(row.id);
     }
