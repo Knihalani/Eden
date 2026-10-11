@@ -13,7 +13,7 @@ export function memoryImportHelp(): string {
   return `usage: eden memory import <path>
        eden memory import --dry-run <path>
        eden memory dump [--json]
-       eden memory remember "<text>" | --jsonl -
+       eden memory remember [--global] "<text>" | --jsonl -
        eden memory purge <regex>
        eden memory forget --secret <regex>
        eden memory migrate [--dry-run | --apply | --rollback | --contract]
