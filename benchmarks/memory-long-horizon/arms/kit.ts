@@ -4,8 +4,9 @@
  * that did not hold. `arms.json` records, per arm and flag state, which checks fail on today's plugin, and the gate
  * (gate.ts) holds every run to that record.
  *
- * Flag states (X7). `on` runs with no flag file. `off` and `shadow` write `~/.eden/flags.json` with every
- * delivery-point flag set to that value before the first hook, and judge the run by the generic checks of
+ * Flag states (X7). Each state writes `~/.eden/flags.json` with every delivery-point flag set to it before the first
+ * hook. `on` is the points turned on, which since P2.3 is not their default: `guard.context` defaults to `shadow` and
+ * `guard.ask` to `off` until their rollout stages. `off` and `shadow` judge the run by the generic checks of
  * `flagChecks` instead of the arm's own:
  * - `off` is identity: exit 0, nothing printed at a delivery point, no context or decision anywhere, no ledger;
  * - `shadow` prints nothing at a delivery point but writes the shadow ledger and wide events, and no live ledger.
@@ -135,7 +136,7 @@ export class ArmRun {
     readonly dir: string,
   ) {}
 
-  /** A world for this run. With flags `off` or `shadow`, the flag file is written before any hook runs. */
+  /** A world for this run. Its flag file is written before any hook runs. */
   world(spec: WorldSpec, setup: WorldSetup = {}): SimWorld {
     const { home, ...options } = setup;
     const runDir = home === undefined ? this.dir : join(this.dir, `home-${home}`);
@@ -155,7 +156,7 @@ export class ArmRun {
       initialTruth: spec.initialTruth,
       ...options,
     });
-    if (this.options.flags !== "on") writeFlags(world.home, this.options.flags);
+    writeFlags(world.home, this.options.flags);
     this.worlds.push(world);
     return world;
   }
@@ -205,7 +206,7 @@ export function jsonOut(result: CliResult): unknown {
   }
 }
 
-export function writeFlags(home: string, value: Exclude<FlagState, "on">): void {
+export function writeFlags(home: string, value: FlagState): void {
   mkdirSync(join(home, ".eden"), { recursive: true });
   const flags = Object.fromEntries(DELIVERY_FLAGS.map((flag) => [flag, value]));
   writeFileSync(join(home, ".eden", "flags.json"), JSON.stringify(flags, null, 2) + "\n");
