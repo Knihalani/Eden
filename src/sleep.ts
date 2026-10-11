@@ -907,7 +907,7 @@ function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: st
   }
   const pins = mem
     .memories()
-    .filter((r) => r.kind === "constraint" && !isIcl(r.text) && own(r.id))
+    .filter((r) => r.kind === "constraint" && !superseded(r) && !isIcl(r.text) && own(r.id))
     .slice(-8)
     .map((r) => validText(r.text.replace(/\s+/g, " ").trim(), r.at, invalid))
     .filter(Boolean);
