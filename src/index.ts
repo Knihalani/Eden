@@ -446,6 +446,18 @@ function lastUserText(list: unknown[]): string {
   return m && typeof m === "object" ? convBlob([m]).trim() : "";
 }
 
+/**
+ * The user's own words in the last message: the `src: "user"` text of `encode` when the caller split the prompt by
+ * D12 (`promptMessages`, with recent tool results), else the message without its marked pastes, fences and quotes.
+ */
+function typedText(list: unknown[], encode?: unknown[]): string {
+  if (!encode?.length) return stripPastes(lastUserText(list));
+  return encode
+    .filter((m) => (m as { src?: unknown } | undefined)?.src === "user")
+    .map((m) => convBlob([m]))
+    .join("\n");
+}
+
 export function cueFor(list: unknown[]): string {
   const raw = lastUserText(list);
   if (!raw) return "";
@@ -1202,10 +1214,13 @@ export class AgentMemory {
     this.ruleRows = ruleRows;
   }
 
-  /** The policies and intents the classes a typed prompt fires deliver (A4 §5.1 step 4b, `memory-triggers.ts`). */
-  private triggered(prompt: string): MemoryRecord[] {
+  /**
+   * The policies and intents the classes the user's own words fire deliver (A4 §5.1 step 4b, `memory-triggers.ts`):
+   * `own` is the text D12 left the user, without pasted spans or spans copied from a recent tool result.
+   */
+  private triggered(own: string): MemoryRecord[] {
     try {
-      const classes = firedClasses(stripPastes(prompt));
+      const classes = firedClasses(own);
       if (!classes.length) return [];
       this.ensureIndex();
       return labelledNotes(triggeredRows(this.ruleRows, classes));
@@ -1599,7 +1614,7 @@ export class AgentMemory {
           if (packet.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(packet, this.dir);
         } catch {}
         // A trigger hit is STRONG evidence (A7 §4), so it leads, whatever the lexical path makes of the cue.
-        const triggered = this.triggered(lastUserText(list));
+        const triggered = this.triggered(typedText(list, encode));
         packet = [...triggered, ...packet.filter((note) => !triggered.some((rule) => rule.id === note.id))];
         if (packet.length)
           try {

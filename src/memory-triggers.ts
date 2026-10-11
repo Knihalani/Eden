@@ -29,7 +29,7 @@ const ASKS_INFORMATION = new RegExp(
   String.raw`^(?:(?:what|what's|whats|which|where|where's|when|who|whom|whose|why|how)\b(?!\s+about\b)|` +
     String.raw`(?:(?:can|could|would|will) you\s+)?(?:please\s+)?(?:remind|tell|show) me (?:about|of|what|why|how|` +
     String.raw`where|when|who|which|whether|if)\b|(?:i\s+)?need help (?:understanding|with)\b|help me understand\b|` +
-    String.raw`explain\b)`,
+    String.raw`(?:(?:can|could|would|will) you\s+)?(?:please\s+)?explain\b)`,
   "i",
 );
 
@@ -58,11 +58,21 @@ function firesAt(clause: string, words: RegExp, informational: boolean): number 
   return undefined;
 }
 
+/** The last prompt read and its classes: a Submit reads one prompt for its wide event and for `recall`. */
+let last: { prompt: string; classes: ActionClass[] } | undefined;
+
 /** The classes a prompt the user typed fires, in the order it first names them (see the header). */
 export function firedClasses(prompt: string): ActionClass[] {
+  if (last?.prompt === prompt) return [...last.classes];
+  const classes = classesIn(String(prompt ?? ""));
+  last = { prompt, classes };
+  return [...classes];
+}
+
+function classesIn(prompt: string): ActionClass[] {
   const first = new Map<ActionClass, number>();
   let at = 0;
-  for (const clause of clausesOf(String(prompt ?? ""))) {
+  for (const clause of clausesOf(prompt)) {
     const informational = asksInformation(clause);
     for (const [cls, words] of CUE_WORDS) {
       const index = firesAt(clause, words, informational);

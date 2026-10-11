@@ -2,7 +2,7 @@
   "about": "A7 §5's action-class lexicon (D18), D18's stash and D9 fix 4's protected-path, in R8's order of specificity (memory-classes.ts). words: the class's words, one case-insensitive regex; a word that names its object captures it as group 1. cue: the words a cue fires the class by, where they differ. verbs: what a revocation or a compaction summary names the class by. object: the class's default object (D9 fix 3), then its other names.",
   "classes": {
     "destructive-db": {
-      "words": "\\b(?:drop|truncate|reset|wipe)\\b([^,;]*?\\b(?:db|database|table|schema)s?)\\b|\\b(?:db|database|table|schema)s?\\b[^,;.]*?\\b(?:drop|truncate|reset|wipe)\\b|\\bmigrate reset\\b",
+      "words": "\\b(?:drop|truncate|reset|wipe)\\b([^,;]{0,60}?\\b(?:db|database|table|schema)s?)\\b|\\b(?:db|database|table|schema)s?\\b[^,;.]{0,60}?\\b(?:drop|truncate|reset|wipe)\\b|\\bmigrate reset\\b",
       "verbs": ["truncate", "reset", "wipe"]
     },
     "history-rewrite": {
@@ -20,7 +20,7 @@
       "words": "\\b(?:billing|invoic\\w*|payments?|stripe)\\b"
     },
     "dependency": {
-      "words": "\\b(?:add(?:s|ed|ing)?\\s+(?:(?:a|an|any|the|new|another|some)\\s+)*(?:(?!(?:to|for|in|into|from|with|on|of|at)\\b)[\\w-]+\\s+){0,3}?(?:deps?|dependenc(?:y|ies)|packages?|librar(?:y|ies))|install\\w*|npm i|pnpm add|bump\\w*|upgrad\\w*)\\b",
+      "words": "\\b(?:add(?:s|ed|ing)?\\s+(?:(?:a|an|any|the|new|another|some)\\s+)*(?:(?!(?:to|for|in|into|onto|from|with|on|of|at|about|under)\\b)[\\w-]+\\s+){0,3}?(?:deps?|dependenc(?:y|ies)|packages?|librar(?:y|ies))|install\\w*|npm i|pnpm add|bump\\w*|upgrad\\w*)\\b",
       "verbs": ["install", "bump", "upgrade"],
       "object": ["package"]
     },

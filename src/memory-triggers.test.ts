@@ -29,6 +29,9 @@ describe("firedClasses", () => {
     expect(firedClasses("Can you remind me how Stripe webhooks work?")).toEqual([]);
     expect(firedClasses("Need help with production deploy steps?")).toEqual([]);
     expect(firedClasses("I added a helper, what should the CI run before pushing?")).toEqual([]);
+    expect(firedClasses("I added a helper, what should I run before pushing?")).toEqual([]);
+    expect(firedClasses("explain merge sort")).toEqual([]);
+    expect(firedClasses("Can you explain how merge sort works?")).toEqual([]);
     // a class word that is the verb of the user or the agent still fires
     expect(firedClasses("What should I run before I push?")).toEqual(["push-upstream"]);
     expect(firedClasses("how do we deploy this?")).toEqual(["deploy"]);
@@ -42,6 +45,13 @@ describe("firedClasses", () => {
     expect(firedClasses("refactor the main function")).toEqual([]);
     expect(firedClasses("rebase onto main")).toEqual(["history-rewrite", "branch"]);
     expect(firedClasses("update the main branch")).toEqual(["branch"]);
+  });
+
+  test("stays linear on a long clause of class objects with no verb (review round 1: was 336-658 ms)", () => {
+    const started = performance.now();
+    firedClasses("table ".repeat(5000));
+    firedClasses("what table ".repeat(5000));
+    expect(performance.now() - started).toBeLessThan(200);
   });
 
   test("orders the classes by where the prompt first names them", () => {
