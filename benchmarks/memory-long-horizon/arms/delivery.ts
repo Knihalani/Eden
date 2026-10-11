@@ -320,21 +320,29 @@ const shadow: Arm = {
   flagged: true,
   async run(run) {
     const claude = "# Project\n\nA TypeScript monorepo. Use pnpm, not npm, for every install.\n";
-    const spec = monorepo({ projectFiles: { "CLAUDE.md": claude } });
+    // A nested file, loaded lazily (InstructionsLoaded `nested_traversal`) by the first Read under apps/web.
+    const web = "# Web\n\nThe test runner is vitest.\n";
+    const spec = monorepo({ projectFiles: { "CLAUDE.md": claude, "apps/web/CLAUDE.md": web } });
     const world = run.world(spec);
     const session = await Driver.start(world, spec);
     await session.say("The package manager is pnpm.", [set(PKG, "", "pnpm")]);
     await session.say("The database is postgres.", [set(DB, "", "postgres")]);
+    await session.say("The test runner is vitest.", [set(TEST, "", "vitest")]);
     await session.compact(BLANK_SUMMARY);
     await session.ask("install the dependencies", { needs: [id(PKG, "")] });
     const control = await session.ask("what database do we use?", { needs: [id(DB, "")] });
+    const login = read("apps/web/app/login.ts", "export function login() {}\n");
+    await session.turn("open apps/web/app/login.ts", { tools: [[login]] });
+    const nested = await session.ask("which test runner do we use?", { needs: [id(TEST, "")] });
     await session.end();
     const pnpm = judged(world, spec)
       .flatMap((packet) => packet.bullets)
       .filter((bullet) => states(bullet, PKG, "pnpm"));
+    const vitest = bulletsAt(world, spec, nested.seq).filter((bullet) => states(bullet, TEST, "vitest"));
     return [
       check("never-injected", pnpm.length === 0, `pnpm bullets: ${quote(pnpm)}`),
       needCheck("control-packs", world, spec, control),
+      check("nested-never-injected", vitest.length === 0, `vitest bullets once apps/web loaded: ${quote(vitest)}`),
     ];
   },
 };

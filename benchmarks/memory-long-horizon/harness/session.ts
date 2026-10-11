@@ -25,7 +25,7 @@
  *   `<subagent_tokens>`, `message.usage`, and `compactMetadata.preTokens`.
  */
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type { Cue, CueRecord } from "./cues";
 import { Oracle, type Effect, type Subject } from "./oracle";
 import {
@@ -503,6 +503,7 @@ export class Window {
     const ran = calls.every((call) => CONCURRENT_TOOLS.has(call.name))
       ? await this.runConcurrently(calls, uses)
       : await this.runOneByOne(calls, uses);
+    if (this === this.session.main) for (const call of ran) await this.session.loadNested(call);
     const batch = await this.session.dispatch(postToolBatchPayload(this.ctx(), ran), this);
     this.session.attach(this, "PostToolBatch", batch, ran.at(-1)!.id);
     this.session.endStep();
@@ -592,6 +593,8 @@ export class SimSession {
   private readonly transcripts = new Set<Transcript>();
   /** Background subagents launched and not completed yet: Stop reports them in `background_tasks`. */
   private readonly background: AgentRun[] = [];
+  /** The nested CLAUDE.md files loaded since the last compaction (`loadNested`). */
+  private readonly nestedLoaded = new Set<string>();
 
   constructor(
     readonly world: SimWorld,
@@ -815,6 +818,7 @@ export class SimSession {
     await this.world.dispatch(subagentStopPayload(this.ctx(compactor), stop), compactor.id, this.placeEnv());
     const preTokens = this.main.tokens;
     this.main.compact();
+    this.nestedLoaded.clear();
     // Prompts of the compacted conversation are no longer rewind targets (our reading; unverified).
     this.humanPrompts.splice(0);
     this.main.transcript.compactBoundary(trigger, preTokens, BASE_CONTEXT_TOKENS + this.world.tokens(summary), 30_000);
@@ -935,6 +939,30 @@ export class SimSession {
       this.main.seen.loadInstructions(file.path, existsSync(filePath) ? readFileSync(filePath, "utf8") : "");
       const load = { filePath, memoryType: file.memoryType, loadReason: reason };
       await this.dispatch(instructionsLoadedPayload(this.ctx(), load), this.main);
+    }
+  }
+
+  /**
+   * The nested CLAUDE.md files a main-thread tool's file access loads (R0 F17), each once until a compaction drops
+   * it: the folders from the file's up to the session's, without the session's own (an eager load). As captured on
+   * Claude Code 2.1.294: a `nested_memory` attachment line, then InstructionsLoaded `nested_traversal`. A subagent's
+   * access fires none (R0 F35).
+   */
+  async loadNested(call: ToolCall): Promise<void> {
+    const filePath = (call.input as { file_path?: unknown }).file_path;
+    if (typeof filePath !== "string") return;
+    const file = filePath.startsWith("/") ? filePath : join(this.place.cwd, filePath);
+    if (relative(this.place.cwd, file).startsWith("..")) return;
+    for (let folder = dirname(file); folder !== this.place.cwd && folder.length > this.place.cwd.length;) {
+      const nested = join(folder, "CLAUDE.md");
+      if (existsSync(nested) && !this.nestedLoaded.has(nested)) {
+        this.nestedLoaded.add(nested);
+        const text = readFileSync(nested, "utf8");
+        this.main.record(this.main.transcript.nestedMemory(nested, relative(this.place.cwd, nested), text), text);
+        const load = { filePath: nested, memoryType: "Project" as const, loadReason: "nested_traversal" as const };
+        await this.dispatch(instructionsLoadedPayload(this.ctx(), { ...load, triggerFilePath: file }), this.main);
+      }
+      folder = dirname(folder);
     }
   }
 
