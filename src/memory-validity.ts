@@ -41,7 +41,15 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { memoryNow } from "./memory-clock";
 import { stripPacketLabel } from "./memory-provenance";
-import { objectWords, overturnable, overturnedKeys, ruleRefs, rulesIn } from "./memory-policy";
+import {
+  INTENT_TTL_MS,
+  objectWords,
+  overturnable,
+  overturnedKeys,
+  ruleRefs,
+  rulesIn,
+  withoutIntents,
+} from "./memory-policy";
 import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript";
 
 /**
@@ -420,19 +428,27 @@ function statesRule(text: string, key: string): boolean {
 }
 
 /**
- * The keys of the rules a text states that an overturning reaches (`overturnable`), read once per text: every delivery
- * point reads each note against the log.
+ * A text's readings, each made once per text: every delivery point reads each note against the log, and rereads it at
+ * the next point. Bounded: the cache is emptied when full.
  */
+const READINGS_KEPT = 4_096;
 const RULE_KEYS = new Map<string, string[]>();
-const RULE_KEYS_KEPT = 4_096;
+const INTENTLESS = new Map<string, string>();
 
-function ruleKeysOf(text: string): string[] {
-  let keys = RULE_KEYS.get(text);
-  if (!keys) {
-    if (RULE_KEYS.size >= RULE_KEYS_KEPT) RULE_KEYS.clear();
-    RULE_KEYS.set(text, (keys = ruleRefs(rulesIn(text)).flatMap((rule) => (overturnable(rule) ? [rule.k] : []))));
+function cached<T>(cache: Map<string, T>, text: string, read: (text: string) => T): T {
+  let reading = cache.get(text);
+  if (reading === undefined) {
+    if (cache.size >= READINGS_KEPT) cache.clear();
+    cache.set(text, (reading = read(text)));
   }
-  return keys;
+  return reading;
+}
+
+/** The keys of the rules a text states that an overturning reaches (`overturnable`). */
+function ruleKeysOf(text: string): string[] {
+  return cached(RULE_KEYS, text, (said) =>
+    ruleRefs(rulesIn(said)).flatMap((rule) => (overturnable(rule) ? [rule.k] : [])),
+  );
 }
 
 /** Whether a text states a rule a revocation or an opposition has overturned. */
@@ -469,11 +485,14 @@ function invalidates(record: Invalidation, sentence: string): boolean {
  * text without a wall-clock time counts as older than every invalidation. Each clause is read on its own, as A4 §3.1
  * supersedes statements: a rule clause yields only to a revocation, which takes its whole sentence (the clauses after
  * a `;` qualify the rule: "never push to main; ask first"); a fact or episode clause yields to a retraction
- * (supersession, `stale_for`), even inside a pinned row.
+ * (supersession, `stale_for`), even inside a pinned row. An intent's clause goes 7 days after the text was said (D9,
+ * A4 §5.1 step 5's expired intent): a row stating a policy beside it ("Never force-push, and don't open the PR yet")
+ * has no `valid_until` of its own.
  */
 export function validText(text: string, at: unknown, records: readonly Invalidation[]): string {
-  const raw = String(text ?? "").trim();
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
+  const said = String(text ?? "").trim();
+  const raw = time + INTENT_TTL_MS <= memoryNow() ? cached(INTENTLESS, said, withoutIntents) : said;
   const newer = records.filter((record) => record.t > time);
   if (!raw || !newer.length) return raw;
   let dropped = false;

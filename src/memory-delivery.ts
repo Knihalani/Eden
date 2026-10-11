@@ -24,12 +24,12 @@ export function isPinnedIntention(r: MemoryRecord): boolean {
 }
 
 /**
- * Step 5: each note without the sentences an invalidation has made invalid; a note left empty is dropped. A rule
- * sentence yields only to a revocation (`validText`). When the cue asks about history, episodes keep what they say
+ * Step 5: each note without the sentences an invalidation has made invalid, and without its intents' clauses once
+ * they expired (`validText`); a note left empty is dropped. A rule sentence yields only to a revocation or an
+ * opposition. When the cue asks about history, episodes keep what they say
  * (D31 `stale_for`), except what the user asked to forget (A6 §3); facts and rules do not.
  */
 export function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
-  if (!invalid.length) return notes;
   const history = asksHistory(prompt);
   return notes.flatMap((note) => {
     const kind = noteKindToken(note);
