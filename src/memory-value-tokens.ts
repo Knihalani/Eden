@@ -13,6 +13,7 @@
  */
 import { stripPacketLabel } from "./memory-provenance";
 import { contentWords } from "./memory-transcript";
+import type { RuleRef } from "./memory-policy";
 import { ACTION_VERBS, objectWords } from "./memory-validity";
 
 /** A class token, which no word of a text can be: words are `[a-z0-9]+`. */
@@ -74,6 +75,11 @@ export function ruleValueTokens(text: string): string[] {
     return object.length ? [...new Set([classToken(VERB_FORMS.get(words[at]!)!), ...object])] : [];
   }
   return [...new Set(objectOf(contentWords(body)))];
+}
+
+/** A rule's value tokens from its keys (P2.1). Interface only. */
+export function keyValueTokens(_rules: readonly RuleRef[]): string[] {
+  return [];
 }
 
 /** What a summary names, as value tokens are written: its words, their singular forms, and the classes of its verbs. */
