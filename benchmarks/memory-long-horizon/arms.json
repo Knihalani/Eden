@@ -717,14 +717,8 @@
       ],
       "a5": "same (class, polarity, object) in 2 sessions -> a pin; in 2 repos -> a user-global proposal; confirmed -> 3rd repo gets it; intents and unrelated objects never promote",
       "on": {
-        "state": "red",
-        "failed": [
-          "intent-not-pinned",
-          "pin-after-2-sessions",
-          "proposal-shown",
-          "third-repo-gets-it"
-        ],
-        "why": "the global gist store shows every rule at every SessionStart from the first session on, in every repo: after one session, the 'not yet' intent, and repo A's rule in repo C before any proposal; no proposal is ever shown"
+        "state": "green",
+        "why": "passes since P2.4 (D9, D11, A4 §5.2): sleep promotes a policy said in 2 sessions to a pin and SessionStart briefs pins only (gists without rule clauses), so 1 session and 3 sessions of an intent brief nothing; a rule pinned in 2 repos is proposed once at a SessionStart of a repo holding it, and after \"yes, everywhere\" repo C is briefed it (all projects)"
       },
       "off": {
         "state": "green",

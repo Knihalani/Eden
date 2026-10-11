@@ -58,14 +58,15 @@ export interface Rule {
 }
 
 /**
- * A rule as a row keeps it: its key, the qualifier that makes it an intent, `c` when it is narrowed, and `v`, its
- * action in a class whose words name distinct actions.
+ * A rule as a row keeps it: its key, the qualifier that makes it an intent, `c` when it is narrowed, `v`, its action
+ * in a class whose words name distinct actions, and `p` once sleep promoted it to a pin (D9, `memory-pins.ts`).
  */
 export interface RuleRef {
   k: string;
   q?: Qualifier;
   c?: true;
   v?: string;
+  p?: true;
 }
 
 /** D9: an intent expires after 7 days, if its action has not completed first. */
@@ -243,14 +244,27 @@ export function oneNamePerObject(text: string): string {
     .replace(/\bdatabases?\b/gi, "db");
 }
 
+/** D11's unambiguous phrase, "in all my projects": it names where a rule holds, never its object. */
+const ALL_MY_PROJECTS = /\b(?:in|across|for) all (?:of )?my (?:projects|repos(?:itories)?)\b/i;
+/** D11's "everywhere" and "globally", set off from the rule by a comma or a colon ("Never force-push, everywhere"). */
+const SET_OFF_EVERYWHERE = /(?:^|[,;:]\s*)(?:everywhere|globally)\s*(?:[,;:.!]|$)/i;
+
+/**
+ * Whether a sentence says its rules hold in every repo (D11's phrases). "Everywhere" and "globally" count only set
+ * off by a comma: "install packages globally" is npm's `-g`, and "use strict types everywhere" means this codebase.
+ */
+export function saysAllProjects(sentence: string): boolean {
+  return ALL_MY_PROJECTS.test(sentence) || SET_OFF_EVERYWHERE.test(sentence.trim());
+}
+
 /**
  * Where an object's noun phrase ends: a qualifier, a conjunction, a relative pronoun, a word that names no object,
- * punctuation (a period only before a space: `.env` and `v1.2` are words).
+ * D11's "in all my projects", punctuation (a period only before a space: `.env` and `v1.2` are words).
  */
 const PHRASE_END = new RegExp(
   String.raw`\b(?:yet|until|before|after|for now|this time|in this pr|today|this week|and|but|or|so|then|when|` +
     String.raw`whenever|while|unless|if|once|because|since|without|that|which|who|whose|yourself|yourselves|ever|` +
-    String.raw`first|on your own|from your side|by hand)\b|[,;:!?()]|\.(?=\s|$)`,
+    String.raw`first|on your own|from your side|by hand)\b|${ALL_MY_PROJECTS.source}|[,;:!?()]|\.(?=\s|$)`,
   "i",
 );
 const LEADING_WORDS =

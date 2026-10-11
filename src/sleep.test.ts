@@ -392,7 +392,9 @@ describe("M7.3 gists + SessionStart", () => {
         expect(ctx).toContain(MEMORY_MARK);
         expect(ctx).toMatch(/bun test/i);
         expect(ctx).toMatch(/\(earlier session notes/);
-        expect(ctx).toContain(gists[0]!.text);
+        // Since P2.4 a gist loses its rule clauses at SessionStart: the rule comes as the pin above (A4 §5.2).
+        expect(gists[0]!.text).toContain(" Always run bun test before you push.");
+        expect(ctx).toContain(`${gists[0]!.text.replace(" Always run bun test before you push.", "")} (earlier`);
         expect(ctx).not.toMatch(/lunch menu chatter/i);
         expect(ctx).not.toMatch(/weather talk from the hallway/i);
       },

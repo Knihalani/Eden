@@ -15,6 +15,7 @@
 import { MEMORY_PACKET_MARK, PACKET_BYTE_CAP } from "./memory-sota";
 import { knownNoteSource, noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { memoryNow } from "./memory-clock";
+import { ALL_PROJECTS } from "./memory-user-global";
 
 export const PACKET_SOFT_BULLETS = 4;
 /** D28's hard limit, which only `Updated:` items reach. */
@@ -69,6 +70,11 @@ function names(text: string, value: string): boolean {
   return new RegExp(`(?<![\\w@.-])${escaped}(?![\\w@-])`, "i").test(text);
 }
 
+/** D11: a rule the user keeps for every repo says so. */
+function allProjects(note: ProvenanceNote): string {
+  return (note.tags ?? []).includes(ALL_PROJECTS) ? " (all projects)" : "";
+}
+
 /** One bullet, worded as information about the project (D14), claiming only the source the row shows (A6 §2.1). */
 export function declarativeBullet(note: ProvenanceNote, now: number): string {
   const text = body(note);
@@ -79,7 +85,7 @@ export function declarativeBullet(note: ProvenanceNote, now: number): string {
     const said = [was, provenance].filter(Boolean).join("; ");
     return `Updated: ${text}${said ? ` (${said})` : ""}`;
   }
-  if (packetKind(note) === "rule" && source === "user") return `Rule you set: ${text}`;
+  if (packetKind(note) === "rule" && source === "user") return `Rule you set: ${text}${allProjects(note)}`;
   return provenance ? `${text} (${provenance})` : text;
 }
 

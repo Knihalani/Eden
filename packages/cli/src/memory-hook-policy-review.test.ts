@@ -59,10 +59,11 @@ describe("P2.1 review probes", () => {
   });
 
   test("L8: a positive rule whose class word is only in its precondition does not supersede a prohibition", () => {
-    submit("Don't push.");
+    // Explicit, so SessionStart briefs it (since P2.4 it briefs pins only, D9).
+    submit("Never push.");
     submit("Always run the tests before you push.");
-    expect(superseded(row("Don't push"))).toBe(false);
-    expect(start("s-next")).toContain("Don't push");
+    expect(superseded(row("Never push"))).toBe(false);
+    expect(start("s-next")).toContain("Never push");
   });
 
   test("fix 4: .env.example is not .env; a rule about it does not supersede the .env rule", () => {
@@ -88,9 +89,10 @@ describe("P2.1 review probes", () => {
     expect(keys("I want you to never push to main.")).toEqual(["policy:push-upstream|neg|main"]);
   });
   test("L8: an exception in the same prompt does not supersede the rule it qualifies", () => {
-    submit("Don't merge PRs. Always merge PRs from dependabot.");
-    expect(superseded(row("Don't merge PRs"))).toBe(false);
-    expect(start("s-next")).toContain("Don't merge PRs");
+    // Explicit, so SessionStart briefs it (since P2.4 it briefs pins only, D9).
+    submit("Never merge PRs. Always merge PRs from dependabot.");
+    expect(superseded(row("Never merge PRs"))).toBe(false);
+    expect(start("s-next")).toContain("Never merge PRs");
   });
 
   test("D9: an expired intent is not briefed through a session gist", () => {
@@ -124,10 +126,13 @@ describe("P2.1 review probes, round 2", () => {
     process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 60_000);
   };
 
-  test("D9: the intent clause of a mixed row is not briefed after 7 days; its policy is", () => {
+  test("D9: the intent clause of a mixed row is not briefed, before 7 days or after; its policy is", () => {
     submit("Never force-push, and don't open the PR yet.");
     stop("s1");
-    expect(start("s-next")).toContain("open the PR yet");
+    // Since P2.4 SessionStart briefs pins only (A4 §5.2), and an intent is never one (D9).
+    const soon = start("s-next");
+    expect(soon).toContain("force-push");
+    expect(soon).not.toContain("open the PR yet");
     process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 8 * 86_400_000);
     const packet = start("s-later");
     expect(packet).toContain("force-push");

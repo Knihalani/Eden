@@ -33,6 +33,7 @@ import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskR
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
 import { firedClasses, triggeredRows } from "./memory-triggers";
 import { writeRuleIndex } from "./memory-rule-index";
+import { readUserRules, withUserGlobal } from "./memory-user-global";
 import { childSessionName, memorySessionName } from "./memory-session";
 import {
   attachPlaceCues,
@@ -158,6 +159,8 @@ export type MemoryRecord = {
   /** The store's order (A4 §1); absent until the store lock gives it one, and on rows written before P0.3. */
   seq?: number;
   ep?: string;
+  /** The other sessions that typed a rule row's text again, word for word (D9's recurrence, `memory-pins.ts`). */
+  eps?: string[];
   sal?: number;
   lane?: MemoryLaneKind;
   invalidAt?: number;
@@ -551,6 +554,9 @@ function pinsItself(text: string, rules: readonly Rule[] = rulesIn(text)): boole
 function restatementKey(text: string): string | undefined {
   return copulaKey(text) ?? (rulesIn(text).length ? `rule:${text.toLowerCase()}` : undefined);
 }
+
+/** How many other sessions a row records as having typed it again (`eps`): D9 needs one. */
+const RECURRING_SESSIONS = 8;
 
 /** The legacy store's rule words, for a rule on no action class ("always explain plainly"). */
 const LEGACY_RULE = /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i;
@@ -965,6 +971,11 @@ export class AgentMemory {
     return this.perRepo ? dirname(dirname(this.dir)) : this.dir;
   }
 
+  /** The session's own `ep`, which each row it writes carries (A4 §7 tells sessions apart by it). */
+  get episode(): string | undefined {
+    return this.session ? opaqueId(this.session) : undefined;
+  }
+
   /** The repo key of a per-repo store (D1), which prefixes the ledger's cids; none for another store. */
   get repoKey(): string | undefined {
     return this.perRepo ? basename(this.dir) : undefined;
@@ -1008,7 +1019,7 @@ export class AgentMemory {
       tags: (opts.tags || []).map((t) => String(t).toLowerCase()),
       at,
       ...(opts.lane ? { lane: opts.lane } : {}),
-      ...(this.session ? { ep: opaqueId(this.session) } : {}),
+      ...(this.episode ? { ep: this.episode } : {}),
       ...(srcUuid ? { srcUuid } : {}),
       ...(promptId ? { promptId } : {}),
     };
@@ -1200,14 +1211,17 @@ export class AgentMemory {
 
   /**
    * The policies and intents the classes the user's own words fire deliver (A4 §5.1 step 4b, `memory-triggers.ts`):
-   * `own` is the text D12 left the user, without pasted spans or spans copied from a recent tool result.
+   * `own` is the text D12 left the user, without pasted spans or spans copied from a recent tool result. A per-repo
+   * store's rules sit beside the rules the user keeps for all projects (D11), which a repo row of the same rule gives
+   * way to.
    */
   private triggered(own: string): MemoryRecord[] {
     try {
       const classes = firedClasses(own);
       if (!classes.length) return [];
       this.ensureIndex();
-      return labelledNotes(triggeredRows(this.ruleRows, classes));
+      const global = this.perRepo ? (readUserRules(this.windowsRoot) as MemoryRecord[]) : [];
+      return labelledNotes(triggeredRows(withUserGlobal(this.ruleRows, global), classes));
     } catch {
       return [];
     }
@@ -1299,7 +1313,10 @@ export class AgentMemory {
           } catch {}
           const lastTypedHere = lastTyped.get(restatementKey(text) ?? "") === `${i}:${j}`;
           const learnAgain = !opts.reread && this.restated(text, lastTypedHere);
-          if (this.seenLower.has(text.toLowerCase()) && !learnAgain) continue;
+          if (this.seenLower.has(text.toLowerCase()) && !learnAgain) {
+            if (!it.untyped) this.noteRuleSaidAgain(text);
+            continue;
+          }
           // A4 §3.0: text the user did not type is an episode, never a fact, a rule or a pin.
           const asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text),
             rules = it.untyped || asQuestion ? [] : rulesIn(text),
@@ -1377,6 +1394,23 @@ export class AgentMemory {
    * about its subject in the batch; the assistant's or a tool's echo never is, and neither is anything in a batch the
    * caller marks a re-read (`observe`).
    */
+  /**
+   * D9's recurrence of a rule typed again word for word, which the store keeps as one row: each row stating it records
+   * the session that said it again (`eps`), so sleep counts both sessions (`memory-pins.ts`).
+   */
+  private noteRuleSaidAgain(text: string): void {
+    const ep = this.episode;
+    const lower = text.toLowerCase();
+    if (!ep) return;
+    for (const { rec: row } of this.compiled) {
+      if (!row.rules?.length || row.text.toLowerCase() !== lower || !row.ep || row.ep === ep) continue;
+      if (row.eps?.includes(ep) || superseded(row)) continue;
+      row.eps = [...(row.eps ?? []), ep].slice(-RECURRING_SESSIONS);
+      this.changed.add(row.id);
+      this.flush(true);
+    }
+  }
+
   private restated(text: string, lastTypedHere: boolean): boolean {
     if (!lastTypedHere) return false;
     const lower = text.toLowerCase();

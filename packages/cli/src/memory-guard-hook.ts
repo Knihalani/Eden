@@ -69,7 +69,7 @@ function guard(r: Record<string, unknown>, flags: FlagState, trace: Trace): Reco
   if (!win || !repo || !store || !readableStore(store)) return null;
   Object.assign(trace, { repo: repo.key, win: win.split("/").at(-1) });
   const permissionMode = str(r.permission_mode) ?? "default";
-  const answer = guardAnswer(store, call, permissionMode);
+  const answer = guardAnswer(store, call, permissionMode, memoryNow(), root);
   if (!answer) return null;
   const id = str(r.tool_use_id) ?? "";
   const asked = askMode === "on" && answer.ask;
