@@ -1,8 +1,11 @@
 /**
  * P2.2: A7 §5's lexicon ships as data (`memory-classes.json`), and every reader takes it from there: D9's extraction,
- * the cue's trigger, the revocation and compaction verbs, and D9 fix 3's default objects.
+ * the cue's trigger, the revocation and compaction verbs, and D9 fix 3's default objects. P2.3: its PreToolUse map is
+ * what `hooks.json` registers and what the guard re-checks.
  */
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import lexicon from "./memory-classes.json";
 import {
   ACTION_CLASSES,
@@ -11,7 +14,9 @@ import {
   CUE_WORDS,
   defaultObject,
   defaultObjectNames,
+  GUARDED_CLASSES,
 } from "./memory-classes";
+import { callClasses } from "./memory-guard";
 import { extractRules, ruleKey } from "./memory-policy";
 
 const keys = (text: string) => extractRules(text).map(ruleKey);
@@ -77,5 +82,72 @@ describe("the action-class lexicon", () => {
     expect(keys("Never drop the users table.")).toEqual(["destructive-db|neg|user-table"]);
     // A7 §5's phrasal verbs with their object inside: "close it out", "wrap this up"
     expect(keys("Never close it out yourself.")).toEqual(["integrate|neg|*"]);
+  });
+});
+
+describe("the PreToolUse map (A7 §5)", () => {
+  const hooks = JSON.parse(readFileSync(join(import.meta.dir, "../plugins/eden-memory/hooks/hooks.json"), "utf8"));
+  const command = (cls: string, n: number) =>
+    `bun --no-install "\${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts" guard ${cls} ${n} 2>/dev/null || true`;
+
+  test("hooks.json registers one handler per (class, pattern), its class an argument, and the tool matchers", () => {
+    const bash = GUARDED_CLASSES.flatMap(([cls, guard]) =>
+      guard.if.map((rule, n) => ({ type: "command", command: command(cls, n + 1), if: `Bash(${rule})`, timeout: 5 })),
+    );
+    const tools = GUARDED_CLASSES.flatMap(([cls, guard]) =>
+      guard.tools
+        ? [
+            {
+              matcher: guard.tools,
+              hooks: [{ type: "command", command: command(cls, guard.if.length + 1), timeout: 5 }],
+            },
+          ]
+        : [],
+    );
+    expect(hooks.hooks.PreToolUse).toEqual([{ matcher: "Bash", hooks: bash }, ...tools]);
+    expect(bash).toHaveLength(29);
+  });
+
+  /** A command each `if` rule spawns its handler for. */
+  const SPAWNS: Record<string, string> = {
+    "git merge*": "git merge feature",
+    "gh pr merge*": "gh pr merge 42",
+    "gh pr create*": "gh pr create --fill",
+    "git commit*": "git commit -m wip",
+    "git push*": "git push origin main",
+    "gh pr merge --auto*": "gh pr merge --auto 42",
+    "git push --force*": "git push --force origin feature",
+    "git push -f*": "git push -f",
+    "git push *+*": "git push origin +main",
+    "git rebase*": "git rebase main",
+    "git commit --amend*": "git commit --amend",
+    "*deploy*": "npm run deploy",
+    "vercel*": "vercel --prod",
+    "fly deploy*": "fly deploy",
+    "kubectl apply*": "kubectl apply -f k8s.yaml",
+    "rm -rf*": "rm -rf dist",
+    "rm -fr*": "rm -fr dist",
+    "rm -r*": "rm -r dist",
+    "git branch -D*": "git branch -D old",
+    "git push * --delete*": "git push origin --delete old",
+    "npm i*": "npm i lodash",
+    "pnpm add*": "pnpm add zod",
+    "yarn add*": "yarn add zod",
+    "bun add*": "bun add zod",
+    "pip install*": "pip install requests",
+    "cargo add*": "cargo add serde",
+    "*migrate reset*": "npx prisma migrate reset",
+    "*db drop*": "supabase db drop",
+    "psql*DROP*": "psql -c 'DROP TABLE users'",
+  };
+
+  test("the guard re-checks each rule's commands as its class", () => {
+    const missed = GUARDED_CLASSES.flatMap(([cls, guard]) =>
+      guard.if.flatMap((rule) => {
+        const sample = SPAWNS[rule];
+        return sample && callClasses({ tool: "Bash", input: { command: sample } }).includes(cls) ? [] : [rule];
+      }),
+    );
+    expect(missed).toEqual([]);
   });
 });

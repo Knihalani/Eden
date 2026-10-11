@@ -2,7 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { asksHistory, invalidationsIn, readInvalidations, recordInvalidations, validText } from "./memory-validity";
+import {
+  asksHistory,
+  invalidationsIn,
+  readInvalidations,
+  recordInvalidations,
+  recordRuleEnds,
+  validText,
+} from "./memory-validity";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -279,5 +286,34 @@ describe("P0.2 review round 4, closed in P0.3", () => {
     expect(after("You can merge now.", "Never merge PRs yourself; never push to main.")).toBe("never push to main.");
     expect(after("You can merge now.", "Never merge PRs yourself, never push to main.")).toBe("never push to main.");
     expect(after("You can push to main now.", "Never push to main; ask first.")).toBe("");
+  });
+});
+
+describe("an end (P2.3): an intent released or done, a rule dropped", () => {
+  const T = Date.parse("2026-10-01T09:00:00.000Z");
+
+  function ended(rules: string[], of: "intent" | "rule"): ReturnType<typeof readInvalidations> {
+    const dir = mkdtempSync(join(tmpdir(), "eden-validity-end-"));
+    try {
+      recordRuleEnds(dir, rules, of, T);
+      return readInvalidations(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test("an intent's end drops its clause and a bare qualifier beside it; the policy beside it stays", () => {
+    const end = ended(["review|neg|*"], "intent");
+    expect(end).toEqual([{ k: "end", r: "review|neg|*", t: T, of: "intent" }]);
+    expect(validText("Never force-push, and don't open the PR yet.", T - 1, end)).toBe("Never force-push.");
+    expect(validText("Not yet, don't open the PR.", T - 1, end)).toBe("");
+    expect(validText("Don't open the PR yet.", T + 1, end)).toBe("Don't open the PR yet.");
+  });
+
+  test("an intent's end leaves a policy of the same key; a rule's end drops it, narrowed or not", () => {
+    const intent = ended(["push-upstream|neg|*"], "intent");
+    expect(validText("Don't push without asking me.", T - 1, intent)).toBe("Don't push without asking me.");
+    const rule = ended(["push-upstream|neg|*"], "rule");
+    expect(validText("Don't push without asking me.", T - 1, rule)).toBe("");
   });
 });
