@@ -34,8 +34,6 @@ import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
 import { firedClasses, triggeredRows } from "./memory-triggers";
 import { writeRuleIndex } from "./memory-rule-index";
 import { childSessionName, memorySessionName } from "./memory-session";
-
-export { childSessionName, memorySessionName };
 import {
   attachPlaceCues,
   hookLane,
@@ -50,6 +48,8 @@ import {
   PACKET_BYTE_CAP,
 } from "./memory-sota";
 import { placeTurnTails, WrapTurns, type InjectOptions } from "./memory-wrap";
+
+export { childSessionName, memorySessionName };
 
 export { injectedPackets, type InjectOptions } from "./memory-wrap";
 

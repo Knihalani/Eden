@@ -1,15 +1,14 @@
 /**
  * P2.3's pre-registered target 3 (A5 `guard_precision`, `guard_recall`): the fixture table
  * (`src/memory-guard-cases.json`), written before the guard, played through the hooks. The user's words go through
- * the Submit hook, as typed prompts in an earlier session; the call goes to every guard handler (one per class, as
- * `hooks.json` registers them), with `guard.context` and `guard.ask` on.
+ * the Submit hook, as typed prompts in an earlier session; the call goes to the guard twice, as two of its handlers
+ * would take it, with `guard.context` and `guard.ask` on.
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GUARDED_CLASSES } from "../../../src/memory-classes";
 import table from "../../../src/memory-guard-cases.json";
 import { guardHookResponse } from "./memory-guard-hook";
 import { memoryHookResponse } from "./memory-hook";
@@ -73,8 +72,9 @@ function play(item: Case, n: number): Answer {
     tool_use_id: `toolu_case_${n}`,
     permission_mode: item.mode,
   };
-  const outs = GUARDED_CLASSES.flatMap(([cls]) => {
-    const out = guardHookResponse(payload, cls);
+  // Two handlers of the call (`gh pr merge 1 && git log`): the second must stay silent.
+  const outs = [1, 2].flatMap(() => {
+    const out = guardHookResponse(payload);
     return out ? [out] : [];
   });
   const said = outs.map((out) => out.hookSpecificOutput as Record<string, unknown>);

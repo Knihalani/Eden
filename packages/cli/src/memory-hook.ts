@@ -33,8 +33,8 @@ import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
 import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
 import { firedClasses } from "../../../src/memory-triggers";
-import { intentsDoneBy, intentsReleasedBy } from "../../../src/memory-guard";
-import { labelFromTranscript, labelGuardCalls, lastShownRules, ran } from "../../../src/memory-guard-log";
+import { intentsReleasedBy } from "../../../src/memory-guard";
+import { askedRules, labelFromTranscript, labelGuardCalls, type Labelled } from "../../../src/memory-guard-log";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   readInvalidations,
@@ -478,9 +478,7 @@ function sleepAfterTurn(ctx: HookContext): void {
 
 /** A6 §2.5: the asks no PostToolBatch labelled, labelled from the transcript at sleep. */
 function labelAsksFromTranscript(ctx: HookContext): void {
-  if (!ctx.win) return;
-  const labels = labelFromTranscript(ctx.win, ctx.transcriptPath);
-  if (labels.length) ctx.trace.guard_labels = labels;
+  if (ctx.win) answered(ctx, labelFromTranscript(ctx.win, ctx.transcriptPath));
 }
 
 /**
@@ -533,7 +531,6 @@ function toolBatch(ctx: HookContext): void {
       if (!ctx.child) encodeConversation(ctx);
     },
     () => labelAsks(ctx),
-    () => endDoneIntents(ctx),
   );
 }
 
@@ -544,33 +541,40 @@ function batchCalls(r: Record<string, unknown>): Record<string, unknown>[] {
 
 /** A4 §5.5, A6 §2.5: the guard's asks this batch answered, labelled approved, declined or denied. */
 function labelAsks(ctx: HookContext): void {
-  if (!ctx.win) return;
-  const labels = labelGuardCalls(ctx.win, batchCalls(ctx.r));
-  if (labels.length) ctx.trace.guard_labels = labels;
+  if (ctx.win) answered(ctx, labelGuardCalls(ctx.win, batchCalls(ctx.r)));
 }
 
-/** D9: an intent ends when its action completes, the call that carries it out having run (P2.1's follow-up). */
-function endDoneIntents(ctx: HookContext): void {
-  const done = batchCalls(ctx.r).flatMap((call) =>
-    ran(call.tool_response)
-      ? intentsDoneBy(ctx.mem.dir, { tool: str(call.tool_name) ?? "", input: asRec(call.tool_input) })
-      : [],
+/**
+ * Logs the labels of answered asks, and ends each intent an approved ask showed whose call then ran (D9: an intent
+ * ends when its action completes). Only an ask the user approved carries an intent out: a call nobody was asked about
+ * (`bypassPermissions`, `guard.ask` off) leaves the intent standing until it is released or 7 days pass.
+ */
+function answered(ctx: HookContext, labels: readonly Labelled[]): void {
+  if (!labels.length) return;
+  ctx.trace.guard_labels = labels.map(({ id, label }) => ({ id, label }));
+  recordRuleEnds(
+    ctx.mem.dir,
+    labels.flatMap((item) => (item.ran ? item.rules : [])),
+    "intent",
   );
-  recordRuleEnds(ctx.mem.dir, done, "intent");
 }
 
-/** A typed sentence that drops the rule just shown (A6 §2.5's "that rule is gone"). */
+/**
+ * A typed sentence that is nothing but dropping the rule just shown (A6 §2.5's "that rule is gone"): "ok, that rule is
+ * gone.", "drop that rule". A sentence about another rule ("delete that rule from the eslint config") is not one.
+ */
 const DROPS_RULE =
-  /\b(?:that|this) rule (?:is gone|no longer applies|doesn['’]?t apply anymore|is (?:dead|over|obsolete)|can go)\b|\b(?:drop|remove|forget|delete|scrap) (?:that|this) rule\b/i;
+  /^(?:(?:ok(?:ay)?|yes|yeah|yep|fine|right|sure|alright|no)\b[\s,.!]*)*(?:please\s+)?(?:(?:that|this|the) rule (?:is gone|no longer applies|doesn['’]?t apply any ?more|is (?:dead|over|obsolete)|can go)|(?:drop|remove|forget|delete|scrap) (?:that|this|the) rule)(?:\s+(?:now|please|then))?[\s.!]*$/i;
 
 /**
  * What the user's own words end (P2.1's follow-ups): a release with no class word ends the live intents it names
- * ("Open it now."), and "that rule is gone" the rules the guard last showed in this window.
+ * ("Open it now."), and "that rule is gone" the rules the guard asked the user about in the turn before this one.
  */
 function endRules(ctx: HookContext, said: string): void {
   if (!said) return;
   recordRuleEnds(ctx.mem.dir, intentsReleasedBy(ctx.mem.dir, said), "intent");
-  if (ctx.win && DROPS_RULE.test(said)) recordRuleEnds(ctx.mem.dir, lastShownRules(ctx.win), "rule");
+  const drops = sentencesOf(said).some((sentence) => DROPS_RULE.test(sentence.trim()));
+  if (ctx.win && drops) recordRuleEnds(ctx.mem.dir, askedRules(ctx.win, humanTurns(ctx.win) - 1), "rule");
 }
 
 /**

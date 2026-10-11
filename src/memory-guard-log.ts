@@ -4,7 +4,8 @@
  * whose answer a later PostToolBatch read from the call's result, or, failing that, sleep from the transcript. Lines
  * hold ids, classes and rule keys only (X11).
  *
- * - **approved:** the call ran: its result is neither a refusal nor a failure to start.
+ * - **approved:** the user let the call run: its result is no refusal. A result that cannot be read (neither text nor
+ *   text blocks) is not labelled: the transcript may label it at sleep.
  * - **declined:** its result is Claude Code's permission-rejection message (the user said no).
  * - **denied:** the call was refused without the user being asked: with no permission host (`claude -p`), Claude Code
  *   2.1.294 denies an ask and returns its reason as the call's error ("Eden: rule you set …", seen in P2.3's
@@ -38,6 +39,8 @@ export type GuardCallRecord = {
   ask: boolean;
   /** The permission mode of the call. */
   mode: string;
+  /** The window's human turns when the call came (the ledger's `hturn`): "that rule" may answer it in the next. */
+  ht: number;
 };
 
 export type GuardRecord = GuardCallRecord | { k: "label"; t: number; id: string; label: GuardLabel };
@@ -89,23 +92,38 @@ export function claimCall(win: string, record: GuardCallRecord): boolean {
 
 const DECLINED = /^The user doesn't want to proceed with this tool use\b/;
 const DENIED = /^(?:Error: )?(?:Eden: rule you set\b|Permission to use \S+.*\b(?:has been|was) denied\b)/;
+const FAILED = /^(?:Exit code [1-9]\d*\b|PreToolUse:\S+ hook)/;
 
-/** What a call's result says of its ask (see the header). */
-export function labelOf(response: unknown): GuardLabel {
+/** What a call's result says of its ask (see the header); undefined for a result it cannot read (fail closed). */
+export function labelOf(response: unknown): GuardLabel | undefined {
+  if (typeof response !== "string" && !Array.isArray(response)) return undefined;
   const text = resultText(response).trim();
   return DECLINED.test(text) ? "declined" : DENIED.test(text) ? "denied" : "approved";
 }
 
+/** An ask's label, the rules it showed, and whether the call carried out its action: approved, and no failure. */
+export interface Labelled {
+  id: string;
+  label: GuardLabel;
+  rules: string[];
+  ran: boolean;
+}
+
 type BatchCall = { tool_use_id?: unknown; tool_response?: unknown };
 
-/** Labels the asks of this window that a batch's calls answered (A4 §5.5), once each; returns the labels. */
-export function labelGuardCalls(win: string, calls: readonly BatchCall[]): { id: string; label: GuardLabel }[] {
+/** Labels the asks of this window that a batch's calls answered (A4 §5.5), once each; returns them. */
+export function labelGuardCalls(win: string, calls: readonly BatchCall[]): Labelled[] {
   const records = guardRecords(win);
   const labelled = new Set(records.flatMap((record) => (record.k === "label" ? [record.id] : [])));
-  const asked = new Set(records.flatMap((record) => (record.k === "call" && record.ask ? [record.id] : [])));
-  const labels = calls.flatMap((call) => {
+  const asked = new Map(
+    records.flatMap((record) => (record.k === "call" && record.ask ? [[record.id, record.rules] as const] : [])),
+  );
+  const labels = calls.flatMap((call): Labelled[] => {
     const id = typeof call.tool_use_id === "string" ? call.tool_use_id : "";
-    return id && asked.has(id) && !labelled.has(id) ? [{ id, label: labelOf(call.tool_response) }] : [];
+    const label = labelOf(call.tool_response);
+    if (!id || !label || !asked.has(id) || labelled.has(id)) return [];
+    const failed = FAILED.test(resultText(call.tool_response).trim());
+    return [{ id, label, rules: asked.get(id)!, ran: label === "approved" && !failed }];
   });
   const t = memoryNow();
   appendGuardRecords(
@@ -120,9 +138,9 @@ const TRANSCRIPT_TAIL_BYTES = 256 * 1024;
 
 /**
  * A6 §2.5's reading at sleep: the asks no PostToolBatch labelled (an interrupt, a host without the event) whose
- * result the transcript's tail holds, labelled from it. Returns the labels.
+ * result the transcript's tail holds, labelled from it. Returns them.
  */
-export function labelFromTranscript(win: string, transcriptPath: string): { id: string; label: GuardLabel }[] {
+export function labelFromTranscript(win: string, transcriptPath: string): Labelled[] {
   const pending = guardRecords(win).some((record) => record.k === "call" && record.ask);
   if (!pending || !transcriptPath) return [];
   const results = tailLines(transcriptPath, TRANSCRIPT_TAIL_BYTES).flatMap((line) => {
@@ -135,13 +153,11 @@ export function labelFromTranscript(win: string, transcriptPath: string): { id: 
   return labelGuardCalls(win, results);
 }
 
-/** Whether a call's result shows it ran: no refusal, and no `Exit code N` other than 0 (`memory-batch.ts`). */
-export function ran(response: unknown): boolean {
-  const text = resultText(response).trim();
-  return labelOf(response) === "approved" && !/^Exit code [1-9]\d*\b/.test(text) && !/^PreToolUse:\S+ hook/.test(text);
-}
-
-/** The rules the guard last showed in this window (by `ruleIdentity`): what "that rule" names. */
-export function lastShownRules(win: string): string[] {
-  return guardRecords(win).findLast((record): record is GuardCallRecord => record.k === "call")?.rules ?? [];
+/**
+ * The rules the user was last asked about in this window, if that ask came in human turn `turn` (by `ruleIdentity`):
+ * what "that rule" names in the next turn. Only an ask's reason reaches the user (D19).
+ */
+export function askedRules(win: string, turn: number): string[] {
+  const last = guardRecords(win).findLast((record): record is GuardCallRecord => record.k === "call" && record.ask);
+  return last && last.ht === turn ? last.rules : [];
 }

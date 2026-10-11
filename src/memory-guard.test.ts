@@ -1,14 +1,14 @@
 /**
  * P2.3's guard core (D19, A4 §5.4, A6 §2.5, A7 §5): how a call is read and re-checked against its classes, which
- * rules of the store's index apply and how they are worded, which class answers, and which intents a release or a
- * completed action ends.
+ * rules of the store's index apply and how they are worded, which class answers, and which intents a release ends.
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory } from "./index";
-import { callClasses, guardAnswer, intentsDoneBy, intentsReleasedBy, subcommandsOf } from "./memory-guard";
+import { guardAnswer, intentsReleasedBy } from "./memory-guard";
+import { callClasses, subcommandsOf } from "./memory-guard-match";
 import { recordInvalidations } from "./memory-validity";
 
 const T0 = Date.parse("2026-10-01T09:00:00.000Z");
@@ -57,6 +57,11 @@ describe("reading a call", () => {
     expect(callClasses(bash("npm run deploy:prod"))).toEqual(["deploy"]);
     expect(callClasses(bash("npm i -D lodash"))).toEqual(["dependency"]);
     expect(callClasses({ tool: "mcp__github__merge_pull_request", input: {} })).toEqual(["integrate"]);
+  });
+
+  test("a call that only asks for help or a dry run carries nothing out", () => {
+    expect(callClasses(bash("gh pr merge --help"))).toEqual([]);
+    expect(callClasses(bash("git push --dry-run origin main"))).toEqual([]);
   });
 
   test("the classes of a call, most severe first", () => {
@@ -113,19 +118,12 @@ describe("the answer", () => {
   });
 });
 
-describe("intents that end", () => {
+describe("a release", () => {
   test("a release with no class word ends the intent whose own verb it names, nothing else", () => {
     const store = storeSaying("Don't open the PR yet.", "Don't merge it yet.", "Never push to main.");
     expect(intentsReleasedBy(store, "Open it now.", T0)).toEqual(["review|neg|*"]);
     expect(intentsReleasedBy(store, "OK, merge it now", T0)).toEqual(["integrate|neg|*"]);
     expect(intentsReleasedBy(store, "fix it now", T0)).toEqual([]);
     expect(intentsReleasedBy(store, "push it now", T0)).toEqual([]);
-  });
-
-  test("a call that carries out a live intent's action ends it", () => {
-    const store = storeSaying("Don't open the PR yet.", "Never push to main.");
-    expect(intentsDoneBy(store, bash("gh pr create --fill"), T0)).toEqual(["review|neg|*"]);
-    expect(intentsDoneBy(store, bash("git push origin main"), T0)).toEqual([]);
-    expect(intentsDoneBy(store, bash("git status"), T0)).toEqual([]);
   });
 });
