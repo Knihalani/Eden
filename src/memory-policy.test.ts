@@ -114,6 +114,8 @@ describe("D9 fix 3 and 4: objects", () => {
     expect(read("do not touch the .env file")).toEqual(["policy:protected-path|neg|.env"]);
     expect(read("never edit pnpm-lock.yaml by hand")).toEqual(["policy:protected-path|neg|pnpm-lock.yaml"]);
     expect(read("never delete anything under infra/ without asking")).toEqual(["policy:delete|neg|infra"]);
+    expect(read("Never commit .env files")).toEqual(["policy:commit|neg|.env"]);
+    expect(read("don't push the v1.2 tag")).toEqual(["policy:push-upstream|neg|v1-tag"]);
   });
 });
 
