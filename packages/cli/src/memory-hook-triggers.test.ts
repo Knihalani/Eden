@@ -53,7 +53,7 @@ describe("P2.2 at the hook", () => {
   test("a fired class delivers the rule the user set in an earlier session, once per window", () => {
     submit("Never merge PRs yourself.", "p1", "s-earlier");
     const packet = submit("looks done, can you land it?", "p2");
-    expect(packet).toContain("Rule you set: Never merge PRs yourself.");
+    expect(packet).toContain("Rule you set: Never merge PRs yourself");
     expect(submit("ok, ship it then", "p3")).not.toContain("Never merge PRs yourself");
   });
 

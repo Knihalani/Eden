@@ -13,6 +13,7 @@ export function memoryImportHelp(): string {
   return `usage: eden memory import <path>
        eden memory import --dry-run <path>
        eden memory dump [--json]
+       eden memory remember "<text>" | --jsonl -
        eden memory purge <regex>
        eden memory forget --secret <regex>
        eden memory migrate [--dry-run | --apply | --rollback | --contract]
@@ -428,6 +429,10 @@ export async function memoryCli(args: string[]): Promise<number> {
   if (args[0] === "extract") {
     const { memoryExtractCli } = await import("./memory-extract");
     return memoryExtractCli(args.slice(1));
+  }
+  if (args[0] === "remember") {
+    const { memoryRememberCli } = await import("./memory-remember");
+    return memoryRememberCli(args.slice(1));
   }
   if (args[0] === "dump") {
     const { memoryDumpCli } = await import("./memory-dump");

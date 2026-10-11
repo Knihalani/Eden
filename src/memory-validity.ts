@@ -39,6 +39,7 @@
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ACTION_VERBS, defaultObjectNames } from "./memory-classes";
 import { memoryNow } from "./memory-clock";
 import { stripPacketLabel } from "./memory-provenance";
 import {
@@ -96,46 +97,10 @@ const PATH = /[\w@.-]*\/[\w@./-]*\w/g;
 /** Words between a switch's verb and "from" that name no subject. */
 const NO_SUBJECT = new Set(["everything", "things", "stuff", "over", "back", "all", "entirely", "fully"]);
 
-/**
- * A7 §5's action-class verbs that a revocation can name: the class is what a rule and its revocation share, and what
- * a compaction summary must name for a rule to stay habituated (`memory-value-tokens.ts`).
- */
-export const ACTION_VERBS: Record<string, string> = {
-  merge: "integrate",
-  land: "integrate",
-  ship: "integrate",
-  commit: "commit",
-  push: "push-upstream",
-  squash: "history-rewrite",
-  rebase: "history-rewrite",
-  amend: "history-rewrite",
-  "force-push": "history-rewrite",
-  deploy: "deploy",
-  release: "deploy",
-  publish: "deploy",
-  delete: "delete",
-  remove: "delete",
-  prune: "delete",
-  drop: "delete",
-  install: "dependency",
-  bump: "dependency",
-  upgrade: "dependency",
-  truncate: "destructive-db",
-  reset: "destructive-db",
-  wipe: "destructive-db",
-};
+/** A7 §5's verbs (`memory-classes.json`), as a revocation names them: the class is what it shares with a rule. */
 const VERBS = Object.keys(ACTION_VERBS).join("|");
-const CLASSES = new Set(Object.values(ACTION_VERBS));
+const CLASSES = new Set<string>(Object.values(ACTION_VERBS));
 const REVOKE = new RegExp(String.raw`^you (?:can|may|are allowed to|are free to) (${VERBS})\b(.*?)\bnow\b`, "i");
-
-/** D9 fix 3: a class's default object is no object of its own, so "never merge PRs" is the integrate rule on `*`. */
-const DEFAULT_OBJECTS: Record<string, readonly string[]> = {
-  integrate: ["pr", "pull", "request"],
-  "push-upstream": ["branch"],
-  "history-rewrite": ["branch"],
-  dependency: ["package"],
-  deploy: ["prod", "production"],
-};
 
 /** Sentences that only ask or suppose something never invalidate. */
 const NOT_A_STATEMENT =
@@ -402,7 +367,7 @@ function forbids(sentence: string, record: Revocation): boolean {
 
 /** An object as D9 keys it: without its class's default object. */
 function keyObject(words: readonly string[], cls: string): string[] {
-  const defaults = DEFAULT_OBJECTS[cls] ?? [];
+  const defaults = objectWords(defaultObjectNames(cls).join(" "));
   return words.filter((word) => !defaults.includes(word));
 }
 

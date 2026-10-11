@@ -32,24 +32,11 @@
  *   "always squash when merging", while "you can merge now" leaves "never merge PRs without a review" standing.
  */
 import { stripPastes } from "./memory-authority";
+import { CLASS_WORDS, defaultObject, type ActionClass } from "./memory-classes";
 import { FUNCTION_WORDS } from "./memory-transcript";
 
-export type ActionClass =
-  | "integrate"
-  | "review"
-  | "complete"
-  | "commit"
-  | "push-upstream"
-  | "branch"
-  | "history-rewrite"
-  | "stash"
-  | "deploy"
-  | "delete"
-  | "dependency"
-  | "destructive-db"
-  | "generated"
-  | "billing"
-  | "protected-path";
+export type { ActionClass } from "./memory-classes";
+
 export type Polarity = "pos" | "neg";
 export type Qualifier =
   "yet" | "for-now" | "until" | "before" | "after" | "this-time" | "in-this-pr" | "today" | "this-week";
@@ -83,53 +70,6 @@ export interface RuleRef {
 
 /** D9: an intent expires after 7 days, if its action has not completed first. */
 export const INTENT_TTL_MS = 7 * 86_400_000;
-
-/**
- * A7 §5's action classes and their words, in R8's order of specificity, which breaks a tie between two classes whose
- * words start at one place. A class word that names its object (`drop the test table`) captures it as group 1.
- */
-const CLASS_WORDS: readonly (readonly [ActionClass, RegExp])[] = [
-  ["destructive-db", /\b(?:drop|truncate|reset|wipe)\b([^,;]*?\b(?:db|database|table|schema)s?)\b|\bmigrate reset\b/i],
-  ["history-rewrite", /\b(?:squash\w*|rebas\w*|amend\w*|force[- ]?push\w*)\b|\bpush(?:es|ed|ing)?\s+(?:--force|-f)\b/i],
-  ["stash", /\bstash\w*\b/i],
-  ["generated", /\bdist\/|\.gen\.ts\b|\bgenerated\b/i],
-  ["billing", /\b(?:billing|invoic\w*|payments?|stripe)\b/i],
-  [
-    "dependency",
-    /\b(?:add(?:s|ed|ing)?\s+(?:a\s+|any\s+|new\s+)?(?:deps?|dependenc(?:y|ies)|packages?|librar(?:y|ies))|install\w*|npm i|pnpm add|bump\w*|upgrad\w*)\b/i,
-  ],
-  ["deploy", /\b(?:deploy\w*|releas\w*|prod|production|publish\w*|roll(?:ing)? out)\b/i],
-  ["delete", /\b(?:delet\w*|remov\w*|rm|clean up|prun\w*|drop(?:s|ped|ping)?)\b/i],
-  ["push-upstream", /\b(?:push(?:es|ed|ing)?|upload the branch)\b/i],
-  [
-    "integrate",
-    /\b(?:merg(?:e|es|ed|ing)|land(?:s|ed|ing)?(?!\s+page)|ship(?:s|ped|ping)?|get it in|close out|finish up|wrap up)\b/i,
-  ],
-  ["review", /\b(?:prs?|pull requests?|review(?:s|ed|ing)?|put up)\b/i],
-  ["commit", /\b(?:commit(?:s|ted|ting)?|sync)\b/i],
-  ["branch", /\b(?:branch(?:es)?|main|master|checkout)\b/i],
-  ["complete", /\b(?:done|finished|good to go|ready|all set)\b/i],
-  [
-    "protected-path",
-    /(?<![\w/])\.env(?:\.(?!example\b|sample\b|template\b|dist\b)\w+)?(?![\w-]|\.\w)|\binfra\/|\b(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?|cargo\.lock|poetry\.lock|gemfile\.lock|composer\.lock|lockfiles?)\b/i,
-  ],
-];
-
-/** D9 fix 3: what a class acts on when the rule names nothing else. */
-const DEFAULT_OBJECT: Partial<Record<ActionClass, string>> = {
-  integrate: "pr",
-  review: "pr",
-  "push-upstream": "branch",
-  "history-rewrite": "branch",
-  branch: "branch",
-  dependency: "package",
-  deploy: "prod",
-};
-
-/** The default object of a class, if it has one. */
-export function defaultObject(cls: string): string | undefined {
-  return DEFAULT_OBJECT[cls as ActionClass];
-}
 
 interface Trigger {
   pattern: RegExp;
@@ -257,7 +197,7 @@ function triggersIn(clause: string): Hit[] {
   });
 }
 
-/** The class whose word comes first in a text; a tie goes to the earlier class in `CLASS_WORDS`. */
+/** The class whose word comes first in a text; a tie goes to the earlier class in R8's order (`CLASS_WORDS`). */
 function classIn(text: string): { cls: ActionClass; match: RegExpExecArray } | undefined {
   let found: { cls: ActionClass; match: RegExpExecArray } | undefined;
   for (const [cls, pattern] of CLASS_WORDS) {

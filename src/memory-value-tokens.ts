@@ -17,8 +17,8 @@
  */
 import { stripPacketLabel } from "./memory-provenance";
 import { contentWords } from "./memory-transcript";
-import { defaultObject, objectWords, oneNamePerObject, type RuleRef } from "./memory-policy";
-import { ACTION_VERBS } from "./memory-validity";
+import { ACTION_VERBS, defaultObject } from "./memory-classes";
+import { objectWords, oneNamePerObject, type RuleRef } from "./memory-policy";
 
 /** A class token, which no word of a text can be: words are `[a-z0-9]+`. */
 function classToken(cls: string): string {
