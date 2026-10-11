@@ -208,6 +208,20 @@ describe("after the call (A4 §5.5, A6 §2.5)", () => {
     ]);
   });
 
+  test("an ask no PostToolBatch saw is labelled at sleep, from the transcript's tool result", () => {
+    submit("Don't merge PRs yourself.");
+    flags({ "guard.context": "on", "guard.ask": "on" });
+    guard("integrate", "gh pr merge 1", { tool_use_id: "toolu_interrupted" });
+    const transcript = join(dir, "t.jsonl");
+    const result = { type: "tool_result", tool_use_id: "toolu_interrupted", content: DECLINED, is_error: true };
+    writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { role: "user", content: [result] } })}\n`);
+    const stop = { session_id: "s-now", cwd: project, hook_event_name: "Stop", transcript_path: transcript };
+    memoryHookResponse(stop, "stop-sleep");
+    memoryHookResponse(stop, "stop-sleep");
+    const labels = events().flatMap((event) => (event.guard_labels as unknown[]) ?? []);
+    expect(labels).toEqual([{ id: "toolu_interrupted", label: "declined" }]);
+  });
+
   test("an intent ends once the call carrying out its action has run", () => {
     submit("Don't open the PR yet.");
     flags({ "guard.context": "on", "guard.ask": "on" });

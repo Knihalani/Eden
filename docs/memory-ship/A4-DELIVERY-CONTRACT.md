@@ -297,6 +297,13 @@ All points share the window ledger, the validity filter, the novelty filters and
   - **Irreversible** class (integrate, push-upstream, deploy, delete, destructive-db, history-rewrite) **or any live intent** → also `permissionDecision: "ask"`, reason `Eden: rule you set (<age>): <text>`. The reason is shown to the user only. `ask` is only returned when `permission_mode ∈ {default, acceptEdits, plan, auto}`; in `dontAsk` and `bypassPermissions` the guard downgrades to context only and logs `guard_bypassed` (D19).
 - Never `deny`. Guard firings are logged with `tool_use_id`. Approval or decline is read later from the transcript (A6 §2.5). `EDEN_POLICY_GUARD=off` disables it.
 
+**Built in P2.3** (D19's note has the registration and flags). Where it reads this section narrowly:
+- The guard reads A4 §1's `policies.jsonl` and `intents.jsonl`: an index the store writes beside itself at each persist, from the typed rule rows not superseded (newest 500 each), so the lookup never loads the store. What a later invalidation or 7 days took from a row is read at the guard, as at every delivery point.
+- The reason and context show each rule's own clause of what the user typed, "Rule you set (<age>): …"; a prohibition on the agent alone ("… yourself") of a class's default object is said as who does it ("pull requests are merged by you, not by the agent", D14).
+- What the guard tells is a delivery in the window's ledger of its mode, outside the refractory rule and the budget (§4: a violation re-delivers).
+- Labels (§5.5) come from the next PostToolBatch's `tool_calls`, and at `stop-sleep` from the transcript's last 256 KB for an ask no PostToolBatch saw: `declined` for Claude Code's rejection message, `denied` for a refusal nobody answered (`claude -p` returns the ask's reason as the error; "Permission to use … denied"), `approved` otherwise. The 3-declines revocation proposal (A6 §2.5) is not built.
+- An intent ends (validity `end` records) when a call carrying out its action has run, on a release with no class word whose verb is the intent's own or its class's ("Open it now."), and a rule of any kind when the user says "that rule is gone" (or "drop that rule") after the guard showed it in that window.
+
 ### 5.5 PostToolBatch
 
 - Append to `ctx.log` (paths, `Exit code N` parsed from the serialized results, error signatures). Run the delta encoder.
