@@ -11,7 +11,13 @@ import { join } from "node:path";
 import { openMemory, storeRows, superseded, type MemoryRecord } from "./index";
 import { ledgerKey } from "./memory-ledger";
 import { INTENT_TTL_MS } from "./memory-policy";
-import { invalidationsIn, readInvalidations, recordInvalidations, validText } from "./memory-validity";
+import {
+  invalidationsIn,
+  readInvalidations,
+  recordInvalidations,
+  validText,
+  withoutExpiredIntents,
+} from "./memory-validity";
 import { keyValueTokens, summaryTokens } from "./memory-value-tokens";
 
 const T0 = Date.parse("2026-10-01T09:00:00.000Z");
@@ -171,7 +177,7 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     expect(readInvalidations(root)).toEqual([{ k: "oppose", r: "history-rewrite|pos|*|squash", t: 500 }]);
     const many = Array.from({ length: 500 }, (_, n) => ({
       k: "oppose" as const,
-      r: `delete|pos|thing${n}-file|delet`,
+      r: `delete|pos|thing${n}-file`,
       t: 2,
     }));
     const notes = Array.from({ length: 200 }, (_, n) => `Always delete the thing${n % 50} files. Never push to main.`);
@@ -181,12 +187,13 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     expect(validText("Always delete the thing7 files. Never push to main.", 1, many)).toBe("Never push to main.");
   });
 
-  test("validText drops an intent's clause 7 days after the text was said (A4 §5.1 step 5)", () => {
+  test("delivery drops an intent's clause 7 days after the text was said (A4 §5.1 step 5); validText does not", () => {
     const mixed = "Never force-push, and don't open the PR yet.";
     process.env.EDEN_NOW = String(T0 + INTENT_TTL_MS - 1);
-    expect(validText(mixed, T0, [])).toBe(mixed);
+    expect(withoutExpiredIntents(mixed, T0)).toBe(mixed);
     process.env.EDEN_NOW = String(T0 + INTENT_TTL_MS);
-    expect(validText(mixed, T0, [])).toBe("Never force-push.");
+    expect(withoutExpiredIntents(mixed, T0)).toBe("Never force-push.");
+    expect(validText(mixed, 0, [])).toBe(mixed);
   });
 
   test("one action of a class does not overturn another: never force-push leaves always squash", () => {

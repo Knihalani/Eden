@@ -34,7 +34,13 @@ import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoIdentity, repoStoreDir, swapping, type RepoIdentity } from "../../../src/memory-repo";
 import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
-import { readInvalidations, recordInvalidations, validText, withoutForgets } from "../../../src/memory-validity";
+import {
+  readInvalidations,
+  recordInvalidations,
+  validText,
+  withoutExpiredIntents,
+  withoutForgets,
+} from "../../../src/memory-validity";
 import {
   appendTurn,
   compactContext,
@@ -113,7 +119,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
     notes: ProvenanceNote[] = [],
     invalid = readInvalidations(mem.dir),
     add = (note: ProvenanceNote): boolean => {
-      let text = validText(String(note.text ?? ""), note.at, invalid);
+      let text = validText(withoutExpiredIntents(String(note.text ?? ""), note.at), note.at, invalid);
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
       } catch {}

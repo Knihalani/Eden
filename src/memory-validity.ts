@@ -486,14 +486,11 @@ function invalidates(record: Invalidation, sentence: string): boolean {
  * text without a wall-clock time counts as older than every invalidation. Each clause is read on its own, as A4 §3.1
  * supersedes statements: a rule clause yields only to a revocation, which takes its whole sentence (the clauses after
  * a `;` qualify the rule: "never push to main; ask first"); a fact or episode clause yields to a retraction
- * (supersession, `stale_for`), even inside a pinned row. An intent's clause goes 7 days after the text was said (D9,
- * A4 §5.1 step 5's expired intent): a row stating a policy beside it ("Never force-push, and don't open the PR yet")
- * has no `valid_until` of its own.
+ * (supersession, `stale_for`), even inside a pinned row.
  */
 export function validText(text: string, at: unknown, records: readonly Invalidation[]): string {
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
-  const said = String(text ?? "").trim();
-  const raw = time + INTENT_TTL_MS <= memoryNow() ? cached(INTENTLESS, said, withoutIntents) : said;
+  const raw = String(text ?? "").trim();
   const newer = records.filter((record) => record.t > time);
   if (!raw || !newer.length) return raw;
   let dropped = false;
@@ -512,6 +509,18 @@ export function validText(text: string, at: unknown, records: readonly Invalidat
     if (said.length) kept.push(said.join("; "));
   }
   return dropped ? kept.join(" ") : raw;
+}
+
+/**
+ * A delivered text without its expired intents (D9, A4 §5.1 step 5's expired intent): 7 days after the text was said,
+ * each clause stating an intent goes (`withoutIntents`). A row stating a policy beside one ("Never force-push, and
+ * don't open the PR yet") has no `valid_until` of its own, so every delivery point reads its text through this. A text
+ * without a wall-clock time counts as older than 7 days. Only delivery reads it: a forget reads the store's own text.
+ */
+export function withoutExpiredIntents(text: string, at: unknown): string {
+  const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
+  const said = String(text ?? "");
+  return time + INTENT_TTL_MS <= memoryNow() ? cached(INTENTLESS, said, withoutIntents) : said;
 }
 
 /** A cue that asks about history (A4 §5.1 step 5; R3's markers), which keeps episodes carrying an older value. */

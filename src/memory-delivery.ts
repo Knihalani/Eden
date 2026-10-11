@@ -14,7 +14,7 @@ import type { MemoryRecord } from "./index";
 import { admitNotes, type CueParts } from "./memory-gate";
 import { noteKindToken, type ProvenanceNote } from "./memory-provenance";
 import { isResidualNote, residualSentences, unsaidText, type Said } from "./memory-residual";
-import { asksHistory, isForget, validText, type Invalidation } from "./memory-validity";
+import { asksHistory, isForget, validText, withoutExpiredIntents, type Invalidation } from "./memory-validity";
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
 
@@ -25,16 +25,17 @@ export function isPinnedIntention(r: MemoryRecord): boolean {
 
 /**
  * Step 5: each note without the sentences an invalidation has made invalid, and without its intents' clauses once
- * they expired (`validText`); a note left empty is dropped. A rule sentence yields only to a revocation or an
- * opposition. When the cue asks about history, episodes keep what they say
- * (D31 `stale_for`), except what the user asked to forget (A6 §3); facts and rules do not.
+ * they expired (`withoutExpiredIntents`); a note left empty is dropped. A rule sentence yields only to a revocation
+ * or an opposition. When the cue asks about history, episodes keep what they say (D31 `stale_for`), except what the
+ * user asked to forget (A6 §3); facts and rules do not.
  */
 export function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
   const history = asksHistory(prompt);
   return notes.flatMap((note) => {
     const kind = noteKindToken(note);
     const episode = kind !== "rule" && kind !== "fact" && !isPinnedIntention(note);
-    const text = validText(note.text, note.at, history && episode ? invalid.filter(isForget) : invalid);
+    const said = withoutExpiredIntents(note.text, note.at);
+    const text = validText(said, note.at, history && episode ? invalid.filter(isForget) : invalid);
     return text ? [{ ...note, text }] : [];
   });
 }

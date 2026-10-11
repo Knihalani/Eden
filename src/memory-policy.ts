@@ -318,6 +318,9 @@ const LEADING_WORDS =
 const LEADING_PREPOSITION = /^\s*(?:to|into|onto|on|under|in|from|against|off|at)\b/i;
 const INNER_PREPOSITION = /\s(?:of|for|with|in|on|to|at|by|from|under|into|via|using|across)\s.*$/i;
 
+/** A command's flags ("rm -rf node_modules"), which are no object. */
+const FLAGS = /(?:^|\s)--?[a-z][\w-]*/gi;
+
 /** A noun phrase: its words, and whether a qualifying prepositional phrase was cut from it. */
 interface Phrase {
   words: string;
@@ -330,8 +333,8 @@ function nounPhrase(text: string, again = true): Phrase {
   const phrase = ` ${(end ? text.slice(0, end.index) : text).replace(LEADING_WORDS, "").trim()} `;
   if (LEADING_PREPOSITION.test(phrase))
     return again ? nounPhrase(phrase.replace(LEADING_PREPOSITION, ""), false) : { words: "", cut: false };
-  const words = phrase.replace(INNER_PREPOSITION, "").trim();
-  return { words, cut: words !== phrase.trim() };
+  const words = phrase.replace(INNER_PREPOSITION, "").replace(FLAGS, " ").trim();
+  return { words, cut: words !== phrase.replace(FLAGS, " ").trim() };
 }
 
 /** A protected path's own name: `.env`, `infra`, a lockfile's name. */
@@ -423,14 +426,13 @@ function bareQualifier(clause: string): Qualifier | undefined {
 }
 
 /**
- * Classes whose words name distinct actions. D9 keys their rules by class, but one action's rule is not another's
- * opposite, nor the same delivery: "never force-push" neither overturns "always squash when merging" nor stands for it.
+ * History-rewrite's words name distinct actions (squash, rebase, amend, force-push). D9 keys its rules by class, but
+ * one action's rule is not another's opposite, nor the same delivery: "never force-push" neither overturns "always
+ * squash when merging" nor stands for it. Every other class's words are synonyms of one action (delete, remove, rm,
+ * clean up; deploy, release, publish), which fix 3 keeps one rule.
  */
-const DISTINCT_ACTIONS: ReadonlySet<ActionClass> = new Set(["history-rewrite", "delete", "deploy", "dependency"]);
-
-/** A rule's action in such a class: its class word's stem ("squashing" is `squash`, "push --force" `force-push`). */
 function actionOf(cls: ActionClass, word: string): string | undefined {
-  if (!DISTINCT_ACTIONS.has(cls)) return undefined;
+  if (cls !== "history-rewrite") return undefined;
   const said = word.toLowerCase();
   return /force/.test(said) ? "force-push" : said.match(/[a-z]+/)![0].replace(/(?:ing|ed|es|e|s)$/, "");
 }

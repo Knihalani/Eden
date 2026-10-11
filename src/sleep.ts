@@ -19,7 +19,7 @@ import { HowToStore, mergeSharedPrefixHowTo, type HowTo, type HowToStep } from "
 import { memoryConsent } from "./memory-consent";
 import { isUntyped } from "./memory-provenance";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
-import { readInvalidations, validText } from "./memory-validity";
+import { readInvalidations, validText, withoutExpiredIntents } from "./memory-validity";
 import { parseRuleTime, writeAliasTags, type MissClass } from "./memory-sota";
 import {
   isIclExemplar,
@@ -914,7 +914,7 @@ function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: st
     .memories()
     .filter((r) => r.kind === "constraint" && !superseded(r) && !isIntent(r) && !isIcl(r.text) && own(r.id))
     .slice(-8)
-    .map((r) => validText(r.text.replace(/\s+/g, " ").trim(), r.at, invalid))
+    .map((r) => validText(withoutExpiredIntents(r.text.replace(/\s+/g, " ").trim(), r.at), r.at, invalid))
     .filter(Boolean);
   const gist = [...facts, ...pins].join(". ").slice(0, 800);
   if (gist) new GistStore(mem.dir).put(gist, session?.trim() ? session.trim() : "default", memoryNow());
