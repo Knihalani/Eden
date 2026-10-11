@@ -193,10 +193,18 @@ describe("after the call (A4 §5.5, A6 §2.5)", () => {
     batch("toolu_no", "gh pr merge 1", DECLINED);
     batch("toolu_yes", "gh pr merge 2", "Merged pull request #2");
     batch("toolu_yes", "gh pr merge 2", "Merged pull request #2");
+    // `claude -p` has no one to ask: Claude Code 2.1.294 denied the call with the ask's reason as its error.
+    guard("integrate", "gh pr merge 3", { tool_use_id: "toolu_headless" });
+    batch(
+      "toolu_headless",
+      "gh pr merge 3",
+      "Eden: rule you set (just now): pull requests are merged by you, not by the agent",
+    );
     const labels = events().flatMap((event) => (event.guard_labels as unknown[]) ?? []);
     expect(labels).toEqual([
       { id: "toolu_no", label: "declined" },
       { id: "toolu_yes", label: "approved" },
+      { id: "toolu_headless", label: "denied" },
     ]);
   });
 

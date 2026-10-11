@@ -18,7 +18,7 @@
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../packages/cli/src/home";
-import { memorySessionName } from "./index";
+import { memorySessionName } from "./memory-session";
 import { scrubMemoryText } from "./memory-scrub";
 import type { BatchRecord } from "./memory-batch";
 import type { FlagMode } from "./memory-flags";

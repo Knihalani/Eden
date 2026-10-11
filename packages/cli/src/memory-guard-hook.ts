@@ -33,7 +33,7 @@ import {
   str,
   transcriptOf,
   type Trace,
-} from "./memory-hook";
+} from "./memory-hook-io";
 
 /** Records what the guard told in the window's ledger of its mode (A4 §4). */
 function recordTold(r: Record<string, unknown>, win: string, answer: GuardAnswer, repo: string, told: boolean): void {

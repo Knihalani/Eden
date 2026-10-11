@@ -1,14 +1,13 @@
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
-import { childSessionName, isLiveRow, openMemory, type MemoryRecord } from "../../../src/index";
+import { isLiveRow, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
 import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
-import { tripIfOverBudget, takeNotice } from "../../../src/memory-breaker";
-import { appendWideEvent, errorTag, retainEvents, type WideEvent } from "../../../src/memory-events";
-import { flagModes, pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
+import { takeNotice } from "../../../src/memory-breaker";
+import { errorTag, retainEvents } from "../../../src/memory-events";
+import { pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
 import { batchRecord } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
 import { inheritFork, markFork, parentLines } from "../../../src/memory-fork";
@@ -31,7 +30,7 @@ import { isPinnedIntention, selectNotes, unsaidNotes } from "../../../src/memory
 import { recentConversation, sentencesOf, type RecentConversation } from "../../../src/memory-residual";
 import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
-import { readableStore, repoIdentity, repoStoreDir, swapping, type RepoIdentity } from "../../../src/memory-repo";
+import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
 import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
 import { firedClasses } from "../../../src/memory-triggers";
 import { intentsDoneBy, intentsReleasedBy } from "../../../src/memory-guard";
@@ -54,8 +53,6 @@ import {
   readLastAssistant,
   recordBatch,
   recordCrons,
-  recordStart,
-  startCwd,
   transcriptOffset,
   windowDir,
   writeLastAssistant,
@@ -65,6 +62,19 @@ import { lightSleep } from "../../../src/sleep";
 import { memoryNow } from "../../../src/memory-clock";
 import { parseHookToolTraces, persistToolTraces } from "../../../src/tool-trace";
 import { noteRepoActivity, spawnIdleSleeper } from "./memory-sleep";
+import {
+  asRec,
+  eventRepo,
+  logInvocation,
+  memoryRoot,
+  readHookPayload,
+  resolveSession,
+  str,
+  transcriptOf,
+  type Trace,
+} from "./memory-hook-io";
+
+export { memoryRoot };
 
 const MEMORY_EVENTS = new Set([
   "UserPromptSubmit",
@@ -87,10 +97,6 @@ export type HookStage = "stop-fast" | "stop-sleep";
 
 function hookMemory(opts: { dir: string; session?: string; child: boolean; cwd?: string }) {
   return openMemory({ ...opts, perRepo: true });
-}
-
-export function asRec(v: unknown): Record<string, unknown> {
-  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
 function flattenContent(content: unknown): string {
@@ -181,16 +187,6 @@ function promptMessages(prompt: string, tools: readonly string[]): TranscriptMes
     ...(said ? [{ role: "user", content: said, src: "user" as const }] : []),
     ...pasted.map((content) => ({ role: "user", content, src: "paste" as const })),
   ];
-}
-
-/** The memory root: `EDEN_MEMORY_DIR`, else `$EDEN_HOME/memory`, else `~/.eden/memory`. */
-export function memoryRoot(): string {
-  if (process.env.EDEN_MEMORY_DIR) return process.env.EDEN_MEMORY_DIR;
-  return process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : join(homedir(), ".eden", "memory");
-}
-
-export function str(v: unknown): string | undefined {
-  return typeof v === "string" && v ? v : undefined;
 }
 
 const PROMPT_KEYS = [
@@ -323,9 +319,6 @@ function payloadMessages(r: Record<string, unknown>): { role: string; content: s
   });
 }
 
-/** What one invocation logs (`memory-events.ts`), filled in as the handler runs. */
-export type Trace = Omit<WideEvent, "t" | "ms" | "aborted" | "flags">;
-
 /** The window a point records its ledger in, and the ledger file of its mode (X7); none when it is `off`. */
 type Ledger = { dir: string; file: LedgerFile };
 
@@ -362,65 +355,6 @@ export function memoryHookResponse(raw: Record<string, unknown>, stage?: HookSta
   return out;
 }
 
-/** Appends the invocation's wide event; after an exception at a delivery point, the breaker checks its budget. */
-export function logInvocation(trace: Trace, flags: FlagState | undefined, ms: number): void {
-  try {
-    const root = memoryRoot(),
-      t = memoryNow();
-    appendWideEvent(root, {
-      t,
-      ...trace,
-      ...(flags ? { flags: flagModes(flags) } : {}),
-      ms: Math.round(ms * 100) / 100,
-      aborted: false,
-    });
-    if (trace.err && trace.point && flags) tripIfOverBudget(root, trace.point, flags, t);
-  } catch {}
-}
-
-/**
- * The window a hook payload belongs to (D2): its session, or `session--agent` in a subagent (`child`), and the
- * session it runs in (`parent`).
- */
-export function resolveSession(
-  r: Record<string, unknown>,
-  event: string,
-): { session?: string; parent?: string; child: boolean } {
-  try {
-    const parent = [
-        r.session_id,
-        r.sessionID,
-        r.sessionId,
-        r.parent_session_id,
-        process.env.EDEN_MEMORY_PARENT,
-        process.env.EDEN_MEMORY_SESSION,
-      ]
-        .map((v) => (typeof v === "string" ? v.trim() : ""))
-        .find(Boolean),
-      childId = [r.agent_id, r.agentId, r.subagent_id, r.subagentId, r.child_session_id, process.env.EDEN_MEMORY_CHILD]
-        .map((v) => (typeof v === "string" ? v.trim() : ""))
-        .find(Boolean);
-    const asChild = event === "SubagentStop" || !!(childId && childId !== parent),
-      session = asChild ? childSessionName(parent, childId || "sub") : parent;
-    return { session: asChild && session ? session : parent, parent, child: !!(asChild && session) };
-  } catch {
-    return { child: false };
-  }
-}
-
-/**
- * The repo of an event (D1). Outside git it is the directory the session started in: SessionStart records it in
- * the session's window (`starting`), and later events, a subagent's included, read it back.
- */
-export function eventRepo(cwd: string, sessionWin: string | undefined, starting: boolean): RepoIdentity | undefined {
-  const repo = repoIdentity(cwd, () => (starting || !sessionWin ? undefined : startCwd(sessionWin)));
-  if (repo && !repo.top && starting && sessionWin)
-    try {
-      recordStart(sessionWin, cwd);
-    } catch {}
-  return repo;
-}
-
 /** The breaker's notice as a message to the user (`systemMessage`), beside whatever the point delivers. */
 function withNotice(out: Record<string, unknown> | null, notice: string | undefined): Record<string, unknown> | null {
   return notice ? { ...(out ?? {}), systemMessage: notice } : out;
@@ -447,11 +381,6 @@ interface HookContext {
   /** The delivery point's mode; undefined at an event that delivers nothing. */
   mode?: FlagMode;
   ledgerOf: (mode: FlagMode | undefined) => Ledger | undefined;
-}
-
-/** The transcript a payload names. */
-export function transcriptOf(r: Record<string, unknown>): string {
-  return str(r.transcript_path) ?? str(r.transcriptPath) ?? "";
 }
 
 /** The `prompt_id` a payload carries, for the rows its text becomes (A4 §3.3: a rewind takes them back). */
@@ -932,22 +861,6 @@ function respond(
 /** The stage a handler names on its command line (`hooks.json`), if any. */
 function stageOf(arg: string | undefined): HookStage | undefined {
   return arg === "stop-fast" || arg === "stop-sleep" ? arg : undefined;
-}
-
-/** The hook payload on stdin; `{}` when it is missing or not JSON. */
-export async function readHookPayload(): Promise<Record<string, unknown>> {
-  try {
-    return JSON.parse(
-      (await new Promise<string>((resolve) => {
-        const chunks: Buffer[] = [];
-        process.stdin.on("data", (c) => chunks.push(c as Buffer));
-        process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-        if (process.stdin.isTTY) resolve("{}");
-      })) || "{}",
-    ) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
 }
 
 export async function runMemoryHookStdin(arg?: string): Promise<void> {
