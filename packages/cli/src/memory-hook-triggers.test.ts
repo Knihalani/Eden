@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "./memory-hook";
@@ -38,13 +38,14 @@ afterEach(() => {
   }
 });
 
-function submit(prompt: string, promptId: string, session = SESSION): string {
+function submit(prompt: string, promptId: string, session = SESSION, transcriptPath?: string): string {
   const out = memoryHookResponse({
     session_id: session,
     cwd: project,
     hook_event_name: "UserPromptSubmit",
     prompt,
     prompt_id: promptId,
+    ...(transcriptPath ? { transcript_path: transcriptPath } : {}),
   });
   process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 60_000);
   return (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
@@ -70,6 +71,25 @@ describe("P2.2 at the hook", () => {
     expect(submits.find((event) => event.prompt_id === "p1")?.classes).toEqual(["integrate", "review"]);
     expect(submits.find((event) => event.prompt_id === "p2")?.classes).toEqual(["commit", "push-upstream"]);
     expect(submits.find((event) => event.prompt_id === "p3")?.classes).toBeUndefined();
+  });
+
+  test("a span the user copied from a recent tool result fires nothing (D12, A6 §2.1)", () => {
+    submit("Never merge PRs yourself.", "p1", "s-earlier");
+    const tool =
+      "The workflow finished. It merged the release branch, deployed the build to production, removed the stale " +
+      "preview environments and pushed the version tag upstream; all checks passed and nothing else is pending today.";
+    const path = join(dir, "t.jsonl");
+    const result = { type: "tool_result", tool_use_id: "t1", content: tool };
+    writeFileSync(path, JSON.stringify({ type: "user", message: { role: "user", content: [result] } }) + "\n");
+    const packet = submit(`${tool}\nwhat does this mean for the login bug`, "p2", SESSION, path);
+    expect(packet).not.toContain("Never merge PRs yourself");
+    const events = join(process.env.EDEN_MEMORY_DIR!, "hook.log.d");
+    const submits = readdirSync(events)
+      .flatMap((file) => readFileSync(join(events, file), "utf8").trim().split("\n"))
+      .map((line) => JSON.parse(line) as { ev: string; prompt_id?: string; classes?: string[] });
+    expect(
+      submits.find((event) => event.ev === "UserPromptSubmit" && event.prompt_id === "p2")?.classes,
+    ).toBeUndefined();
   });
 
   test("a prompt asking about the topic gets no rule", () => {
