@@ -9,8 +9,9 @@
  *   quotes), after leading `VAR=value` assignments are stripped. Commands inside `$()` and backticks are checked too,
  *   and so is the full command around them.
  * - When the command name is a variable (`$TOOL git push`), Claude Code cannot tell what runs, so the hook runs. A
- *   pattern that says more than the command name (`git push *`) also runs the hook on any `$()`, backtick or
- *   `$VAR`.
+ *   pattern that says more than the command name (`git push *`) also runs the hook on any `$()` or backtick. The
+ *   reference adds `$VAR` there, but in a real Claude Code 2.1.294 session `echo $HOME` ran none of 29 such
+ *   handlers (P2.3's review), so a variable elsewhere than the command name runs nothing here.
  * - In a pattern, `*` matches any run of characters, and a trailing ` *` also matches the bare command (`git *`
  *   matches `git`). This module is the simulator's own reading, kept apart from the product's re-check (X6).
  */
@@ -40,7 +41,7 @@ export function ifAccepts(rule: string, event: string, toolName: unknown, toolIn
 /** Whether a Bash command runs a hook whose pattern is `pattern` (see the header). */
 export function bashAccepts(pattern: string, command: string): boolean {
   const saysMore = !/^[\w.-]+$/.test(pattern.trim().replace(/\s*\*$/, ""));
-  if (saysMore && /\$\(|`|\$[A-Za-z_{]/.test(command)) return true;
+  if (saysMore && /\$\(|`/.test(command)) return true;
   const regex = globRegex(pattern);
   return subcommands(command).some((part) => {
     const bare = withoutAssignments(part);

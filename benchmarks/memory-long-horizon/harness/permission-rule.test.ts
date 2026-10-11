@@ -10,6 +10,8 @@ describe("the hooks reference's Bash matching table", () => {
     ["cat *", "echo before $(date) after", false],
     ["git *", "$TOOL git push", true],
     ["git push *", "echo $(date)", true],
+    // Not the reference's row: a real Claude Code 2.1.294 session ran no such handler on `echo $HOME`.
+    ["git push *", "echo $HOME", false],
   ];
   for (const [pattern, command, runs] of rows)
     test(`Bash(${pattern}) on \`${command}\`: ${runs ? "runs" : "does not run"}`, () => {
