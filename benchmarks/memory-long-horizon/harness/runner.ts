@@ -10,12 +10,14 @@
  * gives it time to; its invocation joins the event's record when it exits. Its output reaches Claude only on the
  * next turn, which the simulator does not model, so context from an async handler is reported as an error.
  *
- * Handler features the simulator does not model yet are rejected when the plugin loads, rather than
- * silently run differently: `if` filters (P2.3 needs them) and non-command handler types.
+ * A handler's `if` filter (one permission rule) is evaluated as Claude Code documents it (`permission-rule.ts`).
+ * Handler features the simulator does not model yet are rejected when the plugin loads, rather than silently run
+ * differently: non-command handler types.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { HookEvent, HookPayload } from "./payloads";
+import { ifAccepts } from "./permission-rule";
 
 export interface HookHandler {
   type: "command";
@@ -25,6 +27,8 @@ export interface HookHandler {
   timeout?: number;
   /** Runs in the background: Claude Code does not wait for it. */
   async?: boolean;
+  /** One permission rule (`Bash(git merge*)`): the handler runs only on a tool call it matches. */
+  if?: string;
 }
 
 export interface HookGroup {
@@ -38,7 +42,7 @@ export interface Plugin {
   hooks: Partial<Record<HookEvent, HookGroup[]>>;
 }
 
-const SUPPORTED_HANDLER_FIELDS = new Set(["type", "command", "args", "timeout", "statusMessage", "async"]);
+const SUPPORTED_HANDLER_FIELDS = new Set(["type", "command", "args", "timeout", "statusMessage", "async", "if"]);
 
 export function loadPlugin(root: string): Plugin {
   const manifest = join(root, ".claude-plugin", "plugin.json");
@@ -253,7 +257,10 @@ export class HookRunner {
     const value = matchedField(payload);
     const handlers = (this.options.plugin.hooks[event] ?? [])
       .filter((group) => matcherAccepts(group.matcher, value))
-      .flatMap((group) => group.hooks);
+      .flatMap((group) => group.hooks)
+      .filter(
+        (handler) => handler.if === undefined || ifAccepts(handler.if, event, payload.tool_name, payload.tool_input),
+      );
     const invocations: Invocation[] = [];
     const later = handlers.filter((handler) => handler.async).map((handler) => this.run(event, handler, payload, env));
     const now = Promise.all(handlers.filter((handler) => !handler.async).map((h) => this.run(event, h, payload, env)));

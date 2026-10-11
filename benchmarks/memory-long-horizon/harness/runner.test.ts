@@ -124,7 +124,7 @@ describe("timeouts (hooks reference, Common fields)", () => {
 
 describe("loading a plugin", () => {
   test("handler features the simulator does not model are refused, not run differently", () => {
-    for (const extra of [{ if: "Bash(git *)" }, { type: "prompt", prompt: "x" }]) {
+    for (const extra of [{ type: "prompt", prompt: "x" }]) {
       const root = pluginWith({ PreToolUse: [{ hooks: [probeHook(extra) as never] }] });
       expect(() => loadPlugin(root)).toThrow("does not model");
     }
@@ -339,6 +339,20 @@ describe("processes (target 3)", () => {
     expect(world.idleSleeps[0]).toMatchObject({ cwd: world.projectDir, exitCode: 0 });
     const runs = readFileSync(marker, "utf8").trim().split("\n");
     expect(runs).toEqual([`--session ${world.log.at(-1)!.sessionId} ${realpathSync(world.projectDir)}`]);
+  });
+
+  test("a handler with `if` runs only on a tool call its permission rule matches", async () => {
+    const out = tempDir("eden-probe-out");
+    const root = pluginWith({
+      PostToolUse: [
+        { hooks: [probeHook({ if: "Read(*.ts)" }), probeHook({ if: "Read(*.md)" }), probeHook({ if: "Bash" })] },
+      ],
+    });
+    const plugin = loadPlugin(root);
+    const env = hookEnv({ home: tempDir("eden-home"), projectDir: out, plugin, extra: { PROBE_OUT: out } });
+    const runner = new HookRunner({ plugin, env, projectDir: out });
+    const call = readCall("toolu_01EEEEEEEEEEEEEEEEEEEEEE", join(out, "a.ts"), "x");
+    expect(await runner.dispatch(postToolUsePayload(ctx(out), call))).toHaveLength(1);
   });
 
   test("an event with no matching handler runs nothing", async () => {
