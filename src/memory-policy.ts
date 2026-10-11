@@ -246,11 +246,14 @@ export function oneNamePerObject(text: string): string {
     .replace(/\bdatabases?\b/gi, "db");
 }
 
-/** Where an object's noun phrase ends: a qualifier, a conjunction, a word that names no object, punctuation. */
+/**
+ * Where an object's noun phrase ends: a qualifier, a conjunction, a word that names no object, punctuation (a period
+ * only before a space: `.env` and `v1.2` are words).
+ */
 const PHRASE_END = new RegExp(
   String.raw`\b(?:yet|until|before|after|for now|this time|in this pr|today|this week|and|but|or|so|then|when|` +
     String.raw`whenever|while|unless|if|once|because|since|without|yourself|yourselves|ever|first|on your own|` +
-    String.raw`from your side|by hand)\b|[,;:.!?()]`,
+    String.raw`from your side|by hand)\b|[,;:!?()]|\.(?=\s|$)`,
   "i",
 );
 const LEADING_WORDS =
@@ -282,14 +285,21 @@ function keyedObject(cls: string, words: readonly string[]): string {
   return !kept.length || (kept.length === 1 && kept[0] === defaultObject(cls)) ? "*" : kept.join("-");
 }
 
+/** A protected path (fix 4) a text names: `.env`, `infra/`, a lockfile. */
+const PROTECTED_PATH = CLASS_WORDS.find(([cls]) => cls === "protected-path")![1];
+
 /**
  * A rule's object: a protected path or a branch name its class word names, the object its class word captured
- * (`drop tables`), or the noun phrase after it.
+ * (`drop tables`), or the noun phrase after it, which is a protected path when it names one ("never commit .env
+ * files" is `.env`).
  */
 function objectOf(cls: ActionClass, rest: string, word?: RegExpExecArray): string {
   if (word && cls === "protected-path") return pathName(word[0].trim());
   if (word && cls === "branch" && /^(?:main|master)$/i.test(word[0])) return "main";
-  return keyedObject(cls, objectWords(oneNamePerObject(word?.groups?.o ?? nounPhrase(rest))));
+  const phrase = word?.groups?.o ?? nounPhrase(rest);
+  const path = PROTECTED_PATH.exec(phrase);
+  if (path) return pathName(path[0].trim());
+  return keyedObject(cls, objectWords(oneNamePerObject(phrase)));
 }
 
 function qualifierOf(match: RegExpMatchArray): Qualifier {
