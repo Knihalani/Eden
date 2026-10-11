@@ -66,13 +66,19 @@ export interface Rule {
   explicit: boolean;
   /** It states its action outright, unnarrowed (see the header). */
   outright: boolean;
+  /** Its action, in a class whose words name distinct actions (`squash`, `force-push`; see `actionOf`). */
+  action?: string;
 }
 
-/** A rule as a row keeps it: its key, the qualifier that makes it an intent, and `c` when it is narrowed. */
+/**
+ * A rule as a row keeps it: its key, the qualifier that makes it an intent, `c` when it is narrowed, and `v`, its
+ * action in a class whose words name distinct actions.
+ */
 export interface RuleRef {
   k: string;
   q?: Qualifier;
   c?: true;
+  v?: string;
 }
 
 /** D9: an intent expires after 7 days, if its action has not completed first. */
@@ -416,6 +422,19 @@ function bareQualifier(clause: string): Qualifier | undefined {
   return qualifier && !/\w/.test(rest.replace(/\b(?:not|no|ok|okay)\b/gi, "")) ? qualifier : undefined;
 }
 
+/**
+ * Classes whose words name distinct actions. D9 keys their rules by class, but one action's rule is not another's
+ * opposite, nor the same delivery: "never force-push" neither overturns "always squash when merging" nor stands for it.
+ */
+const DISTINCT_ACTIONS: ReadonlySet<ActionClass> = new Set(["history-rewrite", "delete", "deploy", "dependency"]);
+
+/** A rule's action in such a class: its class word's stem ("squashing" is `squash`, "push --force" `force-push`). */
+function actionOf(cls: ActionClass, word: string): string | undefined {
+  if (!DISTINCT_ACTIONS.has(cls)) return undefined;
+  const said = word.toLowerCase();
+  return /force/.test(said) ? "force-push" : said.match(/[a-z]+/)![0].replace(/(?:ing|ed|es|e|s)$/, "");
+}
+
 /** What a trigger that names its class says after its object ("leave it unmerged"). */
 const NAMING_TAIL = /\b(?:unmerged|as an? draft|alone)\b.*$/i;
 
@@ -428,6 +447,7 @@ function ruleAt(clause: string, hit: Hit, qualifier: Qualifier | undefined): Rul
   let cls: ActionClass;
   let object: { object: string; cut: boolean };
   let ownVerb = true;
+  let action: string | undefined;
   if (named) {
     cls = named;
     object = objectOf(named, after.replace(NAMING_TAIL, ""));
@@ -441,6 +461,7 @@ function ruleAt(clause: string, hit: Hit, qualifier: Qualifier | undefined): Rul
     cls = used.cls;
     object = objectOf(cls, used.match.input.slice(used.match.index + used.match[0].length), used.match);
     ownVerb = !!found && VERB_LEAD.test(window.slice(0, found.match.index)) && !inner;
+    action = actionOf(cls, used.match[0]);
   }
   const timed = qualifier === "before" || qualifier === "after";
   const precondition = (!timed && /\b(?:before|after)\b/i.test(clause)) || SUBORDINATE.test(lead.trim());
@@ -453,6 +474,7 @@ function ruleAt(clause: string, hit: Hit, qualifier: Qualifier | undefined): Rul
     ...(qualifier ? { qualifier } : {}),
     explicit: hit.trigger.explicit === true,
     outright: ownVerb && !narrowed,
+    ...(action ? { action } : {}),
   };
 }
 
@@ -526,19 +548,24 @@ export function ruleKey(rule: Pick<Rule, "class" | "polarity" | "object">): stri
   return `${rule.class}|${rule.polarity}|${rule.object}`;
 }
 
-/** The rules a row keeps: each key once, an intent with its qualifier. */
+/** The rules a row keeps: each rule once, an intent with its qualifier. */
 export function ruleRefs(rules: readonly Rule[]): RuleRef[] {
   const refs: RuleRef[] = [];
   for (const rule of rules) {
-    const k = ruleKey(rule);
-    if (!refs.some((ref) => ref.k === k))
-      refs.push({
-        k,
-        ...(rule.qualifier ? { q: rule.qualifier } : {}),
-        ...(rule.outright ? {} : { c: true as const }),
-      });
+    const ref: RuleRef = {
+      k: ruleKey(rule),
+      ...(rule.qualifier ? { q: rule.qualifier } : {}),
+      ...(rule.outright ? {} : { c: true as const }),
+      ...(rule.action ? { v: rule.action } : {}),
+    };
+    if (!refs.some((known) => ruleIdentity(known) === ruleIdentity(ref))) refs.push(ref);
   }
   return refs;
+}
+
+/** What tells one rule from another: its key, and its action where the class's words name distinct ones. */
+export function ruleIdentity(rule: Pick<RuleRef, "k" | "v">): string {
+  return rule.v ? `${rule.k}|${rule.v}` : rule.k;
 }
 
 /** The key with the other polarity: a rule it states supersedes one with this key (A4 §3.1, L8). */
@@ -548,15 +575,15 @@ export function oppositeKey(key: string): string {
 }
 
 /**
- * The keys a typed sentence overturns (A4 §3.1, L8): the opposite of each policy it states outright, and, for a
- * revocation ("you can merge PRs yourself now", "you can open the PR now"), the prohibition of what it permits, read
- * by this module's own classes.
+ * The rules a typed sentence overturns (A4 §3.1, L8), by `ruleIdentity`: the opposite of each policy it states
+ * outright, and, for a revocation ("you can merge PRs yourself now", "you can open the PR now"), the prohibition of
+ * what it permits, read by this module's own classes.
  */
 export function overturnedKeys(sentence: string): string[] {
   const permitted = /^you (?:can|may|are allowed to|are free to) (.+?)\s+now\b/i.exec(sentence.trim());
-  if (permitted) return rulesIn(`don't ${permitted[1]}`).map(ruleKey);
+  if (permitted) return ruleRefs(rulesIn(`don't ${permitted[1]}`)).map(ruleIdentity);
   return rulesIn(sentence).flatMap((rule) =>
-    rule.kind === "policy" && rule.outright ? [oppositeKey(ruleKey(rule))] : [],
+    rule.kind === "policy" && rule.outright ? [ruleIdentity({ k: oppositeKey(ruleKey(rule)), v: rule.action })] : [],
   );
 }
 
