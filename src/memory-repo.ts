@@ -73,7 +73,8 @@ export function mainCheckout(place: GitPlace): string {
   return /[\\/]\.git$/.test(place.common) ? dirname(place.common) : place.top;
 }
 
-function realpathOrSelf(path: string): string {
+/** A path with its links resolved, or as an absolute path when it does not exist. */
+export function realpathOrSelf(path: string): string {
   try {
     return realpathSync(path);
   } catch {
