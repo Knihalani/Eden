@@ -647,7 +647,7 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   if (mode === "off") return withNotice(null, notice);
   // A4 §5.1 step 7 holds here too: what the window's instruction files state is never briefed (D27).
   const notes = briefing(mem, ctx.session, !compact);
-  const briefed = unsaidNotes(notes, shadowSentences(win, ctx.place));
+  const briefed = notes.length ? unsaidNotes(notes, shadowSentences(win, ctx.place)) : notes;
   const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
   Object.assign(trace, {
     cids,

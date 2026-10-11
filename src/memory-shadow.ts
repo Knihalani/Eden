@@ -143,7 +143,11 @@ export function shadowTexts(dir: string | undefined, place: ShadowPlace): string
   return texts.filter(Boolean);
 }
 
-/** The shadow set's sentences, for D26's test (`unsaidText`). */
+/** The shadow set's sentences, for D26's test (`unsaidText`); none when they cannot be read (fail open). */
 export function shadowSentences(dir: string | undefined, place: ShadowPlace): Said[] {
-  return residualSentences(shadowTexts(dir, place));
+  try {
+    return residualSentences(shadowTexts(dir, place));
+  } catch {
+    return [];
+  }
 }
