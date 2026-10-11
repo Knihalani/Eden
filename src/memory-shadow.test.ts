@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { residualSentences, unsaidText } from "./memory-residual";
@@ -73,12 +74,13 @@ describe("D27: the window's loads", () => {
 describe("D27: files read from disk", () => {
   test("AGENTS.md from the session's folder up to the repo's top, only where no folder has a CLAUDE.md", () => {
     const top = temp();
+    execFileSync("git", ["init", "-q"], { cwd: top });
     const cwd = join(top, "apps", "web");
     write(join(top, "AGENTS.md"), "Root agents.");
-    write(join(cwd, "AGENTS.md"), "Web agents.");
-    expect(shadowTexts(undefined, { cwd, top })).toEqual(["Web agents.", "Root agents."]);
+    write(join(cwd, ".claude", "AGENTS.md"), "Web agents.");
+    expect(shadowTexts(undefined, { cwd })).toEqual(["Web agents.", "Root agents."]);
     write(join(top, ".claude", "CLAUDE.md"), "Claude file.");
-    expect(shadowTexts(undefined, { cwd, top })).toEqual([]);
+    expect(shadowTexts(undefined, { cwd })).toEqual([]);
   });
 
   test("outside git only the session's folder is looked at", () => {
@@ -88,14 +90,45 @@ describe("D27: files read from disk", () => {
     expect(shadowTexts(undefined, { cwd: join(parent, "here") })).toEqual(["Here agents."]);
   });
 
-  test("MEMORY.md beside the transcript: its first 200 lines, as Claude Code loads it", () => {
-    const projects = temp();
-    const lines = Array.from({ length: 250 }, (_, at) => `- memory ${at + 1}`);
-    write(join(projects, "memory", "MEMORY.md"), lines.join("\n"));
-    const [index] = shadowTexts(undefined, { transcriptPath: join(projects, "s1.jsonl") });
-    expect(index?.split("\n")).toHaveLength(200);
-    expect(index).toContain("- memory 200");
-    expect(index).not.toContain("- memory 201");
+  describe("auto-memory MEMORY.md, in the project's folder beside the session's", () => {
+    const off = process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;
+    afterEach(() => {
+      if (off === undefined) delete process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;
+      else process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = off;
+    });
+    const folderOf = (path: string) => realpathSync(path).replace(/[^a-zA-Z0-9]/g, "-");
+
+    test("its first 200 lines, as Claude Code loads it", () => {
+      const cwd = temp();
+      const projects = temp();
+      const lines = Array.from({ length: 250 }, (_, at) => `- memory ${at + 1}`);
+      write(join(projects, folderOf(cwd), "memory", "MEMORY.md"), lines.join("\n"));
+      const [index] = shadowTexts(undefined, { cwd, transcriptPath: join(projects, "session-folder", "s1.jsonl") });
+      expect(index?.split("\n")).toHaveLength(200);
+      expect(index).toContain("- memory 200");
+      expect(index).not.toContain("- memory 201");
+    });
+
+    test("none when auto memory is turned off (CLAUDE_CODE_DISABLE_AUTO_MEMORY)", () => {
+      const cwd = temp();
+      const projects = temp();
+      write(join(projects, folderOf(cwd), "memory", "MEMORY.md"), "- The database is postgres.");
+      const place = { cwd, transcriptPath: join(projects, "session-folder", "s1.jsonl") };
+      process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
+      expect(shadowTexts(undefined, place)).toEqual([]);
+      process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "0";
+      expect(shadowTexts(undefined, place)).toEqual(["- The database is postgres."]);
+    });
+
+    test("a project folder name past 200 characters is found by its prefix (Claude Code adds a hash)", () => {
+      const deep = join(temp(), "a".repeat(120), "b".repeat(100));
+      mkdirSync(deep, { recursive: true });
+      const projects = temp();
+      const name = folderOf(deep);
+      write(join(projects, `${name.slice(0, 200)}-1x2y3z`, "memory", "MEMORY.md"), "- Long path memory.");
+      const place = { cwd: deep, transcriptPath: join(projects, "session-folder", "s1.jsonl") };
+      expect(shadowTexts(undefined, place)).toEqual(["- Long path memory."]);
+    });
   });
 
   test("the loaded files are read at each delivery, so an edit counts at once; a missing file gives nothing", () => {
@@ -105,6 +138,16 @@ describe("D27: files read from disk", () => {
     recordInstructions(win, load("/missing/CLAUDE.md", "session_start"));
     write(file, "New text.");
     expect(shadowTexts(win, {})).toEqual(["New text."]);
+  });
+
+  test("a delivery reads at most 64 KB of the set, in order", () => {
+    const win = temp();
+    const files = temp();
+    for (const name of ["a", "b", "c"]) {
+      recordInstructions(win, load(write(join(files, name, "CLAUDE.md"), name.repeat(40 * 1024)), "session_start"));
+    }
+    const texts = shadowTexts(win, {});
+    expect(texts.map((text) => text.length)).toEqual([40 * 1024, 24 * 1024]);
   });
 });
 
