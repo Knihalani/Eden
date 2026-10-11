@@ -1,10 +1,11 @@
 /**
  * P2.2 at the hook (A4 §5.1 steps 4b–9): a class the typed prompt fires delivers its rule as "Rule you set: …", and
- * a later prompt of the class in the same window does not repeat it (the ledger's refractory, A4 §4).
+ * a later prompt of the class in the same window does not repeat it (the ledger's refractory, A4 §4). The Submit's
+ * wide event names the classes fired.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryHookResponse } from "./memory-hook";
@@ -55,6 +56,20 @@ describe("P2.2 at the hook", () => {
     const packet = submit("looks done, can you land it?", "p2");
     expect(packet).toContain("Rule you set: Never merge PRs yourself");
     expect(submit("ok, ship it then", "p3")).not.toContain("Never merge PRs yourself");
+  });
+
+  test("the Submit's wide event names the classes the prompt fired, and only those", () => {
+    submit("Never merge PRs yourself.", "p1", "s-earlier");
+    submit("commit this and push", "p2");
+    submit("where do the logs go?", "p3");
+    const events = join(process.env.EDEN_MEMORY_DIR!, "hook.log.d");
+    const submits = readdirSync(events)
+      .flatMap((file) => readFileSync(join(events, file), "utf8").trim().split("\n"))
+      .map((line) => JSON.parse(line) as { ev: string; prompt_id?: string; classes?: string[] })
+      .filter((event) => event.ev === "UserPromptSubmit");
+    expect(submits.find((event) => event.prompt_id === "p1")?.classes).toEqual(["integrate", "review"]);
+    expect(submits.find((event) => event.prompt_id === "p2")?.classes).toEqual(["commit", "push-upstream"]);
+    expect(submits.find((event) => event.prompt_id === "p3")?.classes).toBeUndefined();
   });
 
   test("a prompt asking about the topic gets no rule", () => {
