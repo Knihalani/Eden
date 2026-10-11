@@ -115,7 +115,58 @@ describe("D9 fix 3 and 4: objects", () => {
     expect(read("never edit pnpm-lock.yaml by hand")).toEqual(["policy:protected-path|neg|pnpm-lock.yaml"]);
     expect(read("never delete anything under infra/ without asking")).toEqual(["policy:delete|neg|infra"]);
     expect(read("Never commit .env files")).toEqual(["policy:commit|neg|.env"]);
-    expect(read("don't push the v1.2 tag")).toEqual(["policy:push-upstream|neg|v1-tag"]);
+    expect(read("don't push the v1.2 tag")).toEqual(["policy:push-upstream|neg|v1.2-tag"]);
+  });
+});
+
+describe("review round 1: edges of D9's wording", () => {
+  test("a tag question still instructs; don't worry / bother / hesitate do not; a subject before never describes", () => {
+    expect(read("Don't merge PRs yourself, ok?")).toEqual(["policy:integrate|neg|*"]);
+    expect(read("I'd like you to always squash when merging")).toEqual(["policy:history-rewrite|pos|*"]);
+    for (const text of [
+      "Don't worry about the release notes.",
+      "Don't hesitate to push back on the design.",
+      "Don't bother with the PR description.",
+      "make sure the API never returns a 500 when the branch is missing",
+      "Always update .env.example when you add a variable.",
+    ])
+      expect(read(text)).toEqual([]);
+  });
+
+  test("fix 1: an intent needs a time or an event; any precondition keeps a policy", () => {
+    for (const text of [
+      "Always merge after CI passes.",
+      "Never merge before CI finishes.",
+      "Always run lint before commit.",
+      "Always clean up after yourself.",
+      "Don't merge after the build finishes.",
+    ])
+      expect(rulesIn(text).map((rule) => rule.kind)).toEqual(["policy"]);
+    expect(read("don't deploy before the holidays")).toEqual(["intent:deploy|neg|* q=before"]);
+    expect(read("don't deploy after launch")).toEqual(["intent:deploy|neg|* q=after"]);
+  });
+
+  test("a qualifier binds to its own clause, or to a bare qualifier beside it", () => {
+    expect(read("Never force-push, and don't open the PR yet.")).toEqual([
+      "policy:history-rewrite|neg|*",
+      "intent:review|neg|* q=yet",
+    ]);
+    expect(read("Never push to main, we have a demo today.")).toEqual(["policy:push-upstream|neg|main"]);
+    expect(read("not yet, don't commit")).toEqual(["intent:commit|neg|* q=yet"]);
+  });
+
+  test("outright: the class word is the rule's own verb and nothing narrows it", () => {
+    const outright = (text: string) => rulesIn(text).map((rule) => rule.outright);
+    for (const text of ["Never squash.", "Don't open the PR yet.", "Never push directly to the main branch."])
+      expect(outright(text)).toEqual([true]);
+    for (const text of [
+      "Always squash when merging.",
+      "Always run the tests before you push.",
+      "Always merge PRs from dependabot.",
+      "Never merge PRs without a review.",
+      "Don't install packages without asking.",
+    ])
+      expect(outright(text)).toEqual([false]);
   });
 });
 
