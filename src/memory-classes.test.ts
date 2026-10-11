@@ -69,6 +69,7 @@ describe("the action-class lexicon", () => {
     expect(keys("Ask before adding a new dependency.")).toEqual(["dependency|neg|*"]);
     expect(keys("Don't add a date picker package.")).toEqual(["dependency|neg|*"]);
     expect(keys("Don't add tests to the package.")).toEqual([]);
+    expect(keys("Don't add a section about packages.")).toEqual([]);
     // A7 §5: destructive-db is a destructive verb with a db, table or schema, in either order
     expect(keys("Do not run destructive database commands (drop, truncate, reset) without asking.")).toEqual([
       "destructive-db|neg|*",

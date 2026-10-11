@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { redact } from "@eden/ir";
-import { authoredTexts, splitPastes, stripPastes, type TextSource } from "../../../src/memory-authority";
+import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
 import { childSessionName, isLiveRow, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
@@ -722,8 +722,6 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   if (human) {
     Object.assign(trace, { submit: "human", turn_mode: turn, prompt_id: att, prompt_hash: promptHash(prompt), off });
     if (recent.contextTokens !== undefined) trace.ctx_tokens = recent.contextTokens;
-    const classes = firedClasses(stripPastes(prompt));
-    if (classes.length) trace.classes = classes;
     if (win)
       try {
         trace.hturn = humanTurns(win);
@@ -737,6 +735,15 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // A typed forget also sends the rows it names to history (A6 §3).
   if (writes && prompt && human) mem.forget(recordInvalidations(mem.dir, mem.storableText(prompt)));
   const encode = promptMessages(prompt, recent.toolResults).map((message) => ({ ...message, ...promptIdOf(r) }));
+  if (human) {
+    const classes = firedClasses(
+      encode
+        .filter((m) => m.src === "user")
+        .map((m) => m.content)
+        .join("\n"),
+    );
+    if (classes.length) trace.classes = classes;
+  }
   if (mode === "shadow" && ledger && trace.hturn !== undefined)
     try {
       const own = encode.filter((m) => m.src === "user").map((m) => m.content);
