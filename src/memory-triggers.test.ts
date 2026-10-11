@@ -28,7 +28,11 @@ describe("firedClasses", () => {
     expect(firedClasses("in general, what are the tradeoffs of soft deletes?")).toEqual([]);
     expect(firedClasses("Can you remind me how Stripe webhooks work?")).toEqual([]);
     expect(firedClasses("Need help with production deploy steps?")).toEqual([]);
-    expect(firedClasses("I added a helper, what should I run before pushing?")).toEqual([]);
+    expect(firedClasses("I added a helper, what should the CI run before pushing?")).toEqual([]);
+    // a class word that is the verb of the user or the agent still fires
+    expect(firedClasses("What should I run before I push?")).toEqual(["push-upstream"]);
+    expect(firedClasses("how do we deploy this?")).toEqual(["deploy"]);
+    expect(firedClasses("why can't I merge my PR yet?")).toEqual(["integrate"]);
     // the clause that asks for the action still fires
     expect(firedClasses("what changed? merge it when CI is green")).toEqual(["integrate"]);
     expect(firedClasses("how about we merge it now")).toEqual(["integrate"]);

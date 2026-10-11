@@ -73,7 +73,7 @@ describe("the action-class lexicon", () => {
     expect(keys("Do not run destructive database commands (drop, truncate, reset) without asking.")).toEqual([
       "destructive-db|neg|*",
     ]);
-    expect(keys("Never drop the users table.")).toEqual(["destructive-db|neg|user"]);
+    expect(keys("Never drop the users table.")).toEqual(["destructive-db|neg|user-table"]);
     // A7 §5's phrasal verbs with their object inside: "close it out", "wrap this up"
     expect(keys("Never close it out yourself.")).toEqual(["integrate|neg|*"]);
   });

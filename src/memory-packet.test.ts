@@ -223,7 +223,10 @@ describe("M8.4 retrieveText does not rewrite rules", () => {
       mem.remember(NEVER_LOG, { kind: "constraint" });
       const stored = mem.memories().find((r) => /console\.log/i.test(r.text));
       expect(stored?.text).toBe(NEVER_LOG);
-      const hit = mem.notesFor("console.log").find((r) => /console\.log/i.test(r.text));
+      // D18: a keyed rule (D9 keys this one on `deploy`) comes by its class's trigger, never by word overlap.
+      const hit = mem
+        .recall([{ role: "user", content: "add console.log output to the production build" }])
+        .find((r) => /console\.log/i.test(r.text));
       expect(hit).toBeTruthy();
       expect(hit!.text).toMatch(
         new RegExp(`^${kindLabel("rule")}\\s+${NEVER_LOG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
@@ -243,7 +246,10 @@ describe("M8.4 retrieveText does not rewrite rules", () => {
     withMem((mem) => {
       const body = "Production changelog never ships a silent never.";
       mem.remember(body, { kind: "constraint" });
-      const hit = mem.notesFor("changelog production silent").find((r) => /changelog/i.test(r.text));
+      // D18: keyed on `integrate` ("ships"), it comes by that class's trigger.
+      const hit = mem
+        .recall([{ role: "user", content: "ship the production changelog" }])
+        .find((r) => /changelog/i.test(r.text));
       expect(hit?.text).toMatch(new RegExp(`^${kindLabel("rule")}\\s+${body.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
       expect(hit?.text).not.toMatch(/never no/i);
     });
@@ -297,7 +303,8 @@ describe("M8.4 gist + empty cue", () => {
         expect(ctx).toContain(`- ${gists[0]!.text} (earlier session notes`);
         expect(ctx).not.toMatch(/\[(?:rule|gist|fact|episode|procedure)\b/);
 
-        const notes = mem.notesFor(PACKET_CUE);
+        // D18: the keyed rule comes by its class's trigger ("committing"), the other kinds by the lexical path.
+        const notes = mem.recall([{ role: "user", content: PACKET_CUE }]);
         expect(notes.some((r) => kindPrefix("rule").test(r.text) && r.text.includes(RULE))).toBe(true);
         expect(notes.some((r) => kindPrefix("fact").test(r.text) && /Clerk/.test(r.text))).toBe(true);
         const gistHit = notes.find((r) => r.kind === "gist" || /GitHub Actions; Node 18/.test(r.text));

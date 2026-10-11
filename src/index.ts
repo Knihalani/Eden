@@ -23,7 +23,7 @@ import {
   type RuleRef,
 } from "./memory-policy";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
-import { withoutInstructions, type TextSource } from "./memory-authority";
+import { stripPastes, withoutInstructions, type TextSource } from "./memory-authority";
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
@@ -31,6 +31,7 @@ import { counteredKeys, isForget, recordSupersession, validText, type Invalidati
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
+import { firedClasses, triggeredRows } from "./memory-triggers";
 import {
   attachPlaceCues,
   hookLane,
@@ -97,6 +98,15 @@ export function encodeLane(text: string): MemoryLaneKind {
 function rankKindBoost(r: MemoryRecord): number {
   const k = String(r.kind ?? "");
   return k === "constraint" ? 50 : k === "procedure" ? 40 : k === "fact" || k === "preference" ? 25 : 0;
+}
+
+/** Notes as retrieval hands them on: each body capped and labelled with its kind and source. */
+function labelledNotes(recs: MemoryRecord[]): MemoryRecord[] {
+  try {
+    return recs.map((r) => ({ ...r, text: applyProvenanceLabel(r, capMemoryBody(r, stripPacketLabel(r.text).body)) }));
+  } catch {
+    return recs;
+  }
 }
 
 function capMemoryBody(r: MemoryRecord, body: string): string {
@@ -421,7 +431,8 @@ function convBlob(list: unknown[]): string {
   return parts.join("\n");
 }
 
-export function cueFor(list: unknown[]): string {
+/** The text of the last message the user sent, packets aside: what the cue is read from. */
+function lastUserText(list: unknown[]): string {
   const m = Array.isArray(list)
     ? list.findLast((x) => {
         if (!x || typeof x !== "object") return false;
@@ -432,7 +443,11 @@ export function cueFor(list: unknown[]): string {
         return !!text && !packet && (role === "user" || role === "human");
       })
     : undefined;
-  const raw = m && typeof m === "object" ? convBlob([m]).trim() : "";
+  return m && typeof m === "object" ? convBlob([m]).trim() : "";
+}
+
+export function cueFor(list: unknown[]): string {
+  const raw = lastUserText(list);
   if (!raw) return "";
   const paras = raw
       .split(/\n\n/)
@@ -898,6 +913,8 @@ export class AgentMemory {
   /** Every row's text exactly: a text a row already holds has passed the gate, which `observe` need not run again. */
   private stored = new Set<string>();
   private post: Map<string, Compiled[]> | null = null;
+  /** The live rule rows (D9 keys), which triggers deliver; built with `post`. */
+  private ruleRows: MemoryRecord[] = [];
   private knownIds = new Set<string>();
   /** Rows this process wrote that no store file holds yet. */
   private unsaved = new Set<string>();
@@ -1163,19 +1180,38 @@ export class AgentMemory {
   /**
    * The postings `relevant` ranks from: the live rows it can score (P0.6). A row of more than 12 needles never
    * ranks, so it neither fills the candidate pool nor counts in a term's df, and it is never tokenized whole: a
-   * store's tool results made this index the Submit's cost that grew with the session.
+   * store's tool results made this index the Submit's cost that grew with the session. A live rule row with D9 keys
+   * is a policy or an intent, which its classes' triggers deliver and word overlap never does (D18): it is kept
+   * apart, in `ruleRows`.
    */
   private ensureIndex() {
     if (this.post) return;
     const post = new Map<string, Compiled[]>();
-    for (const c of this.compiled)
-      if (isLiveRow(c.rec) && c.scorable)
+    const ruleRows: MemoryRecord[] = [];
+    for (const c of this.compiled) {
+      if (!isLiveRow(c.rec)) continue;
+      if (c.rec.rules?.length) ruleRows.push(c.rec);
+      else if (c.scorable)
         for (const w of c.needles) {
           let arr = post.get(w);
           if (!arr) post.set(w, (arr = []));
           arr.push(c);
         }
+    }
     this.post = post;
+    this.ruleRows = ruleRows;
+  }
+
+  /** The policies and intents the classes a typed prompt fires deliver (A4 §5.1 step 4b, `memory-triggers.ts`). */
+  private triggered(prompt: string): MemoryRecord[] {
+    try {
+      const classes = firedClasses(stripPastes(prompt));
+      if (!classes.length) return [];
+      this.ensureIndex();
+      return labelledNotes(triggeredRows(this.ruleRows, classes));
+    } catch {
+      return [];
+    }
   }
 
   /** Encodes messages (`ObserveOptions`). */
@@ -1530,19 +1566,13 @@ export class AgentMemory {
         return n;
       }
     });
-    try {
-      return kept.map((r) => ({
-        ...r,
-        text: applyProvenanceLabel(r, capMemoryBody(r, stripPacketLabel(r.text).body)),
-      }));
-    } catch {
-      return kept;
-    }
+    return labelledNotes(kept);
   }
 
   /**
    * The notes a message list's cue retrieves, ranked and labelled, before any packing; then the list is observed
-   * (`observeCue`). Nothing is retrieved for a no-op cue, or when the list already carries a packet. The memory hook
+   * (`observeCue`). The policies and intents the user's last message fires come first (`triggered`), then the lexical
+   * path's notes, which a no-op cue gets none of. Nothing is retrieved when the list already carries a packet. The hook
    * and `inject` (`memory-wrap.ts`) select, shape and word them (`memory-delivery.ts`, `memory-hook-packet.ts`). Fails
    * open: a throw is counted in `memoryInjectSwallows` and recalls nothing. `encode` replaces what is encoded when
    * the caller knows more of its sources than the cue shows (the hook splits a prompt's pasted spans off, D12).
@@ -1568,6 +1598,9 @@ export class AgentMemory {
         try {
           if (packet.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(packet, this.dir);
         } catch {}
+        // A trigger hit is STRONG evidence (A7 §4), so it leads, whatever the lexical path makes of the cue.
+        const triggered = this.triggered(lastUserText(list));
+        packet = [...triggered, ...packet.filter((note) => !triggered.some((rule) => rule.id === note.id))];
         if (packet.length)
           try {
             logMemoryNotes(packet);

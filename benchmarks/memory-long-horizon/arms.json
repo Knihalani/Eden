@@ -572,27 +572,17 @@
       "on": {
         "state": "red",
         "failed": [
-          "fir",
-          "planted",
-          "recall"
+          "fir"
         ],
-        "why": "`eden memory remember` does not exist, so no row is planted (R1 measured today's retrieval in-process: test FIR 0.50, recall@4 0.52; R1 §0)"
+        "why": "rows are planted since P2.2 (`eden memory remember`); the lexical path puts a packet on 5 of the 12 CI negatives: main's lexical admission, which P4.3's BM25F and tau_repo gate replace"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "ran"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "ran",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -606,27 +596,17 @@
         "state": "red",
         "failed": [
           "fir",
-          "planted",
-          "policy-on-positives",
-          "policy-recall"
+          "policy-on-positives"
         ],
-        "why": "`eden memory remember` does not exist, so no row is planted"
+        "why": "since P2.2 the compiled trigger delivers the keyed policies (`policy-recall` passes), and keyed rule rows leave the lexical path (D18); `fir` counts every packet on a negative and `policy-on-positives` every policy bullet, and the rest come from the lexical path: main's lexical admission, which P4.3's BM25F and tau_repo gate replace (a packet on 5 of the 8 CI negatives, an unkeyed policy such as p05 or p15 on 2 of the 5 non-policy positives)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "ran"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "ran",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -656,27 +636,17 @@
         "state": "red",
         "failed": [
           "batch-decided",
-          "kept-only-if",
-          "planted",
-          "recall-before"
+          "kept-only-if"
         ],
-        "why": "`eden memory remember` does not exist, so no row is planted"
+        "why": "rows are planted since P2.2 (`eden memory remember`); `eden memory aliases --batch` does not exist (D21a's alias batch is P5.3's)"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "ran"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "ran",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -955,28 +925,20 @@
       "on": {
         "state": "red",
         "failed": [
-          "gold-recall",
-          "p99",
-          "planted",
-          "silence"
+          "gold-recall"
         ],
-        "why": "`eden memory remember` does not exist, so no row is planted"
+        "unstable": [
+          "p99"
+        ],
+        "why": "rows are planted since P2.2 (`eden memory remember`); at 2,000 rows the legacy lexical path meets 10 of the 15 needs it meets at the small store (prebuilt postings and BM25F are P4.2's); `p99` sat at 145.7-148 ms against its 150 ms gate at load 3, so it flips with load"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "ran"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "ran",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     },
     {
@@ -989,28 +951,20 @@
       "on": {
         "state": "red",
         "failed": [
-          "gold-recall",
-          "p99",
-          "planted",
-          "silence"
+          "gold-recall"
         ],
-        "why": "`eden memory remember` does not exist, so no row is planted"
+        "unstable": [
+          "p99"
+        ],
+        "why": "rows are planted since P2.2 (`eden memory remember`); at 2,000 rows the legacy lexical path meets 10 of the 15 needs it meets at the small store (prebuilt postings and BM25F are P4.2's); `p99` sat at 145.7-148 ms against its 150 ms gate at load 3, so it flips with load"
       },
       "off": {
-        "state": "red",
-        "failed": [
-          "ran"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag off, the plugin prints nothing at a delivery point, returns no context and writes no ledger (the Submit is still encoded)"
       },
       "shadow": {
-        "state": "red",
-        "failed": [
-          "ran",
-          "shadow-ledger",
-          "wide-events"
-        ],
-        "why": "the arm reaches no hook until its entry point exists (see on)"
+        "state": "green",
+        "why": "passes since P2.2, which plants the arm's rows (`eden memory remember`), as every flagged arm has since P0.8 (X7): with every delivery-point flag shadow, the plugin runs the pipeline and prints nothing; its turn, deliver and epoch records go to the window's delivery.shadow.log, never delivery.log, and every invocation appends a wide event under hook.log.d/"
       }
     }
   ]
