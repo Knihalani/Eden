@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { openMemory, storeRows, superseded, type MemoryRecord } from "./index";
 import { ledgerKey } from "./memory-ledger";
 import { INTENT_TTL_MS } from "./memory-policy";
-import { invalidationsIn, validText } from "./memory-validity";
+import { invalidationsIn, readInvalidations, recordInvalidations, validText } from "./memory-validity";
 import { keyValueTokens, summaryTokens } from "./memory-value-tokens";
 
 const T0 = Date.parse("2026-10-01T09:00:00.000Z");
@@ -151,6 +151,34 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     );
     expect(validText("Always squash when merging, never push to main.", 0, opposed)).toBe("never push to main.");
     expect(validText("Always squash when merging.", 2, opposed)).toBe("Always squash when merging.");
+  });
+
+  test("a permission lifts no narrowed prohibition; a prohibition overturns a narrowed permission", () => {
+    const mem = store();
+    mem.observe([typed("Never merge PRs without a review.")]);
+    mem.observe([typed("Always squash when merging.")]);
+    process.env.EDEN_NOW = String(T0 + 60_000);
+    mem.observe([typed("You can merge now.")]);
+    mem.observe([typed("Never squash.")]);
+    expect(superseded(ruleRow(mem, "without a review"))).toBe(false);
+    expect(superseded(ruleRow(mem, "Always squash"))).toBe(true);
+  });
+
+  test("the log reads each key's newest opposition only, so its cost is bounded by the keys", () => {
+    const root = mkdtempSync(join(tmpdir(), "eden-policy-log-"));
+    dirs.push(root);
+    for (let t = 1; t <= 500; t++) recordInvalidations(root, "Never squash.", t);
+    expect(readInvalidations(root)).toEqual([{ k: "oppose", r: "history-rewrite|pos|*", t: 500 }]);
+    const many = Array.from({ length: 500 }, (_, n) => ({
+      k: "oppose" as const,
+      r: `delete|pos|thing${n}-file`,
+      t: 2,
+    }));
+    const notes = Array.from({ length: 200 }, (_, n) => `Always delete the thing${n % 50} files. Never push to main.`);
+    const started = performance.now();
+    for (const note of notes) validText(note, 1, many);
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(validText("Always delete the thing7 files. Never push to main.", 1, many)).toBe("Never push to main.");
   });
 
   test("text the user did not type supersedes nothing", () => {

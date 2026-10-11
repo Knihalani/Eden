@@ -12,7 +12,15 @@ import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
-import { INTENT_TTL_MS, ruleRefs, rulesIn, withoutExcludedWording, type Rule, type RuleRef } from "./memory-policy";
+import {
+  INTENT_TTL_MS,
+  overturnable,
+  ruleRefs,
+  rulesIn,
+  withoutExcludedWording,
+  type Rule,
+  type RuleRef,
+} from "./memory-policy";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { withoutInstructions, type TextSource } from "./memory-authority";
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
@@ -1031,9 +1039,10 @@ export class AgentMemory {
   }
 
   /**
-   * L8 (A4 §3.1): a typed statement supersedes an older rule row only by stating a policy of the opposite polarity on
-   * its key, or by revoking it ("you can merge PRs yourself now"), and only when it counters every rule the row
-   * states. An intent supersedes no policy: "don't squash yet" leaves "always squash" standing.
+   * L8 (A4 §3.1): a typed statement supersedes a rule row of an earlier prompt only by stating outright a policy of
+   * the opposite polarity on its key, or by revoking it ("you can merge PRs yourself now"), and only when it counters
+   * every rule the row states (`counteredKeys`). An intent supersedes no policy: "don't squash yet" leaves "always
+   * squash" standing.
    */
   private supersedeRules(incoming: MemoryRecord): void {
     if (isUntyped(incoming)) return;
@@ -1042,7 +1051,9 @@ export class AgentMemory {
     for (const c of this.compiled) {
       const row = c.rec;
       if (row.id === incoming.id || superseded(row) || isUntyped(row) || !row.rules?.length) continue;
-      if ((row.at ?? 0) > incoming.at || !row.rules.every((rule) => countered.has(rule.k))) continue;
+      // A row of the same prompt is never overturned by it: "Don't merge PRs. Always merge PRs from dependabot."
+      const samePrompt = (row.at ?? 0) >= incoming.at || (!!row.promptId && row.promptId === incoming.promptId);
+      if (samePrompt || !row.rules.every((rule) => countered.has(rule.k) && overturnable(rule))) continue;
       row.invalidBy = incoming.id;
       this.changed.add(row.id);
     }

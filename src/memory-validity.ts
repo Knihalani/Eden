@@ -10,9 +10,12 @@
  *   "use POST instead of GET" is a coding instruction, not a switch;
  * - a **revocation** (A4 §3.1, D9): "you can merge PRs yourself now", whose verb is one of A7 §5's action classes. It
  *   invalidates a rule that forbids an action of the same class on the same object (`forbids`);
- * - an **opposition** (A4 §3.1, L8; P2.1): a typed policy ("never squash") overturns what older text said of the
- *   opposite polarity on its key (D9's `(class, polarity, object)`): "always squash when merging". An intent ("don't
- *   squash yet") overturns nothing;
+ * - an **opposition** (A4 §3.1, L8; P2.1): a typed policy stated outright ("never squash") overturns what older text
+ *   said of the opposite polarity on its key (D9's `(class, polarity, object)`): "always squash when merging". An
+ *   intent ("don't squash yet"), a rule with a precondition ("always run the tests before you push") or one whose
+ *   object lost a qualifier ("always merge PRs from dependabot") overturns nothing (`overturnedKeys`). A revocation
+ *   is logged as an opposition too, of the prohibition it lifts, keyed by D9's classes, so it reaches every class
+ *   ("you can open the PR now"). Each key's newest opposition is read; older ones add nothing;
  * - a **forget** (A6 §3, A4 §3.1's "forget that"): "forget ZebraCache", "forget that the auth provider is Clerk". It
  *   is a retraction (`r: "forget"`) of the value its sentence ends with, shaped as a retracted value is: "Forget the
  *   tests, just fix the build" sets nothing aside, "forget it" neither, and "don't forget to …" is none (D9 fix 2).
@@ -38,7 +41,7 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { memoryNow } from "./memory-clock";
 import { stripPacketLabel } from "./memory-provenance";
-import { keyedObject, objectWords, oneNamePerObject, oppositeKey, ruleKey, rulesIn } from "./memory-policy";
+import { objectWords, overturnable, overturnedKeys, ruleRefs, rulesIn } from "./memory-policy";
 import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript";
 
 /**
@@ -238,26 +241,17 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
     if (revoked)
       found.push({ k: "revoke", c: ACTION_VERBS[revoked[1]!.toLowerCase()]!, o: objectWords(revoked[2]!), t });
   }
-  const opposed = rulesIn(typedText(prompt)).flatMap((rule) =>
-    rule.kind === "policy" ? [oppositeKey(ruleKey(rule))] : [],
-  );
-  for (const r of new Set(opposed)) found.push({ k: "oppose", r, t });
+  const overturned = sentences(typedText(prompt)).flatMap(overturnedKeys);
+  for (const r of new Set(overturned)) found.push({ k: "oppose", r, t });
   return found;
 }
 
-/** The rule key a revocation revokes: its object keyed as a rule's is ("you can merge PRs now": `integrate|neg|*`). */
-function revokedKey(record: Revocation): string {
-  return `${record.c}|neg|${keyedObject(record.c, objectWords(oneNamePerObject(record.o.join(" "))))}`;
-}
-
 /**
- * The rule keys a typed text counters (A4 §3.1, L8): the rules it revokes, and the opposite of each policy it states.
- * A rule row whose every rule it counters goes to history.
+ * The rule keys a typed text overturns (A4 §3.1, L8; `overturnedKeys`): the rules it revokes, and the opposite of each
+ * policy it states outright. A rule row whose every rule it overturns goes to history.
  */
 export function counteredKeys(text: string): string[] {
-  return invalidationsIn(text, 0).flatMap((record) =>
-    record.k === "oppose" ? [record.r] : record.k === "revoke" ? [revokedKey(record)] : [],
-  );
+  return invalidationsIn(text, 0).flatMap((record) => (record.k === "oppose" ? [record.r] : []));
 }
 
 /** Appends the invalidations of a human prompt to the store's validity log, and returns them. Fails open. */
@@ -307,31 +301,42 @@ export function readInvalidations(root: string): Invalidation[] {
   } catch {
     return [];
   }
-  return text.split("\n").flatMap((line): Invalidation[] => {
-    try {
-      const record = JSON.parse(line) as Record<string, unknown>;
-      const t = record.t;
-      if (typeof t !== "number") return [];
-      if (record.k === "retract" && typeof record.o === "string") {
-        const form = typeof record.f === "string" ? { f: record.f } : {};
-        const scope = typeof record.s === "string" ? { s: record.s } : {};
-        const subject = Array.isArray(record.w)
-          ? { w: record.w.filter((word): word is string => typeof word === "string") }
-          : {};
-        const forget = record.r === "forget" ? { r: "forget" as const } : {};
-        const to = typeof record.n === "string" ? { n: record.n } : {};
-        return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...to, ...forget }];
-      }
-      if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
-        return [
-          { k: "revoke", c: record.c, o: record.o.filter((word): word is string => typeof word === "string"), t },
-        ];
-      if (record.k === "oppose" && typeof record.r === "string") return [{ k: "oppose", r: record.r, t }];
-      return [];
-    } catch {
-      return [];
+  return newestOppositions(text.split("\n").flatMap(parseInvalidation));
+}
+
+/**
+ * Each key's newest opposition only: it overturns all text older than itself, so older oppositions of the key add
+ * nothing, and the log's cost at every delivery point stays bounded by the keys ever opposed.
+ */
+function newestOppositions(records: readonly Invalidation[]): Invalidation[] {
+  const newest = new Map<string, Invalidation>();
+  for (const record of records)
+    if (record.k === "oppose" && record.t >= (newest.get(record.r)?.t ?? -Infinity)) newest.set(record.r, record);
+  return records.filter((record) => record.k !== "oppose" || newest.get(record.r) === record);
+}
+
+function parseInvalidation(line: string): Invalidation[] {
+  try {
+    const record = JSON.parse(line) as Record<string, unknown>;
+    const t = record.t;
+    if (typeof t !== "number") return [];
+    if (record.k === "retract" && typeof record.o === "string") {
+      const form = typeof record.f === "string" ? { f: record.f } : {};
+      const scope = typeof record.s === "string" ? { s: record.s } : {};
+      const subject = Array.isArray(record.w)
+        ? { w: record.w.filter((word): word is string => typeof word === "string") }
+        : {};
+      const forget = record.r === "forget" ? { r: "forget" as const } : {};
+      const to = typeof record.n === "string" ? { n: record.n } : {};
+      return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...to, ...forget }];
     }
-  });
+    if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
+      return [{ k: "revoke", c: record.c, o: record.o.filter((word): word is string => typeof word === "string"), t }];
+    if (record.k === "oppose" && typeof record.r === "string") return [{ k: "oppose", r: record.r, t }];
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 function escape(text: string): string {
@@ -409,9 +414,25 @@ function namesSubject(sentence: string, subject: readonly string[] | undefined):
 /** A sentence that states a rule (a prohibition or an "always"), which only a revocation supersedes (A4 §3.1). */
 const RULE_SENTENCE = /\b(?:never|always|don'?t|do not|must|must not|should not|shouldn'?t|avoid)\b/i;
 
-/** Whether a text states the rule keyed `key` (D9). */
+/** Whether a text states a rule keyed `key` that an overturning reaches (D9, `overturnable`). */
 function statesRule(text: string, key: string): boolean {
-  return rulesIn(text).some((rule) => ruleKey(rule) === key);
+  return ruleKeysOf(text).includes(key);
+}
+
+/**
+ * The keys of the rules a text states that an overturning reaches (`overturnable`), read once per text: every delivery
+ * point reads each note against the log.
+ */
+const RULE_KEYS = new Map<string, string[]>();
+const RULE_KEYS_KEPT = 4_096;
+
+function ruleKeysOf(text: string): string[] {
+  let keys = RULE_KEYS.get(text);
+  if (!keys) {
+    if (RULE_KEYS.size >= RULE_KEYS_KEPT) RULE_KEYS.clear();
+    RULE_KEYS.set(text, (keys = ruleRefs(rulesIn(text)).flatMap((rule) => (overturnable(rule) ? [rule.k] : []))));
+  }
+  return keys;
 }
 
 /** Whether a text states a rule a revocation or an opposition has overturned. */

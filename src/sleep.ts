@@ -891,6 +891,11 @@ function identityCandidates(ordered: readonly { row: SleepRecord; t: number }[])
   return candidates;
 }
 
+/** An intent row (D9): it expires after 7 days, so a gist, which outlives it, never carries it. */
+function isIntent(r: MemoryRecord): boolean {
+  return !!r.rules?.length && r.rules.every((rule) => rule.q);
+}
+
 /**
  * The session gist: the winning value of each subject the session stated, then its pins. A4 §3.3, §5.1 step 5: it
  * is rewritten at every sleep, later than what it states, so each source is checked against the validity log at its
@@ -907,7 +912,7 @@ function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: st
   }
   const pins = mem
     .memories()
-    .filter((r) => r.kind === "constraint" && !superseded(r) && !isIcl(r.text) && own(r.id))
+    .filter((r) => r.kind === "constraint" && !superseded(r) && !isIntent(r) && !isIcl(r.text) && own(r.id))
     .slice(-8)
     .map((r) => validText(r.text.replace(/\s+/g, " ").trim(), r.at, invalid))
     .filter(Boolean);
