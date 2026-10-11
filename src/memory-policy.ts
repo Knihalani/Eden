@@ -372,7 +372,11 @@ function bareQualifier(clause: string): Qualifier | undefined {
  * clean up; deploy, release, publish), which fix 3 keeps one rule.
  */
 function actionOf(cls: ActionClass, word: string): string | undefined {
-  if (cls !== "history-rewrite") return undefined;
+  return cls === "history-rewrite" ? historyAction(word) : undefined;
+}
+
+/** The history-rewrite action a word names, as a rule keeps it (`v`): `force-push`, `squash`, `rebas`, `amend`. */
+export function historyAction(word: string): string {
   const said = word.toLowerCase();
   return /force/.test(said) ? "force-push" : said.match(/[a-z]+/)![0].replace(/(?:ing|ed|es|e|s)$/, "");
 }
@@ -457,17 +461,45 @@ function readClauses(sentence: string): ClauseReading[] {
 }
 
 /**
+ * The clause of a text that states the rule `identity` (`ruleIdentity`), without a leading conjunction or the
+ * sentence's end: "Push the fix to the PR, but don't merge it yourself." gives "don't merge it yourself".
+ */
+export function ruleClause(text: string, identity: string): string | undefined {
+  for (const sentence of sentencesOf(String(text ?? ""))) {
+    if (isQuestion(sentence)) continue;
+    for (const { clause, rule } of readClauses(sentence))
+      if (rule && ruleRefs([rule]).some((ref) => ruleIdentity(ref) === identity))
+        return clause
+          .trim()
+          .replace(/^(?:and|but|so|then|or|also|please|just)\s+/i, "")
+          .replace(/[\s.!;]+$/, "");
+  }
+  return undefined;
+}
+
+/**
  * A text without its intents (D9: an intent expires after 7 days): each clause that states one goes, with a bare
  * qualifier beside it ("not yet, don't commit"); the other clauses stay ("Never force-push, and don't open the PR yet"
  * keeps "Never force-push."). A text stating no intent is returned as it is.
  */
 export function withoutIntents(text: string): string {
+  return withoutRules(text, (rule) => rule.kind === "intent");
+}
+
+/**
+ * A text without the clauses stating a rule `drops` picks, each with a bare qualifier beside it, as `withoutIntents`
+ * reads them. A text stating no such rule is returned as it is.
+ */
+export function withoutRules(text: string, drops: (rule: Rule) => boolean): string {
   let dropped = false;
   const kept = sentencesOf(String(text ?? "")).flatMap((sentence) => {
     if (isQuestion(sentence)) return [sentence];
     const readings = readClauses(sentence);
-    const intent = (at: number) => readings[at]?.rule?.kind === "intent";
-    const left = readings.filter(({ bare }, at) => !intent(at) && !(bare && (intent(at - 1) || intent(at + 1))));
+    const dropping = (at: number) => {
+      const rule = readings[at]?.rule;
+      return !!rule && drops(rule);
+    };
+    const left = readings.filter(({ bare }, at) => !dropping(at) && !(bare && (dropping(at - 1) || dropping(at + 1))));
     if (left.length === readings.length) return [sentence];
     dropped = true;
     if (!left.length) return [];

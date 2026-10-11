@@ -8,6 +8,8 @@ import { basename, dirname, join } from "node:path";
 
 /** The memory hook's module, relative to an Eden checkout. */
 export const MEMORY_HOOK = join("packages", "cli", "src", "memory-hook.ts");
+/** The PreToolUse policy guard's hook, beside it (`hook.ts guard <class>`). */
+export const GUARD_HOOK = join("packages", "cli", "src", "memory-guard-hook.ts");
 
 export type EdenRoot = { root: string; via: string };
 

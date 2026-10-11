@@ -5,7 +5,9 @@
  *
  * - **Sources, by precedence:** the environment (`EDEN_FLAG_DELIVER_SUBMIT`, …; `guard.ask` is `EDEN_POLICY_GUARD`),
  *   the repo file `<repo>/.eden/flags.json`, the user file `$EDEN_HOME/flags.json`, then the point's default. Both
- *   files map a flag name to its value: `{"deliver.submit": "shadow"}`.
+ *   files map a flag name to its value: `{"deliver.submit": "shadow"}`. A repo file comes with whatever repo was
+ *   cloned, so for `guard.ask`, the one point that touches control flow (D19), it may lower what the user file or the
+ *   default gives, never raise it (P2.3, with `/security-review`).
  * - **Default** (no source sets the flag): what the point does today. UserPromptSubmit and SessionStart delivered
  *   before flags existed, so they stay `on` until a stage writes otherwise; the points not built yet are `shadow`,
  *   and `guard.ask` `off`.
@@ -32,6 +34,8 @@ interface FlagSpec {
   unknown: FlagMode;
   /** A release flag's removal date (yyyy-mm-dd); none for a kill switch. */
   removeBy?: string;
+  /** False when a repo file may only lower the flag (see the header). */
+  repoRaises?: false;
 }
 
 const RELEASE_FLAGS_REMOVED_BY = "2027-06-30";
@@ -73,7 +77,7 @@ export const FLAGS = {
     unknown: "off",
     removeBy: RELEASE_FLAGS_REMOVED_BY,
   },
-  "guard.ask": { env: "EDEN_POLICY_GUARD", default: "off", unknown: "off" },
+  "guard.ask": { env: "EDEN_POLICY_GUARD", default: "off", unknown: "off", repoRaises: false },
 } as const satisfies Record<string, FlagSpec>;
 
 export type Flag = keyof typeof FLAGS;
@@ -140,6 +144,11 @@ function readObject(path: string | undefined): Record<string, unknown> {
   }
 }
 
+/** A mode's order, quietest first. */
+function rank(mode: FlagMode): number {
+  return FLAG_MODES.indexOf(mode);
+}
+
 function parseMode(raw: unknown): FlagMode | undefined {
   const value = typeof raw === "string" ? raw.trim().toLowerCase() : raw;
   return FLAG_MODES.find((mode) => mode === value);
@@ -183,6 +192,11 @@ export function resolveFlags(cwd?: string, env: NodeJS.ProcessEnv = process.env)
     if (set) {
       const mode = parseMode(set[1]);
       resolved = mode ? { mode, source: set[0] } : { mode: spec.unknown, source: set[0], unknown: String(set[1]) };
+    }
+    if (resolved.source === "repo" && spec.repoRaises === false) {
+      const user = layers[1]![1];
+      const below = flag in user ? (parseMode(user[flag]) ?? spec.unknown) : spec.default;
+      if (rank(resolved.mode) > rank(below)) resolved = { mode: below, source: flag in user ? "user" : "default" };
     }
     if (resolved.mode === "on" && breaker[flag]) resolved = { mode: "shadow", source: "breaker" };
     state[flag] = resolved;

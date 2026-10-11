@@ -16,6 +16,9 @@
  *   object lost a qualifier ("always merge PRs from dependabot") overturns nothing (`overturnedKeys`). A revocation
  *   is logged as an opposition too, of the prohibition it lifts, keyed by D9's classes, so it reaches every class
  *   ("you can open the PR now"). Each key's newest opposition is read; older ones add nothing;
+ * - an **end** (D9, P2.3) of the rule keyed `r` (`ruleIdentity`): an intent released ("open it now") or done (its
+ *   action succeeded), or a rule the user dropped ("that rule is gone"). It drops each clause stating that rule (only
+ *   an intent, for an intent's end) with a bare qualifier beside it, whether or not it was narrowed;
  * - a **forget** (A6 §3, A4 §3.1's "forget that"): "forget ZebraCache", "forget that the auth provider is Clerk". It
  *   is a retraction (`r: "forget"`) of the value its sentence ends with, shaped as a retracted value is: "Forget the
  *   tests, just fix the build" sets nothing aside, "forget it" neither, and "don't forget to …" is none (D9 fix 2).
@@ -51,6 +54,7 @@ import {
   ruleRefs,
   rulesIn,
   withoutIntents,
+  withoutRules,
 } from "./memory-policy";
 import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript";
 
@@ -58,13 +62,17 @@ import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript"
  * A retraction or switch (`retract`) of value `o`, with its typed form `f` when its capitals alone shape it; a switch
  * also keeps the scope it names (`s`, a path), its subject words (`w`) and the value it switches to (`n`, as typed,
  * when that is value-shaped). A revocation (`revoke`) of action class `c`
- * on object words `o`. An opposition (`oppose`) of the rule keyed `r`.
+ * on object words `o`. An opposition (`oppose`) of the rule keyed `r`. An end (`end`) of the rule `r`: of an
+ * intent, or (`of: "rule"`) of any rule.
  */
 export type Invalidation =
   | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; n?: string; r?: "forget" }
   | { k: "revoke"; c: string; o: string[]; t: number }
   | { k: "oppose"; r: string; t: number }
-  | { k: "end"; r: string; t: number; of: "intent" | "rule" };
+  | { k: "end"; r: string; t: number; of: RuleEnd };
+
+/** What an `end` ends: an intent (released or done), or a rule of any kind the user dropped. */
+export type RuleEnd = "intent" | "rule";
 type Retraction = Extract<Invalidation, { k: "retract" }>;
 type Revocation = Extract<Invalidation, { k: "revoke" }>;
 
@@ -229,8 +237,15 @@ export function counteredKeys(text: string): string[] {
   return invalidationsIn(text, 0).flatMap((record) => (record.k === "oppose" ? [record.r] : []));
 }
 
-/** Appends the ends of rules to the store's validity log (P2.3). Red first: a stub. */
-export function recordRuleEnds(_root: string, _rules: readonly string[], _of: "intent" | "rule", _t?: number): void {}
+/** Appends the ends of rules (by `ruleIdentity`) to the store's validity log (see the header). Fails open. */
+export function recordRuleEnds(root: string, rules: readonly string[], of: RuleEnd, t = memoryNow()): void {
+  if (!rules.length) return;
+  try {
+    mkdirSync(root, { recursive: true });
+    const lines = [...new Set(rules)].map((r) => `${JSON.stringify({ k: "end", r, t, of })}\n`);
+    appendFileSync(join(root, FILE), lines.join(""), { mode: 0o600 });
+  } catch {}
+}
 
 /** Appends the invalidations of a human prompt to the store's validity log, and returns them. Fails open. */
 export function recordInvalidations(root: string, prompt: string, t = memoryNow()): Invalidation[] {
@@ -311,6 +326,8 @@ function parseInvalidation(line: string): Invalidation[] {
     if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
       return [{ k: "revoke", c: record.c, o: record.o.filter((word): word is string => typeof word === "string"), t }];
     if (record.k === "oppose" && typeof record.r === "string") return [{ k: "oppose", r: record.r, t }];
+    if (record.k === "end" && typeof record.r === "string" && (record.of === "intent" || record.of === "rule"))
+      return [{ k: "end", r: record.r, t, of: record.of }];
     return [];
   } catch {
     return [];
@@ -443,6 +460,7 @@ function otherRules(sentence: string, records: readonly Invalidation[]): string[
 function invalidates(record: Invalidation, sentence: string): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
   if (record.k === "oppose") return statesRule(sentence, record.r);
+  // An end is applied to the whole text first (`withoutEnded`).
   if (record.k === "end") return false;
   if (RULE_SENTENCE.test(sentence)) return false;
   if (!mentions(sentence, record)) return false;
@@ -460,8 +478,11 @@ function invalidates(record: Invalidation, sentence: string): boolean {
  */
 export function validText(text: string, at: unknown, records: readonly Invalidation[]): string {
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
-  const raw = String(text ?? "").trim();
-  const newer = records.filter((record) => record.t > time);
+  const newer = records.filter((record) => record.t > time && record.k !== "end");
+  const raw = withoutEnded(
+    String(text ?? "").trim(),
+    records.filter((record): record is RuleEndRecord => record.k === "end" && record.t > time),
+  );
   if (!raw || !newer.length) return raw;
   let dropped = false;
   const kept: string[] = [];
@@ -479,6 +500,18 @@ export function validText(text: string, at: unknown, records: readonly Invalidat
     if (said.length) kept.push(said.join("; "));
   }
   return dropped ? kept.join(" ") : raw;
+}
+
+type RuleEndRecord = Extract<Invalidation, { k: "end" }>;
+
+/** A text without the rules an `end` newer than it ended (see the header); the text itself when none applies. */
+function withoutEnded(text: string, ends: readonly RuleEndRecord[]): string {
+  if (!ends.length || !text) return text;
+  return withoutRules(text, (rule) =>
+    ruleRefs([rule]).some((ref) =>
+      ends.some((end) => end.r === ruleIdentity(ref) && (end.of === "rule" || rule.kind === "intent")),
+    ),
+  ).trim();
 }
 
 /**
