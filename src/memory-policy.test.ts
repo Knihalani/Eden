@@ -3,7 +3,7 @@
  * typed. Each rule is keyed `(class, polarity, object)`; a temporal qualifier makes it an intent.
  */
 import { describe, expect, test } from "bun:test";
-import { extractRules, ruleKey, rulesIn, type Rule } from "./memory-policy";
+import { extractRules, ruleKey, rulesIn, withoutIntents, type Rule } from "./memory-policy";
 
 /** A text's rules as `kind:class|polarity|object`, with ` q=<qualifier>` on an intent. */
 const read = (text: string) => rulesIn(text).map(show);
@@ -167,6 +167,16 @@ describe("review round 1: edges of D9's wording", () => {
       "Don't install packages without asking.",
     ])
       expect(outright(text)).toEqual([false]);
+  });
+});
+
+describe("D9: an intent's clause expires, its sentence's other rules stay", () => {
+  test("withoutIntents drops each intent clause, and a bare qualifier beside one", () => {
+    expect(withoutIntents("Never force-push, and don't open the PR yet.")).toBe("Never force-push.");
+    expect(withoutIntents("Don't open the PR yet, and never force-push.")).toBe("never force-push.");
+    expect(withoutIntents("not yet, don't commit. Never push to main.")).toBe("Never push to main.");
+    expect(withoutIntents("Don't open the PR yet.")).toBe("");
+    expect(withoutIntents("Never push to main.")).toBe("Never push to main.");
   });
 });
 

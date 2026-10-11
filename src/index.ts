@@ -532,6 +532,14 @@ function pinsItself(text: string, rules: readonly Rule[] = rulesIn(text)): boole
   return rules.length ? rules.some((rule) => rule.kind === "policy" && rule.explicit) : /\balways\s+\S/i.test(text);
 }
 
+/**
+ * What a restatement is matched by: a copula's subject, or a rule's own text (D9), so a rule typed again after it was
+ * overturned is learned again (`restated`).
+ */
+function restatementKey(text: string): string | undefined {
+  return copulaKey(text) ?? (rulesIn(text).length ? `rule:${text.toLowerCase()}` : undefined);
+}
+
 /** The legacy store's rule words, for a rule on no action class ("always explain plainly"). */
 const LEGACY_RULE = /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i;
 
@@ -1172,7 +1180,7 @@ export class AgentMemory {
       durables.forEach((texts, i) => {
         if (items[i]!.untyped) return;
         texts.forEach((text, j) => {
-          const key = copulaKey(text);
+          const key = restatementKey(text);
           if (key) lastTyped.set(key, `${i}:${j}`);
         });
       });
@@ -1233,7 +1241,7 @@ export class AgentMemory {
               }
             }
           } catch {}
-          const lastTypedHere = lastTyped.get(copulaKey(text) ?? "") === `${i}:${j}`;
+          const lastTypedHere = lastTyped.get(restatementKey(text) ?? "") === `${i}:${j}`;
           const learnAgain = !opts.reread && this.restated(text, lastTypedHere);
           if (this.seenLower.has(text.toLowerCase()) && !learnAgain) continue;
           // A4 §3.0: text the user did not type is an episode, never a fact, a rule or a pin.
