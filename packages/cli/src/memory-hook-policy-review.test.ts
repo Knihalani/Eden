@@ -1,6 +1,6 @@
 /**
- * P2.1 review rounds 1 and 2: the reviewer's probes, kept as regression tests. Each states the behaviour D9 / A4 §3.1
- * / L8 asks for (round 1: findings 2–6, 8, 9, 11, 13; round 2: findings 1–3, and a restatement).
+ * P2.1 review rounds 1–3: the reviewer's probes, kept as regression tests. Each states the behaviour D9 / A4 §3.1 /
+ * L8 asks for (round 1: findings 2–6, 8, 9, 11, 13; round 2: findings 1–3, and a restatement; round 3: findings 1–3).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
@@ -10,7 +10,8 @@ import { join } from "node:path";
 import { openMemory, superseded } from "../../../src/index";
 import { storeFor } from "../../../src/memory-repo";
 import { counteredKeys } from "../../../src/memory-validity";
-import { rulesIn, ruleKey } from "../../../src/memory-policy";
+import { ruleIdentity, ruleRefs, rulesIn, ruleKey } from "../../../src/memory-policy";
+import { ledgerKey } from "../../../src/memory-ledger";
 import { memoryHookResponse } from "./memory-hook";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z");
@@ -151,5 +152,39 @@ describe("P2.1 review probes, round 2", () => {
     submit("Always squash when merging.");
     const squash = rows().filter((r) => r.text.startsWith("Always squash when merging"));
     expect(squash.some((r) => !superseded(r))).toBe(true);
+  });
+});
+
+describe("P2.1 review probes, round 3", () => {
+  const ids = (text: string) => ruleRefs(rulesIn(text)).map(ruleIdentity);
+
+  test("A6 §3: an unrelated forget does not take an intent row", () => {
+    submit("Don't open the PR yet.");
+    submit("Forget ZebraCache.");
+    expect(superseded(row("Don't open the PR yet"))).toBe(false);
+  });
+
+  test("A7 §5: synonyms of one class word revoke and oppose one another; history-rewrite's actions do not", () => {
+    const covered: [string, string][] = [
+      ["Don't remove the old API.", "You can delete the old API now."],
+      ["Never delete migrations.", "You can remove migrations now."],
+      ["Don't release to prod.", "You can deploy to prod now."],
+      ["Never deploy on fridays.", "Always release on fridays."],
+      ["Don't add new dependencies.", "You can install new dependencies now."],
+      ["Don't upgrade react.", "You can bump react now."],
+      ["Don't delete branches.", "Always clean up branches."],
+      ["Never squash commits.", "You can squash commits now."],
+      ["Never rm -rf node_modules.", "You can rm node_modules now."],
+    ];
+    for (const [rule, later] of covered)
+      expect([rule, ids(rule).every((k) => counteredKeys(later).includes(k))]).toEqual([rule, true]);
+    expect(ids("Always squash when merging.").some((k) => counteredKeys("Never force-push.").includes(k))).toBe(false);
+  });
+
+  test("two rows saying one rule share a cid (P0.2 follow-up): delete / remove", () => {
+    const rule = (text: string) => ({ id: text, text, kind: "constraint", rules: ruleRefs(rulesIn(text)) });
+    expect(ledgerKey(rule("Never delete migrations."), "a1b2c3d4").cid).toBe(
+      ledgerKey(rule("Never remove migrations."), "a1b2c3d4").cid,
+    );
   });
 });
