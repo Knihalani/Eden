@@ -149,6 +149,7 @@ Topical words (tests, docs, logs, explain) are **not** trigger classes; they ove
 - The guard **re-checks** `tool_input.command` against its class, because `if` is best-effort: it also spawns on commands with `$()` or `$VAR`.
 - **Dedup across parallel handlers.** Each process takes `flock(windows/<win>/guard.lock)` and appends `{tool_use_id, class}` to `guard.log`. The most severe class for a `tool_use_id` emits; the rest exit `{}`. Severity order: history-rewrite > delete > destructive-db > deploy > push-upstream > integrate > others.
 - **Lookup.** `dirmap.json` gives the repo in < 1 ms. The guard then reads `policies.jsonl`, `intents.jsonl` and `_user/policies.jsonl` filtered by class; each is < 64 KB (cap: 500 live rows per repo).
+- **Built in P2.3** (D19's note): the handlers are one per command a pattern starts with (`Bash(git *)`, …) and the wildcard-led patterns as written, 16 in all plus the MCP matcher, in shell form, since A7's 29 narrower rules all fire on any `$()` line; `hook.ts` re-checks the call against every class before the guard loads, and parallel handlers deduplicate through `guard.log` as above. `_user/policies.jsonl` waits for the user-global store (P2.4).
 
 **Per-class cap and order.** When a class fires on the cue, deliver at most 2 of its policies, ranked by:
 1. user-stated
