@@ -75,7 +75,7 @@ describe("eden memory remember", () => {
     expect(remember(["--global", "Never", "force-push."]).out).toBe("remembered: 1");
     const kept = storeRows(join(dir, "memory", "_user", "policies.jsonl"));
     expect(kept).toHaveLength(1);
-    expect(kept[0]).toMatchObject({ text: "Never force-push.", kind: "constraint" });
+    expect(kept[0]).toMatchObject({ text: "Never force-push", kind: "constraint" });
     expect(kept[0]!.rules?.map((rule) => rule.k)).toEqual(["history-rewrite|neg|*"]);
     expect(kept[0]!.tags).toContain("all-projects");
     expect(rowsOf(repoA)).toEqual([]);

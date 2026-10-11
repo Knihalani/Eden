@@ -526,6 +526,18 @@ export function withoutExpiredIntents(text: string, at: unknown): string {
   return time + INTENT_TTL_MS <= memoryNow() ? cached(INTENTLESS, said, withoutIntents) : said;
 }
 
+/**
+ * What a rule row still says once every delivery point's validity is read (`withoutExpiredIntents`, `validText`), and
+ * the rules that text states, by `ruleIdentity`.
+ */
+export function rulesInForce(
+  row: { text: string; at?: unknown },
+  invalid: readonly Invalidation[],
+): { text: string; rules: Set<string> } {
+  const text = validText(withoutExpiredIntents(row.text, row.at), row.at, invalid);
+  return { text, rules: new Set(text ? ruleRefs(rulesIn(text)).map(ruleIdentity) : []) };
+}
+
 /** A cue that asks about history (A4 §5.1 step 5; R3's markers), which keeps episodes carrying an older value. */
 export function asksHistory(prompt: string): boolean {
   return /\b(?:before|used to|previously|was|why did we)\b/i.test(String(prompt ?? ""));

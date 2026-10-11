@@ -41,6 +41,15 @@ export interface WideEvent {
   turn_mode?: string;
   /** The action classes a human prompt's own words fire (A7 §5): what its compiled triggers deliver from. */
   classes?: string[];
+  /**
+   * D9, D11 at a human Submit: the rules of the prompt an earlier session also stated (A4 §7's `policy_recur`), and
+   * the rules it kept for all projects (`kept`: a confirmed proposal, D11's phrases) or ended there (`dropped`).
+   */
+  policy_recur?: string[];
+  kept?: string[];
+  dropped?: string[];
+  /** The proposal for all projects a SessionStart showed (D11), by `ruleIdentity`. */
+  proposed?: string;
   /** The cids of the packet the point delivered, or in shadow would have, and the ids of their rows. */
   cids?: string[];
   ids?: string[];
