@@ -198,7 +198,7 @@ The categories come from R2 §8.1, extended with R6's classes. Measured rows cit
 | Step | Cost | Source |
 |---|---|---|
 | Bun start + imports | 10–25 ms | R1 §4, A2 §1 |
-| read `ctx.log` (fold ≤ 16 KB), `qprev.json`, `delivery.json` + `delivery.log` (≤ 32 KB), `tau.json`, `shadow.json` | < 3 ms | — |
+| read `ctx.log` (fold ≤ 16 KB), `qprev.json`, `delivery.json` + `delivery.log` (≤ 32 KB), `tau.json`, `shadow.log` and the files it names (0.82 ms p50 for a 10 KB CLAUDE.md and MEMORY.md, P1.3) | < 3 ms | — |
 | mode + slot detector + class match | < 1 ms | regex / linear |
 | BM25F over scoped postings, ≤ 20k rows in memory | 5.5 ms warm-equivalent; building the index in-process at 20k costs ~100 ms | R1 §4. **So a prebuilt on-disk index is required above ~5k rows** (JSONL postings snapshot at sleep, or SQLite FTS at P6, ~25 ms; an estimate, not measured, R1 §7) |
 | residual (≤ 256 KB parse) | ≤ 10 ms | estimate |

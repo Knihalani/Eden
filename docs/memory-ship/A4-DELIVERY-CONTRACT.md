@@ -68,7 +68,7 @@ Each error type has its **own control**. That is the lesson from biology (A3 §4
   delivery.log  delivery.json      # ledger (§4)
   ctx.log                          # append-only {k: paths|exit|sig|crons}; folded on read (last 3 human turns), compacted at Stop
   qprev.json                       # rare tokens of last_assistant_message, written by sync stop-fast
-  shadow.json                      # instruction files loaded in this window (InstructionsLoaded) + AGENTS.md/MEMORY.md
+  shadow.log                       # instruction files loaded in this window (InstructionsLoaded; AGENTS.md/MEMORY.md are read from disk)
   spawn.log  guard.log  guard.lock # PreToolUse(Agent) task paths; guard dedup
   hwm.json  hwm.lock               # encode high-water mark, typed-prompt parent map (rewind); advanced only under flock(hwm.lock, LOCK_NB)
 ```
