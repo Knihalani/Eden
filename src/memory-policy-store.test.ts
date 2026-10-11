@@ -120,6 +120,15 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     expect(superseded(ruleRow(mem, "Never push"))).toBe(false);
   });
 
+  test("a revocation on another branch leaves the main branch's rule", () => {
+    const mem = store();
+    mem.observe([typed("Don't push directly to the main branch.")]);
+    process.env.EDEN_NOW = String(T0 + 60_000);
+    mem.observe([typed("You can push to the feature branch now.")]);
+    expect(ruleRow(mem, "main branch").rules).toEqual([{ k: "push-upstream|neg|main" }]);
+    expect(superseded(ruleRow(mem, "main branch"))).toBe(false);
+  });
+
   test("another object, or a row with a rule left standing, is not superseded", () => {
     const mem = store();
     mem.observe([typed("Never push to main.")]);

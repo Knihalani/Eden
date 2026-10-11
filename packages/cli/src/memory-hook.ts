@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
-import { childSessionName, openMemory, type MemoryRecord } from "../../../src/index";
+import { childSessionName, isLiveRow, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
 import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
@@ -103,9 +103,10 @@ function additional(event: string, packet: string): Record<string, unknown> | nu
 }
 
 /**
- * SessionStart's packet: the newest pinned rules (not after a compaction, A4 §5.2), then the 3 latest gists, each
- * still valid (A4 §5.1 step 5, before any selection). Until the store is per repo (P0.5), gists are the only memory
- * one session passes to the next, so D23's pins-only briefing waits for P2.5.
+ * SessionStart's packet: the newest pinned rules still in force (not superseded, not an expired intent; not after a
+ * compaction, A4 §5.2), then the 3 latest gists, each still valid (A4 §5.1 step 5, before any selection). Until the
+ * store is per repo (P0.5), gists are the only memory one session passes to the next, so D23's pins-only briefing
+ * waits for P2.5.
  */
 function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true): ProvenanceNote[] {
   const seen = new Set<string>(),
@@ -124,7 +125,7 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
   if (pins)
     mem
       .memories()
-      .filter(isPinnedIntention)
+      .filter((row) => isLiveRow(row) && isPinnedIntention(row))
       .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
       .slice(0, 8)
       .forEach(add);

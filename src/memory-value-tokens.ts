@@ -2,18 +2,22 @@
  * A4 §4's value tokens: the words `compact_summary` must still name for a delivered item to stay habituated after a
  * compaction (R0 F14). Everything else the window was given is re-armed.
  * - **Slot:** the words of its value ("postgres", "node 22").
- * - **Rule** (policies and intents): the class verb stem and the object of its first clause that names an action
- *   class (A7 §5's verbs, `ACTION_VERBS`): "Don't merge PRs yourself" is `integrate` and "pr". The object is what
- *   follows the verb, or, when the verb ends its clause ("Run the tests before you commit"), the clause's other words.
- *   A rule whose clause names nothing but its class has no value tokens: any summary mentioning a commit would hold
- *   it, so it is always re-armed. A summary names the class with any of its verbs, inflected ("not to be merging
+ * - **Rule with D9 keys** (P2.1, `keyValueTokens`): each key's class and object words; a key on `*` names its class's
+ *   default object (`pr` for integrate, D9 fix 3), which a summary names by any synonym ("pull requests"). A key whose
+ *   class has no verb a summary could name it by (A7 §5's verbs, `ACTION_VERBS`), or that has no object and no
+ *   default, gives the row no value tokens: it is always re-armed.
+ * - **Rule without keys** (one on no action class, or written before P2.1): the class verb stem and the object of
+ *   its first clause that names an action class: "Don't merge PRs yourself" is `integrate` and "pr". The object is
+ *   what follows the verb, or, when the verb ends its clause ("Run the tests before you commit"), the clause's other
+ *   words. A rule whose clause names nothing but its class has no value tokens: any summary mentioning a commit would
+ *   hold it, so it is always re-armed. A summary names the class with any of its verbs, inflected ("not to be merging
  *   PRs"). A rule without a class verb keeps its object words (D9), all of which the summary must name.
  * - **Other kinds** have none: no summary keeps them, so a compaction always re-arms them.
  * The ledger keeps the tokens hashed (X11); this module compares them as words.
  */
 import { stripPacketLabel } from "./memory-provenance";
 import { contentWords } from "./memory-transcript";
-import type { RuleRef } from "./memory-policy";
+import { defaultObject, oneNamePerObject, type RuleRef } from "./memory-policy";
 import { ACTION_VERBS, objectWords } from "./memory-validity";
 
 /** A class token, which no word of a text can be: words are `[a-z0-9]+`. */
@@ -77,9 +81,19 @@ export function ruleValueTokens(text: string): string[] {
   return [...new Set(objectOf(contentWords(body)))];
 }
 
-/** A rule's value tokens from its keys (P2.1). Interface only. */
-export function keyValueTokens(_rules: readonly RuleRef[]): string[] {
-  return [];
+/** The classes a summary can name, by one of their verbs. */
+const VERB_CLASSES: ReadonlySet<string> = new Set(VERB_FORMS.values());
+
+/** A keyed rule row's value tokens (see the header). */
+export function keyValueTokens(rules: readonly RuleRef[]): string[] {
+  const tokens: string[] = [];
+  for (const { k } of rules) {
+    const [cls = "", , object = "*"] = k.split("|");
+    const named = object === "*" ? defaultObject(cls) : object.replace(/-/g, " ");
+    if (!named || !VERB_CLASSES.has(cls)) return [];
+    tokens.push(classToken(cls), ...objectWords(named));
+  }
+  return [...new Set(tokens)];
 }
 
 /** What a summary names, as value tokens are written: its words, their singular forms, and the classes of its verbs. */
@@ -89,5 +103,5 @@ export function summaryTokens(summary: string): Set<string> {
     const cls = VERB_FORMS.get(word);
     return cls ? [classToken(cls)] : [];
   });
-  return new Set([...words, ...objectWords(summary), ...classes]);
+  return new Set([...words, ...objectWords(oneNamePerObject(summary)), ...classes]);
 }

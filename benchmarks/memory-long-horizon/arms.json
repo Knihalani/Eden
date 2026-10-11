@@ -639,12 +639,9 @@
       "on": {
         "state": "red",
         "failed": [
-          "extracted",
-          "false-durable",
-          "rule-recall-b",
           "slot-recall-b"
         ],
-        "why": "`eden memory extract` does not exist"
+        "why": "`eden memory extract` gives policy and intent records only (P2.1); D7's slot table and its records are P3.3's"
       }
     },
     {
