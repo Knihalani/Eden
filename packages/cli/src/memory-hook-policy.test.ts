@@ -48,6 +48,14 @@ function submit(prompt: string, promptId: string): void {
   process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 60_000);
 }
 
+function stopSleep(session = SESSION): void {
+  memoryHookResponse(
+    { session_id: session, cwd: project, hook_event_name: "Stop", last_assistant_message: "OK." },
+    "stop-sleep",
+  );
+  process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + 60_000);
+}
+
 function startPacket(session: string): string {
   const out = hook({ hook_event_name: "SessionStart", source: "startup" }, session);
   return (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
@@ -78,6 +86,17 @@ describe("P2.1 at the hook", () => {
     expect(pinned.every((row) => row.kind === "constraint")).toBe(true);
     const packet = startPacket("s-later");
     expect(packet).toContain("Never squash");
+    expect(packet).not.toContain("Always squash");
+  });
+
+  test("a session gist written before the opposite rule no longer briefs the old one (real-session probe)", () => {
+    submit("Never merge PRs yourself. Always squash when merging.", "p1");
+    stopSleep("s-one");
+    submit("Never merge PRs yourself. Always squash when merging.", "p1");
+    stopSleep();
+    submit("Never squash, keep every commit.", "p2");
+    const packet = startPacket("s-later");
+    expect(packet).toContain("Never merge PRs yourself");
     expect(packet).not.toContain("Always squash");
   });
 });

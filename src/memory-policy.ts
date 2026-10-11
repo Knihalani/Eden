@@ -25,7 +25,7 @@
  *   `infra`, `pnpm-lock.yaml`).
  */
 import { stripPastes } from "./memory-authority";
-import { invalidationsIn, objectWords } from "./memory-validity";
+import { contentWords } from "./memory-transcript";
 
 export type ActionClass =
   | "integrate"
@@ -236,6 +236,25 @@ function classIn(text: string): { cls: ActionClass; match: RegExpExecArray } | u
   return found;
 }
 
+/** Words that name no object: D9 normalizes "don't merge it yourself" to the object `*`. */
+const NO_OBJECT = new Set(["yourself", "yourselves", "again", "too", "anytime", "freely", "whenever", "want", "like"]);
+
+/**
+ * An object word in one form, whatever its plural: "PRs" and "PR", "branches" and "branch", "caches" and "cache",
+ * "prizes" and "prize" each share one. The form need not be a word ("cach"), only the same for both.
+ */
+function singular(word: string): string {
+  const stem = word.length >= 3 && /[^siu]s$/.test(word) ? word.slice(0, -1) : word;
+  return stem.length >= 4 && /(?:ch|sh|ss|x|z)e$/.test(stem) ? stem.slice(0, -1) : stem;
+}
+
+/** The object words of a text (D9): content words, singular, without words that name no object. */
+export function objectWords(text: string): string[] {
+  return contentWords(text)
+    .filter((word) => !NO_OBJECT.has(word))
+    .map(singular);
+}
+
 /** Synonyms named one way, before objects are read (fix 3), and in a summary (`memory-value-tokens.ts`). */
 export function oneNamePerObject(text: string): string {
   return text
@@ -279,7 +298,7 @@ function pathName(word: string): string {
  * Object words as a key holds them (fix 3): `*` for none or for the class's default object alone ("PRs"); a default
  * object named with other words keys by them ("the main branch" is `main`, "the feature branch" `feature`).
  */
-function keyedObject(cls: string, words: readonly string[]): string {
+export function keyedObject(cls: string, words: readonly string[]): string {
   const named = words.slice(0, 3);
   const kept = named.length > 1 && named.at(-1) === defaultObject(cls) ? named.slice(0, -1) : named;
   return !kept.length || (kept.length === 1 && kept[0] === defaultObject(cls)) ? "*" : kept.join("-");
@@ -415,16 +434,4 @@ export function ruleRefs(rules: readonly Rule[]): RuleRef[] {
 export function oppositeKey(key: string): string {
   const [cls, polarity, object] = key.split("|");
   return `${cls}|${polarity === "neg" ? "pos" : "neg"}|${object}`;
-}
-
-/**
- * The rule keys a text revokes (A4 §3.1): "you can merge PRs yourself now" revokes `integrate|neg|*`. The
- * revocation's object is keyed as a rule's is, so it revokes the rule on that object only.
- */
-export function revokedKeys(text: string): string[] {
-  return invalidationsIn(text, 0).flatMap((record) =>
-    record.k === "revoke"
-      ? [`${record.c}|neg|${keyedObject(record.c, objectWords(oneNamePerObject(record.o.join(" "))))}`]
-      : [],
-  );
 }
