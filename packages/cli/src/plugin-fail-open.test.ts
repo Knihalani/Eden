@@ -1,9 +1,9 @@
 /**
  * P0.8, EXECUTION §5's fail-open contract: a throw injected into each hook entry point exits 0 with empty stdout and
  * stderr. Each entry point is a command the plugin's `hooks/hooks.json` registers, run as Claude Code runs it
- * (`/bin/sh -c`, `CLAUDE_PLUGIN_ROOT`), against an Eden checkout whose memory hook fails in each way a process can:
- * at import, by rejecting, by an uncaught exception after it returns, by exiting non-zero with stderr, against a
- * store that cannot be read, and with no `bun` on PATH at all.
+ * (`/bin/sh -c`, `CLAUDE_PLUGIN_ROOT`), against an Eden checkout whose memory hook (and PreToolUse guard, P2.3) fails
+ * in each way a process can: at import, by rejecting, by an uncaught exception after it returns, by exiting non-zero
+ * with stderr, against a store that cannot be read, and with no `bun` on PATH at all.
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -35,12 +35,18 @@ function pluginCopy(): string {
   return copy;
 }
 
-/** An Eden checkout whose memory hook module is `source`. */
+/**
+ * An Eden checkout whose memory hook module is `source`, and whose PreToolUse guard (P2.3) takes every call up and
+ * fails the same way: `runMemoryHookStdin` is the guard's `runGuardHook` there.
+ */
 function edenWith(source: string): string {
   const root = join(tmp, `eden-${++dirs}`);
-  const hook = join(root, "packages", "cli", "src", "memory-hook.ts");
-  mkdirSync(dirname(hook), { recursive: true });
-  writeFileSync(hook, source);
+  const src = join(root, "packages", "cli", "src");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "memory-hook.ts"), source);
+  writeFileSync(join(src, "memory-guard-hook.ts"), source.replaceAll("runMemoryHookStdin", "runGuardHook"));
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src", "memory-guard-match.ts"), "export const guardedCall = () => true;\n");
   return root;
 }
 
@@ -58,7 +64,14 @@ type Ran = { code: number; stdout: string; stderr: string };
 async function run(command: string, event: string, env: Record<string, string>): Promise<Ran> {
   const home = join(tmp, `home-${++dirs}`);
   mkdirSync(home, { recursive: true });
-  const payload = { hook_event_name: event, session_id: "s-fail-open", prompt: "fix the login", cwd: home };
+  const payload = {
+    hook_event_name: event,
+    session_id: "s-fail-open",
+    prompt: "fix the login",
+    cwd: home,
+    // A call every guard handler takes up (P2.3): a class matches it.
+    ...(event === "PreToolUse" ? { tool_name: "Bash", tool_input: { command: "git push --force origin main" } } : {}),
+  };
   const proc = Bun.spawn(["/bin/sh", "-c", command], {
     env: {
       PATH: `${BUN_DIR}:/usr/bin:/bin`,
@@ -90,6 +103,8 @@ describe("every registered entry point fails open (EXECUTION §5)", () => {
         "PostCompact",
         "PostToolBatch",
         "PreCompact",
+        // The policy guard (P2.3): 16 Bash handlers and the MCP merge matcher.
+        ...Array<string>(17).fill("PreToolUse"),
         "SessionEnd",
         "SessionStart",
         "Stop",
