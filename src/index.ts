@@ -1048,6 +1048,26 @@ export class AgentMemory {
   }
 
   /**
+   * Statements the user asked Eden to keep (`eden memory remember`, D11), each one row in the user's own words
+   * (`src:user`): a rule row when it states a D9 rule, else of the kind given (a fact by default). The store is
+   * written once for them all.
+   */
+  rememberTyped(statements: readonly { text: string; kind?: MemoryKind }[]): MemoryRecord[] {
+    this.batch++;
+    try {
+      return statements.map(({ text, kind }) =>
+        this.remember(text, {
+          kind: rulesIn(this.persistText(text)).length ? "constraint" : kind || "fact",
+          tags: ["src:user"],
+        }),
+      );
+    } finally {
+      this.batch--;
+      this.flush(false);
+    }
+  }
+
+  /**
    * L8 (A4 §3.1): a typed statement supersedes a rule row of an earlier prompt only by stating outright a policy of
    * the opposite polarity on its key, or by revoking it ("you can merge PRs yourself now"), and only when it counters
    * every rule the row states (`counteredKeys`). An intent supersedes no policy: "don't squash yet" leaves "always
