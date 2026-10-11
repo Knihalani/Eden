@@ -70,4 +70,14 @@ describe("P2.1 at the hook", () => {
     expect(packet).toContain("Never squash");
     expect(packet).not.toContain("Always squash");
   });
+
+  test("the prompt's own episode is no pin, so it does not brief the superseded rule (real-session probe)", () => {
+    submit("Always squash when merging. Reply with just OK.", "p1");
+    submit("Never squash, keep every commit. Reply with just OK.", "p2");
+    const pinned = repoRows().filter((row) => (row.tags ?? []).includes("pin"));
+    expect(pinned.every((row) => row.kind === "constraint")).toBe(true);
+    const packet = startPacket("s-later");
+    expect(packet).toContain("Never squash");
+    expect(packet).not.toContain("Always squash");
+  });
 });
