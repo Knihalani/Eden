@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { openMemory, storeRows, superseded, type MemoryRecord } from "./index";
 import { ledgerKey } from "./memory-ledger";
 import { INTENT_TTL_MS } from "./memory-policy";
+import { invalidationsIn, validText } from "./memory-validity";
 import { keyValueTokens, summaryTokens } from "./memory-value-tokens";
 
 const T0 = Date.parse("2026-10-01T09:00:00.000Z");
@@ -138,6 +139,18 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     mem.observe([typed("Always commit directly to main.")]);
     expect(superseded(ruleRow(mem, "Never push to main"))).toBe(false);
     expect(superseded(ruleRow(mem, "work on a branch"))).toBe(false);
+  });
+
+  test("the validity log keeps the opposition: older text stating the overturned rule loses that sentence", () => {
+    const opposed = invalidationsIn("Never squash.", 1);
+    expect(opposed).toEqual([{ k: "oppose", r: "history-rewrite|pos|*", t: 1 }]);
+    expect(invalidationsIn("Don't squash yet.", 1)).toEqual([]);
+    expect(validText("Always squash when merging.", 0, opposed)).toBe("");
+    expect(validText("Always squash when merging. Never merge PRs yourself.", 0, opposed)).toBe(
+      "Never merge PRs yourself.",
+    );
+    expect(validText("Always squash when merging, never push to main.", 0, opposed)).toBe("never push to main.");
+    expect(validText("Always squash when merging.", 2, opposed)).toBe("Always squash when merging.");
   });
 
   test("text the user did not type supersedes nothing", () => {

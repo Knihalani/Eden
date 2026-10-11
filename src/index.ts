@@ -12,22 +12,13 @@ import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
-import {
-  INTENT_TTL_MS,
-  oppositeKey,
-  revokedKeys,
-  ruleRefs,
-  rulesIn,
-  withoutExcludedWording,
-  type Rule,
-  type RuleRef,
-} from "./memory-policy";
+import { INTENT_TTL_MS, ruleRefs, rulesIn, withoutExcludedWording, type Rule, type RuleRef } from "./memory-policy";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { withoutInstructions, type TextSource } from "./memory-authority";
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
-import { isForget, recordSupersession, validText, type Invalidation } from "./memory-validity";
+import { counteredKeys, isForget, recordSupersession, validText, type Invalidation } from "./memory-validity";
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
@@ -1046,8 +1037,7 @@ export class AgentMemory {
    */
   private supersedeRules(incoming: MemoryRecord): void {
     if (isUntyped(incoming)) return;
-    const opposed = (incoming.rules ?? []).filter((rule) => !rule.q).map((rule) => oppositeKey(rule.k));
-    const countered = new Set([...opposed, ...revokedKeys(incoming.text)]);
+    const countered = new Set(counteredKeys(incoming.text));
     if (!countered.size) return;
     for (const c of this.compiled) {
       const row = c.rec;

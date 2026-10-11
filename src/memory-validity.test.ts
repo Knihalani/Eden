@@ -15,7 +15,9 @@ function tempRoot(): string {
 }
 
 const shown = (text: string) =>
-  invalidationsIn(text, 1).map((r) => (r.k === "retract" ? `retract:${r.o}` : `revoke:${r.c}:${r.o.join("+")}`));
+  invalidationsIn(text, 1).map((r) =>
+    r.k === "retract" ? `retract:${r.o}` : r.k === "revoke" ? `revoke:${r.c}:${r.o.join("+")}` : `oppose:${r.r}`,
+  );
 
 describe("A4 §3.1, D7: what invalidates a value", () => {
   test("a retraction or a switch with a 'we' subject, of a capitalized or identifier-shaped value ending its clause", () => {
