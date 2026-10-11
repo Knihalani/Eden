@@ -45,7 +45,7 @@ This is the single source of truth for what is done and what is next. `/next` re
 | P0.7 | Cache-safe placement (wrap / OpenAI inject) | P0.1 | S | cached-prefix test | done (0 prefix breaks in 11 request pairs on each of 4 wrap paths, main 7; the 5 follow-up rows closed; 2 review rounds) | #128 | [reports/P0.7.md](reports/P0.7.md) |
 | P1.1 | Ledger core | P0.6, P0.8 | M | `repeat`, `budget`, `re-eligibility` | done (`repeat`, `re-eligibility` green, `budget` 477 / 610 tokens; a Submit reads 17,319 B of ledger after 300 soak turns, `main` 52,216; the wrap follows `deliver.submit` and keeps its prefix across restarts; guards identical to `main`; 3 review rounds; 4 follow-up rows closed, 4 filed) | #129 | [reports/P1.1.md](reports/P1.1.md) |
 | P1.2 | Epochs: clear, selective PostCompact re-arm, resume, fork, rewind | P1.1 | M | `compaction`, `resume`, `rewind` | done (`compaction` green: PostCompact holds what the summary still names, re-arms the rest; `resume`, `rewind` green; `clear` starts an epoch; a forked session copies its parent's ledger after its first turn; guards identical to `main`; 2 review rounds; 1 follow-up row closed, 4 filed) | #130 | [reports/P1.2.md](reports/P1.2.md) |
-| P1.3 | Residual + per-window shadow set | P1.2 | M | `residual`, `shadow` | todo | | |
+| P1.3 | Residual + per-window shadow set | P1.2 | M | `residual`, `shadow` | in-progress (`mem/P1.3-residual-shadow`) | | |
 | P2.1 | Policy & intent extraction (regex, D9 incl. R8 fixes) | P0.4 | M | `extraction` (E3 set) | todo | | |
 | P2.2 | Compiled triggers (`classes.json`) | P2.1 | S | `policy-trigger` | todo | | |
 | P2.3 | PreToolUse policy guard | P2.2, P1.1 | M | `policy-guard`, `guard-modes`, `guard-dedup`, `intent-expiry` | todo | | |
