@@ -997,10 +997,11 @@ export class AgentMemory {
       return rec;
     }
     const untyped = isUntyped(rec);
-    // D9: text the user did not type states no rule (A4 §3.0), and only a rule row carries its rules' keys.
+    // D9: text the user did not type states no rule (A4 §3.0), and only a rule row carries its rules' keys. An episode
+    // (the diary, D6) is never a pin: a prompt's own episode would otherwise brief a rule its rule row no longer holds.
     const stated = untyped ? [] : rulesIn(rec.text);
     const rules = rec.kind === "constraint" ? stated : [];
-    const pin = !untyped && (opts.pin === true || pinsItself(rec.text, stated));
+    const pin = !untyped && rec.kind !== "episode" && (opts.pin === true || pinsItself(rec.text, stated));
     if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
     rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => {
       if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false;
