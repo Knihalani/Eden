@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isResidual, isResidualNote, legacySlot, recentConversation, residualSentences } from "./memory-residual";
+import { isResidualNote, legacySlot, recentConversation, residualSentences } from "./memory-residual";
+
+/** A note the residual reads by Jaccard (an episode). */
+const episode = (text: string) => ({ id: text, kind: "episode", text });
+const isResidual = (text: string, sentences: ReturnType<typeof residualSentences>) =>
+  isResidualNote(episode(text), sentences);
 
 const dirs: string[] = [];
 afterEach(() => {

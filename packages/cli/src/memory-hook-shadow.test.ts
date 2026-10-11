@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { MEMORY_HOOK_EVENTS } from "./doctor";
@@ -166,9 +166,11 @@ describe("D27: AGENTS.md and auto-memory MEMORY.md, read from disk", () => {
     expect(submit(FACT_CUE, "p2")).toContain("postgres");
   });
 
-  test("auto-memory MEMORY.md beside the session's transcript counts", () => {
-    const transcript = join(dir, "claude", "projects", "-tmp-project", `${SESSION}.jsonl`);
-    write(join(dirname(transcript), "memory", "MEMORY.md"), "- The database is postgres.\n");
+  test("the project's auto-memory MEMORY.md counts (Claude Code's projects/<project>/memory folder)", () => {
+    const projects = join(dir, "claude", "projects");
+    const transcript = join(projects, "-the-session-folder", `${SESSION}.jsonl`);
+    const folder = realpathSync(project).replace(/[^a-zA-Z0-9]/g, "-");
+    write(join(projects, folder, "memory", "MEMORY.md"), "- The database is postgres.\n");
     submit(FACT, "p1", { transcript_path: transcript });
     expect(submit(FACT_CUE, "p2", { transcript_path: transcript })).not.toContain("postgres");
   });

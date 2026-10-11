@@ -472,12 +472,16 @@ function encodeConversation(ctx: HookContext): void {
     let encoded = 0;
     const delta = encodeDelta(win, transcriptPath, ({ messages, abandoned, branchTexts }) => {
       // A fork's first delta holds its parent's conversation, which the parent's delta encoded (`parentLines`).
-      const copied = parentLines(
-        memoryRoot(),
-        win,
-        transcriptPath,
-        messages.flatMap((m) => m.uuid ?? []),
-      );
+      // When the parent cannot be looked for, everything is encoded, as before P1.3 (fail open).
+      let copied = new Set<string>();
+      try {
+        copied = parentLines(
+          memoryRoot(),
+          win,
+          transcriptPath,
+          messages.flatMap((m) => m.uuid ?? []),
+        );
+      } catch {}
       const own = copied.size ? messages.filter((message) => !message.uuid || !copied.has(message.uuid)) : messages;
       encoded = own.length;
       if (own.length) ctx.mem.observe(own, { keepLiveIdentity: true, deferSleep: true });
@@ -844,7 +848,7 @@ function respond(
     session: resolved.session,
     child: resolved.child,
     transcriptPath: transcriptOf(r),
-    place: { cwd: cwd ?? process.cwd(), top: repo?.top, transcriptPath: transcriptOf(r) },
+    place: { cwd: cwd ?? process.cwd(), transcriptPath: transcriptOf(r) },
     mode,
     /** The ledger this point writes: none when it is off or read-only. */
     ledgerOf: (m) => {
