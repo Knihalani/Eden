@@ -91,6 +91,25 @@ export const GUARDED_CLASSES: readonly (readonly [ActionClass, ClassGuard])[] = 
   return guard ? [[cls, guard] as const] : [];
 });
 
+/**
+ * The `if` rules `hooks.json` registers, one handler each: the command each class pattern starts with (`git push
+ * --force*` is `git *`), and a pattern that starts with a wildcard as written (`*deploy*`). A rule naming only its
+ * command does not fire on a `$()` elsewhere in a command line, where a narrower one would (`memory-guard-hook.ts`).
+ */
+export const GUARD_IF_RULES: readonly string[] = [
+  ...new Set(GUARDED_CLASSES.flatMap(([, guard]) => guard.if.map(commandRule))),
+];
+
+function commandRule(pattern: string): string {
+  const command = /^[A-Za-z0-9._-]+/.exec(pattern)?.[0];
+  return command ? `${command} *` : pattern;
+}
+
+/** The tool-name matchers `hooks.json` registers beside the Bash handlers (`mcp__.*__merge.*`). */
+export const GUARD_TOOL_MATCHERS: readonly string[] = GUARDED_CLASSES.flatMap(([, guard]) =>
+  guard.tools ? [guard.tools] : [],
+);
+
 /** The classes whose prohibition asks before the call (D19). */
 export const IRREVERSIBLE: ReadonlySet<ActionClass> = new Set(GUARD.irreversible);
 

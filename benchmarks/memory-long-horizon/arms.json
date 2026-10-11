@@ -215,7 +215,7 @@
       "a5": "a throw in each hook entry point -> exit 0 with empty stdout and stderr",
       "on": {
         "state": "green",
-        "why": "passes since P0.8: the hook prints nothing when it has nothing to say (it printed '{}'), and hooks.json's commands end in `2>/dev/null || true`, so all 21 invocations, the PreToolUse guard's on `git commit` included (P2.3), exit 0 with empty stdout and stderr over a memory root that is a regular file"
+        "why": "passes since P0.8: the hook prints nothing when it has nothing to say (it printed '{}'), and hooks.json's commands end in `2>/dev/null || true`, so all 22 invocations, the PreToolUse guard's on `bun test` and `git commit` included (P2.3), exit 0 with empty stdout and stderr over a memory root that is a regular file"
       }
     },
     {
@@ -658,7 +658,7 @@
       "a5": "\"don't merge it yourself\"; `gh pr merge` -> ask with the rule and the same text in additionalContext; revoked -> no ask; a declined ask labelled `declined`",
       "on": {
         "state": "green",
-        "why": "passes since P2.3: a PreToolUse handler per (class, pattern) runs on `gh pr merge`; the guard finds the rule the user typed a session earlier in the repo's rule index, asks with \"Eden: rule you set (1 day ago): pull requests are merged by you, not by the agent\" and gives Claude the same rule as context; after \"You can merge PRs yourself now.\" nothing answers; the next PostToolBatch labels the declined ask in its wide event"
+        "why": "passes since P2.3: the guard's `Bash(gh *)` handler runs on `gh pr merge`; the guard finds the rule the user typed a session earlier in the repo's rule index, asks with \"Eden: rule you set (1 day ago): pull requests are merged by you, not by the agent\" and gives Claude the same rule as context; after \"You can merge PRs yourself now.\" nothing answers; the next PostToolBatch labels the declined ask in its wide event"
       },
       "off": {
         "state": "green",
@@ -698,7 +698,7 @@
       "a5": "`git push --force` matches push-upstream and history-rewrite -> exactly one response, from history-rewrite",
       "on": {
         "state": "green",
-        "why": "passes since P2.3: `git push --force` spawns the push-upstream and history-rewrite handlers; both compute history-rewrite's answer (A7 §5's severity), and only the first to record the call in guard.log answers, with \"Never force-push\" alone"
+        "why": "passes since P2.3: `git push --force` starts one guard handler (`Bash(git *)`); of its classes, history-rewrite is the most severe with a rule that applies (A7 §5's severity), so it answers with \"Never force-push\" alone; a second handler of the same call would find it in guard.log and stay silent"
       },
       "off": {
         "state": "green",
@@ -744,7 +744,7 @@
       "a5": "\"don't open the PR yet\" -> an ask on `gh pr create`; \"open it now\" -> no ask; after 7 days -> gone",
       "on": {
         "state": "green",
-        "why": "passes since P2.3: the live intent \"Don't open the PR yet.\" asks on `gh pr create` (an intent asks whatever its class); the call ran, so the intent is done, and \"Open it now.\" releases it too; 8 days later the intent has expired (7 days, D9)"
+        "why": "passes since P2.3: the live intent \"Don't open the PR yet.\" asks on `gh pr create` (an intent asks whatever its class); the user approved the ask and the call ran, so the intent is done, and \"Open it now.\" releases it too; 8 days later the intent has expired (7 days, D9)"
       },
       "off": {
         "state": "green",
