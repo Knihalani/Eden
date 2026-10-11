@@ -188,6 +188,8 @@ describe("eden doctor --memory", () => {
     const { lines } = await doctorMemory(homeWith({}));
     expect(lines.get("flags")).toStartWith("ok deliver.submit on (default) · deliver.session_start on (default)");
     expect(lines.get("flags")).toContain("guard.ask off (default)");
+    expect(lines.get("guard")).toStartWith("ok context shadow (default) · ask off (default), EDEN_POLICY_GUARD");
+    expect(lines.get("guard")).toContain("rule rows indexed for this repo");
     expect(lines.get("breaker")).toStartWith("ok none tripped");
     const kill = lines.get("kill switches")!;
     expect(kill).toContain("1. a point's flag set to off in");

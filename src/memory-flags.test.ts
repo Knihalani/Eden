@@ -49,6 +49,21 @@ describe("resolveFlags", () => {
     expect(fromEnv["deliver.submit"]).toEqual({ mode: "on", source: "env" });
   });
 
+  test("a repo file may lower guard.ask but never raise it above the user file or the default (P2.3)", () => {
+    const repo = join(dir, "repo");
+    write(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
+    write(join(repo, ".eden", "flags.json"), { "guard.ask": "on", "guard.context": "on" });
+    const cloned = resolveFlags(repo, env());
+    expect(cloned["guard.ask"]).toEqual({ mode: "off", source: "default" });
+    expect(cloned["guard.context"]).toEqual({ mode: "on", source: "repo" });
+    write(join(home, "flags.json"), { "guard.ask": "shadow" });
+    expect(resolveFlags(repo, env())["guard.ask"]).toEqual({ mode: "shadow", source: "user" });
+    write(join(home, "flags.json"), { "guard.ask": "on" });
+    write(join(repo, ".eden", "flags.json"), { "guard.ask": "off" });
+    expect(resolveFlags(repo, env())["guard.ask"]).toEqual({ mode: "off", source: "repo" });
+    expect(resolveFlags(repo, env({ EDEN_POLICY_GUARD: "on" }))["guard.ask"]).toEqual({ mode: "on", source: "env" });
+  });
+
   test("guard.ask reads EDEN_POLICY_GUARD", () => {
     expect(resolveFlags(undefined, env({ EDEN_POLICY_GUARD: "shadow" }))["guard.ask"]).toEqual({
       mode: "shadow",

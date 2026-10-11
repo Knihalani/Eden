@@ -1,14 +1,43 @@
 {
-  "about": "A7 §5's action-class lexicon (D18), D18's stash and D9 fix 4's protected-path, in R8's order of specificity (memory-classes.ts). words: the class's words, one case-insensitive regex; a word that names its object captures it as group 1. cue: the words a cue fires the class by, where they differ. verbs: what a revocation or a compaction summary names the class by. object: the class's default object (D9 fix 3), then its other names.",
+  "about": "A7 §5's action-class lexicon (D18), D18's stash and D9 fix 4's protected-path, in R8's order of specificity (memory-classes.ts). words: the class's words, one case-insensitive regex; a word that names its object captures it as group 1. cue: the words a cue fires the class by, where they differ. verbs: what a revocation or a compaction summary names the class by. object: the class's default object (D9 fix 3), then its other names. guard: A7 §5's PreToolUse map: `if`, the permission rules hooks.json registers one handler each for; `check`, the regex the guard re-checks each subcommand with (case-insensitive), since `if` is best-effort; `tools`, a tool-name matcher with no `if`.",
   "classes": {
     "destructive-db": {
       "words": "\\b(?:drop|truncate|reset|wipe)\\b([^,;]{0,60}?\\b(?:db|database|table|schema)s?)\\b|\\b(?:db|database|table|schema)s?\\b[^,;.]{0,60}?\\b(?:drop|truncate|reset|wipe)\\b|\\bmigrate reset\\b",
-      "verbs": ["truncate", "reset", "wipe"]
+      "verbs": [
+        "truncate",
+        "reset",
+        "wipe"
+      ],
+      "guard": {
+        "if": [
+          "*migrate reset*",
+          "*db drop*",
+          "psql*DROP*"
+        ],
+        "check": "\\bmigrate reset\\b|\\bdb drop\\b|^psql\\b.*\\bdrop\\s+(?:table|database|schema)\\b"
+      }
     },
     "history-rewrite": {
       "words": "\\b(?:squash\\w*|rebas\\w*|amend\\w*|force[- ]?push\\w*)\\b|\\bpush(?:es|ed|ing)?\\s+(?:--force|-f)\\b",
-      "verbs": ["squash", "rebase", "amend", "force-push"],
-      "object": ["branch"]
+      "verbs": [
+        "squash",
+        "rebase",
+        "amend",
+        "force-push"
+      ],
+      "object": [
+        "branch"
+      ],
+      "guard": {
+        "if": [
+          "git push --force*",
+          "git push -f*",
+          "git push *+*",
+          "git rebase*",
+          "git commit --amend*"
+        ],
+        "check": "^(?:git push\\b.*\\s(?:--force(?:-with-lease)?\\b|-f\\b|\\+\\S)|git rebase\\b|git commit\\b.*\\s--amend\\b)"
+      }
     },
     "stash": {
       "words": "\\bstash\\w*\\b"
@@ -21,40 +50,133 @@
     },
     "dependency": {
       "words": "\\b(?:add(?:s|ed|ing)?\\s+(?:(?:a|an|any|the|new|another|some)\\s+)*(?:(?!(?:to|for|in|into|onto|from|with|on|of|at|about|under)\\b)[\\w-]+\\s+){0,3}?(?:deps?|dependenc(?:y|ies)|packages?|librar(?:y|ies))|install\\w*|npm i|pnpm add|bump\\w*|upgrad\\w*)\\b",
-      "verbs": ["install", "bump", "upgrade"],
-      "object": ["package"]
+      "verbs": [
+        "install",
+        "bump",
+        "upgrade"
+      ],
+      "object": [
+        "package"
+      ],
+      "guard": {
+        "if": [
+          "npm i*",
+          "pnpm add*",
+          "yarn add*",
+          "bun add*",
+          "pip install*",
+          "cargo add*"
+        ],
+        "check": "^(?:npm (?:i|install|add)|pnpm add|yarn add|bun add|pip3? install|cargo add)(?:\\s+-\\S+)*\\s+[^-\\s]"
+      }
     },
     "deploy": {
       "words": "\\b(?:deploy\\w*|releas\\w*|prod|production|publish\\w*|roll(?:ing)? (?:it |this |that )?out)\\b",
-      "verbs": ["deploy", "release", "publish"],
-      "object": ["prod", "production"]
+      "verbs": [
+        "deploy",
+        "release",
+        "publish"
+      ],
+      "object": [
+        "prod",
+        "production"
+      ],
+      "guard": {
+        "if": [
+          "*deploy*",
+          "vercel*",
+          "fly deploy*",
+          "kubectl apply*"
+        ],
+        "check": "^(?!(?:cat|less|more|head|tail|grep|rg|ag|vi|vim|nvim|nano|code|open|ls|echo|printf|git|diff|wc|sed|awk|find|stat|file|touch|cp|mv|mkdir)\\b)(?:\\S*deploy\\S*|\\S+\\s+(?:run\\s+)?\\S*deploy\\S*)(?:\\s|$)|^vercel\\b|^kubectl apply\\b"
+      }
     },
     "delete": {
       "words": "\\b(?:delet\\w*|remov\\w*|rm|clean up|prun\\w*|drop(?:s|ped|ping)?)\\b",
-      "verbs": ["delete", "remove", "prune", "drop"]
+      "verbs": [
+        "delete",
+        "remove",
+        "prune",
+        "drop"
+      ],
+      "guard": {
+        "if": [
+          "rm -rf*",
+          "rm -fr*",
+          "rm -r*",
+          "git branch -D*",
+          "git push * --delete*"
+        ],
+        "check": "^(?:rm\\s+(?:-\\w*r\\w*|--recursive)\\b|git branch\\s+-D\\b|git push\\b.*\\s--delete\\b)"
+      }
     },
     "push-upstream": {
       "words": "\\b(?:push(?:es|ed|ing)?|upload the branch)\\b",
-      "verbs": ["push"],
-      "object": ["branch"]
+      "verbs": [
+        "push"
+      ],
+      "object": [
+        "branch"
+      ],
+      "guard": {
+        "if": [
+          "git push*",
+          "gh pr merge --auto*"
+        ],
+        "check": "^(?:git push\\b|gh pr merge\\b.*\\s--auto\\b)"
+      }
     },
     "integrate": {
       "words": "\\b(?:merg(?:e|es|ed|ing)|land(?:s|ed|ing)?(?!\\s+page)|ship(?:s|ped|ping)?|get it in|close (?:it |this |that )?out|finish up|wrap (?:it |this |that )?up)\\b",
-      "verbs": ["merge", "land", "ship"],
-      "object": ["pr", "pull request"]
+      "verbs": [
+        "merge",
+        "land",
+        "ship"
+      ],
+      "object": [
+        "pr",
+        "pull request"
+      ],
+      "guard": {
+        "if": [
+          "git merge*",
+          "gh pr merge*"
+        ],
+        "check": "^(?:git merge(?![\\w-])|gh pr merge\\b)",
+        "tools": "mcp__.*__merge.*"
+      }
     },
     "review": {
       "words": "\\b(?:prs?|pull requests?|review(?:s|ed|ing)?|put up)\\b",
-      "object": ["pr", "pull request"]
+      "object": [
+        "pr",
+        "pull request"
+      ],
+      "guard": {
+        "if": [
+          "gh pr create*"
+        ],
+        "check": "^gh pr create\\b"
+      }
     },
     "commit": {
       "words": "\\b(?:commit(?:s|ted|ting)?|sync)\\b",
-      "verbs": ["commit"]
+      "verbs": [
+        "commit"
+      ],
+      "guard": {
+        "if": [
+          "git commit*"
+        ],
+        "check": "^git commit\\b"
+      }
     },
     "branch": {
       "words": "\\b(?:branch(?:es)?|main|master|checkout)\\b",
       "cue": "\\b(?:branch(?:es)?|checkout)\\b|\\b(?:to|on|onto|into|from|off|against|of)\\s+(?:main|master)\\b|\\b(?:main|master)\\s+branch\\b",
-      "object": ["branch"]
+      "object": [
+        "branch"
+      ]
     },
     "complete": {
       "words": "\\b(?:done|finished|good to go|ready|all set)\\b"
@@ -62,5 +184,24 @@
     "protected-path": {
       "words": "(?<![\\w/])\\.env(?:\\.(?!example\\b|sample\\b|template\\b|dist\\b)\\w+)?(?![\\w-]|\\.\\w)|\\binfra\\/|\\b(?:pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock|bun\\.lockb?|cargo\\.lock|poetry\\.lock|gemfile\\.lock|composer\\.lock|lockfiles?)\\b"
     }
+  },
+  "guard": {
+    "about": "Severity, most severe first: of the classes a command matches, the most severe with a rule answers (A7 §5); the rest after it in the lexicon's order. irreversible: the classes whose prohibition asks (D19).",
+    "severity": [
+      "history-rewrite",
+      "delete",
+      "destructive-db",
+      "deploy",
+      "push-upstream",
+      "integrate"
+    ],
+    "irreversible": [
+      "integrate",
+      "push-upstream",
+      "deploy",
+      "delete",
+      "destructive-db",
+      "history-rewrite"
+    ]
   }
 }
