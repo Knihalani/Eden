@@ -5,8 +5,10 @@
  *
  * - **approved:** the call ran: its result is neither a refusal nor a failure to start.
  * - **declined:** its result is Claude Code's permission-rejection message (the user said no).
- * - **denied:** its result says permission was denied without the user being asked (`-p` with no permission host,
- *   or a classifier): not the user's answer, so it never counts as a decline.
+ * - **denied:** the call was refused without the user being asked: with no permission host (`claude -p`), Claude Code
+ *   2.1.294 denies an ask and returns its reason as the call's error ("Eden: rule you set …", seen in P2.3's
+ *   end-to-end), and a mode or classifier says "Permission to use … denied". Not the user's answer, so it never
+ *   counts as a decline.
  */
 import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readSync } from "node:fs";
 import { join } from "node:path";
@@ -84,7 +86,7 @@ export function claimCall(win: string, record: GuardCallRecord): boolean {
 }
 
 const DECLINED = /^The user doesn't want to proceed with this tool use\b/;
-const DENIED = /^Permission to use \S+.*\bhas been denied\b|^Permission to use \S+ was denied\b/;
+const DENIED = /^(?:Error: )?(?:Eden: rule you set\b|Permission to use \S+.*\b(?:has been|was) denied\b)/;
 
 /** What a call's result says of its ask (see the header). */
 export function labelOf(response: unknown): GuardLabel {
