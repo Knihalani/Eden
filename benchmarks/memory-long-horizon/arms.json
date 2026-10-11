@@ -633,7 +633,8 @@
       "id": "extraction",
       "group": "cues",
       "slices": [
-        "P2.1"
+        "P2.1",
+        "P3.3"
       ],
       "a5": "E3: regex false durable <= 1% on no-durable items; batch-B slot recall >= 0.70 and rule recall >= 0.80",
       "on": {

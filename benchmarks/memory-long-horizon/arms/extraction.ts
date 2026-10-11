@@ -11,6 +11,10 @@
  *   eden memory extract --jsonl -   (stdin: {"id", "text"} per line)   →   {"id", "records": [record…]} per line
  *   record: {"kind": "slot", "slot", "op": "set"|"invalidate", "value"}
  *         | {"kind": "policy"|"intent", "class", "polarity": "neg"|"pos", "object", "qualifier"?}
+ *
+ * P2.1 built the entry point (`packages/cli/src/memory-extract.ts`), with each text's pasted spans stripped first
+ * (D12), and confirmed this contract: it answers policy and intent records, D9's. Slot records (D7's slot table) are
+ * P3.3's, which owns `slot-recall-b` (ROADMAP).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
