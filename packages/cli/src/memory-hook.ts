@@ -34,7 +34,7 @@ import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo"
 import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
 import { firedClasses } from "../../../src/memory-triggers";
 import { intentsDoneBy, intentsReleasedBy } from "../../../src/memory-guard";
-import { labelGuardCalls, lastShownRules, ran } from "../../../src/memory-guard-log";
+import { labelFromTranscript, labelGuardCalls, lastShownRules, ran } from "../../../src/memory-guard-log";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   readInvalidations,
@@ -470,9 +470,17 @@ function sleepAfterTurn(ctx: HookContext): void {
     () => lightSleep(ctx.mem, ctx.session),
     () => ctx.win && compactContext(ctx.win),
     () => ctx.win && foldWindow(ctx.win),
+    () => labelAsksFromTranscript(ctx),
     () => retainEvents(memoryRoot(), memoryNow()),
     () => spawnIdleSleeper(ctx.store, ctx.session),
   );
+}
+
+/** A6 §2.5: the asks no PostToolBatch labelled, labelled from the transcript at sleep. */
+function labelAsksFromTranscript(ctx: HookContext): void {
+  if (!ctx.win) return;
+  const labels = labelFromTranscript(ctx.win, ctx.transcriptPath);
+  if (labels.length) ctx.trace.guard_labels = labels;
 }
 
 /**
