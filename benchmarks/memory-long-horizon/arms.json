@@ -489,7 +489,7 @@
       "slices": [
         "P1.3"
       ],
-      "a5": "an InstructionsLoaded CLAUDE.md says \"use pnpm\" -> the pnpm fact is never injected",
+      "a5": "an InstructionsLoaded CLAUDE.md says \"use pnpm\" -> the pnpm fact is never injected; a nested apps/web/CLAUDE.md loaded lazily by a Read under apps/web says \"the test runner is vitest\" -> no vitest bullet on the next cue (P1.3)",
       "on": {
         "state": "green"
       },
