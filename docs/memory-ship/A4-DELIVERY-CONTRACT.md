@@ -278,6 +278,7 @@ All points share the window ledger, the validity filter, the novelty filters and
 ### 5.2 SessionStart
 
 - **startup:** ≤ 3 policy pins for the likely scope (last session's read set), plus `Updated:` items (values that changed since this repo's last session).
+  - **Built in P2.4** (pins only, D9): the rules kept for all projects `(all projects)` and a proposal shown once (D11), then the repo's pins, a rule row's pinned clauses only (a policy said once is not briefed, an intent never is), then the legacy gists without their rule clauses. The ≤ 3 cap, the scope and `Updated:` items are P2.5's.
 - **clear / compact:** re-arm per §4.
 - **resume:** nothing new.
 
@@ -351,6 +352,8 @@ Eden memory (apps/web), recalled from earlier sessions:
 | idle | a detached `eden sleep --idle --after 300`, spawned by `stop-sleep`; exits early if the repo saw activity in the last 5 min (no hook fires during idle) | slot extraction from user episodes; `stale_for`; scope catalog rebuild if manifests changed; citation checks |
 | heavy | the same detached process at ≥ 30 min idle, or launched detached from SessionStart, which returns immediately (SessionStart delays Claude's first response) | repo-fact mining (D8), τ_repo refit on the silence replay (D17), alias maturation (D21), policy promotion (D9, D11), restatement classification (§7), SQLite `optimize` at P6 |
 
+**Built in P2.4:** the heavy tier is not built (P3.4's follow-up), so policy promotion (D9) runs in the full sleep the idle sleeper runs (`consolidate`), and the D11 proposal right after it, over every repo's rule index under the root (`eden sleep`, `sleepStore`).
+
 LLM use at sleep is opt-in per repo, local model first, and receives only scrubbed rows.
 
 ---
@@ -374,6 +377,8 @@ LLM use at sleep is opt-in per repo, local model first, and receives only scrubb
 | `suppressed` | dropped by the ledger or residual filter | ledger-distance evidence; re-examine the 400 KB / 1.2 MB distances |
 | `not_encoded` | no row existed | an extractor miss → a fixture row |
 | `recurring_policy` | `policy_recur` without a pin | promote to a pin (D9); when the pin exists in ≥ 2 repos, **propose** user-global for confirmation (D11) |
+
+**Built in P2.4:** `policy_recur` goes in the human Submit's wide event (the identities of the prompt's unqualified policies a live row of another session states). Promotion reads the rows, not the event: D9's "unqualified in ≥ 2 sessions" decides, so an intent in one session and the same policy in one other is a `policy_recur` but no pin (DECISIONS wins).
 
 ---
 
