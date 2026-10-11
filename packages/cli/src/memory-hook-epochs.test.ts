@@ -232,6 +232,18 @@ describe("A4 §4: a fork copies the parent's ledger (D25)", () => {
     expect(submit(FACT_CUE, "pf2", as(FORK))).not.toContain("postgres");
     expect(submit(RULE_CUE, "pf3", as(FORK))).toContain("merge PRs yourself");
   });
+
+  test("the fork's first delta encodes only its own lines, not the parent's copied ones again (P1.3)", () => {
+    const copied = parentTurns();
+    hook({ hook_event_name: "SessionStart", source: "fork", seconds_since_last_response: 5, ...as(FORK) });
+    submit("check the deploy logs", "pf1", as(FORK));
+    write(FORK, ...copied.map((line) => (line.promptId ? { ...line, promptId: "pf1" } : line)));
+    write(FORK, typed("uf1", "a2", "pf1", "check the deploy logs", 9), said("af1", "uf1", "The logs are clean.", 10));
+    stopSleep(FORK, "The logs are clean.");
+    // The copied assistant lines a1 and a2 were the parent's, which its own delta encoded; af1 is the fork's.
+    expect(lastEvent("Stop")?.encoded).toBe(1);
+    expect(lastEvent("Stop")?.forked_from).toBe(PARENT);
+  });
 });
 
 describe("PostCompact reaches the memory hook", () => {

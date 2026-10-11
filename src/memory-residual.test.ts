@@ -116,6 +116,28 @@ describe("D26: the residual", () => {
     ).toBe(true);
   });
 
+  test("a typed prompt is one Claude Code marks `origin.kind: human` (R6 §1.1); other origins are not typed", () => {
+    const human = (text: string) => ({ ...typed(text), origin: { kind: "human" } });
+    const notification = { ...typed("<task-notification>done</task-notification>"), origin: { kind: "task" } };
+    const path = transcript([human("First prompt."), said("One."), notification, human("Second prompt.")]);
+    const recent = recentConversation(path, "Third prompt.");
+    expect(recent.residual).toEqual(["Third prompt.", "Second prompt.", "One.", "First prompt."]);
+    expect(recent.previousTyped).toBe("Second prompt.");
+  });
+
+  test("a negated value never states its slot: 'not postgres', 'no longer use postgres' (D7)", () => {
+    const fact = (text: string) => ({ id: text, text: `[fact · 0m] ${text}` });
+    const sentences = residualSentences(["The database is not postgres anymore.", "We no longer use the postgres db."]);
+    expect(isResidualNote(fact("The database is postgres"), sentences)).toBe(false);
+  });
+
+  test("a bare 'use V' states V's slot without naming its subject (D7: V in one slot's value class)", () => {
+    const fact = (text: string) => ({ id: text, text: `[fact · 0m] ${text}` });
+    const sentences = residualSentences(["Use pnpm, not npm, for every install."]);
+    expect(isResidualNote(fact("The package manager is pnpm"), sentences)).toBe(true);
+    expect(isResidualNote(fact("The package manager is npm"), sentences)).toBe(false);
+  });
+
   test("a slot is a fact with a slot-shaped value (D7); a longer value is a misparse, read as an episode", () => {
     const fact = (text: string) => ({ id: text, text: `[fact · 0m] ${text}` });
     expect(legacySlot(fact("The database is postgres."))).toEqual({ subject: "database", value: "postgres" });
