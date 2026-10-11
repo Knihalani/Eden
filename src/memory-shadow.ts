@@ -30,7 +30,7 @@ const SHADOW = "shadow.log";
 const EAGER = new Set(["session_start", "include", "compact"]);
 /**
  * The most text a delivery reads, over all the files in order, and the most files it opens: a bound on its cost
- * (A7 §8; a 64 KB set parses in about 4 ms). Past it, the rest of the set is not read, which costs a repeat, not a
+ * (A7 §8; a 64 KB set parses in about 5 ms). Past it, the rest of the set is not read, which costs a repeat, not a
  * miss.
  */
 const TOTAL_BYTES = 64 * 1024;
