@@ -20,6 +20,7 @@ import {
   type BreakerEntry,
   type Flag,
 } from "../../../src/memory-flags";
+import { readRuleIndex } from "../../../src/memory-rule-index";
 import { fallbackLogPath, readFallbacks } from "../../../plugins/eden-memory/scripts/fallback-log";
 import { legacyTree, repoIdentity, repoStoreDir } from "../../../src/memory-repo";
 import type { DoctorCheck } from "./doctor";
@@ -279,13 +280,31 @@ export function fallbackCheck(loadsNow: boolean, path = fallbackLogPath(edenHome
   return { name: "fallback", ok: loadsNow, detail: `${count}, last ${last.t}: ${last.cause}${now} · ${path}` };
 }
 
-/** How the store is keyed (D1). Folder scopes (D3) and the policy guard (D18) come in later slices. */
+/** How the store is keyed (D1), and the policy guard (D19). Folder scopes (D3) come in a later slice. */
 export function storeChecks(cwd = process.cwd()): DoctorCheck[] {
   return [
     repoKeyCheck(memoryRoot(), cwd),
     { name: "scope catalog", ok: true, detail: "none · no folder scopes" },
-    { name: "guard", ok: true, detail: "off · no PreToolUse policy guard" },
+    guardCheck(memoryRoot(), cwd),
   ];
+}
+
+/**
+ * The PreToolUse policy guard (D19, X7) for a session in `cwd`: its two flags with their sources, what
+ * `EDEN_POLICY_GUARD` says, and how many rule rows the repo's index holds for it to look up.
+ */
+export function guardCheck(root: string, cwd: string, env: NodeJS.ProcessEnv = process.env): DoctorCheck {
+  const state = resolveFlags(cwd, env);
+  const flag = (name: "guard.context" | "guard.ask") => `${state[name].mode} (${state[name].source})`;
+  const switched = env.EDEN_POLICY_GUARD ? `EDEN_POLICY_GUARD=${env.EDEN_POLICY_GUARD}` : "EDEN_POLICY_GUARD unset";
+  const repo = repoIdentity(cwd);
+  const rows = repo ? readRuleIndex(repoStoreDir(root, repo.key)).length : 0;
+  const indexed = `${rows} rule row${rows === 1 ? "" : "s"} indexed for this repo`;
+  return {
+    name: "guard",
+    ok: true,
+    detail: `context ${flag("guard.context")} · ask ${flag("guard.ask")}, ${switched} · ${indexed}`,
+  };
 }
 
 /**

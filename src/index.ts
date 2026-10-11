@@ -32,6 +32,7 @@ import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
 import { firedClasses, triggeredRows } from "./memory-triggers";
+import { writeRuleIndex } from "./memory-rule-index";
 import {
   attachPlaceCues,
   hookLane,
@@ -1438,13 +1439,16 @@ export class AgentMemory {
         this.trimToStoreCap();
         const resolved = resolveSupersessions(this.compiled.map((c) => c.rec));
         this.compiled = this.compiled.map((c, i) => (resolved[i] === c.rec ? c : compileNeedles(resolved[i]!)));
-        writeStore(
-          this.path,
-          this.compiled.filter((c) => !this.pended.has(c.rec.id)).map((c) => c.rec),
-        );
+        const written = this.compiled.filter((c) => !this.pended.has(c.rec.id)).map((c) => c.rec);
+        writeStore(this.path, written);
         try {
           unlinkSync(`${this.path}.wal`);
         } catch {}
+        // The guard's lookup by class (A4 §1, A7 §5): a repo store's rule rows, beside it.
+        if (this.perRepo)
+          try {
+            writeRuleIndex(this.dir, written);
+          } catch {}
       });
       this.unsaved.clear();
       // A row waiting in pending.jsonl that this process has since superseded waits again, as it is now.

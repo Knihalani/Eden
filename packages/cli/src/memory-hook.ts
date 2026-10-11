@@ -34,10 +34,13 @@ import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoIdentity, repoStoreDir, swapping, type RepoIdentity } from "../../../src/memory-repo";
 import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
 import { firedClasses } from "../../../src/memory-triggers";
+import { intentsDoneBy, intentsReleasedBy } from "../../../src/memory-guard";
+import { labelGuardCalls, lastShownRules, ran } from "../../../src/memory-guard-log";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   readInvalidations,
   recordInvalidations,
+  recordRuleEnds,
   validText,
   withoutExpiredIntents,
   withoutForgets,
@@ -86,7 +89,7 @@ function hookMemory(opts: { dir: string; session?: string; child: boolean; cwd?:
   return openMemory({ ...opts, perRepo: true });
 }
 
-function asRec(v: unknown): Record<string, unknown> {
+export function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
@@ -186,7 +189,7 @@ export function memoryRoot(): string {
   return process.env.EDEN_HOME ? join(process.env.EDEN_HOME, "memory") : join(homedir(), ".eden", "memory");
 }
 
-function str(v: unknown): string | undefined {
+export function str(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined;
 }
 
@@ -321,7 +324,7 @@ function payloadMessages(r: Record<string, unknown>): { role: string; content: s
 }
 
 /** What one invocation logs (`memory-events.ts`), filled in as the handler runs. */
-type Trace = Omit<WideEvent, "t" | "ms" | "aborted" | "flags">;
+export type Trace = Omit<WideEvent, "t" | "ms" | "aborted" | "flags">;
 
 /** The window a point records its ledger in, and the ledger file of its mode (X7); none when it is `off`. */
 type Ledger = { dir: string; file: LedgerFile };
@@ -360,7 +363,7 @@ export function memoryHookResponse(raw: Record<string, unknown>, stage?: HookSta
 }
 
 /** Appends the invocation's wide event; after an exception at a delivery point, the breaker checks its budget. */
-function logInvocation(trace: Trace, flags: FlagState | undefined, ms: number): void {
+export function logInvocation(trace: Trace, flags: FlagState | undefined, ms: number): void {
   try {
     const root = memoryRoot(),
       t = memoryNow();
@@ -379,7 +382,7 @@ function logInvocation(trace: Trace, flags: FlagState | undefined, ms: number): 
  * The window a hook payload belongs to (D2): its session, or `session--agent` in a subagent (`child`), and the
  * session it runs in (`parent`).
  */
-function resolveSession(
+export function resolveSession(
   r: Record<string, unknown>,
   event: string,
 ): { session?: string; parent?: string; child: boolean } {
@@ -409,7 +412,7 @@ function resolveSession(
  * The repo of an event (D1). Outside git it is the directory the session started in: SessionStart records it in
  * the session's window (`starting`), and later events, a subagent's included, read it back.
  */
-function eventRepo(cwd: string, sessionWin: string | undefined, starting: boolean): RepoIdentity | undefined {
+export function eventRepo(cwd: string, sessionWin: string | undefined, starting: boolean): RepoIdentity | undefined {
   const repo = repoIdentity(cwd, () => (starting || !sessionWin ? undefined : startCwd(sessionWin)));
   if (repo && !repo.top && starting && sessionWin)
     try {
@@ -447,7 +450,7 @@ interface HookContext {
 }
 
 /** The transcript a payload names. */
-function transcriptOf(r: Record<string, unknown>): string {
+export function transcriptOf(r: Record<string, unknown>): string {
   return str(r.transcript_path) ?? str(r.transcriptPath) ?? "";
 }
 
@@ -592,7 +595,45 @@ function toolBatch(ctx: HookContext): void {
     () => {
       if (!ctx.child) encodeConversation(ctx);
     },
+    () => labelAsks(ctx),
+    () => endDoneIntents(ctx),
   );
+}
+
+/** A PostToolBatch payload's calls. */
+function batchCalls(r: Record<string, unknown>): Record<string, unknown>[] {
+  return Array.isArray(r.tool_calls) ? r.tool_calls.map(asRec) : [];
+}
+
+/** A4 §5.5, A6 §2.5: the guard's asks this batch answered, labelled approved, declined or denied. */
+function labelAsks(ctx: HookContext): void {
+  if (!ctx.win) return;
+  const labels = labelGuardCalls(ctx.win, batchCalls(ctx.r));
+  if (labels.length) ctx.trace.guard_labels = labels;
+}
+
+/** D9: an intent ends when its action completes, the call that carries it out having run (P2.1's follow-up). */
+function endDoneIntents(ctx: HookContext): void {
+  const done = batchCalls(ctx.r).flatMap((call) =>
+    ran(call.tool_response)
+      ? intentsDoneBy(ctx.mem.dir, { tool: str(call.tool_name) ?? "", input: asRec(call.tool_input) })
+      : [],
+  );
+  recordRuleEnds(ctx.mem.dir, done, "intent");
+}
+
+/** A typed sentence that drops the rule just shown (A6 §2.5's "that rule is gone"). */
+const DROPS_RULE =
+  /\b(?:that|this) rule (?:is gone|no longer applies|doesn['’]?t apply anymore|is (?:dead|over|obsolete)|can go)\b|\b(?:drop|remove|forget|delete|scrap) (?:that|this) rule\b/i;
+
+/**
+ * What the user's own words end (P2.1's follow-ups): a release with no class word ends the live intents it names
+ * ("Open it now."), and "that rule is gone" the rules the guard last showed in this window.
+ */
+function endRules(ctx: HookContext, said: string): void {
+  if (!said) return;
+  recordRuleEnds(ctx.mem.dir, intentsReleasedBy(ctx.mem.dir, said), "intent");
+  if (ctx.win && DROPS_RULE.test(said)) recordRuleEnds(ctx.mem.dir, lastShownRules(ctx.win), "rule");
 }
 
 /**
@@ -735,13 +776,13 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // A typed forget also sends the rows it names to history (A6 §3).
   if (writes && prompt && human) mem.forget(recordInvalidations(mem.dir, mem.storableText(prompt)));
   const encode = promptMessages(prompt, recent.toolResults).map((message) => ({ ...message, ...promptIdOf(r) }));
+  const own = encode
+    .filter((m) => m.src === "user")
+    .map((m) => m.content)
+    .join("\n");
+  if (writes && human) inTurn(() => endRules(ctx, own));
   if (human) {
-    const classes = firedClasses(
-      encode
-        .filter((m) => m.src === "user")
-        .map((m) => m.content)
-        .join("\n"),
-    );
+    const classes = firedClasses(own);
     if (classes.length) trace.classes = classes;
   }
   if (mode === "shadow" && ledger && trace.hturn !== undefined)
@@ -893,10 +934,10 @@ function stageOf(arg: string | undefined): HookStage | undefined {
   return arg === "stop-fast" || arg === "stop-sleep" ? arg : undefined;
 }
 
-export async function runMemoryHookStdin(arg?: string): Promise<void> {
-  let body: Record<string, unknown> = {};
+/** The hook payload on stdin; `{}` when it is missing or not JSON. */
+export async function readHookPayload(): Promise<Record<string, unknown>> {
   try {
-    body = JSON.parse(
+    return JSON.parse(
       (await new Promise<string>((resolve) => {
         const chunks: Buffer[] = [];
         process.stdin.on("data", (c) => chunks.push(c as Buffer));
@@ -904,7 +945,13 @@ export async function runMemoryHookStdin(arg?: string): Promise<void> {
         if (process.stdin.isTTY) resolve("{}");
       })) || "{}",
     ) as Record<string, unknown>;
-  } catch {}
+  } catch {
+    return {};
+  }
+}
+
+export async function runMemoryHookStdin(arg?: string): Promise<void> {
+  const body = await readHookPayload();
   // Fail open (EXECUTION §5): nothing to say prints nothing, and so does an error.
   try {
     const out = memoryHookResponse(body, stageOf(arg));

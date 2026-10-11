@@ -59,6 +59,18 @@ export interface WideEvent {
   /** PostCompact (A4 §4): the cids `compact_summary` held, and how many of the closed epoch's it left re-armed. */
   held?: string[];
   rearmed?: number;
+  /**
+   * The PreToolUse guard (D19, A4 §5.4): its class, the call, and what it did: an ask was due (`would_ask`, X7's
+   * shadow measure), it asked (`asked`), the permission mode turned it to context (`guard_bypassed`), or another
+   * handler of the call answered (`guard_dup`). PostToolBatch labels asks it sees answered (A6 §2.5).
+   */
+  guard_class?: string;
+  tool_use_id?: string;
+  would_ask?: true;
+  asked?: true;
+  guard_bypassed?: true;
+  guard_dup?: true;
+  guard_labels?: { id: string; label: string }[];
   /** A fork's copy of its parent's ledger (D25): the parent's window ("" when none was found), and its deliveries. */
   forked_from?: string;
   copied?: number;
