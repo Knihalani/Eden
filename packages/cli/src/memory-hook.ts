@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { redact } from "@eden/ir";
-import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
+import { authoredTexts, splitPastes, stripPastes, type TextSource } from "../../../src/memory-authority";
 import { childSessionName, isLiveRow, openMemory, type MemoryRecord } from "../../../src/index";
 import { GistStore, scrubTombstonedIdentity } from "../../../src/gist-store";
 import { memoryConsent } from "../../../src/memory-consent";
@@ -33,6 +33,7 @@ import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoIdentity, repoStoreDir, swapping, type RepoIdentity } from "../../../src/memory-repo";
 import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
+import { firedClasses } from "../../../src/memory-triggers";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
 import {
   readInvalidations,
@@ -721,6 +722,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   if (human) {
     Object.assign(trace, { submit: "human", turn_mode: turn, prompt_id: att, prompt_hash: promptHash(prompt), off });
     if (recent.contextTokens !== undefined) trace.ctx_tokens = recent.contextTokens;
+    const classes = firedClasses(stripPastes(prompt));
+    if (classes.length) trace.classes = classes;
     if (win)
       try {
         trace.hturn = humanTurns(win);

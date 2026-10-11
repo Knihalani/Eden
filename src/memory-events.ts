@@ -39,6 +39,8 @@ export interface WideEvent {
   nonhuman?: string;
   preamble?: true;
   turn_mode?: string;
+  /** The action classes a human prompt's own words fire (A7 §5): what its compiled triggers deliver from. */
+  classes?: string[];
   /** The cids of the packet the point delivered, or in shadow would have, and the ids of their rows. */
   cids?: string[];
   ids?: string[];
