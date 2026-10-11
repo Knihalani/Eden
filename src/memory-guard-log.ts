@@ -1,7 +1,8 @@
 /**
  * A window's `guard.log` (A4 §1, §5.4–5.5; A6 §2.5): one `call` line per tool call the guard answered, appended by the
  * first of its parallel handlers under `flock(guard.lock)`, so the others stay silent; and one `label` line per ask
- * whose answer a later PostToolBatch read from the call's result. Lines hold ids, classes and rule keys only (X11).
+ * whose answer a later PostToolBatch read from the call's result, or, failing that, sleep from the transcript. Lines
+ * hold ids, classes and rule keys only (X11).
  *
  * - **approved:** the call ran: its result is neither a refusal nor a failure to start.
  * - **declined:** its result is Claude Code's permission-rejection message (the user said no).
@@ -15,6 +16,7 @@ import { join } from "node:path";
 import { withFileLock } from "../packages/cli/src/home";
 import { resultText } from "./memory-batch";
 import { memoryNow } from "./memory-clock";
+import { tailLines } from "./memory-transcript";
 
 export const GUARD_LOG = "guard.log";
 const GUARD_LOCK = "guard.lock";
@@ -111,6 +113,26 @@ export function labelGuardCalls(win: string, calls: readonly BatchCall[]): { id:
     labels.map(({ id, label }) => ({ k: "label" as const, t, id, label })),
   );
   return labels;
+}
+
+/** How much of the transcript sleep reads for an ask's answer: the turn's end, where its calls are. */
+const TRANSCRIPT_TAIL_BYTES = 256 * 1024;
+
+/**
+ * A6 §2.5's reading at sleep: the asks no PostToolBatch labelled (an interrupt, a host without the event) whose
+ * result the transcript's tail holds, labelled from it. Returns the labels.
+ */
+export function labelFromTranscript(win: string, transcriptPath: string): { id: string; label: GuardLabel }[] {
+  const pending = guardRecords(win).some((record) => record.k === "call" && record.ask);
+  if (!pending || !transcriptPath) return [];
+  const results = tailLines(transcriptPath, TRANSCRIPT_TAIL_BYTES).flatMap((line) => {
+    const content = (line as { type?: unknown; message?: { content?: unknown } }).message?.content;
+    if ((line as { type?: unknown }).type !== "user" || !Array.isArray(content)) return [];
+    return content.flatMap((block: { type?: unknown; tool_use_id?: unknown; content?: unknown }) =>
+      block?.type === "tool_result" ? [{ tool_use_id: block.tool_use_id, tool_response: block.content }] : [],
+    );
+  });
+  return labelGuardCalls(win, results);
 }
 
 /** Whether a call's result shows it ran: no refusal, and no `Exit code N` other than 0 (`memory-batch.ts`). */
