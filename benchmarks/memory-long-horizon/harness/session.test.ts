@@ -226,6 +226,72 @@ describe("conversation structure", () => {
   });
 });
 
+describe("nested instruction files (R0 F17; captured on Claude Code 2.1.294)", () => {
+  const NESTED = "# Web\n\nThe web app uses vitest.\n";
+
+  test("a Read under a folder with its own CLAUDE.md loads it once: an attachment, then a lazy InstructionsLoaded", async () => {
+    const probe = probeWorld({ projectFiles: { "CLAUDE.md": "# Root\n", "apps/web/CLAUDE.md": NESTED } });
+    const session = await started(probe);
+    await session.prompt("open the web login");
+    const at = (path: string) => join(probe.world.projectDir, path);
+    await session.main.tools([readCall("toolu_1", at("apps/web/login.ts"), "export {};")]);
+    await session.main.tools([readCall("toolu_2", at("apps/web/page.ts"), "export {};")]);
+    const loads = probe.world.log.filter((record) => record.event === "InstructionsLoaded");
+    expect(loads.map((record) => record.payload.load_reason)).toEqual(["session_start", "nested_traversal"]);
+    // The captured key order of a lazy load.
+    expect(Object.keys(loads[1]!.payload)).toEqual([
+      "session_id",
+      "transcript_path",
+      "cwd",
+      "prompt_id",
+      "effort",
+      "hook_event_name",
+      "file_path",
+      "memory_type",
+      "load_reason",
+      "trigger_file_path",
+    ]);
+    expect(loads[1]!.payload.trigger_file_path).toBe(at("apps/web/login.ts"));
+    const attachment = readLines(session.transcriptPath).find(
+      (line) => (line.attachment as { type?: string } | undefined)?.type === "nested_memory",
+    );
+    expect((attachment?.attachment as { displayPath?: string }).displayPath).toBe("apps/web/CLAUDE.md");
+    expect(session.main.seen.snapshot().text).toContain("The web app uses vitest.");
+  });
+
+  test("a compaction drops the nested file from the window; the next access loads it again", async () => {
+    const probe = probeWorld({ projectFiles: { "apps/web/CLAUDE.md": NESTED } });
+    const session = await started(probe);
+    await session.prompt("open the web login");
+    const read = (id: string) => readCall(id, join(probe.world.projectDir, "apps/web/login.ts"), "export {};");
+    await session.main.tools([read("toolu_1")]);
+    await session.compact("manual", "Summary: the login page was opened.");
+    expect(session.main.seen.snapshot().text).not.toContain("The web app uses vitest.");
+    await session.prompt("open it again");
+    await session.main.tools([read("toolu_2")]);
+    const lazy = probe.world.log.filter((record) => record.payload.load_reason === "nested_traversal");
+    expect(lazy).toHaveLength(2);
+    expect(session.main.seen.snapshot().text).toContain("The web app uses vitest.");
+  });
+
+  test("a subagent's file access loads nothing (R0 F35)", async () => {
+    const probe = probeWorld({ projectFiles: { "apps/web/CLAUDE.md": NESTED } });
+    const session = await started(probe);
+    await session.prompt("explore the web app");
+    const spec = {
+      agentType: "Explore",
+      description: "Look",
+      task: "Read the login.",
+      background: false,
+      report: "ok",
+    };
+    await session.subagent(spec, async (window) => {
+      await window.tools([readCall("toolu_1", join(probe.world.projectDir, "apps/web/login.ts"), "export {};")]);
+    });
+    expect(probe.world.log.filter((record) => record.payload.load_reason === "nested_traversal")).toEqual([]);
+  });
+});
+
 describe("generated sessions play through", () => {
   test("200 R6-shaped scripts replay without error (plugin with no hooks)", async () => {
     const root = tempDir("eden-empty-plugin");

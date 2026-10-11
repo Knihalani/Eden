@@ -191,6 +191,25 @@ export class Transcript {
     }));
   }
 
+  /**
+   * A nested CLAUDE.md that a tool's file access loaded (`nested_memory`, captured on Claude Code 2.1.294 with its
+   * InstructionsLoaded `nested_traversal`): its text is in the context from here, like any line.
+   */
+  nestedMemory(path: string, displayPath: string, content: string): string {
+    return this.append((uuid) => ({
+      ...this.head(this.leaf),
+      attachment: {
+        type: "nested_memory",
+        path,
+        content: { path, type: "Project", content, contentDiffersFromDisk: false },
+        displayPath,
+      },
+      type: "attachment",
+      uuid,
+      timestamp: this.now(),
+    }));
+  }
+
   /** A submit that arrived while the agent was working (a queued prompt or a background task's notification). */
   queuedCommand(prompt: string, kind: OriginKind): string {
     const commandMode = kind === "task-notification" ? "task-notification" : "prompt";

@@ -127,6 +127,8 @@ const PROMPT: Parts = { permission: true, agent: false, effort: false };
 const TURN: Parts = { permission: true, agent: false, effort: true };
 const TOOL: Parts = { permission: true, agent: true, effort: true };
 const SUBAGENT_START: Parts = { permission: false, agent: true, effort: false };
+/** A lazy InstructionsLoaded (`nested_traversal`, `path_glob_match`) carries `effort` (captured on 2.1.294). */
+const LAZY_LOAD: Parts = { permission: false, agent: false, effort: true };
 
 export function sessionStartPayload(
   ctx: EventContext,
@@ -153,7 +155,8 @@ export function instructionsLoadedPayload(ctx: EventContext, load: InstructionsL
   if (load.globs) fields.globs = load.globs;
   if (load.triggerFilePath) fields.trigger_file_path = load.triggerFilePath;
   if (load.parentFilePath) fields.parent_file_path = load.parentFilePath;
-  return payload(ctx, "InstructionsLoaded", SESSION, fields);
+  const lazy = load.loadReason === "nested_traversal" || load.loadReason === "path_glob_match";
+  return payload(ctx, "InstructionsLoaded", lazy ? LAZY_LOAD : SESSION, fields);
 }
 
 export function userPromptSubmitPayload(ctx: EventContext, prompt: string): HookPayload {
