@@ -143,7 +143,7 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
 
   test("the validity log keeps the opposition: older text stating the overturned rule loses that sentence", () => {
     const opposed = invalidationsIn("Never squash.", 1);
-    expect(opposed).toEqual([{ k: "oppose", r: "history-rewrite|pos|*", t: 1 }]);
+    expect(opposed).toEqual([{ k: "oppose", r: "history-rewrite|pos|*|squash", t: 1 }]);
     expect(invalidationsIn("Don't squash yet.", 1)).toEqual([]);
     expect(validText("Always squash when merging.", 0, opposed)).toBe("");
     expect(validText("Always squash when merging. Never merge PRs yourself.", 0, opposed)).toBe(
@@ -168,10 +168,10 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     const root = mkdtempSync(join(tmpdir(), "eden-policy-log-"));
     dirs.push(root);
     for (let t = 1; t <= 500; t++) recordInvalidations(root, "Never squash.", t);
-    expect(readInvalidations(root)).toEqual([{ k: "oppose", r: "history-rewrite|pos|*", t: 500 }]);
+    expect(readInvalidations(root)).toEqual([{ k: "oppose", r: "history-rewrite|pos|*|squash", t: 500 }]);
     const many = Array.from({ length: 500 }, (_, n) => ({
       k: "oppose" as const,
-      r: `delete|pos|thing${n}-file`,
+      r: `delete|pos|thing${n}-file|delet`,
       t: 2,
     }));
     const notes = Array.from({ length: 200 }, (_, n) => `Always delete the thing${n % 50} files. Never push to main.`);
@@ -187,6 +187,17 @@ describe("L8: a policy is superseded only by the opposite polarity on its key, o
     expect(validText(mixed, T0, [])).toBe(mixed);
     process.env.EDEN_NOW = String(T0 + INTENT_TTL_MS);
     expect(validText(mixed, T0, [])).toBe("Never force-push.");
+  });
+
+  test("one action of a class does not overturn another: never force-push leaves always squash", () => {
+    const mem = store();
+    mem.observe([typed("Always squash when merging.")]);
+    process.env.EDEN_NOW = String(T0 + 60_000);
+    mem.observe([typed("Never force-push.")]);
+    expect(superseded(ruleRow(mem, "Always squash"))).toBe(false);
+    expect(ruleRow(mem, "force-push").rules).toEqual([{ k: "history-rewrite|neg|*", v: "force-push" }]);
+    const cid = (row: MemoryRecord) => ledgerKey(row, REPO).cid;
+    expect(cid(ruleRow(mem, "force-push"))).not.toBe(cid(ruleRow(mem, "Always squash")));
   });
 
   test("text the user did not type supersedes nothing", () => {

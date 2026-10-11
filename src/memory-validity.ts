@@ -46,6 +46,7 @@ import {
   objectWords,
   overturnable,
   overturnedKeys,
+  ruleIdentity,
   ruleRefs,
   rulesIn,
   withoutIntents,
@@ -447,7 +448,7 @@ function cached<T>(cache: Map<string, T>, text: string, read: (text: string) => 
 /** The keys of the rules a text states that an overturning reaches (`overturnable`). */
 function ruleKeysOf(text: string): string[] {
   return cached(RULE_KEYS, text, (said) =>
-    ruleRefs(rulesIn(said)).flatMap((rule) => (overturnable(rule) ? [rule.k] : [])),
+    ruleRefs(rulesIn(said)).flatMap((rule) => (overturnable(rule) ? [ruleIdentity(rule)] : [])),
   );
 }
 
