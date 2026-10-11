@@ -33,6 +33,9 @@ import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskR
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
 import { firedClasses, triggeredRows } from "./memory-triggers";
 import { writeRuleIndex } from "./memory-rule-index";
+import { childSessionName, memorySessionName } from "./memory-session";
+
+export { childSessionName, memorySessionName };
 import {
   attachPlaceCues,
   hookLane,
@@ -252,26 +255,6 @@ export type MemoryOptions = {
    */
   perRepo?: boolean;
 };
-
-export function memorySessionName(raw: unknown): string | undefined {
-  const s = typeof raw === "string" ? raw.trim() : "";
-  return s &&
-    !s.includes("\0") &&
-    !s.includes("/") &&
-    !s.includes("\\") &&
-    !s.split("--").join("").includes("..") &&
-    /^[A-Za-z0-9._-]+$/.test(s) &&
-    s !== "." &&
-    s !== ".."
-    ? s
-    : undefined;
-}
-
-export function childSessionName(parent?: string, child?: string): string | undefined {
-  const p = memorySessionName(parent),
-    c = memorySessionName(child);
-  return p && c ? memorySessionName(`${p}--${c}`) : (c ?? p);
-}
 
 type Compiled = { rec: MemoryRecord; needles: string[]; scorable: boolean };
 
