@@ -9,7 +9,7 @@ import {
   type CandidateText,
   type Triple,
 } from "./assemble";
-import { settlePendingRows, superseded, type MemoryRecord } from "./index";
+import { isLiveRow, settlePendingRows, superseded, type MemoryRecord } from "./index";
 import { memoryNow } from "./memory-clock";
 import { inStoreOrder } from "./memory-ids";
 import { ExperienceStore, promoteExperienceHowTo, type ExperienceState, type ExperienceTraj } from "./experience-store";
@@ -17,6 +17,7 @@ import { GistStore, scrubTombstonedIdentity } from "./gist-store";
 import { promoteNarrativeGists } from "./gist-retrieve";
 import { HowToStore, mergeSharedPrefixHowTo, type HowTo, type HowToStep } from "./howto-store";
 import { memoryConsent } from "./memory-consent";
+import { promotions } from "./memory-pins";
 import { isUntyped } from "./memory-provenance";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { readInvalidations, validText, withoutExpiredIntents } from "./memory-validity";
@@ -946,6 +947,18 @@ export function lightSleep(mem: SleepMem, session: string | undefined): void {
   );
 }
 
+/** D9's promotion (A4 §6, §7 `recurring_policy`): a policy said in 2 sessions is a pin (`memory-pins.ts`). */
+function promotePolicies(mem: SleepMem): void {
+  if (!mem.patchWhere) return;
+  const live = (mem.memories() as MemoryRecord[]).filter((row) => row.rules?.length && isLiveRow(row));
+  const promoted = promotions(live, readInvalidations(mem.dir));
+  if (!promoted.size) return;
+  mem.patchWhere((row) => {
+    const rules = promoted.get(row.id);
+    return rules ? { ...row, rules } : undefined;
+  });
+}
+
 export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   try {
     if (memoryConsent() !== "on" || mem.sealed) return;
@@ -1040,6 +1053,9 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     stampForesight(mem, mem.memories());
   } catch {}
   if (mode === "full") {
+    try {
+      promotePolicies(mem);
+    } catch {}
     try {
       decayHeat(mem, mem.memories());
     } catch {}

@@ -7,11 +7,17 @@
  *
  * A row's repo is its `cwd`'s, else this folder's. A statement of a D9 rule is a rule row, keyed like a typed one;
  * `kind` names any other row's kind. Rows keep no scope yet: the scope catalog is P3.1's, so `scope` is read and
- * ignored. A line that is not a JSON object with a non-empty string `text` is skipped and not counted. User-global
- * rows (`--global`) wait for the user-global store (P2.4).
+ * ignored. A line that is not a JSON object with a non-empty string `text` is skipped and not counted.
+ *
+ * `--global` (D11) keeps each policy a statement states for all projects, in the user-global store only
+ * (`memory-user-global.ts`); a fact or an intent is never user-global, so it is not counted.
  */
 import { openMemory, type AgentMemory } from "../../../src/index";
+import { memoryNow } from "../../../src/memory-clock";
 import { memoryConsent } from "../../../src/memory-consent";
+import { ruleRefs, rulesIn } from "../../../src/memory-policy";
+import { scrubMemoryText } from "../../../src/memory-scrub";
+import { keepForAllProjects } from "../../../src/memory-user-global";
 import { storeFor } from "../../../src/memory-repo";
 import { memoryRoot } from "./memory-hook";
 
@@ -64,9 +70,20 @@ export function rememberStatements(statements: readonly Statement[]): number {
   return remembered;
 }
 
+/** `--global`: the policies of the statements, kept for all projects; the number of rules newly kept. */
+export function rememberForAllProjects(statements: readonly Statement[]): number {
+  if (memoryConsent() !== "on") return 0;
+  const rules = statements.flatMap(({ text, cwd }) => {
+    const typed = scrubMemoryText(text, { cwd: cwd ?? process.cwd() });
+    return ruleRefs(rulesIn(typed).filter((rule) => rule.kind === "policy")).map((rule) => ({ text: typed, rule }));
+  });
+  return keepForAllProjects(memoryRoot(), rules, memoryNow()).length;
+}
+
 export async function memoryRememberCli(args: string[]): Promise<number> {
+  const remember = args.includes("--global") ? rememberForAllProjects : rememberStatements;
   if (args.includes("--jsonl") && args.includes("-")) {
-    const remembered = rememberStatements(statementsOf(await Bun.stdin.text()));
+    const remembered = remember(statementsOf(await Bun.stdin.text()));
     console.log(JSON.stringify({ remembered }));
     return 0;
   }
@@ -75,9 +92,11 @@ export async function memoryRememberCli(args: string[]): Promise<number> {
     .join(" ")
     .trim();
   if (!text) {
-    console.log('usage: eden memory remember "<text>" | --jsonl -   (stdin: {"text", "kind"?, "cwd"?} per line)');
+    console.log(
+      'usage: eden memory remember [--global] "<text>" | --jsonl -   (stdin: {"text", "kind"?, "cwd"?} per line)',
+    );
     return 0;
   }
-  console.log(`remembered: ${rememberStatements([{ text }])}`);
+  console.log(`remembered: ${remember([{ text }])}`);
   return 0;
 }

@@ -33,6 +33,21 @@ import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
 import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
 import { firedClasses } from "../../../src/memory-triggers";
+import { pinnedRules, pinnedText, policyRecurrences } from "../../../src/memory-pins";
+import { ruleIdentity, withoutRules } from "../../../src/memory-policy";
+import {
+  dropUserRules,
+  keepForAllProjects,
+  keepShownProposals,
+  markProposalShown,
+  overturnUserRules,
+  proposalNote,
+  proposalToShow,
+  readUserRules,
+  rulesForAllProjects,
+  withUserGlobal,
+  type Proposal,
+} from "../../../src/memory-user-global";
 import { intentsReleasedBy } from "../../../src/memory-guard";
 import { askedRules, labelFromTranscript, labelGuardCalls, type Labelled } from "../../../src/memory-guard-log";
 import { nonHumanKind, promptHash, turnMode } from "../../../src/memory-turn";
@@ -119,12 +134,21 @@ function additional(event: string, packet: string): Record<string, unknown> | nu
 }
 
 /**
- * SessionStart's packet: the newest pinned rules still in force (not superseded, not an expired intent; not after a
- * compaction, A4 §5.2), then the 3 latest gists, each still valid (A4 §5.1 step 5, before any selection). Until the
- * store is per repo (P0.5), gists are the only memory one session passes to the next, so D23's pins-only briefing
- * waits for P2.5.
+ * SessionStart's packet (A4 §5.2), unless after a compaction (whose pins come back on their next cue):
+ * - the rules the user keeps for all projects (D11), and a proposal for all projects that this repo holds as a pin,
+ *   shown in place of its pin's bullet (`memory-user-global.ts`);
+ * - then the repo's newest pins (D9, `memory-pins.ts`): a rule row's pinned clauses only, so a policy said once is
+ *   not briefed and an intent never is; a rule on no action class is briefed as a pinned row was before;
+ * - then the 3 latest gists without their rule clauses: a rule reaches SessionStart only as a pin.
+ * Each is read through validity (A4 §5.1 step 5) before any selection. D23's selection (≤ 3 pins for the likely
+ * scope, `Updated:` items) waits for P2.5.
  */
-function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true): ProvenanceNote[] {
+function briefing(
+  mem: ReturnType<typeof openMemory>,
+  root: string,
+  session = "",
+  pins = true,
+): { notes: ProvenanceNote[]; proposal?: Proposal } {
   const seen = new Set<string>(),
     notes: ProvenanceNote[] = [],
     invalid = readInvalidations(mem.dir),
@@ -138,21 +162,33 @@ function briefing(mem: ReturnType<typeof openMemory>, session = "", pins = true)
       notes.push({ ...note, text });
       return true;
     };
-  if (pins)
-    mem
+  let proposal: Proposal | undefined;
+  if (pins) {
+    const own = mem
       .memories()
       .filter((row) => isLiveRow(row) && isPinnedIntention(row))
-      .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at)
-      .slice(0, 8)
-      .forEach(add);
+      .flatMap(pinnedPart)
+      .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at);
+    proposal = proposalToShow(root, new Set(own.flatMap((row) => (row.rules ?? []).map(ruleIdentity))));
+    const global = [...(proposal ? [proposalNote(proposal)] : []), ...readUserRules(root)];
+    withUserGlobal<ProvenanceNote>(own, global).slice(0, 8).forEach(add);
+  }
   try {
     let gists = 0;
     for (const g of new GistStore(mem.dir).latest(session || "", GIST_SCAN, { excludeSrc: "experience" })) {
       if (gists >= BRIEFED_GISTS) break;
-      if (add({ text: g.text, kind: "gist", tags: ["gist"], at: g.t })) gists++;
+      if (add({ text: withoutRules(g.text, () => true), kind: "gist", tags: ["gist"], at: g.t })) gists++;
     }
   } catch {}
-  return notes;
+  return { notes, proposal };
+}
+
+/** What a pinned row may brief: a rule row's pinned rules and their clauses only (see `briefing`). */
+function pinnedPart(row: MemoryRecord): MemoryRecord[] {
+  if (!row.rules?.length) return [row];
+  const text = pinnedText(row);
+  const pinned = pinnedRules(row);
+  return text ? [{ ...row, text, rules: row.rules.filter((rule) => pinned.has(ruleIdentity(rule))) }] : [];
 }
 
 /**
@@ -368,6 +404,8 @@ interface HookContext {
   flags: FlagState;
   trace: Trace;
   mem: ReturnType<typeof hookMemory>;
+  /** The memory root (`<root>/repos/…`, `<root>/_user/`, `<root>/windows/…`). */
+  root: string;
   store: string;
   /** The repo key (D1): its first 8 characters prefix the ledger's cids. */
   repo?: string;
@@ -574,7 +612,29 @@ function endRules(ctx: HookContext, said: string): void {
   if (!said) return;
   recordRuleEnds(ctx.mem.dir, intentsReleasedBy(ctx.mem.dir, said), "intent");
   const drops = sentencesOf(said).some((sentence) => DROPS_RULE.test(sentence.trim()));
-  if (ctx.win && drops) recordRuleEnds(ctx.mem.dir, askedRules(ctx.win, humanTurns(ctx.win) - 1), "rule");
+  if (!ctx.win || !drops) return;
+  const asked = askedRules(ctx.win, humanTurns(ctx.win) - 1);
+  recordRuleEnds(ctx.mem.dir, asked, "rule");
+  const dropped = dropUserRules(ctx.root, asked, memoryNow(), "dropped");
+  if (dropped.length) ctx.trace.dropped = dropped;
+}
+
+/**
+ * D11 at a human Submit, on the user's own words as the store keeps them: the rules kept for all projects that the
+ * prompt overturns end (A4 §3.1, L8), its policies stated with D11's phrases are kept for all projects, and "yes,
+ * everywhere" keeps the proposals shown (`memory-user-global.ts`).
+ */
+function userGlobalRules(ctx: HookContext, said: string): void {
+  if (!said) return;
+  const typed = ctx.mem.storableText(said);
+  const now = memoryNow();
+  const dropped = overturnUserRules(ctx.root, typed, now);
+  const kept = [
+    ...keepForAllProjects(ctx.root, rulesForAllProjects(typed), now),
+    ...keepShownProposals(ctx.root, typed, now),
+  ];
+  if (dropped.length) ctx.trace.dropped = [...(ctx.trace.dropped ?? []), ...dropped];
+  if (kept.length) ctx.trace.kept = kept;
 }
 
 /**
@@ -640,7 +700,7 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   }
   if (mode === "off") return withNotice(null, notice);
   // A4 §5.1 step 7 holds here too: what the window's instruction files state is never briefed (D27).
-  const notes = briefing(mem, ctx.session, !compact);
+  const { notes, proposal } = briefing(mem, ctx.root, ctx.session, !compact);
   const briefed = notes.length ? unsaidNotes(notes, shadowSentences(win, ctx.place)) : notes;
   const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
   Object.assign(trace, {
@@ -648,6 +708,13 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
     ids,
     drops: { shadow: notes.length - briefed.length, shape: briefed.length - cids.length },
   });
+  // D11: a proposal is shown once, so only a packet the user's session received counts.
+  const shown = proposal && mode === "on" && ids.includes(proposalNote(proposal).id ?? "") ? proposal : undefined;
+  if (shown && writes)
+    try {
+      markProposalShown(ctx.root, shown, memoryNow());
+      trace.proposed = shown.r;
+    } catch {}
   return withNotice(mode === "on" ? additional(ctx.event, packet) : null, notice);
 }
 
@@ -721,10 +788,19 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     .filter((m) => m.src === "user")
     .map((m) => m.content)
     .join("\n");
-  if (writes && human) inTurn(() => endRules(ctx, own));
+  if (writes && human)
+    inTurn(
+      () => endRules(ctx, own),
+      () => userGlobalRules(ctx, own),
+    );
   if (human) {
     const classes = firedClasses(own);
     if (classes.length) trace.classes = classes;
+    try {
+      const ruled = mem.memories().filter((row) => row.rules?.length && isLiveRow(row));
+      const recur = policyRecurrences(ruled, own, mem.episode);
+      if (recur.length) trace.policy_recur = recur;
+    } catch {}
   }
   if (mode === "shadow" && ledger && trace.hturn !== undefined)
     try {
@@ -841,6 +917,7 @@ function respond(
     flags,
     trace,
     mem,
+    root,
     store,
     repo: repo?.key,
     win,

@@ -4,7 +4,8 @@
  * the flags, the deduplication across parallel handlers, the ledger and the wide event.
  *
  * - **Which classes a call is:** `memory-guard-match.ts`.
- * - **Which rules apply.** The rows of the store's rule index (`memory-rule-index.ts`) with a rule of the class, as
+ * - **Which rules apply.** The rows of the store's rule index (`memory-rule-index.ts`) and the rules kept for all
+ *   projects (`memory-user-global.ts`, which a repo row of the same rule gives way to) with a rule of the class, as
  *   every delivery point reads them: past `valid_until`, an intent after 7 days, and what an invalidation newer than
  *   the row took (a revocation, an opposition, an end) are gone. A rule applies when the call names its object (`*`
  *   always does; "don't delete the fixtures" applies to `rm -rf tests/fixtures`, not to `rm -rf node_modules`) and,
@@ -24,20 +25,18 @@
 import { ACTION_VERBS, IRREVERSIBLE, type ActionClass } from "./memory-classes";
 import { memoryNow } from "./memory-clock";
 import { ageInWords } from "./memory-hook-packet";
-import {
-  historyAction,
-  objectWords,
-  oneNamePerObject,
-  ruleClause,
-  ruleIdentity,
-  ruleRefs,
-  rulesIn,
-  type RuleRef,
-} from "./memory-policy";
+import { historyAction, objectWords, oneNamePerObject, ruleClause, ruleIdentity, type RuleRef } from "./memory-policy";
 import { callClasses, CHECKS, commandOf, partsOf, type GuardCall } from "./memory-guard-match";
 import { knownNoteSource } from "./memory-provenance";
 import { readRuleIndex, type IndexedRow } from "./memory-rule-index";
-import { readInvalidations, validText, withoutExpiredIntents, type Invalidation } from "./memory-validity";
+import { isUserGlobal, readUserRules, withUserGlobal } from "./memory-user-global";
+import {
+  readInvalidations,
+  rulesInForce,
+  validText,
+  withoutExpiredIntents,
+  type Invalidation,
+} from "./memory-validity";
 
 /** The permission modes in which an `ask` reaches the user (D19). */
 const ASKING_MODES = new Set(["default", "acceptEdits", "plan", "auto"]);
@@ -117,9 +116,8 @@ function applying(
     if (typeof row.validUntil === "number" && row.validUntil <= now) continue;
     const ofClass = (row.rules ?? []).filter((rule) => keyParts(rule).cls === cls);
     if (!ofClass.length) continue;
-    const text = validText(withoutExpiredIntents(row.text, row.at), row.at, invalid);
+    const { text, rules: stated } = rulesInForce(row, invalid);
     if (!text) continue;
-    const stated = new Set(ruleRefs(rulesIn(text)).map(ruleIdentity));
     const rule = ofClass.find(
       (ref) =>
         stated.has(ruleIdentity(ref)) &&
@@ -155,7 +153,7 @@ function ruleWords(found: Applying, now: number): string {
     .replace(/\s+/g, " ")
     .trim();
   const text = plain.length > RULE_CHARS ? `${plain.slice(0, RULE_CHARS - 1).trimEnd()}…` : plain;
-  return `Rule you set${age ? ` (${age})` : ""}: ${text}`;
+  return `Rule you set${age ? ` (${age})` : ""}: ${text}${isUserGlobal(found.row) ? " (all projects)" : ""}`;
 }
 
 /**
@@ -188,16 +186,20 @@ export function intentsReleasedBy(store: string, prompt: string, now = memoryNow
   return [...new Set(released)];
 }
 
-/** The guard's answer for a call, from a store's index, or undefined when no rule of a class it is applies. */
+/**
+ * The guard's answer for a call, from a store's index and the rules kept for all projects under `root` (D11, A7 §5's
+ * lookup), or undefined when no rule of a class it is applies.
+ */
 export function guardAnswer(
   store: string,
   call: GuardCall,
   permissionMode: string,
   now = memoryNow(),
+  root?: string,
 ): GuardAnswer | undefined {
   const classes = callClasses(call);
   if (!classes.length) return undefined;
-  const rows = readRuleIndex(store);
+  const rows = withUserGlobal(readRuleIndex(store), root ? readUserRules(root) : []);
   if (!rows.length) return undefined;
   const invalid = readInvalidations(store);
   for (const cls of classes) {

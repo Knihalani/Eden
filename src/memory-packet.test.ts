@@ -300,7 +300,9 @@ describe("M8.4 gist + empty cue", () => {
         // A pinned rule with no recorded source is a plain bullet: no "Rule you set" (A6 §2.1).
         expect(ctx).toContain(`- ${RULE}`);
         expect(ctx).not.toMatch(/Rule you set/);
-        expect(ctx).toContain(`- ${gists[0]!.text} (earlier session notes`);
+        // Since P2.4 a gist loses its rule clauses at SessionStart: the rule comes as the pin (A4 §5.2).
+        expect(gists[0]!.text).toContain(` ${RULE}`);
+        expect(ctx).toContain(`- ${gists[0]!.text.replace(` ${RULE}`, "")} (earlier session notes`);
         expect(ctx).not.toMatch(/\[(?:rule|gist|fact|episode|procedure)\b/);
 
         // D18: the keyed rule comes by its class's trigger ("committing"), the other kinds by the lexical path.

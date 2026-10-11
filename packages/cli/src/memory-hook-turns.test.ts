@@ -281,11 +281,13 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
   test("a permission on another object, or a retraction, leaves a rule in place", () => {
     const cases = [
       ["Never delete the main branch.", "You can delete the branch now."],
-      ["Don't push directly to the main branch.", "You can push to the feature branch now."],
+      // SessionStart briefs pins only since P2.4 (D9), so each rule here is explicit.
+      ["Never push directly to the main branch.", "You can push to the feature branch now."],
       ["Never merge PRs without a review.", "You may merge PR 12 now."],
       ["Never install packages globally.", "You can install the types package now."],
       ["Never drop the production table.", "You can run the tests now."],
-      ["Never merge until CI is green.", "We no longer run CI on Fridays."],
+      // "until" makes an intent (D9), never briefed at SessionStart; a precondition keeps a policy (fix 1).
+      ["Never merge before CI is green.", "We no longer run CI on Fridays."],
       ["Never return GET responses without an ETag.", "Use POST instead of GET for this endpoint."],
       ["Always deploy to AWS from the release branch.", "We no longer use the AWS SDK v2."],
       ["Never flush Redis in production.", "We no longer use Redis."],

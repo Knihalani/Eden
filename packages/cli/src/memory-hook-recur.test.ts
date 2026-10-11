@@ -110,7 +110,7 @@ describe("P2.4: a policy said in 2 sessions is a pin (D9)", () => {
     session(a, ["Don't merge PRs yourself."]);
     sleep(a);
     const both = rows(a).find((row) => row.text.includes("fixtures"));
-    expect(both?.rules).toEqual([{ k: "integrate|neg|*", p: true }, { k: "delete|neg|fixtures" }]);
+    expect(both?.rules).toEqual([{ k: "integrate|neg|*", p: true }, { k: "delete|neg|fixture" }]);
     const start = session(a).start;
     expect(start).toContain("merge PRs yourself");
     expect(start).not.toContain("fixtures");
@@ -219,8 +219,9 @@ describe("P2.4: a pin in 2 repos is proposed for all projects (D11)", () => {
 
   test('"yes, everywhere" before any proposal was shown keeps nothing', () => {
     pinIn("a");
-    const b = pinIn("b");
-    session(b, ["yes, everywhere"]);
+    pinIn("b");
+    // Repo C holds no pin, so its SessionStart shows no proposal before the answer.
+    session(repo("c"), ["yes, everywhere"]);
     expect(existsSync(join(process.env.EDEN_MEMORY_DIR!, "_user", "policies.jsonl"))).toBe(false);
   });
 
@@ -307,8 +308,9 @@ describe("P2.4: a rule stated for all projects (D11's phrases)", () => {
     expect(readFileSync(kept, "utf8")).not.toContain("force-push");
   });
 
-  test("an intent or a fact with the phrase stays in its repo", () => {
+  test("an intent or a fact with the phrase stays in its repo, and so does npm's 'globally'", () => {
     session(repo("a"), ["Don't open the PR yet, everywhere.", "We use pnpm everywhere."]);
+    session(repo("a"), ["Never install packages globally."]);
     expect(session(repo("b")).start).toBe("");
   });
 });
