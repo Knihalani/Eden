@@ -88,7 +88,7 @@ function queuedPrompt(attachment: Entry | undefined): string | undefined {
 }
 
 /** No origin (older Claude Code) counts as human; the text checks still apply. */
-function isHuman(origin: unknown): boolean {
+export function isHuman(origin: unknown): boolean {
   const kind = entry(origin)?.kind;
   return kind === undefined || kind === "human";
 }

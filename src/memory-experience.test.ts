@@ -456,7 +456,8 @@ describe("M23.3 fail-open ENOENT + inject pass-through", () => {
     await withMem("eden-m233-inject-", (mem, dir) => {
       mem.observe([{ role: "user", content: "Use sqlite in this project." }]);
       expect(experienceEmpty(dir)).toBe(true);
-      const list = [{ role: "user", content: SQLITE_CHAT }];
+      // A cue that names sqlite without restating the row, which D26's residual would drop (P1.3: bare `use V`).
+      const list = [{ role: "user", content: "What's 2+2? Set up sqlite for the tests." }];
       let out: unknown;
       expect(() => {
         out = mem.inject(list);
