@@ -2,8 +2,9 @@
  * `eden memory remember` (D11's command): statements the user asks Eden to keep, each stored as one row in their own
  * words (`src:user`), in the store of the repo it is said in (D1):
  *
- *   eden memory remember "<text>"
- *   eden memory remember --jsonl -   (stdin: {"text", "kind"?, "cwd"?, "scope"?} per line)   →   {"remembered": N}
+ *   eden memory remember [--global] "<text>"
+ *   eden memory remember [--global] --jsonl -   (stdin: {"text", "kind"?, "cwd"?, "scope"?} per line)
+ *     →   {"remembered": N}
  *
  * A row's repo is its `cwd`'s, else this folder's. A statement of a D9 rule is a rule row, keyed like a typed one;
  * `kind` names any other row's kind. Rows keep no scope yet: the scope catalog is P3.1's, so `scope` is read and
