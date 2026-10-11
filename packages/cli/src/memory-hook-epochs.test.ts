@@ -191,23 +191,39 @@ describe("A4 §4: a fork copies the parent's ledger (D25)", () => {
   const stopSleep = (session: string, last: string) =>
     hook({ hook_event_name: "Stop", last_assistant_message: last, ...as(session) }, "stop-sleep");
 
-  /** The parent's turns: the fact and its cue before the fork point (u2), the rule and its cue after it (u4). */
+  /**
+   * The parent's turns: the fact and its cue before the fork point (u2), the rule and its cue after it (u4). Two
+   * other prompts come between each statement and its cue, so D26's residual (the last 2 typed prompts) does not hold
+   * the statement.
+   */
   function parentTurns(): Line[] {
     const lines = [
       typed("u1", null, "p1", FACT, 1),
       said("a1", "u1", "Noted.", 2),
-      typed("u2", "a1", "p2", FACT_CUE, 3),
+      typed("ux", "a1", "px", "list the open issues", 2),
+      said("ax", "ux", "There are none.", 2),
+      typed("uy", "ax", "py", "check the deploy queue", 2),
+      said("ay", "uy", "It is empty.", 2),
+      typed("u2", "ay", "p2", FACT_CUE, 3),
       said("a2", "u2", "Postgres.", 4),
     ];
     submit(FACT, "p1", as(PARENT));
-    write(PARENT, ...lines.slice(0, 2));
+    write(PARENT, ...lines.slice(0, 6));
     expect(submit(FACT_CUE, "p2", as(PARENT))).toContain("postgres");
-    write(PARENT, ...lines.slice(2));
+    write(PARENT, ...lines.slice(6));
     stopSleep(PARENT, "Postgres.");
     submit(RULE, "p3", as(PARENT));
-    write(PARENT, typed("u3", "a2", "p3", RULE, 5), said("a3", "u3", "Understood.", 6));
+    write(
+      PARENT,
+      typed("u3", "a2", "p3", RULE, 5),
+      said("a3", "u3", "Understood.", 6),
+      typed("uz", "a3", "pz", "list the open issues", 6),
+      said("az", "uz", "There are none.", 6),
+      typed("uw", "az", "pw", "check the deploy queue", 6),
+      said("aw", "uw", "It is empty.", 6),
+    );
     expect(submit(RULE_CUE, "p4", as(PARENT))).toContain("merge PRs yourself");
-    write(PARENT, typed("u4", "a3", "p4", RULE_CUE, 7), said("a4", "u4", "I will leave the merge to you.", 8));
+    write(PARENT, typed("u4", "aw", "p4", RULE_CUE, 7), said("a4", "u4", "I will leave the merge to you.", 8));
     stopSleep(PARENT, "I will leave the merge to you.");
     return lines;
   }
@@ -240,7 +256,7 @@ describe("A4 §4: a fork copies the parent's ledger (D25)", () => {
     write(FORK, ...copied.map((line) => (line.promptId ? { ...line, promptId: "pf1" } : line)));
     write(FORK, typed("uf1", "a2", "pf1", "check the deploy logs", 9), said("af1", "uf1", "The logs are clean.", 10));
     stopSleep(FORK, "The logs are clean.");
-    // The copied assistant lines a1 and a2 were the parent's, which its own delta encoded; af1 is the fork's.
+    // The copied assistant lines (a1 to a2) were the parent's, which its own delta encoded; af1 is the fork's.
     expect(lastEvent("Stop")?.encoded).toBe(1);
     expect(lastEvent("Stop")?.forked_from).toBe(PARENT);
   });

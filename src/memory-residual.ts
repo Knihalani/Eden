@@ -1,9 +1,16 @@
 /**
- * D26's residual filter (A4 §5.1 step 7): a bullet the conversation already states is dropped (R3).
- * - An episode or rule bullet: its content-token Jaccard with one sentence of the residual is ≥ 0.6.
- * - A slot bullet: its value and its subject co-occur in one sentence. Until P3.3's slot keys and aliases, a slot
- *   is a fact row with a slot-shaped value (`legacySlot`), and its subject's words stand for its aliases; any other
- *   row is read as an episode.
+ * D26's residual filter (A4 §5.1 step 7): what the conversation already states is dropped (R3). The same test reads
+ * D27's shadow set (`memory-shadow.ts`), the instruction files in the window.
+ * - An episode or rule: its content-token Jaccard with one sentence of the residual is ≥ 0.6.
+ * - A slot: its value, asserted (not in a question, no negation before it in its clause: "not npm", "no longer use
+ *   postgres"), and its subject co-occur in one sentence, or the sentence uses the value (D7's bare `use V`, "Use
+ *   pnpm, not npm").
+ *   Until P3.3's slot keys, aliases and value classes, a slot is a slot-shaped sentence of a fact or gist that the
+ *   legacy copula reader parses, its subject's words stand for its aliases, and its value names one slot, the row's.
+ * - A legacy row can hold several sentences (a whole prompt, a gist). The residual drops a row whose every sentence
+ *   it states (`isResidualNote`): its texts are the conversation's, whose short sentences ("label:") carry too few
+ *   content words to strip a row's sentence by. The shadow set's files state items one per line, so it drops each
+ *   sentence it states and keeps the rest, as validity drops invalid ones (`unsaidText`).
  *
  * The residual is what the conversation already says: the current prompt, the last 2 typed prompts before it and
  * the assistant text between them, parsed from the complete transcript lines in its last 256 KB. Tool results,
@@ -126,16 +133,25 @@ export function sentencesOf(text: string): string[] {
     .filter(Boolean);
 }
 
-/** The residual's sentences, as content-token sets. */
-export function residualSentences(texts: readonly string[]): Set<string>[] {
-  return texts
-    .flatMap(sentencesOf)
-    .map(contentTokens)
-    .filter((tokens) => tokens.size > 0);
+/**
+ * A sentence the window already holds, from the residual (D26) or the shadow set (D27): its content tokens, and its
+ * lowercased text, which D7's negation and bare `use V` are read from.
+ */
+export interface Said {
+  tokens: Set<string>;
+  lower: string;
 }
 
-function saidIn(tokens: Set<string>, sentences: readonly Set<string>[]): boolean {
-  return sentences.some((sentence) => {
+/** The sentences of texts the window holds, each with its tokens; a sentence with no content word is left out. */
+export function residualSentences(texts: readonly string[]): Said[] {
+  return texts
+    .flatMap(sentencesOf)
+    .map((sentence) => ({ tokens: contentTokens(sentence), lower: sentence.toLowerCase() }))
+    .filter((said) => said.tokens.size > 0);
+}
+
+function saidIn(tokens: Set<string>, sentences: readonly Said[]): boolean {
+  return sentences.some(({ tokens: sentence }) => {
     let shared = 0;
     for (const token of tokens) if (sentence.has(token)) shared++;
     return shared / (tokens.size + sentence.size - shared) >= JACCARD;
@@ -146,29 +162,32 @@ function saidIn(tokens: Set<string>, sentences: readonly Set<string>[]): boolean
  * Whether a bullet's text is one the residual already says: content-token Jaccard ≥ 0.6 with one sentence, or, for
  * a bullet of several sentences, so for each of them (a stored row can hold a whole prompt).
  */
-export function isResidual(text: string, sentences: readonly Set<string>[]): boolean {
+export function isResidual(text: string, sentences: readonly Said[]): boolean {
   const body = stripPacketLabel(String(text ?? "")).body;
   const tokens = contentTokens(body);
   if (!tokens.size) return false;
   if (saidIn(tokens, sentences)) return true;
-  const parts = body
-    .split(SENTENCE_BREAK)
+  const parts = sentencesOf(body)
     .map(contentTokens)
     .filter((part) => part.size > 0);
   return parts.length > 1 && parts.every((part) => saidIn(part, sentences));
 }
 
+/** A slot as a legacy row states it until P3.3's keys: its subject's words and its value. */
+interface LegacySlot {
+  subject: string;
+  value: string;
+}
+
 /**
- * A row read as a slot until P3.3's keys: a fact the legacy copula reader parses whose value is slot-shaped, one or
- * two tokens and not a status word (D7: a value outside a slot's value class is a single capitalized or
- * identifier-shaped token not in the status lexicon). Any other row is read as an episode.
+ * The slot a sentence states through the legacy copula reader: a slot-shaped value, one or two tokens and not a
+ * status word (D7: a value outside a slot's value class is a single capitalized or identifier-shaped token not in the
+ * status lexicon).
  */
-export function legacySlot(note: ProvenanceNote): { subject: string; value: string } | undefined {
-  const body = stripPacketLabel(String(note.text ?? "")).body;
-  if (noteKindToken(note) !== "fact") return undefined;
+function copulaSlot(sentence: string): LegacySlot | undefined {
   let fact: ReturnType<typeof objectAsserted>;
   try {
-    fact = objectAsserted(body);
+    fact = objectAsserted(sentence);
   } catch {}
   const value = fact?.o.trim().replace(/[.!?]+$/, "");
   if (!fact || !value || !/^[\w@./+-]+(?: [\w@./+-]+)?$/.test(value)) return undefined;
@@ -176,14 +195,92 @@ export function legacySlot(note: ProvenanceNote): { subject: string; value: stri
   return { subject: fact.s, value };
 }
 
-/** D26 by the row's kind: the slot rule for a slot (`legacySlot`), Jaccard for everything else. */
-export function isResidualNote(note: ProvenanceNote, sentences: readonly Set<string>[]): boolean {
-  const slot = legacySlot(note);
-  if (!slot) return isResidual(stripPacketLabel(String(note.text ?? "")).body, sentences);
+/**
+ * A row read as a slot until P3.3's keys: a fact whose text the legacy copula reader parses with a slot-shaped value
+ * (`copulaSlot`). Any other row is read as an episode.
+ */
+export function legacySlot(note: ProvenanceNote): LegacySlot | undefined {
+  if (noteKindToken(note) !== "fact") return undefined;
+  return copulaSlot(stripPacketLabel(String(note.text ?? "")).body);
+}
+
+/** Clause breaks within a sentence: D7's `use A, not B` puts B in a clause of its own. */
+const CLAUSE_BREAK = /[,;:()—]|\s-\s/;
+/** A question asserts nothing: it ends with "?" or opens with a question word or an auxiliary. */
+const QUESTION =
+  /\?\s*$|^(?:what|which|who|whom|whose|where|when|why|how|do|does|did|is|are|was|were|should|can|could|would|will|shall)\b/;
+/** Words that, before a value in its clause, say the clause does not assert it (D7: `not`, retractions). */
+const NEGATION =
+  /\b(?:not|no longer|never|don'?t|doesn'?t|isn'?t|aren'?t|instead of|rather than|without|dropp(?:ed|ing))\b/;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Whether a sentence asserts a value: it is not a question, and the value occurs as whole words in a clause with no
+ * negation before it. With `bare`, the clause must use it (D7's bare `use V`, `use A not B`, `use A for B`), which
+ * states V's slot without its subject.
+ */
+function asserts(lower: string, value: string, bare: boolean): boolean {
+  if (QUESTION.test(lower.trim())) return false;
+  const found = new RegExp(`(?<![a-z0-9])${escapeRegExp(value.toLowerCase())}(?![a-z0-9])`);
+  return lower.split(CLAUSE_BREAK).some((clause) => {
+    const at = clause.search(found);
+    if (at < 0) return false;
+    const before = clause.slice(0, at);
+    return !NEGATION.test(before) && (!bare || /\b(?:use|uses|using)\s+(?:the\s+)?$/.test(before));
+  });
+}
+
+/**
+ * D26's slot rule: one sentence holds the slot's value, asserted, and one of its subject's words (until P3.3, a
+ * subject's words stand for its aliases). D7's bare `use V` also states it: until P3.3's value classes, the value is
+ * taken to name one slot, the row's.
+ */
+function statesSlot(slot: LegacySlot, sentences: readonly Said[]): boolean {
   const value = contentTokens(slot.value);
   const subject = contentTokens(slot.subject);
   if (!value.size) return false;
-  return sentences.some(
-    (sentence) => [...value].every((token) => sentence.has(token)) && [...subject].some((t) => sentence.has(t)),
-  );
+  return sentences.some((sentence) => {
+    if (![...value].every((token) => sentence.tokens.has(token))) return false;
+    const named = [...subject].some((token) => sentence.tokens.has(token));
+    return asserts(sentence.lower, slot.value, !named);
+  });
+}
+
+/** Kinds whose sentences can state a slot: facts, and the gists that summarize them. */
+const SLOT_KINDS = new Set(["fact", "gist"]);
+
+/** Whether one sentence of a note is stated: the slot rule for a slot-shaped sentence of a slot kind, else Jaccard. */
+function statedSentence(sentence: string, slotKind: boolean, said: readonly Said[]): boolean {
+  const slot = slotKind ? copulaSlot(sentence) : undefined;
+  if (slot) return statesSlot(slot, said);
+  const tokens = contentTokens(sentence);
+  return tokens.size > 0 && saidIn(tokens, said);
+}
+
+/**
+ * A note's text without what the window already states (D26's residual, D27's shadow set): "" when it states all of
+ * it, the text itself when it states none, else the note's other sentences under its label. A whole body within
+ * Jaccard ≥ 0.6 of one sentence is stated; otherwise sentence by sentence, a fact's or gist's slot-shaped sentences by
+ * the slot rule and the rest by Jaccard. A sentence with no content word goes with the rest.
+ */
+export function unsaidText(note: ProvenanceNote, said: readonly Said[]): string {
+  const text = String(note.text ?? "");
+  if (!said.length) return text;
+  const { label, body } = stripPacketLabel(text);
+  const whole = contentTokens(body);
+  if (!whole.size) return text;
+  if (!copulaSlot(body) && saidIn(whole, said)) return "";
+  const slotKind = SLOT_KINDS.has(noteKindToken(note) ?? "");
+  const sentences = sentencesOf(body);
+  const kept = sentences.filter((sentence) => !statedSentence(sentence, slotKind, said));
+  if (kept.length === sentences.length) return text;
+  return kept.some((sentence) => contentTokens(sentence).size) ? `${label}${kept.join(" ")}` : "";
+}
+
+/** D26: whether the residual states all of a note, read sentence by sentence (`unsaidText`). */
+export function isResidualNote(note: ProvenanceNote, sentences: readonly Said[]): boolean {
+  return !unsaidText(note, sentences);
 }

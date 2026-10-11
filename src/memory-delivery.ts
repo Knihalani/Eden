@@ -3,15 +3,17 @@
  * hook's Submit and the wrap's turn (D29, `memory-wrap.ts`).
  * - **Validity** (step 5): each note without the sentences an invalidation has made invalid.
  * - **The gate** (step 6, A7 §4): an episode the user did not type needs evidence from the cue's parts.
- * - **Novelty** (step 7): what the last turns already say (D26's residual), then what the window was already given.
- *   The second is the caller's: the hook reads its window's ledger, the wrap the packets still in its request.
+ * - **Novelty** (step 7): what the last turns already say (D26's residual) and what the window's instruction files
+ *   state (D27's shadow set, `memory-shadow.ts`, which drops the sentences it states: `unsaidText`), then what the
+ *   window was already given. The last is the caller's: the hook reads its window's ledger, the wrap the packets still
+ *   in its request.
  *
  * The shape and wording (step 8) are `memory-hook-packet.ts`'s.
  */
 import type { MemoryRecord } from "./index";
 import { admitNotes, type CueParts } from "./memory-gate";
 import { noteKindToken } from "./memory-provenance";
-import { isResidualNote, residualSentences } from "./memory-residual";
+import { isResidualNote, residualSentences, unsaidText, type Said } from "./memory-residual";
 import { asksHistory, isForget, validText, type Invalidation } from "./memory-validity";
 
 const INTENTION_TAG = /^(?:intention|intent|rule|constraint|never|always|must|prefer)$/i;
@@ -43,6 +45,8 @@ export interface DeliveryCue {
   parts: CueParts;
   /** D26's residual texts: the prompt, the last 2 typed prompts and the assistant text between them. */
   residual: readonly string[];
+  /** D27's shadow set: the sentences of the instruction files in the window (none for a caller without one). */
+  shadow?: readonly Said[];
   invalid: readonly Invalidation[];
 }
 
@@ -51,7 +55,17 @@ export interface DeliveryDrops {
   validity: number;
   gate: number;
   residual: number;
+  shadow: number;
   refractory: number;
+}
+
+/** The notes with what the window already states left out (`unsaidText`); a note it states in full is dropped. */
+export function unsaidNotes<T extends MemoryRecord>(notes: readonly T[], said: readonly Said[]): T[] {
+  return notes.flatMap((note) => {
+    const text = unsaidText(note, said);
+    if (text === note.text) return [note];
+    return text ? [{ ...note, text }] : [];
+  });
 }
 
 /** Steps 5–7 on the retrieved notes (see the header); `refractory` keeps the notes the window may be given again. */
@@ -63,14 +77,16 @@ export function selectNotes(
   const valid = stillValid(notes, cue.invalid, cue.prompt);
   const admitted = admitNotes(valid, cue.parts);
   const residual = residualSentences(cue.residual);
-  const fresh = admitted.filter((note) => !isResidualNote(note, residual));
+  const said = admitted.filter((note) => !isResidualNote(note, residual));
+  const fresh = unsaidNotes(said, cue.shadow ?? []);
   const novel = refractory(fresh);
   return {
     notes: novel,
     drops: {
       validity: notes.length - valid.length,
       gate: valid.length - admitted.length,
-      residual: admitted.length - fresh.length,
+      residual: admitted.length - said.length,
+      shadow: said.length - fresh.length,
       refractory: fresh.length - novel.length,
     },
   };
