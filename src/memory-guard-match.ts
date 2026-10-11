@@ -58,8 +58,9 @@ function closingParen(command: string, open: number): number {
   return command.length;
 }
 
-/** A subcommand that only asks for help or a dry run carries out nothing. */
+/** A subcommand that only asks for help or a dry run carries out nothing; quoted text is no flag ("--dry-run docs"). */
 const NO_ACTION = /\s--(?:help|dry-run)\b/;
+const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g;
 
 export const CHECKS = GUARDED_CLASSES.map(([cls, guard]) => ({
   cls,
@@ -77,7 +78,9 @@ export function partsOf(call: GuardCall, check: RegExp): string[] {
   const command = commandOf(call);
   return command === undefined
     ? []
-    : subcommandsOf(command).filter((part) => !/^\$/.test(part) && !NO_ACTION.test(part) && check.test(part));
+    : subcommandsOf(command).filter(
+        (part) => !/^\$/.test(part) && !NO_ACTION.test(part.replace(QUOTED, "''")) && check.test(part),
+      );
 }
 
 /** The classes a call is, most severe first. */
