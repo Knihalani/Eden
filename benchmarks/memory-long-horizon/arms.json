@@ -598,7 +598,7 @@
           "fir",
           "policy-on-positives"
         ],
-        "why": "since P2.2 the compiled trigger delivers the keyed policies (`policy-recall` passes), and keyed rule rows leave the lexical path (D18); `fir` counts every packet on a negative and `policy-on-positives` every policy bullet, and the rest come from the lexical path: main's lexical admission, which P4.3's BM25F and tau_repo gate replace (a packet on 5 of the 8 CI negatives, an unkeyed policy such as p05 or p15 on 2 of the 5 non-policy positives)"
+        "why": "accepted by the user (2026-10-11) until P4.3: since P2.2 the compiled trigger delivers the keyed policies (`policy-recall` passes), and keyed rule rows leave the lexical path (D18); `fir` counts every packet on a negative and `policy-on-positives` every policy bullet, and the rest come from the lexical path: main's lexical admission, which P4.3's BM25F and tau_repo gate replace (a packet on 5 of the 8 CI negatives, an unkeyed policy such as p05 or p15 on 2 of the 5 non-policy positives)"
       },
       "off": {
         "state": "green",
