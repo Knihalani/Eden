@@ -18,9 +18,11 @@
  * - **Overflow.** Above 256 entries a fold evicts deliveries of older epochs first, oldest first, then the least
  *   recent episodes.
  * - **cid / ver.** `cid = <repo8>/<kind letter>:<key>`, `repo8` being the first 8 hex characters of the repo key
- *   (D1). Until P2.1 and P3.3 bring keys, a slot (`legacySlot`) is keyed `s:` by its subject, with its value as `ver`,
- *   and a rule (`P:`) or anything else (`E:`) by a hash of its normalized content words, so near-identical text gets
- *   one cid.
+ *   (D1). A rule row with D9 keys (P2.1) is keyed `P:` by a hash of its keys (A7 §5), so two rows stating one rule
+ *   share a cid, and its value tokens come from its keys. Until P3.3 brings slot keys, a slot (`legacySlot`) is keyed
+ *   `s:` by its subject, with its value as `ver`, and a rule without keys (`P:`: one on no action class, or written
+ *   before P2.1) or anything else (`E:`) by a hash of its normalized content words, so near-identical text gets one
+ *   cid.
  * - **Live.** A delivery is still in the window when it is of the current epoch, the transcript has grown by less
  *   than 400 KB (rules) or 1.2 MB (everything else) since `off`, and `att` is not on an abandoned branch: a prompt the
  *   delta encoder found abandoned by a rewind (A4 §3.3, `memory-delta.ts`). A prompt whose line it has not read yet
@@ -54,7 +56,7 @@ import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-p
 import { legacySlot } from "./memory-residual";
 import { contentWords } from "./memory-transcript";
 import { invalidationsIn, subjectWords, type Invalidation } from "./memory-validity";
-import { ruleValueTokens, slotValueTokens, summaryTokens } from "./memory-value-tokens";
+import { keyValueTokens, ruleValueTokens, slotValueTokens, summaryTokens } from "./memory-value-tokens";
 import {
   appendRecords,
   existingLedgers,
@@ -114,6 +116,15 @@ function valueHash(value: string): string {
 /** A note's cid and ver (see the header); `repo` is the repo key (D1), whose first 8 characters prefix the cid. */
 export function ledgerKey(note: ProvenanceNote, repo?: string): LedgerKey {
   const prefix = repo ? `${repo.slice(0, 8)}/` : "";
+  if (note.rules?.length) {
+    const keys = hash(
+      note.rules
+        .map((rule) => rule.k)
+        .sort()
+        .join(" "),
+    );
+    return { cid: `${prefix}P:${keys}`, ver: keys, rule: true, ...hashedTokens(keyValueTokens(note.rules)) };
+  }
   const slot = legacySlot(note);
   if (slot) {
     const sw = subjectWords(slot.subject).map(wordHash);

@@ -3,6 +3,7 @@
  * Relative age + source only. Never cwd / email / session_id / paths.
  */
 import { memoryNow } from "./memory-clock";
+import type { RuleRef } from "./memory-policy";
 
 export const PACKET_KIND = "rule|fact|episode|gist|procedure";
 /** Matches `[fact]`, `[fact · 3h · user]`, `[fact | 3h | user]`, `[procedure · verified]`. */
@@ -23,6 +24,8 @@ export type ProvenanceNote = {
    * the slot entry its delivery renews (`memory-ledger.ts`).
    */
   update?: { was?: string; renews?: { cid: string; ver: string; rule: boolean; sw?: string[] } };
+  /** D9: the rules a rule row states, by key (`memory-policy.ts`). */
+  rules?: readonly RuleRef[];
 };
 
 /** Times are epoch ms (~1.7e12); a smaller number is a list serial a store from before P0.3 kept, not a time. */

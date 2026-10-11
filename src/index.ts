@@ -12,7 +12,16 @@ import { routeMemory } from "./memory-router";
 import { memoryConsent } from "./memory-consent";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
 import { type MemoryLaneKind } from "./memory-lanes";
-import type { RuleRef } from "./memory-policy";
+import {
+  INTENT_TTL_MS,
+  oppositeKey,
+  revokedKeys,
+  ruleRefs,
+  rulesIn,
+  withoutExcludedWording,
+  type Rule,
+  type RuleRef,
+} from "./memory-policy";
 import { isIclExemplar, objectAsserted, SemanticStore } from "./semantic-store";
 import { withoutInstructions, type TextSource } from "./memory-authority";
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
@@ -154,7 +163,8 @@ export function superseded(r: Pick<MemoryRecord, "invalidAt" | "invalidBy">): bo
   return typeof r.invalidAt === "number" || typeof r.invalidBy === "string";
 }
 
-function isLiveRow(r: MemoryRecord, now = memoryNow()): boolean {
+/** Whether a row is in force: not superseded, and not past its `valid_until` (an intent's 7 days, D9). */
+export function isLiveRow(r: MemoryRecord, now = memoryNow()): boolean {
   return !superseded(r) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
 }
 
@@ -511,13 +521,20 @@ function extractDurable(blob: string): string[] {
   return out;
 }
 
-/** "remember that …", "always …": a statement that pins itself, unless it says not to remember. */
-function pinsItself(text: string): boolean {
-  return (
-    !/\b(?:don'?t|do not|never)\s+remember\b/i.test(text) &&
-    (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(text) || /\balways\s+\S/i.test(text))
-  );
+/**
+ * A statement that pins itself, unless it says not to remember: "remember that …", or D9's explicit policy (`never`
+ * or `always` on an action class). An intent never pins (D9). A text with no rule on an action class keeps the legacy
+ * reading, where any "always …" pins.
+ */
+function pinsItself(text: string, rules: readonly Rule[] = rulesIn(text)): boolean {
+  if (/\b(?:don'?t|do not|never)\s+remember\b/i.test(text)) return false;
+  if (rules.length && rules.every((rule) => rule.kind === "intent")) return false;
+  if (/\b(?:please\s+)?remember(?:\s+that)?\s+\S/i.test(text)) return true;
+  return rules.length ? rules.some((rule) => rule.kind === "policy" && rule.explicit) : /\balways\s+\S/i.test(text);
 }
+
+/** The legacy store's rule words, for a rule on no action class ("always explain plainly"). */
+const LEGACY_RULE = /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i;
 
 const TEXT_SOURCES = new Set<string>(["user", "paste", "tool", "agent"]);
 
@@ -980,7 +997,10 @@ export class AgentMemory {
       return rec;
     }
     const untyped = isUntyped(rec);
-    const pin = !untyped && (opts.pin === true || pinsItself(rec.text));
+    // D9: text the user did not type states no rule (A4 §3.0), and only a rule row carries its rules' keys.
+    const stated = untyped ? [] : rulesIn(rec.text);
+    const rules = rec.kind === "constraint" ? stated : [];
+    const pin = !untyped && (opts.pin === true || pinsItself(rec.text, stated));
     if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
     rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => {
       if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) return false;
@@ -992,6 +1012,11 @@ export class AgentMemory {
       const until = parseRuleTime(rec.text)?.until;
       if (typeof until === "number") rec.validUntil = until;
     } catch {}
+    if (rules.length) {
+      rec.rules = ruleRefs(rules);
+      if (rules.every((rule) => rule.kind === "intent"))
+        rec.validUntil = Math.min(rec.validUntil ?? Infinity, rec.at + INTENT_TTL_MS);
+    }
     try {
       const fact = untyped ? undefined : objectAsserted(rec.text);
       if (fact && !STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, rec.at);
@@ -1002,12 +1027,34 @@ export class AgentMemory {
     try {
       this.invalidateSameCopula(rec);
     } catch {}
+    try {
+      this.supersedeRules(rec);
+    } catch {}
     this.compiled.push(c);
     this.knownIds.add(rec.id);
     this.unsaved.add(rec.id);
     this.post = null;
     this.noteSeen(rec.text);
     return (this.flush(true), rec);
+  }
+
+  /**
+   * L8 (A4 §3.1): a typed statement supersedes an older rule row only by stating a policy of the opposite polarity on
+   * its key, or by revoking it ("you can merge PRs yourself now"), and only when it counters every rule the row
+   * states. An intent supersedes no policy: "don't squash yet" leaves "always squash" standing.
+   */
+  private supersedeRules(incoming: MemoryRecord): void {
+    if (isUntyped(incoming)) return;
+    const opposed = (incoming.rules ?? []).filter((rule) => !rule.q).map((rule) => oppositeKey(rule.k));
+    const countered = new Set([...opposed, ...revokedKeys(incoming.text)]);
+    if (!countered.size) return;
+    for (const c of this.compiled) {
+      const row = c.rec;
+      if (row.id === incoming.id || superseded(row) || isUntyped(row) || !row.rules?.length) continue;
+      if ((row.at ?? 0) > incoming.at || !row.rules.every((rule) => countered.has(rule.k))) continue;
+      row.invalidBy = incoming.id;
+      this.changed.add(row.id);
+    }
   }
 
   /**
@@ -1188,14 +1235,15 @@ export class AgentMemory {
           const learnAgain = !opts.reread && this.restated(text, lastTypedHere);
           if (this.seenLower.has(text.toLowerCase()) && !learnAgain) continue;
           // A4 §3.0: text the user did not type is an episode, never a fact, a rule or a pin.
-          const pin = !it.untyped && pinsItself(text),
-            asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text);
+          const asQuestion = /^\s*(?:what|which|who|where|when|why|how)\b/i.test(text),
+            rules = it.untyped || asQuestion ? [] : rulesIn(text),
+            pin = !it.untyped && pinsItself(text, rules);
           let kind: MemoryKind =
             it.untyped || asQuestion
               ? "episode"
-              : pin
+              : pin || rules.length
                 ? "constraint"
-                : /\b(prefer|never |always |don'?t |do not |must |from now on)\b/i.test(text)
+                : LEGACY_RULE.test(withoutExcludedWording(text))
                   ? "constraint"
                   : new RegExp(
                         String.raw`\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|` +

@@ -30,7 +30,7 @@ describe("D9: an imperative on an action class, keyed (class, polarity, object)"
   test("the class whose word comes first in the clause; a tie goes to the more specific class", () => {
     expect(read("don't touch main until the release is out")).toEqual(["intent:branch|neg|main q=until"]);
     expect(read("never drop tables in the prod database")).toEqual(["policy:destructive-db|neg|table"]);
-    expect(read("please never git push --force on shared branches")).toEqual(["policy:history-rewrite|neg|*"]);
+    expect(read("please never git push --force on shared branches")).toEqual(["policy:history-rewrite|neg|shared"]);
     expect(read("always ask before force-pushing")).toEqual(["policy:history-rewrite|neg|*"]);
     expect(read("don't stash my changes, commit them to a wip branch")).toEqual(["policy:stash|neg|change"]);
   });
@@ -94,7 +94,7 @@ describe("D9 fix 3 and 4: objects", () => {
   test("a class's default object, and words that name none, key as *", () => {
     for (const text of ["never merge PRs", "don't merge it yourself", "don't merge anything, I do the merging"])
       expect(read(text)).toEqual(["policy:integrate|neg|*"]);
-    expect(read("never rebase shared branches")).toEqual(["policy:history-rewrite|neg|*"]);
+    expect(read("never rebase branches")).toEqual(["policy:history-rewrite|neg|*"]);
     expect(read("don't install packages without asking me first")).toEqual(["policy:dependency|neg|*"]);
     expect(read("don't deploy to production")).toEqual(["policy:deploy|neg|*"]);
     expect(read("never open pull requests on your own")).toEqual(["policy:review|neg|*"]);
@@ -103,6 +103,8 @@ describe("D9 fix 3 and 4: objects", () => {
   test("another object keeps its own key", () => {
     expect(read("never push to main")).toEqual(["policy:push-upstream|neg|main"]);
     expect(read("never push to master")).toEqual(["policy:push-upstream|neg|main"]);
+    expect(read("don't push directly to the main branch")).toEqual(["policy:push-upstream|neg|main"]);
+    expect(read("never rebase shared branches")).toEqual(["policy:history-rewrite|neg|shared"]);
     expect(read("don't delete the fixtures")).toEqual(["policy:delete|neg|fixture"]);
     expect(read("don't remove the old API")).toEqual(["policy:delete|neg|old-api"]);
     expect(read("never delete migrations")).toEqual(["policy:delete|neg|migration"]);
