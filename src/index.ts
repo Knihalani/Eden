@@ -1389,12 +1389,6 @@ export class AgentMemory {
   }
 
   /**
-   * A statement whose text only superseded rows hold, said again: only a later typed statement re-learns a value
-   * (A4 §3.1, D12). A batch can hold old statements too, so a restatement must be the last statement the user typed
-   * about its subject in the batch; the assistant's or a tool's echo never is, and neither is anything in a batch the
-   * caller marks a re-read (`observe`).
-   */
-  /**
    * D9's recurrence of a rule typed again word for word, which the store keeps as one row: each row stating it records
    * the session that said it again (`eps`), so sleep counts both sessions (`memory-pins.ts`). A transcript line read
    * again (a re-read, or a fork's copy of its parent's line, which keeps its uuid) is no new statement.
@@ -1403,15 +1397,23 @@ export class AgentMemory {
     const ep = this.episode;
     const lower = text.toLowerCase();
     if (!ep) return;
+    let noted = false;
     for (const { rec: row } of this.compiled) {
       if (!row.rules?.length || row.text.toLowerCase() !== lower || !row.ep || row.ep === ep) continue;
       if (row.eps?.includes(ep) || superseded(row) || (srcUuid && row.srcUuid === srcUuid)) continue;
       row.eps = [...(row.eps ?? []), ep].slice(-RECURRING_SESSIONS);
       this.changed.add(row.id);
-      this.flush(true);
+      noted = true;
     }
+    if (noted) this.flush(true);
   }
 
+  /**
+   * A statement whose text only superseded rows hold, said again: only a later typed statement re-learns a value
+   * (A4 §3.1, D12). A batch can hold old statements too, so a restatement must be the last statement the user typed
+   * about its subject in the batch; the assistant's or a tool's echo never is, and neither is anything in a batch the
+   * caller marks a re-read (`observe`).
+   */
   private restated(text: string, lastTypedHere: boolean): boolean {
     if (!lastTypedHere) return false;
     const lower = text.toLowerCase();

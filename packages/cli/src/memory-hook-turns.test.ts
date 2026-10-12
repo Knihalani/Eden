@@ -304,6 +304,14 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
     }
   });
 
+  test("a retraction on another subject leaves an intent in place, at the Submit trigger", () => {
+    // An intent is never briefed at SessionStart (P2.4: pins only), so its class's trigger reads it.
+    submit("Never merge until CI is green.", { prompt_id: "p1", session_id: "s-intent" });
+    submit("We no longer run CI on Fridays.", { prompt_id: "p2", session_id: "s-intent" });
+    const packet = submit("the PR is approved, land it", { prompt_id: "p3", session_id: "s-later" }) ?? "";
+    expect(packet).toContain("Never merge until CI is green");
+  });
+
   test("the validity log keeps no secret a stored row would not", () => {
     submit("You can push with ghp_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2Y now. We no longer use AKIAZZZZZZZZZZZZZZZZ.", {
       prompt_id: "p1",
