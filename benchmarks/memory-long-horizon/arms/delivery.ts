@@ -8,7 +8,21 @@ import { readFileSync } from "node:fs";
 import type { AgentRun } from "../harness/session";
 import { filler } from "../harness/shape";
 import { bulletContent } from "../harness/statements";
-import { AUTH, CACHE, DB, id, monorepo, NO_MERGE, NODE, PKG, rule, set, TEST, VITEST_ENV } from "./fixtures/world";
+import {
+  AUTH,
+  CACHE,
+  DB,
+  id,
+  IN_FORCE,
+  monorepo,
+  NO_MERGE,
+  NODE,
+  PKG,
+  rule,
+  set,
+  TEST,
+  VITEST_ENV,
+} from "./fixtures/world";
 import {
   BLANK_SUMMARY,
   bulletsAt,
@@ -170,6 +184,7 @@ const subagent: Arm = {
     const facts = await Driver.start(world, spec);
     await facts.say("In apps/web the auth provider is Clerk.", [set(AUTH, "apps/web", "Clerk")], "apps/web");
     await facts.say("packages/cli has no auth.", [set(AUTH, "packages/cli", "none")], "packages/cli");
+    await facts.say("Don't merge PRs yourself.", [rule(NO_MERGE, true)]);
     await facts.end();
     world.advance(DAY_MS);
     const parent = await Driver.start(world, spec);
@@ -211,6 +226,25 @@ const subagent: Arm = {
       },
     });
     for (const explore of explores) if (explore.run) await parent.notify(explore.run);
+    // The gate's policy part (ROADMAP P2.5, A4 §5.3): policies whose classes fit the agent type or the task.
+    const policy = { needs: [id(NO_MERGE, "")] };
+    let reviewer: Turn | undefined;
+    let merger: Turn | undefined;
+    await parent.turn("have someone look over the cli diff", {
+      cue: { scope: "packages/cli" },
+      within: async (driver) => {
+        reviewer = await driver.subagent({
+          agentType: "code-reviewer",
+          task: "look over the diff in packages/cli/src/index.ts",
+          cue: policy,
+        });
+        merger = await driver.subagent({
+          agentType: "general-purpose",
+          task: "merge the dependabot PR once CI is green",
+          cue: policy,
+        });
+      },
+    });
     await parent.end();
     const states_ = (turn: Turn | undefined, scope: string, value: string) =>
       turn !== undefined && bulletsAt(world, spec, turn.seq).some((bullet) => states(bullet, AUTH, value, scope));
@@ -223,6 +257,9 @@ const subagent: Arm = {
     const forkBullets = fork ? bulletsAt(world, spec, fork.seq) : [];
     const repeated = forkBullets.filter((bullet) => bullet.redundant);
     const ownStale = bulletsAt(world, spec, own.seq).filter((bullet) => bullet.stale);
+    const packetOf = (turn: Turn | undefined) => (turn ? bulletsAt(world, spec, turn.seq) : []);
+    const noMerge = (turn: Turn | undefined) => packetOf(turn).some((bullet) => states(bullet, NO_MERGE, IN_FORCE, ""));
+    const classless = [task, ...explores.map((explore) => explore.turn)];
     return [
       check(
         "subagent-packet",
@@ -240,6 +277,13 @@ const subagent: Arm = {
         explores.map((explore) => quote(bulletsAt(world, spec, explore.turn.seq))).join(" | "),
       ),
       check("fork-no-repeat", repeated.length === 0, `the fork's packet repeats the parent's: ${quote(repeated)}`),
+      check("policy-by-type", noMerge(reviewer), `the code-reviewer's packet: ${quote(packetOf(reviewer))}`),
+      check("policy-by-task", noMerge(merger), `the merge task's packet: ${quote(packetOf(merger))}`),
+      check(
+        "policy-by-class-only",
+        classless.every((turn) => !noMerge(turn)),
+        `packets of subagents whose type and task name no class: ${classless.map((t) => quote(packetOf(t))).join(" | ")}`,
+      ),
     ];
   },
 };
