@@ -89,6 +89,11 @@ export function forgetScopeCli(args: readonly string[]): number {
     return 1;
   }
   const store = repoStoreDir(memoryRoot(), here.key);
+  // EXECUTION §9: a store in a format this code does not know is never read or written.
+  if (!readableStore(store)) {
+    console.log("forget: this repo's store is in a format this version does not know; nothing changed");
+    return 1;
+  }
   const scope = normalizedFolder(named);
   const scopes = new Set([...(freshCatalog(cwd, here.key)?.scopes ?? [""]), ...keyedRowScopes(store)]);
   if (!scopes.has(scope)) {
