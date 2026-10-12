@@ -152,6 +152,11 @@ describe("the catalog at the hook", () => {
     ]);
   });
 
+  test("a batch before the repo has a catalog builds none: the turn's end does", () => {
+    batch([{ tool: "Write", path: join(top, "packages/a/package.json") }]);
+    expect(existsSync(catalogPath())).toBe(false);
+  });
+
   test("a batch that writes no manifest, reads one, or writes another repo's, rebuilds nothing", () => {
     stop();
     const before = readFileSync(catalogPath(), "utf8");

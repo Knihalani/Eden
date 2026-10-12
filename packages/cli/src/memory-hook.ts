@@ -645,8 +645,8 @@ const BATCH_LIST_TIMEOUT_MS = 1_000;
 
 /**
  * A4 §2: the batch's writes to this repo rebuild its scope catalog when they can change it: a manifest, workspace or
- * build-system file, the `.eden/scopes` override, a file in a directory that held only its manifest, or any file
- * while the repo has no catalog. Another repo's files, and every other write, list nothing.
+ * build-system file, the `.eden/scopes` override, or a file in a directory that held only its manifest. Another
+ * repo's files, every other write, and a repo with no catalog yet (the turn's end builds it) list nothing.
  */
 function rebuildAfterWrites(ctx: HookContext): void {
   const cwd = str(ctx.r.cwd) ?? ctx.top;

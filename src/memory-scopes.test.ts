@@ -367,8 +367,8 @@ describe("rebuild triggers (A4 §2: after a Write/Edit of a manifest or workspac
       expect([rel, rebuildsCatalog(catalog, [rel])]).toEqual([rel, true]);
   });
 
-  test("any other file does not, and no catalog yet always does", () => {
+  test("any other file does not, and with no catalog yet nothing does (the turn's end builds it)", () => {
     expect(rebuildsCatalog(catalog, ["packages/a/i.js", "packages/newer/i.js", "README.md"])).toBe(false);
-    expect(rebuildsCatalog(undefined, ["README.md"])).toBe(true);
+    expect(rebuildsCatalog(undefined, ["package.json"])).toBe(false);
   });
 });
