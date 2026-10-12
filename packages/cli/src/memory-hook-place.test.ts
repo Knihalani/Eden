@@ -1,0 +1,310 @@
+/**
+ * P3.2 at the hook (A4 §2; D2, D4): a window's place from what its prompts named and its batches touched, the scope
+ * each encoded row is stored at, what a Submit or a SubagentStart may deliver from it, the two-scope bullet and its
+ * ledger keys, a repo's first catalog at SessionStart, and P3.1's rebuild follow-ups. X7: `off` answers nothing.
+ */
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { storeRows } from "../../../src/index";
+import { readLedger } from "../../../src/memory-ledger";
+import { storeFor } from "../../../src/memory-repo";
+import { readCatalog } from "../../../src/memory-scopes";
+import { memoryHookResponse } from "./memory-hook";
+
+const NOW = Date.parse("2026-10-12T12:00:00Z");
+const CLERK = "In apps/web the auth provider is Clerk.";
+const CLI_AUTH = "packages/cli has no auth.";
+
+let dir = "";
+let top = "";
+const ENV_KEYS = ["EDEN_MEMORY_DIR", "EDEN_HOME", "EDEN_MEMORY", "EDEN_NOW", "EDEN_FLAG_DELIVER_SUBAGENT"] as const;
+const FLAG_SUBMIT = "EDEN_FLAG_DELIVER_SUBMIT";
+const prev = Object.fromEntries([...ENV_KEYS, FLAG_SUBMIT].map((key) => [key, process.env[key]]));
+
+function git(cwd: string, ...args: string[]): void {
+  const run = Bun.spawnSync(["git", ...args], {
+    cwd,
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: dir, GIT_CONFIG_NOSYSTEM: "1" },
+    stderr: "pipe",
+  });
+  if (run.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${run.stderr.toString()}`);
+}
+
+function put(base: string, files: Record<string, string>): void {
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(base, path)), { recursive: true });
+    writeFileSync(join(base, path), text);
+  }
+}
+
+const commit = (at: string) => {
+  git(at, "add", "-A");
+  git(at, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "c");
+};
+
+beforeEach(() => {
+  dir = realpathSync.native(mkdtempSync(join(tmpdir(), "eden-hook-place-")));
+  top = join(dir, "repo");
+  put(top, {
+    "package.json": JSON.stringify({ name: "demo", workspaces: ["apps/*", "packages/*"] }),
+    "apps/web/package.json": JSON.stringify({ name: "web" }),
+    "apps/web/app/login.ts": "export function login() {}\n",
+    "packages/cli/package.json": JSON.stringify({ name: "cli" }),
+    "packages/cli/src/index.ts": "export function main() {}\n",
+    "packages/cli/src/login.ts": "export function login() {}\n",
+  });
+  git(top, "init", "-q", "-b", "main");
+  commit(top);
+  process.env.EDEN_MEMORY_DIR = join(dir, "memory");
+  process.env.EDEN_HOME = join(dir, "home");
+  process.env.EDEN_NOW = String(NOW);
+  process.env.EDEN_FLAG_DELIVER_SUBAGENT = "on";
+  delete process.env.EDEN_MEMORY;
+  delete process.env[FLAG_SUBMIT];
+});
+
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+  for (const [key, value] of Object.entries(prev)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
+const store = () => storeFor(process.env.EDEN_MEMORY_DIR!, top);
+const win = (session: string) => join(process.env.EDEN_MEMORY_DIR!, "windows", session);
+const ctxLog = (session: string) =>
+  readFileSync(join(win(session), "ctx.log"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+const rows = () => storeRows(join(store(), "memories.jsonl"));
+const scopeOf = (text: string) => rows().find((row) => row.text.startsWith(text))?.scope;
+
+function tick(ms = 60_000): void {
+  process.env.EDEN_NOW = String(Number(process.env.EDEN_NOW) + ms);
+}
+
+function hook(event: string, session: string, fields: Record<string, unknown> = {}): Record<string, unknown> | null {
+  const out = memoryHookResponse({ hook_event_name: event, session_id: session, cwd: top, ...fields });
+  tick(1_000);
+  return out;
+}
+
+const packetOf = (out: Record<string, unknown> | null) =>
+  (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
+
+function submit(session: string, prompt: string, id: string): string {
+  return packetOf(hook("UserPromptSubmit", session, { prompt, prompt_id: id }));
+}
+
+function read(session: string, id: string, ...files: string[]): void {
+  hook("PostToolBatch", session, {
+    prompt_id: id,
+    tool_calls: files.map((file, n) => ({
+      tool_name: "Read",
+      tool_use_id: `${id}-${n}`,
+      tool_input: { file_path: join(top, file) },
+      tool_response: "1\t//",
+    })),
+  });
+}
+
+/** An earlier session states each folder's auth, naming its folder (A4 §2: the prompt's places). */
+function plant(): void {
+  hook("SessionStart", "s-facts", { source: "startup" });
+  submit("s-facts", CLERK, "f1");
+  tick();
+  submit("s-facts", CLI_AUTH, "f2");
+  tick(86_400_000);
+}
+
+/** The wide events of an event, from the day files (`hook.log.d`). */
+function events(name: string): Record<string, unknown>[] {
+  const days = join(process.env.EDEN_MEMORY_DIR!, "hook.log.d");
+  return readdirSync(days)
+    .filter((file) => file.endsWith(".jsonl"))
+    .sort()
+    .flatMap((file) => readFileSync(join(days, file), "utf8").split("\n").filter(Boolean))
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((event) => event.ev === name);
+}
+
+describe("a repo's place at the hook", () => {
+  test("a repo's first SessionStart builds its catalog, so its first prompt's row is stored where it names", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    expect(readCatalog(store())?.scopes).toEqual(["", "apps/web", "packages/cli"]);
+    expect(events("SessionStart")[0]!.catalog).toBe(3);
+    submit("s1", CLERK, "p1");
+    expect(scopeOf("In apps/web the auth provider is Clerk")).toBe("apps/web");
+    // X11: the window keeps the prompt's places, never its text.
+    expect(ctxLog("s1")).toEqual([{ k: "prompt", paths: ["apps/web"], prompt_id: "p1" }]);
+  });
+
+  test("a prompt naming no place is stored at the working scope: the read set its window's turns make", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    submit("s1", "look at the login flow", "p1");
+    read("s1", "p1", "packages/cli/src/login.ts");
+    submit("s1", "The login flow should retry twice before it gives up.", "p2");
+    expect(scopeOf("The login flow should retry twice")).toBe("packages/cli");
+    expect(scopeOf("look at the login flow")).toBe("");
+  });
+
+  test("Submit delivers no row of a sibling folder", () => {
+    plant();
+    hook("SessionStart", "s2", { source: "startup" });
+    const cli = submit("s2", "which auth does packages/cli/src/index.ts use?", "p1");
+    expect(cli).toContain("has no auth");
+    expect(cli).not.toContain("Clerk");
+    const web = submit("s2", "which auth provider does apps/web/app/login.ts use?", "p2");
+    expect(web).toContain("Clerk");
+    expect(web).not.toContain("no auth");
+    expect(events("UserPromptSubmit").at(-1)!.read).toBe(1);
+  });
+
+  test("a turn on both folders: one bullet for the slot, and the ledger records both rows", () => {
+    plant();
+    hook("SessionStart", "s3", { source: "startup" });
+    submit("s3", "look at both login flows", "p1");
+    read("s3", "p1", "apps/web/app/login.ts", "packages/cli/src/login.ts");
+    const packet = submit("s3", "make apps/web/app/login.ts and packages/cli/src/login.ts behave the same", "p2");
+    expect(packet).toContain("- auth provider — apps/web: Clerk · packages/cli: has no auth (you said, 1 day ago)");
+    const event = events("UserPromptSubmit").at(-1)!;
+    expect(event.read).toBe(2);
+    const cids = event.cids as string[];
+    expect(cids.some((cid) => cid.includes("/s:apps/web|"))).toBe(true);
+    expect(cids).toHaveLength(2);
+    const delivered = [...readLedger(win("s3")).delivered.keys()];
+    expect(delivered).toEqual(expect.arrayContaining(cids));
+    // Given once: the next cue on both folders finds both rows refractory.
+    expect(submit("s3", "again: make apps/web/app/login.ts and packages/cli/src/login.ts match", "p3")).not.toContain(
+      "Clerk",
+    );
+  });
+});
+
+describe("what a batch records of its place", () => {
+  test("Bash paths apart from tool paths (D4: Bash 1, a tool path 2 or 1)", () => {
+    hook("PostToolBatch", "s1", {
+      prompt_id: "p1",
+      tool_calls: [
+        { tool_name: "Read", tool_use_id: "t1", tool_input: { file_path: join(top, "apps/web/app/login.ts") } },
+        { tool_name: "Bash", tool_use_id: "t2", tool_input: { command: "cd packages/cli && bun test src/index.ts" } },
+      ],
+    });
+    expect(ctxLog("s1")).toEqual([
+      {
+        k: "batch",
+        prompt_id: "p1",
+        paths: [join(top, "apps/web/app/login.ts")],
+        bash: ["packages/cli", "packages/cli/src/index.ts"],
+        exit: [0],
+        sig: [],
+      },
+    ]);
+  });
+
+  test("a subagent's batch is its own, and its session's subagent paths (D2)", () => {
+    hook("PostToolBatch", "s1", {
+      agent_id: "a1",
+      agent_type: "Explore",
+      prompt_id: "p1",
+      tool_calls: [{ tool_name: "Read", tool_use_id: "t1", tool_input: { file_path: join(top, "apps/web/x.ts") } }],
+    });
+    expect(ctxLog("s1--a1")[0]).toMatchObject({ k: "batch", paths: [join(top, "apps/web/x.ts")] });
+    expect(ctxLog("s1")).toEqual([{ k: "sub", paths: [join(top, "apps/web/x.ts")] }]);
+  });
+});
+
+describe("SubagentStart's place (A4 §5.3)", () => {
+  test("with no launch record, the parent's read set: its folder's rows, never a sibling's", () => {
+    plant();
+    hook("SessionStart", "s4", { source: "startup" });
+    submit("s4", "refactor packages/cli/src/index.ts", "p1");
+    const packet = packetOf(hook("SubagentStart", "s4", { agent_id: "a1", agent_type: "general-purpose" }));
+    expect(packet).toContain("has no auth");
+    expect(packet).not.toContain("Clerk");
+    const scope = JSON.parse(readFileSync(join(win("s4--a1"), "scope.json"), "utf8"));
+    expect(scope).toMatchObject({ from: "parent", scopes: ["packages/cli"] });
+  });
+});
+
+describe("P3.1's rebuild follow-ups", () => {
+  function write(file: string, cwd = top): void {
+    hook("PostToolBatch", "s1", {
+      cwd,
+      prompt_id: "p1",
+      tool_calls: [{ tool_name: "Write", tool_use_id: `w-${file}`, tool_input: { file_path: join(cwd, file) } }],
+    });
+  }
+  const rebuilt = () => events("PostToolBatch").filter((event) => event.catalog !== undefined).length;
+
+  test("a write into a waiting folder rebuilds only when the file is there and git lists it", () => {
+    put(top, { ".gitignore": "dist/\n", "packages/new/package.json": JSON.stringify({ name: "new" }) });
+    commit(top);
+    hook("SessionStart", "s1", { source: "startup" });
+    expect(readCatalog(store())?.waiting).toEqual(["packages/new"]);
+    write("packages/new/index.ts");
+    put(top, { "packages/new/dist/out.js": "" });
+    write("packages/new/dist/out.js");
+    expect(rebuilt()).toBe(0);
+    put(top, { "packages/new/index.ts": "" });
+    write("packages/new/index.ts");
+    expect(rebuilt()).toBe(1);
+    expect(readCatalog(store())?.scopes).toContain("packages/new");
+  });
+
+  test("a manifest written in a linked worktree lists nothing: the catalog lists the main checkout", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    const linked = join(dir, "linked");
+    git(top, "worktree", "add", "-q", linked);
+    put(linked, { "packages/other/package.json": JSON.stringify({ name: "other" }) });
+    write("packages/other/package.json", linked);
+    expect(rebuilt()).toBe(0);
+    write("packages/cli/package.json");
+    expect(rebuilt()).toBe(1);
+  });
+});
+
+describe("X7 and fail-open", () => {
+  test("`off`: the Submit answers nothing and writes no ledger; the prompt's places are still recorded", () => {
+    plant();
+    process.env[FLAG_SUBMIT] = "off";
+    hook("SessionStart", "s5", { source: "startup" });
+    expect(submit("s5", "which auth does packages/cli/src/index.ts use?", "p1")).toBe("");
+    expect(existsSync(join(win("s5"), "delivery.log"))).toBe(false);
+    expect(ctxLog("s5")).toEqual([{ k: "prompt", paths: ["packages/cli/src/index.ts"], prompt_id: "p1" }]);
+  });
+
+  test("an unreadable ctx.log: the prompt's own places still place the Submit", () => {
+    plant();
+    hook("SessionStart", "s6", { source: "startup" });
+    mkdirSync(join(win("s6"), "ctx.log"), { recursive: true });
+    const packet = submit("s6", "which auth does packages/cli/src/index.ts use?", "p1");
+    expect(packet).toContain("has no auth");
+    expect(packet).not.toContain("Clerk");
+    expect(events("UserPromptSubmit").at(-1)!.err).toBeUndefined();
+  });
+
+  test("no readable catalog: the place is unknown, so every row is read and new rows are stored unplaced", () => {
+    plant();
+    // A session's start would build it again: this Submit runs before any rebuild.
+    writeFileSync(join(store(), "scopes.json"), "{");
+    const packet = submit("s7", "which auth does packages/cli/src/index.ts use? apps/web/app/login.ts too", "p1");
+    expect(packet).toContain("has no auth");
+    expect(packet).toContain("Clerk");
+    expect(events("UserPromptSubmit").at(-1)!.read).toBeUndefined();
+    expect(scopeOf("which auth does packages/cli")).toBeUndefined();
+  });
+});
