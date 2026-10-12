@@ -103,12 +103,13 @@ describe("every registered entry point fails open (EXECUTION §5)", () => {
         "PostCompact",
         "PostToolBatch",
         "PreCompact",
-        // The policy guard (P2.3): 16 Bash handlers and the MCP merge matcher.
-        ...Array<string>(17).fill("PreToolUse"),
+        // The policy guard (P2.3): 16 Bash handlers and the MCP merge matcher; the Agent launch record (P2.5).
+        ...Array<string>(18).fill("PreToolUse"),
         "SessionEnd",
         "SessionStart",
         "Stop",
         "Stop",
+        "SubagentStart",
         "SubagentStop",
         "UserPromptSubmit",
       ].sort(),

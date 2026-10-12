@@ -17,6 +17,7 @@ import {
   foldWindow,
   holdSummarized,
   humanTurns,
+  inheritLedger,
   ledgerKey,
   liveDeliveries,
   novelNotes,
@@ -31,14 +32,39 @@ import { recentConversation, sentencesOf, type RecentConversation } from "../../
 import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
-import { recordInstructions, shadowSentences, startShadowEpoch, type ShadowPlace } from "../../../src/memory-shadow";
+import {
+  recordInstructions,
+  shadowSentences,
+  startShadowEpoch,
+  type ShadowKind,
+  type ShadowPlace,
+} from "../../../src/memory-shadow";
+import { childTranscript } from "../../../src/memory-session";
+import {
+  agentClasses,
+  claimSpawn,
+  parentPaths,
+  storedScope,
+  storeScope,
+  type ChildScope,
+} from "../../../src/memory-spawn";
+import {
+  declineCounts,
+  isRevocation,
+  markRevocations,
+  recordDeclines,
+  revocationNotes,
+  shownRevocations,
+} from "../../../src/memory-revoke";
 import { firedClasses } from "../../../src/memory-triggers";
 import { pinnedRules, pinnedText, policyRecurrences } from "../../../src/memory-pins";
 import { ruleIdentity, withoutRules } from "../../../src/memory-policy";
+import type { IndexedRow } from "../../../src/memory-rule-index";
 import {
   dropUserRules,
   keepForAllProjects,
   keepShownProposals,
+  keptNote,
   markProposalShown,
   noteNextSession,
   overturnUserRules,
@@ -96,6 +122,7 @@ export { memoryRoot };
 const MEMORY_EVENTS = new Set([
   "UserPromptSubmit",
   "SessionStart",
+  "SubagentStart",
   "PreCompact",
   "PostCompact",
   "Stop",
@@ -125,7 +152,10 @@ function flattenContent(content: unknown): string {
   return field == null ? "" : typeof field === "object" ? flattenContent(field) : String(field);
 }
 
-/** SessionStart briefs the 3 latest valid gists, looking through at most 12. */
+/** D23: SessionStart briefs at most 3 pins; A4 §5.3: a subagent's packet holds at most 3 bullets. */
+const BRIEFED_PINS = 3;
+const SUBAGENT_BULLETS = 3;
+/** After a compaction, SessionStart briefs the 3 latest valid gists, looking through at most 12 (`compactGists`). */
 const BRIEFED_GISTS = 3;
 const GIST_SCAN = 12;
 
@@ -136,53 +166,81 @@ function additional(event: string, packet: string): Record<string, unknown> | nu
 }
 
 /**
- * SessionStart's packet (A4 §5.2), unless after a compaction (whose pins come back on their next cue):
- * - the rules the user keeps for all projects (D11), and a proposal for all projects that this repo holds as a pin,
- *   shown in place of its pin's bullet (`memory-user-global.ts`);
- * - then the repo's newest pins (D9, `memory-pins.ts`): a rule row's pinned clauses only, so a policy said once is
- *   not briefed and an intent never is; a rule on no action class is briefed as a pinned row was before;
- * - then the 3 latest gists without their rule clauses: a rule reaches SessionStart only as a pin.
- * Each is read through validity (A4 §5.1 step 5) before any selection. D23's selection (≤ 3 pins for the likely
- * scope, `Updated:` items) waits for P2.5.
+ * SessionStart's candidates (A4 §5.2, D23), in order, each read through validity (A4 §5.1 step 5); the caller briefs
+ * the first 3 that the window's instruction files do not state:
+ * - the rules the user declined 3 times within 14 days, proposed for revocation (A6 §2.5, `memory-revoke.ts`);
+ * - a proposal for all projects that this repo holds as a pin, in place of its pin's bullet, and the rules the user
+ *   keeps for all projects (D11, `memory-user-global.ts`);
+ * - the repo's newest pins (D9, `memory-pins.ts`): a rule row's pinned clauses only, so a policy said once is not
+ *   briefed and an intent never is; a rule on no action class is briefed as a pinned row was before. A row the rules
+ *   kept for all projects leave with no rule of its own briefs what else it says as a fact, not as a rule (P2.4's
+ *   follow-up: a keyed row is no candidate of the lexical path, so this is where its fact still reaches Claude).
+ * Pins have no scope until P3.1's catalog, so every pin is in the likely scope. Gists, P0.2's carrier between
+ * sessions, are no longer briefed: since P0.5 a later session retrieves the same row at its Submit. `Updated:` items
+ * wait for P3.3's keyed slots (no lookup from a delivered cid to its current value before them).
  */
-function briefing(
-  mem: ReturnType<typeof openMemory>,
-  root: string,
-  session = "",
-  pins = true,
-): { notes: ProvenanceNote[]; proposal?: Proposal } {
+function briefing(mem: ReturnType<typeof openMemory>, root: string): { notes: ProvenanceNote[]; proposal?: Proposal } {
   const seen = new Set<string>(),
     notes: ProvenanceNote[] = [],
     invalid = readInvalidations(mem.dir),
-    add = (note: ProvenanceNote): boolean => {
+    add = (note: ProvenanceNote): void => {
       let text = validText(withoutExpiredIntents(String(note.text ?? ""), note.at), note.at, invalid);
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
       } catch {}
-      if (!text || seen.has(text.toLowerCase())) return false;
+      if (!text || seen.has(text.toLowerCase())) return;
       seen.add(text.toLowerCase());
       notes.push({ ...note, text });
-      return true;
     };
-  let proposal: Proposal | undefined;
-  if (pins) {
-    const own = mem
-      .memories()
-      .filter((row) => isLiveRow(row) && isPinnedIntention(row))
-      .flatMap(pinnedPart)
-      .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at);
-    proposal = proposalToShow(root, new Set(own.flatMap((row) => (row.rules ?? []).map(ruleIdentity))));
-    const global = [...(proposal ? [proposalNote(proposal)] : []), ...readUserRules(root)];
-    withUserGlobal<ProvenanceNote>(own, global, invalid).slice(0, 8).forEach(add);
-  }
+  const live = mem.memories().filter(isLiveRow);
+  const own = live
+    .filter(isPinnedIntention)
+    .flatMap(pinnedPart)
+    .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at);
+  const proposal = proposalToShow(root, new Set(own.flatMap((row) => (row.rules ?? []).map(ruleIdentity))));
+  const userRules = readUserRules(root);
+  const global = [...(proposal ? [proposalNote(proposal)] : []), ...userRules];
+  const ruleRows = withUserGlobal<IndexedRow>(
+    live.filter((row) => row.rules?.length),
+    userRules,
+    invalid,
+  ).map((row) => ({ ...row, text: validText(withoutExpiredIntents(row.text, row.at), row.at, invalid) }));
+  const revocations = revocationNotes(ruleRows, declineCounts(mem.dir, memoryNow()));
+  const revoked = new Set(revocations.map((note) => note.revokes));
+  const ruled = new Set(own.flatMap((row) => (row.rules?.length ? [row.id] : [])));
+  const pins = withUserGlobal<ProvenanceNote>(own, global, invalid).flatMap((row) => {
+    if (row.rules?.length) return row.rules.every((rule) => revoked.has(ruleIdentity(rule))) ? [] : [row];
+    return ruled.has(String(row.id)) ? [{ ...row, kind: "fact" }] : [row];
+  });
+  [...revocations, ...pins].forEach(add);
+  return { notes, proposal };
+}
+
+/**
+ * SessionStart(compact)'s packet: the 3 latest valid gists, without their rule clauses (pins come back on their next
+ * cue). A4 §5.2 re-arms the compaction's dropped rows for their next cue; until that cue's words reach a row's
+ * (P4.2: "how should we cache sessions?" misses "We use Redis for caching", A5 `negation`), the gists, P0.2's carrier,
+ * stay here. A startup or a clear briefs pins only (`briefing`).
+ */
+function compactGists(mem: ReturnType<typeof openMemory>, session = ""): ProvenanceNote[] {
+  const invalid = readInvalidations(mem.dir);
+  const notes: ProvenanceNote[] = [];
   try {
-    let gists = 0;
-    for (const g of new GistStore(mem.dir).latest(session || "", GIST_SCAN, { excludeSrc: "experience" })) {
-      if (gists >= BRIEFED_GISTS) break;
-      if (add({ text: withoutRules(g.text, () => true), kind: "gist", tags: ["gist"], at: g.t })) gists++;
+    for (const g of new GistStore(mem.dir).latest(session, GIST_SCAN, { excludeSrc: "experience" })) {
+      if (notes.length >= BRIEFED_GISTS) break;
+      let text = validText(
+        withoutRules(g.text, () => true),
+        g.t,
+        invalid,
+      );
+      try {
+        text = scrubTombstonedIdentity(text, mem.dir).trim();
+      } catch {}
+      if (text && !notes.some((note) => note.text?.toLowerCase() === text.toLowerCase()))
+        notes.push({ text, kind: "gist", tags: ["gist"], at: g.t });
     }
   } catch {}
-  return { notes, proposal };
+  return notes;
 }
 
 /** What a pinned row may brief: a rule row's pinned rules and their clauses only (see `briefing`). */
@@ -418,6 +476,10 @@ interface HookContext {
   transcriptPath: string;
   /** Where the session runs, for its shadow set's files on disk (D27). */
   place: ShadowPlace;
+  /** The repo's top, or the session's folder outside git: what a task's paths are relative to (A4 §5.3). */
+  top: string;
+  /** The session's own window: a subagent's parent (D2). */
+  sessionWin?: string;
   /** The delivery point's mode; undefined at an event that delivers nothing. */
   mode?: FlagMode;
   ledgerOf: (mode: FlagMode | undefined) => Ledger | undefined;
@@ -587,11 +649,13 @@ function labelAsks(ctx: HookContext): void {
 /**
  * Logs the labels of answered asks, and ends each intent an approved ask showed whose call then ran (D9: an intent
  * ends when its action completes). Only an ask the user approved carries an intent out: a call nobody was asked about
- * (`bypassPermissions`, `guard.ask` off) leaves the intent standing until it is released or 7 days pass.
+ * (`bypassPermissions`, `guard.ask` off) leaves the intent standing until it is released or 7 days pass. A declined
+ * ask goes to the store's decline log (A6 §2.5, `memory-revoke.ts`).
  */
 function answered(ctx: HookContext, labels: readonly Labelled[]): void {
   if (!labels.length) return;
   ctx.trace.guard_labels = labels.map(({ id, label }) => ({ id, label }));
+  recordDeclines(ctx.mem.dir, labels, memoryNow());
   recordRuleEnds(
     ctx.mem.dir,
     labels.flatMap((item) => (item.ran ? item.rules : [])),
@@ -608,14 +672,17 @@ const DROPS_RULE =
 
 /**
  * What the user's own words end (P2.1's follow-ups): a release with no class word ends the live intents it names
- * ("Open it now."), and "that rule is gone" the rules the guard asked the user about in the turn before this one.
+ * ("Open it now."), and "that rule is gone" the rules the guard asked the user about in the turn before this one, or,
+ * with no such ask, the rules this session's SessionStart proposed revoking (A6 §2.5), unless the guard has asked
+ * anything since.
  */
 function endRules(ctx: HookContext, said: string): void {
   if (!said) return;
   recordRuleEnds(ctx.mem.dir, intentsReleasedBy(ctx.mem.dir, said), "intent");
   const drops = sentencesOf(said).some((sentence) => DROPS_RULE.test(sentence.trim()));
   if (!ctx.win || !drops) return;
-  const asked = askedRules(ctx.win, humanTurns(ctx.win) - 1);
+  const lastAsked = askedRules(ctx.win, humanTurns(ctx.win) - 1);
+  const asked = lastAsked.length ? lastAsked : shownRevocations(ctx.win);
   recordRuleEnds(ctx.mem.dir, asked, "rule");
   const dropped = dropUserRules(ctx.root, asked, memoryNow(), "dropped");
   if (dropped.length) ctx.trace.dropped = dropped;
@@ -630,28 +697,29 @@ function answerPlace(ctx: HookContext): AnswerPlace | undefined {
 /**
  * D11 at a human Submit, on the user's own words as the store keeps them: the rules kept for all projects that the
  * prompt overturns with D11's phrase end (A4 §3.1, L8), its policies stated with D11's phrases are kept for all
- * projects, and "yes, everywhere" keeps the proposals it answers (`memory-user-global.ts`).
+ * projects, and "yes, everywhere" keeps the proposals it answers (`memory-user-global.ts`). Returns what the Submit
+ * acknowledges: a proposal kept in the session after the one that showed it, whose context never held it.
  */
-function userGlobalRules(ctx: HookContext, said: string): void {
-  if (!said) return;
+function userGlobalRules(ctx: HookContext, said: string): ProvenanceNote[] {
+  if (!said) return [];
   const typed = ctx.mem.storableText(said);
   const now = memoryNow();
   const place = answerPlace(ctx);
   const dropped = overturnUserRules(ctx.root, typed, now);
-  const kept = [
-    ...keepForAllProjects(ctx.root, rulesForAllProjects(typed), now),
-    ...(place ? keepShownProposals(ctx.root, typed, now, place) : []),
-  ];
+  const confirmed = place ? keepShownProposals(ctx.root, typed, now, place) : [];
+  const kept = [...keepForAllProjects(ctx.root, rulesForAllProjects(typed), now), ...confirmed.map(({ r }) => r)];
   if (dropped.length) ctx.trace.dropped = [...(ctx.trace.dropped ?? []), ...dropped];
   if (kept.length) ctx.trace.kept = kept;
+  return confirmed.filter(({ shown }) => shown?.ep !== place?.ep).map(keptNote);
 }
 
 /**
  * SubagentStop (A4 §5.7b): the subagent's last message, or the result a host sends as a tool result, encoded once,
  * and the child window's ledger folded (D25).
- * Its own transcript is not encoded yet: what it holds reaches the parent as the Agent call and its result, which
- * the parent's delta encodes, and until P1.3's shadow set a child's rows come back to the parent as bullets it
- * already holds (`redundant_rate` +4.42 pp in P0.6's guard runs).
+ * Its own transcript is not encoded (decided in P2.5, with the child's delivery point): what the parent learns from it
+ * is the Agent call's result, which the parent's delta encodes, and rows made from the child's own reads and reasoning
+ * would come back to the parent as bullets its Agent result already holds (`redundant_rate` +4.42 pp in P0.6's guard
+ * runs).
  */
 function subagentStop(ctx: HookContext): void {
   let asTool = false;
@@ -662,6 +730,74 @@ function subagentStop(ctx: HookContext): void {
     },
     () => ctx.win && foldWindow(ctx.win),
   );
+}
+
+/** A4 §5.3, D27: what of its parent's instruction files a child's context holds, by its type (R0 F35). */
+function childShadowKind(type: string): ShadowKind {
+  if (type === "fork") return "window";
+  return type === "Explore" || type === "Plan" ? "none" : "instructions";
+}
+
+/**
+ * The child's scope (A4 §5.3, `memory-spawn.ts`): the one it stored at its first start (a resumed subagent), else its
+ * launch's record, else the parent's recent paths; a task that names no place of the repo takes the parent's too. At
+ * its first start it is stored, and a fork copies its parent's ledger (D25), at its own transcript's start.
+ */
+function childScope(ctx: HookContext, type: string): ChildScope & { source: "task" | "parent" | "stored" } {
+  const { r, win, sessionWin: parent, writes } = ctx;
+  const stored = win ? storedScope(win) : undefined;
+  if (stored) return { ...stored, source: "stored" };
+  const agent = str(r.agent_id) ?? "";
+  const spawn = parent ? claimSpawn(parent, { type, now: memoryNow(), agent, mark: writes }) : undefined;
+  const recent = () => (parent ? parentPaths(parent, ctx.top) : []);
+  const scope: ChildScope = spawn
+    ? { paths: spawn.paths.length ? spawn.paths : recent(), classes: spawn.classes, from: "task" }
+    : { paths: recent(), classes: [], from: "parent" };
+  if (writes && win)
+    inTurn(
+      () => storeScope(win, scope),
+      () => {
+        if (type !== "fork" || !parent) return;
+        const copied = inheritLedger(parent, win, new Set(), { off: 0 });
+        Object.assign(ctx.trace, { forked_from: basename(parent), copied });
+      },
+    );
+  return { ...scope, source: scope.from };
+}
+
+/**
+ * SubagentStart (A4 §5.3, D23): at most 3 bullets for the subagent's scope, in its own window's ledger (D2): the
+ * policies and intents of the classes its task and its type fit (a reviewer gets the merge policies), then the rows
+ * the lexical path finds for its scope's paths. Through validity, the gate (A7 §4: the cue is the scope's paths, so an
+ * untyped row is admitted only on an identifier it shares with them), the child's shadow set by its type (D27), and
+ * its ledger, whose distance is measured on its own transcript (D25). A fork's ledger starts as its parent's copy and
+ * its residual is the parent's conversation, so it gets nothing its context already holds. Claude Code dedupes a
+ * re-run's context (R0 F12); Eden's ledger keeps a resumed subagent from being given the same bullets again.
+ */
+function subagentStart(ctx: HookContext): Record<string, unknown> | null {
+  const { r, win, mode, mem, trace } = ctx;
+  if (!win || mode === "off") return null;
+  const type = str(r.agent_type) ?? "";
+  const scope = childScope(ctx, type);
+  const off = transcriptOffset(childTranscript(r)),
+    ledger = ctx.ledgerOf(mode),
+    classes = [...new Set([...scope.classes, ...agentClasses(type)])],
+    cue = scope.paths.join(" "),
+    invalid = readInvalidations(mem.dir);
+  const shadow = shadowSentences(ctx.sessionWin, ctx.place, { kind: childShadowKind(type), onDisk: true });
+  // D26: a fork's context is its parent's whole conversation; a typed subagent's, its task, which no payload carries.
+  const residual = type === "fork" ? recentConversation(ctx.transcriptPath, "", Infinity).residual : [];
+  const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid };
+  const { notes: novel, drops } = selectNotes(mem.taskNotes(scope.paths, classes), against, (fresh) =>
+    novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid }),
+  );
+  const allowed = withinBudget(novel, epochTokens(win, ledger?.file));
+  const shaped = shapePacket(allowed).slice(0, SUBAGENT_BULLETS);
+  const { packet, cids, ids } = deliver(shaped, ledger, { off, att: "", repo: ctx.repo });
+  Object.assign(trace, { scope: scope.source, paths: scope.paths.length, cids, ids });
+  if (classes.length) trace.classes = classes;
+  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: allowed.length - cids.length };
+  return mode === "on" ? additional(ctx.event, packet) : null;
 }
 
 function sessionStart(ctx: HookContext): Record<string, unknown> | null {
@@ -681,8 +817,7 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   // the ledger. A fork holds its parent's context the same way: it brings nothing, and copies the parent's ledger
   // once its transcript names the parent (`inheritParent`). `clear` and a compaction start an epoch (A4 §4), which
   // re-arms everything; PostCompact then holds what the summary still names, and a compaction's pins come back on
-  // their next cue, not here. The gists, the legacy carrier between sessions, stay at every other SessionStart until
-  // P2.5.
+  // their next cue, not here.
   const off = transcriptOffset(ctx.transcriptPath),
     ledger = ctx.ledgerOf(mode),
     source = r.source,
@@ -714,15 +849,28 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
       noteNextSession(ctx.root, memoryNow(), place);
     } catch {}
   if (mode === "off") return withNotice(null, notice);
-  // A4 §5.1 step 7 holds here too: what the window's instruction files state is never briefed (D27).
-  const { notes, proposal } = briefing(mem, ctx.root, ctx.session, !compact);
-  const briefed = notes.length ? unsaidNotes(notes, shadowSentences(win, ctx.place)) : notes;
+  // A4 §5.1 step 7 holds here too: what the window's instruction files state is never briefed (D27), the CLAUDE.md
+  // files read from disk, as InstructionsLoaded may not have reported them yet. Then D23's cap.
+  const { notes, proposal } = compact ? { notes: compactGists(mem, ctx.session) } : briefing(mem, ctx.root);
+  const unsaid = notes.length ? unsaidNotes(notes, shadowSentences(win, ctx.place, { onDisk: true })) : notes;
+  const briefed = unsaid.slice(0, BRIEFED_PINS);
   const { packet, cids, ids } = deliver(briefed, ledger, { off, att: "", repo: ctx.repo });
   Object.assign(trace, {
     cids,
     ids,
-    drops: { shadow: notes.length - briefed.length, shape: briefed.length - cids.length },
+    drops: { shadow: notes.length - unsaid.length, shape: unsaid.length - cids.length },
   });
+  // A6 §2.5: the revocations the session was shown, which its "that rule is gone" may answer.
+  const revoked = briefed.filter((note) => isRevocation(note) && ids.includes(String(note.id ?? "")));
+  if (revoked.length && mode === "on" && writes && win)
+    try {
+      markRevocations(
+        win,
+        revoked.flatMap((note) => (isRevocation(note) ? [note.revokes] : [])),
+        memoryNow(),
+      );
+      trace.revoke = revoked.flatMap((note) => (isRevocation(note) ? [note.revokes] : []));
+    } catch {}
   // D11: a proposal is shown once, so only a packet the user's session received counts.
   const shown = proposal && mode === "on" && ids.includes(proposalNote(proposal).id ?? "") ? proposal : undefined;
   if (shown && writes && place)
@@ -803,10 +951,11 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     .filter((m) => m.src === "user")
     .map((m) => m.content)
     .join("\n");
+  let acknowledged: ProvenanceNote[] = [];
   if (writes && human)
     inTurn(
       () => endRules(ctx, own),
-      () => userGlobalRules(ctx, own),
+      () => (acknowledged = userGlobalRules(ctx, own)),
     );
   if (human) {
     const classes = firedClasses(own);
@@ -825,7 +974,7 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     } catch {}
   if (prompt && turn === "imperative" && answer !== "off") notes = mem.recall(cue, encode);
   else if (prompt) mem.observeCue(cue, undefined, encode);
-  if (!notes.length) return null;
+  if (!notes.length && !acknowledged.length) return null;
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
   // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
@@ -839,9 +988,15 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   );
   const tokens = win ? epochTokens(win, ledger?.file) : 0;
   const allowed = withinBudget(novel, tokens);
-  const { packet, cids, ids } = deliver(shapePacket(allowed), ledger, { off, att, repo: ctx.repo });
+  // D11: a kept proposal's acknowledgement leads; it states nothing the store retrieves.
+  const { packet, cids, ids } = deliver(shapePacket([...acknowledged, ...allowed]), ledger, {
+    off,
+    att,
+    repo: ctx.repo,
+  });
   Object.assign(trace, { cids, ids, tokens_epoch: tokens });
-  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: allowed.length - cids.length };
+  const shaped = allowed.length + acknowledged.length;
+  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: shaped - cids.length };
   return answer === "shadow" ? null : additional(event, packet);
 }
 
@@ -897,8 +1052,9 @@ function respond(
     return null;
   }
   // R0 F32: `/compact` runs an internal agent (`agent_type: ""`) with no transcript of its own. Its last message is
-  // the summary, which the main transcript's compact summary line already carries to the delta encoder.
-  if (event === "SubagentStop" && r.agent_type === "") return null;
+  // the summary, which the main transcript's compact summary line already carries to the delta encoder; it is given
+  // nothing either.
+  if ((event === "SubagentStop" || event === "SubagentStart") && r.agent_type === "") return null;
   // D24, A4 §5.1 step 0: a non-human submit gets nothing, before any store is opened. Its wide event names the rule
   // it matched, so the live shape of each kind can be checked from ids alone (R0 F34).
   const nonHuman = event === "UserPromptSubmit" ? nonHumanKind(prompt, win ? cronHashes(win) : []) : undefined;
@@ -940,6 +1096,8 @@ function respond(
     child: resolved.child,
     transcriptPath: transcriptOf(r),
     place: { cwd: cwd ?? process.cwd(), transcriptPath: transcriptOf(r) },
+    top: repo?.top ?? cwd ?? process.cwd(),
+    sessionWin,
     mode,
     /** The ledger this point writes: none when it is off or read-only. */
     ledgerOf: (m) => {
@@ -953,6 +1111,7 @@ function respond(
     else if (event === "SubagentStop") subagentStop(ctx);
     else if (event === "Stop" || event === "SessionEnd") sleepAfterTurn(ctx);
     else if (event === "SessionStart") return sessionStart(ctx);
+    else if (event === "SubagentStart") return subagentStart(ctx);
     else return submit(ctx);
     return null;
   } finally {

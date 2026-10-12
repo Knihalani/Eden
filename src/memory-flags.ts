@@ -208,6 +208,7 @@ export function resolveFlags(cwd?: string, env: NodeJS.ProcessEnv = process.env)
 export function pointOf(event: string): Flag | undefined {
   if (event === "UserPromptSubmit") return "deliver.submit";
   if (event === "SessionStart") return "deliver.session_start";
+  if (event === "SubagentStart") return "deliver.subagent";
   return undefined;
 }
 

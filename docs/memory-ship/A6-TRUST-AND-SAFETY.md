@@ -88,6 +88,7 @@ The guard is the only Eden path that touches control flow:
 - **Its reason string is the user's own rule text** (sanitized), labelled with age and source.
 - **Every ask is logged with its `tool_use_id`.** No hook reports the user's answer. At the next PostToolBatch, and at sleep from the transcript, the ask is labelled **approved** if the call has a successful `tool_result`, and **declined** if its result is the permission-rejection message. Three declined asks on the same rule within 14 days → sleep proposes revoking it, shown at the next SessionStart as `Rule you set … (you declined it 3× — say "that rule is gone" to remove it)`.
 - `EDEN_POLICY_GUARD=off` disables it. A guard error returns `{}`, which proceeds normally (fail-open).
+- **Built in P2.5** (`src/memory-revoke.ts`): each declined ask goes to the repo store's `declines.jsonl` (its id, time and the rules it showed, ids only), so the asks of every session of the repo count. The count (distinct declined calls of a rule within 14 days) is read at SessionStart from that log, the same records sleep would read, so no proposal file is kept. The proposal comes first among SessionStart's ≤ 3, whether or not the rule is a pin, while the rule is in force. "that rule is gone" then names the rules the guard asked about in the turn before, or, with none, the rules this session's SessionStart proposed revoking, unless the guard has asked anything since.
 
 ### 2.6 Poisoning tests (A5 `poison` arm)
 

@@ -176,6 +176,7 @@ function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost 
     eventRaw === "PreToolUse" ||
     eventRaw === "Stop" ||
     eventRaw === "SessionStart" ||
+    eventRaw === "SubagentStart" ||
     eventRaw === "UserPromptSubmit" ||
     eventRaw === "PreCompact" ||
     eventRaw === "PostCompact" ||
@@ -389,6 +390,7 @@ export async function respondToHook(
   if (
     body.hook_event_name === "UserPromptSubmit" ||
     body.hook_event_name === "SessionStart" ||
+    body.hook_event_name === "SubagentStart" ||
     body.hook_event_name === "PreCompact" ||
     body.hook_event_name === "PostCompact" ||
     body.hook_event_name === "InstructionsLoaded"

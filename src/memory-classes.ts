@@ -110,6 +110,11 @@ export const GUARD_TOOL_MATCHERS: readonly string[] = GUARDED_CLASSES.flatMap(([
   guard.tools ? [guard.tools] : [],
 );
 
+/** A4 §5.3: the classes an agent type also gets when its name fires a class (`memory-spawn.ts`). */
+export const AGENT_CLASSES = Object.fromEntries(
+  Object.entries(lexicon.agents).filter(([cls]) => cls !== "about"),
+) as Partial<Record<ActionClass, ActionClass[]>>;
+
 /** The classes whose prohibition asks before the call (D19). */
 export const IRREVERSIBLE: ReadonlySet<ActionClass> = new Set(GUARD.irreversible);
 

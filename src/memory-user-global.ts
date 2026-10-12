@@ -353,9 +353,9 @@ export function proposalNote(proposal: Proposal): ProvenanceNote {
 
 /**
  * A typed "yes, everywhere" (see the header): keeps each proposal it answers, shown in this repo, in this session or
- * the one before it, within 7 days, and returns their identities.
+ * the one before it, within 7 days, and returns them.
  */
-export function keepShownProposals(root: string, typed: string, now: number, at: AnswerPlace): string[] {
+export function keepShownProposals(root: string, typed: string, now: number, at: AnswerPlace): Proposal[] {
   const answers = String(typed ?? "")
     .split(/(?<=[.!?;])\s+|\n+/)
     .some((sentence) => KEEP_EVERYWHERE.test(sentence.trim()));
@@ -377,5 +377,14 @@ export function keepShownProposals(root: string, typed: string, now: number, at:
     join(ensureDir(root), PROPOSALS_FILE),
     due.map(({ r }) => ({ k: "keep", r, t: now })),
   );
-  return due.map((proposal) => proposal.r);
+  return due;
+}
+
+/**
+ * A kept proposal as a Submit acknowledges it, in D11's words and nothing else: when it was kept in the session after
+ * the one that showed it, the context that showed it is gone, and "yes, everywhere" alone names nothing (P2.4's
+ * end-to-end).
+ */
+export function keptNote(proposal: Proposal): ProvenanceNote {
+  return { id: `kept:${proposal.r}`, text: `Kept for all projects: ${proposal.text}`, kind: "fact" };
 }

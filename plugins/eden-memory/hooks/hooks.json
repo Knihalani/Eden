@@ -3,6 +3,7 @@
   "hooks": {
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "PreCompact": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "PostCompact": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "Stop": [
@@ -36,7 +37,8 @@
           { "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard 16 2>/dev/null || true", "if": "Bash(gh *)", "timeout": 5 }
         ]
       },
-      { "matcher": "mcp__.*__merge.*", "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard 17 2>/dev/null || true", "timeout": 5 }] }
+      { "matcher": "mcp__.*__merge.*", "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" guard 17 2>/dev/null || true", "timeout": 5 }] },
+      { "matcher": "Agent", "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" spawn 2>/dev/null || true", "timeout": 5 }] }
     ],
     "PostToolBatch": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true" }] }],
     "SubagentStop": [{ "hooks": [{ "type": "command", "command": "bun --no-install \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts\" 2>/dev/null || true", "async": true }] }],

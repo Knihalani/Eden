@@ -203,5 +203,11 @@
       "destructive-db",
       "history-rewrite"
     ]
+  },
+  "agents": {
+    "about": "A4 §5.3: the classes an agent type also gets when its name fires a class (memory-spawn.ts agentClasses): a reviewer gets the review and merge policies.",
+    "review": [
+      "integrate"
+    ]
   }
 }

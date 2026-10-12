@@ -309,6 +309,7 @@ describe("M35.3 wrap + hook leftover identity", () => {
   });
 
   test("SessionStart does not brief an Always-use-postgres pin after sqlite sleep", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     await withMem(
       "eden-m35-pin-",
       async (mem, dir) => {
@@ -323,11 +324,14 @@ describe("M35.3 wrap + hook leftover identity", () => {
         expect(pkt).not.toMatch(/database is postgres/i);
         expect(gistText(dir)).toMatch(/sqlite/i);
         expect(gistText(dir)).not.toMatch(/postgres/i);
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: SESSION });
         const ctx = hookContext(start);
         expect(ctx).toMatch(/sqlite/i);
         expect(ctx).not.toMatch(/postgres/i);
         expect(ctx).not.toMatch(/always use postgres/i);
+        // The pin itself would come at a startup: superseded, it does not.
+        const startup = hookContext(memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION }));
+        expect(startup).not.toMatch(/postgres/i);
       },
       SESSION,
       undefined,
@@ -373,6 +377,7 @@ describe("M35.3 scrub does not destroy gold that merely contains postgres", () =
   });
 
   test("SessionStart keeps a sqlite gist that mentions postgres as prose", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     await withMem(
       "eden-m35-gist-prose-",
       async (mem, dir) => {
@@ -384,7 +389,7 @@ describe("M35.3 scrub does not destroy gold that merely contains postgres", () =
         expect(gistText(dir)).toMatch(/Miller mentioned postgres/);
         expect(gistText(dir)).toMatch(/sqlite/i);
         await withEnv({ EDEN_MEMORY: "readonly" }, async () => {
-          const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION });
+          const start = memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: SESSION });
           const ctx = hookContext(start);
           expect(ctx).toMatch(/sqlite/i);
           expect(ctx).toMatch(/Miller mentioned postgres/);

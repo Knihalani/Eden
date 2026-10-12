@@ -11,6 +11,8 @@ export const MEMORY_HOOK = join("packages", "cli", "src", "memory-hook.ts");
 /** The PreToolUse policy guard's hook, beside it (`hook.ts guard <n>`), and the re-check it runs first. */
 export const GUARD_HOOK = join("packages", "cli", "src", "memory-guard-hook.ts");
 export const GUARD_MATCH = join("src", "memory-guard-match.ts");
+/** `PreToolUse(Agent)`'s handler (`hook.ts spawn`): it records the launch for SubagentStart (A4 §5.3). */
+export const SPAWN_HOOK = join("packages", "cli", "src", "memory-spawn-hook.ts");
 
 export type EdenRoot = { root: string; via: string };
 

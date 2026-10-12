@@ -50,6 +50,15 @@ export interface WideEvent {
   dropped?: string[];
   /** The proposal for all projects a SessionStart showed (D11), by `ruleIdentity`. */
   proposed?: string;
+  /** The rules a SessionStart proposed revoking (A6 §2.5: declined 3 times in 14 days), by `ruleIdentity`. */
+  revoke?: string[];
+  /**
+   * SubagentStart (A4 §5.3): where the child's scope came from (its launch's record, the parent's recent paths, or
+   * the scope it stored at its first start), and how many paths it holds. `PreToolUse(Agent)`: the launch it recorded.
+   */
+  scope?: "task" | "parent" | "stored";
+  paths?: number;
+  spawn?: { type: string; paths: number; classes: string[] };
   /** The cids of the packet the point delivered, or in shadow would have, and the ids of their rows. */
   cids?: string[];
   ids?: string[];

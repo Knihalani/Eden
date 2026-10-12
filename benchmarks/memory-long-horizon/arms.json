@@ -425,14 +425,8 @@
       ],
       "a5": "SubagentStart packet by task scope; parent scope unchanged; parallel Explore scopes; fork gets no parent-delivered bullet",
       "on": {
-        "state": "red",
-        "failed": [
-          "parallel-scopes",
-          "policy-by-task",
-          "policy-by-type",
-          "subagent-packet"
-        ],
-        "why": "no SubagentStart handler, so no subagent gets a packet (P2.5): neither its task's scope rows nor its task's or type's policies; since P0.5 the parent's cli cue gets 'packages/cli has no auth' through the repo store (parent-scope met). fork-no-repeat and policy-by-class-only pass: no packet at all. fork-no-repeat runs on a simulated fork (agent_type 'fork' starting with the parent's window, A4 §5.3); Claude Code 2.1.285 has no such agent type ('Agent type 'fork' not found', P0.0c end-to-end)"
+        "state": "green",
+        "why": "passes since P2.5: PreToolUse(Agent) records each launch's task paths and classes, and SubagentStart takes its own launch's record (by the meta file's toolUseId, else the newest of its type within 5 s), so the task subagent and each parallel Explore get their own scope's rows; the code-reviewer type and the merge task get the merge policy (A4 §5.3: a reviewer gets the merge policies; the task's classes), and no subagent whose type and task name no class does; the simulated fork (agent_type 'fork', A4 §5.3) copies the parent's ledger and reads the parent's conversation as its residual, so it gets nothing its context holds"
       },
       "off": {
         "state": "green",
