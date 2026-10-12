@@ -226,11 +226,8 @@
       ],
       "a5": "web Clerk + postgres; cli none + sqlite at 4752 and 15840 turns, junk on disk",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-leak"
-        ],
-        "why": "since P0.5 a later session's cue reads every earlier session's rows in the repo store, and rows have no folder scope until P3.1/P3.2: the apps/web cue's packet carries 'packages/cli has no auth, and its database is sqlite'. Before P0.5 no row crossed sessions at Submit (only SessionStart gists), so nothing could leak. junk-on-disk is a plain check since P0.3: its flakes were rows lost to pid-derived ids (#98); with ULIDs it held in 20 of 20 isolated runs on macOS (final P0.3 code) and 20 of 20 on Linux (GitHub run 37776855175)"
+        "state": "green",
+        "why": "passes since P3.2 at CI scale (the 4,752 and 15,840 points are P3.5's gate): rows the hook encodes are stored at the scope their text names, else the window's working scope (A4 §2–3), and each cue's read set is its own folder (D4: the last turn read a file there), so the apps/web cue no longer retrieves packages/cli's row (never siblings); the cli cue's values were given at the turn that opened packages/cli, whose read set held both folders, and the window still holds them. junk-on-disk holds as since P0.3"
       },
       "off": {
         "state": "green",
@@ -292,12 +289,8 @@
       ],
       "a5": "a turn touching web and cli -> the two-scope bullet `auth - apps/web: Clerk . packages/cli: none`",
       "on": {
-        "state": "red",
-        "failed": [
-          "needs-met",
-          "two-scope-bullet"
-        ],
-        "why": "the cue's packet echoes the turn's Read results ('1 // packages/cli/src/login.ts 2'), and neither folder's auth value reaches the session"
+        "state": "green",
+        "why": "passes since P3.2: the cue names a file of each folder after a turn that read both, so the read set (D4) is apps/web and packages/cli, 50% each; the web row's slot (the legacy copula reading until P3.3) takes packages/cli's value from that folder's newest typed row naming its subject, and the packet holds one bullet, 'auth provider — apps/web: Clerk · packages/cli: has no auth' (A4 §2), the ledger recording both rows"
       },
       "off": {
         "state": "green",

@@ -27,6 +27,7 @@ import { stripPastes, withoutInstructions, type TextSource } from "./memory-auth
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
+import { rowScope, type EncodePlace } from "./memory-place";
 import {
   counteredKeys,
   isForget,
@@ -195,6 +196,14 @@ export function isLiveRow(r: MemoryRecord, now = memoryNow()): boolean {
   return !superseded(r) && !(typeof r.validUntil === "number" && Number.isFinite(r.validUntil) && r.validUntil <= now);
 }
 
+/**
+ * Whether two rows are about one place: the same scope, or either written before P3.2 placed encoded rows (A4 §3.2:
+ * a value at one scope never supersedes another scope's).
+ */
+function samePlace(a: Pick<MemoryRecord, "scope">, b: Pick<MemoryRecord, "scope">): boolean {
+  return a.scope === undefined || b.scope === undefined || a.scope === b.scope;
+}
+
 /** Whether two statements give one subject different values, so the newer supersedes the older (A4 §3.1). */
 function contradicts(a: string, b: string): boolean {
   try {
@@ -267,7 +276,13 @@ export type MemoryOptions = {
    * The session still labels its rows (`ep`) and its gist, but has no directory of its own.
    */
   perRepo?: boolean;
+  /** Where the hook's window is working (A4 §2, `memory-place.ts`): the scope each row it encodes is stored at. */
+  place?: EncodePlace;
 };
+
+/** Which rows a reader may see (A4 §2's visibility, `memory-place.ts`); every row by default. */
+export type RowFilter = (row: MemoryRecord) => boolean;
+const EVERY_ROW: RowFilter = () => true;
 
 type Compiled = { rec: MemoryRecord; needles: string[]; scorable: boolean };
 
@@ -636,7 +651,15 @@ function fromDisk(parsed: unknown): MemoryRecord | undefined {
 /** A record as its store file holds it. A row written before P0.3 that is a bare episode keeps its compact form. */
 function toDisk(r: MemoryRecord): DiskRow | [string, string] {
   const { at, seq, invalidAt, invalidBy, validUntil, srcUuid, promptId, ...rest } = r;
-  const bare = !r.tags && !r.lane && !r.ep && !r.heat && !r.sal && invalidAt === undefined && invalidBy === undefined;
+  const bare =
+    !r.tags &&
+    !r.lane &&
+    !r.ep &&
+    !r.heat &&
+    !r.sal &&
+    r.scope === undefined &&
+    invalidAt === undefined &&
+    invalidBy === undefined;
   if (r.kind === "episode" && bare && at === undefined && seq === undefined && validUntil === undefined)
     return [r.id, r.text];
   return {
@@ -729,7 +752,7 @@ function supersedeByTime(root: string, stored: readonly MemoryRecord[], settled:
   const live = () => stored.filter((r) => !superseded(r) && !isUntyped(r));
   for (const row of live().filter((r) => settled.has(r.id)))
     for (const other of live()) {
-      if (other === row || superseded(row) || !contradicts(row.text, other.text)) continue;
+      if (other === row || superseded(row) || !samePlace(row, other) || !contradicts(row.text, other.text)) continue;
       const [older, newer] = (other.at ?? 0) > (row.at ?? 0) ? [row, other] : [other, row];
       older.invalidBy = newer.id;
       const slot = legacySlot(older);
@@ -808,11 +831,12 @@ function mergeNarrativeLane(
   cap: number,
   dir: string,
   compiled: MemoryRecord[] = [],
+  hidden: ReadonlySet<string> = new Set(),
 ): MemoryRecord[] {
   const q = String(text ?? "").trim();
   if (!q) return lexical;
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))),
-    hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled }),
+    hits = retrieveNarrativeChunks(dir, q, { k, fallback: compiled }).filter((hit) => !hidden.has(hit.src ?? "")),
     chat = lexical.filter((l) => l.lane !== "narrative" && !(l.tags ?? []).includes("chunk"));
   if (!hits.length) return chat.length ? chat : lexical;
   const chunks: MemoryRecord[] = [];
@@ -838,11 +862,17 @@ function mergeNarrativeLane(
   return out;
 }
 
-function mergeIclLane(text: string, cap: number, dir: string, compiled: MemoryRecord[] = []): MemoryRecord[] {
+function mergeIclLane(
+  text: string,
+  cap: number,
+  dir: string,
+  compiled: MemoryRecord[] = [],
+  hidden: ReadonlySet<string> = new Set(),
+): MemoryRecord[] {
   const q = String(text ?? "").trim();
   if (!q) return [];
   const k = Math.min(10, Math.max(0, Math.floor(Number(cap) || 0))),
-    hits = retrieveIcl(dir, q, { k, fallback: compiled });
+    hits = retrieveIcl(dir, q, { k, fallback: compiled }).filter((hit) => !hidden.has(hit.src ?? ""));
   if (!hits.length) return [];
   const out: MemoryRecord[] = [],
     seen = new Set<string>();
@@ -915,6 +945,7 @@ export class AgentMemory {
   /** The subdirectory the rows live in: the session's, or none in a per-repo store. */
   private readonly subdir: string;
   private readonly perRepo: boolean;
+  private readonly place?: EncodePlace;
   private compiled: Compiled[];
   private path: string;
   private batch = 0;
@@ -948,6 +979,7 @@ export class AgentMemory {
     this.child = opts.child === true;
     this.subdir = opts.perRepo ? "" : (session ?? "");
     this.perRepo = opts.perRepo === true;
+    this.place = opts.place;
     if (this.perRepo && !this.sealed && memoryConsent() === "on")
       try {
         markStoreFormat(this.dir);
@@ -1033,7 +1065,6 @@ export class AgentMemory {
       ...(this.episode ? { ep: this.episode } : {}),
       ...(srcUuid ? { srcUuid } : {}),
       ...(promptId ? { promptId } : {}),
-      ...(opts.scope ? { scope: opts.scope } : {}),
     };
     try {
       if (this.consent() !== "on") return rec;
@@ -1045,6 +1076,8 @@ export class AgentMemory {
     // (the diary, D6) is never a pin: a prompt's own episode would otherwise brief a rule its rule row no longer holds.
     const stated = untyped ? [] : rulesIn(rec.text);
     const rules = rec.kind === "constraint" ? stated : [];
+    const scope = opts.scope ?? (this.place && rowScope(rec.text, rules.length > 0, this.place));
+    if (scope !== undefined) rec.scope = scope;
     const pin = !untyped && rec.kind !== "episode" && (opts.pin === true || pinsItself(rec.text, stated));
     if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
     rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => {
@@ -1126,14 +1159,15 @@ export class AgentMemory {
   }
 
   /**
-   * A newer statement of a copula's subject supersedes its older values (A4 §3.1), whatever list numbers they carry,
-   * and when both are slots, older text giving the old value is stale (D31, `recordSupersession`). Only what the user
-   * typed supersedes: a tool result or the assistant's text is an episode (A4 §3.0, A6 §2.1).
+   * A newer statement of a copula's subject supersedes its older values at its scope (A4 §3.1–3.2), whatever list
+   * numbers they carry, and when both are slots, older text giving the old value is stale (D31, `recordSupersession`).
+   * Only what the user typed supersedes: a tool result or the assistant's text is an episode (A4 §3.0, A6 §2.1).
    */
   private invalidateSameCopula(incoming: MemoryRecord): void {
     if (isUntyped(incoming) || !copulaKey(incoming.text)) return;
     for (const c of this.compiled) {
-      if (c.rec.id === incoming.id || superseded(c.rec) || !contradicts(c.rec.text, incoming.text)) continue;
+      if (c.rec.id === incoming.id || superseded(c.rec) || !samePlace(c.rec, incoming)) continue;
+      if (!contradicts(c.rec.text, incoming.text)) continue;
       c.rec.invalidBy = incoming.id;
       this.changed.add(c.rec.id);
       const old = legacySlot(c.rec);
@@ -1236,18 +1270,19 @@ export class AgentMemory {
    * store's rules sit beside the rules the user keeps for all projects (D11), which a repo row of the same rule gives
    * way to.
    */
-  private triggered(own: string): MemoryRecord[] {
-    return this.triggeredBy(firedClasses(own));
+  private triggered(own: string, visible: RowFilter): MemoryRecord[] {
+    return this.triggeredBy(firedClasses(own), visible);
   }
 
   /** The policies and intents the classes deliver (`triggered`), each class's best `PER_CLASS`. */
-  private triggeredBy(classes: readonly ActionClass[]): MemoryRecord[] {
+  private triggeredBy(classes: readonly ActionClass[], visible: RowFilter): MemoryRecord[] {
     try {
       if (!classes.length) return [];
       this.ensureIndex();
       const global = this.perRepo ? (readUserRules(this.windowsRoot) as MemoryRecord[]) : [];
       const invalid = global.length ? readInvalidations(this.dir) : [];
-      return labelledNotes(triggeredRows(withUserGlobal(this.ruleRows, global, invalid), classes));
+      const rows = withUserGlobal(this.ruleRows.filter(visible), global, invalid);
+      return labelledNotes(triggeredRows(rows, classes));
     } catch {
       return [];
     }
@@ -1544,7 +1579,7 @@ export class AgentMemory {
     this.post = null;
   }
 
-  relevant(text: string, cap = memoryRetrieveCap()): MemoryRecord[] {
+  relevant(text: string, cap = memoryRetrieveCap(), visible: RowFilter = EVERY_ROW): MemoryRecord[] {
     const hay = queryHay(text);
     try {
       this.ensureIndex();
@@ -1559,7 +1594,7 @@ export class AgentMemory {
       for (const { t, df } of ranked) {
         if (df >= 80 && pool.length) break;
         for (const c of this.post!.get(t) ?? []) {
-          if (seen.has(c)) continue;
+          if (seen.has(c) || !visible(c.rec)) continue;
           seen.add(c);
           pool.push(c);
           if (pool.length >= poolCap) break;
@@ -1597,28 +1632,23 @@ export class AgentMemory {
     }
   }
 
-  notesFor(text = "", k = memoryRetrieveCap()): MemoryRecord[] {
+  notesFor(text = "", k = memoryRetrieveCap(), visible: RowFilter = EVERY_ROW): MemoryRecord[] {
     const cap = Math.max(0, Math.floor(Number(k) || 0)),
-      route = routeMemory(text);
-    let recs: MemoryRecord[] =
-      route === "icl-index"
-        ? mergeIclLane(
-            text,
-            cap,
-            this.dir,
-            this.compiled.map((c) => c.rec),
-          )
-        : this.relevant(text, k);
-    if (route !== "icl-index") {
-      if (route === "gist-chunk")
-        recs = mergeNarrativeLane(
-          recs,
-          text,
-          cap,
-          this.dir,
-          this.compiled.map((c) => c.rec),
-        );
-      recs = mergeHowtoLane(recs, text, cap, this.dir);
+      route = routeMemory(text),
+      all = this.compiled.map((c) => c.rec),
+      // The lanes' own indexes name each hit's row (`src`): a row the reader may not see is no hit.
+      lane = () => ({ rows: all.filter(visible), hidden: new Set(all.flatMap((r) => (visible(r) ? [] : [r.id]))) });
+    let recs: MemoryRecord[];
+    if (route === "icl-index") {
+      const { rows, hidden } = lane();
+      recs = mergeIclLane(text, cap, this.dir, rows, hidden);
+    } else {
+      recs = this.relevant(text, k, visible);
+      if (route === "gist-chunk") {
+        const { rows, hidden } = lane();
+        recs = mergeNarrativeLane(recs, text, cap, this.dir, rows, hidden);
+      }
+      recs = mergeHowtoLane(recs, text, cap, this.dir).filter(visible);
     }
     const kept = recs.map((n) => {
       const raw = String(n.text ?? "");
@@ -1642,7 +1672,7 @@ export class AgentMemory {
    * open: a throw is counted in `memoryInjectSwallows` and recalls nothing. `encode` replaces what is encoded when
    * the caller knows more of its sources than the cue shows (the hook splits a prompt's pasted spans off, D12).
    */
-  recall(messages: unknown[], encode?: unknown[]): MemoryRecord[] {
+  recall(messages: unknown[], encode?: unknown[], visible: RowFilter = EVERY_ROW): MemoryRecord[] {
     const list = Array.isArray(messages) ? messages : [];
     try {
       if (this.consent() === "off") return [];
@@ -1659,12 +1689,12 @@ export class AgentMemory {
           if (cue && isNoopCue(cue)) silent = true;
           else if (hookLane(cue) === "none") silent = true;
         } catch {}
-        packet = !silent && cue ? this.notesFor(cue) : [];
+        packet = !silent && cue ? this.notesFor(cue, memoryRetrieveCap(), visible) : [];
         try {
           if (packet.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(packet, this.dir);
         } catch {}
         // A trigger hit is STRONG evidence (A7 §4), so it leads, whatever the lexical path makes of the cue.
-        const triggered = this.triggered(typedText(list, encode));
+        const triggered = this.triggered(typedText(list, encode), visible);
         packet = [...triggered, ...packet.filter((note) => !triggered.some((rule) => rule.id === note.id))];
         if (packet.length)
           try {
@@ -1684,11 +1714,11 @@ export class AgentMemory {
    * task and type fit, then what the lexical path finds for its scope's paths. It encodes nothing: SubagentStart
    * carries no text. Fails open like `recall`.
    */
-  taskNotes(paths: readonly string[], classes: readonly ActionClass[]): MemoryRecord[] {
+  taskNotes(paths: readonly string[], classes: readonly ActionClass[], visible: RowFilter = EVERY_ROW): MemoryRecord[] {
     try {
       if (this.consent() === "off") return [];
-      const triggered = this.triggeredBy(classes);
-      const scoped = paths.length ? this.notesFor(paths.join(" ")) : [];
+      const triggered = this.triggeredBy(classes, visible);
+      const scoped = paths.length ? this.notesFor(paths.join(" "), memoryRetrieveCap(), visible) : [];
       return [...triggered, ...scoped.filter((note) => !triggered.some((rule) => rule.id === note.id))];
     } catch {
       memoryInjectSwallows.n++;

@@ -183,20 +183,30 @@ const KEPT_TURNS = 3;
 /** Below this size `ctx.log` is left as it is: compaction rewrites the file, which only an outgrown log needs. */
 const COMPACT_BYTES = 32 * 1024;
 
+/** The place signal's records (`memory-place.ts`): a window keeps those of its last 3 human turns. */
+const TURN_RECORDS = new Set<unknown>(["prompt", "batch", "sub"]);
+
 /**
- * Compacts `ctx.log` at `stop-sleep` (A4 §1): the last `crons` and `start` records, and the batches of the last 3
- * human turns (by `prompt_id`). The file is replaced by rename; a batch appended meanwhile can be lost, which costs a
- * path signal, never a row.
+ * Compacts `ctx.log` at `stop-sleep` (A4 §1): everything from the third-newest human prompt's record on (D4's last 3
+ * human turns, `memory-place.ts`), and before it the last record of each other kind (`crons`, `start`, …). A window
+ * with fewer prompt records (a subagent's, or one written before P3.2) keeps them, its `sub` records, and the
+ * batches of its last 3 `prompt_id`s.
+ * The file is replaced by rename; a record appended meanwhile can be lost, which costs a path signal, never a row.
  */
 export function compactContext(dir: string): void {
   const size = statSync(join(dir, CONTEXT), { throwIfNoEntry: false })?.size ?? 0;
   if (size <= COMPACT_BYTES) return;
   const records = windowRecords(dir, CONTEXT);
+  const prompts = records.flatMap((record, at) => (record.k === "prompt" ? [at] : []));
+  const from = prompts.length >= KEPT_TURNS ? prompts.at(-KEPT_TURNS)! : Infinity;
   const turns = [...new Set(records.flatMap((record) => (record.k === "batch" ? [record.prompt_id] : [])))];
   const recent = new Set(turns.slice(-KEPT_TURNS));
-  const kept = records.filter((record, at) =>
-    record.k === "batch" ? recent.has(record.prompt_id) : records.findLastIndex((other) => other.k === record.k) === at,
-  );
+  const kept = records.filter((record, at) => {
+    if (at >= from) return true;
+    if (!TURN_RECORDS.has(record.k)) return records.findLastIndex((other) => other.k === record.k) === at;
+    if (from !== Infinity) return false;
+    return record.k !== "batch" || recent.has(record.prompt_id);
+  });
   writeFileAtomic(join(dir, CONTEXT), kept.map((record) => `${JSON.stringify(record)}\n`).join(""), 0o600);
 }
 

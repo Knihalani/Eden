@@ -12,9 +12,11 @@
  * - **Paths** (§9.1): a path belongs to the repo of its own worktree, relative to that worktree's top, so an agent
  *   worktree's `packages/know/src/a.ts` is the main checkout's `packages/know`.
  * - **Waiting** (R5 §10): the directories min-2 dropped. A file written into one makes it a scope, so a new package
- *   becomes one when its second file is written, not at the next sleep.
+ *   becomes one when its second file is written, not at the next sleep. Only a file that is there and that git lists
+ *   can: ignored output (`dist/`), a failed write, or a write in a linked worktree (the catalog lists the main
+ *   checkout's files) leaves the wait as it is, so it lists nothing.
  */
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { writeFileAtomic } from "../packages/cli/src/home";
 import { memoryNow } from "./memory-clock";
@@ -540,17 +542,41 @@ function shapesScopes(name: string): boolean {
 }
 
 /**
- * A4 §2: whether files written (relative to their repo's top) rebuild the catalog: a manifest, workspace or
- * build-system root file, the override, or a file a waiting directory owns (see the header; a file a deeper scope
- * owns cannot end the wait). Without a catalog, none: the turn's end builds it, off the agent's path.
+ * A4 §2: whether files written in the main checkout (relative to its top) rebuild the catalog: a manifest, workspace
+ * or build-system root file, the override, or a file a waiting directory owns that git lists (`listed`; see the
+ * header; a file a deeper scope owns cannot end the wait). Without a catalog, none: the turn's end builds it, off the
+ * agent's path.
  */
-export function rebuildsCatalog(catalog: ScopeCatalog | undefined, written: readonly string[]): boolean {
+export function rebuildsCatalog(
+  catalog: ScopeCatalog | undefined,
+  written: readonly string[],
+  listed: (rel: string) => boolean,
+): boolean {
   if (!catalog) return false;
   const owners = [...catalog.scopes, ...catalog.waiting];
   return written.some(
     (rel) =>
-      rel === SCOPES_OVERRIDE || shapesScopes(basename(rel)) || catalog.waiting.includes(scopeOfFile(owners, rel)),
+      rel === SCOPES_OVERRIDE ||
+      shapesScopes(basename(rel)) ||
+      (catalog.waiting.includes(scopeOfFile(owners, rel)) && listed(rel)),
   );
+}
+
+/** How long a batch may ask git whether it lists one file (fail open: not listed). */
+const LISTED_TIMEOUT_MS = 1_000;
+
+/** Whether a file is in a checkout as a regular file that git lists (step 1's files; see the header). */
+export function listedFile(checkout: string, rel: string): boolean {
+  try {
+    if (!lstatSync(join(checkout, rel)).isFile()) return false;
+    const run = Bun.spawnSync(
+      ["git", "--literal-pathspecs", "-C", checkout, "ls-files", "-co", "--exclude-standard", "--", rel],
+      { env: gitEnv(), stdout: "pipe", stderr: "ignore", timeout: LISTED_TIMEOUT_MS },
+    );
+    return run.exitCode === 0 && run.stdout.toString().trim() !== "";
+  } catch {
+    return false;
+  }
 }
 
 /**

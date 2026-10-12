@@ -12,7 +12,7 @@ import {
 import { handleChatCompletions } from "./proxy";
 import { createState } from "./wrap-tools";
 import { KNOW_INJECT_MARK } from "../../know/src/inject";
-import { AgentMemory, cueFor, injectedPackets, MEMORY_MARK, openMemory } from "../../../src/index";
+import { AgentMemory, cueFor, injectedPackets, MEMORY_MARK, openMemory, type RowFilter } from "../../../src/index";
 import * as edenMem from "../../../src/index";
 import { HowToStore, howtoPath } from "../../../src/howto-store";
 
@@ -594,10 +594,10 @@ describe("M41 wrap place cues", () => {
       this: AgentMemory,
       text?: string,
       k?: number,
-      opts?: { fuse?: boolean },
+      visible?: RowFilter,
     ) {
       cues.push(String(text ?? ""));
-      return real.call(this, text, k);
+      return real.call(this, text, k, visible);
     });
     try {
       mem.remember("Kai timezone is Pacific");
@@ -629,10 +629,10 @@ describe("M41 wrap place cues", () => {
       this: AgentMemory,
       text?: string,
       k?: number,
-      opts?: { fuse?: boolean },
+      visible?: RowFilter,
     ) {
       cues.push(String(text ?? ""));
-      return real.call(this, text, k);
+      return real.call(this, text, k, visible);
     });
     const proc = spyOn(edenMem, "processMemory").mockImplementation(() => mem);
     try {
