@@ -14,8 +14,9 @@
  *   taken for the parent;
  * - the fork point is that line's turn. The parent's prompts after it were never in the fork's context, so their
  *   deliveries are not copied (`inheritLedger`).
- * The fork's first turn therefore runs on its own, empty ledger. A fork subagent's copy waits for a delivery point in
- * the child window (P2.5).
+ * The fork's first turn therefore runs on its own, empty ledger. A fork subagent (`agent_type: "fork"`) copies its
+ * parent's ledger at its first SubagentStart, before its packet: SubagentStart names the parent session, and the fork
+ * point is now (`memory-hook.ts` `childScope`).
  *
  * The same parent tells the fork's first delta which of its lines are copies (`parentLines`): the parent's own delta
  * encoded them, so the fork encodes only its own turn.

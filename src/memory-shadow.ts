@@ -14,9 +14,16 @@
  *   (captured: with a CLAUDE.md it was not in context, without one it was); and the auto-memory `MEMORY.md` of the
  *   session's project (`memoryIndex`), of which Claude Code loads the first 200 lines, at most 25,000 bytes.
  *
- * A subagent's window gets no InstructionsLoaded (R0 F35) and no delivery point yet: its shadow set (its type's files,
- * D27) waits for SubagentStart delivery (P2.5). The records hold paths, never file text; the files are read at each
- * delivery, so an edit counts at once.
+ * - **At SessionStart and SubagentStart** the project's CLAUDE.md files (`CLAUDE.md`, `.claude/CLAUDE.md`,
+ *   `CLAUDE.local.md` from the session's folder up to the repo's top) are also read from disk: Claude Code 2.1.294
+ *   ran SessionStart(startup) before the session's InstructionsLoaded(session_start), so the briefing cannot wait for
+ *   the record.
+ * - **A subagent's window** gets no InstructionsLoaded (R0 F35), so its set is its parent's, by its type (D27; the
+ *   sub-agents reference, "a non-fork subagent's initial context"): a fork holds the parent's whole context (`window`);
+ *   a typed subagent the parent's eagerly loaded files, the CLAUDE.md files and AGENTS.md, but not auto memory
+ *   (`instructions`); Explore and Plan none of them.
+ *
+ * The records hold paths, never file text; the files are read at each delivery, so an edit counts at once.
  */
 import { closeSync, existsSync, openSync, readdirSync, readSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -88,6 +95,11 @@ export function startShadowEpoch(dir: string): void {
   appendRecord(dir, SHADOW, { k: "epoch" });
 }
 
+/** The files InstructionsLoaded reported loaded eagerly: what a typed subagent's context holds too (see the header). */
+function eagerInstructions(dir: string): string[] {
+  return [...new Set(currentLoads(dir).flatMap((load) => (EAGER.has(load.reason) ? [load.path] : [])))];
+}
+
 /** The instruction files InstructionsLoaded reported that are in the window's context now (see the header). */
 export function loadedInstructions(dir: string): string[] {
   let abandoned: Set<string> | undefined;
@@ -105,6 +117,13 @@ function foldersUp(cwd: string, top: string | undefined): string[] {
   if (!top || relative(top, cwd).startsWith("..")) return folders;
   for (let at = cwd; at !== top && dirname(at) !== at;) folders.push((at = dirname(at)));
   return folders;
+}
+
+/** The project's CLAUDE.md files on disk, from the session's folder up to the repo's top (see the header). */
+function claudeFiles(cwd: string, top: string | undefined): string[] {
+  return foldersUp(cwd, top).flatMap((folder) =>
+    CLAUDE_FILES.map((name) => join(folder, name)).filter((path) => existsSync(path)),
+  );
 }
 
 /** AGENTS.md files Claude Code loads by default: those of a project with no CLAUDE.md of its own (see the header). */
@@ -160,13 +179,36 @@ export interface ShadowPlace {
 }
 
 /**
- * The text of every file in the window's shadow set (see the header), in order: the loaded files, AGENTS.md, then
- * MEMORY.md, within `TOTAL_BYTES` in all.
+ * Which of a window's files a context holds (see the header): the whole set (`window`), a typed subagent's part
+ * (`instructions`), or none.
  */
-export function shadowTexts(dir: string | undefined, place: ShadowPlace): string[] {
+export type ShadowKind = "window" | "instructions" | "none";
+
+/** Which set to read: its kind (default `window`), and whether the CLAUDE.md files are read from disk too. */
+export interface ShadowOptions {
+  kind?: ShadowKind;
+  onDisk?: boolean;
+}
+
+/**
+ * The text of every file in the window's shadow set (see the header), in order: the loaded files, the CLAUDE.md files
+ * on disk (`onDisk`), AGENTS.md, then MEMORY.md, within `TOTAL_BYTES` in all. `dir` is the window whose records
+ * count: a subagent's parent.
+ */
+export function shadowTexts(dir: string | undefined, place: ShadowPlace, options: ShadowOptions = {}): string[] {
+  const kind = options.kind ?? "window";
+  if (kind === "none") return [];
   const git = place.cwd ? gitPlace(place.cwd) : undefined;
-  const files = [...(dir ? loadedInstructions(dir) : []), ...(place.cwd ? agentsFiles(place.cwd, git?.top) : [])];
-  const index = place.cwd && place.transcriptPath ? memoryIndex(place.cwd, git, place.transcriptPath) : undefined;
+  const loaded = dir ? (kind === "window" ? loadedInstructions(dir) : eagerInstructions(dir)) : [];
+  const files = [
+    ...loaded,
+    ...(options.onDisk && place.cwd ? claudeFiles(place.cwd, git?.top) : []),
+    ...(place.cwd ? agentsFiles(place.cwd, git?.top) : []),
+  ];
+  const index =
+    kind === "window" && place.cwd && place.transcriptPath
+      ? memoryIndex(place.cwd, git, place.transcriptPath)
+      : undefined;
   const texts: string[] = [];
   let left = TOTAL_BYTES;
   for (const path of [...new Set(files)].slice(0, MAX_FILES)) {
@@ -181,9 +223,9 @@ export function shadowTexts(dir: string | undefined, place: ShadowPlace): string
 }
 
 /** The shadow set's sentences, for D26's test (`unsaidText`); none when they cannot be read (fail open). */
-export function shadowSentences(dir: string | undefined, place: ShadowPlace): Said[] {
+export function shadowSentences(dir: string | undefined, place: ShadowPlace, options: ShadowOptions = {}): Said[] {
   try {
-    return residualSentences(shadowTexts(dir, place));
+    return residualSentences(shadowTexts(dir, place, options));
   } catch {
     return [];
   }

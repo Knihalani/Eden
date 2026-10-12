@@ -175,6 +175,7 @@ describe("M44 project identity", () => {
   });
 
   test("SessionStart for B briefs sqlite and skips the traj dump; math submit omits the packet", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir, EDEN_MEMORY_MIN: "1" }, () => {
@@ -191,10 +192,7 @@ describe("M44 project identity", () => {
           session: SESSION_A,
           states: [{ url: AX_URL, tree: AX_TREE, action: "click", t: 1 }],
         });
-        const start = memoryHookResponse({
-          hook_event_name: "SessionStart",
-          session_id: SESSION_B,
-        });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: SESSION_B });
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
         expect(ctx).toMatch(/sqlite/i);
@@ -340,6 +338,7 @@ describe("M44 project identity", () => {
 
   // Out of quarantine since P0.5: both sessions run in this repo, whose one store (D1) session B reads.
   test("session B does not resurrect postgres after sqlite overwrite", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     const dir = tmpDir();
     try {
       await withEnv({ ...QUIET, EDEN_MEMORY_DIR: dir }, () => {
@@ -362,7 +361,7 @@ describe("M44 project identity", () => {
         const dbCtx = hookContext(db);
         expect(dbCtx).toMatch(/sqlite/i);
         expect(dbCtx).not.toMatch(/postgres/i);
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: SESSION_B });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: SESSION_B });
         const ctx = hookContext(start);
         expect(ctx).toMatch(/sqlite/i);
         expect(ctx).not.toMatch(/database is postgres/i);

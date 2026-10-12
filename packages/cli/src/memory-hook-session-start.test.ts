@@ -139,16 +139,17 @@ describe("SessionStart briefs ≤ 3 pins and no gists (D23)", () => {
     expect(session(project).start).toBe("");
   });
 
-  test("after a compaction, nothing", () => {
+  test("after a compaction, no pin: the legacy gists only, until the cue path brings a dropped row back (P4.2)", () => {
     const project = repo();
-    session(project, ["Never force-push."]);
+    session(project, ["Never force-push.", "The dev server port is 4000."]);
     const out = memoryHookResponse({
       session_id: "s-c",
       cwd: project,
       hook_event_name: "SessionStart",
       source: "compact",
     });
-    expect(contextOf(out)).toBe("");
+    expect(contextOf(out)).not.toContain("force-push");
+    expect(contextOf(out)).toContain("4000");
   });
 });
 
@@ -164,7 +165,7 @@ describe("D27 at startup: the project's CLAUDE.md before InstructionsLoaded repo
 });
 
 describe("D11: a row whose only rule the user keeps for all projects", () => {
-  test("is no pin, so its other words are not briefed as a rule", () => {
+  test("briefs what else it says as a fact, not as a rule (P2.4's follow-up)", () => {
     pinIn("a", "Don't merge PRs yourself, the staging server is called orbit.");
     const b = pinIn("b");
     session(b);
@@ -172,7 +173,7 @@ describe("D11: a row whose only rule the user keeps for all projects", () => {
     const start = session(repo("a")).start;
     expect(start).toContain("Rule you set: Don't merge PRs yourself (all projects)");
     expect(start).not.toContain("Rule you set: the staging server");
-    expect(start).not.toContain("orbit");
+    expect(start).toMatch(/- the staging server is called orbit \(you said, /);
   });
 });
 

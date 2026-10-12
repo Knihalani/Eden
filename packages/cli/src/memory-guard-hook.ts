@@ -27,6 +27,7 @@ import { guardedCall, type GuardCall } from "../../../src/memory-guard-match";
 import { claimCall } from "../../../src/memory-guard-log";
 import { deliveredKeys, humanTurns, ledgerKey, packetTokens, recordPacket } from "../../../src/memory-ledger";
 import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
+import { childTranscript } from "../../../src/memory-session";
 import { ledgerFor, transcriptOffset, windowDir } from "../../../src/memory-window";
 import {
   asRec,
@@ -39,17 +40,21 @@ import {
   type Trace,
 } from "./memory-hook-io";
 
-/** Records what the guard told in the window's ledger of its mode (A4 §4). */
+/**
+ * Records what the guard told in the window's ledger of its mode (A4 §4), at its transcript's size: a subagent's own
+ * transcript in a child window (D25).
+ */
 function recordTold(
   r: Record<string, unknown>,
-  at: { win: string; ht: number },
+  at: { win: string; ht: number; child: boolean },
   answer: GuardAnswer,
   repo: string,
   told: boolean,
 ): void {
   const file = ledgerFor(told ? "on" : "shadow");
   if (!file) return;
-  const moment = { off: transcriptOffset(transcriptOf(r)), att: str(r.prompt_id) ?? "", ht: at.ht };
+  const transcript = at.child ? childTranscript(r) : transcriptOf(r);
+  const moment = { off: transcriptOffset(transcript), att: str(r.prompt_id) ?? "", ht: at.ht };
   const keys = answer.rows.flatMap((row) => deliveredKeys(row, repo));
   recordPacket(at.win, { keys, tokens: packetTokens(answer.context) }, moment, file);
 }
@@ -90,7 +95,7 @@ function guard(r: Record<string, unknown>, flags: FlagState, trace: Trace): Reco
     ...(answer.bypassed ? { guard_bypassed: true } : {}),
   });
   try {
-    recordTold(r, { win, ht }, answer, repo.key, told);
+    recordTold(r, { win, ht, child: resolved.child }, answer, repo.key, told);
   } catch {}
   if (!told && !asked) return null;
   return {

@@ -84,7 +84,16 @@ function latest(
   };
 }
 
-export function recentConversation(transcriptPath: string, prompt: string): RecentConversation {
+/**
+ * What the conversation just said (see the header). `typedPrompts` is how many typed prompts back D26's residual
+ * reaches: 2 for a window's own turn, every one since the last compaction for a fork subagent, whose context is its
+ * parent's whole conversation (A4 §5.3).
+ */
+export function recentConversation(
+  transcriptPath: string,
+  prompt: string,
+  typedPrompts = TYPED_PROMPTS,
+): RecentConversation {
   const current = prompt.trim();
   const residual = current ? [prompt] : [];
   let previousTyped = "";
@@ -92,7 +101,7 @@ export function recentConversation(transcriptPath: string, prompt: string): Rece
   let sawCurrent = false;
   const lines = transcriptPath ? tailLines(transcriptPath, TAIL_BYTES) : [];
   const { toolResults, lastAssistant, contextTokens } = latest(lines);
-  for (let at = lines.length - 1; at >= 0 && typed < TYPED_PROMPTS; at--) {
+  for (let at = lines.length - 1; at >= 0 && typed < typedPrompts; at--) {
     const line = lines[at]!;
     if (line.isSidechain === true) continue;
     if (line.isCompactSummary === true || line.subtype === "compact_boundary") break;
