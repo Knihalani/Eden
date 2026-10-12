@@ -453,3 +453,26 @@ describe("review round 2's probes: the semantic store's unscoped values (guards)
     expect(packet).toContain("Clerk");
   });
 });
+
+describe("review round 4: rows that name only the root's files", () => {
+  test("a tool result naming a root file, while working in apps/web, is the root's and never labelled apps/web", () => {
+    put(top, { "scripts/db.ts": "export {};\n" });
+    commit(top);
+    hook("SessionStart", "s1", { source: "startup" });
+    submit("s1", "look at the web login", "p1");
+    read("s1", "p1", "apps/web/app/login.ts");
+    hook("PostToolUse", "s1", {
+      tool_name: "Write",
+      tool_input: { file_path: join(top, "scripts/db.ts") },
+      tool_response: `File created successfully at: ${join(top, "scripts/db.ts")}`,
+    });
+    const row = rows().find((r) => r.text.includes("scripts/db.ts"));
+    expect(row?.scope).toBe("");
+    tick(86_400_000);
+    hook("SessionStart", "s2", { source: "startup" });
+    submit("s2", "look at both login flows", "q1");
+    read("s2", "q1", "apps/web/app/login.ts", "packages/cli/src/login.ts");
+    const packet = submit("s2", "where is the db script for apps/web/app/login.ts and packages/cli/src/login.ts", "q2");
+    expect(packet).not.toMatch(/apps\/web: [^\n]*scripts\/db\.ts/);
+  });
+});
