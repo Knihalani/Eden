@@ -98,7 +98,7 @@ Each error type has its **own control**. That is the lesson from biology (A3 §4
 - Bazel top-level fallback
 - `.eden/scopes` override
 
-It is rebuilt at sleep and after a Write/Edit of a manifest or workspace file. Lookup is a longest prefix match and never touches the filesystem.
+It is rebuilt at sleep and after a Write/Edit of a manifest or workspace file. Lookup is a longest prefix match and never touches the filesystem. (Built in P3.1; D3 has the notes: a turn's end builds a missing catalog, and a write into a folder min-2 dropped rebuilds it.)
 
 **Place signal** (per window, folded from `ctx.log`):
 - Collect paths with these weights (DECISIONS D4):
