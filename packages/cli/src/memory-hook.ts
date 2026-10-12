@@ -96,6 +96,7 @@ import {
   readLastAssistant,
   recordBatch,
   recordCrons,
+  SHADOW_LEDGER,
   transcriptOffset,
   windowDir,
   writeLastAssistant,
@@ -673,16 +674,17 @@ const DROPS_RULE =
 /**
  * What the user's own words end (P2.1's follow-ups): a release with no class word ends the live intents it names
  * ("Open it now."), and "that rule is gone" the rules the guard asked the user about in the turn before this one, or,
- * with no such ask, the rules this session's SessionStart proposed revoking (A6 §2.5), unless the guard has asked
- * anything since.
+ * with no such ask, the rules this session's SessionStart proposed revoking (A6 §2.5), in its next 2 human turns and
+ * unless the guard has asked anything since.
  */
 function endRules(ctx: HookContext, said: string): void {
   if (!said) return;
   recordRuleEnds(ctx.mem.dir, intentsReleasedBy(ctx.mem.dir, said), "intent");
   const drops = sentencesOf(said).some((sentence) => DROPS_RULE.test(sentence.trim()));
   if (!ctx.win || !drops) return;
-  const lastAsked = askedRules(ctx.win, humanTurns(ctx.win) - 1);
-  const asked = lastAsked.length ? lastAsked : shownRevocations(ctx.win);
+  const ht = humanTurns(ctx.win);
+  const lastAsked = askedRules(ctx.win, ht - 1);
+  const asked = lastAsked.length ? lastAsked : shownRevocations(ctx.win, ht);
   recordRuleEnds(ctx.mem.dir, asked, "rule");
   const dropped = dropUserRules(ctx.root, asked, memoryNow(), "dropped");
   if (dropped.length) ctx.trace.dropped = dropped;
@@ -758,7 +760,9 @@ function childScope(ctx: HookContext, type: string): ChildScope & { source: "tas
       () => storeScope(win, scope),
       () => {
         if (type !== "fork" || !parent) return;
-        const copied = inheritLedger(parent, win, new Set(), { off: 0 });
+        // X7: in shadow the copy goes to the shadow ledger, which the shadow point reads beside the live one.
+        const into = ctx.mode === "shadow" ? SHADOW_LEDGER : undefined;
+        const copied = inheritLedger(parent, win, new Set(), { off: 0, into });
         Object.assign(ctx.trace, { forked_from: basename(parent), copied });
       },
     );
@@ -864,12 +868,9 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   const revoked = briefed.filter((note) => isRevocation(note) && ids.includes(String(note.id ?? "")));
   if (revoked.length && mode === "on" && writes && win)
     try {
-      markRevocations(
-        win,
-        revoked.flatMap((note) => (isRevocation(note) ? [note.revokes] : [])),
-        memoryNow(),
-      );
-      trace.revoke = revoked.flatMap((note) => (isRevocation(note) ? [note.revokes] : []));
+      const rules = revoked.flatMap((note) => (isRevocation(note) ? [note.revokes] : []));
+      markRevocations(win, rules, memoryNow(), humanTurns(win));
+      trace.revoke = rules;
     } catch {}
   // D11: a proposal is shown once, so only a packet the user's session received counts.
   const shown = proposal && mode === "on" && ids.includes(proposalNote(proposal).id ?? "") ? proposal : undefined;
@@ -974,7 +975,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
     } catch {}
   if (prompt && turn === "imperative" && answer !== "off") notes = mem.recall(cue, encode);
   else if (prompt) mem.observeCue(cue, undefined, encode);
-  if (!notes.length && !acknowledged.length) return null;
+  // X7: an `off` point answers nothing, a kept proposal's acknowledgement included.
+  if (answer === "off" || (!notes.length && !acknowledged.length)) return null;
   // A4 §5.1: validity (step 5); the gate on episodes the user did not type (step 6, A7 §4); novelty (step 7):
   // what the last turns already say (D26), then what this window was already given (the ledger, which also marks
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).

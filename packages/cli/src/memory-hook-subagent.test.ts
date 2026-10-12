@@ -203,12 +203,21 @@ describe("SubagentStart: the task's scope (A4 §5.3)", () => {
     expect(subagentStart("a2", "Explore")).toContain("packages/cli has no auth");
   });
 
-  test("two launches before either SubagentStart: the newest unconsumed of its type, each once", () => {
+  test("two launches before either SubagentStart: which is whose cannot be told, so both get the parent's paths", () => {
     plant();
+    readBatch("packages/cli/src/index.ts", "p1");
     launch("look at apps/web/app/login.ts", "Explore");
     launch("look at packages/cli/src/index.ts", "Explore");
-    expect(subagentStart("a1", "Explore")).toContain("packages/cli has no auth");
-    expect(subagentStart("a2", "Explore")).toContain("Clerk");
+    for (const agent of ["a1", "a2"]) {
+      const packet = subagentStart(agent, "Explore");
+      expect(packet).toContain("packages/cli has no auth");
+      expect(packet).not.toContain("Clerk");
+    }
+    expect(
+      events()
+        .filter((event) => event.ev === "SubagentStart")
+        .map((event) => event.scope),
+    ).toEqual(["parent", "parent"]);
   });
 
   test("no launch recorded: the parent's recent paths", () => {

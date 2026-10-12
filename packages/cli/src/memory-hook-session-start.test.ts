@@ -221,6 +221,16 @@ describe("A6 §2.5: 3 declines in 14 days propose revoking the rule", () => {
     expect(asked).toBeNull();
   });
 
+  test('"that rule is gone" after the session\'s first 2 human turns no longer names the proposal', () => {
+    const project = repo();
+    session(project, ["Don't merge PRs yourself."]);
+    flags({ "guard.context": "on", "guard.ask": "on" });
+    for (let n = 0; n < 3; n++) declinedMerge(project, "s-a");
+    const shown = session(project, ["list the open issues", "check the deploy queue", "ok, that rule is gone."]);
+    expect(shown.start).toMatch(REVOKE);
+    expect(session(project).start).toMatch(REVOKE);
+  });
+
   test("approved asks do not count", () => {
     const project = repo();
     session(project, ["Don't merge PRs yourself."]);
