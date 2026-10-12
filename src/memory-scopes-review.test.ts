@@ -8,6 +8,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { catalogOf, rebuildsCatalog } from "./memory-scopes";
 
+/** Every written file is one git lists (the rule's own reading; `listedFile` is tested apart). */
+const listedAll = () => true;
+
 let dir = "";
 let top = "";
 
@@ -68,9 +71,9 @@ describe("the reader", () => {
 describe("waiting edges", () => {
   const catalog = { built: 0, checkout: "/x", scopes: ["", "tools/a"], waiting: ["tools", "tools/a/deep"] };
   test("a waiting folder inside a scope owns its files; its parent scope's other files do not count", () => {
-    expect(rebuildsCatalog(catalog, ["tools/a/deep/x.ts"])).toBe(true);
-    expect(rebuildsCatalog(catalog, ["tools/a/y.ts"])).toBe(false);
-    expect(rebuildsCatalog(catalog, ["tools/z.ts"])).toBe(true);
-    expect(rebuildsCatalog(catalog, ["toolsx/z.ts"])).toBe(false);
+    expect(rebuildsCatalog(catalog, ["tools/a/deep/x.ts"], listedAll)).toBe(true);
+    expect(rebuildsCatalog(catalog, ["tools/a/y.ts"], listedAll)).toBe(false);
+    expect(rebuildsCatalog(catalog, ["tools/z.ts"], listedAll)).toBe(true);
+    expect(rebuildsCatalog(catalog, ["toolsx/z.ts"], listedAll)).toBe(false);
   });
 });

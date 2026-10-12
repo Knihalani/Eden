@@ -26,6 +26,10 @@ export type ProvenanceNote = {
   update?: { was?: string; renews?: { cid: string; ver: string; rule: boolean; sw?: string[] } };
   /** D9: the rules a rule row states, by key (`memory-policy.ts`). */
   rules?: readonly RuleRef[];
+  /** Where in the repo the row is true (A4 §1, D3); absent on a row written before P3.2 placed encoded rows. */
+  scope?: string;
+  /** The rows a two-scope bullet shows (`memory-place.ts`): what the ledger records for it (A4 §4). */
+  parts?: readonly ProvenanceNote[];
 };
 
 /** Times are epoch ms (~1.7e12); a smaller number is a list serial a store from before P0.3 kept, not a time. */
