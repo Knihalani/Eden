@@ -16,10 +16,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { storeRows } from "../../../src/index";
+import { openMemory, storeRows } from "../../../src/index";
 import { readLedger } from "../../../src/memory-ledger";
 import { storeFor } from "../../../src/memory-repo";
 import { readCatalog } from "../../../src/memory-scopes";
+import { consolidate } from "../../../src/sleep";
 import { memoryHookResponse } from "./memory-hook";
 
 const NOW = Date.parse("2026-10-12T12:00:00Z");
@@ -306,5 +307,99 @@ describe("X7 and fail-open", () => {
     expect(packet).toContain("Clerk");
     expect(events("UserPromptSubmit").at(-1)!.read).toBeUndefined();
     expect(scopeOf("which auth does packages/cli")).toBeUndefined();
+  });
+});
+
+/** Two sibling folders each state their auth provider as a copula, naming a file of their folder. */
+function plantCopulas(): void {
+  hook("SessionStart", "s-facts", { source: "startup" });
+  submit("s-facts", "The auth provider is Clerk in apps/web/app/login.ts.", "f1");
+  tick();
+  submit("s-facts", "The auth provider is Passport in packages/cli/src/login.ts.", "f2");
+  tick(86_400_000);
+}
+
+const live = () => rows().filter((row) => row.invalidAt === undefined && row.invalidBy === undefined);
+
+describe("review round 1's probes (A4 §2–3.2 as P3.2 reads them)", () => {
+  test("the two-scope bullet's other value is never a prompt the user typed, nor one that only names the subject", () => {
+    plant();
+    hook("SessionStart", "s3", { source: "startup" });
+    submit("s3", "which auth does packages/cli/src/index.ts use?", "p1");
+    tick();
+    submit("s3", "look at both login flows", "p2");
+    read("s3", "p2", "apps/web/app/login.ts", "packages/cli/src/login.ts");
+    const packet = submit("s3", "make packages/cli/src/login.ts use the same auth as apps/web/app/login.ts", "p3");
+    expect(packet).not.toMatch(/packages\/cli: (?:which auth|make packages)/);
+  });
+
+  test("a two-scope turn's labelled bullet shows no raw packet label", () => {
+    hook("SessionStart", "s0", { source: "startup" });
+    submit("s0", "look at the login page", "p0");
+    read("s0", "p0", "apps/web/app/login.ts");
+    submit("s0", "The login redirect waits for the session cookie before it navigates.", "p1");
+    tick(86_400_000);
+    hook("SessionStart", "s1", { source: "startup" });
+    submit("s1", "look at both login flows", "q1");
+    read("s1", "q1", "apps/web/app/login.ts", "packages/cli/src/login.ts");
+    const packet = submit(
+      "s1",
+      "why does the login redirect wait in apps/web/app/login.ts and packages/cli/src/login.ts",
+      "q2",
+    );
+    expect(packet).toContain("- apps/web: The login redirect waits");
+    expect(packet).not.toMatch(/\[(?:fact|episode)/);
+  });
+
+  test("the idle sleep's consolidate supersedes no value of a sibling folder", () => {
+    plantCopulas();
+    const mem = openMemory({ dir: store(), perRepo: true });
+    try {
+      consolidate(mem as never);
+    } finally {
+      mem.close();
+    }
+    expect(
+      live()
+        .map((row) => row.scope)
+        .sort(),
+    ).toEqual(["apps/web", "packages/cli"]);
+  });
+
+  test("an apps/web cue on the overwrite route gets apps/web's value, never packages/cli's", () => {
+    plantCopulas();
+    hook("SessionStart", "s2", { source: "startup" });
+    const packet = submit("s2", "which auth provider does apps/web/app/login.ts use? The Lead is Bob", "p1");
+    expect(packet).not.toContain("Passport");
+  });
+
+  test("a switch at apps/web leaves packages/cli's same old value standing at delivery", () => {
+    hook("SessionStart", "s-facts", { source: "startup" });
+    submit("s-facts", "In apps/web the auth provider is Auth0.", "f1");
+    tick();
+    submit("s-facts", "In packages/cli the auth provider is Auth0.", "f2");
+    tick();
+    submit("s-facts", "In apps/web the auth provider is Clerk.", "f3");
+    tick(86_400_000);
+    expect(
+      live()
+        .filter((row) => row.text.includes("Auth0"))
+        .map((row) => row.scope),
+    ).toEqual(["packages/cli"]);
+    hook("SessionStart", "s2", { source: "startup" });
+    expect(submit("s2", "which auth provider does packages/cli/src/index.ts use?", "p1")).toContain("Auth0");
+  });
+
+  test("D7: a root slot typed while working in one folder is stored at the root, and every folder sees it", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    submit("s1", "look at the login page", "p1");
+    read("s1", "p1", "apps/web/app/login.ts");
+    submit("s1", "The package manager is pnpm.", "p2");
+    const fact = rows().find((row) => row.kind === "fact" && row.text.startsWith("The package manager is pnpm"));
+    expect(fact?.scope).toBe("");
+    tick(86_400_000);
+    hook("SessionStart", "s2", { source: "startup" });
+    const packet = submit("s2", "which package manager installs packages/cli/src/index.ts deps?", "q1");
+    expect(packet).toContain("pnpm");
   });
 });

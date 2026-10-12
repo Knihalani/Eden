@@ -207,7 +207,7 @@ function briefing(mem: ReturnType<typeof openMemory>, root: string): { notes: Pr
     notes: ProvenanceNote[] = [],
     invalid = readInvalidations(mem.dir),
     add = (note: ProvenanceNote): void => {
-      let text = validText(withoutExpiredIntents(String(note.text ?? ""), note.at), note.at, invalid);
+      let text = validText(withoutExpiredIntents(String(note.text ?? ""), note.at), note.at, invalid, note.scope);
       try {
         text = scrubTombstonedIdentity(text, mem.dir).trim();
       } catch {}
@@ -299,14 +299,15 @@ function deliver(
 
 /**
  * A scope's live rows that may give a two-scope bullet its other value (`twoScopeNotes`), as delivery reads them (A4
- * §5.1 step 5: what invalidations and 7 days left of each), newest first.
+ * §5.1 step 5: what invalidations and 7 days left of each), newest first; never a row of the prompt being answered.
  */
-function scopeRows(mem: ReturnType<typeof openMemory>, invalid: readonly Invalidation[]) {
+function scopeRows(mem: ReturnType<typeof openMemory>, invalid: readonly Invalidation[], promptId?: string) {
   return (scope: string): ProvenanceNote[] =>
     mem
       .memories()
       .filter((row) => row.scope === scope && typedValueRow(row) && isLiveRow(row))
-      .map((row) => ({ ...row, text: validText(withoutExpiredIntents(row.text, row.at), row.at, invalid) }))
+      .filter((row) => !promptId || row.promptId !== promptId)
+      .map((row) => ({ ...row, text: validText(withoutExpiredIntents(row.text, row.at), row.at, invalid, scope) }))
       .filter((row) => row.text)
       .sort((a, b) => b.at - a.at);
 }
@@ -1137,7 +1138,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   const allowed = withinBudget(novel, tokens);
   // D11: a kept proposal's acknowledgement leads; it states nothing the store retrieves. A4 §2: a two-scope read set's
   // values of one slot share a bullet.
-  const shown = twoScopeNotes([...acknowledged, ...allowed], place?.readSet ?? [], scopeRows(mem, against.invalid));
+  const others = scopeRows(mem, against.invalid, str(r.prompt_id));
+  const shown = twoScopeNotes([...acknowledged, ...allowed], place?.readSet ?? [], others);
   const { packet, cids, ids, notes: given } = deliver(shapePacket(shown), ledger, { off, att, repo: ctx.repo });
   Object.assign(trace, { cids, ids, tokens_epoch: tokens });
   trace.drops = { ...drops, budget: novel.length - allowed.length, shape: shown.length - given };

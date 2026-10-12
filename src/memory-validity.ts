@@ -61,12 +61,13 @@ import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript"
 /**
  * A retraction or switch (`retract`) of value `o`, with its typed form `f` when its capitals alone shape it; a switch
  * also keeps the scope it names (`s`, a path), its subject words (`w`) and the value it switches to (`n`, as typed,
- * when that is value-shaped). A revocation (`revoke`) of action class `c`
+ * when that is value-shaped). A supersession keeps the scope of the row it superseded (`in`, since P3.2): it holds
+ * for rows at that scope only, and for rows whose scope is unknown. A revocation (`revoke`) of action class `c`
  * on object words `o`. An opposition (`oppose`) of the rule keyed `r`. An end (`end`) of the rule `r`: of an
  * intent, or (`of: "rule"`) of any rule.
  */
 export type Invalidation =
-  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; n?: string; r?: "forget" }
+  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; n?: string; r?: "forget"; in?: string }
   | { k: "revoke"; c: string; o: string[]; t: number }
   | { k: "oppose"; r: string; t: number }
   | { k: "end"; r: string; t: number; of: RuleEnd };
@@ -276,11 +277,13 @@ export function recordSupersession(
   slot: { subject: string; value: string },
   t = memoryNow(),
   src?: "legacy",
+  scope?: string,
 ): void {
   try {
     const subject = subjectWords(slot.subject);
     if (!subject.length) return;
-    const record = { k: "retract", ...retracted(slot.value), t, w: subject, ...(src ? { src } : {}) };
+    const place = scope === undefined ? {} : { in: scope };
+    const record = { k: "retract", ...retracted(slot.value), t, w: subject, ...place, ...(src ? { src } : {}) };
     mkdirSync(root, { recursive: true });
     appendFileSync(join(root, FILE), `${JSON.stringify(record)}\n`, { mode: 0o600 });
   } catch {}
@@ -321,7 +324,8 @@ function parseInvalidation(line: string): Invalidation[] {
         : {};
       const forget = record.r === "forget" ? { r: "forget" as const } : {};
       const to = typeof record.n === "string" ? { n: record.n } : {};
-      return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...to, ...forget }];
+      const place = typeof record.in === "string" ? { in: record.in } : {};
+      return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...to, ...forget, ...place }];
     }
     if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
       return [{ k: "revoke", c: record.c, o: record.o.filter((word): word is string => typeof word === "string"), t }];
@@ -457,11 +461,12 @@ function otherRules(sentence: string, records: readonly Invalidation[]): string[
     .filter((part) => RULE_SENTENCE.test(part) && !revokes(records, part));
 }
 
-function invalidates(record: Invalidation, sentence: string): boolean {
+function invalidates(record: Invalidation, sentence: string, scope: string | undefined): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
   if (record.k === "oppose") return statesRule(sentence, record.r);
   // An end is applied to the whole text first (`withoutEnded`).
   if (record.k === "end") return false;
+  if (record.in !== undefined && scope !== undefined && record.in !== scope) return false;
   if (RULE_SENTENCE.test(sentence)) return false;
   if (!mentions(sentence, record)) return false;
   if (!sameScope(sentence, record.s) || !namesSubject(sentence, record.w)) return false;
@@ -474,9 +479,10 @@ function invalidates(record: Invalidation, sentence: string): boolean {
  * text without a wall-clock time counts as older than every invalidation. Each clause is read on its own, as A4 §3.1
  * supersedes statements: a rule clause yields only to a revocation, which takes its whole sentence (the clauses after
  * a `;` qualify the rule: "never push to main; ask first"); a fact or episode clause yields to a retraction
- * (supersession, `stale_for`), even inside a pinned row.
+ * (supersession, `stale_for`), even inside a pinned row. `scope` is the row's (A4 §2), when it has one: a supersession
+ * at another scope leaves it as it is.
  */
-export function validText(text: string, at: unknown, records: readonly Invalidation[]): string {
+export function validText(text: string, at: unknown, records: readonly Invalidation[], scope?: string): string {
   const time = typeof at === "number" && Number.isFinite(at) ? at : 0;
   const newer = records.filter((record) => record.t > time && record.k !== "end");
   const raw = withoutEnded(
@@ -491,7 +497,7 @@ export function validText(text: string, at: unknown, records: readonly Invalidat
       .split(CLAUSE_BREAK)
       .map((clause) => clause.trim())
       .filter(Boolean);
-    const valid = (clause: string) => !newer.some((record) => invalidates(record, clause));
+    const valid = (clause: string) => !newer.some((record) => invalidates(record, clause, scope));
     const revoked = clauses.some((clause) => revokes(newer, clause));
     const left = revoked ? otherRules(sentence, newer).filter(valid) : clauses.filter(valid);
     if (revoked || left.length < clauses.length) dropped = true;

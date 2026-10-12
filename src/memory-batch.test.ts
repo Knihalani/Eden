@@ -1,5 +1,8 @@
 /** P0.6: what one PostToolBatch records (A4 §5.5): paths, Bash exit codes and D10 error signatures. */
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { batchRecord, errorSignature } from "./memory-batch";
 
 const call = (tool_name: string, tool_input: Record<string, unknown>, tool_response: unknown) => ({
@@ -27,10 +30,27 @@ describe("A4 §5.5: the batch's ctx.log record", () => {
     expect(record).toEqual({
       prompt_id: "p1",
       paths: ["/repo/packages/cli/src/login.ts", "/repo/apps/web"],
-      bash: ["packages/cli"],
+      bash: [],
       exit: [0, 1],
       sig: ["error: Cannot find module '<path>' from '<path>:<loc>'"],
     });
+  });
+
+  test("D4's Bash paths: the cd target and the arguments read from it, each a place of the repo", () => {
+    const top = mkdtempSync(join(tmpdir(), "eden-batch-bash-"));
+    try {
+      mkdirSync(join(top, "apps/web/src"), { recursive: true });
+      writeFileSync(join(top, "apps/web/src/a.ts"), "");
+      const bash = (command: string, cwd = top) =>
+        batchRecord({ tool_calls: [call("Bash", { command }, "")] }, { top, cwd }).bash;
+      expect(bash("cd apps/web && bun test src/a.ts")).toEqual(["apps/web", "apps/web/src/a.ts"]);
+      expect(bash("cd src && ls", join(top, "apps/web"))).toEqual(["apps/web/src"]);
+      expect(bash("cd ~/elsewhere && cat src/a.ts", join(top, "apps/web"))).toEqual([]);
+      expect(bash('cd "$(git rev-parse --show-toplevel)" && ls')).toEqual([]);
+      expect(batchRecord({ tool_calls: [call("Bash", { command: "cd apps/web" }, "")] }).bash).toEqual([]);
+    } finally {
+      rmSync(top, { recursive: true, force: true });
+    }
   });
 
   test("D10: the same error in another file, line or run has one signature", () => {

@@ -27,7 +27,7 @@ import { stripPastes, withoutInstructions, type TextSource } from "./memory-auth
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
-import { rowScope, type EncodePlace } from "./memory-place";
+import { namesRootSlot, rowScope, type EncodePlace } from "./memory-place";
 import {
   counteredKeys,
   isForget,
@@ -756,7 +756,7 @@ function supersedeByTime(root: string, stored: readonly MemoryRecord[], settled:
       const [older, newer] = (other.at ?? 0) > (row.at ?? 0) ? [row, other] : [other, row];
       older.invalidBy = newer.id;
       const slot = legacySlot(older);
-      if (slot && legacySlot(newer)) recordSupersession(root, slot, newer.at);
+      if (slot && legacySlot(newer)) recordSupersession(root, slot, newer.at, undefined, older.scope);
     }
 }
 
@@ -934,6 +934,16 @@ function mergeHowtoLane(lexical: MemoryRecord[], text: string, cap: number, dir:
   return [...kept, rec];
 }
 
+/**
+ * The overwrite route's assembly where a reader's place is known (A4 §3.2): each scope's notes on their own, and
+ * never with the semantic store's live values, which hold no scope, so a value at one scope never overturns another's.
+ */
+function assembleWithin(notes: MemoryRecord[]): MemoryRecord[] {
+  const byScope = new Map<string | undefined, MemoryRecord[]>();
+  for (const note of notes) byScope.set(note.scope, [...(byScope.get(note.scope) ?? []), note]);
+  return [...byScope.values()].flatMap((group) => assembleNotes(group));
+}
+
 export class AgentMemory {
   readonly dir: string;
   readonly session?: string;
@@ -1076,7 +1086,8 @@ export class AgentMemory {
     // (the diary, D6) is never a pin: a prompt's own episode would otherwise brief a rule its rule row no longer holds.
     const stated = untyped ? [] : rulesIn(rec.text);
     const rules = rec.kind === "constraint" ? stated : [];
-    const scope = opts.scope ?? (this.place && rowScope(rec.text, rules.length > 0, this.place));
+    const root = rules.length > 0 || (rec.kind === "fact" && namesRootSlot(rec.text));
+    const scope = opts.scope ?? (this.place && rowScope(rec.text, root, this.place));
     if (scope !== undefined) rec.scope = scope;
     const pin = !untyped && rec.kind !== "episode" && (opts.pin === true || pinsItself(rec.text, stated));
     if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
@@ -1171,7 +1182,7 @@ export class AgentMemory {
       c.rec.invalidBy = incoming.id;
       this.changed.add(c.rec.id);
       const old = legacySlot(c.rec);
-      if (old && legacySlot(incoming)) recordSupersession(this.dir, old, incoming.at);
+      if (old && legacySlot(incoming)) recordSupersession(this.dir, old, incoming.at, undefined, c.rec.scope);
     }
   }
 
@@ -1691,7 +1702,8 @@ export class AgentMemory {
         } catch {}
         packet = !silent && cue ? this.notesFor(cue, memoryRetrieveCap(), visible) : [];
         try {
-          if (packet.length && cue && routeMemory(cue) === "sf-assemble") packet = assembleNotes(packet, this.dir);
+          if (packet.length && cue && routeMemory(cue) === "sf-assemble")
+            packet = visible === EVERY_ROW ? assembleNotes(packet, this.dir) : assembleWithin(packet);
         } catch {}
         // A trigger hit is STRONG evidence (A7 §4), so it leads, whatever the lexical path makes of the cue.
         const triggered = this.triggered(typedText(list, encode), visible);
