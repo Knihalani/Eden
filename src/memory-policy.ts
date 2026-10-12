@@ -245,13 +245,17 @@ export function oneNamePerObject(text: string): string {
 }
 
 /** D11's unambiguous phrase, "in all my projects": it names where a rule holds, never its object. */
-const ALL_MY_PROJECTS = /\b(?:in|across|for) all (?:of )?my (?:projects|repos(?:itories)?)\b/i;
-/** D11's "everywhere" and "globally", set off from the rule by a comma or a colon ("Never force-push, everywhere"). */
-const SET_OFF_EVERYWHERE = /(?:^|[,;:]\s*)(?:everywhere|globally)\s*(?:[,;:.!]|$)/i;
+const ALL_MY_PROJECTS = /\b(?:in|across|for) (?:all|any) (?:of )?my (?:projects|repos(?:itories)?)\b/i;
+/**
+ * D11's "everywhere" and "globally", set off from the rule as its last words ("Never force-push, everywhere.",
+ * "… — globally") or as its first ("Everywhere, never force-push").
+ */
+const SET_OFF_EVERYWHERE = /(?:[,;—–]|\s-)\s*(?:everywhere|globally)\s*[.!]*$|^(?:everywhere|globally)\s*,/i;
 
 /**
  * Whether a sentence says its rules hold in every repo (D11's phrases). "Everywhere" and "globally" count only set
- * off by a comma: "install packages globally" is npm's `-g`, and "use strict types everywhere" means this codebase.
+ * off: "install packages globally" is npm's `-g`, "use strict types everywhere" means this codebase, and "…: globally,
+ * CI is flaky" says nothing of the rule.
  */
 export function saysAllProjects(sentence: string): boolean {
   return ALL_MY_PROJECTS.test(sentence) || SET_OFF_EVERYWHERE.test(sentence.trim());
