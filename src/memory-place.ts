@@ -26,8 +26,8 @@
  * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names; of several, the working scope (the
  *   read set's first) when it is one of them, else their common ancestor; naming none, the working scope, or `""` for
  *   a rule (A4 §2: policies are mostly `""`) and for a fact of one of D7's root slots (`default_scope: root`, written
- *   at `""` unless the utterance names a scope). Until P3.3's slot table, a fact is of a root slot when it names that
- *   slot's subject or a value only that slot takes (`ROOT_SLOT`).
+ *   at `""` unless the utterance names a scope). Until P3.3's slot table, a fact is of a root slot when it states
+ *   it as a copula's subject or in one of D7's patterns for it (`ROOT_SUBJECT`).
  * - **Two scopes (A4 §2, D4).** When the read set has two scopes and a candidate states a slot at one of them, the
  *   other scope's value for that slot joins it in one bullet: `auth provider — apps/web: Clerk · packages/cli: none`.
  *   Until P3.3's keys, a slot is the legacy copula reading's (`legacySlot`) and its subject's words stand for its
@@ -42,6 +42,7 @@ import { legacySlot } from "./memory-residual";
 import { realpathOrSelf } from "./memory-repo";
 import { repoPathOf, scopeOfDir } from "./memory-scopes";
 import { subjectWords } from "./memory-validity";
+import { STATUS_WORDS } from "./memory-transcript";
 import { appendRecord, windowRecords } from "./memory-window";
 
 /** D4's weights, by source. */
@@ -306,18 +307,25 @@ export function namedScopes(text: string, scopes: readonly string[], top: string
 
 /**
  * D7's root slots (`pkg.manager`, `commit.style`, `branch.base`, `gh.account`, `ci.system`, `deploy.target`), as a
- * fact names them until P3.3's slot table: a subject, or a value only that slot takes.
+ * fact states one until P3.3's slot table: as a copula's subject ("The package manager is pnpm"), or in the patterns
+ * D7 gives them their values by ("we use pnpm", "we deploy to fly.io", "PRs go against develop"). A fact that only
+ * mentions one ("hosted on their cloud", "run through npm scripts") is of its own subject's slot.
  */
-const ROOT_SLOT = new RegExp(
-  String.raw`\b(?:package manager|npm|pnpm|yarn|commit (?:style|messages?)|conventional commits|(?:base|default) branch|` +
-    String.raw`prs? (?:go|goes) (?:against|into)|(?:github|gh) account|ci|continuous integration|github actions|` +
-    String.raw`circleci|buildkite|jenkins|deploy(?:s|ed|ment|ments)?|hosting|hosted)\b`,
+const ROOT_SUBJECT = new RegExp(
+  String.raw`^(?:(?:the|our|this repo'?s?)\s+)?(?:package manager|commit (?:style|messages?)|(?:base|default) branch|` +
+    String.raw`(?:github|gh) account|ci(?: system)?|continuous integration|deploy(?:ment)? target|deployments?|hosting)$`,
+  "i",
+);
+const ROOT_STATEMENT = new RegExp(
+  String.raw`\b(?:we|i)\s+(?:always\s+)?(?:use|run)\s+(?:npm|pnpm|yarn)\b|\bwe\s+(?:deploy|host)\s+(?:to|on)\b|` +
+    String.raw`\bprs?\s+(?:go|goes)\s+(?:against|into)\b`,
   "i",
 );
 
-/** Whether a fact is of one of D7's root slots (see `ROOT_SLOT`). */
+/** Whether a fact states one of D7's root slots (see `ROOT_SUBJECT`). */
 export function namesRootSlot(text: string): boolean {
-  return ROOT_SLOT.test(text);
+  const slot = clauseSlot({ text, kind: "fact" });
+  return (!!slot && ROOT_SUBJECT.test(slot.subject.trim())) || ROOT_STATEMENT.test(text);
 }
 
 /**
@@ -377,22 +385,47 @@ function clauseSlot(row: ProvenanceNote): ReturnType<typeof legacySlot> {
 
 /** A question: it ends with "?", or opens with a question word or an auxiliary. */
 const QUESTION = /\?\s*$|^(?:what|which|who|where|when|why|how|do|does|did|is|are|can|could|should|would|will)\b/i;
+/** Words before a value's head that say nothing of it ("is a mess", "is really slow"). */
+const VALUE_LEAD = /^(?:(?:a|an|the|very|so|really|still|totally|completely|kind of|a bit|pretty|quite)\s+)*/i;
+/** Heads of a complaint, which, like D7's status lexicon, describe a state and are never a slot's value. */
+const COMPLAINTS = new Set(["mess", "pain", "nightmare", "disaster", "problem", "issue", "headache"]);
+
+/** The sentences of a text that are not questions, without their closing stop. */
+function statementsIn(text: string): string[] {
+  return text
+    .split(/(?<=[.!?;])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence && !QUESTION.test(sentence))
+    .map((sentence) => sentence.replace(/[.!?;]+$/, ""));
+}
+
+/** Whether a value's head is a state, not a value: D7's status lexicon or a complaint ("is broken", "is a mess"). */
+function stateOnly(value: string): boolean {
+  const head =
+    value
+      .replace(VALUE_LEAD, "")
+      .split(/\s+/)[0]
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, "") ?? "";
+  return STATUS_WORDS.has(head) || COMPLAINTS.has(head);
+}
 
 /**
- * Whether a sentence states something of one of the subject words, not only names it: the word before a copula or a
- * verb of use ("the auth provider is none", "its database runs on sqlite"), or after one of having or using ("has no
- * auth", "uses no database"). A question or an instruction naming the word ("make it use the same auth") states none.
+ * Whether a statement states a value of one of the subject words, not only names it: the word right before a copula
+ * or a verb of use, with a value after it that is no state ("the auth provider is none", "its database runs on
+ * sqlite"; not "the auth flow is broken" or "our auth is a mess"); or the word after a verb of having or using ("has
+ * no auth", "uses no database"). An instruction naming the word ("make it use the same auth") states none.
  */
 function statesSubject(sentence: string, words: ReadonlySet<string>): boolean {
-  if (QUESTION.test(sentence.trim())) return false;
   return [...words].some((word) => {
     const named = `${escaped(word)}s?`;
-    const before = new RegExp(String.raw`\b${named}\b(?:\s+[\w'-]+){0,3}?\s+(?:is|are|was|were|uses|runs|goes)\b`, "i");
+    const before = new RegExp(String.raw`\b${named}\s+(?:is|are|was|were|uses|runs|goes)\s+(.+)$`, "i").exec(sentence);
     const after = new RegExp(
-      String.raw`\b(?:has|have|had|uses|used)\s+(?:no\s+|an?\s+|the\s+)?(?:[\w'-]+\s+){0,2}${named}\b`,
+      String.raw`\b(?:has|have|had|uses|used)\s+(?:no\s+|an?\s+|the\s+)?((?:[\w'-]+\s+){0,2})${named}\b`,
       "i",
-    );
-    return before.test(sentence) || after.test(sentence);
+    ).exec(sentence);
+    const stated = (value: string) => !value.split(/\s+/).some((part) => part && stateOnly(part));
+    return (!!before && !stateOnly(before[1]!)) || (!!after && stated(after[1]!));
   });
 }
 
@@ -400,7 +433,7 @@ function statesSubject(sentence: string, words: ReadonlySet<string>): boolean {
 function valueFor(row: ProvenanceNote, words: ReadonlySet<string>, scope: string): string | undefined {
   const slot = clauseSlot(row);
   if (slot && subjectWords(slot.subject).some((word) => words.has(word))) return slot.value;
-  const sentence = sentencesIn(bodyOf(row)).find(
+  const sentence = statementsIn(bodyOf(row)).find(
     (part) => subjectWords(part).some((word) => words.has(word)) && statesSubject(part, words),
   );
   return sentence && withoutScope(sentence, scope);

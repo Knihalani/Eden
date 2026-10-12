@@ -403,3 +403,53 @@ describe("review round 1's probes (A4 §2–3.2 as P3.2 reads them)", () => {
     expect(packet).toContain("pnpm");
   });
 });
+
+describe("review round 2's probes: the semantic store's unscoped values (guards)", () => {
+  test("packages/cli's value of a subject never scrubs apps/web's rule or fact at the idle sleep", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    submit("s1", "look at the web login", "p1");
+    read("s1", "p1", "apps/web/app/login.ts");
+    submit("s1", "The auth provider is Clerk.", "p2");
+    submit("s1", "Always use Clerk for login.", "p3");
+    tick();
+    hook("SessionStart", "s2", { source: "startup" });
+    submit("s2", "look at the cli login", "q1");
+    read("s2", "q1", "packages/cli/src/login.ts");
+    submit("s2", "The auth provider is Passport.", "q2");
+    tick();
+    const mem = openMemory({ dir: store(), perRepo: true });
+    try {
+      consolidate(mem as never);
+    } finally {
+      mem.close();
+    }
+    const after = live().map((row) => [row.text, row.scope, row.kind]);
+    expect(after).toContainEqual(["The auth provider is Clerk", "apps/web", "fact"]);
+    expect(after.some(([text]) => String(text).startsWith("Always use Clerk"))).toBe(true);
+  });
+
+  test("after packages/cli states its value, an apps/web cue still gets apps/web's own (no unscoped tombstone hides it)", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    submit("s1", "look at the web login", "p1");
+    read("s1", "p1", "apps/web/app/login.ts");
+    submit("s1", "The auth provider is Clerk.", "p2");
+    tick();
+    hook("SessionStart", "s2", { source: "startup" });
+    submit("s2", "look at the cli login", "q1");
+    read("s2", "q1", "packages/cli/src/login.ts");
+    submit("s2", "The auth provider is Passport.", "q2");
+    tick(86_400_000);
+    const mem = openMemory({ dir: store(), perRepo: true });
+    try {
+      consolidate(mem as never);
+    } finally {
+      mem.close();
+    }
+    hook("SessionStart", "s3", { source: "startup" });
+    submit("s3", "look at the web login again", "r1");
+    read("s3", "r1", "apps/web/app/login.ts");
+    const packet = submit("s3", "which auth provider does apps/web/app/login.ts use?", "r2");
+    expect(packet).not.toContain("Passport");
+    expect(packet).toContain("Clerk");
+  });
+});

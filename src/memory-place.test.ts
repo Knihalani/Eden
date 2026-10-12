@@ -230,7 +230,13 @@ describe("the scope an encoded row is stored at", () => {
   test("D7's root slots go to the root unless the row names a scope", () => {
     expect(namesRootSlot("The package manager is pnpm.")).toBe(true);
     expect(namesRootSlot("We deploy to fly.io from main.")).toBe(true);
+    expect(namesRootSlot("We use pnpm here.")).toBe(true);
+    expect(namesRootSlot("PRs go against develop.")).toBe(true);
     expect(namesRootSlot("The auth provider is Clerk.")).toBe(false);
+    // Review round 2: a working slot's fact that only mentions a root slot's word.
+    expect(namesRootSlot("The auth provider is Clerk, hosted on their cloud.")).toBe(false);
+    expect(namesRootSlot("The test runner is vitest, run through npm scripts.")).toBe(false);
+    expect(namesRootSlot("The database is postgres in CI and sqlite locally.")).toBe(false);
     expect(rowScope("The package manager is pnpm.", true, at("apps/web"))).toBe("");
     expect(rowScope("packages/cli uses yarn as its package manager.", true, at("apps/web"))).toBe("packages/cli");
   });
@@ -314,6 +320,15 @@ describe("A4 §2's two-scope bullet", () => {
     for (const text of [
       "which auth does packages/cli use?",
       "make packages/cli/src/login.ts use the same auth as apps/web/app/login.ts",
+    ])
+      expect(twoScopeNotes([web], readSet, () => [typed(text, "packages/cli", "episode")])[0]!.text).toBe(web.text);
+    // Review round 2: a question that names the subject mid-sentence, and states said of something else or as a state.
+    for (const text of [
+      "packages/cli uses which auth?",
+      "The auth flow is broken in packages/cli",
+      "packages/cli auth tests are flaky",
+      "Our auth is a mess in packages/cli",
+      "packages/cli has broken auth",
     ])
       expect(twoScopeNotes([web], readSet, () => [typed(text, "packages/cli", "episode")])[0]!.text).toBe(web.text);
     const states = typed("The cli's auth is a static token", "packages/cli", "episode");
