@@ -347,7 +347,7 @@ function valueFor(row: ProvenanceNote, words: ReadonlySet<string>, scope: string
 }
 
 /** Whether a row can give the other scope's value: the user typed it, and it is a fact or an episode. */
-function typedValueRow(row: ProvenanceNote): boolean {
+export function typedValueRow(row: ProvenanceNote): boolean {
   const kind = noteKindToken(row);
   return knownNoteSource(row) === "user" && (kind === "fact" || kind === "episode") && !row.rules?.length;
 }
@@ -360,8 +360,9 @@ function namesScope(text: string, scope: string): boolean {
 
 /**
  * A4 §2's two-scope packet (see the header): the candidates, in order, with a slot's value at the other scope of a
- * two-scope read set merged into its bullet, and the rest labelled. `rowsAt` gives a scope's live, valid rows, newest
- * first. A merged or labelled note keeps the rows it shows as `parts`, which the ledger records.
+ * two-scope read set merged into its bullet, and the rest labelled. `rowsAt` gives a scope's live rows that may give a
+ * value (`typedValueRow`), as delivery reads them, newest first; it is asked only for a note that is a slot. A merged
+ * or labelled note keeps the rows it shows as `parts`, which the ledger records.
  */
 export function twoScopeNotes<T extends ProvenanceNote>(
   notes: readonly T[],
@@ -383,9 +384,10 @@ export function twoScopeNotes<T extends ProvenanceNote>(
       continue;
     }
     const other = scope === pair[0] ? pair[1] : pair[0];
-    const candidates = [...notes.filter((row) => row.scope === other), ...rowsOf(other)].filter(
-      (row) => !used.has(rowKey(row)) && rowKey(row) !== rowKey(note),
-    );
+    const candidates = () =>
+      [...notes.filter((row) => row.scope === other), ...rowsOf(other)].filter(
+        (row) => !used.has(rowKey(row)) && rowKey(row) !== rowKey(note),
+      );
     const merged = note.update ? undefined : mergedNote(note, other, pair, placeWords, candidates);
     for (const part of merged?.parts ?? []) used.add(rowKey(part));
     out.push(merged ?? labelled(note, scope));
@@ -407,12 +409,12 @@ function mergedNote(
   other: string,
   pair: readonly [string, string],
   placeWords: ReadonlySet<string>,
-  candidates: readonly ProvenanceNote[],
+  candidates: () => readonly ProvenanceNote[],
 ): ProvenanceNote | undefined {
   const slot = clauseSlot(note);
   const words = new Set(slot ? subjectWords(slot.subject).filter((word) => !placeWords.has(word)) : []);
   if (!slot || !words.size) return undefined;
-  const partner = candidates.find((row) => typedValueRow(row) && valueFor(row, words, other) !== undefined);
+  const partner = candidates().find((row) => typedValueRow(row) && valueFor(row, words, other) !== undefined);
   if (!partner) return undefined;
   const values = new Map([
     [note.scope, slot.value],
