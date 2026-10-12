@@ -301,7 +301,8 @@ describe("eden memory forget --all-in <scope> (A6 §3)", () => {
   });
 
   test("forget --secret still purges", () => {
-    expect(cli(["memory", "forget", "--secret", "nothing-matches-this"]).code).toBe(0);
+    const claude = { CLAUDE_CONFIG_DIR: join(dir, "claude") };
+    expect(cli(["memory", "forget", "--secret", "nothing-matches-this"], { env: claude }).code).toBe(0);
   });
 });
 

@@ -181,6 +181,8 @@ export type MemoryRecord = {
   promptId?: string;
   /** D9: the rules the row states, by key. */
   rules?: RuleRef[];
+  /** Where in the repo the row is true (A4 §1, D3): a scope of its catalog. Absent is the repo root, `""`. */
+  scope?: string;
 };
 
 /** Whether a newer row has superseded this one (A4 §3.1). */
@@ -1017,6 +1019,7 @@ export class AgentMemory {
       pin?: boolean;
       lane?: MemoryLaneKind;
       origin?: MessageOrigin;
+      scope?: string;
     } = {},
   ): MemoryRecord {
     const { at = memoryNow(), srcUuid, promptId } = opts.origin ?? {};
@@ -1030,6 +1033,7 @@ export class AgentMemory {
       ...(this.episode ? { ep: this.episode } : {}),
       ...(srcUuid ? { srcUuid } : {}),
       ...(promptId ? { promptId } : {}),
+      ...(opts.scope ? { scope: opts.scope } : {}),
     };
     try {
       if (this.consent() !== "on") return rec;
@@ -1081,16 +1085,17 @@ export class AgentMemory {
 
   /**
    * Statements the user asked Eden to keep (`eden memory remember`, D11), each one row in the user's own words
-   * (`src:user`): a rule row when it states a D9 rule, else of the kind given (a fact by default). The store is
-   * written once for them all.
+   * (`src:user`): a rule row when it states a D9 rule, else of the kind given (a fact by default), at the scope given
+   * (the repo root by default). The store is written once for them all.
    */
-  rememberTyped(statements: readonly { text: string; kind?: MemoryKind }[]): MemoryRecord[] {
+  rememberTyped(statements: readonly { text: string; kind?: MemoryKind; scope?: string }[]): MemoryRecord[] {
     this.batch++;
     try {
-      return statements.map(({ text, kind }) =>
+      return statements.map(({ text, kind, scope }) =>
         this.remember(text, {
           kind: rulesIn(this.persistText(text)).length ? "constraint" : kind || "fact",
           tags: ["src:user"],
+          scope,
         }),
       );
     } finally {
@@ -1145,10 +1150,26 @@ export class AgentMemory {
   forget(records: readonly Invalidation[]): void {
     const forgets = records.filter(isForget);
     if (!forgets.length) return;
-    const named = this.compiled.filter((c) => !superseded(c.rec) && !validText(c.rec.text, 0, forgets));
-    if (!named.length) return;
+    this.toHistory(this.compiled.filter((c) => !superseded(c.rec) && !validText(c.rec.text, 0, forgets)));
+  }
+
+  /**
+   * A6 §3 `eden memory forget --all-in <scope>`: every keyed row of the scope (a row stating D9 rules) goes to
+   * history, as a forget's do. Returns how many.
+   */
+  forgetScope(scope: string): number {
+    const keyed = this.compiled.filter(
+      (c) => !superseded(c.rec) && c.rec.rules?.length && (c.rec.scope ?? "") === scope,
+    );
+    this.toHistory(keyed);
+    return keyed.length;
+  }
+
+  /** Rows taken back with no successor: invalid at the store's next `seq` (A4 §3.1), and the store written. */
+  private toHistory(rows: readonly Compiled[]): void {
+    if (!rows.length) return;
     const seq = claimSeqs(this.dir, 1) ?? Math.max(0, ...this.compiled.map((c) => c.rec.seq ?? 0));
-    for (const c of named) {
+    for (const c of rows) {
       c.rec.invalidAt = seq;
       this.changed.add(c.rec.id);
     }
@@ -1166,15 +1187,7 @@ export class AgentMemory {
     const taken = this.compiled.filter((c) => c.rec.promptId && gone.has(c.rec.promptId) && !superseded(c.rec));
     if (!taken.length) return;
     const said = restated.map((text) => this.persistText(text).replace(/\s+/g, " ").toLowerCase());
-    const named = taken.filter((c) => !said.some((text) => text.includes(c.rec.text.toLowerCase())));
-    if (!named.length) return;
-    const seq = claimSeqs(this.dir, 1) ?? Math.max(0, ...this.compiled.map((c) => c.rec.seq ?? 0));
-    for (const c of named) {
-      c.rec.invalidAt = seq;
-      this.changed.add(c.rec.id);
-    }
-    this.post = null;
-    this.flush(true);
+    this.toHistory(taken.filter((c) => !said.some((text) => text.includes(c.rec.text.toLowerCase()))));
   }
 
   private rebuildSeen() {

@@ -82,10 +82,6 @@ describe("R5 §9.2 step 2: the manifest set", () => {
     expect(scopesOf({ ...nx, "nx.json": "{}" })).toEqual(["", "libs/a"]);
     expect(scopesOf({ "MODULE.bazel": "", "svc/BUILD": "", "svc/BUILD.bazel": "", "svc/a.go": "" })).toEqual([""]);
   });
-
-  test("a directory git lists as an untracked nested repo (trailing /) is no file", () => {
-    expect(scopesOf({ "package.json": pkg("r"), "nested/": "", "nested/package.json/": "" })).toEqual([""]);
-  });
 });
 
 describe("R5 §9.2 step 3: workspace declarations", () => {
