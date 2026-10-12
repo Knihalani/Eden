@@ -523,10 +523,11 @@ function shapesScopes(name: string): boolean {
 
 /**
  * A4 §2: whether files written (relative to their repo's top) rebuild the catalog: a manifest, workspace or
- * build-system root file, the override, or a file in a waiting directory (see the header). Without a catalog, any.
+ * build-system root file, the override, or a file in a waiting directory (see the header). Without a catalog, none:
+ * the turn's end builds it, off the agent's path, with no time limit to fail on a large repo.
  */
 export function rebuildsCatalog(catalog: ScopeCatalog | undefined, written: readonly string[]): boolean {
-  if (!catalog) return written.length > 0;
+  if (!catalog) return false;
   return written.some(
     (rel) =>
       rel === SCOPES_OVERRIDE ||
