@@ -375,6 +375,8 @@ export function twoScopeNotes<T extends ProvenanceNote>(
   const stored = new Map<string, readonly ProvenanceNote[]>();
   const rowsOf = (scope: string) => stored.get(scope) ?? stored.set(scope, rowsAt(scope)).get(scope)!;
   const used = new Set<string>();
+  // What merged bullets already say at a scope: a later row saying only that is given by them.
+  const said = new Set<string>();
   const out: ProvenanceNote[] = [];
   for (const note of notes) {
     if (used.has(rowKey(note))) continue;
@@ -383,16 +385,27 @@ export function twoScopeNotes<T extends ProvenanceNote>(
       out.push(note);
       continue;
     }
+    if (said.has(saidAt(scope, withoutScope(bodyOf(note), scope)))) continue;
     const other = scope === pair[0] ? pair[1] : pair[0];
     const candidates = () =>
       [...notes.filter((row) => row.scope === other), ...rowsOf(other)].filter(
         (row) => !used.has(rowKey(row)) && rowKey(row) !== rowKey(note),
       );
     const merged = note.update ? undefined : mergedNote(note, other, pair, placeWords, candidates);
-    for (const part of merged?.parts ?? []) used.add(rowKey(part));
-    out.push(merged ?? labelled(note, scope));
+    for (const part of merged?.note.parts ?? []) used.add(rowKey(part));
+    for (const [at, value] of merged?.values ?? []) said.add(saidAt(at, value));
+    out.push(merged?.note ?? labelled(note, scope));
   }
   return out;
+}
+
+/** A value as said at a scope, compared without case, spacing or a closing stop. */
+function saidAt(scope: string, value: string): string {
+  return `${scope}\0${value
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.!?;]+$/, "")
+    .trim()}`;
 }
 
 /** What identifies a row across the packet and the store: its id, or its text when it has none. */
@@ -402,7 +415,8 @@ function rowKey(row: ProvenanceNote): string {
 
 /**
  * The two-scope bullet of a note's slot (see the header), with the first candidate at the other scope giving that
- * slot's value; none when the note is no one-clause slot, or no candidate gives a value.
+ * slot's value, and the value it gives at each scope; none when the note is no one-clause slot, or no candidate gives
+ * a value.
  */
 function mergedNote(
   note: ProvenanceNote,
@@ -410,18 +424,18 @@ function mergedNote(
   pair: readonly [string, string],
   placeWords: ReadonlySet<string>,
   candidates: () => readonly ProvenanceNote[],
-): ProvenanceNote | undefined {
+): { note: ProvenanceNote; values: Map<string, string> } | undefined {
   const slot = clauseSlot(note);
   const words = new Set(slot ? subjectWords(slot.subject).filter((word) => !placeWords.has(word)) : []);
   if (!slot || !words.size) return undefined;
   const partner = candidates().find((row) => typedValueRow(row) && valueFor(row, words, other) !== undefined);
   if (!partner) return undefined;
   const values = new Map([
-    [note.scope, slot.value],
-    [other, valueFor(partner, words, other)],
+    [note.scope!, slot.value],
+    [other, valueFor(partner, words, other)!],
   ]);
   const user = knownNoteSource(note) === "user" && knownNoteSource(partner) === "user";
-  return {
+  const merged: ProvenanceNote = {
     id: note.id,
     text: `${[...words].join(" ")} — ${pair.map((scope) => `${scope}: ${values.get(scope)}`).join(" · ")}`,
     kind: "fact",
@@ -429,6 +443,7 @@ function mergedNote(
     at: Math.max(note.at ?? 0, partner.at ?? 0),
     parts: [note, partner],
   };
+  return { note: merged, values };
 }
 
 /** A note at one scope of a two-scope read set, labelled with it unless its text names it (D4). */
