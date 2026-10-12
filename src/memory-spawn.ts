@@ -4,14 +4,17 @@
  *
  * - **The launch record.** `PreToolUse(Agent)` appends `{k: "spawn", id, type, paths, classes, t}` to the session's
  *   `windows/<session>/spawn.log`: the call's `tool_use_id`, its `subagent_type` (Claude Code's default,
- *   `general-purpose`, when the call names none), the places of the repo its task names, and the action classes its
- *   task names (A7 §5, the compiled triggers' reading). Never the task's text (X11). A nested subagent's launch goes to
+ *   `general-purpose`, when the call names none), the places of the repo its task names (a relative path read from
+ *   the session's folder first, then from the repo's top), and the action classes its task names (A7 §5, the
+ *   compiled triggers' reading). Never the task's text (X11). A nested subagent's launch goes to
  *   the session's window too: SubagentStart's payload does not say which window launched it.
- * - **The claim.** SubagentStart takes A4's record: the newest unconsumed one of its type made within 5 s, and marks it
+ * - **The claim.** SubagentStart takes A4's record, the unconsumed one of its type made within 5 s, and marks it
  *   consumed (a `take` record) under `flock(spawn.lock)`. Claude Code 2.1.294 (P2.5's end-to-end) runs each Agent
- *   call's PreToolUse and then its SubagentStart, one call after the other in a parallel batch too, so the newest of
- *   the type is the subagent's own launch. The subagent's meta file, which names the call's `tool_use_id`, is written
- *   only after SubagentStart returns, so it cannot match them.
+ *   call's PreToolUse and then its SubagentStart, one call after the other in a parallel batch too, so there is one:
+ *   the subagent's own launch. When two are open, which is whose cannot be told (the subagent's meta file, which
+ *   names the call's `tool_use_id`, is written only after SubagentStart returns), so none is taken and the subagent
+ *   gets the parent's paths: A5 `subagent` allows parallel launches their own scopes or both the parent's, never each
+ *   other's.
  * - **The child's scope** is its task's paths and classes, or, with no record to take, the parent's recent paths (the
  *   paths of its last 3 human turns' tool batches: D4's main-thread paths, until P3.2 builds the read set). It is
  *   stored in the child's `scope.json`, which a resumed subagent reuses.
@@ -19,7 +22,7 @@
  *   review), plus the classes `memory-classes.json`'s `agents` map adds (A4 §5.3: a reviewer gets the merge policies).
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join, normalize, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { AGENT_CLASSES, type ActionClass } from "./memory-classes";
 import { realpathOrSelf } from "./memory-repo";
@@ -77,34 +80,41 @@ function underTop(path: string, top: string): string | undefined {
   return undefined;
 }
 
-/** A place of the repo: it exists under the top, or, for a path with a folder, its folder does (a file to create). */
+/**
+ * A place of the repo: it exists under the top, or it is a file to create, one with a file name's shape in a folder
+ * that exists ("apps/web/app/new.ts"); prose with a slash ("and/or", "client/server") is neither.
+ */
 function inRepo(rel: string, top: string): boolean {
   if (!rel || rel.startsWith("..")) return false;
   const path = join(top, rel);
-  return existsSync(path) || (rel.includes("/") && existsSync(dirname(path)));
+  if (existsSync(path)) return true;
+  return rel.includes("/") && FILE_NAME.test(basename(rel)) && existsSync(dirname(path));
 }
 
 /**
  * The places of the repo a text names, in order, each once, at most 8 (see the header): paths with a folder, and file
- * names, that exist under `top` (or whose folder does). URLs are not places; absolute paths outside `top` are not the
- * repo's.
+ * names, that are places of the repo under `top`, a relative one read from `cwd` first (a session in `apps/web` naming
+ * `app/login.ts`). URLs are not places; absolute paths outside `top` are not the repo's.
  */
-export function taskPaths(task: string, top: string): string[] {
+export function taskPaths(task: string, top: string, cwd = top): string[] {
   const out: string[] = [];
   for (const raw of String(task ?? "")
     .replace(URL, " ")
     .split(/[\s,;()[\]{}<>"'`]+/)) {
     const token = raw.replace(/[.:!?]+$/, "");
     if (!token || token.length > MAX_PATH || !(token.includes("/") ? PATH_SHAPED : FILE_NAME).test(token)) continue;
-    const rel = underTop(token, top)?.replace(/\/+$/, "");
-    if (rel && inRepo(rel, top) && !out.includes(rel)) out.push(rel);
+    const reads = isAbsolute(token) ? [token] : [...new Set([join(cwd, token), token])];
+    const rel = reads
+      .map((read) => underTop(read, top)?.replace(/\/+$/, ""))
+      .find((candidate): candidate is string => !!candidate && inRepo(candidate, top));
+    if (rel && !out.includes(rel)) out.push(rel);
     if (out.length >= MAX_PATHS) break;
   }
   return out;
 }
 
 /** A `PreToolUse(Agent)` payload's launch record (see the header); none for another tool or a call with no id. */
-export function spawnOf(payload: Record<string, unknown>, top: string, now: number): Spawn | undefined {
+export function spawnOf(payload: Record<string, unknown>, top: string, now: number, cwd = top): Spawn | undefined {
   const id = str(payload.tool_use_id);
   if (payload.tool_name !== "Agent" || !id) return undefined;
   const input = asRec(payload.tool_input);
@@ -112,7 +122,7 @@ export function spawnOf(payload: Record<string, unknown>, top: string, now: numb
   return {
     id,
     type: str(input.subagent_type) ?? DEFAULT_TYPE,
-    paths: taskPaths(task, top),
+    paths: taskPaths(task, top, cwd),
     classes: firedClasses(task),
     t: now,
   };
@@ -146,7 +156,8 @@ function pick(win: string, want: Claim): Spawn | undefined {
   const records = windowRecords(win, SPAWN_LOG);
   const taken = new Set(records.flatMap((record) => (record.k === "take" ? [record.id] : [])));
   const open = records.flatMap((record) => spawnRecord(record) ?? []).filter((spawn) => !taken.has(spawn.id));
-  return open.findLast((spawn) => spawn.type === want.type && Math.abs(want.now - spawn.t) <= CLAIM_MS);
+  const mine = open.filter((spawn) => spawn.type === want.type && Math.abs(want.now - spawn.t) <= CLAIM_MS);
+  return mine.length === 1 ? mine[0] : undefined;
 }
 
 /** A SubagentStart's claim of its launch record (see the header); marks it consumed unless `mark` is false. */
@@ -194,13 +205,21 @@ export function parentPaths(win: string, top: string): string[] {
   return out.slice(0, MAX_PATHS);
 }
 
+/**
+ * A word and the verbs its agentive ending may stand for: "reviewer" review, "committer" commit, "migrator" migrate.
+ */
+function agentForms(word: string): string[] {
+  const stem = word.replace(/(?:er|or)$/, "");
+  return [word, stem, word.replace(/r$/, ""), stem.replace(/(.)\1$/, "$1"), word.replace(/ator$/, "ate")];
+}
+
 /** The classes an agent type's name fits (see the header). */
 export function agentClasses(type: string): ActionClass[] {
   const words = String(type ?? "")
     .toLowerCase()
     .split(/[^a-z]+/)
     .filter(Boolean);
-  const forms = words.flatMap((word) => [word, word.replace(/(?:er|or)$/, ""), word.replace(/r$/, "")]);
+  const forms = words.flatMap(agentForms);
   const fired = forms.length ? firedClasses([...new Set(forms)].join(" ")) : [];
   return [...new Set([...fired, ...fired.flatMap((cls) => AGENT_CLASSES[cls] ?? [])])];
 }

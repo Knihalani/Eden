@@ -9,8 +9,10 @@
  * - **The count** is a rule's distinct declined calls of the last 14 days. A6 has sleep propose the revocation; the
  *   count is a read of this small log, so SessionStart makes it itself, from the same records, and no proposal file is
  *   kept.
- * - **Shown:** a SessionStart that delivered a proposal records its rules in the window's `ctx.log` (`revoke`), so the
- *   session's "that rule is gone" names them while the guard has asked nothing since (`memory-hook.ts` `endRules`).
+ * - **Shown:** a SessionStart that delivered a proposal records its rules in the window's `ctx.log` (`revoke`), with
+ *   the window's human turns then, so "that rule is gone" names them in the session's next 2 human turns while the
+ *   guard has asked nothing since (`memory-hook.ts` `endRules`): later, "that rule" may be any rule the conversation
+ *   named.
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -72,15 +74,22 @@ export function revocationNotes<T extends Pick<MemoryRecord, "text" | "at" | "ru
   return notes;
 }
 
-/** Records the rules a SessionStart proposed revoking in the window (see the header). */
-export function markRevocations(win: string, rules: readonly string[], now: number): void {
-  if (rules.length) appendRecord(win, "ctx.log", { k: "revoke", rules: [...rules], t: now });
+/** The human turns after the SessionStart that showed it in which a revocation proposal may be answered. */
+const ANSWER_TURNS = 2;
+
+/** Records the rules a SessionStart proposed revoking in the window, at its human turn `ht` (see the header). */
+export function markRevocations(win: string, rules: readonly string[], now: number, ht: number): void {
+  if (rules.length) appendRecord(win, "ctx.log", { k: "revoke", rules: [...rules], t: now, ht });
 }
 
-/** The rules this window was proposed to revoke, unless the guard has asked the user anything since. */
-export function shownRevocations(win: string): string[] {
+/**
+ * The rules this window was proposed to revoke, if the human turn `ht` is one of the next 2 after it and the guard has
+ * asked the user nothing since.
+ */
+export function shownRevocations(win: string, ht: number): string[] {
   const shown = windowRecords(win, "ctx.log").findLast((record) => record.k === "revoke");
-  if (!shown || typeof shown.t !== "number" || !Array.isArray(shown.rules)) return [];
+  if (!shown || typeof shown.t !== "number" || typeof shown.ht !== "number" || !Array.isArray(shown.rules)) return [];
+  if (ht - shown.ht > ANSWER_TURNS) return [];
   const t = shown.t;
   if (guardRecords(win).some((record) => record.k === "call" && record.ask && record.t >= t)) return [];
   return shown.rules.filter((rule): rule is string => typeof rule === "string");

@@ -37,7 +37,7 @@ export function spawnHookResponse(raw: Record<string, unknown>): void {
   try {
     const win = windowDir(memoryRoot(), resolveSession(r, "PreToolUse").parent ?? "");
     const cwd = str(r.cwd) ?? process.cwd();
-    const spawn = win ? spawnOf(r, gitPlace(cwd)?.top ?? cwd, memoryNow()) : undefined;
+    const spawn = win ? spawnOf(r, gitPlace(cwd)?.top ?? cwd, memoryNow(), cwd) : undefined;
     if (win && spawn) {
       recordSpawn(win, spawn);
       Object.assign(trace, {

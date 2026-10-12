@@ -443,14 +443,15 @@ export function holdSummarized(
  * current epoch that are on its branch and were not made at a prompt in `after` (the parent's prompts after the fork
  * point), and the tokens of its epoch. They go to the fork's ledger of the same file, in the fork's own epoch, with
  * no human turn (`ht` 0). A fork subagent's transcript is its own (D25: a child's distance is measured on it), so its
- * copies are made at `off` 0, its start; a forked session's keep the parent's offsets, as its transcript does. Returns
- * how many deliveries were copied.
+ * copies are made at `off` 0, its start; a forked session's keep the parent's offsets, as its transcript does. `into`
+ * puts every copy in one ledger file (a fork subagent whose point is in shadow writes only its shadow ledger, X7).
+ * Returns how many deliveries were copied.
  */
 export function inheritLedger(
   parent: string,
   fork: string,
   after: ReadonlySet<string>,
-  opts: { off?: number } = {},
+  opts: { off?: number; into?: LedgerFile } = {},
 ): number {
   const abandoned = abandonedPrompts(parent);
   let copied = 0;
@@ -463,7 +464,7 @@ export function inheritLedger(
       return [{ k: "deliver", cid, ver, off, att, ht: 0, ...(sw ? { sw } : {}), ...(vt ? { vt } : {}) }];
     });
     const tokens = state.tokensEpoch > 0 ? [{ k: "packet", tok: state.tokensEpoch }] : [];
-    appendRecords(fork, file, [...delivered, ...tokens]);
+    appendRecords(fork, opts.into ?? file, [...delivered, ...tokens]);
     copied += delivered.length;
   }
   return copied;
