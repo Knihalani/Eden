@@ -75,7 +75,9 @@ export const DEMO_WORLD: WorldSpec = {
     "package-lock.json": '{ "name": "demo", "lockfileVersion": 3 }\n',
     ".nvmrc": "20\n",
     "apps/web/package.json": webPackage("@auth0/nextjs-auth0"),
+    "apps/web/app/login.ts": "export function login() {\n  return redirect('/home');\n}\n",
     "packages/cli/package.json": '{ "name": "cli", "private": true }\n',
+    "packages/cli/src/index.ts": "export function main() {}\n",
   },
   initialTruth: [
     { key: PKG, scope: "", value: "npm" },
