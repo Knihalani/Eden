@@ -32,7 +32,7 @@ import { recentConversation, sentencesOf, type RecentConversation } from "../../
 import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
-import { buildCatalog, readCatalog, rebuildsCatalog, repoPathOf } from "../../../src/memory-scopes";
+import { buildCatalog, readCatalog, rebuildsCatalog, repoPathOf, type ScopeCatalog } from "../../../src/memory-scopes";
 import {
   recordInstructions,
   shadowSentences,
@@ -572,7 +572,7 @@ function sleepAfterTurn(ctx: HookContext): void {
     () => inheritParent(ctx),
     () => encodePayloadText(ctx),
     () => lightSleep(ctx.mem, ctx.session),
-    () => ctx.writes && !readCatalog(ctx.store) && buildCatalog(ctx.store, ctx.top),
+    () => ctx.writes && !readCatalog(ctx.store) && noteCatalog(ctx, buildCatalog(ctx.store, ctx.top)),
     () => ctx.win && compactContext(ctx.win),
     () => ctx.win && foldWindow(ctx.win),
     () => labelAsksFromTranscript(ctx),
@@ -654,7 +654,13 @@ function rebuildAfterWrites(ctx: HookContext): void {
     const at = repoPathOf(resolve(cwd, path));
     return at && at.repo === ctx.repo ? [at.rel] : [];
   });
-  if (rebuildsCatalog(readCatalog(ctx.store), written)) buildCatalog(ctx.store, ctx.top, BATCH_LIST_TIMEOUT_MS);
+  if (rebuildsCatalog(readCatalog(ctx.store), written))
+    noteCatalog(ctx, buildCatalog(ctx.store, ctx.top, BATCH_LIST_TIMEOUT_MS));
+}
+
+/** The wide event names the catalog an event rebuilt, by its scope count. */
+function noteCatalog(ctx: HookContext, catalog: ScopeCatalog | undefined): void {
+  if (catalog) ctx.trace.catalog = catalog.scopes.length;
 }
 
 /** A PostToolBatch payload's calls. */
