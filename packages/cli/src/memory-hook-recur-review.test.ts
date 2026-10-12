@@ -228,3 +228,51 @@ describe("pins and the rest", () => {
     expect(guardAsks(repo("fresh"), "git push --force")).toBe("ask");
   });
 });
+
+/** One more prompt of session `id` in `project`, a minute later: its Submit packet. */
+function submitIn(project: string, id: string, prompt: string): string {
+  advance(60_000);
+  const hook = { session_id: id, cwd: project, hook_event_name: "UserPromptSubmit", prompt, prompt_id: `${id}-x` };
+  return contextOf(memoryHookResponse(hook));
+}
+
+describe("P2.4 code review, round 2", () => {
+  test("a rule overturned in repo c, then said again there, holds in c again; d keeps the global one", () => {
+    session(repo("a"), ["Never force-push, in all my projects."]);
+    const c = repo("c");
+    session(c, ["Always force-push."]);
+    expect(guardAsks(c, "git push --force origin feat")).toBeUndefined();
+    session(c, ["Never force-push."]);
+    expect(guardAsks(c, "git push --force origin feat")).toBe("ask");
+    expect(session(c)).toContain("Never force-push");
+    expect(guardAsks(repo("d"), "git push --force origin feat")).toBe("ask");
+  });
+
+  test("a local revocation in c: c's Submit trigger does not deliver the global rule; d's does", () => {
+    session(repo("a"), ["Never force-push, in all my projects."]);
+    session(repo("c"), ["Always force-push."]);
+    expect(submitIn(repo("c"), "s-trig-c", "rebase this and force push it")).not.toContain("Never force-push");
+    expect(submitIn(repo("d"), "s-trig-d", "rebase this and force push it")).toContain("Never force-push");
+  });
+
+  test("'Yes, everywhere.' in the session that showed the proposal keeps it; 'yes' or 'no, not everywhere' does not", () => {
+    pinIn("a");
+    const b = pinIn("b");
+    memoryHookResponse({ session_id: "s-show", cwd: b, hook_event_name: "SessionStart", source: "startup" });
+    submitIn(b, "s-show", "no, not everywhere");
+    submitIn(b, "s-show", "yes");
+    expect(userPolicies()).toBe("");
+    submitIn(b, "s-show", "Yes, everywhere.");
+    expect(userPolicies()).toContain("merge PRs yourself");
+  });
+
+  test("a row stating a rule kept for all projects and a fact keeps its fact at SessionStart", () => {
+    session(repo("a"), ["Never force-push, in all my projects."]);
+    const c = repo("c");
+    session(c, ["Never force-push; the staging server is called orbit."]);
+    const start = session(c);
+    expect(start).toContain("Never force-push (all projects)");
+    expect(start).toContain("the staging server is called orbit");
+    expect(start.match(/force-push/g)?.length).toBe(1);
+  });
+});
