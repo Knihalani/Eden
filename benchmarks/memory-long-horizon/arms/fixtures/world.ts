@@ -23,7 +23,7 @@ export const KEEP_OLD_API = "policy:delete|neg|old-api";
 export const ESM_FIX = "gotcha:ERR_REQUIRE_ESM";
 
 /** Phrases that state a rule is in force; a policy's value is that it holds. */
-const IN_FORCE = "in force";
+export const IN_FORCE = "in force";
 
 export const SUBJECTS: Subject[] = [
   {
