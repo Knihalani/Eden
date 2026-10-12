@@ -260,6 +260,7 @@ const subagent: Arm = {
     const packetOf = (turn: Turn | undefined) => (turn ? bulletsAt(world, spec, turn.seq) : []);
     const noMerge = (turn: Turn | undefined) => packetOf(turn).some((bullet) => states(bullet, NO_MERGE, IN_FORCE, ""));
     const classless = [task, ...explores.map((explore) => explore.turn)];
+    const classlessPackets = classless.map((turn) => quote(packetOf(turn))).join(" | ");
     return [
       check(
         "subagent-packet",
@@ -282,7 +283,7 @@ const subagent: Arm = {
       check(
         "policy-by-class-only",
         classless.every((turn) => !noMerge(turn)),
-        `packets of subagents whose type and task name no class: ${classless.map((t) => quote(packetOf(t))).join(" | ")}`,
+        `packets of subagents whose type and task name no class: ${classlessPackets}`,
       ),
     ];
   },
