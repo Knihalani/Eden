@@ -119,6 +119,9 @@ const TABLES: Record<string, Reference> = {
         when: "look at packages/cli/src/index.ts",
         context: packet("Auth in packages/cli: none"),
       },
+      // The policy part (P2.5): the reviewer type and the merge task get the merge rule.
+      { event: "SubagentStart", when: "look over the diff in packages/cli/src/index.ts", context: packet(MERGE_RULE) },
+      { event: "SubagentStart", when: "merge the dependabot PR once CI is green", context: packet(MERGE_RULE) },
     ],
   },
   "first-touch": {
