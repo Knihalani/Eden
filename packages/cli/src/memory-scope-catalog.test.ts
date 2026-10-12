@@ -10,6 +10,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -105,6 +106,15 @@ function batch(calls: { tool: string; path: string }[], session = "s1"): void {
   });
 }
 
+/** The wide events every invocation appended (`memory-events.ts`), in order. */
+function wideEvents(): Record<string, unknown>[] {
+  const logs = join(root, "hook.log.d");
+  return readdirSync(logs)
+    .sort()
+    .flatMap((name) => readFileSync(join(logs, name), "utf8").split("\n").filter(Boolean))
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
 function cli(args: string[], opts: { cwd?: string; input?: string; env?: Record<string, string> } = {}) {
   const run = spawnSync("bun", [CLI, ...args], {
     cwd: opts.cwd ?? top,
@@ -134,6 +144,12 @@ describe("the catalog at the hook", () => {
     put(top, { "packages/b/index.ts": "" });
     batch([{ tool: "Write", path: join(top, "packages/b/index.ts") }]);
     expect(readCatalog(store())!.scopes).toEqual(["", "packages/a", "packages/b"]);
+    // Each event that rebuilt it names the catalog's scope count in its wide event.
+    expect(wideEvents().map((event) => [event.ev, event.catalog])).toEqual([
+      ["Stop", 2],
+      ["PostToolBatch", 2],
+      ["PostToolBatch", 3],
+    ]);
   });
 
   test("a batch that writes no manifest, reads one, or writes another repo's, rebuilds nothing", () => {
