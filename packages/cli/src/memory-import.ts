@@ -16,6 +16,8 @@ export function memoryImportHelp(): string {
        eden memory remember [--global] "<text>" | --jsonl -
        eden memory purge <regex>
        eden memory forget --secret <regex>
+       eden memory forget --all-in <scope>
+       eden memory scopes [--json] [<path>…]
        eden memory migrate [--dry-run | --apply | --rollback | --contract]
 
 Read a JSONL or JSON transcript file or directory into AgentMemory: each record into
@@ -418,6 +420,10 @@ function flagPath(args: string[]): string | undefined {
 }
 
 export async function memoryCli(args: string[]): Promise<number> {
+  if (args[0] === "scopes" || (args[0] === "forget" && args.includes("--all-in"))) {
+    const { forgetScopeCli, memoryScopesCli } = await import("./memory-scopes");
+    return args[0] === "scopes" ? memoryScopesCli(args.slice(1)) : forgetScopeCli(args.slice(1));
+  }
   if (args[0] === "purge" || args[0] === "forget") {
     const { memoryPurgeCli } = await import("./memory-purge");
     return memoryPurgeCli(args);

@@ -16,6 +16,7 @@ import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync, utimes
 import { join } from "node:path";
 import { openMemory } from "../../../src/index";
 import { readableStore, repoIdentity, repoStoreDir } from "../../../src/memory-repo";
+import { rebuildRecorded } from "../../../src/memory-scopes";
 import { consolidate, sleepIdleMs } from "../../../src/sleep";
 import { memoryConsent } from "../../../src/memory-consent";
 import { memoryNow } from "../../../src/memory-clock";
@@ -87,7 +88,8 @@ export function spawnIdleSleeper(store: string, session: string | undefined): vo
 
 /**
  * The full sleep over a repo store, as one session (the session's gist and how-tos), then D11's step over every
- * repo of the root: a rule pinned in 2 of them is proposed for all projects (`memory-user-global.ts`).
+ * repo of the root: a rule pinned in 2 of them is proposed for all projects (`memory-user-global.ts`), and the
+ * store's scope catalog is rebuilt from its checkout (D3).
  */
 export function sleepStore(store: string, session: string | undefined): void {
   if (!existsSync(store) || !readableStore(store)) return;
@@ -99,6 +101,9 @@ export function sleepStore(store: string, session: string | undefined): void {
   }
   try {
     if (memoryConsent() === "on") proposeRecurring(memoryRoot(), memoryNow());
+  } catch {}
+  try {
+    if (memoryConsent() === "on") rebuildRecorded(store);
   } catch {}
 }
 

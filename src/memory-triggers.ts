@@ -1,8 +1,9 @@
 /**
  * Compiled triggers on the cue (A7 §1 layer 3 and §5, D18, A4 §5.1 step 4b): an action word in what the user typed
  * fires its class (`memory-classes.ts`), and each fired class delivers at most 2 of the store's policies and intents
- * keyed on it (D9), ranked by A7 §5: the ones the user stated first, then the most recently stated. Scopes are not
- * known yet (P3.1), so "narrowest scope" ranks nothing. A trigger hit is STRONG evidence and admits alone (A7 §4).
+ * keyed on it (D9), ranked by A7 §5: the ones the user stated first, then the most recently stated. Rows carry a
+ * scope since P3.1, but the cue's is P3.2's read set, so "narrowest scope" ranks nothing yet. A trigger hit is STRONG
+ * evidence and admits alone (A7 §4).
  * Policies are delivered by triggers, not similarity (D18): the lexical path leaves keyed rule rows out (`index.ts`).
  *
  * A class fires on an action the prompt asks for or announces, never on a word that names a topic (R1 Addendum A:

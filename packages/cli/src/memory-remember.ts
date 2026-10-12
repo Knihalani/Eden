@@ -7,12 +7,14 @@
  *     →   {"remembered": N}
  *
  * A row's repo is its `cwd`'s, else this folder's. A statement of a D9 rule is a rule row, keyed like a typed one;
- * `kind` names any other row's kind. Rows keep no scope yet: the scope catalog is P3.1's, so `scope` is read and
- * ignored. A line that is not a JSON object with a non-empty string `text` is skipped and not counted.
+ * `kind` names any other row's kind. A row's scope (D3) is the catalog's scope owning `scope`, a folder relative to
+ * the repo's top, else owning the folder the statement was made in; the root's is stored as none. A line that is not
+ * a JSON object with a non-empty string `text` is skipped and not counted.
  *
  * `--global` (D11) keeps each policy a statement states for all projects, in the user-global store only
  * (`memory-user-global.ts`); a fact or an intent is never user-global, so it is not counted.
  */
+import { resolve } from "node:path";
 import { openMemory, type AgentMemory } from "../../../src/index";
 import { memoryNow } from "../../../src/memory-clock";
 import { memoryConsent } from "../../../src/memory-consent";
@@ -20,18 +22,21 @@ import { ruleRefs, rulesIn } from "../../../src/memory-policy";
 import { scrubMemoryText } from "../../../src/memory-scrub";
 import { keepForAllProjects } from "../../../src/memory-user-global";
 import { storeFor } from "../../../src/memory-repo";
+import { buildCatalog, readCatalog, repoPathOf, scopeOfDir } from "../../../src/memory-scopes";
 import { memoryRoot } from "./memory-hook";
 
 export interface Statement {
   text: string;
   kind?: string;
   cwd?: string;
+  /** A folder relative to the repo's top, whose scope the row is stored at. */
+  scope?: string;
 }
 
 /** The statements of a JSONL input, in order. */
 export function statementsOf(input: string): Statement[] {
   return input.split("\n").flatMap((line) => {
-    let row: { text?: unknown; kind?: unknown; cwd?: unknown } = {};
+    let row: { text?: unknown; kind?: unknown; cwd?: unknown; scope?: unknown } = {};
     try {
       row = JSON.parse(line) as typeof row;
     } catch {
@@ -43,6 +48,7 @@ export function statementsOf(input: string): Statement[] {
         text: row.text.trim(),
         ...(typeof row.kind === "string" && row.kind ? { kind: row.kind } : {}),
         ...(typeof row.cwd === "string" && row.cwd ? { cwd: row.cwd } : {}),
+        ...(typeof row.scope === "string" && row.scope ? { scope: row.scope } : {}),
       },
     ];
   });
@@ -63,12 +69,25 @@ export function rememberStatements(statements: readonly Statement[]): number {
   for (const [dir, said] of byStore) {
     const mem: AgentMemory = openMemory({ dir, perRepo: true });
     try {
-      remembered += mem.rememberTyped(said).length;
+      const scoped = said.map((statement) => ({ ...statement, scope: rowScope(dir, statement) }));
+      remembered += mem.rememberTyped(scoped).length;
     } finally {
       mem.close();
     }
   }
   return remembered;
+}
+
+/**
+ * The scope a statement's row is stored at (see the header): `""` outside git. The store's catalog is built when it
+ * has none.
+ */
+function rowScope(store: string, statement: Statement): string {
+  const said = repoPathOf(resolve(statement.cwd ?? process.cwd()));
+  if (!said) return "";
+  const catalog = readCatalog(store) ?? buildCatalog(store, said.top);
+  const folder = statement.scope === undefined ? said.rel : statement.scope.replace(/^(?:\.\/)+|\/+$/g, "");
+  return catalog ? scopeOfDir(catalog.scopes, folder) : "";
 }
 
 /** `--global`: the policies of the statements, kept for all projects; the number of rules newly kept. */
@@ -94,7 +113,7 @@ export async function memoryRememberCli(args: string[]): Promise<number> {
     .trim();
   if (!text) {
     console.log(
-      'usage: eden memory remember [--global] "<text>" | --jsonl -   (stdin: {"text", "kind"?, "cwd"?} per line)',
+      'usage: eden memory remember [--global] "<text>" | --jsonl -   (stdin: {"text", "kind"?, "cwd"?, "scope"?} per line)',
     );
     return 0;
   }

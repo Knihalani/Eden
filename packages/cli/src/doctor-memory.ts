@@ -23,6 +23,7 @@ import {
 import { readRuleIndex } from "../../../src/memory-rule-index";
 import { fallbackLogPath, readFallbacks } from "../../../plugins/eden-memory/scripts/fallback-log";
 import { legacyTree, repoIdentity, repoStoreDir } from "../../../src/memory-repo";
+import { readCatalog } from "../../../src/memory-scopes";
 import type { DoctorCheck } from "./doctor";
 import { memoryRoot } from "./memory-hook";
 import { legacySessions } from "./memory-migrate";
@@ -280,13 +281,20 @@ export function fallbackCheck(loadsNow: boolean, path = fallbackLogPath(edenHome
   return { name: "fallback", ok: loadsNow, detail: `${count}, last ${last.t}: ${last.cause}${now} · ${path}` };
 }
 
-/** How the store is keyed (D1), and the policy guard (D19). Folder scopes (D3) come in a later slice. */
+/** How the store is keyed (D1), its folder scopes (D3), and the policy guard (D19). */
 export function storeChecks(cwd = process.cwd()): DoctorCheck[] {
-  return [
-    repoKeyCheck(memoryRoot(), cwd),
-    { name: "scope catalog", ok: true, detail: "none · no folder scopes" },
-    guardCheck(memoryRoot(), cwd),
-  ];
+  return [repoKeyCheck(memoryRoot(), cwd), scopeCatalogCheck(memoryRoot(), cwd), guardCheck(memoryRoot(), cwd)];
+}
+
+/** The repo's scope catalog (D3): how many scopes, when and from which checkout it was built. Never a failure. */
+export function scopeCatalogCheck(root: string, cwd: string): DoctorCheck {
+  const name = "scope catalog";
+  const repo = repoIdentity(cwd);
+  if (!repo?.top) return { name, ok: true, detail: "outside git: one scope" };
+  const catalog = readCatalog(repoStoreDir(root, repo.key));
+  if (!catalog) return { name, ok: true, detail: "none built yet · a turn's end builds it, or `eden memory scopes`" };
+  const built = new Date(catalog.built).toISOString();
+  return { name, ok: true, detail: `${catalog.scopes.length} scopes · built ${built} from ${catalog.checkout}` };
 }
 
 /**
