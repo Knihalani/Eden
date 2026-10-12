@@ -23,7 +23,8 @@
  *   ancestor only when the prompt names its scope; nothing at a sibling. A row with no `scope` was written where its
  *   place was unknown (before P3.2, or in a repo with no catalog, outside git included): it stays visible everywhere,
  *   as every row was, and a window in such a repo reads every row.
- * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names; of several, the working scope (the
+ * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names (the root's by a file path in its own
+ *   folders, "scripts/db.ts"); of several, the working scope (the
  *   read set's first) when it is one of them, else their common ancestor; naming none, the working scope, or `""` for
  *   a rule (A4 §2: policies are mostly `""`) and for a fact of one of D7's root slots (`default_scope: root`, written
  *   at `""` unless the utterance names a scope). Until P3.3's slot table, a fact is of a root slot when it states
@@ -292,15 +293,20 @@ export interface EncodePlace {
   working(): string;
 }
 
-/** The scopes of the catalog other than `""` that a text's paths are in, in order: no filesystem access (D3). */
+/**
+ * The scopes of the catalog that a text's paths are in, in order, with no filesystem access (D3). A path in the root's
+ * own folders names `""` only when it ends in a file name ("scripts/db.ts"), so prose with a slash ("and/or") names
+ * nothing.
+ */
 export function namedScopes(text: string, scopes: readonly string[], top: string): string[] {
   const named: string[] = [];
   for (const raw of text.split(TOKEN_BREAK)) {
     if (!raw.includes("/")) continue;
     const token = raw.replace(/[.:!?]+$/, "").replace(/^\.\/+/, "");
     const rel = isAbsolute(token) ? (token.startsWith(`${top}/`) ? token.slice(top.length + 1) : "") : token;
-    const scope = rel ? scopeOfDir(scopes, rel.replace(/\/+$/, "")) : "";
-    if (scope && !named.includes(scope)) named.push(scope);
+    if (!rel) continue;
+    const scope = scopeOfDir(scopes, rel.replace(/\/+$/, ""));
+    if ((scope || FILE_NAME.test(basename(rel))) && !named.includes(scope)) named.push(scope);
   }
   return named;
 }

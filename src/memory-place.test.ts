@@ -247,9 +247,24 @@ describe("the scope an encoded row is stored at", () => {
     expect(rowScope(both, false, at("apps/api"))).toBe("");
   });
 
-  test("names only catalog scopes other than the root: prose slashes and other places are none", () => {
+  test("names catalog scopes: the root by a file path in its own folders; prose slashes and other places are none", () => {
     expect(namedScopes("and/or client/server, see packages/cli's README", CATALOG, top)).toEqual(["packages/cli"]);
-    expect(namedScopes("/other/apps/web/a.ts docs/guide.md", CATALOG, top)).toEqual([]);
+    expect(namedScopes("/other/apps/web/a.ts docs/guide.md", CATALOG, top)).toEqual([""]);
+    expect(namedScopes("see docs/guide and/or scripts", CATALOG, top)).toEqual([]);
+  });
+
+  test("a row naming only files of the root's own folders is the root's, never the working folder's", () => {
+    // The kept world replays' two-scope packets labelled such rows with the folder being worked in (7 of 8).
+    for (const text of [
+      "The file [cwd]packages/wrap/src/login.ts has been updated successfully",
+      "explain what src/index.ts does",
+      "File created successfully at: /repo/scripts/db.ts",
+    ])
+      expect(rowScope(text, false, at("apps/web"))).toBe("");
+    expect(rowScope("rename the loader in apps/web/src/db.ts and scripts/cli.ts", false, at("apps/web"))).toBe(
+      "apps/web",
+    );
+    expect(rowScope("rename the loader in apps/web/src/db.ts and scripts/cli.ts", false, at("apps/api"))).toBe("");
   });
 });
 
