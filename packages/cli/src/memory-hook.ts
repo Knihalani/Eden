@@ -8,7 +8,7 @@ import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
 import { takeNotice } from "../../../src/memory-breaker";
 import { errorTag, retainEvents } from "../../../src/memory-events";
 import { pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
-import { batchRecord, writtenPaths } from "../../../src/memory-batch";
+import { batchRecord, writtenPaths, type Call } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
 import { inheritFork, markFork, parentLines } from "../../../src/memory-fork";
 import {
@@ -563,8 +563,9 @@ function stopFast(r: Record<string, unknown>, win: string | undefined): void {
 /**
  * Async `stop-sleep` (D34, A4 §5.7), and SessionEnd: the delta and the agent's last message are encoded, the light
  * sleep runs, `ctx.log` is compacted, the window's ledger folded into its snapshot (D25), day files of `hook.log.d`
- * past their 90 days aggregated (X11), and the idle sleeper is started for the rest. SessionEnd shares a 1.5 s budget
- * (R0), so it does the same light work and leaves the full sleep to the idle sleeper too.
+ * past their 90 days aggregated (X11), and the idle sleeper is started for the rest. Last, a Stop builds the repo's
+ * scope catalog when it has none (D3). SessionEnd shares a 1.5 s budget (R0), so it does the same light work, builds
+ * no catalog, and leaves the full sleep to the idle sleeper too.
  */
 function sleepAfterTurn(ctx: HookContext): void {
   inTurn(
@@ -572,13 +573,21 @@ function sleepAfterTurn(ctx: HookContext): void {
     () => inheritParent(ctx),
     () => encodePayloadText(ctx),
     () => lightSleep(ctx.mem, ctx.session),
-    () => ctx.writes && !readCatalog(ctx.store) && noteCatalog(ctx, buildCatalog(ctx.store, ctx.top)),
     () => ctx.win && compactContext(ctx.win),
     () => ctx.win && foldWindow(ctx.win),
     () => labelAsksFromTranscript(ctx),
     () => retainEvents(memoryRoot(), memoryNow()),
     () => spawnIdleSleeper(ctx.store, ctx.session),
+    () => ctx.event === "Stop" && buildMissingCatalog(ctx),
   );
+}
+
+/** How long a Stop's first build may list the repo's files: the async hook blocks no one, but should end (A4 §6). */
+const STOP_LIST_TIMEOUT_MS = 10_000;
+
+/** A repo's first scope catalog (D3), built at a turn's end when the store has none. */
+function buildMissingCatalog(ctx: HookContext): void {
+  if (ctx.writes && !readCatalog(ctx.store)) noteCatalog(ctx, buildCatalog(ctx.store, ctx.top, STOP_LIST_TIMEOUT_MS));
 }
 
 /** A6 §2.5: the asks no PostToolBatch labelled, labelled from the transcript at sleep. */
@@ -605,8 +614,8 @@ function inTurn(...steps: (() => unknown)[]): void {
 }
 
 /**
- * A PostToolUse (hosts other than the plugin, which records batches): the result is encoded from the payload.
- * Returns whether the payload carried one.
+ * A PostToolUse (hosts other than the plugin, which records batches): the result is encoded from the payload, and a
+ * write it made can rebuild the scope catalog as a batch's can. Returns whether the payload carried a result.
  */
 function toolResult(ctx: HookContext, tool = "tool"): boolean {
   const { r, mem } = ctx;
@@ -620,6 +629,9 @@ function toolResult(ctx: HookContext, tool = "tool"): boolean {
     });
   try {
     persistToolTraces(mem.jsonlDir, parseHookToolTraces(r));
+  } catch {}
+  try {
+    if (ctx.writes) rebuildAfterWrites(ctx, [r]);
   } catch {}
   return !!result;
 }
@@ -636,7 +648,7 @@ function toolBatch(ctx: HookContext): void {
       if (!ctx.child) encodeConversation(ctx);
     },
     () => labelAsks(ctx),
-    () => ctx.writes && rebuildAfterWrites(ctx),
+    () => ctx.writes && rebuildAfterWrites(ctx, batchCalls(ctx.r)),
   );
 }
 
@@ -648,9 +660,9 @@ const BATCH_LIST_TIMEOUT_MS = 1_000;
  * build-system file, the `.eden/scopes` override, or a file in a directory that held only its manifest. Another
  * repo's files, every other write, and a repo with no catalog yet (the turn's end builds it) list nothing.
  */
-function rebuildAfterWrites(ctx: HookContext): void {
+function rebuildAfterWrites(ctx: HookContext, calls: readonly Call[]): void {
   const cwd = str(ctx.r.cwd) ?? ctx.top;
-  const written = writtenPaths(ctx.r).flatMap((path) => {
+  const written = writtenPaths(calls).flatMap((path) => {
     const at = repoPathOf(resolve(cwd, path));
     return at && at.repo === ctx.repo ? [at.rel] : [];
   });

@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { ROWS } from "../benchmarks/memory-long-horizon/arms/scope-rows";
 import { repoKeyOf } from "./memory-repo";
 import {
   buildCatalog,
@@ -233,8 +232,113 @@ describe("R5 §9.2 step 9: the .eden/scopes override", () => {
   });
 });
 
+/**
+ * R5 §9.3's rows and R3 F9's, restated here (the `r5-unit-rows` arm checks them through the CLI against its own
+ * oracle; EXECUTION X6 keeps product tests off the harness). Row k, a worktree path, is the git test below.
+ */
 describe("R5 §9.3 and R3 F9 rows, as a pure function", () => {
-  for (const row of ROWS)
+  const big = (root: boolean) => {
+    const files: Record<string, string> = {
+      "README.md": "",
+      "src/main.go": "",
+      ...(root ? { "MODULE.bazel": "" } : {}),
+    };
+    for (let n = 0; n < 1_000; n++) files[`enterprise/svc/f${n}.go`] = "";
+    return files;
+  };
+  const rows: { id: string; files: Record<string, string>; expect: Record<string, string>; absent?: string[] }[] = [
+    {
+      id: "a: a cargo-style test-suite crate is no scope",
+      files: { "Cargo.toml": crate("c"), "src/main.rs": "", "tests/testsuite/x/in/Cargo.toml": crate("in") },
+      expect: { "tests/testsuite/x/in/src/lib.rs": "" },
+    },
+    {
+      id: "b: a member beats exclusion",
+      files: {
+        "Cargo.toml": '[workspace]\nmembers = ["tests/specs"]\n',
+        "tests/specs/Cargo.toml": "",
+        "tests/specs/a": "",
+      },
+      expect: { "tests/specs/src/lib.rs": "tests/specs" },
+    },
+    {
+      id: "c: an example app buckets",
+      files: { "package.json": pkg("r"), "examples/foo/package.json": pkg("foo"), "examples/foo/i.js": "" },
+      expect: { "examples/foo/i.js": "examples" },
+    },
+    {
+      id: "d: archived",
+      files: { "pyproject.toml": "", "app.py": "", "archived/pyproject.toml": "", "archived/old.py": "" },
+      expect: { "archived/old.py": "archived" },
+    },
+    {
+      id: "e: a workspace inside an example is ignored",
+      files: {
+        "examples/basic/pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n",
+        "examples/basic/apps/a/package.json": pkg("a"),
+        "examples/basic/apps/a/i.js": "",
+      },
+      expect: { "examples/basic/apps/a/i.js": "examples" },
+    },
+    {
+      id: "f: a compiled vendored package belongs to its package",
+      files: {
+        "package.json": pkg("r", { workspaces: ["packages/*"] }),
+        "packages/next/package.json": pkg("next"),
+        "packages/next/src/compiled/@babel/runtime/package.json": pkg("@babel/runtime"),
+        "packages/next/src/compiled/@babel/runtime/i.js": "",
+      },
+      expect: { "packages/next/src/compiled/@babel/runtime/i.js": "packages/next" },
+    },
+    {
+      id: "g: a manifest-only leaf is no scope",
+      files: { "package.json": pkg("r"), "nx.json": "{}", "libs/leaf/package.json": pkg("leaf"), "src/i.ts": "" },
+      expect: { "libs/leaf/package.json": "" },
+      absent: ["libs/leaf"],
+    },
+    {
+      id: "h: a 2-file crate is a scope",
+      files: { "crates/tiny/Cargo.toml": crate("tiny"), "crates/tiny/src/main.rs": "" },
+      expect: { "crates/tiny/src/main.rs": "crates/tiny" },
+    },
+    {
+      id: "i: CMake with project( only",
+      files: {
+        "cpp/CMakeLists.txt": "project(Arrow VERSION 1.0)\n",
+        "cpp/src/a.cc": "",
+        "tools/CMakeLists.txt": "add_subdirectory(src)\n",
+        "tools/src/b.cc": "",
+      },
+      expect: { "cpp/src/a.cc": "cpp", "tools/src/b.cc": "" },
+    },
+    { id: "j: a Bazel root's big folder", files: big(true), expect: { "enterprise/svc/f7.go": "enterprise" } },
+    { id: "j: no Bazel root", files: big(false), expect: { "enterprise/svc/f7.go": "" } },
+    {
+      id: "l: a single package's src and test",
+      files: { "package.json": pkg("s"), "src/a.ts": "", "test/a.test.ts": "" },
+      expect: { "src/a.ts": "", "test/a.test.ts": "" },
+    },
+    {
+      id: "F9: a test fixture's manifest",
+      files: { "package.json": pkg("r"), "test/fixtures/app/package.json": pkg("app"), "test/fixtures/app/i.js": "" },
+      expect: { "test/fixtures/app/i.js": "" },
+    },
+    {
+      id: "F9: a root-only monorepo through .eden/scopes",
+      files: { "pyproject.toml": "", ".eden/scopes": "services/*\n", "services/a/m.py": "", "services/b/m.py": "" },
+      expect: { "services/a/m.py": "services/a", "services/b/m.py": "services/b" },
+    },
+    {
+      id: "F9: a uv workspace",
+      files: {
+        "pyproject.toml": '[tool.uv.workspace]\nmembers = ["packages/*"]\n',
+        "packages/a/pyproject.toml": "",
+        "packages/a/a.py": "",
+      },
+      expect: { "packages/a/a.py": "packages/a" },
+    },
+  ];
+  for (const row of rows)
     test(row.id, () => {
       const { scopes } = derive(row.files);
       for (const [path, scope] of Object.entries(row.expect))
@@ -370,5 +474,73 @@ describe("rebuild triggers (A4 §2: after a Write/Edit of a manifest or workspac
   test("any other file does not, and with no catalog yet nothing does (the turn's end builds it)", () => {
     expect(rebuildsCatalog(catalog, ["packages/a/i.js", "packages/newer/i.js", "README.md"])).toBe(false);
     expect(rebuildsCatalog(undefined, ["package.json"])).toBe(false);
+  });
+});
+
+/** Code review round 1's probes (P3.1), kept as regression tests. */
+describe("review round 1", () => {
+  describe("waiting directories and the batch trigger", () => {
+    test("a dropped folder whose other files belong to deeper scopes stays waiting", () => {
+      const files = {
+        "package.json": pkg("root", { workspaces: ["tools", "tools/*"] }),
+        "tools/package.json": pkg("tools"),
+        "tools/a/package.json": pkg("a"),
+        "tools/a/x.js": "",
+        "tools/a/y.js": "",
+      };
+      const c = derive(files);
+      // tools owns only its manifest, so it waits; tools/a is a scope.
+      expect(c).toEqual({ scopes: ["", "tools/a"], waiting: ["tools"] });
+      const catalog = { built: 0, checkout: "/x", ...c };
+      // A file tools/a owns cannot end the wait, so it rebuilds nothing; one tools owns does.
+      expect(rebuildsCatalog(catalog, ["tools/a/x.js"])).toBe(false);
+      expect(rebuildsCatalog(catalog, ["tools/x.js"])).toBe(true);
+    });
+  });
+
+  describe("step 2 edge cases", () => {
+    test("a package.json with a name only of whitespace is no manifest", () => {
+      expect(derive({ "a/package.json": pkg("  "), "a/x.js": "" }).scopes).toEqual([""]);
+    });
+    test("DESCRIPTION whose first field is not Package: is no manifest", () => {
+      expect(derive({ "r/DESCRIPTION": "Title: x\nPackage: y\n", "r/x.R": "" }).scopes).toEqual([""]);
+      expect(derive({ "r/DESCRIPTION": "Package: y\n", "r/x.R": "" }).scopes).toEqual(["", "r"]);
+    });
+    test("a manifest whose read fails (missing, unreadable) is no candidate for content manifests", () => {
+      expect(deriveScopes(["a/package.json", "a/x.js"], () => undefined).scopes).toEqual([""]);
+    });
+  });
+
+  describe("step 5 buckets", () => {
+    test("a TEST segment before an EXAMPLE one: no bucket", () => {
+      expect(derive({ "test/examples/a/package.json": pkg("a"), "test/examples/a/x.js": "" }).scopes).toEqual([""]);
+    });
+    test("a manifest at the bucket folder itself makes the bucket", () => {
+      expect(derive({ "examples/package.json": pkg("ex"), "examples/x.js": "" }).scopes).toEqual(["", "examples"]);
+    });
+  });
+
+  describe("step 9 override", () => {
+    test("a !glob removes an override scope added on an earlier line, and never the root", () => {
+      const files = { ".eden/scopes": "tools/*\n!tools/b\n!**\n", "tools/a/x": "", "tools/b/y": "" };
+      expect(derive(files).scopes).toEqual([""]);
+    });
+    test("an override glob matching a file name only adds no scope", () => {
+      expect(derive({ ".eden/scopes": "*.md\n", "README.md": "" }).scopes).toEqual([""]);
+    });
+  });
+
+  describe("step 10 lookup", () => {
+    test("a sibling with the same prefix is not owned", () => {
+      expect(scopeOfFile(["", "packages/a"], "packages/ab/x.ts")).toBe("");
+    });
+  });
+
+  describe("names inherited from Object.prototype", () => {
+    test("a file named constructor or toString is no manifest and rebuilds nothing", () => {
+      expect(derive({ "a/constructor": "", "a/x.js": "", "b/toString": "", "b/y.js": "" }).scopes).toEqual([""]);
+      const catalog = { built: 0, checkout: "/x", scopes: [""], waiting: [] };
+      expect(rebuildsCatalog(catalog, ["src/toString"])).toBe(false);
+    });
   });
 });

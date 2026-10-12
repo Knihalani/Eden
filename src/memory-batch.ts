@@ -19,7 +19,7 @@ export interface BatchRecord {
   sig: string[];
 }
 
-type Call = { tool_name?: unknown; tool_input?: unknown; tool_response?: unknown };
+export type Call = { tool_name?: unknown; tool_input?: unknown; tool_response?: unknown };
 
 const PATH_FIELDS = ["file_path", "path", "notebook_path"] as const;
 const EXIT_CODE = /^Exit code (\d+)\b/;
@@ -54,9 +54,11 @@ function pathsOf(call: Call): string[] {
 /** The tools that write the file their input names. */
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
-/** The files a PostToolBatch payload's calls wrote (A4 §2: a manifest written rebuilds the scope catalog). */
-export function writtenPaths(payload: Record<string, unknown>): string[] {
-  const calls = (Array.isArray(payload.tool_calls) ? payload.tool_calls : []) as Call[];
+/**
+ * The files tool calls wrote (A4 §2: a manifest written rebuilds the scope catalog): a PostToolBatch's `tool_calls`,
+ * or a PostToolUse payload, which is one call.
+ */
+export function writtenPaths(calls: readonly Call[]): string[] {
   return [
     ...new Set(
       calls.flatMap((call) =>

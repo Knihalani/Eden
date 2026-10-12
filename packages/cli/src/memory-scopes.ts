@@ -9,16 +9,18 @@
  * read-only), and answers where each path belongs: its own repo (D1) and that repo's scope. A path is relative to the
  * folder the command runs in; outside git every scope is the root, in the repo the folder is (D1).
  *
- * `forget --all-in` sends every keyed row of a scope of this repo (a row stating rules, D9) to history.
+ * `forget --all-in` sends every keyed row of a scope of this repo (a row stating rules, D9) to history. The scope is
+ * one of the catalog's, or one a keyed row still carries after its folder was removed or renamed.
  */
 import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { openMemory } from "../../../src/index";
+import { join, resolve } from "node:path";
+import { openMemory, storeRows, superseded } from "../../../src/index";
 import { memoryConsent } from "../../../src/memory-consent";
 import { readableStore, repoIdentity, repoStoreDir } from "../../../src/memory-repo";
 import {
   buildCatalog,
   catalogOf,
+  normalizedFolder,
   repoPathOf,
   scopeOfDir,
   scopeOfFile,
@@ -67,6 +69,12 @@ export function memoryScopesCli(args: readonly string[]): number {
   return 0;
 }
 
+/** The scopes the store's live keyed rows carry. */
+function keyedRowScopes(store: string): Set<string> {
+  const rows = storeRows(join(store, "memories.jsonl"));
+  return new Set(rows.filter((row) => row.rules?.length && !superseded(row)).map((row) => row.scope ?? ""));
+}
+
 /** `eden memory forget --all-in <scope>` (A6 §3). Exit 2 when the name is no scope of this repo. */
 export function forgetScopeCli(args: readonly string[]): number {
   const named = args[args.indexOf("--all-in") + 1];
@@ -80,13 +88,15 @@ export function forgetScopeCli(args: readonly string[]): number {
     console.log(`forget: memory is ${memoryConsent()}; nothing changed`);
     return 1;
   }
-  const scope = named === "." ? "" : named.replace(/^(?:\.\/)+|\/+$/g, "");
-  const scopes = freshCatalog(cwd, here.key)?.scopes ?? [""];
-  if (!scopes.includes(scope)) {
-    console.log(`${named} is not a scope of this repo; its scopes: ${scopes.map((s) => JSON.stringify(s)).join(", ")}`);
+  const store = repoStoreDir(memoryRoot(), here.key);
+  const scope = normalizedFolder(named);
+  const scopes = new Set([...(freshCatalog(cwd, here.key)?.scopes ?? [""]), ...keyedRowScopes(store)]);
+  if (!scopes.has(scope)) {
+    const listed = [...scopes].sort().map((s) => JSON.stringify(s));
+    console.log(`${named} is not a scope of this repo; its scopes: ${listed.join(", ")}`);
     return 2;
   }
-  const mem = openMemory({ dir: repoStoreDir(memoryRoot(), here.key), perRepo: true });
+  const mem = openMemory({ dir: store, perRepo: true });
   try {
     const forgot = mem.forgetScope(scope);
     console.log(`forgot ${forgot} keyed row${forgot === 1 ? "" : "s"} in ${scope || '"" (the repo root)'}`);
