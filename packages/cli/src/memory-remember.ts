@@ -21,8 +21,16 @@ import { memoryConsent } from "../../../src/memory-consent";
 import { ruleRefs, rulesIn } from "../../../src/memory-policy";
 import { scrubMemoryText } from "../../../src/memory-scrub";
 import { keepForAllProjects } from "../../../src/memory-user-global";
-import { storeFor } from "../../../src/memory-repo";
-import { buildCatalog, readCatalog, repoPathOf, scopeOfDir } from "../../../src/memory-scopes";
+import { readableStore, storeFor } from "../../../src/memory-repo";
+import {
+  buildCatalog,
+  catalogOf,
+  normalizedFolder,
+  readCatalog,
+  repoPathOf,
+  scopeOfDir,
+  type ScopeCatalog,
+} from "../../../src/memory-scopes";
 import { memoryRoot } from "./memory-hook";
 
 export interface Statement {
@@ -69,7 +77,8 @@ export function rememberStatements(statements: readonly Statement[]): number {
   for (const [dir, said] of byStore) {
     const mem: AgentMemory = openMemory({ dir, perRepo: true });
     try {
-      const scoped = said.map((statement) => ({ ...statement, scope: rowScope(dir, statement) }));
+      const scopeOf = rowScopes(dir);
+      const scoped = said.map((statement) => ({ ...statement, scope: scopeOf(statement) }));
       remembered += mem.rememberTyped(scoped).length;
     } finally {
       mem.close();
@@ -79,15 +88,22 @@ export function rememberStatements(statements: readonly Statement[]): number {
 }
 
 /**
- * The scope a statement's row is stored at (see the header): `""` outside git. The store's catalog is built when it
- * has none.
+ * The scope each statement's row of a store is stored at (see the header): `""` outside git. The store's catalog is
+ * read, else built once (and kept only in a store of this format, EXECUTION §9).
  */
-function rowScope(store: string, statement: Statement): string {
-  const said = repoPathOf(resolve(statement.cwd ?? process.cwd()));
-  if (!said) return "";
-  const catalog = readCatalog(store) ?? buildCatalog(store, said.top);
-  const folder = statement.scope === undefined ? said.rel : statement.scope.replace(/^(?:\.\/)+|\/+$/g, "");
-  return catalog ? scopeOfDir(catalog.scopes, folder) : "";
+function rowScopes(store: string): (statement: Statement) => string {
+  let catalog: ScopeCatalog | undefined;
+  let looked = false;
+  return (statement) => {
+    const said = repoPathOf(resolve(statement.cwd ?? process.cwd()));
+    if (!said) return "";
+    if (!looked) {
+      looked = true;
+      catalog = readCatalog(store) ?? (readableStore(store) ? buildCatalog(store, said.top) : catalogOf(said.top));
+    }
+    const folder = statement.scope === undefined ? said.rel : normalizedFolder(statement.scope);
+    return catalog ? scopeOfDir(catalog.scopes, folder) : "";
+  };
 }
 
 /** `--global`: the policies of the statements, kept for all projects; the number of rules newly kept. */
