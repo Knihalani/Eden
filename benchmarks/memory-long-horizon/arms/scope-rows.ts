@@ -8,7 +8,9 @@
  *
  *   eden memory scopes --json <path>…   →   {"scopes": [scope…], "of": {"<path>": {"repo", "scope"}…}}
  *
- * Until a slice provides it, every row fails with the reason.
+ * Until a slice provides it, every row fails with the reason. P3.1 provides it, as written: the command builds the
+ * catalog of the repo it runs in from that repo's files at the time, and a path, relative to the command's folder,
+ * is answered with its own repo's key (D1) and that repo's scope.
  */
 import type { SimWorld } from "../harness/session";
 import { SUBJECTS } from "./fixtures/world";
