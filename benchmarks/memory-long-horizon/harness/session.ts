@@ -79,8 +79,10 @@ const OMITS_INSTRUCTIONS = new Set(["Explore", "Plan"]);
 
 /**
  * Subagent types that start with the parent's context, its packets included (A4 §5.3: "a fork subagent inherits
- * the parent's context"). Simulated, not captured: Claude Code 2.1.285 rejects `subagent_type: "fork"` ("Agent type
- * 'fork' not found", 2026-10-04), so no real fork launch exists to record.
+ * the parent's context"). `fork` is Claude Code's fork mode: on by default in interactive sessions, off under `-p`
+ * unless `CLAUDE_CODE_FORK_SUBAGENT=1` (the sub-agents reference), which is why 2.1.285 rejected it headless ("Agent
+ * type 'fork' not found", 2026-10-04). Captured with the variable on 2.1.294 (P2.5's end-to-end): SubagentStart's
+ * `agent_type` is "fork", and the meta file says `"isFork": true`. The simulated window still copies the parent's.
  */
 const INHERITS_CONTEXT = new Set(["fork"]);
 
@@ -773,10 +775,12 @@ export class SimSession {
     else if (!OMITS_INSTRUCTIONS.has(spec.agentType)) {
       for (const [path, text] of this.main.seen.instructionFiles) child.seen.loadInstructions(path, text);
     }
-    const meta = { agentType: spec.agentType, description: spec.description, toolUseId: call.id, spawnDepth: 1 };
-    writeFileSync(childPath.replace(/\.jsonl$/, ".meta.json"), JSON.stringify(meta));
     child.record(child.transcript.taskPrompt(spec.task, this.promptIdOrThrow()), spec.task);
     const started = await this.dispatch(subagentStartPayload(child.ctx()), child);
+    // Claude Code 2.1.294 writes the meta file once SubagentStart's hooks return (P2.5's end-to-end: born 28 and
+    // 30 ms after the hooks' wide events), so no SubagentStart hook can read it.
+    const meta = { agentType: spec.agentType, description: spec.description, toolUseId: call.id, spawnDepth: 1 };
+    writeFileSync(childPath.replace(/\.jsonl$/, ".meta.json"), JSON.stringify(meta));
     const cue = spec.cue && this.noteCue(spec.cue, spec.task, started, child);
     this.attach(child, "SubagentStart", started, "SubagentStart", { cue });
 
