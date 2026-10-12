@@ -14,7 +14,7 @@
  * - **Waiting** (R5 §10): the directories min-2 dropped. A file written into one makes it a scope, so a new package
  *   becomes one when its second file is written, not at the next sleep.
  */
-import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { writeFileAtomic } from "../packages/cli/src/home";
 import { memoryNow } from "./memory-clock";
@@ -62,16 +62,19 @@ const PLAIN_MANIFESTS = new Set([
 const MANIFEST_SUFFIXES = [".gemspec", ".csproj", ".fsproj"];
 const PROJECT_LINE = /^\s*project\s*\(/m;
 /** Step 2: manifests that count only for what they say. */
-const CONTENT_MANIFESTS: Record<string, (text: string) => boolean> = {
-  "package.json": (text) => {
-    const name = jsonObject(text)?.name;
-    return typeof name === "string" && name.trim() !== "";
-  },
-  "setup.cfg": (text) => sectionHasName(text, "metadata"),
-  DESCRIPTION: (text) => /^\s*Package:/.test(text),
-  "CMakeLists.txt": (text) => PROJECT_LINE.test(text),
-  "meson.build": (text) => PROJECT_LINE.test(text),
-};
+const CONTENT_MANIFESTS = new Map<string, (text: string) => boolean>([
+  [
+    "package.json",
+    (text) => {
+      const name = jsonObject(text)?.name;
+      return typeof name === "string" && name.trim() !== "";
+    },
+  ],
+  ["setup.cfg", (text) => sectionHasName(text, "metadata")],
+  ["DESCRIPTION", (text) => /^\s*Package:/.test(text)],
+  ["CMakeLists.txt", (text) => PROJECT_LINE.test(text)],
+  ["meson.build", (text) => PROJECT_LINE.test(text)],
+]);
 /** Step 2: nx's project files count when the repo has an `nx.json`. */
 const NX_PROJECT = "project.json";
 const NX_ROOT = "nx.json";
@@ -185,7 +188,7 @@ function isManifest(file: string, read: (path: string) => string | undefined, nx
   const name = basename(file);
   if (PLAIN_MANIFESTS.has(name) || MANIFEST_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
   if (name === NX_PROJECT) return nx;
-  const says = CONTENT_MANIFESTS[name];
+  const says = CONTENT_MANIFESTS.get(name);
   if (!says) return false;
   const text = read(file);
   return text !== undefined && says(text);
@@ -262,17 +265,21 @@ function declarationIn(file: string, text: string): Declaration | undefined {
   return undefined;
 }
 
-/** A glob as written in a declaration or the override, made comparable to a directory path: no `./`, no `/` end. */
-function normalizedGlob(glob: string): string {
-  return glob
+/**
+ * A folder or glob as written (a declaration, the override, a scope named on the command line), made comparable to
+ * a directory path relative to the repo's top: no `./`, no `/` end, and `.` is the root, `""`.
+ */
+export function normalizedFolder(written: string): string {
+  const folder = written
     .trim()
     .replace(/^(?:\.\/)+/, "")
     .replace(/\/+$/, "");
+  return folder === "." ? "" : folder;
 }
 
 function globMatcher(globs: string[]): (path: string) => boolean {
-  const matchers = globs.map(normalizedGlob).map((glob) => {
-    if (glob === "" || glob === ".") return (path: string) => path === "";
+  const matchers = globs.map(normalizedFolder).map((glob) => {
+    if (glob === "") return (path: string) => path === "";
     const compiled = new Bun.Glob(glob);
     return (path: string) => compiled.match(path);
   });
@@ -371,7 +378,7 @@ function applyOverride(scopes: Set<string>, files: readonly string[], text: stri
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
     const remove = line.startsWith("!");
-    const glob = normalizedGlob(remove ? line.slice(1) : line);
+    const glob = normalizedFolder(remove ? line.slice(1) : line);
     if (!glob) continue;
     const matches = globMatcher([glob]);
     if (remove) {
@@ -473,14 +480,25 @@ export function catalogOf(from: string, timeoutMs = LIST_TIMEOUT_MS): ScopeCatal
   const checkout = canonicalPath(mainCheckout(place));
   const files = repoFiles(checkout, timeoutMs);
   if (!files) return undefined;
-  const read = (file: string) => {
-    try {
-      return readFileSync(join(checkout, file), "utf8");
-    } catch {
-      return undefined;
-    }
-  };
-  return { built: memoryNow(), checkout, ...deriveScopes(files, read) };
+  return { built: memoryNow(), checkout, ...deriveScopes(files, (file) => readManifest(checkout, file)) };
+}
+
+/** A manifest or the override is small: a larger file is not read (and is no manifest). */
+const MAX_MANIFEST_BYTES = 1 << 20;
+
+/**
+ * A listed file's text, read only when it is a regular file inside the checkout and at most 1 MB: git lists a link
+ * as a file, and a link to a device (`/dev/zero`) or a fifo would never finish reading (fail open: no hang).
+ */
+function readManifest(checkout: string, file: string): string | undefined {
+  try {
+    const real = realpathSync.native(join(checkout, file));
+    if (!real.startsWith(`${checkout}${sep}`)) return undefined;
+    const stat = statSync(real);
+    return stat.isFile() && stat.size <= MAX_MANIFEST_BYTES ? readFileSync(real, "utf8") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Builds the catalog of the repo `from` is in and writes it to the repo's store (step 10). */
@@ -513,7 +531,7 @@ function shapesScopes(name: string): boolean {
   return (
     PLAIN_MANIFESTS.has(name) ||
     MANIFEST_SUFFIXES.some((suffix) => name.endsWith(suffix)) ||
-    name in CONTENT_MANIFESTS ||
+    CONTENT_MANIFESTS.has(name) ||
     WORKSPACE_FILES.has(name) ||
     name === NX_PROJECT ||
     name === NX_ROOT ||
@@ -523,16 +541,15 @@ function shapesScopes(name: string): boolean {
 
 /**
  * A4 §2: whether files written (relative to their repo's top) rebuild the catalog: a manifest, workspace or
- * build-system root file, the override, or a file in a waiting directory (see the header). Without a catalog, none:
- * the turn's end builds it, off the agent's path, with no time limit to fail on a large repo.
+ * build-system root file, the override, or a file a waiting directory owns (see the header; a file a deeper scope
+ * owns cannot end the wait). Without a catalog, none: the turn's end builds it, off the agent's path.
  */
 export function rebuildsCatalog(catalog: ScopeCatalog | undefined, written: readonly string[]): boolean {
   if (!catalog) return false;
+  const owners = [...catalog.scopes, ...catalog.waiting];
   return written.some(
     (rel) =>
-      rel === SCOPES_OVERRIDE ||
-      shapesScopes(basename(rel)) ||
-      catalog.waiting.some((dir) => rel.startsWith(`${dir}/`)),
+      rel === SCOPES_OVERRIDE || shapesScopes(basename(rel)) || catalog.waiting.includes(scopeOfFile(owners, rel)),
   );
 }
 
