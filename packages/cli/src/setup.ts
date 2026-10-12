@@ -76,12 +76,13 @@ export type HookCommandFor = string | ((stage?: HookArg) => string);
 
 /**
  * Claude hooks `eden setup` writes: memory runs as the plugin runs it (`plugins/eden-memory/hooks/hooks.json`).
- * - Memory events (fail-open; EDEN_MEMORY=0|readonly|on): UserPromptSubmit, SessionStart, PreCompact, PostCompact,
- *   Stop, SessionEnd, PostToolBatch, SubagentStop, InstructionsLoaded. PostToolBatch records each batch (A4 §5.5), so
- *   PostToolUse runs only Eden's compiled-tool work (`batched`). Stop is a sync `stop-fast` and an async `stop-sleep`
- *   (D34), and SubagentStop is async, so Claude does not wait for the light sleep. PostCompact keeps habituated what
- *   the compact summary still names (A4 §4). InstructionsLoaded, async as Claude Code runs it, records the window's
- *   instruction files: what they state is never delivered (D27).
+ * - Memory events (fail-open; EDEN_MEMORY=0|readonly|on): UserPromptSubmit, SessionStart, SubagentStart, PreCompact,
+ *   PostCompact, Stop, SessionEnd, PostToolBatch, SubagentStop, InstructionsLoaded. PostToolBatch records each batch
+ *   (A4 §5.5), so PostToolUse runs only Eden's compiled-tool work (`batched`). Stop is a sync `stop-fast` and an
+ *   async `stop-sleep` (D34), and SubagentStop is async, so Claude does not wait for the light sleep. PostCompact keeps
+ *   habituated what the compact summary still names (A4 §4). InstructionsLoaded, async as Claude Code runs it, records
+ *   the window's instruction files: what they state is never delivered (D27). SubagentStart briefs a subagent (A4
+ *   §5.3); without the plugin's `PreToolUse(Agent)` record, from its parent's recent paths.
  * - Compile-only (not memory): PreToolUse.
  * Prune by deleting the store or EDEN_MEMORY=0 — operator-driven, not an HTTP route.
  */
@@ -98,6 +99,7 @@ export function installedHooks(hookCmd: HookCommandFor, preCmd: string = preHook
     PostCompact: [{ hooks: [handler()] }],
     Stop: [{ hooks: [handler("stop-fast"), background("stop-sleep")] }],
     SessionStart: [{ hooks: [handler()] }],
+    SubagentStart: [{ hooks: [handler()] }],
     SessionEnd: [{ hooks: [handler()] }],
     SubagentStop: [{ hooks: [background()] }],
     InstructionsLoaded: [{ hooks: [background()] }],

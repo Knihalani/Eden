@@ -6,11 +6,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { childTranscript } from "./memory-session";
 import {
   agentClasses,
-  childTranscript,
   claimSpawn,
-  launchToolUseId,
   recordSpawn,
   spawnOf,
   storedScope,
@@ -39,8 +38,7 @@ const launch = (id: string, type: string, t: number, paths: string[] = []): Spaw
 
 describe("taskPaths: the places of the repo a task names", () => {
   const repo = () => {
-    for (const folder of ["apps/web/app", "packages/cli/src", "src", "and"])
-      mkdirSync(join(dir, folder), { recursive: true });
+    for (const folder of ["apps/web/app", "packages/cli/src", "src"]) mkdirSync(join(dir, folder), { recursive: true });
     writeFileSync(join(dir, "README.md"), "# demo\n");
     return dir;
   };
@@ -105,14 +103,8 @@ describe("spawnOf: a PreToolUse(Agent) payload's launch record", () => {
   });
 });
 
-describe("claimSpawn: a SubagentStart takes its own launch's record, once (A4 §5.3)", () => {
-  test("by the launch's tool_use_id, whatever else is newer", () => {
-    recordSpawn(dir, launch("toolu_a", "Explore", 1_000));
-    recordSpawn(dir, launch("toolu_b", "Explore", 2_000));
-    expect(claimSpawn(dir, { type: "Explore", id: "toolu_a", now: 3_000, agent: "a1" })?.id).toBe("toolu_a");
-  });
-
-  test("else the newest unconsumed record of its type within 5 s, each once", () => {
+describe("claimSpawn: a SubagentStart takes its launch's record, once (A4 §5.3)", () => {
+  test("the newest unconsumed record of its type within 5 s, each once", () => {
     recordSpawn(dir, launch("toolu_a", "Explore", 1_000));
     recordSpawn(dir, launch("toolu_g", "general-purpose", 1_500));
     recordSpawn(dir, launch("toolu_b", "Explore", 2_000));
@@ -172,18 +164,5 @@ describe("a subagent's own transcript (D25: a child's distance is measured on it
       join(dir, "s1", "subagents", "agent-a1.jsonl"),
     );
     expect(childTranscript({ agent_id: "a1" })).toBe("");
-  });
-
-  test("the launch's tool_use_id from the transcript's meta file", () => {
-    const main = join(dir, "s1.jsonl");
-    mkdirSync(join(dir, "s1", "subagents"), { recursive: true });
-    const meta = join(dir, "s1", "subagents", "agent-a1.meta.json");
-    writeFileSync(
-      meta,
-      JSON.stringify({ agentType: "Explore", description: "d", toolUseId: "toolu_9", spawnDepth: 1 }),
-    );
-    expect(launchToolUseId({ transcript_path: main, agent_id: "a1" })).toBe("toolu_9");
-    expect(launchToolUseId({ transcript_path: main, agent_id: "a2" })).toBeUndefined();
-    expect(readFileSync(meta, "utf8")).toContain("toolu_9");
   });
 });

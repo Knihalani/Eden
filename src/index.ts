@@ -38,6 +38,7 @@ import {
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
+import type { ActionClass } from "./memory-classes";
 import { firedClasses, triggeredRows } from "./memory-triggers";
 import { writeRuleIndex } from "./memory-rule-index";
 import { readUserRules, withUserGlobal } from "./memory-user-global";
@@ -1223,8 +1224,12 @@ export class AgentMemory {
    * way to.
    */
   private triggered(own: string): MemoryRecord[] {
+    return this.triggeredBy(firedClasses(own));
+  }
+
+  /** The policies and intents the classes deliver (`triggered`), each class's best `PER_CLASS`. */
+  private triggeredBy(classes: readonly ActionClass[]): MemoryRecord[] {
     try {
-      const classes = firedClasses(own);
       if (!classes.length) return [];
       this.ensureIndex();
       const global = this.perRepo ? (readUserRules(this.windowsRoot) as MemoryRecord[]) : [];
@@ -1655,6 +1660,23 @@ export class AgentMemory {
       }
       this.observeCue(list, cue, encode ?? list);
       return packet;
+    } catch {
+      memoryInjectSwallows.n++;
+      return [];
+    }
+  }
+
+  /**
+   * A subagent's candidates at SubagentStart (A4 §5.3, `memory-spawn.ts`): the policies and intents of the classes its
+   * task and type fit, then what the lexical path finds for its scope's paths. It encodes nothing: SubagentStart
+   * carries no text. Fails open like `recall`.
+   */
+  taskNotes(paths: readonly string[], classes: readonly ActionClass[]): MemoryRecord[] {
+    try {
+      if (this.consent() === "off") return [];
+      const triggered = this.triggeredBy(classes);
+      const scoped = paths.length ? this.notesFor(paths.join(" ")) : [];
+      return [...triggered, ...scoped.filter((note) => !triggered.some((rule) => rule.id === note.id))];
     } catch {
       memoryInjectSwallows.n++;
       return [];

@@ -121,7 +121,18 @@ describe("the PreToolUse map (A7 §5)", () => {
       matcher,
       hooks: [{ type: "command", command: command(GUARD_IF_RULES.length + n + 1), timeout: 5 }],
     }));
-    expect(hooks.hooks.PreToolUse).toEqual([{ matcher: "Bash", hooks: bash }, ...tools]);
+    // P2.5: the Agent call's launch record for SubagentStart (A4 §5.3), not a class handler.
+    const spawn = {
+      matcher: "Agent",
+      hooks: [
+        {
+          type: "command",
+          command: `bun --no-install "\${CLAUDE_PLUGIN_ROOT}/scripts/hook.ts" spawn 2>/dev/null || true`,
+          timeout: 5,
+        },
+      ],
+    };
+    expect(hooks.hooks.PreToolUse).toEqual([{ matcher: "Bash", hooks: bash }, ...tools, spawn]);
   });
 
   /** A command each `if` rule spawns its handler for. */

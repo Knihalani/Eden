@@ -63,13 +63,16 @@ Each error type has its **own control**. That is the lesson from biology (A3 §4
   episodes/seg-*.jsonl             # append-only diary; never rewritten (except purge)
   scopes.json  shadowfacts.json  tau.json  aliases.jsonl  last_read.json
   hook.log.d/<yyyy-mm-dd>.jsonl  miss.jsonl  pending.jsonl  .lock
+  declines.jsonl                   # the guard's declined asks, by rule (A6 §2.5's revocation count; ids only)
   activity  sleep.pending          # mtime of the repo's last hook; the idle sleeper's pid (D34, `eden sleep --idle`)
 <root>/windows/<win>/
   delivery.log  delivery.json      # ledger (§4)
   ctx.log                          # append-only {k: paths|exit|sig|crons}; folded on read (last 3 human turns), compacted at Stop
   qprev.json                       # rare tokens of last_assistant_message, written by sync stop-fast
   shadow.log                       # instruction files loaded in this window (InstructionsLoaded; AGENTS.md/MEMORY.md are read from disk)
-  spawn.log  guard.log  guard.lock # PreToolUse(Agent) task paths; guard dedup
+  spawn.log  spawn.lock            # the session's PreToolUse(Agent) launches (task paths, classes) and their claims
+  scope.json                       # a subagent's scope, taken at its first SubagentStart (a resume reuses it)
+  guard.log  guard.lock            # guard dedup
   hwm.json  hwm.lock               # encode high-water mark, typed-prompt parent map (rewind); advanced only under flock(hwm.lock, LOCK_NB)
 ```
 
@@ -279,7 +282,9 @@ All points share the window ledger, the validity filter, the novelty filters and
 
 - **startup:** ≤ 3 policy pins for the likely scope (last session's read set), plus `Updated:` items (values that changed since this repo's last session).
   - **Built in P2.4** (pins only, D9): the rules kept for all projects `(all projects)` and a proposal shown once (D11), then the repo's pins, a rule row's pinned clauses only (a policy said once is not briefed, an intent never is), then the legacy gists without their rule clauses. The ≤ 3 cap, the scope and `Updated:` items are P2.5's.
+  - **Built in P2.5** (`packages/cli/src/memory-hook.ts` `briefing`): a startup or a clear briefs at most 3, in order: the rules proposed for revocation (A6 §2.5), the D11 proposal and the rules kept for all projects, then the repo's newest pins; the window's shadow set first takes out what its files state, with the project's CLAUDE.md files read from disk, since Claude Code 2.1.294 runs SessionStart(startup) before the session's InstructionsLoaded. No gists: since P0.5 a later session retrieves the same row at its Submit (P0.5's end-to-end got the port fact twice). A row the rules kept for all projects leave with no rule of its own briefs what else it says as a fact, not as a rule: a keyed row is no candidate of the lexical path, so this is where its fact still reaches Claude. Pins have no scope before P3.1's catalog, so "the likely scope" ranks nothing. `Updated:` items wait for P3.3: they need a lookup from a delivered cid to its current value, which keyed slots give, and before P3.4's mining nothing changes a value between sessions.
 - **clear / compact:** re-arm per §4.
+  - **Built in P2.5:** a compaction briefs the 3 latest valid gists without their rule clauses, P0.2's carrier, and no pin. The rows a compaction drops come back on their next cue; until that cue's words reach a row's ("how should we cache sessions?" misses "We use Redis for caching", A5 `negation`), the gists stay (a P4.2 follow-up). A clear is a new window in Claude Code, and briefs as a startup does.
 - **resume:** nothing new.
 
 ### 5.3 SubagentStart
@@ -289,6 +294,15 @@ All points share the window ledger, the validity filter, the novelty filters and
 - A fork subagent inherits the parent's context, packets included, so it gets no bullet already in the parent ledger.
 - ≤ 3 bullets: relevant slot facts, policies whose classes fit the agent type or task (e.g. a reviewer gets the review/merge policies), and gotchas for the scope.
 - Claude Code dedupes these per subagent (R0 F12); Eden records them in the child window's ledger.
+
+**Built in P2.5** (`src/memory-spawn.ts`, `packages/cli/src/memory-spawn-hook.ts`, `memory-hook.ts` `subagentStart`; flag `deliver.subagent`, `shadow` by default). Where it reads this section narrowly:
+- **The record** holds the task's classes beside its paths (`{k: "spawn", id, type, paths, classes, t}`), so "policies whose classes fit the task" need no task text (X11). Paths are the places of the repo the task names: paths with a folder and file names that exist under the repo's top, or whose folder does (a file to create); a URL or a path outside the repo is none. A nested subagent's launch goes to the session's window too, as SubagentStart's payload does not say which window launched it. With the flag `off` nothing is recorded.
+- **The claim** is A4's rule. Claude Code 2.1.294 (P2.5's end-to-end) runs each Agent call's PreToolUse and then its SubagentStart, one call after the other in a parallel batch too, so the newest record of the type is the subagent's own; the subagent's meta file, which names the call's `tool_use_id`, is written only after SubagentStart returns (born 28 and 30 ms after the two hooks' wide events), so it cannot match them. A task that names no place of the repo takes the parent's recent paths, as no record does. Until P3.2's read set, "the parent's read set" is the paths of its last 3 human turns' tool batches (D4's main-thread paths).
+- **The packet:** the policies and intents of the task's classes and the type's (its name read as words, the agentive ending as the verb, "code-reviewer" firing `review`; `memory-classes.json`'s `agents` map adds `integrate` to `review`), then the rows the lexical path finds for the scope's paths, through validity, the gate (A7 §4: the cue is the scope's paths, so an untyped row is admitted only on an identifier it shares with them), the child's shadow set and ledger; ≤ 3 bullets. Gotchas are P4.5's.
+- **A fork** (`agent_type: "fork"`; Claude Code's fork mode, on by default in interactive sessions, `CLAUDE_CODE_FORK_SUBAGENT=1` under `-p`) copies its parent's current-epoch ledger at its first start, at `off` 0 of its own transcript, and reads the parent's whole conversation since the last compaction as its D26 residual: its context is the parent's.
+- **The child's shadow set** is its parent's, by type (D27, R0 F35): a fork's whole set; a typed subagent's, the parent's eagerly loaded files, the CLAUDE.md files on disk and AGENTS.md, not auto memory; Explore and Plan none.
+- **Distance:** a child window's deliveries, the guard's included, are made at the size of its own transcript (`<session>/subagents/agent-<agent_id>.jsonl`, D25).
+- `eden setup` installs SubagentStart, not the `PreToolUse(Agent)` record (its PreToolUse is the compile hook), so its subagents take the parent's recent paths.
 
 ### 5.4 PreToolUse policy guard (D19)
 
@@ -326,6 +340,8 @@ Two handlers, because async output races the next prompt and Stop does not fire 
 ### 5.7b SubagentStop (async)
 
 The same as `stop-sleep` for the child window, reading `agent_transcript_path`. Under `SubagentHandback` (v2.1.271+), `last_assistant_message` is not the report; use labels read the handback's `tool_input.message` from PostToolUse.
+
+**Decided in P2.5:** the child's own transcript is not encoded. What the parent learns from it is the Agent call's result, which the parent's delta encodes; rows made from the child's own reads and reasoning would come back to the parent as bullets its Agent result already holds (P0.6's guard runs: `redundant_rate` +4.42 pp). SubagentStop encodes the child's last message and folds its ledger.
 
 ### 5.8 Packet wording (D14)
 

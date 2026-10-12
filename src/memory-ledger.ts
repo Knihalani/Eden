@@ -27,7 +27,7 @@
  * - **Live.** A delivery is still in the window when it is of the current epoch, the transcript has grown by less
  *   than 400 KB (rules) or 1.2 MB (everything else) since `off`, and `att` is not on an abandoned branch: a prompt the
  *   delta encoder found abandoned by a rewind (A4 §3.3, `memory-delta.ts`). A prompt whose line it has not read yet
- *   counts as on the branch. A child window's `off` is measured on its own transcript (P2.5 brings child delivery).
+ *   counts as on the branch. A child window's `off` is measured on its own transcript (`childTranscript`, D25).
  * - **Novelty.** A candidate whose cid a live delivery holds at the same `ver` is dropped (refractory). One whose cid
  *   it holds at another `ver`, or whose text retracts or switches away from a live slot's value (D7, A4 §3.1), is an
  *   `Updated:` item. A switch is tied to the slot by subject: every subject word it names is one of the slot's (slot
@@ -442,16 +442,24 @@ export function holdSummarized(
  * A fork's copy of its parent's ledger (D25, `memory-fork.ts`): each ledger file the parent has, the deliveries of its
  * current epoch that are on its branch and were not made at a prompt in `after` (the parent's prompts after the fork
  * point), and the tokens of its epoch. They go to the fork's ledger of the same file, in the fork's own epoch, with
- * no human turn (`ht` 0). Returns how many deliveries were copied.
+ * no human turn (`ht` 0). A fork subagent's transcript is its own (D25: a child's distance is measured on it), so its
+ * copies are made at `off` 0, its start; a forked session's keep the parent's offsets, as its transcript does. Returns
+ * how many deliveries were copied.
  */
-export function inheritLedger(parent: string, fork: string, after: ReadonlySet<string>): number {
+export function inheritLedger(
+  parent: string,
+  fork: string,
+  after: ReadonlySet<string>,
+  opts: { off?: number } = {},
+): number {
   const abandoned = abandonedPrompts(parent);
   let copied = 0;
   for (const file of existingLedgers(parent)) {
     const state = readLedger(parent, file);
     const delivered = [...state.delivered].flatMap(([cid, entry]) => {
       if (entry.epoch !== state.epoch || after.has(entry.att) || abandoned.has(entry.att)) return [];
-      const { ver, off, att, sw, vt } = entry;
+      const { ver, att, sw, vt } = entry;
+      const off = opts.off ?? entry.off;
       return [{ k: "deliver", cid, ver, off, att, ht: 0, ...(sw ? { sw } : {}), ...(vt ? { vt } : {}) }];
     });
     const tokens = state.tokensEpoch > 0 ? [{ k: "packet", tok: state.tokensEpoch }] : [];

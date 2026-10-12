@@ -195,8 +195,8 @@ describe("D14, D28: the packet's wording and shape", () => {
   });
 });
 
-function sessionStart(session: string): string {
-  const out = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session, source: "startup" });
+function sessionStart(session: string, source = "startup"): string {
+  const out = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session, source });
   return (out?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext ?? "";
 }
 
@@ -248,15 +248,16 @@ describe("A4 §3.1, §5.1 step 5: an invalidated value or rule is not delivered"
   });
 
   test("a session gist the sleep rewrites after a retraction is as old as its sources (A4 §3.3)", () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins).
     submit("We use ZebraCache for caching.", { prompt_id: "p1" });
     stop();
-    expect(sessionStart(SESSION)).toContain("ZebraCache");
+    expect(sessionStart(SESSION, "compact")).toContain("ZebraCache");
     Bun.sleepSync(5);
     submit("We no longer use ZebraCache.", { prompt_id: "p2" });
     Bun.sleepSync(5);
     // The sleep at this Stop writes the session's gist again, after the retraction, from the same older row.
     stop();
-    expect(sessionStart(SESSION)).not.toMatch(/uses ZebraCache/i);
+    expect(sessionStart(SESSION, "compact")).not.toMatch(/uses ZebraCache/i);
   });
 
   test("so is one the sleep rewrites after a revocation", () => {

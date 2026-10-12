@@ -99,13 +99,6 @@ function launch(task: string, type?: string, extra: Record<string, unknown> = {}
   return id;
 }
 
-/** Claude Code's meta file beside the subagent's transcript, which names its launch. */
-function meta(agent: string, type: string, toolUseId: string): void {
-  mkdirSync(join(dir, "projects", PARENT, "subagents"), { recursive: true });
-  const fields = { agentType: type, description: "task", toolUseId, spawnDepth: 1 };
-  writeFileSync(childTranscriptOf(agent).replace(/\.jsonl$/, ".meta.json"), JSON.stringify(fields));
-}
-
 function subagentStart(agent: string, type: string): string {
   const out = memoryHookResponse({
     session_id: PARENT,
@@ -202,17 +195,15 @@ describe("SubagentStart: the task's scope (A4 §5.3)", () => {
     expect(packet).not.toContain("packages/cli has no auth");
   });
 
-  test("two launches of one type each get their own scope, by the launch their meta file names", () => {
+  test("two launches of one type, each followed by its SubagentStart (Claude Code's order), get their own scopes", () => {
     plant();
-    const web = launch("look at apps/web/app/login.ts", "Explore");
-    const cli = launch("look at packages/cli/src/index.ts", "Explore");
-    meta("a1", "Explore", web);
-    meta("a2", "Explore", cli);
+    launch("look at apps/web/app/login.ts", "Explore");
     expect(subagentStart("a1", "Explore")).toContain("Clerk");
+    launch("look at packages/cli/src/index.ts", "Explore");
     expect(subagentStart("a2", "Explore")).toContain("packages/cli has no auth");
   });
 
-  test("without a meta file, the newest unconsumed launch of its type, each once", () => {
+  test("two launches before either SubagentStart: the newest unconsumed of its type, each once", () => {
     plant();
     launch("look at apps/web/app/login.ts", "Explore");
     launch("look at packages/cli/src/index.ts", "Explore");
@@ -293,6 +284,25 @@ describe("SubagentStart: policies by the task's and the type's classes (A4 §5.3
 });
 
 describe("SubagentStart: a fork, a child's shadow set, its transcript (D25, D27)", () => {
+  test("a fork gets nothing its parent's conversation says, however far back (D26); a typed subagent does", () => {
+    plant();
+    const line = (type: string, text: string) =>
+      JSON.stringify({ type, message: { role: type, content: type === "user" ? text : [{ type: "text", text }] } });
+    const turns = [
+      line("user", CLI_AUTH),
+      line("assistant", "Noted."),
+      ...["list the open issues", "check the deploy queue", "run the linter"].flatMap((text) => [
+        line("user", text),
+        line("assistant", "Done."),
+      ]),
+    ];
+    writeFileSync(transcript(PARENT), `${turns.join("\n")}\n`);
+    launch("carry on with packages/cli/src/index.ts", "fork");
+    expect(subagentStart("a-fork", "fork")).not.toContain("packages/cli has no auth");
+    launch("carry on with packages/cli/src/index.ts", "general-purpose");
+    expect(subagentStart("a-typed", "general-purpose")).toContain("packages/cli has no auth");
+  });
+
   test("a fork gets nothing its parent's ledger holds; a typed subagent with the same task does", () => {
     plant();
     process.env.EDEN_FLAG_DELIVER_SUBMIT = "on";

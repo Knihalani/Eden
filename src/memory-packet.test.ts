@@ -293,17 +293,19 @@ describe("M8.4 gist + empty cue", () => {
         const gists = new GistStore(dir).latest(session, 5);
         expect(gists.length).toBeGreaterThan(0);
 
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-        const ctx = hookContext(start);
-        expect(ctx).toContain(MEMORY_MARK);
+        const start = hookContext(memoryHookResponse({ hook_event_name: "SessionStart", session_id: session }));
+        expect(start).toContain(MEMORY_MARK);
         // The hook words its bullets (D14): a rule the user set, a gist from a summary, no [kind · age · src] tag.
         // A pinned rule with no recorded source is a plain bullet: no "Rule you set" (A6 §2.1).
-        expect(ctx).toContain(`- ${RULE}`);
-        expect(ctx).not.toMatch(/Rule you set/);
+        expect(start).toContain(`- ${RULE}`);
+        expect(start).not.toMatch(/Rule you set/);
+        // Since P2.5 a startup briefs pins only (D23), and a compaction's SessionStart the gists.
+        const compact = { hook_event_name: "SessionStart", source: "compact", session_id: session };
+        const ctx = hookContext(memoryHookResponse(compact));
         // Since P2.4 a gist loses its rule clauses at SessionStart: the rule comes as the pin (A4 §5.2).
         expect(gists[0]!.text).toContain(` ${RULE}`);
         expect(ctx).toContain(`- ${gists[0]!.text.replace(` ${RULE}`, "")} (earlier session notes`);
-        expect(ctx).not.toMatch(/\[(?:rule|gist|fact|episode|procedure)\b/);
+        for (const briefed of [start, ctx]) expect(briefed).not.toMatch(/\[(?:rule|gist|fact|episode|procedure)\b/);
 
         // D18: the keyed rule comes by its class's trigger ("committing"), the other kinds by the lexical path.
         const notes = mem.recall([{ role: "user", content: PACKET_CUE }]);

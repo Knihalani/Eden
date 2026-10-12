@@ -7,8 +7,11 @@
  *   records count from both logs, so `hturn` does not depend on which mode the Submits ran in.
  * - `ctx.log`: the prompt hashes of the window's last Stop `session_crons` (D24), never the prompts themselves; the
  *   `cwd` of its SessionStart, which names the repo of a session outside git (D1, `memory-repo.ts`); one `batch`
- *   record per PostToolBatch (`memory-batch.ts`); and a forked session's `fork` records (`memory-fork.ts`).
- *   `stop-sleep` compacts it (`compactContext`).
+ *   record per PostToolBatch (`memory-batch.ts`); a forked session's `fork` records (`memory-fork.ts`); and the
+ *   rules a SessionStart proposed revoking (`revoke`, `memory-revoke.ts`). `stop-sleep` compacts it (`compactContext`).
+ * - `spawn.log` (a session's window): one `spawn` record per Agent call, its task's paths and classes, and one `take`
+ *   record per SubagentStart that claimed one (`memory-spawn.ts`); `scope.json` (a subagent's window): the scope its
+ *   first SubagentStart took.
  * - `qprev.json`: the end of the agent's last message, written by `stop-fast` (A4 §5.7, A7 §3's `q_prev`) through the
  *   store's secret gate, as every text under the memory root is (A6 §2.2).
  * - `hwm.json`: the delta encoder's mark (`memory-delta.ts`).

@@ -232,8 +232,10 @@ describe("A4 §4: a fork copies the parent's ledger (D25)", () => {
     parentTurns();
     const fork = hook({ hook_event_name: "SessionStart", source: "fork", seconds_since_last_response: 5, ...as(FORK) });
     expect(fork).toBeNull();
-    const fresh = hook({ hook_event_name: "SessionStart", source: "startup", ...as("s-fresh") });
-    expect(packetOf(fresh)).not.toBe("");
+    // Since P2.5 a startup briefs pins only, and the parent's rule, said once, is none: the gist that a compaction's
+    // SessionStart still briefs shows what the fork was not given.
+    const compacted = hook({ hook_event_name: "SessionStart", source: "compact", ...as("s-fresh") });
+    expect(packetOf(compacted)).not.toBe("");
   });
 
   test("after the fork's first turn, its ledger holds the parent's deliveries from before the fork point only", () => {

@@ -157,6 +157,7 @@ describe("eden doctor --memory", () => {
     const events = [
       "UserPromptSubmit",
       "SessionStart",
+      "SubagentStart",
       "PreCompact",
       "PostCompact",
       "Stop",

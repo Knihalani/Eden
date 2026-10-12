@@ -6,15 +6,17 @@
  * stays inside the 150 ms Submit budget (D20). Stop's two handlers name their stage as the first argument (D34:
  * `stop-fast`, `stop-sleep`). The PreToolUse guard's handlers name `guard`: their call is re-checked against every
  * action class before the guard's hook loads, so a call no class is (`git status`, `bun test`) costs only this process
- * (A7 §5, `memory-guard-match.ts`).
+ * (A7 §5, `memory-guard-match.ts`). The `PreToolUse(Agent)` handler names `spawn`: it records the launch for the
+ * subagent's SubagentStart (A4 §5.3, `memory-spawn-hook.ts`) and prints nothing.
  */
 import { dirname, join } from "node:path";
-import { findEdenRoot, GUARD_HOOK, GUARD_MATCH, MEMORY_HOOK } from "./eden-root";
+import { findEdenRoot, GUARD_HOOK, GUARD_MATCH, MEMORY_HOOK, SPAWN_HOOK } from "./eden-root";
 import { logFallbackOnce } from "./fallback-log";
 
 type MemoryHook = { runMemoryHookStdin: (stage?: string) => Promise<void> };
 type GuardMatch = { guardedCall: (payload: Record<string, unknown>) => boolean };
 type GuardHook = { runGuardHook: (payload: Record<string, unknown>) => void };
+type SpawnHook = { runSpawnHook: (payload: Record<string, unknown>) => void };
 
 /** The hook payload on stdin; `{}` when it is not a JSON object. */
 async function payload(): Promise<Record<string, unknown>> {
@@ -34,6 +36,8 @@ try {
     const body = await payload();
     const { guardedCall } = (await import(join(root, GUARD_MATCH))) as GuardMatch;
     if (guardedCall(body)) ((await import(join(root, GUARD_HOOK))) as GuardHook).runGuardHook(body);
+  } else if (stage === "spawn") {
+    ((await import(join(root, SPAWN_HOOK))) as SpawnHook).runSpawnHook(await payload());
   } else {
     const { runMemoryHookStdin } = (await import(join(root, MEMORY_HOOK))) as MemoryHook;
     await runMemoryHookStdin(stage);

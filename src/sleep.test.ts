@@ -349,6 +349,7 @@ describe("M7.2 ICL exemplars skip SemanticStore", () => {
 
 describe("M7.3 gists + SessionStart", () => {
   test("long session + sleep: a gist exists and SessionStart injects it", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     const session = "s-m74-long";
     await withHookMem(
       "eden-m74-gist-",
@@ -363,7 +364,7 @@ describe("M7.3 gists + SessionStart", () => {
         expect(gistText.length).toBeGreaterThan(0);
         expect(existsSync(join(dir, "gists.jsonl"))).toBe(true);
 
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: session });
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
         expect(ctx).toMatch(/\(earlier session notes/);
@@ -373,7 +374,7 @@ describe("M7.3 gists + SessionStart", () => {
     );
   });
 
-  test("SessionStart has pin+gist, not last-k unpinned junk", async () => {
+  test("SessionStart has the pin at a startup and the gist after a compaction, not last-k unpinned junk", async () => {
     const session = "s-m74-junk";
     await withHookMem(
       "eden-m74-start-",
@@ -387,22 +388,27 @@ describe("M7.3 gists + SessionStart", () => {
         const gists = new GistStore(dir).latest(session, 5);
         expect(gists.length).toBeGreaterThan(0);
 
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
-        const ctx = hookContext(start);
-        expect(ctx).toContain(MEMORY_MARK);
-        expect(ctx).toMatch(/bun test/i);
-        expect(ctx).toMatch(/\(earlier session notes/);
-        // Since P2.4 a gist loses its rule clauses at SessionStart: the rule comes as the pin above (A4 §5.2).
+        // Since P2.5 a startup briefs pins only (D23), and a compaction's SessionStart the gists only.
+        const start = hookContext(memoryHookResponse({ hook_event_name: "SessionStart", session_id: session }));
+        expect(start).toContain(MEMORY_MARK);
+        expect(start).toMatch(/bun test/i);
+        expect(start).not.toMatch(/\(earlier session notes/);
+        const compact = { hook_event_name: "SessionStart", source: "compact", session_id: session };
+        const ctx = hookContext(memoryHookResponse(compact));
+        // Since P2.4 a gist loses its rule clauses at SessionStart: the rule comes as the pin (A4 §5.2).
         expect(gists[0]!.text).toContain(" Always run bun test before you push.");
         expect(ctx).toContain(`${gists[0]!.text.replace(" Always run bun test before you push.", "")} (earlier`);
-        expect(ctx).not.toMatch(/lunch menu chatter/i);
-        expect(ctx).not.toMatch(/weather talk from the hallway/i);
+        for (const briefed of [start, ctx]) {
+          expect(briefed).not.toMatch(/lunch menu chatter/i);
+          expect(briefed).not.toMatch(/weather talk from the hallway/i);
+        }
       },
       session,
     );
   });
 
   test("SessionStart after a later sleep does not brief a tombstoned gist name", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     const session = "s-m74-gist-lww";
     await withHookMem(
       "eden-m74-gist-lww-",
@@ -411,7 +417,7 @@ describe("M7.3 gists + SessionStart", () => {
         await sleep({ dir, mem, session });
         mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
         await sleep({ dir, mem, session });
-        const start = memoryHookResponse({ hook_event_name: "SessionStart", session_id: session });
+        const start = memoryHookResponse({ hook_event_name: "SessionStart", source: "compact", session_id: session });
         const ctx = hookContext(start);
         expect(ctx).toContain(MEMORY_MARK);
         expect(ctx).toMatch(/sqlite/i);
@@ -422,6 +428,7 @@ describe("M7.3 gists + SessionStart", () => {
   });
 
   test("SessionStart transcript re-observe does not brief instead-of postgres", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     const session = "s-m74-start-trans";
     await withHookMem(
       "eden-m74-start-trans-",
@@ -438,6 +445,7 @@ describe("M7.3 gists + SessionStart", () => {
         );
         const start = memoryHookResponse({
           hook_event_name: "SessionStart",
+          source: "compact",
           session_id: session,
           transcript_path: trans,
         });
@@ -506,6 +514,7 @@ describe("M7.3 gists + SessionStart", () => {
   });
 
   test("Stop/Start leftover system_prompt does not beat live sqlite", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     await withHookMem("eden-m74-hook-sys-", async (mem, dir) => {
       mem.observe([{ role: "user", content: "The database is postgres." }]);
       mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
@@ -514,7 +523,11 @@ describe("M7.3 gists + SessionStart", () => {
       const stop = memoryHookResponse({ hook_event_name: "Stop", system_prompt: "The database is postgres." });
       expect(stop).toBeNull();
       expect(factObject(new SemanticStore(dir).get("database", "is"))).toMatch(/sqlite/i);
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", system_prompt: "The database is postgres." });
+      const start = memoryHookResponse({
+        hook_event_name: "SessionStart",
+        source: "compact",
+        system_prompt: "The database is postgres.",
+      });
       const ctx = hookContext(start);
       expect(ctx).toMatch(/sqlite/i);
       expect(ctx).not.toMatch(/postgres/i);
@@ -522,6 +535,7 @@ describe("M7.3 gists + SessionStart", () => {
   });
 
   test("Stop/Start leftover content does not beat live sqlite", async () => {
+    // Since P2.5 only a compaction's SessionStart briefs gists (a startup briefs pins: D23).
     await withHookMem("eden-m74-hook-content-", async (mem, dir) => {
       mem.observe([{ role: "user", content: "The database is postgres." }]);
       mem.observe([{ role: "user", content: "The database is sqlite instead of postgres." }]);
@@ -530,7 +544,11 @@ describe("M7.3 gists + SessionStart", () => {
       const stop = memoryHookResponse({ hook_event_name: "Stop", content: "The database is postgres." });
       expect(stop).toBeNull();
       expect(factObject(new SemanticStore(dir).get("database", "is"))).toMatch(/sqlite/i);
-      const start = memoryHookResponse({ hook_event_name: "SessionStart", content: "The database is postgres." });
+      const start = memoryHookResponse({
+        hook_event_name: "SessionStart",
+        source: "compact",
+        content: "The database is postgres.",
+      });
       const ctx = hookContext(start);
       expect(ctx).toMatch(/sqlite/i);
       expect(ctx).not.toMatch(/postgres/i);
