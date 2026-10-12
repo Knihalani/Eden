@@ -173,7 +173,7 @@ function briefing(
       .sort((a, b) => Number(b.kind === "constraint") - Number(a.kind === "constraint") || b.at - a.at);
     proposal = proposalToShow(root, new Set(own.flatMap((row) => (row.rules ?? []).map(ruleIdentity))));
     const global = [...(proposal ? [proposalNote(proposal)] : []), ...readUserRules(root)];
-    withUserGlobal<ProvenanceNote>(own, global).slice(0, 8).forEach(add);
+    withUserGlobal<ProvenanceNote>(own, global, invalid).slice(0, 8).forEach(add);
   }
   try {
     let gists = 0;

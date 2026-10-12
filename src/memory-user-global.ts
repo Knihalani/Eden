@@ -41,7 +41,7 @@ import {
   type RuleRef,
 } from "./memory-policy";
 import { POLICIES_FILE, readRuleIndex, type IndexedRow } from "./memory-rule-index";
-import { readInvalidations, rulesInForce } from "./memory-validity";
+import { readInvalidations, rulesInForce, type Invalidation } from "./memory-validity";
 
 /** The user-global directory under the memory root, and the repo part of its cids (A4 §4). */
 export const USER_GLOBAL = "_user";
@@ -72,20 +72,26 @@ export function readUserRules(root: string): IndexedRow[] {
 
 /**
  * The rows a repo reads: the user-global ones first, then its own rows without the rules kept globally and their
- * clauses; a row left with no rule goes. A row with no D9 rule is kept as it is.
+ * clauses. A global rule counts only while it is in force in this repo (read through `invalid`, the repo's
+ * invalidations): a repo that overturned it and then said it again keeps its own row. A row left with no rule keeps
+ * whatever else it says; one left with nothing goes. A row with no D9 rule is kept as it is.
  */
-export function withUserGlobal<T extends { text?: string; rules?: readonly RuleRef[] }>(
+export function withUserGlobal<T extends { text?: string; at?: unknown; rules?: readonly RuleRef[] }>(
   own: readonly T[],
   global: readonly T[],
+  invalid: readonly Invalidation[],
 ): T[] {
-  const kept = new Set(global.flatMap((row) => (row.rules ?? []).map(ruleIdentity)));
+  const kept = new Set(
+    global.flatMap((row) => [...rulesInForce({ text: String(row.text ?? ""), at: row.at }, invalid).rules]),
+  );
   if (!kept.size) return [...global, ...own];
   const isKept = (rule: Rule) => ruleRefs([rule]).some((ref) => kept.has(ruleIdentity(ref)));
   const left = own.flatMap((row) => {
     if (!row.rules?.some((rule) => kept.has(ruleIdentity(rule)))) return [row];
     const rules = row.rules.filter((rule) => !kept.has(ruleIdentity(rule)));
     const text = withoutRules(String(row.text ?? ""), isKept).trim();
-    return rules.length && text ? [{ ...row, text, rules }] : [];
+    if (!text) return [];
+    return [{ ...row, text, rules: rules.length ? rules : undefined }];
   });
   return [...global, ...left];
 }

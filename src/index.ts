@@ -27,7 +27,14 @@ import { stripPastes, withoutInstructions, type TextSource } from "./memory-auth
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
-import { counteredKeys, isForget, recordSupersession, validText, type Invalidation } from "./memory-validity";
+import {
+  counteredKeys,
+  isForget,
+  readInvalidations,
+  recordSupersession,
+  validText,
+  type Invalidation,
+} from "./memory-validity";
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
 import { markStoreFormat, readableStore, storeFor } from "./memory-repo";
@@ -1221,7 +1228,8 @@ export class AgentMemory {
       if (!classes.length) return [];
       this.ensureIndex();
       const global = this.perRepo ? (readUserRules(this.windowsRoot) as MemoryRecord[]) : [];
-      return labelledNotes(triggeredRows(withUserGlobal(this.ruleRows, global), classes));
+      const invalid = global.length ? readInvalidations(this.dir) : [];
+      return labelledNotes(triggeredRows(withUserGlobal(this.ruleRows, global, invalid), classes));
     } catch {
       return [];
     }

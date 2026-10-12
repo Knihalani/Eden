@@ -199,9 +199,9 @@ export function guardAnswer(
 ): GuardAnswer | undefined {
   const classes = callClasses(call);
   if (!classes.length) return undefined;
-  const rows = withUserGlobal(readRuleIndex(store), root ? readUserRules(root) : []);
-  if (!rows.length) return undefined;
   const invalid = readInvalidations(store);
+  const rows = withUserGlobal(readRuleIndex(store), root ? readUserRules(root) : [], invalid);
+  if (!rows.length) return undefined;
   for (const cls of classes) {
     const found = applying(rows, cls, call, invalid, now);
     if (!found.length) continue;
