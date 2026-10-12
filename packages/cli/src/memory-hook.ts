@@ -1,4 +1,4 @@
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { redact } from "@eden/ir";
 import { authoredTexts, splitPastes, type TextSource } from "../../../src/memory-authority";
 import { isLiveRow, openMemory, type MemoryRecord } from "../../../src/index";
@@ -8,7 +8,7 @@ import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
 import { takeNotice } from "../../../src/memory-breaker";
 import { errorTag, retainEvents } from "../../../src/memory-events";
 import { pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
-import { batchRecord } from "../../../src/memory-batch";
+import { batchRecord, writtenPaths } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
 import { inheritFork, markFork, parentLines } from "../../../src/memory-fork";
 import {
@@ -32,6 +32,7 @@ import { recentConversation, sentencesOf, type RecentConversation } from "../../
 import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
+import { buildCatalog, readCatalog, rebuildsCatalog, repoPathOf } from "../../../src/memory-scopes";
 import {
   recordInstructions,
   shadowSentences,
@@ -176,9 +177,9 @@ function additional(event: string, packet: string): Record<string, unknown> | nu
  *   briefed and an intent never is; a rule on no action class is briefed as a pinned row was before. A row the rules
  *   kept for all projects leave with no rule of its own briefs what else it says as a fact, not as a rule (P2.4's
  *   follow-up: a keyed row is no candidate of the lexical path, so this is where its fact still reaches Claude).
- * Pins have no scope until P3.1's catalog, so every pin is in the likely scope. Gists, P0.2's carrier between
- * sessions, are no longer briefed: since P0.5 a later session retrieves the same row at its Submit. `Updated:` items
- * wait for P3.3's keyed slots (no lookup from a delivered cid to its current value before them).
+ * Pins are not filtered by scope: the likely scope is P3.2's read set, so every pin is in it. Gists, P0.2's carrier
+ * between sessions, are no longer briefed: since P0.5 a later session retrieves the same row at its Submit. `Updated:`
+ * items wait for P3.3's keyed slots (no lookup from a delivered cid to its current value before them).
  */
 function briefing(mem: ReturnType<typeof openMemory>, root: string): { notes: ProvenanceNote[]; proposal?: Proposal } {
   const seen = new Set<string>(),
@@ -571,6 +572,7 @@ function sleepAfterTurn(ctx: HookContext): void {
     () => inheritParent(ctx),
     () => encodePayloadText(ctx),
     () => lightSleep(ctx.mem, ctx.session),
+    () => ctx.writes && !readCatalog(ctx.store) && buildCatalog(ctx.store, ctx.top),
     () => ctx.win && compactContext(ctx.win),
     () => ctx.win && foldWindow(ctx.win),
     () => labelAsksFromTranscript(ctx),
@@ -634,7 +636,25 @@ function toolBatch(ctx: HookContext): void {
       if (!ctx.child) encodeConversation(ctx);
     },
     () => labelAsks(ctx),
+    () => ctx.writes && rebuildAfterWrites(ctx),
   );
+}
+
+/** A batch blocks the agent: a rebuild it starts lists the repo's files for at most this long (fail open). */
+const BATCH_LIST_TIMEOUT_MS = 1_000;
+
+/**
+ * A4 §2: the batch's writes to this repo rebuild its scope catalog when they can change it: a manifest, workspace or
+ * build-system file, the `.eden/scopes` override, a file in a directory that held only its manifest, or any file
+ * while the repo has no catalog. Another repo's files, and every other write, list nothing.
+ */
+function rebuildAfterWrites(ctx: HookContext): void {
+  const cwd = str(ctx.r.cwd) ?? ctx.top;
+  const written = writtenPaths(ctx.r).flatMap((path) => {
+    const at = repoPathOf(resolve(cwd, path));
+    return at && at.repo === ctx.repo ? [at.rel] : [];
+  });
+  if (rebuildsCatalog(readCatalog(ctx.store), written)) buildCatalog(ctx.store, ctx.top, BATCH_LIST_TIMEOUT_MS);
 }
 
 /** A PostToolBatch payload's calls. */

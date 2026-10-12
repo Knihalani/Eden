@@ -51,6 +51,21 @@ function pathsOf(call: Call): string[] {
   return cd ? [...named, cd[1]!.replace(/^["']|["']$/g, "")] : named;
 }
 
+/** The tools that write the file their input names. */
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/** The files a PostToolBatch payload's calls wrote (A4 §2: a manifest written rebuilds the scope catalog). */
+export function writtenPaths(payload: Record<string, unknown>): string[] {
+  const calls = (Array.isArray(payload.tool_calls) ? payload.tool_calls : []) as Call[];
+  return [
+    ...new Set(
+      calls.flatMap((call) =>
+        typeof call.tool_name === "string" && WRITE_TOOLS.has(call.tool_name) ? pathsOf(call) : [],
+      ),
+    ),
+  ];
+}
+
 /** D10: the first error line, with paths, hashes, line:col and numbers normalized. */
 export function errorSignature(text: string): string | undefined {
   const line = text

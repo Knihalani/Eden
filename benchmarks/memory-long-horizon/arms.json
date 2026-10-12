@@ -316,26 +316,8 @@
       ],
       "a5": "all 12 rows of R5 §9.3 + R3 F9 rows",
       "on": {
-        "state": "red",
-        "failed": [
-          "f9-fixture",
-          "f9-root-only",
-          "f9-uv",
-          "row-a",
-          "row-b",
-          "row-c",
-          "row-d",
-          "row-e",
-          "row-f",
-          "row-g",
-          "row-h",
-          "row-i",
-          "row-j",
-          "row-j-no-bazel",
-          "row-k",
-          "row-l"
-        ],
-        "why": "`eden memory scopes` does not exist, so no row is answered"
+        "state": "green",
+        "why": "passes since P3.1 (D3): `eden memory scopes --json` derives the catalog by R5 §9.2 from the row repo's `git ls-files -co --exclude-standard` and answers each path by longest prefix, through its own worktree's top"
       }
     },
     {

@@ -3,7 +3,7 @@
  * No embeddings, no dump-all, no LLM on submit.
  */
 
-/** Every packet's header (D14, A4 §5.8). It names the scope once a scope catalog exists (P3.1). */
+/** Every packet's header (D14, A4 §5.8). It names the scope once a cue has one: P3.2's read set. */
 export const MEMORY_PACKET_MARK = "Eden memory, recalled from earlier sessions:";
 /** Both headers a packet may carry: today's, and the one before P0.2, still in older conversations. */
 export const MEMORY_PACKET_MARKS = [MEMORY_PACKET_MARK, "Eden Memory:"] as const;
