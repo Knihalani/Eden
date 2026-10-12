@@ -79,11 +79,15 @@ export interface Place {
   named: string[];
 }
 
-/** The repo a window's paths are read against: its key, its checkout's top, and its catalog's scopes. */
+/**
+ * The repo a window's paths are read against: its key, its checkout's top, its catalog's scopes, and the session's
+ * folder relative to the top (`""` at the top), which a relative path in a text may be read from.
+ */
 export interface RepoScopes {
   repo: string;
   top: string;
   scopes: readonly string[];
+  cwd?: string;
 }
 
 /** What splits a text into the tokens a path may be. */
@@ -294,18 +298,23 @@ export interface EncodePlace {
 }
 
 /**
- * The scopes of the catalog that a text's paths are in, in order, with no filesystem access (D3). A path in the root's
- * own folders names `""` only when it ends in a file name ("scripts/db.ts"), so prose with a slash ("and/or") names
- * nothing.
+ * The scopes of the catalog that a text's paths are in, in order, with no filesystem access (D3). A relative path is
+ * read from the top, else from the session's folder (`cwd`, relative to the top), whichever falls in a folder's scope;
+ * one that falls in neither names `""` only when it ends in a file name ("scripts/db.ts"), so prose with a slash
+ * ("and/or") names nothing. URLs are no places.
  */
-export function namedScopes(text: string, scopes: readonly string[], top: string): string[] {
+export function namedScopes(text: string, scopes: readonly string[], top: string, cwd = ""): string[] {
   const named: string[] = [];
-  for (const raw of text.split(TOKEN_BREAK)) {
+  for (const raw of text.replace(URL, " ").split(TOKEN_BREAK)) {
     if (!raw.includes("/")) continue;
-    const token = raw.replace(/[.:!?]+$/, "").replace(/^\.\/+/, "");
+    const token = raw
+      .replace(/[.:!?]+$/, "")
+      .replace(/^\.\/+/, "")
+      .replace(/\/+$/, "");
     const rel = isAbsolute(token) ? (token.startsWith(`${top}/`) ? token.slice(top.length + 1) : "") : token;
     if (!rel) continue;
-    const scope = scopeOfDir(scopes, rel.replace(/\/+$/, ""));
+    const reads = isAbsolute(token) || !cwd ? [rel] : [rel, `${cwd}/${rel}`];
+    const scope = reads.map((read) => scopeOfDir(scopes, read)).find(Boolean) ?? "";
     if ((scope || FILE_NAME.test(basename(rel))) && !named.includes(scope)) named.push(scope);
   }
   return named;
@@ -341,8 +350,8 @@ export function namesRootSlot(text: string): boolean {
 export function rowScope(text: string, root: boolean, place: EncodePlace): string | undefined {
   const at = place.repo();
   if (!at) return undefined;
-  const { scopes, top } = at;
-  const named = namedScopes(text, scopes, top);
+  const { scopes, top, cwd } = at;
+  const named = namedScopes(text, scopes, top, cwd);
   if (named.length === 1) return named[0]!;
   if (!named.length) return root ? "" : place.working();
   const working = place.working();

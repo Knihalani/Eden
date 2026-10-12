@@ -31,7 +31,7 @@ import { isPinnedIntention, selectNotes, unsaidNotes } from "../../../src/memory
 import { recentConversation, sentencesOf, type RecentConversation } from "../../../src/memory-residual";
 import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
-import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
+import { readableStore, realpathOrSelf, repoStoreDir, swapping } from "../../../src/memory-repo";
 import {
   buildCatalog,
   listedFile,
@@ -47,6 +47,7 @@ import {
   taskPlace,
   twoScopeNotes,
   typedValueRow,
+  underTop,
   visibleFrom,
   windowPlace,
   type EncodePlace,
@@ -1229,7 +1230,10 @@ function respond(
   const top = repo?.top ?? cwd ?? process.cwd();
   const scopesAt = lazily((): RepoScopes | undefined => {
     const catalog = readCatalog(store);
-    return catalog && repo ? { repo: repo.key, top, scopes: catalog.scopes } : undefined;
+    // The session's folder within the top, which a relative path a row names may be read from (`namedScopes`).
+    const within = cwd ? underTop(realpathOrSelf(cwd), top) : undefined;
+    const from = within && !within.startsWith("..") ? within : "";
+    return catalog && repo ? { repo: repo.key, top, scopes: catalog.scopes, cwd: from } : undefined;
   });
   // A subagent's prompt is its task, whose places its first SubagentStart stored (A4 §5.3).
   let named = (): readonly string[] | undefined => (resolved.child && win ? storedScope(win)?.paths : undefined);

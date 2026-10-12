@@ -476,3 +476,30 @@ describe("review round 4: rows that name only the root's files", () => {
     expect(packet).not.toMatch(/apps\/web: [^\n]*scripts\/db\.ts/);
   });
 });
+
+describe("review round 4's probes: a session started in a package", () => {
+  const web = () => join(top, "apps/web");
+
+  test("a path relative to the session's folder is that folder's, not the root's", () => {
+    hook("SessionStart", "s1", { source: "startup", cwd: web() });
+    hook("UserPromptSubmit", "s1", { cwd: web(), prompt: "look at the login", prompt_id: "p1" });
+    read("s1", "p1", "apps/web/app/login.ts");
+    const said = "The redirect in app/login.ts fires twice before the session cookie lands.";
+    hook("UserPromptSubmit", "s1", { cwd: web(), prompt: said, prompt_id: "p2" });
+    expect(scopeOf("The redirect in app/login.ts fires twice")).toBe("apps/web");
+  });
+
+  test("a fact naming a file of the session's folder is never seen from a sibling folder", () => {
+    hook("SessionStart", "s1", { source: "startup", cwd: web() });
+    hook("UserPromptSubmit", "s1", { cwd: web(), prompt: "look at the login", prompt_id: "p1" });
+    read("s1", "p1", "apps/web/app/login.ts");
+    hook("UserPromptSubmit", "s1", {
+      cwd: web(),
+      prompt: "The session store in app/session.ts is redis.",
+      prompt_id: "p2",
+    });
+    tick(86_400_000);
+    hook("SessionStart", "s2", { source: "startup" });
+    expect(submit("s2", "which session store does packages/cli/src/index.ts use?", "q1")).not.toContain("redis");
+  });
+});
