@@ -60,6 +60,8 @@ export interface WideEvent {
   paths?: number;
   /** The scope count of the catalog this event rebuilt (D3): after a batch's manifest write, or at a turn's end. */
   catalog?: number;
+  /** How many scopes the read set of a human Submit or a SubagentStart holds (D4, `memory-place.ts`): 1 or 2. */
+  read?: number;
   spawn?: { type: string; paths: number; classes: string[] };
   /** The cids of the packet the point delivered, or in shadow would have, and the ids of their rows. */
   cids?: string[];

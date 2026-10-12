@@ -26,7 +26,8 @@ describe("A4 §5.5: the batch's ctx.log record", () => {
     });
     expect(record).toEqual({
       prompt_id: "p1",
-      paths: ["/repo/packages/cli/src/login.ts", "/repo/apps/web", "packages/cli"],
+      paths: ["/repo/packages/cli/src/login.ts", "/repo/apps/web"],
+      bash: ["packages/cli"],
       exit: [0, 1],
       sig: ["error: Cannot find module '<path>' from '<path>:<loc>'"],
     });

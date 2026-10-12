@@ -20,7 +20,7 @@ const NEAR_DUP = 0.8;
 
 export type IclRecord = { id: string; text: string; t: number; src?: string; label?: string };
 
-export type IclHit = { text: string; id: string; t: number; score: number; label?: string };
+export type IclHit = { text: string; id: string; t: number; score: number; label?: string; src?: string };
 
 export type IclFallback = { text?: string; id?: string; at?: number; lane?: string };
 
@@ -263,6 +263,7 @@ function toHit(row: Scored): IclHit {
     score: row.score,
   };
   if (row.rec.label) hit.label = row.rec.label;
+  if (row.rec.src) hit.src = row.rec.src;
   return hit;
 }
 

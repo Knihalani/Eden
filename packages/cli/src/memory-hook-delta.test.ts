@@ -118,7 +118,7 @@ describe("A4 §5.5: PostToolBatch", () => {
     });
     const records = readFileSync(windowFile("ctx.log"), "utf8").trim().split("\n");
     expect(records.map((line) => JSON.parse(line))).toEqual([
-      { k: "batch", prompt_id: "p1", paths: ["/r/src/a.ts"], exit: [2], sig: ["error: no rule"] },
+      { k: "batch", prompt_id: "p1", paths: ["/r/src/a.ts"], bash: [], exit: [2], sig: ["error: no rule"] },
     ]);
     expect(live("Running the build now")).toHaveLength(1);
   });

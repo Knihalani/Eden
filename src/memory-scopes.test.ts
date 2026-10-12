@@ -19,6 +19,9 @@ import {
   scopeOfFile,
 } from "./memory-scopes";
 
+/** Every written file is one git lists (the rule's own reading; `listedFile` is tested apart). */
+const listedAll = () => true;
+
 const pkg = (name?: string, more: Record<string, unknown> = {}) =>
   JSON.stringify({ ...(name ? { name } : {}), ...more });
 const crate = (name: string) => `[package]\nname = "${name}"\n`;
@@ -468,12 +471,12 @@ describe("rebuild triggers (A4 §2: after a Write/Edit of a manifest or workspac
       ".eden/scopes",
       "packages/new/index.ts",
     ])
-      expect([rel, rebuildsCatalog(catalog, [rel])]).toEqual([rel, true]);
+      expect([rel, rebuildsCatalog(catalog, [rel], listedAll)]).toEqual([rel, true]);
   });
 
   test("any other file does not, and with no catalog yet nothing does (the turn's end builds it)", () => {
-    expect(rebuildsCatalog(catalog, ["packages/a/i.js", "packages/newer/i.js", "README.md"])).toBe(false);
-    expect(rebuildsCatalog(undefined, ["package.json"])).toBe(false);
+    expect(rebuildsCatalog(catalog, ["packages/a/i.js", "packages/newer/i.js", "README.md"], listedAll)).toBe(false);
+    expect(rebuildsCatalog(undefined, ["package.json"], listedAll)).toBe(false);
   });
 });
 
@@ -493,8 +496,8 @@ describe("review round 1", () => {
       expect(c).toEqual({ scopes: ["", "tools/a"], waiting: ["tools"] });
       const catalog = { built: 0, checkout: "/x", ...c };
       // A file tools/a owns cannot end the wait, so it rebuilds nothing; one tools owns does.
-      expect(rebuildsCatalog(catalog, ["tools/a/x.js"])).toBe(false);
-      expect(rebuildsCatalog(catalog, ["tools/x.js"])).toBe(true);
+      expect(rebuildsCatalog(catalog, ["tools/a/x.js"], listedAll)).toBe(false);
+      expect(rebuildsCatalog(catalog, ["tools/x.js"], listedAll)).toBe(true);
     });
   });
 
@@ -540,7 +543,7 @@ describe("review round 1", () => {
     test("a file named constructor or toString is no manifest and rebuilds nothing", () => {
       expect(derive({ "a/constructor": "", "a/x.js": "", "b/toString": "", "b/y.js": "" }).scopes).toEqual([""]);
       const catalog = { built: 0, checkout: "/x", scopes: [""], waiting: [] };
-      expect(rebuildsCatalog(catalog, ["src/toString"])).toBe(false);
+      expect(rebuildsCatalog(catalog, ["src/toString"], listedAll)).toBe(false);
     });
   });
 });

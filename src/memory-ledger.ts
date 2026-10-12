@@ -21,7 +21,8 @@
  *   (D1), or `_user` for a rule kept for all projects (D11, `memory-user-global.ts`). A rule row with D9 keys
  *   (P2.1) is keyed `P:` by a hash of its rules (A7 §5; `ruleIdentity`: the key, and the action in a class whose
  *   words name distinct ones), so two rows stating one rule share a cid, and its value tokens come from its keys.
- *   Until P3.3 brings slot keys, a slot (`legacySlot`) is keyed `s:` by its subject, with its value as `ver`, and a
+ *   Until P3.3 brings slot keys, a slot (`legacySlot`) is keyed `s:` by its scope (since P3.2; none at the root) and
+ *   its subject, with its value as `ver`, and a
  *   rule without keys (`P:`: one on no action class, or written before P2.1) or anything else (`E:`) by a hash of its
  *   normalized content words, so near-identical text gets one cid.
  * - **Live.** A delivery is still in the window when it is of the current epoch, the transcript has grown by less
@@ -126,7 +127,8 @@ export function ledgerKey(note: ProvenanceNote, repo?: string): LedgerKey {
   const slot = legacySlot(note);
   if (slot) {
     const sw = subjectWords(slot.subject).map(wordHash);
-    const cid = `${prefix}s:${hash(words(slot.subject))}`;
+    // A4 §4's `s:<scope>|<slot>`: two scopes' values of one slot are two items. The root's keeps its old form.
+    const cid = `${prefix}s:${note.scope ? `${note.scope}|` : ""}${hash(words(slot.subject))}`;
     return { cid, ver: valueHash(slot.value), rule: false, sw, ...hashedTokens(slotValueTokens(slot.value)) };
   }
   const text = String(note.text ?? "");

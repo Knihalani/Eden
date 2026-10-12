@@ -265,7 +265,7 @@ describe("eden memory scopes", () => {
 });
 
 describe("eden memory remember stores each row's scope", () => {
-  test("a scope given, a path in a scope, the folder it runs in; the root and an unknown scope store none", () => {
+  test("a scope given, a path in a scope, the folder it runs in; the root and an unknown scope store the root", () => {
     const lines = [
       { text: "The a package logs to stderr.", cwd: top, scope: "packages/a" },
       { text: "The a package has no tests.", cwd: top, scope: "packages/a/src" },
@@ -282,11 +282,12 @@ describe("eden memory remember stores each row's scope", () => {
       ["The a package logs to stderr.", "packages/a"],
       ["The a package has no tests.", "packages/a"],
       ["The a package is ESM.", "packages/a"],
-      ["The repo uses bun.", undefined],
-      ["The docs are in markdown.", undefined],
+      ["The repo uses bun.", ""],
+      ["The docs are in markdown.", ""],
     ]);
+    // Since P3.2 a row without a scope is one written before rows had one: its place is unknown (`memory-place.ts`).
     const disk = readFileSync(join(store(), "memories.jsonl"), "utf8").split("\n").filter(Boolean);
-    expect(disk.filter((line) => line.includes('"scope"')).length).toBe(3);
+    expect(disk.filter((line) => line.includes('"scope"')).length).toBe(5);
   });
 });
 

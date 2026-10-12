@@ -8,7 +8,7 @@ import { packetOf, shapePacket } from "../../../src/memory-hook-packet";
 import { takeNotice } from "../../../src/memory-breaker";
 import { errorTag, retainEvents } from "../../../src/memory-events";
 import { pointOf, resolveFlags, type FlagMode, type FlagState } from "../../../src/memory-flags";
-import { batchRecord, writtenPaths, type Call } from "../../../src/memory-batch";
+import { batchRecord, writtenPaths, type BatchRecord, type Call } from "../../../src/memory-batch";
 import { encodeDelta } from "../../../src/memory-delta";
 import { inheritFork, markFork, parentLines } from "../../../src/memory-fork";
 import {
@@ -32,7 +32,26 @@ import { recentConversation, sentencesOf, type RecentConversation } from "../../
 import { tailLines } from "../../../src/memory-transcript";
 import { type ProvenanceNote } from "../../../src/memory-provenance";
 import { readableStore, repoStoreDir, swapping } from "../../../src/memory-repo";
-import { buildCatalog, readCatalog, rebuildsCatalog, repoPathOf, type ScopeCatalog } from "../../../src/memory-scopes";
+import {
+  buildCatalog,
+  listedFile,
+  readCatalog,
+  rebuildsCatalog,
+  repoPathOf,
+  type ScopeCatalog,
+} from "../../../src/memory-scopes";
+import {
+  recordPrompt,
+  recordSubagentPaths,
+  taskPaths,
+  taskPlace,
+  twoScopeNotes,
+  visibleFrom,
+  windowPlace,
+  type EncodePlace,
+  type Place,
+  type RepoScopes,
+} from "../../../src/memory-place";
 import {
   recordInstructions,
   shadowSentences,
@@ -87,6 +106,7 @@ import {
   validText,
   withoutExpiredIntents,
   withoutForgets,
+  type Invalidation,
 } from "../../../src/memory-validity";
 import {
   appendTurn,
@@ -141,7 +161,7 @@ const MEMORY_EVENTS = new Set([
  */
 export type HookStage = "stop-fast" | "stop-sleep";
 
-function hookMemory(opts: { dir: string; session?: string; child: boolean; cwd?: string }) {
+function hookMemory(opts: { dir: string; session?: string; child: boolean; cwd?: string; place: EncodePlace }) {
   return openMemory({ ...opts, perRepo: true });
 }
 
@@ -254,24 +274,40 @@ function pinnedPart(row: MemoryRecord): MemoryRecord[] {
 }
 
 /**
- * Renders a packet and records what it delivered in the ledger (A4 §4): the notes whose bullet made it into the 900
- * bytes, and the packet's tokens. In shadow the ledger is the shadow one, and the caller prints nothing. A ledger that
- * cannot be written leaves the packet as it is. Returns the packet, the cids it delivered and their rows' ids.
+ * Renders a packet and records what it delivered in the ledger (A4 §4): the rows whose bullet made it into the 900
+ * bytes (a two-scope bullet's rows, `parts`, each), and the packet's tokens. In shadow the ledger is the shadow one,
+ * and the caller prints nothing. A ledger that cannot be written leaves the packet as it is. Returns the packet, the
+ * cids it delivered, their rows' ids, and how many of the notes it holds.
  */
 function deliver(
   notes: readonly ProvenanceNote[],
   ledger: Ledger | undefined,
   at: { off: number; att: string; repo?: string },
-): { packet: string; cids: string[]; ids: string[] } {
+): { packet: string; cids: string[]; ids: string[]; notes: number } {
   const { packet, delivered } = packetOf(notes, memoryNow());
-  if (delivered.length && ledger)
+  const rows = delivered.flatMap((note) => note.parts ?? [note]);
+  if (rows.length && ledger)
     try {
       const moment = { off: at.off, att: at.att, ht: humanTurns(ledger.dir) };
-      const keys = delivered.flatMap((note) => deliveredKeys(note, at.repo));
+      const keys = rows.flatMap((note) => deliveredKeys(note, at.repo));
       recordPacket(ledger.dir, { keys, tokens: packetTokens(packet) }, moment, ledger.file);
     } catch {}
-  const cids = delivered.map((note) => ledgerKey(note, at.repo).cid);
-  return { packet, cids, ids: delivered.map((note) => String(note.id ?? "")) };
+  const cids = rows.map((note) => ledgerKey(note, at.repo).cid);
+  return { packet, cids, ids: rows.map((note) => String(note.id ?? "")), notes: delivered.length };
+}
+
+/**
+ * A scope's live rows as delivery reads them (A4 §5.1 step 5: what invalidations and 7 days left of each), newest
+ * first: where a two-scope bullet finds the other scope's value (`twoScopeNotes`).
+ */
+function scopeRows(mem: ReturnType<typeof openMemory>, invalid: readonly Invalidation[]) {
+  return (scope: string): ProvenanceNote[] =>
+    mem
+      .memories()
+      .filter((row) => row.scope === scope && isLiveRow(row))
+      .map((row) => ({ ...row, text: validText(withoutExpiredIntents(row.text, row.at), row.at, invalid) }))
+      .filter((row) => row.text)
+      .sort((a, b) => b.at - a.at);
 }
 
 /**
@@ -485,6 +521,15 @@ interface HookContext {
   /** The delivery point's mode; undefined at an event that delivers nothing. */
   mode?: FlagMode;
   ledgerOf: (mode: FlagMode | undefined) => Ledger | undefined;
+  /**
+   * The repo as the window's paths are read against it (`memory-place.ts`), its catalog read once: none without a
+   * catalog, where a place is unknown.
+   */
+  repoScopes: () => RepoScopes | undefined;
+  /** The window's place (A4 §2), none where it is unknown: read when first asked, and again after `movePlace`. */
+  workPlace: () => Place | undefined;
+  /** The window moved: a Submit's prompt names `prompt`'s places, or the catalog was built. */
+  movePlace: (prompt?: readonly string[]) => void;
 }
 
 /** The `prompt_id` a payload carries, for the rows its text becomes (A4 §3.3: a rewind takes them back). */
@@ -578,16 +623,21 @@ function sleepAfterTurn(ctx: HookContext): void {
     () => labelAsksFromTranscript(ctx),
     () => retainEvents(memoryRoot(), memoryNow()),
     () => spawnIdleSleeper(ctx.store, ctx.session),
-    () => ctx.event === "Stop" && buildMissingCatalog(ctx),
+    () => ctx.event === "Stop" && buildMissingCatalog(ctx, STOP_LIST_TIMEOUT_MS),
   );
 }
 
 /** How long a Stop's first build may list the repo's files: the async hook blocks no one, but should end (A4 §6). */
 const STOP_LIST_TIMEOUT_MS = 10_000;
 
-/** A repo's first scope catalog (D3), built at a turn's end when the store has none. */
-function buildMissingCatalog(ctx: HookContext): void {
-  if (ctx.writes && !readCatalog(ctx.store)) noteCatalog(ctx, buildCatalog(ctx.store, ctx.top, STOP_LIST_TIMEOUT_MS));
+/**
+ * A repo's first scope catalog (D3), built when the store has none: at a session's start, so its first prompt is
+ * placed (A4 §2), listing for at most 1 s as a batch may; and at a turn's end, for up to 10 s, if that ran out.
+ */
+function buildMissingCatalog(ctx: HookContext, timeoutMs: number): void {
+  if (!ctx.writes || readCatalog(ctx.store)) return;
+  noteCatalog(ctx, buildCatalog(ctx.store, ctx.top, timeoutMs));
+  ctx.movePlace();
 }
 
 /** A6 §2.5: the asks no PostToolBatch labelled, labelled from the transcript at sleep. */
@@ -603,6 +653,17 @@ function inheritParent(ctx: HookContext): void {
   if (!ctx.win || ctx.child) return;
   const inherited = inheritFork(memoryRoot(), ctx.win, ctx.transcriptPath);
   if (inherited) Object.assign(ctx.trace, { forked_from: inherited.from, copied: inherited.copied });
+}
+
+/** A value made when first asked, and made again when asked after `reset`. */
+function lazily<T>(make: () => T): { get: () => T; reset: () => void } {
+  let made: { value: T } | undefined;
+  return {
+    get: () => (made ??= { value: make() }).value,
+    reset: () => {
+      made = undefined;
+    },
+  };
 }
 
 /** Runs each step of a handler in order; one that throws is skipped, never the steps after it (fail open). */
@@ -638,11 +699,17 @@ function toolResult(ctx: HookContext, tool = "tool"): boolean {
 
 /**
  * PostToolBatch (A4 §5.5): one `ctx.log` record for the batch (`memory-batch.ts`), its tool traces, and the main
- * window's delta. A subagent's lines are its own transcript's, which SubagentStop encodes.
+ * window's delta. A subagent's lines are its own transcript's, which SubagentStop encodes; its batch's paths also go
+ * to its session's window, where they are subagent paths (D2, `memory-place.ts`).
  */
 function toolBatch(ctx: HookContext): void {
+  let batch: BatchRecord | undefined;
   inTurn(
-    () => ctx.win && recordBatch(ctx.win, batchRecord(ctx.r)),
+    () => {
+      batch = batchRecord(ctx.r, { top: ctx.top, cwd: ctx.place.cwd ?? ctx.top });
+      if (ctx.win) recordBatch(ctx.win, batch);
+    },
+    () => ctx.child && ctx.sessionWin && batch && recordSubagentPaths(ctx.sessionWin, [...batch.paths, ...batch.bash]),
     () => persistToolTraces(ctx.mem.jsonlDir, parseHookToolTraces(ctx.r)),
     () => {
       if (!ctx.child) encodeConversation(ctx);
@@ -656,17 +723,21 @@ function toolBatch(ctx: HookContext): void {
 const BATCH_LIST_TIMEOUT_MS = 1_000;
 
 /**
- * A4 §2: the batch's writes to this repo rebuild its scope catalog when they can change it: a manifest, workspace or
- * build-system file, the `.eden/scopes` override, or a file in a directory that held only its manifest. Another
- * repo's files, every other write, and a repo with no catalog yet (the turn's end builds it) list nothing.
+ * A4 §2: the batch's writes to this repo's main checkout rebuild its scope catalog when they can change it: a
+ * manifest, workspace or build-system file, the `.eden/scopes` override, or a file git lists in a directory that
+ * held only its manifest (`memory-scopes.ts`). Another repo's files, a linked worktree's (the catalog lists the main
+ * checkout's), every other write, and a repo with no catalog yet (its session's start or turn's end builds it) list
+ * nothing.
  */
 function rebuildAfterWrites(ctx: HookContext, calls: readonly Call[]): void {
+  const catalog = readCatalog(ctx.store);
+  if (!catalog) return;
   const cwd = str(ctx.r.cwd) ?? ctx.top;
   const written = writtenPaths(calls).flatMap((path) => {
     const at = repoPathOf(resolve(cwd, path));
-    return at && at.repo === ctx.repo ? [at.rel] : [];
+    return at && at.repo === ctx.repo && at.top === catalog.checkout ? [at.rel] : [];
   });
-  if (rebuildsCatalog(readCatalog(ctx.store), written))
+  if (rebuildsCatalog(catalog, written, (rel) => listedFile(catalog.checkout, rel)))
     noteCatalog(ctx, buildCatalog(ctx.store, ctx.top, BATCH_LIST_TIMEOUT_MS));
 }
 
@@ -780,8 +851,9 @@ function childShadowKind(type: string): ShadowKind {
 
 /**
  * The child's scope (A4 §5.3, `memory-spawn.ts`): the one it stored at its first start (a resumed subagent), else its
- * launch's record, else the parent's recent paths; a task that names no place of the repo takes the parent's too. At
- * its first start it is stored, and a fork copies its parent's ledger (D25), at its own transcript's start.
+ * launch's record, its task's paths and the read set they make, else the parent's recent paths and read set (D4); a
+ * task that names no place of the repo takes the parent's too. At its first start it is stored, and a fork copies its
+ * parent's ledger (D25), at its own transcript's start.
  */
 function childScope(ctx: HookContext, type: string): ChildScope & { source: "task" | "parent" | "stored" } {
   const { r, win, sessionWin: parent, writes } = ctx;
@@ -789,10 +861,19 @@ function childScope(ctx: HookContext, type: string): ChildScope & { source: "tas
   if (stored) return { ...stored, source: "stored" };
   const agent = str(r.agent_id) ?? "";
   const spawn = parent ? claimSpawn(parent, { type, now: memoryNow(), agent, mark: writes }) : undefined;
-  const recent = () => (parent ? parentPaths(parent, ctx.top) : []);
+  const at = ctx.repoScopes();
+  const fromParent = () => ({
+    paths: parent ? parentPaths(parent, ctx.top) : [],
+    ...(at ? { scopes: windowPlace(parent, at).readSet } : {}),
+  });
+  const own = spawn?.paths.length ? spawn.paths : undefined;
   const scope: ChildScope = spawn
-    ? { paths: spawn.paths.length ? spawn.paths : recent(), classes: spawn.classes, from: "task" }
-    : { paths: recent(), classes: [], from: "parent" };
+    ? {
+        ...(own ? { paths: own, ...(at ? { scopes: taskPlace(own, at).readSet } : {}) } : fromParent()),
+        classes: spawn.classes,
+        from: "task",
+      }
+    : { ...fromParent(), classes: [], from: "parent" };
   if (writes && win)
     inTurn(
       () => storeScope(win, scope),
@@ -805,6 +886,17 @@ function childScope(ctx: HookContext, type: string): ChildScope & { source: "tas
       },
     );
   return { ...scope, source: scope.from };
+}
+
+/**
+ * A child's place (A4 §2, §5.3): its stored read set, or, in a scope stored without one, the one its paths make; the
+ * scopes its task names, when it has one. None where a place is unknown.
+ */
+function childPlace(ctx: HookContext, scope: ChildScope): Place | undefined {
+  const at = ctx.repoScopes();
+  if (!at) return undefined;
+  const named = taskPlace(scope.from === "task" ? scope.paths : [], at).named;
+  return { readSet: scope.scopes ?? taskPlace(scope.paths, at).readSet, named };
 }
 
 /**
@@ -825,20 +917,24 @@ function subagentStart(ctx: HookContext): Record<string, unknown> | null {
     ledger = ctx.ledgerOf(mode),
     classes = [...new Set([...scope.classes, ...agentClasses(type)])],
     cue = scope.paths.join(" "),
-    invalid = readInvalidations(mem.dir);
+    invalid = readInvalidations(mem.dir),
+    place = childPlace(ctx, scope);
   const shadow = shadowSentences(ctx.sessionWin, ctx.place, { kind: childShadowKind(type), onDisk: true });
   // D26: a fork's context is its parent's whole conversation; a typed subagent's, its task, which no payload carries.
   const residual = type === "fork" ? recentConversation(ctx.transcriptPath, "", Infinity).residual : [];
   const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid };
-  const { notes: novel, drops } = selectNotes(mem.taskNotes(scope.paths, classes), against, (fresh) =>
+  const candidates = mem.taskNotes(scope.paths, classes, place && visibleFrom(place));
+  const { notes: novel, drops } = selectNotes(candidates, against, (fresh) =>
     novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid }),
   );
   const allowed = withinBudget(novel, epochTokens(win, ledger?.file));
-  const shaped = shapePacket(allowed).slice(0, SUBAGENT_BULLETS);
-  const { packet, cids, ids } = deliver(shaped, ledger, { off, att: "", repo: ctx.repo });
+  const shown = twoScopeNotes(allowed, place?.readSet ?? [], scopeRows(mem, invalid));
+  const shaped = shapePacket(shown).slice(0, SUBAGENT_BULLETS);
+  const { packet, cids, ids, notes: given } = deliver(shaped, ledger, { off, att: "", repo: ctx.repo });
   Object.assign(trace, { scope: scope.source, paths: scope.paths.length, cids, ids });
+  if (place) trace.read = place.readSet.length;
   if (classes.length) trace.classes = classes;
-  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: allowed.length - cids.length };
+  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: shown.length - given };
   return mode === "on" ? additional(ctx.event, packet) : null;
 }
 
@@ -846,6 +942,7 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   const { r, writes, win, mode, flags, mem, trace } = ctx;
   if (writes)
     inTurn(
+      () => buildMissingCatalog(ctx, BATCH_LIST_TIMEOUT_MS),
       () => encodeConversation(ctx),
       () => encodePayloadText(ctx),
     );
@@ -966,6 +1063,13 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // A4 §5.1 step 1: the delta before the prompt (which `recall` encodes after retrieving), so what the prompt
   // states is newer than every transcript line it supersedes, and a forget below reaches the delta's rows too.
   if (writes) inTurn(() => encodeConversation(ctx));
+  // A4 §2: the prompt's places weigh 3 in the window's place, which its own rows are stored at (D4).
+  if (human)
+    inTurn(() => {
+      const places = taskPaths(prompt, ctx.top, ctx.place.cwd);
+      ctx.movePlace(places);
+      if (writes && win) recordPrompt(win, places, str(r.prompt_id));
+    });
   const recent = recentConversation(transcriptPath, prompt);
   const prev = previousAssistant(win, recent),
     turn = human ? turnMode(prompt, { previousAssistant: prev }) : "imperative",
@@ -1011,7 +1115,9 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
       const preempted = wouldPreempt(ledger.dir, [...own, ...own.flatMap(sentencesOf)], trace.hturn, ctx.repo);
       if (preempted.length) trace.would_preempt = preempted;
     } catch {}
-  if (prompt && turn === "imperative" && answer !== "off") notes = mem.recall(cue, encode);
+  const place = ctx.workPlace();
+  if (human && place) trace.read = place.readSet.length;
+  if (prompt && turn === "imperative" && answer !== "off") notes = mem.recall(cue, encode, place && visibleFrom(place));
   else if (prompt) mem.observeCue(cue, undefined, encode);
   // X7: an `off` point answers nothing, a kept proposal's acknowledgement included.
   if (answer === "off" || (!notes.length && !acknowledged.length)) return null;
@@ -1028,15 +1134,12 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   );
   const tokens = win ? epochTokens(win, ledger?.file) : 0;
   const allowed = withinBudget(novel, tokens);
-  // D11: a kept proposal's acknowledgement leads; it states nothing the store retrieves.
-  const { packet, cids, ids } = deliver(shapePacket([...acknowledged, ...allowed]), ledger, {
-    off,
-    att,
-    repo: ctx.repo,
-  });
+  // D11: a kept proposal's acknowledgement leads; it states nothing the store retrieves. A4 §2: a two-scope read set's
+  // values of one slot share a bullet.
+  const shown = twoScopeNotes([...acknowledged, ...allowed], place?.readSet ?? [], scopeRows(mem, against.invalid));
+  const { packet, cids, ids, notes: given } = deliver(shapePacket(shown), ledger, { off, att, repo: ctx.repo });
   Object.assign(trace, { cids, ids, tokens_epoch: tokens });
-  const shaped = allowed.length + acknowledged.length;
-  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: shaped - cids.length };
+  trace.drops = { ...drops, budget: novel.length - allowed.length, shape: shown.length - given };
   return answer === "shadow" ? null : additional(event, packet);
 }
 
@@ -1120,7 +1223,19 @@ function respond(
     try {
       noteRepoActivity(store);
     } catch {}
-  const mem = hookMemory({ dir: store, session: resolved.session, child: resolved.child, cwd });
+  const top = repo?.top ?? cwd ?? process.cwd();
+  const scopesAt = lazily((): RepoScopes | undefined => {
+    const catalog = readCatalog(store);
+    return catalog && repo ? { repo: repo.key, top, scopes: catalog.scopes } : undefined;
+  });
+  // A subagent's prompt is its task, whose places its first SubagentStart stored (A4 §5.3).
+  let named = (): readonly string[] | undefined => (resolved.child && win ? storedScope(win)?.paths : undefined);
+  const placed = lazily((): Place | undefined => {
+    const at = scopesAt.get();
+    return at && windowPlace(win, at, named());
+  });
+  const place = { repo: scopesAt.get, working: () => placed.get()?.readSet[0] ?? "" };
+  const mem = hookMemory({ dir: store, session: resolved.session, child: resolved.child, cwd, place });
   const ctx: HookContext = {
     r,
     event,
@@ -1136,13 +1251,20 @@ function respond(
     child: resolved.child,
     transcriptPath: transcriptOf(r),
     place: { cwd: cwd ?? process.cwd(), transcriptPath: transcriptOf(r) },
-    top: repo?.top ?? cwd ?? process.cwd(),
+    top,
     sessionWin,
     mode,
     /** The ledger this point writes: none when it is off or read-only. */
     ledgerOf: (m) => {
       const file = m && writes && win ? ledgerFor(m) : undefined;
       return file && win ? { dir: win, file } : undefined;
+    },
+    repoScopes: scopesAt.get,
+    workPlace: placed.get,
+    movePlace: (paths) => {
+      if (paths) named = () => paths;
+      scopesAt.reset();
+      placed.reset();
     },
   };
   try {
