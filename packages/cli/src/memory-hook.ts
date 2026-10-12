@@ -46,6 +46,7 @@ import {
   taskPaths,
   taskPlace,
   twoScopeNotes,
+  typedValueRow,
   visibleFrom,
   windowPlace,
   type EncodePlace,
@@ -297,14 +298,14 @@ function deliver(
 }
 
 /**
- * A scope's live rows as delivery reads them (A4 §5.1 step 5: what invalidations and 7 days left of each), newest
- * first: where a two-scope bullet finds the other scope's value (`twoScopeNotes`).
+ * A scope's live rows that may give a two-scope bullet its other value (`twoScopeNotes`), as delivery reads them (A4
+ * §5.1 step 5: what invalidations and 7 days left of each), newest first.
  */
 function scopeRows(mem: ReturnType<typeof openMemory>, invalid: readonly Invalidation[]) {
   return (scope: string): ProvenanceNote[] =>
     mem
       .memories()
-      .filter((row) => row.scope === scope && isLiveRow(row))
+      .filter((row) => row.scope === scope && typedValueRow(row) && isLiveRow(row))
       .map((row) => ({ ...row, text: validText(withoutExpiredIntents(row.text, row.at), row.at, invalid) }))
       .filter((row) => row.text)
       .sort((a, b) => b.at - a.at);
