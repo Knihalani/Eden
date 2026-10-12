@@ -321,6 +321,16 @@ describe("eden memory forget --all-in <scope> (A6 §3)", () => {
     expect(readRuleIndex(store()).length).toBe(2);
   });
 
+  test("a store in a format this code does not know is neither read nor written", () => {
+    plant();
+    writeFileSync(join(store(), "format.json"), JSON.stringify({ major: 99 }));
+    const { code, out } = cli(["memory", "forget", "--all-in", "packages/a"]);
+    expect([code, out]).toEqual([
+      1,
+      "forget: this repo's store is in a format this version does not know; nothing changed",
+    ]);
+  });
+
   test("forget --secret still purges", () => {
     const claude = { CLAUDE_CONFIG_DIR: join(dir, "claude") };
     expect(cli(["memory", "forget", "--secret", "nothing-matches-this"], { env: claude }).code).toBe(0);
