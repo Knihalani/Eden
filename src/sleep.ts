@@ -34,7 +34,7 @@ import { loadToolTraces, memoryTracesDir, type ToolTrace } from "./tool-trace";
 
 export { mergeSharedPrefix } from "./howto-store";
 
-export type SleepRecord = Pick<MemoryRecord, "id" | "text" | "kind" | "at" | "seq" | "lane" | "tags"> & {
+export type SleepRecord = Pick<MemoryRecord, "id" | "text" | "kind" | "at" | "seq" | "lane" | "tags" | "scope"> & {
   sal?: number;
   ep?: string;
   heat?: number;
@@ -915,7 +915,7 @@ function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: st
     .memories()
     .filter((r) => r.kind === "constraint" && !superseded(r) && !isIntent(r) && !isIcl(r.text) && own(r.id))
     .slice(-8)
-    .map((r) => validText(withoutExpiredIntents(r.text.replace(/\s+/g, " ").trim(), r.at), r.at, invalid))
+    .map((r) => validText(withoutExpiredIntents(r.text.replace(/\s+/g, " ").trim(), r.at), r.at, invalid, r.scope))
     .filter(Boolean);
   const gist = [...facts, ...pins].join(". ").slice(0, 800);
   if (gist) new GistStore(mem.dir).put(gist, session?.trim() ? session.trim() : "default", memoryNow());
@@ -959,6 +959,61 @@ function promotePolicies(mem: SleepMem): void {
   });
 }
 
+/**
+ * The rows whose values compete (A4 §3.2: a value supersedes only at its own scope): each scope's rows, with the rows
+ * of unknown scope (written before P3.2 placed rows), which compete with every scope's as all rows did. A store with
+ * no placed row is one group.
+ */
+function scopeGroups<T extends { row: SleepRecord }>(ordered: readonly T[]): T[][] {
+  const scopes = [...new Set(ordered.flatMap(({ row }) => (typeof row.scope === "string" ? [row.scope] : [])))];
+  if (!scopes.length) return [[...ordered]];
+  return scopes.map((scope) => ordered.filter(({ row }) => row.scope === undefined || row.scope === scope));
+}
+
+/** Triples once each: a row of unknown scope wins in every group it is in. */
+function distinctTriples(triples: readonly Triple[]): Triple[] {
+  const seen = new Set<string>();
+  return triples.filter((tr) => {
+    const key = `${liveKey(tr.s, tr.p)}\0${normObj(tr.o)}\0${tr.recId ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * One group's assembly (`scopeGroups`): each fact row whose every value lost, superseded by the row that won, and
+ * each "instead of" row said again as its subject's winning value. A row already given its successor or rewrite by
+ * another group keeps it.
+ */
+function supersedeLosers(
+  group: { recs: readonly SleepRecord[]; candidates: Triple[]; winners: Triple[] },
+  supersededBy: Map<string, string>,
+  rewrites: Map<string, string>,
+): void {
+  const winByKey = new Map<string, Triple>();
+  for (const w of group.winners) winByKey.set(liveKey(w.s, w.p), w);
+  if (!winByKey.size) return;
+  const lost = new Set<string>();
+  try {
+    for (const l of losingTriples(group.candidates)) lost.add(`${liveKey(l.s, l.p)}\0${normObj(l.o)}`);
+  } catch {}
+  for (const r of group.recs) {
+    try {
+      const facts = extractIdentity(r);
+      if (!facts.length) continue;
+      if (/\b(?:instead of|rather than)\b/i.test(r.text) || /\binstead\b/i.test(r.text)) {
+        const won = facts.map((fact) => ({ fact, o: winByKey.get(liveKey(fact.s, fact.p))?.o })).find((f) => f.o);
+        if (won && !rewrites.has(r.id)) rewrites.set(r.id, identitySentence(won.fact.s, won.fact.p, won.o!));
+      }
+      if (String(r.kind ?? "") === "episode" || supersededBy.has(r.id)) continue;
+      if (!facts.every((fact) => lost.has(`${liveKey(fact.s, fact.p)}\0${normObj(fact.o)}`))) continue;
+      const winner = winByKey.get(liveKey(facts[0]!.s, facts[0]!.p))?.recId;
+      if (winner && winner !== r.id) supersededBy.set(r.id, winner);
+    } catch {}
+  }
+}
+
 export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   try {
     if (memoryConsent() !== "on" || mem.sealed) return;
@@ -973,57 +1028,31 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
     settlePendingRows(mem.dir);
   } catch {}
   const ordered = liveInStoreOrder(mem);
-  const recs = ordered.map(({ row }) => row);
-  const candidates = identityCandidates(ordered);
-  const winners = assemble(candidates);
+  const groups = scopeGroups(ordered).map((rows) => {
+    const candidates = identityCandidates(rows);
+    return { recs: rows.map(({ row }) => row), candidates, winners: assemble(candidates) };
+  });
+  const winners = distinctTriples(groups.flatMap((group) => group.winners));
   const mode: SleepMode = opts?.mode === "incremental" ? "incremental" : "full";
   // Incremental rest must not tombstone a fact the open goal still references.
   // Full replay (Stop / SessionEnd / idle > EDEN_SLEEP_IDLE) keeps today's drops.
   if (mode === "full") {
+    // The semantic store's tombstones hold no scope: only rows of unknown scope give them, so a value one scope lost
+    // is never scrubbed where another scope still holds it (A4 §3.2).
     try {
-      emitAssemblyTombstones(mem.dir, candidates);
+      emitAssemblyTombstones(mem.dir, identityCandidates(ordered.filter(({ row }) => row.scope === undefined)));
     } catch {}
-    const winByKey = new Map<string, Triple>();
-    for (const w of winners) winByKey.set(liveKey(w.s, w.p), w);
-    const live = new Map<string, string>();
-    for (const [k, w] of winByKey) live.set(k, w.o);
+    const supersededBy = new Map<string, string>();
+    const rewrites = new Map<string, string>();
+    for (const group of groups) supersedeLosers(group, supersededBy, rewrites);
     // A fact row whose every value lost goes to history, superseded by the row that won (A4 §3.1). It stays in the
     // store, so reading the transcript again never learns it anew as the newest value.
-    if (live.size && mem.patchWhere) {
-      const supersededBy = new Map<string, string>();
-      const lost = new Set<string>();
-      try {
-        for (const l of losingTriples(candidates)) {
-          lost.add(`${liveKey(l.s, l.p)}\0${normObj(l.o)}`);
-        }
-      } catch {}
-      for (const r of recs) {
-        try {
-          const facts = extractIdentity(r);
-          if (!facts.length) continue;
-          if (String(r.kind ?? "") === "episode") continue;
-          if (!facts.every((fact) => lost.has(`${liveKey(fact.s, fact.p)}\0${normObj(fact.o)}`))) continue;
-          const winner = winByKey.get(liveKey(facts[0]!.s, facts[0]!.p))?.recId;
-          if (winner && winner !== r.id) supersededBy.set(r.id, winner);
-        } catch {}
-      }
-      if (supersededBy.size)
-        mem.patchWhere((r) => {
-          const by = supersededBy.get(r.id);
-          return by && !superseded(r) ? { ...r, invalidBy: by } : undefined;
-        });
-    }
-    if (live.size && mem.rewriteWhere) {
-      mem.rewriteWhere((r) => {
-        if (!/\b(?:instead of|rather than)\b/i.test(r.text) && !/\binstead\b/i.test(r.text)) return;
-        try {
-          for (const fact of extractIdentity(r)) {
-            const want = live.get(liveKey(fact.s, fact.p));
-            if (want) return identitySentence(fact.s, fact.p, want);
-          }
-        } catch {}
+    if (supersededBy.size && mem.patchWhere)
+      mem.patchWhere((r) => {
+        const by = supersededBy.get(r.id);
+        return by && !superseded(r) ? { ...r, invalidBy: by } : undefined;
       });
-    }
+    if (rewrites.size && mem.rewriteWhere) mem.rewriteWhere((r) => rewrites.get(r.id));
     // Positive "Always use postgres" is not a copula, so episode LWW never drops it.
     // After the tombstone is on disk, drop or peel that pin so packet and gists
     // do not brief the loser. Fail-open: a scrub throw leaves the pin.
@@ -1074,7 +1103,11 @@ export function consolidate(mem: SleepMem, opts?: ConsolidateOpts): void {
   if (incrementalExpired(opts)) return;
   const session = sleepSession(mem, opts);
   try {
-    promoteHowTo(mem, recs, session);
+    promoteHowTo(
+      mem,
+      ordered.map(({ row }) => row),
+      session,
+    );
   } catch {
     // Fail-open: how-to faults must not undo tombstones/gists or throw into inject.
   }
