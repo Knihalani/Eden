@@ -426,7 +426,7 @@
       "a5": "SubagentStart packet by task scope; parent scope unchanged; parallel Explore scopes; fork gets no parent-delivered bullet",
       "on": {
         "state": "green",
-        "why": "passes since P2.5: PreToolUse(Agent) records each launch's task paths and classes, and SubagentStart takes its own launch's record (by the meta file's toolUseId, else the newest of its type within 5 s), so the task subagent and each parallel Explore get their own scope's rows; the code-reviewer type and the merge task get the merge policy (A4 §5.3: a reviewer gets the merge policies; the task's classes), and no subagent whose type and task name no class does; the simulated fork (agent_type 'fork', A4 §5.3) copies the parent's ledger and reads the parent's conversation as its residual, so it gets nothing its context holds"
+        "why": "passes since P2.5: PreToolUse(Agent) records each launch's task paths and classes, and SubagentStart takes the one unconsumed record of its type made within 5 s (the simulator, like Claude Code 2.1.294, runs each Agent call's PreToolUse and then its SubagentStart), so the task subagent and each parallel Explore get their own scope's rows; the code-reviewer type and the merge task get the merge policy (A4 §5.3: a reviewer gets the merge policies; the task's classes), and no subagent whose type and task name no class does; the simulated fork (agent_type 'fork', A4 §5.3) copies the parent's ledger and reads the parent's conversation as its residual, so it gets nothing its context holds"
       },
       "off": {
         "state": "green",
