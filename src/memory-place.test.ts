@@ -251,6 +251,11 @@ describe("the scope an encoded row is stored at", () => {
     expect(namedScopes("and/or client/server, see packages/cli's README", CATALOG, top)).toEqual(["packages/cli"]);
     expect(namedScopes("/other/apps/web/a.ts docs/guide.md", CATALOG, top)).toEqual([""]);
     expect(namedScopes("see docs/guide and/or scripts", CATALOG, top)).toEqual([]);
+    // Review round 4: a URL is no place, and a relative path is read from the session's folder too.
+    expect(namedScopes("The auth docs are at https://clerk.com/docs/nextjs.html", CATALOG, top)).toEqual([]);
+    expect(namedScopes("The redirect in app/login.ts fires twice", CATALOG, top, "apps/web")).toEqual(["apps/web"]);
+    expect(namedScopes("see packages/cli/src/x.ts", CATALOG, top, "apps/web")).toEqual(["packages/cli"]);
+    expect(namedScopes("see scripts/db.ts", CATALOG, top)).toEqual([""]);
   });
 
   test("a row naming only files of the root's own folders is the root's, never the working folder's", () => {
