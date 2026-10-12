@@ -7,10 +7,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openMemory, type MemoryRecord } from "./index";
+import { packetOf } from "./memory-hook-packet";
 import { ledgerKey } from "./memory-ledger";
 import {
   commonScope,
   namedScopes,
+  namesRootSlot,
   readSetOf,
   recordPrompt,
   recordSubagentPaths,
@@ -22,6 +24,7 @@ import {
   type PlacePaths,
 } from "./memory-place";
 import type { ProvenanceNote } from "./memory-provenance";
+import { recordSupersession, readInvalidations, validText } from "./memory-validity";
 import { compactContext, recordBatch, windowRecords } from "./memory-window";
 
 const CATALOG = ["", "apps/web", "apps/api", "packages/cli"];
@@ -127,6 +130,14 @@ describe("a window's paths, from ctx.log", () => {
     });
   });
 
+  test("each source reads its 64 newest distinct paths: one long turn's thousands cost no more", () => {
+    recordPrompt(win, [], "p1");
+    for (let n = 0; n < 500; n++) batch([`apps/web/f${n}.ts`, `packages/cli/g${n}.ts`], [`apps/api/h${n}`]);
+    const read = windowPaths(win);
+    expect([read.turns.length, read.bash.length]).toEqual([64, 64]);
+    expect(read.turns[0]).toBe("apps/web/f499.ts");
+  });
+
   test("a prompt record holds places only, never the prompt (X11), at most 8", () => {
     recordPrompt(
       win,
@@ -216,6 +227,14 @@ describe("the scope an encoded row is stored at", () => {
     expect(rowScope("Never edit packages/cli/migrations by hand.", true, at("apps/api"))).toBe("packages/cli");
   });
 
+  test("D7's root slots go to the root unless the row names a scope", () => {
+    expect(namesRootSlot("The package manager is pnpm.")).toBe(true);
+    expect(namesRootSlot("We deploy to fly.io from main.")).toBe(true);
+    expect(namesRootSlot("The auth provider is Clerk.")).toBe(false);
+    expect(rowScope("The package manager is pnpm.", true, at("apps/web"))).toBe("");
+    expect(rowScope("packages/cli uses yarn as its package manager.", true, at("apps/web"))).toBe("packages/cli");
+  });
+
   test("of several, the working scope when it is one of them, else their common ancestor", () => {
     const both = "make apps/web/a.ts and packages/cli/b.ts behave the same";
     expect(rowScope(both, false, at("packages/cli"))).toBe("packages/cli");
@@ -281,6 +300,28 @@ describe("A4 §2's two-scope bullet", () => {
     expect(twoScopeNotes([both], readSet, () => [cli]).map((note) => note.text)).toEqual([both.text]);
   });
 
+  test("a labelled note renders its scope after the packet label it was retrieved with (review round 1)", () => {
+    const note = { ...typed("[episode · 1d · user] The login page redirects home", "apps/web", "episode") };
+    const { packet } = packetOf(
+      twoScopeNotes([note], readSet, () => []),
+      2,
+    );
+    expect(packet).toContain("- apps/web: The login page redirects home");
+    expect(packet).not.toContain("[episode");
+  });
+
+  test("a row naming the subject without stating it (a question, an instruction) gives no value (review round 1)", () => {
+    for (const text of [
+      "which auth does packages/cli use?",
+      "make packages/cli/src/login.ts use the same auth as apps/web/app/login.ts",
+    ])
+      expect(twoScopeNotes([web], readSet, () => [typed(text, "packages/cli", "episode")])[0]!.text).toBe(web.text);
+    const states = typed("The cli's auth is a static token", "packages/cli", "episode");
+    expect(twoScopeNotes([web], readSet, () => [states])[0]!.text).toContain(
+      "packages/cli: The cli's auth is a static",
+    );
+  });
+
   test("only what the user typed, a fact or an episode, gives the other value", () => {
     const agent = { ...cli, tags: ["src:agent"] };
     const rule = { ...typed("Never touch auth in packages/cli", "packages/cli", "constraint"), rules: [] };
@@ -343,6 +384,15 @@ describe("rows and scopes in the store (A4 §3.2)", () => {
       "The database is mysql.",
     ]);
     mem.close();
+  });
+
+  test("a supersession holds at the superseded row's scope only (and where a row's scope is unknown)", () => {
+    recordSupersession(dir, { subject: "auth provider", value: "Auth0" }, 10, undefined, "apps/web");
+    const invalid = readInvalidations(dir);
+    const said = "In packages/cli the auth provider is Auth0.";
+    expect(validText(said, 1, invalid, "packages/cli")).toBe(said);
+    expect(validText("The auth provider is Auth0.", 1, invalid, "apps/web")).toBe("");
+    expect(validText("The auth provider is Auth0.", 1, invalid)).toBe("");
   });
 
   test("a reader's place leaves sibling rows out of retrieval, the rules the cue fires included", () => {

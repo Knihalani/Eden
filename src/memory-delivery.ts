@@ -35,7 +35,7 @@ export function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation
     const kind = noteKindToken(note);
     const episode = kind !== "rule" && kind !== "fact" && !isPinnedIntention(note);
     const said = withoutExpiredIntents(note.text, note.at);
-    const text = validText(said, note.at, history && episode ? invalid.filter(isForget) : invalid);
+    const text = validText(said, note.at, history && episode ? invalid.filter(isForget) : invalid, note.scope);
     return text ? [{ ...note, text }] : [];
   });
 }

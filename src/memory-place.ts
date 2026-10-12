@@ -9,7 +9,8 @@
  *   Each PostToolBatch records its tool paths and, apart, its Bash paths (`memory-batch.ts`), and a subagent's batch
  *   is recorded in its session's window too, as `sub` (D2).
  * - **Recent** is the last 3 human turns: what the window recorded from its third-newest `prompt` record on (all of
- *   it in a window with fewer, such as a subagent's).
+ *   it in a window with fewer, such as a subagent's), each source's 64 newest distinct paths. A Submit records its
+ *   own prompt first, so its turn is one of the 3 (in read-only consent, which records nothing, it is not).
  * - **Weights (D4).** Each distinct path gains the weight of every source it is in: named in the current turn's
  *   prompt 3; a main-thread tool path of the most recent batch 2, of the last 3 human turns 1; a main-thread Bash path
  *   1. A scope holds its paths' weight. A subagent path weighs 0.5, and counts only when the main-thread paths carry
@@ -23,8 +24,10 @@
  *   place was unknown (before P3.2, or in a repo with no catalog, outside git included): it stays visible everywhere,
  *   as every row was, and a window in such a repo reads every row.
  * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names; of several, the working scope (the
- *   read set's first) when it is one of them, else their common ancestor; naming none, the working scope, and `""` for
- *   a rule (A4 §2: policies are mostly `""`; D7 writes a root slot at `""` unless the utterance names a scope).
+ *   read set's first) when it is one of them, else their common ancestor; naming none, the working scope, or `""` for
+ *   a rule (A4 §2: policies are mostly `""`) and for a fact of one of D7's root slots (`default_scope: root`, written
+ *   at `""` unless the utterance names a scope). Until P3.3's slot table, a fact is of a root slot when it names that
+ *   slot's subject or a value only that slot takes (`ROOT_SLOT`).
  * - **Two scopes (A4 §2, D4).** When the read set has two scopes and a candidate states a slot at one of them, the
  *   other scope's value for that slot joins it in one bullet: `auth provider — apps/web: Clerk · packages/cli: none`.
  *   Until P3.3's keys, a slot is the legacy copula reading's (`legacySlot`) and its subject's words stand for its
@@ -53,6 +56,11 @@ const CONTEXT = "ctx.log";
 /** A record line stays under 4 KB (`memory-window.ts`): at most 8 paths of at most 200 characters. */
 const MAX_PATHS = 8;
 const MAX_PATH = 200;
+/**
+ * A source's newest distinct paths a place reads, at most: each costs a few filesystem calls (`repoPathOf`), and one
+ * long turn can touch thousands.
+ */
+const MAX_RECENT_PATHS = 64;
 
 /** The places a window's recent turns named and touched, by D4's source, newest first (see the header). */
 export interface PlacePaths {
@@ -115,14 +123,19 @@ export function taskPaths(task: string, top: string, cwd = top): string[] {
     .split(TOKEN_BREAK)) {
     const token = raw.replace(/[.:!?]+$/, "");
     if (!token || token.length > MAX_PATH || !(token.includes("/") ? PATH_SHAPED : FILE_NAME).test(token)) continue;
-    const reads = isAbsolute(token) ? [token] : [...new Set([join(cwd, token), token])];
-    const rel = reads
-      .map((read) => underTop(read, top)?.replace(/\/+$/, ""))
-      .find((candidate): candidate is string => !!candidate && inRepo(candidate, top));
+    const rel = repoPlace(token, top, cwd);
     if (rel && !out.includes(rel)) out.push(rel);
     if (out.length >= MAX_PATHS) break;
   }
   return out;
+}
+
+/** A path as a place of the repo, relative to `top`: a relative one read from `cwd` first; none if it is no place. */
+export function repoPlace(path: string, top: string, cwd = top): string | undefined {
+  const reads = isAbsolute(path) ? [path] : [...new Set([join(cwd, path), path])];
+  return reads
+    .map((read) => underTop(read, top)?.replace(/\/+$/, ""))
+    .find((candidate): candidate is string => !!candidate && inRepo(candidate, top));
 }
 
 const strings = (list: unknown): string[] =>
@@ -153,12 +166,13 @@ export function windowPaths(win: string, prompt?: readonly string[]): PlacePaths
   const recent = records.slice(prompts.length >= RECENT_TURNS ? prompts.at(-RECENT_TURNS) : 0).reverse();
   const batches = recent.filter((record) => record.k === "batch");
   const newest = recent.find((record) => record.k === "prompt");
+  const newestOf = (paths: string[]) => [...new Set(paths)].slice(0, MAX_RECENT_PATHS);
   return {
     prompt: prompt ? [...prompt] : newest ? strings(newest.paths) : [],
     batch: batches.length ? strings(batches[0]!.paths) : [],
-    turns: batches.flatMap((batch) => strings(batch.paths)),
-    bash: batches.flatMap((batch) => strings(batch.bash)),
-    sub: recent.flatMap((record) => (record.k === "sub" ? strings(record.paths) : [])),
+    turns: newestOf(batches.flatMap((batch) => strings(batch.paths))),
+    bash: newestOf(batches.flatMap((batch) => strings(batch.bash))),
+    sub: newestOf(recent.flatMap((record) => (record.k === "sub" ? strings(record.paths) : []))),
   };
 }
 
@@ -290,16 +304,40 @@ export function namedScopes(text: string, scopes: readonly string[], top: string
   return named;
 }
 
-/** The scope an encoded row is stored at (see the header); none where its place is unknown. */
-export function rowScope(text: string, rule: boolean, place: EncodePlace): string | undefined {
+/**
+ * D7's root slots (`pkg.manager`, `commit.style`, `branch.base`, `gh.account`, `ci.system`, `deploy.target`), as a
+ * fact names them until P3.3's slot table: a subject, or a value only that slot takes.
+ */
+const ROOT_SLOT = new RegExp(
+  String.raw`\b(?:package manager|npm|pnpm|yarn|commit (?:style|messages?)|conventional commits|(?:base|default) branch|` +
+    String.raw`prs? (?:go|goes) (?:against|into)|(?:github|gh) account|ci|continuous integration|github actions|` +
+    String.raw`circleci|buildkite|jenkins|deploy(?:s|ed|ment|ments)?|hosting|hosted)\b`,
+  "i",
+);
+
+/** Whether a fact is of one of D7's root slots (see `ROOT_SLOT`). */
+export function namesRootSlot(text: string): boolean {
+  return ROOT_SLOT.test(text);
+}
+
+/**
+ * The scope an encoded row is stored at (see the header); none where its place is unknown. `root` is a row D7 or A4
+ * §2 writes at `""` unless it names a scope: a rule, or a fact of a root slot.
+ */
+export function rowScope(text: string, root: boolean, place: EncodePlace): string | undefined {
   const at = place.repo();
   if (!at) return undefined;
   const { scopes, top } = at;
   const named = namedScopes(text, scopes, top);
   if (named.length === 1) return named[0]!;
-  if (!named.length) return rule ? "" : place.working();
+  if (!named.length) return root ? "" : place.working();
   const working = place.working();
   return named.includes(working) ? working : commonScope(named, scopes);
+}
+
+/** A text as a regular expression matches it, literally. */
+function escaped(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** The words of a scope's path, as `subjectWords` reads them, which say where a value is, not what it is of. */
@@ -317,8 +355,7 @@ function sentencesIn(text: string): string[] {
 
 /** A sentence without a leading mention of its scope ("packages/cli has no auth" is "has no auth" there). */
 function withoutScope(sentence: string, scope: string): string {
-  const escaped = scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const lead = new RegExp(`^(?:in\\s+)?${escaped}(?:'s)?\\s*,?\\s*`, "i");
+  const lead = new RegExp(String.raw`^(?:in\s+)?${escaped(scope)}(?:'s)?\s*,?\s*`, "i");
   return sentence.replace(lead, "").trim() || sentence;
 }
 
@@ -338,11 +375,34 @@ function clauseSlot(row: ProvenanceNote): ReturnType<typeof legacySlot> {
   return clauses ? undefined : legacySlot({ ...row, text: body });
 }
 
+/** A question: it ends with "?", or opens with a question word or an auxiliary. */
+const QUESTION = /\?\s*$|^(?:what|which|who|where|when|why|how|do|does|did|is|are|can|could|should|would|will)\b/i;
+
+/**
+ * Whether a sentence states something of one of the subject words, not only names it: the word before a copula or a
+ * verb of use ("the auth provider is none", "its database runs on sqlite"), or after one of having or using ("has no
+ * auth", "uses no database"). A question or an instruction naming the word ("make it use the same auth") states none.
+ */
+function statesSubject(sentence: string, words: ReadonlySet<string>): boolean {
+  if (QUESTION.test(sentence.trim())) return false;
+  return [...words].some((word) => {
+    const named = `${escaped(word)}s?`;
+    const before = new RegExp(String.raw`\b${named}\b(?:\s+[\w'-]+){0,3}?\s+(?:is|are|was|were|uses|runs|goes)\b`, "i");
+    const after = new RegExp(
+      String.raw`\b(?:has|have|had|uses|used)\s+(?:no\s+|an?\s+|the\s+)?(?:[\w'-]+\s+){0,2}${named}\b`,
+      "i",
+    );
+    return before.test(sentence) || after.test(sentence);
+  });
+}
+
 /** A row's value for a slot of these subject words at its scope, if it states one (see the header). */
 function valueFor(row: ProvenanceNote, words: ReadonlySet<string>, scope: string): string | undefined {
   const slot = clauseSlot(row);
   if (slot && subjectWords(slot.subject).some((word) => words.has(word))) return slot.value;
-  const sentence = sentencesIn(bodyOf(row)).find((part) => subjectWords(part).some((word) => words.has(word)));
+  const sentence = sentencesIn(bodyOf(row)).find(
+    (part) => subjectWords(part).some((word) => words.has(word)) && statesSubject(part, words),
+  );
   return sentence && withoutScope(sentence, scope);
 }
 
@@ -354,8 +414,7 @@ export function typedValueRow(row: ProvenanceNote): boolean {
 
 /** Whether a text names a scope's path as a whole path. */
 function namesScope(text: string, scope: string): boolean {
-  const escaped = scope.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![\\w./-])${escaped}(?![\\w-])`, "i").test(text);
+  return new RegExp(String.raw`(?<![\w./-])${escaped(scope)}(?![\w-])`, "i").test(text);
 }
 
 /**
@@ -446,10 +505,13 @@ function mergedNote(
   return { note: merged, values };
 }
 
-/** A note at one scope of a two-scope read set, labelled with it unless its text names it (D4). */
+/**
+ * A note at one scope of a two-scope read set, labelled with it unless its text names it (D4), after the label a
+ * retrieved note carries (`[episode · 1d · user]`), which the packet reads past.
+ */
 function labelled<T extends ProvenanceNote>(note: T, scope: string): T | ProvenanceNote {
-  const text = String(note.text ?? "");
-  if (!scope || note.update || note.rules?.length || noteKindToken(note) === "rule" || namesScope(text, scope))
+  const { label, body } = stripPacketLabel(String(note.text ?? ""));
+  if (!scope || note.update || note.rules?.length || noteKindToken(note) === "rule" || namesScope(body, scope))
     return note;
-  return { ...note, text: `${scope}: ${text}`, parts: [note] };
+  return { ...note, text: `${label}${scope}: ${body}`, parts: [note] };
 }

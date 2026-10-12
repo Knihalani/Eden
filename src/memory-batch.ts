@@ -11,7 +11,7 @@
  */
 
 import { resolve } from "node:path";
-import { boundedPaths, taskPaths } from "./memory-place";
+import { boundedPaths, repoPlace, taskPaths } from "./memory-place";
 
 /** A record line stays under 4 KB (`memory-window.ts`): long lists are cut. */
 const MAX_ITEMS = 8;
@@ -61,12 +61,19 @@ export interface BatchPlace {
   cwd: string;
 }
 
-/** A Bash call's places of the repo (see the header): its `cd` target, then its path arguments, read from there. */
+/**
+ * A Bash call's places of the repo (see the header): its `cd` target, then its path arguments, read from there. Each
+ * must be a place of the repo, so a batch read from nowhere (`at` absent), or a command that moves out of the repo,
+ * records none.
+ */
 function bashPaths(call: Call, at: BatchPlace | undefined): string[] {
   const command = call.tool_name === "Bash" ? inputOf(call).command : undefined;
-  if (typeof command !== "string") return [];
+  if (typeof command !== "string" || !at) return [];
   const cd = /(?:^|&&|;)\s*cd\s+("[^"]+"|'[^']+'|\S+)/.exec(command)?.[1]?.replace(/^["']|["']$/g, "");
-  return [...(cd ? [cd] : []), ...(at ? taskPaths(command, at.top, cd ? resolve(at.cwd, cd) : at.cwd) : [])];
+  const into = cd ? repoPlace(cd, at.top, at.cwd) : undefined;
+  // A command run from elsewhere names no place of this repo by a relative path.
+  if (cd && !into) return [];
+  return [...(into ? [into] : []), ...taskPaths(command, at.top, into ? resolve(at.top, into) : at.cwd)];
 }
 
 /** The tools that write the file their input names. */
