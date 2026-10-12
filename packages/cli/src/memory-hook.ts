@@ -40,12 +40,14 @@ import {
   keepForAllProjects,
   keepShownProposals,
   markProposalShown,
+  noteNextSession,
   overturnUserRules,
   proposalNote,
   proposalToShow,
   readUserRules,
   rulesForAllProjects,
   withUserGlobal,
+  type AnswerPlace,
   type Proposal,
 } from "../../../src/memory-user-global";
 import { intentsReleasedBy } from "../../../src/memory-guard";
@@ -619,19 +621,26 @@ function endRules(ctx: HookContext, said: string): void {
   if (dropped.length) ctx.trace.dropped = dropped;
 }
 
+/** Where a D11 proposal is shown and answered: the repo and the session's `ep`. */
+function answerPlace(ctx: HookContext): AnswerPlace | undefined {
+  const ep = ctx.mem.episode;
+  return ctx.repo && ep ? { repo: ctx.repo, ep } : undefined;
+}
+
 /**
  * D11 at a human Submit, on the user's own words as the store keeps them: the rules kept for all projects that the
- * prompt overturns end (A4 §3.1, L8), its policies stated with D11's phrases are kept for all projects, and "yes,
- * everywhere" keeps the proposals shown (`memory-user-global.ts`).
+ * prompt overturns with D11's phrase end (A4 §3.1, L8), its policies stated with D11's phrases are kept for all
+ * projects, and "yes, everywhere" keeps the proposals it answers (`memory-user-global.ts`).
  */
 function userGlobalRules(ctx: HookContext, said: string): void {
   if (!said) return;
   const typed = ctx.mem.storableText(said);
   const now = memoryNow();
+  const place = answerPlace(ctx);
   const dropped = overturnUserRules(ctx.root, typed, now);
   const kept = [
     ...keepForAllProjects(ctx.root, rulesForAllProjects(typed), now),
-    ...keepShownProposals(ctx.root, typed, now),
+    ...(place ? keepShownProposals(ctx.root, typed, now, place) : []),
   ];
   if (dropped.length) ctx.trace.dropped = [...(ctx.trace.dropped ?? []), ...dropped];
   if (kept.length) ctx.trace.kept = kept;
@@ -698,6 +707,12 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
       startShadowEpoch(win);
     } catch {}
   }
+  // D11: a proposal may be answered in the session that showed it or its repo's next one.
+  const place = answerPlace(ctx);
+  if (writes && place)
+    try {
+      noteNextSession(ctx.root, memoryNow(), place);
+    } catch {}
   if (mode === "off") return withNotice(null, notice);
   // A4 §5.1 step 7 holds here too: what the window's instruction files state is never briefed (D27).
   const { notes, proposal } = briefing(mem, ctx.root, ctx.session, !compact);
@@ -710,9 +725,9 @@ function sessionStart(ctx: HookContext): Record<string, unknown> | null {
   });
   // D11: a proposal is shown once, so only a packet the user's session received counts.
   const shown = proposal && mode === "on" && ids.includes(proposalNote(proposal).id ?? "") ? proposal : undefined;
-  if (shown && writes)
+  if (shown && writes && place)
     try {
-      markProposalShown(ctx.root, shown, memoryNow());
+      markProposalShown(ctx.root, shown, memoryNow(), place);
       trace.proposed = shown.r;
     } catch {}
   return withNotice(mode === "on" ? additional(ctx.event, packet) : null, notice);

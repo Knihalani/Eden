@@ -282,12 +282,15 @@ describe("P2.4: a pin in 2 repos is proposed for all projects (D11)", () => {
     expect(packet).toContain("Rule you set: Don't merge PRs yourself (all projects)");
   });
 
-  test("a typed revocation in any repo ends the user-global rule", () => {
+  test("a typed revocation holds in its repo; said for all projects, it ends the user-global rule", () => {
     pinIn("a");
     const b = pinIn("b");
     session(b);
     session(b, ["yes, everywhere"]);
     session(repo("c"), ["You can merge PRs yourself now."]);
+    expect(session(repo("c")).start).not.toContain("merge PRs yourself");
+    expect(session(repo("d")).start).toContain("merge PRs yourself");
+    session(repo("c"), ["You can merge PRs yourself now, in all my projects."]);
     expect(session(repo("d")).start).not.toContain("merge PRs yourself");
   });
 });

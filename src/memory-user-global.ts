@@ -5,19 +5,21 @@
  * - **What it holds.** `policies.jsonl`: one line per rule kept for all projects, in the rule index's shape
  *   (`memory-rule-index.ts`) and tagged `all-projects`, so the guard, the Submit trigger and SessionStart read it
  *   beside a repo's own index. Policies only: never an intent, never a fact (D11: "never inferred from facts"). A
- *   repo row stating only rules kept here gives way to them (`withUserGlobal`), so one rule has one cid, `_user/P:…`
- *   (A4 §4).
+ *   repo row gives way to them: it loses the rules and clauses kept here, and goes when nothing is left
+ *   (`withUserGlobal`), so one rule has one cid, `_user/P:…` (A4 §4).
  * - **How a rule gets there** (D11): a typed policy with an explicit phrase ("in all my projects", or "everywhere"
  *   and "globally" set off by a comma: `saysAllProjects`); `eden memory remember --global`; or a confirmed proposal.
  *   Callers pass text as the store keeps it (`storableText`: secrets redacted).
- * - **Proposals** (`proposals.jsonl`, append-only `propose`, `shown` and `keep` records): at sleep, a rule pinned in
- *   ≥ 2 repos (D9, `memory-pins.ts`), still in force in each, and neither kept nor proposed before, is proposed once.
- *   A SessionStart of a repo holding the pin shows it, once, in place of the pin's bullet: `Proposed for all projects:
- *   … (say "yes, everywhere" to keep)`. A later typed "yes, everywhere", as a sentence of its own, keeps each proposal
- *   shown and not yet kept. A proposal shown and never kept is not shown again.
- * - **How a rule leaves:** a typed revocation or outright opposite (A4 §3.1, L8) in any repo, or "that rule is gone"
- *   after the guard asked about it, moves it to `history.jsonl`. Each repo also reads it through its own validity, as
- *   it reads its own rows.
+ * - **Proposals** (`proposals.jsonl`, append-only `propose`, `shown`, `next` and `keep` records): at sleep, a rule
+ *   pinned in ≥ 2 repos (D9, `memory-pins.ts`), still in force in each, and neither kept nor proposed before, is
+ *   proposed once. A SessionStart of a repo holding the pin shows it, once, in place of the pin's bullet: `Proposed for
+ *   all projects: … (say "yes, everywhere" to keep)`. Only an answer to it keeps it: a typed "yes, everywhere" (an
+ *   affirmative, as a sentence of its own; a bare "everywhere" answers many other questions) in the repo that showed
+ *   it, in the session that showed it or that repo's next session, within 7 days. A proposal shown and not kept so is
+ *   never shown again.
+ * - **How a rule leaves:** a typed revocation or outright opposite (A4 §3.1, L8) said with D11's phrase ("…, in all my
+ *   projects"), or "that rule is gone" after the guard asked about it, moves it to `history.jsonl`. Said without one,
+ *   it holds in that repo only: each repo reads the rules kept here through its own validity, as it reads its rows.
  * - Files are written under `<file>.lock`, mode 0600; every read fails open to nothing.
  */
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
@@ -34,6 +36,8 @@ import {
   ruleRefs,
   rulesIn,
   saysAllProjects,
+  withoutRules,
+  type Rule,
   type RuleRef,
 } from "./memory-policy";
 import { POLICIES_FILE, readRuleIndex, type IndexedRow } from "./memory-rule-index";
@@ -48,7 +52,10 @@ const PROPOSALS_FILE = "proposals.jsonl";
 const HISTORY_FILE = "history.jsonl";
 
 /** D11's answer to a proposal, as a sentence of its own. */
-const KEEP_EVERYWHERE = /^(?:(?:yes|yep|yeah|ok(?:ay)?|sure)\b[\s,!.]*)?(?:keep it\s+)?everywhere[\s.!]*$/i;
+const KEEP_EVERYWHERE =
+  /^(?:(?:yes|yep|yeah|sure|ok(?:ay)?)\b[\s,!.]*(?:keep it\s+)?everywhere|keep it everywhere)[\s.!]*$/i;
+/** How long after it was shown a proposal may be answered (in its session or its repo's next one). */
+const ANSWER_MS = 7 * 86_400_000;
 
 export function userGlobalDir(root: string): string {
   return join(root, USER_GLOBAL);
@@ -63,11 +70,24 @@ export function readUserRules(root: string): IndexedRow[] {
   return readRuleIndex(userGlobalDir(root));
 }
 
-/** The rows a repo reads: the user-global ones first, then its own rows that state a rule not kept globally. */
-export function withUserGlobal<T extends { rules?: readonly RuleRef[] }>(own: readonly T[], global: readonly T[]): T[] {
+/**
+ * The rows a repo reads: the user-global ones first, then its own rows without the rules kept globally and their
+ * clauses; a row left with no rule goes. A row with no D9 rule is kept as it is.
+ */
+export function withUserGlobal<T extends { text?: string; rules?: readonly RuleRef[] }>(
+  own: readonly T[],
+  global: readonly T[],
+): T[] {
   const kept = new Set(global.flatMap((row) => (row.rules ?? []).map(ruleIdentity)));
-  const covered = (row: T) => !!row.rules?.length && row.rules.every((rule) => kept.has(ruleIdentity(rule)));
-  return [...global, ...own.filter((row) => !covered(row))];
+  if (!kept.size) return [...global, ...own];
+  const isKept = (rule: Rule) => ruleRefs([rule]).some((ref) => kept.has(ruleIdentity(ref)));
+  const left = own.flatMap((row) => {
+    if (!row.rules?.some((rule) => kept.has(ruleIdentity(rule)))) return [row];
+    const rules = row.rules.filter((rule) => !kept.has(ruleIdentity(rule)));
+    const text = withoutRules(String(row.text ?? ""), isKept).trim();
+    return rules.length && text ? [{ ...row, text, rules }] : [];
+  });
+  return [...global, ...left];
 }
 
 /** A rule as its clause says it, with a capital first letter: "don't merge PRs yourself" of a longer prompt. */
@@ -162,10 +182,14 @@ export function dropUserRules(root: string, identities: readonly string[], now: 
   return dropped.flatMap((row) => (row.rules ?? []).map(ruleIdentity));
 }
 
-/** The rules kept for all projects that a typed text overturns (A4 §3.1, L8), moved to history. */
+/**
+ * The rules kept for all projects that a typed sentence with D11's phrase overturns (A4 §3.1, L8), moved to history.
+ * Without the phrase an overturning holds in its repo only (see the header).
+ */
 export function overturnUserRules(root: string, typed: string, now: number): string[] {
   const overturned = String(typed ?? "")
     .split(/(?<=[.!?;])\s+|\n+/)
+    .filter(saysAllProjects)
     .flatMap((sentence) => overturnedKeys(sentence));
   if (!overturned.length) return [];
   const kept = readUserRules(root).flatMap((row) => row.rules ?? []);
@@ -182,13 +206,23 @@ export interface Proposal {
   /** The repo keys holding it as a pin when it was proposed. */
   repos: string[];
   t: number;
-  shown?: number;
+  shown?: Showing;
   kept?: number;
+}
+
+/** Where and when a proposal was shown (its repo key and session `ep`), and that repo's next session. */
+export interface Showing {
+  t: number;
+  repo: string;
+  ep: string;
+  next?: string;
 }
 
 type ProposalRecord =
   | { k: "propose"; r: string; rule: RuleRef; text: string; repos: string[]; t: number }
-  | { k: "shown" | "keep"; r: string; t: number };
+  | { k: "shown"; r: string; t: number; repo: string; ep: string }
+  | { k: "next"; r: string; t: number; ep: string }
+  | { k: "keep"; r: string; t: number };
 
 /** Every proposal, folded from `proposals.jsonl`. */
 export function readProposals(root: string): Proposal[] {
@@ -212,8 +246,11 @@ export function readProposals(root: string): Proposal[] {
       continue;
     }
     const known = proposals.get(record.r);
-    if (known && record.k === "shown") known.shown ??= record.t;
-    if (known && record.k === "keep") known.kept ??= record.t;
+    if (!known) continue;
+    if (record.k === "shown" && typeof record.repo === "string" && typeof record.ep === "string")
+      known.shown ??= { t: record.t, repo: record.repo, ep: record.ep };
+    if (record.k === "next" && known.shown && typeof record.ep === "string") known.shown.next ??= record.ep;
+    if (record.k === "keep") known.kept ??= record.t;
   }
   return [...proposals.values()];
 }
@@ -277,8 +314,26 @@ export function proposalToShow(root: string, pinnedHere: ReadonlySet<string>): P
   return readProposals(root).find((proposal) => proposal.shown === undefined && pinnedHere.has(proposal.r));
 }
 
-export function markProposalShown(root: string, proposal: Proposal, now: number): void {
-  appendLines(join(ensureDir(root), PROPOSALS_FILE), [{ k: "shown", r: proposal.r, t: now }]);
+/** Where a proposal was shown: the repo key and the session's `ep`. */
+export interface AnswerPlace {
+  repo: string;
+  ep: string;
+}
+
+export function markProposalShown(root: string, proposal: Proposal, now: number, at: AnswerPlace): void {
+  appendLines(join(ensureDir(root), PROPOSALS_FILE), [{ k: "shown", r: proposal.r, t: now, ...at }]);
+}
+
+/** A SessionStart of a repo: the next session of each proposal it showed in an earlier one, still unanswered. */
+export function noteNextSession(root: string, now: number, at: AnswerPlace): void {
+  const waiting = readProposals(root).filter(
+    ({ shown, kept }) => shown && kept === undefined && !shown.next && shown.repo === at.repo && shown.ep !== at.ep,
+  );
+  if (waiting.length)
+    appendLines(
+      join(ensureDir(root), PROPOSALS_FILE),
+      waiting.map(({ r }) => ({ k: "next", r, t: now, ep: at.ep })),
+    );
 }
 
 /**
@@ -291,15 +346,21 @@ export function proposalNote(proposal: Proposal): ProvenanceNote {
 }
 
 /**
- * A typed "yes, everywhere" (see the header): keeps every proposal shown and not yet kept, and returns their
- * identities.
+ * A typed "yes, everywhere" (see the header): keeps each proposal it answers, shown in this repo, in this session or
+ * the one before it, within 7 days, and returns their identities.
  */
-export function keepShownProposals(root: string, typed: string, now: number): string[] {
+export function keepShownProposals(root: string, typed: string, now: number, at: AnswerPlace): string[] {
   const answers = String(typed ?? "")
     .split(/(?<=[.!?;])\s+|\n+/)
     .some((sentence) => KEEP_EVERYWHERE.test(sentence.trim()));
   if (!answers) return [];
-  const due = readProposals(root).filter((proposal) => proposal.shown !== undefined && proposal.kept === undefined);
+  const answered = ({ shown, kept }: Proposal) =>
+    !!shown &&
+    kept === undefined &&
+    shown.repo === at.repo &&
+    (shown.ep === at.ep || shown.next === at.ep) &&
+    now - shown.t <= ANSWER_MS;
+  const due = readProposals(root).filter(answered);
   if (!due.length) return [];
   keepForAllProjects(
     root,

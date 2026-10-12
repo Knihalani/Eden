@@ -10,7 +10,7 @@ import { openMemory, type MemoryRecord } from "./index";
 import { isPinnedRule, pinnedText, policyRecurrences, promotions } from "./memory-pins";
 import { invalidationsIn } from "./memory-validity";
 
-const row = (id: string, text: string, rules: MemoryRecord["rules"], ep: string, extra: Partial<MemoryRecord> = {}) =>
+const row = (id: string, text: string, rules: MemoryRecord["rules"], ep = "e0", extra: Partial<MemoryRecord> = {}) =>
   ({ id, text, kind: "constraint", at: 1, rules, ep, ...extra }) as MemoryRecord;
 
 describe("which rules are pins", () => {
