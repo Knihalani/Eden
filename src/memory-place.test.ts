@@ -259,6 +259,14 @@ describe("A4 §2's two-scope bullet", () => {
     expect(shown.map((note) => note.text)).toEqual(["auth provider — apps/web: Clerk · packages/cli: has no auth"]);
   });
 
+  test("a later row saying only a value the bullet gives is given by it (a prompt's row and its sentence's)", () => {
+    const prompt = typed("packages/cli has no auth. Reply with just OK.", "packages/cli", "episode", 3);
+    const sentence = { ...cli, text: "[episode · 1d · user] packages/cli has no auth" };
+    const shown = twoScopeNotes([web, prompt, sentence], readSet, () => []);
+    expect(shown.map((note) => note.text)).toEqual(["auth provider — apps/web: Clerk · packages/cli: has no auth"]);
+    expect(shown[0]!.parts).toEqual([web, prompt]);
+  });
+
   test("a one-clause slot gives its value; a longer row gives its sentence naming the subject", () => {
     const none = typed("In packages/cli the auth provider is none", "packages/cli");
     expect(twoScopeNotes([web], readSet, () => [none])[0]!.text).toBe(
