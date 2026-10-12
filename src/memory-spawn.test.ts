@@ -38,7 +38,8 @@ const launch = (id: string, type: string, t: number, paths: string[] = []): Spaw
 
 describe("taskPaths: the places of the repo a task names", () => {
   const repo = () => {
-    for (const folder of ["apps/web/app", "packages/cli/src", "src"]) mkdirSync(join(dir, folder), { recursive: true });
+    for (const folder of ["apps/web/app", "packages/cli/src", "src", "and"])
+      mkdirSync(join(dir, folder), { recursive: true });
     writeFileSync(join(dir, "README.md"), "# demo\n");
     return dir;
   };
@@ -104,13 +105,20 @@ describe("spawnOf: a PreToolUse(Agent) payload's launch record", () => {
 });
 
 describe("claimSpawn: a SubagentStart takes its launch's record, once (A4 §5.3)", () => {
-  test("the newest unconsumed record of its type within 5 s, each once", () => {
+  test("the one unconsumed record of its type within 5 s, once", () => {
     recordSpawn(dir, launch("toolu_a", "Explore", 1_000));
     recordSpawn(dir, launch("toolu_g", "general-purpose", 1_500));
+    expect(claimSpawn(dir, { type: "Explore", now: 3_000, agent: "a1" })?.id).toBe("toolu_a");
+    expect(claimSpawn(dir, { type: "Explore", now: 3_000, agent: "a2" })).toBeUndefined();
+    recordSpawn(dir, launch("toolu_b", "Explore", 3_500));
+    expect(claimSpawn(dir, { type: "Explore", now: 4_000, agent: "a3" })?.id).toBe("toolu_b");
+  });
+
+  test("two unconsumed records of its type within 5 s: which is whose cannot be told, so none is taken", () => {
+    recordSpawn(dir, launch("toolu_a", "Explore", 1_000));
     recordSpawn(dir, launch("toolu_b", "Explore", 2_000));
-    expect(claimSpawn(dir, { type: "Explore", now: 3_000, agent: "a1" })?.id).toBe("toolu_b");
-    expect(claimSpawn(dir, { type: "Explore", now: 3_000, agent: "a2" })?.id).toBe("toolu_a");
-    expect(claimSpawn(dir, { type: "Explore", now: 3_000, agent: "a3" })).toBeUndefined();
+    expect(claimSpawn(dir, { type: "Explore", now: 3_000, agent: "a1" })).toBeUndefined();
+    expect(claimSpawn(dir, { type: "Explore", now: 3_000, agent: "a2" })).toBeUndefined();
   });
 
   test("a record older than 5 s is not taken by type", () => {
