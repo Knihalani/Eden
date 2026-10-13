@@ -927,7 +927,7 @@ function subagentStart(ctx: HookContext): Record<string, unknown> | null {
   const shadow = shadowSentences(ctx.sessionWin, ctx.place, { kind: childShadowKind(type), onDisk: true });
   // D26: a fork's context is its parent's whole conversation; a typed subagent's, its task, which no payload carries.
   const residual = type === "fork" ? recentConversation(ctx.transcriptPath, "", Infinity).residual : [];
-  const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid };
+  const against = { prompt: cue, parts: { prompt: cue }, residual, shadow, invalid, readSet: place?.readSet };
   const candidates = mem.taskNotes(scope.paths, classes, place && visibleFrom(place));
   const { notes: novel, drops } = selectNotes(candidates, against, (fresh) =>
     novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid }),
@@ -1131,7 +1131,8 @@ function submit(ctx: HookContext): Record<string, unknown> | null {
   // `Updated:` items); the epoch's budget (A4 §4); shape (step 8).
   const parts = { prompt, turn: recent.previousTyped, prev };
   const shadow = shadowSentences(win, ctx.place);
-  const against = { prompt, parts, residual: recent.residual, shadow, invalid: readInvalidations(mem.dir) };
+  const invalid = readInvalidations(mem.dir);
+  const against = { prompt, parts, residual: recent.residual, shadow, invalid, readSet: place?.readSet };
   const { notes: novel, drops } = selectNotes(notes, against, (fresh) =>
     win
       ? novelNotes(fresh, liveDeliveries(win, off, ledger?.file), { repo: ctx.repo, invalid: against.invalid })
