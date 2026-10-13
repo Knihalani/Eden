@@ -21,22 +21,22 @@
  *   (D1), or `_user` for a rule kept for all projects (D11, `memory-user-global.ts`). A rule row with D9 keys
  *   (P2.1) is keyed `P:` by a hash of its rules (A7 §5; `ruleIdentity`: the key, and the action in a class whose
  *   words name distinct ones), so two rows stating one rule share a cid, and its value tokens come from its keys.
- *   Until P3.3 brings slot keys, a slot (`legacySlot`) is keyed `s:` by its scope (since P3.2; none at the root) and
- *   its subject, with its value as `ver`, and a
- *   rule without keys (`P:`: one on no action class, or written before P2.1) or anything else (`E:`) by a hash of its
- *   normalized content words, so near-identical text gets one cid.
+ *   A slot row (D7, P3.3) is keyed `s:<scope>|<slot>` (the root's `s:<slot>`), with a hash of its canonical value as
+ *   `ver`, so two phrasings of one value share both; a row stating two slots records a key for each. A fact of no D7
+ *   slot that the legacy copula reader parses (`legacySlot`) is keyed `s:` by its scope and a hash of its subject. A
+ *   rule without keys (`P:`: one on no action class, or written before P2.1), a retraction, and anything else (`E:`)
+ *   are keyed by a hash of their normalized content words, so near-identical text gets one cid.
  * - **Live.** A delivery is still in the window when it is of the current epoch, the transcript has grown by less
  *   than 400 KB (rules) or 1.2 MB (everything else) since `off`, and `att` is not on an abandoned branch: a prompt the
  *   delta encoder found abandoned by a rewind (A4 §3.3, `memory-delta.ts`). A prompt whose line it has not read yet
  *   counts as on the branch. A child window's `off` is measured on its own transcript (`childTranscript`, D25).
- * - **Novelty.** A candidate whose cid a live delivery holds at the same `ver` is dropped (refractory). One whose cid
- *   it holds at another `ver`, or whose text retracts or switches away from a live slot's value (D7, A4 §3.1), is an
- *   `Updated:` item. A switch is tied to the slot by subject: every subject word it names is one of the slot's (slot
- *   keys keep their subject words hashed, `sw`), so "the docs site from GitHub to GitLab" is not the CI provider's
- *   change. Delivering a switch's item also records the slot at its new value (`deliveredKeys`), so a second row
- *   stating the same change is refractory. The value an item replaces is named from what the store logged
- *   (`validity.jsonl`) or the switch's own text: the ledger keeps only hashes. Until P3.3's keyed slots, a switch is
- *   how a legacy row carries a slot's new value.
+ * - **Novelty.** A candidate whose every key a live delivery holds at the same `ver` is dropped (refractory). One
+ *   with a slot key a live delivery holds at another `ver` is an `Updated:` item: a key comparison (A4 §4). So is a
+ *   typed episode or gist whose text switches a live slot away from its value (D7's switch, `use A not B`: it states
+ *   the slot's key, read from its text), and a retraction of a live slot's value (A4 §3.1). Delivering either records
+ *   the slot at its new value, or the empty one (`renews`, `deliveredKeys`), so a second row stating the same change
+ *   is refractory. The value an item replaces is named from the row's own keys (`use A not B`, a switch's `from`),
+ *   else from what the store logged (`validity.jsonl`): the ledger keeps only hashes.
  * - **Epochs** (A4 §4 "Re-arm", D25). SessionStart `compact` and `clear` start an epoch, which re-arms everything.
  *   PostCompact, which Claude Code runs right after SessionStart(compact) (R0 F32), then holds what `compact_summary`
  *   still names: each delivery of the epoch the compaction closed whose value tokens (`memory-value-tokens.ts`, kept
@@ -54,12 +54,13 @@ import { appendFileSync, existsSync, readdirSync, readFileSync, renameSync, rmSy
 import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { abandonedPrompts } from "./memory-delta";
-import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { isUntyped, noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
 import { ruleIdentity } from "./memory-policy";
 import { isUserGlobal, USER_GLOBAL } from "./memory-user-global";
 import { legacySlot } from "./memory-residual";
 import { contentWords } from "./memory-transcript";
-import { invalidationsIn, subjectWords, type Invalidation } from "./memory-validity";
+import { noteSlots, slotsIn, typedValue, type SlotId, type SlotRef } from "./memory-slots";
+import type { Invalidation } from "./memory-validity";
 import { keyValueTokens, ruleValueTokens, slotValueTokens, summaryTokens } from "./memory-value-tokens";
 import {
   appendRecords,
@@ -83,8 +84,6 @@ export interface LedgerKey {
   cid: string;
   ver: string;
   rule: boolean;
-  /** A slot's subject words, each hashed: what ties a switch to the slot it switches (see the header). */
-  sw?: string[];
   /** Its value tokens, each hashed: what a compaction summary must name for it to stay habituated (see the header). */
   vt?: string[];
 }
@@ -124,18 +123,48 @@ export function ledgerKey(note: ProvenanceNote, repo?: string): LedgerKey {
     const keys = hash(note.rules.map(ruleIdentity).sort().join(" "));
     return { cid: `${prefix}P:${keys}`, ver: keys, rule: true, ...hashedTokens(keyValueTokens(note.rules)) };
   }
-  const slot = legacySlot(note);
+  const set = setSlots(note)[0];
+  if (set) return slotKey(note, set, prefix);
+  const slot = noteSlots(note).length ? undefined : legacySlot(note);
   if (slot) {
-    const sw = subjectWords(slot.subject).map(wordHash);
     // A4 §4's `s:<scope>|<slot>`: two scopes' values of one slot are two items. The root's keeps its old form.
-    const cid = `${prefix}s:${note.scope ? `${note.scope}|` : ""}${hash(words(slot.subject))}`;
-    return { cid, ver: valueHash(slot.value), rule: false, sw, ...hashedTokens(slotValueTokens(slot.value)) };
+    const cid = `${prefix}s:${placed(note)}${hash(words(slot.subject))}`;
+    return { cid, ver: valueHash(slot.value), rule: false, ...hashedTokens(slotValueTokens(slot.value)) };
   }
   const text = String(note.text ?? "");
   const content = contentHash(text);
   return noteKindToken(note) === "rule"
     ? { cid: `${prefix}P:${content}`, ver: content, rule: true, ...hashedTokens(ruleValueTokens(text)) }
     : { cid: `${prefix}E:${content}`, ver: content, rule: false };
+}
+
+/** A cid's scope part: `<scope>|`, none at the root (or where the place is unknown). */
+function placed(note: ProvenanceNote): string {
+  return note.scope ? `${note.scope}|` : "";
+}
+
+/** The slots a note sets a value of (`noteSlots`). */
+function setSlots(note: ProvenanceNote): SlotRef[] {
+  return noteSlots(note).filter((ref) => ref.v !== undefined);
+}
+
+/** A slot's key in the ledger: `s:<scope>|<slot>`, its canonical value's hash, and the value's tokens as typed. */
+function slotKey(note: ProvenanceNote, ref: SlotRef, prefix: string): LedgerKey {
+  const typed = typedValue(stripPacketLabel(String(note.text ?? "")).body, ref.k, ref.v!);
+  return {
+    cid: `${prefix}s:${placed(note)}${ref.k}`,
+    ver: valueHash(ref.v!),
+    rule: false,
+    ...hashedTokens(slotValueTokens(typed)),
+  };
+}
+
+/** Every key a note's delivery records: a slot row's key for each slot it sets, else its `ledgerKey`. */
+function noteKeys(note: ProvenanceNote, repo?: string): LedgerKey[] {
+  const sets = setSlots(note);
+  if (!sets.length) return [ledgerKey(note, repo)];
+  const prefix = isUserGlobal(note) ? `${USER_GLOBAL}/` : repo ? `${repo.slice(0, 8)}/` : "";
+  return sets.map((ref) => slotKey(note, ref, prefix));
 }
 
 /** The kind letter of a cid (`s`, `P`, `E`, …), after its repo prefix. */
@@ -169,14 +198,13 @@ export function recordPacket(
   at: Moment,
   file: LedgerFile = LIVE_LEDGER,
 ): void {
-  const delivered = packet.keys.map(({ cid, ver, sw, vt }) => ({
+  const delivered = packet.keys.map(({ cid, ver, vt }) => ({
     k: "deliver",
     cid,
     ver,
     off: at.off,
     att: at.att,
     ht: at.ht,
-    ...(sw?.length ? { sw } : {}),
     ...(vt?.length ? { vt } : {}),
   }));
   const tokens = packet.tokens > 0 ? [{ k: "packet", tok: packet.tokens, off: at.off }] : [];
@@ -197,7 +225,6 @@ export interface Delivered {
   ht: number;
   /** How many times the cid was delivered. */
   n: number;
-  sw?: string[];
   vt?: string[];
 }
 
@@ -214,7 +241,7 @@ function emptyState(): LedgerState {
   return { epoch: 0, delivered: new Map(), tokensEpoch: 0, turns: 0, recentTurns: [] };
 }
 
-/** A record's list of hashes (`sw`, `vt`): its strings, none when it has no list. */
+/** A record's list of hashes (`vt`, `cids`): its strings, none when it has no list. */
 function hashList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -248,7 +275,6 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
       prior.n = n;
       return;
     }
-    const sw = hashList(record.sw);
     const vt = hashList(record.vt);
     state.delivered.set(record.cid, {
       ver: record.ver,
@@ -257,7 +283,6 @@ function applyRecord(state: LedgerState, record: Record<string, unknown>): void 
       att: typeof record.att === "string" ? record.att : "",
       ht: typeof record.ht === "number" ? record.ht : 0,
       n,
-      ...(sw.length ? { sw } : {}),
       ...(vt.length ? { vt } : {}),
     });
   }
@@ -461,9 +486,9 @@ export function inheritLedger(
     const state = readLedger(parent, file);
     const delivered = [...state.delivered].flatMap(([cid, entry]) => {
       if (entry.epoch !== state.epoch || after.has(entry.att) || abandoned.has(entry.att)) return [];
-      const { ver, att, sw, vt } = entry;
+      const { ver, att, vt } = entry;
       const off = opts.off ?? entry.off;
-      return [{ k: "deliver", cid, ver, off, att, ht: 0, ...(sw ? { sw } : {}), ...(vt ? { vt } : {}) }];
+      return [{ k: "deliver", cid, ver, off, att, ht: 0, ...(vt ? { vt } : {}) }];
     });
     const tokens = state.tokensEpoch > 0 ? [{ k: "packet", tok: state.tokensEpoch }] : [];
     appendRecords(fork, opts.into ?? file, [...delivered, ...tokens]);
@@ -497,7 +522,6 @@ export function epochTokens(dir: string, file: LedgerFile = LIVE_LEDGER): number
 export interface LiveDelivery {
   cid: string;
   ver: string;
-  sw?: string[];
 }
 
 /** Whether a delivery made `off` bytes in is still in a window `size` bytes long. */
@@ -513,41 +537,9 @@ export function liveDeliveries(dir: string, size: number, file: LedgerFile = LIV
     return [...state.delivered].flatMap(([cid, entry]) => {
       if (entry.epoch !== state.epoch || !inWindow(cid, entry.off, size)) return [];
       abandoned ??= abandonedPrompts(dir);
-      return abandoned.has(entry.att) ? [] : [{ cid, ver: entry.ver, ...(entry.sw ? { sw: entry.sw } : {}) }];
+      return abandoned.has(entry.att) ? [] : [{ cid, ver: entry.ver }];
     });
   });
-}
-
-/** A slot value a note retracts or switches away from (D7, A4 §3.1), tied to the live slot it changes. */
-interface SlotChange {
-  /** The live slot it changes, and the ver it gives it: the new value's hash, or the empty value's. */
-  slot: LiveDelivery;
-  to: string;
-  /** The value it switches to, as typed ("" for a retraction). */
-  value: string;
-  /** The value it replaces, as the note types it. */
-  was: string;
-}
-
-/**
- * The live slot a note changes: one holding the value it retracts or switches away from (or the value it switches
- * to), whose subject words hold every subject word the change names. A retraction names none, and validity applies
- * it to every subject too.
- */
-function slotChange(note: ProvenanceNote, slots: readonly LiveDelivery[]): SlotChange | undefined {
-  const body = stripPacketLabel(String(note.text ?? "")).body;
-  for (const record of invalidationsIn(body, 0)) {
-    if (record.k !== "retract" || record.r === "forget") continue;
-    const subject = (record.w ?? []).map(wordHash);
-    const from = valueHash(record.o);
-    const to = valueHash(record.n ?? "");
-    const slot = slots.find(
-      (s) => (s.ver === from || s.ver === to) && subject.every((word) => s.sw?.includes(word) ?? false),
-    );
-    const typed = body.split(/[^\w@.+-]+/).find((token) => token.toLowerCase() === record.o);
-    if (slot) return { slot, to, value: record.n ?? "", was: typed ?? record.f ?? record.o };
-  }
-  return undefined;
 }
 
 /** The value an invalidation logged for a slot's ver, in the form it was typed. */
@@ -557,10 +549,63 @@ function loggedValue(ver: string, invalid: readonly Invalidation[]): string | un
 }
 
 /**
+ * The value an `Updated:` item replaces, from a live slot's ver: one the note itself invalidates (`use A not B`, a
+ * switch's `from`), as it types it, else what the store logged.
+ */
+function replacedValue(note: ProvenanceNote, slot: SlotId, ver: string, invalid: readonly Invalidation[]) {
+  const old = noteSlots(note).find((ref) => ref.k === slot && ref.x?.some((value) => valueHash(value) === ver));
+  const value = old?.x?.find((x) => valueHash(x) === ver);
+  const body = stripPacketLabel(String(note.text ?? "")).body;
+  return value === undefined ? loggedValue(ver, invalid) : typedValue(body, slot, value);
+}
+
+/**
+ * A typed episode's or gist's switch of a live slot (see the header): the slot's key at the value it switches to,
+ * and the value it replaces; or `held` when the window already holds the slot at that value. Only a statement that
+ * invalidates a value counts (a switch, `use A not B`): an episode that only mentions a value changes nothing.
+ */
+function episodeSwitch(note: ProvenanceNote, held: readonly LiveDelivery[], prefix: string) {
+  const kind = noteKindToken(note);
+  if (isUntyped(note) || note.rules?.length || (kind !== "episode" && kind !== "gist")) return undefined;
+  const body = stripPacketLabel(String(note.text ?? "")).body;
+  for (const { slot, value, was } of slotsIn(body)) {
+    if (value === undefined || !was.length) continue;
+    const cid = `${prefix}s:${placed(note)}${slot}`;
+    const states = held.filter((delivery) => delivery.cid === cid);
+    if (states.some((delivery) => delivery.ver === valueHash(value))) return "held" as const;
+    if (!states.length) continue;
+    const old = was.find((x) => states.some((delivery) => delivery.ver === valueHash(x)));
+    const live = old === undefined ? states[0]! : states.find((delivery) => delivery.ver === valueHash(old))!;
+    const replaced = old === undefined ? undefined : typedValue(body, slot, old);
+    const key = { cid, ver: valueHash(value), rule: false, ...hashedTokens(slotValueTokens(value)) };
+    return { key, was: replaced ?? loggedValue(live.ver, []) ?? "" };
+  }
+  return undefined;
+}
+
+/**
+ * A retraction of a live slot's value (A4 §3.1): the slot's key at the empty value, and the value it retracts; or
+ * `held` when the window already holds the slot at the empty value, which makes the retraction refractory.
+ */
+function retraction(note: ProvenanceNote, held: readonly LiveDelivery[], prefix: string) {
+  const empty = valueHash("");
+  for (const ref of noteSlots(note)) {
+    if (ref.v !== undefined) continue;
+    const cid = `${prefix}s:${placed(note)}${ref.k}`;
+    const slot = held.filter((delivery) => delivery.cid === cid);
+    if (slot.some((delivery) => delivery.ver === empty)) return "held" as const;
+    const live = slot.find((delivery) => ref.x?.some((x) => valueHash(x) === delivery.ver));
+    if (!live) continue;
+    const was = replacedValue(note, ref.k, live.ver, []) ?? "";
+    return { key: { cid, ver: empty, rule: false }, was };
+  }
+  return undefined;
+}
+
+/**
  * Novelty against the live deliveries (see the header): the notes not refractory, each `Updated:` item marked with
- * the value it replaces when the store logged it. `invalid` is the store's invalidation log. A switch's item also
- * names the slot entry it renews (`renews`), which the caller records with it (`deliveredKeys`), so the slot is then
- * held at its new value: a second row stating the same change, in this packet or a later one, is refractory.
+ * the value it replaces when it is known. `invalid` is the store's invalidation log. A retraction's item also names
+ * the slot entry it renews (`renews`), which the caller records with it (`deliveredKeys`).
  */
 export function novelNotes<T extends ProvenanceNote>(
   notes: readonly T[],
@@ -569,36 +614,35 @@ export function novelNotes<T extends ProvenanceNote>(
 ): (T & Pick<ProvenanceNote, "update">)[] {
   if (!live.length) return [...notes];
   const held = [...live];
+  const prefix = opts.repo ? `${opts.repo.slice(0, 8)}/` : "";
   return notes.flatMap((note) => {
-    const key = ledgerKey(note, opts.repo);
-    const same = held.filter((delivery) => delivery.cid === key.cid);
-    if (same.some((delivery) => delivery.ver === key.ver)) return [];
-    const changed = same.find((delivery) => kindLetter(delivery.cid) === "s");
-    if (changed) {
-      held.push(key);
-      const was = loggedValue(changed.ver, opts.invalid ?? []);
+    const keys = noteKeys(note, opts.repo);
+    const same = keys.map((key) => held.filter((delivery) => delivery.cid === key.cid));
+    if (keys.every((key, at) => same[at]!.some((delivery) => delivery.ver === key.ver))) return [];
+    const at = keys.findIndex(
+      (key, i) => kindLetter(key.cid) === "s" && same[i]!.length && !same[i]!.some((d) => d.ver === key.ver),
+    );
+    if (at >= 0) {
+      held.push(...keys);
+      const slot = setSlots(note)[at]?.k;
+      const ver = same[at]![0]!.ver;
+      const was = slot ? replacedValue(note, slot, ver, opts.invalid ?? []) : loggedValue(ver, opts.invalid ?? []);
       return [{ ...note, update: was ? { was } : {} }];
     }
-    const slots = held.filter((delivery) => kindLetter(delivery.cid) === "s");
-    const change = slotChange(note, slots);
-    if (!change) return [note];
-    if (held.some((delivery) => delivery.cid === change.slot.cid && delivery.ver === change.to)) return [];
-    const renews = {
-      cid: change.slot.cid,
-      ver: change.to,
-      rule: false,
-      ...(change.slot.sw ? { sw: change.slot.sw } : {}),
-      ...hashedTokens(slotValueTokens(change.value)),
-    };
-    held.push(renews);
-    return [{ ...note, update: { was: change.was, renews } }];
+    const changed = isUserGlobal(note)
+      ? undefined
+      : (episodeSwitch(note, held, prefix) ?? retraction(note, held, prefix));
+    if (changed === "held") return [];
+    if (!changed) return [note];
+    held.push(changed.key);
+    return [{ ...note, update: { ...(changed.was ? { was: changed.was } : {}), renews: changed.key } }];
   });
 }
 
-/** What delivering a note records: its own key, and the slot entry an `Updated:` item renews (`novelNotes`). */
+/** What delivering a note records: its keys (`noteKeys`), and the slot entry a retraction renews (`novelNotes`). */
 export function deliveredKeys(note: ProvenanceNote, repo?: string): LedgerKey[] {
   const renews = note.update?.renews;
-  return [ledgerKey(note, repo), ...(renews ? [renews] : [])];
+  return [...noteKeys(note, repo), ...(renews ? [renews] : [])];
 }
 
 /** A4 §4's budget: past 6k tokens in the epoch, only `Updated:` items. */
@@ -622,7 +666,7 @@ export function wouldPreempt(dir: string, statements: readonly string[], hturn: 
   );
   if (!recent.length) return [];
   const slots = statements
-    .map((text) => ledgerKey({ text, kind: "fact" }, repo))
+    .flatMap((text) => noteKeys({ text, kind: "fact" }, repo))
     .filter((key) => kindLetter(key.cid) === "s");
   const contents = new Set(statements.map(contentHash));
   return recent

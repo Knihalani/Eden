@@ -18,7 +18,7 @@
  * - **The read set** is every scope holding ≥ 30% of the weight, at most 2, heaviest first; of equal weights, the one
  *   met first, newest source first. When none reaches 30%, it is the scope owning the paths' common folder; with no
  *   path, `""`. A path of another repo, or outside git, is no place of this one.
- * - **Visibility (A4 §2).** A slot fact (until P3.3, a legacy fact), a policy or an intent is visible at its scope and
+ * - **Visibility (A4 §2).** A slot fact (a legacy fact too), a policy or an intent is visible at its scope and
  *   below it (D5's cascade, without P3.5's override); a gotcha, procedure or episode at its scope only, and from an
  *   ancestor only when the prompt names its scope; nothing at a sibling. A row with no `scope` was written where its
  *   place was unknown (before P3.2, or in a repo with no catalog, outside git included): it stays visible everywhere,
@@ -26,15 +26,15 @@
  * - **A row's scope (A4 §3.2).** The one scope of the catalog its text names (the root's by a file path in its own
  *   folders, "scripts/db.ts"); of several, the working scope (the
  *   read set's first) when it is one of them, else their common ancestor; naming none, the working scope, or `""` for
- *   a rule (A4 §2: policies are mostly `""`) and for a fact of one of D7's root slots (`default_scope: root`, written
- *   at `""` unless the utterance names a scope). Until P3.3's slot table, a fact is of a root slot when it states
- *   it as a copula's subject or in one of D7's patterns for it (`ROOT_SUBJECT`).
+ *   a rule (A4 §2: policies are mostly `""`) and for a fact of D7's root slots (`default_scope: root`, written at `""`
+ *   unless the utterance names a scope; the caller decides which with the slot table, `memory-slots.ts`).
  * - **Two scopes (A4 §2, D4).** When the read set has two scopes and a candidate states a slot at one of them, the
  *   other scope's value for that slot joins it in one bullet: `auth provider — apps/web: Clerk · packages/cli: none`.
- *   Until P3.3's keys, a slot is the legacy copula reading's (`legacySlot`) and its subject's words stand for its
- *   aliases (as in P1.1's switches and D26's rule): the other value is the newest live row the user typed at the other
- *   scope with a sentence naming one of them, read as a slot of the same subject when it is one, else as that
- *   sentence. Every other candidate at either scope is labelled with its scope unless its text names it.
+ *   A candidate stating one D7 slot (P3.3) takes the other value from the newest live row the user typed at the other
+ *   scope that sets the same slot, else that states a sentence naming one of the slot's aliases ("has no auth"); the
+ *   bullet is named by the slot's label. A fact of no D7 slot that the legacy copula reader parses keeps that
+ *   reading, its subject's words standing for its aliases. Every other candidate at either scope is labelled with its
+ *   scope unless its text names it.
  */
 import { existsSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, relative } from "node:path";
@@ -42,6 +42,7 @@ import { knownNoteSource, noteKindToken, stripPacketLabel, type ProvenanceNote }
 import { legacySlot } from "./memory-residual";
 import { realpathOrSelf } from "./memory-repo";
 import { repoPathOf, scopeOfDir } from "./memory-scopes";
+import { namesSlot, noteSlots, slotAliases, slotLabel, typedValue, type SlotId } from "./memory-slots";
 import { subjectWords } from "./memory-validity";
 import { STATUS_WORDS } from "./memory-transcript";
 import { appendRecord, windowRecords } from "./memory-window";
@@ -321,29 +322,6 @@ export function namedScopes(text: string, scopes: readonly string[], top: string
 }
 
 /**
- * D7's root slots (`pkg.manager`, `commit.style`, `branch.base`, `gh.account`, `ci.system`, `deploy.target`), as a
- * fact states one until P3.3's slot table: as a copula's subject ("The package manager is pnpm"), or in the patterns
- * D7 gives them their values by ("we use pnpm", "we deploy to fly.io", "PRs go against develop"). A fact that only
- * mentions one ("hosted on their cloud", "run through npm scripts") is of its own subject's slot.
- */
-const ROOT_SUBJECT = new RegExp(
-  String.raw`^(?:(?:the|our|this repo'?s?)\s+)?(?:package manager|commit (?:style|messages?)|(?:base|default) branch|` +
-    String.raw`(?:github|gh) account|ci(?: system)?|continuous integration|deploy(?:ment)? target|deployments?|hosting)$`,
-  "i",
-);
-const ROOT_STATEMENT = new RegExp(
-  String.raw`\b(?:we|i)\s+(?:always\s+)?(?:use|run)\s+(?:npm|pnpm|yarn)\b|\bwe\s+(?:deploy|host)\s+(?:to|on)\b|` +
-    String.raw`\bprs?\s+(?:go|goes)\s+(?:against|into)\b`,
-  "i",
-);
-
-/** Whether a fact states one of D7's root slots (see `ROOT_SUBJECT`). */
-export function namesRootSlot(text: string): boolean {
-  const slot = clauseSlot({ text, kind: "fact" });
-  return (!!slot && ROOT_SUBJECT.test(slot.subject.trim())) || ROOT_STATEMENT.test(text);
-}
-
-/**
  * The scope an encoded row is stored at (see the header); none where its place is unknown. `root` is a row D7 or A4
  * §2 writes at `""` unless it names a scope: a rule, or a fact of a root slot.
  */
@@ -388,14 +366,18 @@ function bodyOf(row: ProvenanceNote): string {
 }
 
 /**
- * A row's slot when it is one copula clause ("In apps/web the auth provider is Clerk"): the legacy reader parses a
- * longer row's clauses as one subject ("packages/cli has no auth, and its database is sqlite" would be a database
- * of "sqlite" alone), so only such a row's value stands for the row.
+ * Whether a row's text is one clause ("In apps/web the auth provider is Clerk"): only then does a slot's value stand
+ * for the row. A longer row says more than its slot ("packages/cli has no auth, and its database is sqlite"), which a
+ * merged bullet would lose.
  */
-function clauseSlot(row: ProvenanceNote): ReturnType<typeof legacySlot> {
+function oneClause(row: ProvenanceNote): boolean {
   const body = bodyOf(row);
-  const clauses = /[,;:]|\s(?:and|but)\s/i.test(body) || sentencesIn(body).length !== 1;
-  return clauses ? undefined : legacySlot({ ...row, text: body });
+  return !/[,;:]|\s(?:and|but)\s/i.test(body) && sentencesIn(body).length === 1;
+}
+
+/** A one-clause row's slot as the legacy copula reader parses it (`oneClause`). */
+function clauseSlot(row: ProvenanceNote): ReturnType<typeof legacySlot> {
+  return oneClause(row) ? legacySlot({ ...row, text: bodyOf(row) }) : undefined;
 }
 
 /** A question: it ends with "?", or opens with a question word or an auxiliary. */
@@ -442,6 +424,21 @@ function statesSubject(sentence: string, words: ReadonlySet<string>): boolean {
     const stated = (value: string) => !value.split(/\s+/).some((part) => part && stateOnly(part));
     return (!!before && !stateOnly(before[1]!)) || (!!after && stated(after[1]!));
   });
+}
+
+/**
+ * A row's value of a D7 slot at its scope (see the header): the one it sets, as it types it, else its sentence naming
+ * one of the slot's aliases that states a value of it ("is none", "has no auth").
+ */
+function keyedValueFor(row: ProvenanceNote, slot: SlotId, scope: string): string | undefined {
+  const own = noteSlots(row).find((ref) => ref.k === slot && ref.v !== undefined);
+  if (own) return typedValue(bodyOf(row), slot, own.v!);
+  // A copula of the slot's subject whose value is in no class ("the auth provider is none").
+  const copula = clauseSlot(row);
+  if (copula && namesSlot(copula.subject, slot)) return copula.value;
+  const aliases = new Set(slotAliases(slot));
+  const sentence = statementsIn(bodyOf(row)).find((part) => namesSlot(part, slot) && statesSubject(part, aliases));
+  return sentence && withoutScope(sentence, scope);
 }
 
 /** A row's value for a slot of these subject words at its scope, if it states one (see the header). */
@@ -532,25 +529,44 @@ function mergedNote(
   placeWords: ReadonlySet<string>,
   candidates: () => readonly ProvenanceNote[],
 ): { note: ProvenanceNote; values: Map<string, string> } | undefined {
-  const slot = clauseSlot(note);
-  const words = new Set(slot ? subjectWords(slot.subject).filter((word) => !placeWords.has(word)) : []);
-  if (!slot || !words.size) return undefined;
-  const partner = candidates().find((row) => typedValueRow(row) && valueFor(row, words, other) !== undefined);
+  const reading = slotReading(note, placeWords);
+  if (!reading) return undefined;
+  const partner = candidates().find((row) => typedValueRow(row) && reading.valueAt(row, other) !== undefined);
   if (!partner) return undefined;
   const values = new Map([
-    [note.scope!, slot.value],
-    [other, valueFor(partner, words, other)!],
+    [note.scope!, reading.value],
+    [other, reading.valueAt(partner, other)!],
   ]);
   const user = knownNoteSource(note) === "user" && knownNoteSource(partner) === "user";
   const merged: ProvenanceNote = {
     id: note.id,
-    text: `${[...words].join(" ")} — ${pair.map((scope) => `${scope}: ${values.get(scope)}`).join(" · ")}`,
+    text: `${reading.label} — ${pair.map((scope) => `${scope}: ${values.get(scope)}`).join(" · ")}`,
     kind: "fact",
     ...(user ? { tags: ["src:user"] } : {}),
     at: Math.max(note.at ?? 0, partner.at ?? 0),
     parts: [note, partner],
   };
   return { note: merged, values };
+}
+
+/**
+ * How a one-clause note states one slot, for the two-scope bullet (see the header): its label, its value as typed,
+ * and how another row gives the slot's value. A D7 slot when the note sets one; else the legacy copula reading of the
+ * fact, its subject's words without the read set's place words. None for any other note.
+ */
+function slotReading(note: ProvenanceNote, placeWords: ReadonlySet<string>) {
+  if (!oneClause(note)) return undefined;
+  const sets = noteSlots(note).filter((ref) => ref.v !== undefined);
+  if (sets.length === 1) {
+    const { k: slot, v } = sets[0]!;
+    const valueAt = (row: ProvenanceNote, scope: string) => keyedValueFor(row, slot, scope);
+    return { label: slotLabel(slot), value: typedValue(bodyOf(note), slot, v!), valueAt };
+  }
+  const slot = sets.length ? undefined : clauseSlot(note);
+  const words = new Set(slot ? subjectWords(slot.subject).filter((word) => !placeWords.has(word)) : []);
+  if (!slot || !words.size) return undefined;
+  const valueAt = (row: ProvenanceNote, scope: string) => valueFor(row, words, scope);
+  return { label: [...words].join(" "), value: slot.value, valueAt };
 }
 
 /**

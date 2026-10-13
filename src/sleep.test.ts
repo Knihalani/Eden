@@ -171,7 +171,7 @@ describe("M7.2 Clerk status is not a delete", () => {
       const pkt = packetOf(out);
       expect(pkt).toContain(MEMORY_MARK);
       expect(pkt).toMatch(/Clerk/);
-      const live = factObject(new SemanticStore(dir).get("auth", "is"));
+      const live = factObject(new SemanticStore(dir).get("auth provider", "is"));
       expect(live).toMatch(/Clerk/i);
       expect(live).not.toMatch(/failing/i);
     });

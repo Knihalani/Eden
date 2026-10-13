@@ -56,18 +56,43 @@ import {
   withoutIntents,
   withoutRules,
 } from "./memory-policy";
+import {
+  commonWord,
+  inClass,
+  namesSlot,
+  slotLabel,
+  slotsIn,
+  slotsOfName,
+  valueNames,
+  type SlotId,
+} from "./memory-slots";
+import { objectAsserted } from "./semantic-store";
 import { contentWords, FUNCTION_WORDS, STATUS_WORDS } from "./memory-transcript";
 
 /**
  * A retraction or switch (`retract`) of value `o`, with its typed form `f` when its capitals alone shape it; a switch
  * also keeps the scope it names (`s`, a path), its subject words (`w`) and the value it switches to (`n`, as typed,
  * when that is value-shaped). A supersession keeps the scope of the row it superseded (`in`, since P3.2): it holds
- * for rows at that scope only, and for rows whose scope is unknown. A revocation (`revoke`) of action class `c`
+ * for rows at that scope only, and for rows whose scope is unknown. A slot's value ended by key (`slot`, P3.3) holds
+ * at `in` and below it, but for the scopes in `except` (and below them), which hold their own value of the slot
+ * (D31); its `f` is the value as it was typed. A revocation (`revoke`) of action class `c`
  * on object words `o`. An opposition (`oppose`) of the rule keyed `r`. An end (`end`) of the rule `r`: of an
  * intent, or (`of: "rule"`) of any rule.
  */
 export type Invalidation =
-  | { k: "retract"; o: string; t: number; f?: string; s?: string; w?: string[]; n?: string; r?: "forget"; in?: string }
+  | {
+      k: "retract";
+      o: string;
+      t: number;
+      f?: string;
+      s?: string;
+      w?: string[];
+      n?: string;
+      r?: "forget";
+      in?: string;
+      slot?: SlotId;
+      except?: string[];
+    }
   | { k: "revoke"; c: string; o: string[]; t: number }
   | { k: "oppose"; r: string; t: number }
   | { k: "end"; r: string; t: number; of: RuleEnd };
@@ -197,6 +222,14 @@ export function withoutForgets(text: string): string {
   return dropped ? lines.filter(Boolean).join("\n") : text;
 }
 
+/**
+ * Whether a sentence states slots and a value is a name of a slot value: its retraction or switch is the store's to
+ * log, by key and at its scope (`recordSlotChanges`), not this log's, which would hold it at every scope.
+ */
+function keyedValue(sentence: string, value: string): boolean {
+  return slotsOfName(value).length > 0 && slotsIn(sentence).length > 0;
+}
+
 /** The invalidations a typed prompt states. */
 export function invalidationsIn(prompt: string, t: number): Invalidation[] {
   const found: Invalidation[] = [];
@@ -205,9 +238,10 @@ export function invalidationsIn(prompt: string, t: number): Invalidation[] {
     if (forget) found.push(forget);
     for (const pattern of RETRACT)
       for (const match of sentence.matchAll(pattern))
-        if (valueShaped(match[1]!)) found.push({ k: "retract", ...retracted(match[1]!), t });
+        if (valueShaped(match[1]!) && !keyedValue(sentence, match[1]!))
+          found.push({ k: "retract", ...retracted(match[1]!), t });
     for (const match of sentence.matchAll(SWITCH)) {
-      if (!valueShaped(match[2]!)) continue;
+      if (!valueShaped(match[2]!) || keyedValue(sentence, match[2]!)) continue;
       const middle = match[1]!;
       const scope = middle.match(PATH)?.[0]?.toLowerCase();
       const subject = subjectWords(middle.replace(PATH, " "));
@@ -289,6 +323,39 @@ export function recordSupersession(
   } catch {}
 }
 
+/** A slot value a typed statement ended (P3.3): where, as typed, and the scopes below that keep their own value. */
+export interface SlotChange {
+  slot: SlotId;
+  value: string;
+  typed: string;
+  scope?: string;
+  except?: readonly string[];
+}
+
+/**
+ * D31's `stale_for` by key (A4 §3.2): each slot value a typed statement superseded or invalidated, at the scope it
+ * was true at (none where the place is unknown) and its descendants but those in `except`. Fails open.
+ */
+export function recordSlotChanges(root: string, changes: readonly SlotChange[], t = memoryNow()): void {
+  if (!changes.length) return;
+  try {
+    const lines = changes.map(({ slot, value, typed, scope, except }) => {
+      const record = {
+        k: "retract",
+        o: value,
+        t,
+        f: typed,
+        slot,
+        ...(scope === undefined ? {} : { in: scope }),
+        ...(except?.length ? { except } : {}),
+      };
+      return `${JSON.stringify(record)}\n`;
+    });
+    mkdirSync(root, { recursive: true });
+    appendFileSync(join(root, FILE), lines.join(""), { mode: 0o600 });
+  } catch {}
+}
+
 /** The store's invalidations. Fails open to none. */
 export function readInvalidations(root: string): Invalidation[] {
   let text = "";
@@ -325,7 +392,25 @@ function parseInvalidation(line: string): Invalidation[] {
       const forget = record.r === "forget" ? { r: "forget" as const } : {};
       const to = typeof record.n === "string" ? { n: record.n } : {};
       const place = typeof record.in === "string" ? { in: record.in } : {};
-      return [{ k: "retract", o: record.o, t, ...form, ...scope, ...subject, ...to, ...forget, ...place }];
+      const keyed = typeof record.slot === "string" ? { slot: record.slot as SlotId } : {};
+      const except = Array.isArray(record.except)
+        ? { except: record.except.filter((at): at is string => typeof at === "string") }
+        : {};
+      return [
+        {
+          k: "retract",
+          o: record.o,
+          t,
+          ...form,
+          ...scope,
+          ...subject,
+          ...to,
+          ...forget,
+          ...place,
+          ...keyed,
+          ...except,
+        },
+      ];
     }
     if (record.k === "revoke" && typeof record.c === "string" && CLASSES.has(record.c) && Array.isArray(record.o))
       return [{ k: "revoke", c: record.c, o: record.o.filter((word): word is string => typeof word === "string"), t }];
@@ -461,11 +546,53 @@ function otherRules(sentence: string, records: readonly Invalidation[]): string[
     .filter((part) => RULE_SENTENCE.test(part) && !revokes(records, part));
 }
 
+/** Whether a scope is at or below `at`, and not at or below a scope of `except`. */
+function within(scope: string, at: string, except: readonly string[] = []): boolean {
+  const under = (top: string) => top === "" || scope === top || scope.startsWith(`${top}/`);
+  return under(at) && !except.some(under);
+}
+
+/**
+ * Whether a sentence carries a slot's ended value: one of its names as a whole word, and the slot named beside it
+ * when the name is an everyday word or a version number ("render the form" is no host).
+ */
+function carriesSlotValue(sentence: string, slot: SlotId, value: string): boolean {
+  return valueNames(slot, value).some((name) => {
+    const pattern = new RegExp(`(?<![\\w@./+-])${escape(name)}(?![\\w@/+-]|\\.\\w)`, "i");
+    if (!pattern.test(sentence)) return false;
+    const plain = inClass(slot, value) && !commonWord(name) && !/^\d/.test(name);
+    return plain || namesSlot(sentence, slot);
+  });
+}
+
+/**
+ * D31's `stale_for` by key: a fact or episode clause carrying a slot value a statement ended, at a scope the record
+ * holds for, older than the record; never a rule clause, a clause giving another subject that value, nor the clause
+ * stating the change.
+ */
+function staleForSlot(record: Retraction & { slot: SlotId }, sentence: string, scope: string | undefined): boolean {
+  if (scope !== undefined && record.in !== undefined && !within(scope, record.in, record.except)) return false;
+  if (RULE_SENTENCE.test(sentence) || !carriesSlotValue(sentence, record.slot, record.o)) return false;
+  if (statesOtherSubject(sentence, record.slot)) return false;
+  return !slotsIn(sentence).some((stated) => stated.slot === record.slot && stated.was.includes(record.o));
+}
+
+/** Whether a clause gives another subject its value ("The cache is postgres"): the value is that subject's then. */
+function statesOtherSubject(sentence: string, slot: SlotId): boolean {
+  try {
+    const fact = objectAsserted(sentence);
+    return !!fact && fact.s !== slotLabel(slot).toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 function invalidates(record: Invalidation, sentence: string, scope: string | undefined): boolean {
   if (record.k === "revoke") return forbids(sentence, record);
   if (record.k === "oppose") return statesRule(sentence, record.r);
   // An end is applied to the whole text first (`withoutEnded`).
   if (record.k === "end") return false;
+  if (record.slot) return staleForSlot({ ...record, slot: record.slot }, sentence, scope);
   if (record.in !== undefined && scope !== undefined && record.in !== scope) return false;
   if (RULE_SENTENCE.test(sentence)) return false;
   if (!mentions(sentence, record)) return false;

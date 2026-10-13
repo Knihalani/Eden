@@ -12,7 +12,6 @@ import { ledgerKey } from "./memory-ledger";
 import {
   commonScope,
   namedScopes,
-  namesRootSlot,
   readSetOf,
   recordPrompt,
   recordSubagentPaths,
@@ -24,6 +23,7 @@ import {
   type PlacePaths,
 } from "./memory-place";
 import type { ProvenanceNote } from "./memory-provenance";
+import { DEFAULT_SCOPES, slotsIn } from "./memory-slots";
 import { recordSupersession, readInvalidations, validText } from "./memory-validity";
 import { compactContext, recordBatch, windowRecords } from "./memory-window";
 
@@ -228,6 +228,9 @@ describe("the scope an encoded row is stored at", () => {
   });
 
   test("D7's root slots go to the root unless the row names a scope", () => {
+    // Since P3.3 the slot table decides (`memory-slots.ts`): a fact is of a root slot when every slot it states is.
+    const namesRootSlot = (text: string) =>
+      slotsIn(text).length > 0 && slotsIn(text).every(({ slot }) => DEFAULT_SCOPES[slot] === "root");
     expect(namesRootSlot("The package manager is pnpm.")).toBe(true);
     expect(namesRootSlot("We deploy to fly.io from main.")).toBe(true);
     expect(namesRootSlot("We use pnpm here.")).toBe(true);
@@ -372,13 +375,15 @@ describe("A4 §2's two-scope bullet", () => {
     expect(twoScopeNotes([updated], readSet, () => [cli])).toEqual([updated]);
   });
 
-  test("the ledger keys a slot by its scope (A4 §4: s:<scope>|<slot>); the root's key is unchanged", () => {
+  test("the ledger keys a slot by its scope (A4 §4: s:<scope>|<slot>); the root's has no scope part", () => {
     const at = (scope?: string) =>
       ledgerKey({ text: "The auth provider is Clerk", kind: "fact", ...(scope === undefined ? {} : { scope }) }, "r");
-    expect(at("apps/web").cid).toMatch(/^r\/s:apps\/web\|/);
+    expect(at("apps/web").cid).toBe("r/s:apps/web|auth.provider");
     expect(at("packages/cli").cid).not.toBe(at("apps/web").cid);
     expect(at("").cid).toBe(at().cid);
-    expect(at("").cid).toMatch(/^r\/s:[0-9a-f]+$/);
+    // Since P3.3 a D7 slot is keyed by its id; a fact of no D7 slot keeps the hash of its subject.
+    expect(at("").cid).toBe("r/s:auth.provider");
+    expect(ledgerKey({ text: "The cache store is redis", kind: "fact" }, "r").cid).toMatch(/^r\/s:[0-9a-f]+$/);
   });
 });
 

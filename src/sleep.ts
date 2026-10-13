@@ -20,7 +20,8 @@ import { memoryConsent } from "./memory-consent";
 import { promotions } from "./memory-pins";
 import { isUntyped } from "./memory-provenance";
 import { opaqueId, scrubMemoryText } from "./memory-scrub";
-import { readInvalidations, validText, withoutExpiredIntents } from "./memory-validity";
+import { noteSlots, slotLabel, typedValue } from "./memory-slots";
+import { readInvalidations, validText, withoutExpiredIntents, type Invalidation } from "./memory-validity";
 import { parseRuleTime, writeAliasTags, type MissClass } from "./memory-sota";
 import {
   isIclExemplar,
@@ -34,7 +35,10 @@ import { loadToolTraces, memoryTracesDir, type ToolTrace } from "./tool-trace";
 
 export { mergeSharedPrefix } from "./howto-store";
 
-export type SleepRecord = Pick<MemoryRecord, "id" | "text" | "kind" | "at" | "seq" | "lane" | "tags" | "scope"> & {
+export type SleepRecord = Pick<
+  MemoryRecord,
+  "id" | "text" | "kind" | "at" | "seq" | "lane" | "tags" | "scope" | "slots" | "rules"
+> & {
   sal?: number;
   ep?: string;
   heat?: number;
@@ -600,6 +604,8 @@ function fastMemorize(mem: SleepMem, recs: SleepRecord[]): void {
       for (const r of ordered) {
         if (seen.has(r.id)) continue;
         seen.add(r.id);
+        // The semantic store has no scope: a row whose place is known never puts there (A4 §3.2, `remember`).
+        if (r.scope !== undefined) continue;
         const pin = r.kind === "constraint" || (r.tags ?? []).some((t) => String(t).toLowerCase() === "pin");
         let facts: Triple[] = [];
         try {
@@ -898,19 +904,42 @@ function isIntent(r: MemoryRecord): boolean {
 }
 
 /**
- * The session gist: the winning value of each subject the session stated, then its pins. A4 §3.3, §5.1 step 5: it
- * is rewritten at every sleep, later than what it states, so each source is checked against the validity log at its
- * own time; SessionStart checks the gist again at the gist's time.
+ * The session's slot values (D7): each `(scope, slot)`'s newest live value the session set, as its row types it,
+ * with the scope named when it is not the root ("packages/cli: database is sqlite").
+ */
+function slotFacts(mem: SleepMem, own: (id: string) => boolean, invalid: readonly Invalidation[]): string[] {
+  const newest = new Map<string, { text: string; at: number }>();
+  const rows = mem.memories().filter((row) => !superseded(row) && !isUntyped(row));
+  for (const row of [...rows].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)))
+    for (const ref of noteSlots(row)) {
+      if (ref.v === undefined) continue;
+      const place = row.scope ? `${row.scope}: ` : "";
+      const text = `${place}${slotLabel(ref.k)} is ${typedValue(row.text, ref.k, ref.v)}`;
+      newest.set(`${row.scope ?? ""}\0${ref.k}`, own(row.id) ? { text, at: row.at ?? 0 } : { text: "", at: 0 });
+    }
+  return [...newest.values()].flatMap(({ text, at }) => {
+    const fact = text && validText(text, at, invalid);
+    return fact ? [fact] : [];
+  });
+}
+
+/**
+ * The session gist: the winning value of each subject the session stated, its slots' values, then its pins. A4
+ * §3.3, §5.1 step 5: it is rewritten at every sleep, later than what it states, so each source is checked against
+ * the validity log at its own time; SessionStart checks the gist again at the gist's time.
  */
 function writeSessionGist(mem: SleepMem, winners: readonly Triple[], session: string | undefined): void {
   const invalid = readInvalidations(mem.dir);
   const own = ownRows(mem, session);
+  // A slot row's value is stated by its scope (`slotFacts`): the winners are the store's, across scopes.
+  const keyed = new Set(mem.memories().flatMap((row) => (noteSlots(row).length ? [row.id] : [])));
   const facts: string[] = [];
   for (const w of winners) {
-    if (w.recId && !own(w.recId)) continue;
+    if ((w.recId && !own(w.recId)) || (w.recId && keyed.has(w.recId))) continue;
     const fact = validText(w.p === "uses" ? `${w.s} uses ${w.o}` : `${w.s} is ${w.o}`, w.t, invalid);
     if (fact) facts.push(fact);
   }
+  facts.push(...slotFacts(mem, own, invalid));
   const pins = mem
     .memories()
     .filter((r) => r.kind === "constraint" && !superseded(r) && !isIntent(r) && !isIcl(r.text) && own(r.id))

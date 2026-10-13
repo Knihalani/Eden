@@ -800,11 +800,8 @@
       ],
       "a5": "cli postgres -> sqlite; cue \"cli db setup\" -> no postgres bullet",
       "on": {
-        "state": "red",
-        "failed": [
-          "no-postgres"
-        ],
-        "why": "'packages/cli uses postgres for its database' is delivered after the switch to sqlite. P0.2's validity reads only D7's own forms with a \"we\" subject and a capitalized or identifier-shaped value; \"packages/cli switched its database from postgres to sqlite\" has neither, so the switch waits for P3.3's slots and value classes"
+        "state": "green",
+        "why": "passes since P3.3: \"packages/cli uses postgres for its database\" is a keyed slot row (D7's `use A for B`, db.engine=postgres at packages/cli), and \"packages/cli switched its database from postgres to sqlite\" sets db.engine=sqlite there and invalidates postgres, so the older row goes to history (A4 §3.1) and D31's `stale_for` logs postgres at packages/cli and below (`recordSlotChanges`): no packet after the switch carries postgres"
       },
       "off": {
         "state": "green",

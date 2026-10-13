@@ -80,7 +80,7 @@ describe("D7: the slot phrasing table", () => {
 
 describe("D7: the table itself", () => {
   test("the 15 launch slots, each with its default scope", () => {
-    expect([...SLOT_IDS].sort()).toEqual(
+    expect(([...SLOT_IDS] as string[]).sort()).toEqual(
       [
         "auth.provider",
         "branch.base",
@@ -105,7 +105,9 @@ describe("D7: the table itself", () => {
 
   test("the status lexicon is D7's", () => {
     expect([...STATUS_LEXICON].sort()).toEqual(
-      "broken down failing flaky slow fixed working done weird annoying wrong fine ok good bad new old".split(" ").sort(),
+      "broken down failing flaky slow fixed working done weird annoying wrong fine ok good bad new old"
+        .split(" ")
+        .sort(),
     );
   });
 

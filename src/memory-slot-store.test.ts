@@ -70,11 +70,12 @@ describe("a typed slot statement is a keyed row (D6, D7)", () => {
     mem.observe([typed("We use Redis for caching.", 0)]);
     mem.observe([typed("We use postgres for the db.", 1)]);
     mem.observe([typed("We use pnpm.", 2)]);
+    // Durable rows keep the text without its closing stop.
     const texts = live(mem).map((row) => row.text);
-    expect(texts).toContain("We use Redis for caching.");
-    expect(texts).toContain("We use postgres for the db.");
-    expect(texts).toContain("We use pnpm.");
-    for (const text of ["We use Redis for caching.", "We use postgres for the db."])
+    expect(texts).toContain("We use Redis for caching");
+    expect(texts).toContain("We use postgres for the db");
+    expect(texts).toContain("We use pnpm");
+    for (const text of ["We use Redis for caching", "We use postgres for the db"])
       expect(scrubTombstonedIdentity(text, mem.dir)).toBe(text);
   });
 });
@@ -102,7 +103,7 @@ describe("supersession by key (A4 §3.1–3.2)", () => {
     expect(superseded(said(mem, "is prettier"))).toBe(true);
     mem.observe([typed("We use yarn.", 2)]);
     mem.observe([typed("We don't use yarn anymore.", 3)]);
-    expect(superseded(said(mem, "We use yarn."))).toBe(true);
+    expect(superseded(mem.memories().find((row) => row.text === "We use yarn")!)).toBe(true);
     expect(keyed(mem).filter((row) => row.slots!.some((slot) => slot.k === "pkg.manager" && slot.v))).toEqual([]);
   });
 
@@ -120,7 +121,7 @@ describe("supersession by key (A4 §3.1–3.2)", () => {
     mem.observe([typed("The package manager is pnpm.", 0)]);
     mem.observe([typed("we use pnpm here", 1)]);
     const rows = keyed(mem);
-    expect(rows.map((row) => row.text)).toEqual(["The package manager is pnpm."]);
+    expect(rows.map((row) => row.text)).toEqual(["The package manager is pnpm"]);
     expect(rows[0]!.reps).toBe(1);
     expect(mem.memories().some((row) => /we use pnpm here/i.test(row.text))).toBe(false);
   });
@@ -188,14 +189,21 @@ describe("D31: stale_for, at the superseded value's scope and its non-overriding
     expect(validText(old, T0, invalid, "apps/web")).toBe(old);
   });
 
+  test("what is left of an older text's dropped item is not a bare list marker (P0.2 review round 4)", () => {
+    const mem = store();
+    mem.observe([typed("The database is SQLite.", 0)]);
+    mem.observe([typed("We switched the database from SQLite to Postgres.", 1)]);
+    const invalid = readInvalidations(mem.dir);
+    expect(validText("1. The database is SQLite", T0, invalid)).toBe("");
+    expect(validText("1. The database is SQLite. 2. Logs go to stdout.", T0, invalid)).toBe("2. Logs go to stdout.");
+  });
+
   test("a common-word value is stale only beside its slot's words: `render` the verb is not the host", () => {
     const mem = store("");
     mem.observe([typed("We deploy to render.", 0)]);
     mem.observe([typed("We switched hosting from render to fly.io.", 1)]);
     const invalid = readInvalidations(mem.dir);
-    expect(validText("Render the login form server-side.", T0, invalid, "")).toBe(
-      "Render the login form server-side.",
-    );
+    expect(validText("Render the login form server-side.", T0, invalid, "")).toBe("Render the login form server-side.");
     expect(validText("The deploy target is render.", T0, invalid, "")).toBe("");
   });
 });

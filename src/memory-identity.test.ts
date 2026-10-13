@@ -350,7 +350,7 @@ describe("M35.3 scrub does not destroy gold that merely contains postgres", () =
       mem.observe([{ role: "user", content: "Use sqlite instead of postgres." }]);
       await sleep({ dir, mem });
       expect(String(new SemanticStore(dir).get("cache", "is")?.o ?? "")).toMatch(/postgres/i);
-      expect(String(new SemanticStore(dir).get("stack", "uses")?.o ?? "")).toMatch(/sqlite/i);
+      expect(String(new SemanticStore(dir).get("database", "is")?.o ?? "")).toMatch(/sqlite/i);
       const prose = "The database is sqlite. Miller mentioned postgres in the novel.";
       const cleaned = scrubTombstonedIdentity(prose, dir);
       expect(cleaned).toBe("The database is sqlite. Miller mentioned postgres in the novel.");

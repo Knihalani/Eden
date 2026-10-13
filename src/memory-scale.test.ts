@@ -156,7 +156,7 @@ describe("2k store accuracy and speed", () => {
       await sleep({ dir, mem });
       const auth = packetOf(mem.inject([{ role: "user", content: "what is auth" }]));
       expect(auth).toMatch(/Clerk/);
-      expect(String(new SemanticStore(dir).get("auth", "is")?.o ?? "")).toMatch(/Clerk/i);
+      expect(String(new SemanticStore(dir).get("auth provider", "is")?.o ?? "")).toMatch(/Clerk/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
