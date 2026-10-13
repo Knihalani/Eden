@@ -580,16 +580,21 @@ function carriesSlotValue(sentence: string, slot: SlotId, value: string): boolea
  */
 function staleForSlot(record: Retraction & { slot: SlotId }, sentence: string, scope: string | undefined): boolean {
   if (scope !== undefined && record.in !== undefined && !within(scope, record.in, record.except)) return false;
-  if (RULE_SENTENCE.test(sentence) || !carriesSlotValue(sentence, record.slot, record.o)) return false;
-  if (statesOtherSubject(sentence, record.slot)) return false;
-  return !slotsIn(sentence).some((stated) => stated.slot === record.slot && stated.was.includes(record.o));
+  const clause = stripPacketLabel(sentence).body;
+  if (RULE_SENTENCE.test(clause) || !carriesSlotValue(clause, record.slot, record.o)) return false;
+  const stated = slotsIn(clause);
+  if (stated.some((statement) => statement.slot === record.slot && statement.was.includes(record.o))) return false;
+  return stated.some((statement) => statement.slot === record.slot) || !statesOtherSubject(clause, record.slot);
 }
 
-/** Whether a clause gives another subject its value ("The cache is postgres"): the value is that subject's then. */
-function statesOtherSubject(sentence: string, slot: SlotId): boolean {
+/**
+ * Whether a clause that states nothing of a slot gives another subject a value ("The cache is postgres"): a value
+ * there is that subject's, not the slot's.
+ */
+function statesOtherSubject(clause: string, slot: SlotId): boolean {
   try {
-    const fact = objectAsserted(sentence);
-    return !!fact && fact.s !== slotLabel(slot).toLowerCase();
+    const fact = objectAsserted(clause);
+    return !!fact && fact.s !== slotLabel(slot).toLowerCase() && !namesSlot(fact.s, slot);
   } catch {
     return false;
   }
