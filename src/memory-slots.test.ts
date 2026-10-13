@@ -3,7 +3,15 @@
  * D7 base forms and R8's additional ones, and the status and trap phrasings that state no slot.
  */
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_SCOPES, SLOT_IDS, slotLabel, slotsIn, STATUS_LEXICON, type SlotStatement } from "./memory-slots";
+import {
+  DEFAULT_SCOPES,
+  mayStateSlot,
+  SLOT_IDS,
+  slotLabel,
+  slotsIn,
+  STATUS_LEXICON,
+  type SlotStatement,
+} from "./memory-slots";
 
 /** A text's slot statements, as `slot=value !was …` (a retraction has no `=value`). */
 const read = (text: string) => slotsIn(text).map(show);
@@ -103,6 +111,21 @@ describe("D7: the slot phrasing table", () => {
     test(JSON.stringify(text), () => {
       expect(read(text)).toEqual(expected);
     });
+});
+
+describe("the cheap test before reading (`mayStateSlot`)", () => {
+  test("never rejects a text that states a slot: every row of the table that states one passes for that slot", () => {
+    for (const [text] of TABLE)
+      for (const { slot } of slotsIn(text)) {
+        expect(mayStateSlot(text, slot)).toBe(true);
+        expect(mayStateSlot(text)).toBe(true);
+      }
+  });
+
+  test("rejects text naming no slot's word", () => {
+    expect(mayStateSlot("refactor the retry logic in packages/wrap/src/db.ts")).toBe(false);
+    expect(mayStateSlot("add input validation to apps/web/app/junk33.ts", "auth.provider")).toBe(false);
+  });
 });
 
 describe("D7: the table itself", () => {
