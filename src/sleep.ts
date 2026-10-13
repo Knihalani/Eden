@@ -904,8 +904,8 @@ function isIntent(r: MemoryRecord): boolean {
 }
 
 /**
- * The session's slot values (D7): each `(scope, slot)`'s newest live value the session set, as its row types it,
- * with the scope named when it is not the root ("packages/cli: database is sqlite").
+ * The session's slot values (D7): each `(scope, slot)`'s newest live value the session set, as its row types it, in
+ * a sentence the slot table reads back ("In packages/cli the database is sqlite").
  */
 function slotFacts(mem: SleepMem, own: (id: string) => boolean, invalid: readonly Invalidation[]): string[] {
   const newest = new Map<string, { text: string; at: number }>();
@@ -913,8 +913,8 @@ function slotFacts(mem: SleepMem, own: (id: string) => boolean, invalid: readonl
   for (const row of [...rows].sort((a, b) => (a.at ?? 0) - (b.at ?? 0)))
     for (const ref of noteSlots(row)) {
       if (ref.v === undefined) continue;
-      const place = row.scope ? `${row.scope}: ` : "";
-      const text = `${place}${slotLabel(ref.k)} is ${typedValue(row.text, ref.k, ref.v)}`;
+      const subject = `${row.scope ? `In ${row.scope} the` : "The"} ${slotLabel(ref.k)}`;
+      const text = `${subject} is ${typedValue(row.text, ref.k, ref.v)}`;
       newest.set(`${row.scope ?? ""}\0${ref.k}`, own(row.id) ? { text, at: row.at ?? 0 } : { text: "", at: 0 });
     }
   return [...newest.values()].flatMap(({ text, at }) => {

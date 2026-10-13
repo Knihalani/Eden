@@ -164,6 +164,7 @@ const TABLE: Readonly<Record<SlotId, SlotSpec>> = {
   "lang.version": {
     label: "language version",
     aliases: [
+      "language version",
       "typescript version",
       "ts version",
       "python version",
