@@ -146,7 +146,8 @@ describe("D26: the residual", () => {
   test("a slot is a fact with a slot-shaped value (D7); a longer value is a misparse, read as an episode", () => {
     const fact = (text: string) => ({ id: text, text: `[fact · 0m] ${text}` });
     expect(legacySlot(fact("The database is postgres."))).toEqual({ subject: "database", value: "postgres" });
-    expect(legacySlot(fact("The node version is node 20"))).toEqual({ subject: "node version", value: "node 20" });
+    // P3.3: the slot table reads a version slot's value as its number ("node 20" is 20).
+    expect(legacySlot(fact("The node version is node 20"))).toEqual({ subject: "node version", value: "20" });
     expect(legacySlot(fact("The build is broken, can you look at the login page"))).toBeUndefined();
     expect(legacySlot(fact("Auth is failing"))).toBeUndefined();
     expect(legacySlot({ id: "e", text: "The database is postgres", kind: "episode" })).toBeUndefined();

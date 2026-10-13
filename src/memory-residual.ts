@@ -3,11 +3,11 @@
  * D27's shadow set (`memory-shadow.ts`), the instruction files in the window.
  * - An episode or rule: its content-token Jaccard with one sentence of the residual is ≥ 0.6, the two of the same
  *   polarity ("Do not run the migrations" does not state "Run the migrations": content words drop "not").
- * - A slot: its value, asserted (not in a question, no negation before it in its clause: "not npm", "no longer use
- *   postgres"), and its subject co-occur in one sentence, or the sentence uses the value (D7's bare `use V`, "Use
- *   pnpm, not npm").
- *   Until P3.3's slot keys, aliases and value classes, a slot is a slot-shaped sentence of a fact or gist that the
- *   legacy copula reader parses, its subject's words stand for its aliases, and its value names one slot, the row's.
+ * - A slot (D7, P3.3): one of its value's names, asserted (not in a question, no negation before it in its clause:
+ *   "not npm", "no longer use postgres"), and one of the slot's aliases in one sentence, or the sentence uses the
+ *   value (D7's bare `use V`, "Use pnpm, not npm") when the value's name is in exactly one slot's class and is no
+ *   everyday word. A fact's or gist's sentence is read for the slots it states (`slotsIn`); one of no D7 slot that the
+ *   legacy copula reader parses keeps that reading, its subject's words standing for aliases.
  * - A legacy row can hold several sentences (a whole prompt, a gist). The residual drops a row whose every sentence
  *   it states (`isResidualNote`): its texts are the conversation's, whose short sentences ("label:") carry too few
  *   content words to strip a row's sentence by. The shadow set's files state items one per line, so it drops each
@@ -22,6 +22,7 @@
  */
 import { toolResultText } from "./memory-authority";
 import { noteKindToken, stripPacketLabel, type ProvenanceNote } from "./memory-provenance";
+import { commonWord, slotAliases, slotsIn, slotsOfName, valueNames, type SlotStatement } from "./memory-slots";
 import { contentWords, STATUS_WORDS, tailLines, textOf, typedPrompt, type TranscriptLine } from "./memory-transcript";
 import { objectAsserted } from "./semantic-store";
 
@@ -262,11 +263,35 @@ function statesSlot(slot: LegacySlot, sentences: readonly Said[]): boolean {
   });
 }
 
+/** Whether a held sentence names a text as whole words (lowercase). */
+function namedIn(lower: string, text: string): boolean {
+  return new RegExp(`(?<![a-z0-9])${escapeRegExp(text.toLowerCase())}(?![a-z0-9])`).test(lower);
+}
+
+/**
+ * D26's slot rule on D7's keys (see the header): a held sentence asserts one of the value's names beside one of the
+ * slot's aliases, or uses it bare when the name is in exactly one slot's class and is no everyday word.
+ */
+function statesKeyedSlot({ slot, value }: SlotStatement, sentences: readonly Said[]): boolean {
+  if (value === undefined) return false;
+  const names = valueNames(slot, value);
+  return sentences.some(({ lower }) => {
+    const aliased = slotAliases(slot).some((alias) => namedIn(lower, alias));
+    return names.some((name) => {
+      if (!namedIn(lower, name)) return false;
+      if (aliased) return asserts(lower, name, false);
+      return slotsOfName(name).length === 1 && !commonWord(name) && asserts(lower, name, true);
+    });
+  });
+}
+
 /** Kinds whose sentences can state a slot: facts, and the gists that summarize them. */
 const SLOT_KINDS = new Set(["fact", "gist"]);
 
 /** Whether one sentence of a note is stated: the slot rule for a slot-shaped sentence of a slot kind, else Jaccard. */
 function statedSentence(sentence: string, slotKind: boolean, held: readonly Said[]): boolean {
+  const keyed = slotKind ? slotsIn(sentence).filter((stated) => stated.value !== undefined) : [];
+  if (keyed.length) return keyed.every((stated) => statesKeyedSlot(stated, held));
   const slot = slotKind ? copulaSlot(sentence) : undefined;
   if (slot) return statesSlot(slot, held);
   const text = heldSentence(sentence);
@@ -285,7 +310,7 @@ export function unsaidText(note: ProvenanceNote, held: readonly Said[]): string 
   const { label, body } = stripPacketLabel(text);
   const whole = heldSentence(body);
   if (!whole.tokens.size) return text;
-  if (!copulaSlot(body) && saidIn(whole, held)) return "";
+  if (!slotsIn(body).length && !copulaSlot(body) && saidIn(whole, held)) return "";
   const slotKind = SLOT_KINDS.has(noteKindToken(note) ?? "");
   const sentences = sentencesOf(body);
   const kept = sentences.filter((sentence) => !statedSentence(sentence, slotKind, held));

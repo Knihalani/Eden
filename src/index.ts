@@ -27,15 +27,26 @@ import { stripPastes, withoutInstructions, type TextSource } from "./memory-auth
 import { applyProvenanceLabel, isUntyped, stripPacketLabel } from "./memory-provenance";
 import { logMemoryNotes } from "./memory-log";
 import { legacySlot } from "./memory-residual";
-import { namesRootSlot, rowScope, type EncodePlace } from "./memory-place";
-import type { SlotRef } from "./memory-slots";
+import { rowScope, type EncodePlace } from "./memory-place";
+import {
+  DEFAULT_SCOPES,
+  noteSlots,
+  slotRefs,
+  slotsIn,
+  typedValue,
+  type SlotId,
+  type SlotRef,
+  type SlotStatement,
+} from "./memory-slots";
 import {
   counteredKeys,
   isForget,
   readInvalidations,
+  recordSlotChanges,
   recordSupersession,
   validText,
   type Invalidation,
+  type SlotChange,
 } from "./memory-validity";
 import { memoryNow } from "./memory-clock";
 import { appendPending, claimSeqs, compareRecency, takePending, ulid, type DiskRow } from "./memory-ids";
@@ -209,6 +220,53 @@ function samePlace(a: Pick<MemoryRecord, "scope">, b: Pick<MemoryRecord, "scope"
   return a.scope === undefined || b.scope === undefined || a.scope === b.scope;
 }
 
+/** The value a row sets for a slot, if it sets one (`noteSlots`). */
+function slotValue(row: MemoryRecord, slot: SlotId): string | undefined {
+  return noteSlots(row).find((ref) => ref.k === slot && ref.v !== undefined)?.v;
+}
+
+/** A scope's parent ("packages/cli" → "packages" → ""); none above the root. */
+function parentScope(scope: string): string | undefined {
+  return scope ? scope.slice(0, Math.max(0, scope.lastIndexOf("/"))) : undefined;
+}
+
+/** Whether row `a` was written after row `b`: by time, then by id (ULIDs sort by time). */
+function newerThan(a: MemoryRecord, b: MemoryRecord): boolean {
+  return (a.at ?? 0) > (b.at ?? 0) || ((a.at ?? 0) === (b.at ?? 0) && a.id > b.id);
+}
+
+/** Whether slot keys end a value: they set the slot otherwise, or invalidate the value (A4 §3.1). */
+function endsValue(refs: readonly SlotRef[], slot: SlotId, value: string): boolean {
+  return refs.some((ref) => ref.k === slot && (ref.v !== undefined ? ref.v !== value : !!ref.x?.includes(value)));
+}
+
+/** Whether slot keys set a slot to a value. */
+function setsValue(refs: readonly SlotRef[], slot: SlotId, value: string): boolean {
+  return refs.some((ref) => ref.k === slot && ref.v === value);
+}
+
+/**
+ * Whether newer typed rows at a row's place end all it says of its slots (`supersedeSlots`): every value it sets,
+ * or, for a retraction, every value it retracts, set again.
+ */
+function slotsEnded(row: MemoryRecord, others: readonly MemoryRecord[]): boolean {
+  const newer = others.filter((other) => samePlace(other, row) && newerThan(other, row)).map(noteSlots);
+  const sets = noteSlots(row).filter((ref) => ref.v !== undefined);
+  if (sets.length) return sets.every((ref) => newer.some((refs) => endsValue(refs, ref.k, ref.v!)));
+  const retracted = noteSlots(row).flatMap((ref) => (ref.x ?? []).map((old) => [ref.k, old] as const));
+  return retracted.length > 0 && retracted.every(([slot, old]) => newer.some((refs) => setsValue(refs, slot, old)));
+}
+
+/** The scopes below `scope` that hold their own value of a slot (D31: `stale_for` spares them). */
+function overridingScopes(rows: readonly MemoryRecord[], slot: SlotId, scope: string | undefined): string[] {
+  if (scope === undefined) return [];
+  const below = (other: string) => other !== scope && (scope === "" || other.startsWith(`${scope}/`));
+  const scopes = rows.flatMap((row) =>
+    row.scope !== undefined && below(row.scope) && slotValue(row, slot) !== undefined ? [row.scope] : [],
+  );
+  return [...new Set(scopes)].sort();
+}
+
 /** Whether two statements give one subject different values, so the newer supersedes the older (A4 §3.1). */
 function contradicts(a: string, b: string): boolean {
   try {
@@ -232,8 +290,9 @@ function copulaKey(text: string): string | undefined {
 }
 
 /**
- * Of the retrieved rows giving one subject a value, the newest. A row the user did not type is an episode (A4 §3.0):
- * it competes with no statement, so a newer tool result or assistant claim never displaces what the user said.
+ * Of the retrieved rows giving one subject a value at one scope, the newest. A row the user did not type is an
+ * episode (A4 §3.0): it competes with no statement, so a newer tool result or assistant claim never displaces what
+ * the user said. Two scopes' values are two items (A4 §2): which one a cue sees is visibility's (D5's override, P3.5).
  */
 function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
   const byKey = new Map<string, T>(),
@@ -249,7 +308,7 @@ function liveCopulaLatest<T extends { rec: MemoryRecord }>(rows: T[]): T[] {
       rest.push(row);
       continue;
     }
-    const k = `${a.s}\0${a.p}`,
+    const k = `${row.rec.scope ?? "\0"}\0${a.s}\0${a.p}`,
       prev = byKey.get(k);
     if (!prev) {
       byKey.set(k, row);
@@ -1091,9 +1150,14 @@ export class AgentMemory {
     // (the diary, D6) is never a pin: a prompt's own episode would otherwise brief a rule its rule row no longer holds.
     const stated = untyped ? [] : rulesIn(rec.text);
     const rules = rec.kind === "constraint" ? stated : [];
-    const root = rules.length > 0 || (rec.kind === "fact" && namesRootSlot(rec.text));
-    const scope = opts.scope ?? (this.place && rowScope(rec.text, root, this.place));
+    // D7: a typed statement of a slot is keyed by it (A4 §3.1); a rule row and an episode state none (D6).
+    const slots = untyped || rec.kind === "episode" || rules.length ? [] : slotsIn(rec.text);
+    const root = rules.length > 0 || (slots.length > 0 && slots.every(({ slot }) => DEFAULT_SCOPES[slot] === "root"));
+    const scope = opts.scope ?? this.encodedScope(rec.text, root, slots);
     if (scope !== undefined) rec.scope = scope;
+    if (slots.length) rec.slots = slotRefs(slots);
+    const visible = opts.id ? undefined : this.restatedSlots(rec);
+    if (visible) return visible;
     const pin = !untyped && rec.kind !== "episode" && (opts.pin === true || pinsItself(rec.text, stated));
     if (pin && !rec.tags!.includes("pin")) rec.tags!.push("pin");
     rec.tags = writeAliasTags(rec.tags!, rec.text).filter((t) => {
@@ -1112,7 +1176,9 @@ export class AgentMemory {
         rec.validUntil = Math.min(rec.validUntil ?? Infinity, rec.at + INTENT_TTL_MS);
     }
     try {
-      const fact = untyped ? undefined : objectAsserted(rec.text);
+      // The semantic store keys a value by its subject, with no scope: only a row of unknown place puts there, so it
+      // never tombstones another scope's value (A4 §3.2). A slot's subject is the slot's (`objectAsserted`, R3 E8).
+      const fact = untyped || rec.scope !== undefined ? undefined : objectAsserted(rec.text);
       if (fact && !STATUS_OBJECT.test(fact.o)) this.semantic().put(fact.s, fact.p, fact.o, rec.at);
     } catch {}
     const c = compileNeedles(rec),
@@ -1120,6 +1186,9 @@ export class AgentMemory {
     i >= 0 && this.compiled.splice(i, 1);
     try {
       this.invalidateSameCopula(rec);
+    } catch {}
+    try {
+      this.supersedeSlots(rec);
     } catch {}
     try {
       this.supersedeRules(rec);
@@ -1180,15 +1249,106 @@ export class AgentMemory {
    * Only what the user typed supersedes: a tool result or the assistant's text is an episode (A4 §3.0, A6 §2.1).
    */
   private invalidateSameCopula(incoming: MemoryRecord): void {
-    if (isUntyped(incoming) || !copulaKey(incoming.text)) return;
+    if (isUntyped(incoming) || incoming.slots || !copulaKey(incoming.text)) return;
     for (const c of this.compiled) {
       if (c.rec.id === incoming.id || superseded(c.rec) || !samePlace(c.rec, incoming)) continue;
+      if (noteSlots(c.rec).length) continue;
       if (!contradicts(c.rec.text, incoming.text)) continue;
       c.rec.invalidBy = incoming.id;
       this.changed.add(c.rec.id);
       const old = legacySlot(c.rec);
       if (old && legacySlot(incoming)) recordSupersession(this.dir, old, incoming.at, undefined, c.rec.scope);
     }
+  }
+
+  /**
+   * D7's `default_scope` (A4 §3.2): where an encoded row goes (`rowScope`), and a root slot naming no scope goes to the
+   * working scope when that scope already has its own row of the slot. None where the place is unknown.
+   */
+  private encodedScope(text: string, root: boolean, slots: readonly SlotStatement[]): string | undefined {
+    if (!this.place) return undefined;
+    const scope = rowScope(text, root, this.place);
+    const working = this.place.working();
+    if (scope !== "" || !slots.length || !root || !working) return scope;
+    const own = slots.some(({ slot }) => this.slotRows(slot).some((row) => row.scope === working));
+    return own ? working : scope;
+  }
+
+  /** The live typed rows that set a slot's value, newest first. */
+  private slotRows(slot: SlotId): MemoryRecord[] {
+    return this.compiled
+      .map((c) => c.rec)
+      .filter((row) => !superseded(row) && slotValue(row, slot) !== undefined)
+      .sort((a, b) => compareRecency(b, a));
+  }
+
+  /**
+   * The row whose value of a slot is visible at a scope (A4 §3.2, D5): the newest at the scope itself, else at the
+   * nearest ancestor that has one. A row of unknown scope is visible everywhere.
+   */
+  private visibleSlot(slot: SlotId, scope: string | undefined): MemoryRecord | undefined {
+    const rows = this.slotRows(slot);
+    if (scope === undefined) return rows[0];
+    for (let at: string | undefined = scope; at !== undefined; at = parentScope(at)) {
+      const own = rows.find((row) => (row.scope ?? at) === at);
+      if (own) return own;
+    }
+    return undefined;
+  }
+
+  /**
+   * A4 §3.2's equal write: a typed fact whose every slot sets the value already visible at its scope writes no row;
+   * each visible row counts the restatement (`reps`) and is returned in its place. D30's `restate` and `confirm`
+   * events are P5.1's.
+   */
+  private restatedSlots(rec: MemoryRecord): MemoryRecord | undefined {
+    const refs = rec.slots ?? [];
+    if (rec.kind !== "fact" || !refs.length || refs.some((ref) => ref.v === undefined || ref.x?.length)) return;
+    const visible = refs.map((ref) => this.visibleSlot(ref.k, rec.scope));
+    if (visible.some((row, at) => !row || slotValue(row, refs[at]!.k) !== refs[at]!.v)) return;
+    for (const row of new Set(visible as MemoryRecord[])) {
+      row.reps = (row.reps ?? 0) + 1;
+      this.changed.add(row.id);
+    }
+    this.flush(true);
+    return visible[0];
+  }
+
+  /**
+   * A4 §3.1–3.2 by key: a typed slot statement supersedes, at its own scope, every older value it sets otherwise or
+   * invalidates (`use A not B`, a retraction, which has no successor). A row goes to history once every value it
+   * sets is gone (a retraction row, once each value it retracts is set again), so a row stating two slots keeps the
+   * one still true. Each value it ends is logged as D31's `stale_for` at the row's scope, but for the descendants
+   * that hold their own value of the slot (`recordSlotChanges`).
+   */
+  private supersedeSlots(incoming: MemoryRecord): void {
+    const refs = incoming.slots ?? [];
+    if (!refs.length) return;
+    const rows = this.compiled.map((c) => c.rec).filter((row) => !superseded(row) && !isUntyped(row));
+    const ended = new Map<string, SlotChange>();
+    const end = (slot: SlotId, value: string, scope: string | undefined, typed: string) => {
+      const key = `${slot}\0${value}\0${scope ?? "\0"}`;
+      if (!ended.has(key)) ended.set(key, { slot, value, typed, ...(scope === undefined ? {} : { scope }) });
+    };
+    for (const row of rows) {
+      if (row === incoming || !samePlace(row, incoming) || !newerThan(incoming, row)) continue;
+      const own = noteSlots(row);
+      const lost = own.filter((ref) => ref.v !== undefined && endsValue(refs, ref.k, ref.v));
+      for (const ref of lost) end(ref.k, ref.v!, row.scope, typedValue(row.text, ref.k, ref.v!));
+      if (!lost.length && !own.some((ref) => ref.x?.some((old) => setsValue(refs, ref.k, old)))) continue;
+      if (slotsEnded(row, [...rows.filter((other) => other !== row), incoming])) {
+        row.invalidBy = incoming.id;
+        this.changed.add(row.id);
+      }
+    }
+    for (const ref of refs)
+      for (const old of ref.x ?? []) end(ref.k, old, incoming.scope, typedValue(incoming.text, ref.k, old));
+    const live = rows.filter((row) => !superseded(row));
+    const changes = [...ended.values()].map((change) => ({
+      ...change,
+      except: overridingScopes(live, change.slot, change.scope),
+    }));
+    recordSlotChanges(this.dir, changes, incoming.at);
   }
 
   /**
@@ -1204,12 +1364,12 @@ export class AgentMemory {
   }
 
   /**
-   * A6 §3 `eden memory forget --all-in <scope>`: every keyed row of the scope (a row stating D9 rules) goes to
-   * history, as a forget's do. Returns how many.
+   * A6 §3 `eden memory forget --all-in <scope>`: every keyed row of the scope (a row stating D9 rules or D7 slots)
+   * goes to history, as a forget's do. Returns how many.
    */
   forgetScope(scope: string): number {
     const keyed = this.compiled.filter(
-      (c) => !superseded(c.rec) && c.rec.rules?.length && (c.rec.scope ?? "") === scope,
+      (c) => !superseded(c.rec) && (c.rec.rules?.length || noteSlots(c.rec).length) && (c.rec.scope ?? "") === scope,
     );
     this.toHistory(keyed);
     return keyed.length;
@@ -1319,6 +1479,8 @@ export class AgentMemory {
         out: MemoryRecord[] = [],
         items = list.map(observedItem).filter((i) => i.text),
         srcTags = (it: ObservedItem): string[] => (it.src ? [`src:${it.src}`] : []),
+        // Rows whose place is known are scoped: the unscoped semantic store takes none of their values (`remember`).
+        placed = !!this.place?.repo(),
         batchLive = new Map<string, string>(),
         lanes = items.map((it) => encodeLane(it.text)),
         durables = items.map((it, i) => (lanes[i] === "icl" || lanes[i] === "narrative" ? [] : this.durables(it.text))),
@@ -1362,8 +1524,10 @@ export class AgentMemory {
         let coveredChars = 0,
           skippedIdentity = false;
         for (const [j, text] of durables[i]!.entries()) {
+          // D7: a statement of a slot is a fact keyed by it (A4 §3.1).
+          const slotted = !it.untyped && slotsIn(text).length > 0;
           try {
-            const fact = it.untyped ? undefined : objectAsserted(text);
+            const fact = it.untyped || placed ? undefined : objectAsserted(text);
             if (fact) {
               const store = this.semantic(),
                 live = store.get(fact.s, fact.p);
@@ -1405,16 +1569,18 @@ export class AgentMemory {
                 ? "constraint"
                 : LEGACY_RULE.test(withoutExcludedWording(text))
                   ? "constraint"
-                  : new RegExp(
-                        String.raw`\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|` +
-                          String.raw`standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|` +
-                          String.raw`deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b`,
-                        "i",
-                      ).test(text) ||
-                      (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text))
-                    ? "episode"
-                    : "fact";
-          if (kind === "fact" && !asQuestion && !pin)
+                  : slotted
+                    ? "fact"
+                    : new RegExp(
+                          String.raw`\b(ran out|shipped |decided |settled on|going with|agreed to|switched to|` +
+                            String.raw`standardized on|standardized to|rolled back|pinned to|migrated to|reverted to|` +
+                            String.raw`deprecated |cut over to|turned on|turned off|enabled the|disabled the)\b`,
+                          "i",
+                        ).test(text) ||
+                        (/\bflake\b/i.test(text) && /\.[A-Za-z]{1,12}\b/.test(text))
+                      ? "episode"
+                      : "fact";
+          if (kind === "fact" && !asQuestion && !pin && !slotted)
             try {
               if (!objectAsserted(text)) kind = "episode";
             } catch {
@@ -1452,12 +1618,15 @@ export class AgentMemory {
     }
   }
 
-  /** A message's durable statements as rows hold them: "X instead of Y" as X alone, the store's redaction applied. */
+  /**
+   * A message's durable statements as rows hold them: "X instead of Y" as X alone, the store's redaction applied. A
+   * slot statement keeps its words: its keys hold what it invalidates (A4 §3.1).
+   */
   private durables(text: string): string[] {
     return extractDurable(text).map((raw) => {
       let said = raw;
       try {
-        const asserted = objectAsserted(said);
+        const asserted = slotsIn(said).length ? undefined : objectAsserted(said);
         if (asserted && /\b(?:instead of|rather than)\b/i.test(said))
           said = asserted.p === "uses" ? `Use ${asserted.o}.` : `The ${asserted.s} is ${asserted.o}.`;
       } catch {}

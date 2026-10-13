@@ -167,7 +167,7 @@ describe("M31.4 movies are not SemanticStore triples after sleep", () => {
         for (const call of track.mock.calls) {
           expect(tripleTouchesMovie({ s: String(call[0] ?? ""), o: String(call[2] ?? "") })).toBe(false);
         }
-        expect(factObject(store.get("auth", "is"))).toMatch(/Clerk/i);
+        expect(factObject(store.get("auth provider", "is"))).toMatch(/Clerk/i);
         expect(store.live().some((row) => /clerk/i.test(row.o))).toBe(true);
       } finally {
         track.mockRestore();
@@ -250,7 +250,7 @@ describe("M31.4 recsys / ICL false positives", () => {
       await sleep({ dir, mem });
       const store = new SemanticStore(dir);
       expect(factObject(store.get("chairperson", "is"))).toMatch(/Bob/i);
-      expect(factObject(store.get("auth", "is"))).toMatch(/Clerk/i);
+      expect(factObject(store.get("auth provider", "is"))).toMatch(/Clerk/i);
       expect(store.live().some((row) => /superbad|hangover|matrix/i.test(`${row.s} ${row.o}`))).toBe(false);
     });
   });
