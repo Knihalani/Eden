@@ -183,7 +183,7 @@ function saidIn(text: Said, sentences: readonly Said[]): boolean {
   });
 }
 
-/** A slot as a legacy row states it until P3.3's keys: its subject's words and its value. */
+/** A fact of no D7 slot, as the legacy copula reader states it: its subject's words and its value. */
 interface LegacySlot {
   subject: string;
   value: string;
@@ -206,8 +206,9 @@ function copulaSlot(sentence: string): LegacySlot | undefined {
 }
 
 /**
- * A row read as a slot until P3.3's keys: a fact whose text the legacy copula reader parses with a slot-shaped value
- * (`copulaSlot`). Any other row is read as an episode.
+ * A fact read as a slot of its own subject: one whose text the legacy copula reader parses with a slot-shaped value
+ * (`copulaSlot`). Since P3.3 a D7 slot's subject is the slot's own label (`objectAsserted`). Any other row is read as
+ * an episode.
  */
 export function legacySlot(note: ProvenanceNote): LegacySlot | undefined {
   if (noteKindToken(note) !== "fact") return undefined;
@@ -248,9 +249,9 @@ function asserts(lower: string, value: string, bare: boolean): boolean {
 }
 
 /**
- * D26's slot rule: one sentence holds the slot's value, asserted, and one of its subject's words (until P3.3, a
- * subject's words stand for its aliases). D7's bare `use V` also states it: until P3.3's value classes, the value is
- * taken to name one slot, the row's.
+ * D26's slot rule for a fact of no D7 slot (`statesKeyedSlot` reads D7's): one sentence holds the value, asserted,
+ * and one of its subject's words, which stand for its aliases. D7's bare `use V` also states it, the value taken to
+ * name one slot, the row's.
  */
 function statesSlot(slot: LegacySlot, sentences: readonly Said[]): boolean {
   const value = contentTokens(slot.value);

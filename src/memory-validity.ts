@@ -1,13 +1,21 @@
 /**
- * Validity (A4 §5.1 step 5) for the legacy store, until P0.3 persists `invalid_at` and P2.1 and P3.3 bring keys.
- * Only D7's and A4 §3.1's own forms invalidate, read narrowly, because a false invalidation silently drops a memory
- * the user still needs:
- * - a **retraction** (A4 §3.1): "we no longer use Redis", "we don't use Jest anymore", "we're not using Jest
- *   anymore", "we dropped Sentry";
- * - a **switch** (D7): "we switched apps/web from Auth0 to Clerk" (or moved, migrated). The words before "from" tie it
- *   to a slot as far as text can: a scope path ("apps/web") and subject words ("the queue"); a sentence naming another
- *   scope, or lacking the subject, keeps the value. D7's "use A, not B" waits for P3.3: without a slot to tie it to,
- *   "use POST instead of GET" is a coding instruction, not a switch;
+ * Validity (A4 §5.1 step 5): the clause-level log (`validity.jsonl`) that every delivery point reads text against.
+ * Rows that hold keys go to history by them (`invalid_at`: D9's rules since P2.1, D7's slots since P3.3); this log is
+ * for what holds no key: gists, episodes (D31's `stale_for`) and the clauses of other sessions' rows. Only D7's and
+ * A4 §3.1's own forms invalidate, read narrowly, because a false invalidation silently drops a memory the user still
+ * needs:
+ * - a **slot's ended value** (D7, P3.3), logged by the store that encodes the statement (`recordSlotChanges`): each
+ *   value a typed slot statement superseded, retracted or invalidated (`use A not B`), at the scope it was true at
+ *   and below it, but for the descendants that hold their own value of the slot (D31). A clause carries it by one of
+ *   its value's names, beside the slot's alias when the name is an everyday word or a version ("render the form" is
+ *   no host); a clause giving another subject the value ("the cache is postgres") keeps it. The prompt's own reading
+ *   below leaves such a value to the store, so it is not held at every scope;
+ * - a **retraction** (A4 §3.1) of a value of no D7 slot: "we no longer use Redis", "we're not using Sentry anymore",
+ *   "we dropped Sentry";
+ * - a **switch** (D7) of a value of no D7 slot: "we migrated the queue from SQS to Kafka" (or switched, moved). The
+ *   words before "from" tie it to a subject as far as text can: a scope path ("apps/web") and subject words ("the
+ *   queue"); a sentence naming another scope, or lacking the subject, keeps the value. Without a slot, "use POST
+ *   instead of GET" is a coding instruction, not a switch;
  * - a **revocation** (A4 §3.1, D9): "you can merge PRs yourself now", whose verb is one of A7 §5's action classes. It
  *   invalidates a rule that forbids an action of the same class on the same object (`forbids`);
  * - an **opposition** (A4 §3.1, L8; P2.1): a typed policy stated outright ("never squash") overturns what older text
@@ -26,10 +34,10 @@
  *
  * Only typed text invalidates (A4 §3.0, A6 §2.1): the human Submit's prompt, without its pasted spans
  * (`<pasted_content>`, fenced code, `>` quotes, runs of 3 or more lines without sentence punctuation), and without
- * questions or conditionals, after the store's own secret redaction. A retracted or switched-from value is one token
- * that ends its clause, capitalized or identifier-shaped and not a path (D7's rule for a value outside a slot's value
- * class; P3.3 brings the classes), so a common word ("array", "src") or the first word of a longer name ("Node" of
- * "Node 16") never is one. The same shape holds where the value is matched: a value shaped by its capitals alone
+ * questions or conditionals, after the store's own secret redaction. A retracted or switched-from value of no slot is
+ * one token that ends its clause, capitalized or identifier-shaped and not a path (D7's rule for a value outside a
+ * slot's value class), so a common word ("array", "src") or the first word of a longer name ("Node" of "Node 16")
+ * never is one. The same shape holds where the value is matched: a value shaped by its capitals alone
  * ("Make", "GET") is matched as typed, and where it opens a sentence only as the sentence's subject ("Make is …",
  * not "Make sure …"); a value with a digit, a dot or an underscore ("Auth0") is matched in any case.
  *
@@ -37,8 +45,8 @@
  * clause of an older row or gist that still names the value as a whole token, and each sentence with a clause that
  * forbids the revoked action (its `;` clauses qualify the rule). The sentence stating the change stays, and so does a
  * rule clause a retraction names (only a revocation supersedes a rule). An episode carrying an invalidated value is
- * D31's `stale_for`: a cue that asks about history keeps it. A whole clause goes, so a still-valid part of it goes too,
- * until P3.3's slots split them.
+ * D31's `stale_for`: a cue that asks about history keeps it. A whole clause goes, so a still-valid part of it goes
+ * too; a row that keys its slots goes to history only when every value it sets is gone.
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

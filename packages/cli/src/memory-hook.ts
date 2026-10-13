@@ -201,7 +201,9 @@ function additional(event: string, packet: string): Record<string, unknown> | nu
  *   follow-up: a keyed row is no candidate of the lexical path, so this is where its fact still reaches Claude).
  * Pins are not filtered by scope: the likely scope is P3.2's read set, so every pin is in it. Gists, P0.2's carrier
  * between sessions, are no longer briefed: since P0.5 a later session retrieves the same row at its Submit. `Updated:`
- * items wait for P3.3's keyed slots (no lookup from a delivered cid to its current value before them).
+ * items (values changed since the repo's last session) are P3.4's: since P3.3 a delivered slot's cid names its
+ * `(scope, slot)`, whose live keyed row holds the current value, and P3.4's mining is what changes a value between
+ * sessions.
  */
 function briefing(mem: ReturnType<typeof openMemory>, root: string): { notes: ProvenanceNote[]; proposal?: Proposal } {
   const seen = new Set<string>(),
