@@ -163,3 +163,28 @@ describe("slot rows at the hook", () => {
     expect(packet).not.toMatch(/uses postgres/);
   });
 });
+
+describe("review round 2: a statement split by its slots' scopes, then a switch", () => {
+  test("apps/web cues after vitest -> jest never show the split statement's old test runner", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    readIn("s1", "p0", "apps/web/app/login.ts");
+    submit("s1", "We use pnpm and vitest.", "p1");
+    hook("Stop", "s1", { prompt_id: "p1", last_assistant_message: "OK" });
+    readIn("s1", "p1b", "apps/web/app/login.ts");
+    submit("s1", "We switched from vitest to jest.", "p2");
+    hook("Stop", "s1", { prompt_id: "p2", last_assistant_message: "OK" });
+    tick(86_400_000);
+    hook("SessionStart", "s2", { source: "startup" });
+    const cues = [
+      "how do we run the unit tests for apps/web/app/login.ts?",
+      "what do we use to install packages and run tests in apps/web/app/login.ts?",
+      "which package manager do we use for apps/web/app/login.ts?",
+      "pnpm install fails in apps/web/app/login.ts, what do we use?",
+    ];
+    const packets = cues.map((cue, i) => {
+      readIn("s2", `q${i}a`, "apps/web/app/login.ts");
+      return submit("s2", cue, `q${i}`);
+    });
+    expect(packets.join("\n")).not.toMatch(/use pnpm and vitest/);
+  });
+});

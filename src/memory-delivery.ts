@@ -29,13 +29,18 @@ export function isPinnedIntention(r: MemoryRecord): boolean {
  * or an opposition. When the cue asks about history, episodes keep what they say (D31 `stale_for`), except what the
  * user asked to forget (A6 §3); facts and rules do not.
  */
-export function stillValid(notes: MemoryRecord[], invalid: readonly Invalidation[], prompt: string): MemoryRecord[] {
+export function stillValid(
+  notes: MemoryRecord[],
+  invalid: readonly Invalidation[],
+  prompt: string,
+  readSet: readonly string[] = [],
+): MemoryRecord[] {
   const history = asksHistory(prompt);
   return notes.flatMap((note) => {
     const kind = noteKindToken(note);
     const episode = kind !== "rule" && kind !== "fact" && !isPinnedIntention(note);
     const said = withoutExpiredIntents(note.text, note.at);
-    const text = validText(said, note.at, history && episode ? invalid.filter(isForget) : invalid, note.scope);
+    const text = validText(said, note.at, history && episode ? invalid.filter(isForget) : invalid, note.scope, readSet);
     return text ? [{ ...note, text }] : [];
   });
 }
@@ -49,6 +54,8 @@ export interface DeliveryCue {
   /** D27's shadow set: the sentences of the instruction files in the window (none for a caller without one). */
   shadow?: readonly Said[];
   invalid: readonly Invalidation[];
+  /** The folders the prompt is read at (A4 §2's read set), when the caller knows its place. */
+  readSet?: readonly string[];
 }
 
 /** How many notes each step dropped, in the order the steps run. */
@@ -75,7 +82,7 @@ export function selectNotes(
   cue: DeliveryCue,
   refractory: (notes: MemoryRecord[]) => MemoryRecord[],
 ): { notes: MemoryRecord[]; drops: DeliveryDrops } {
-  const valid = stillValid(notes, cue.invalid, cue.prompt);
+  const valid = stillValid(notes, cue.invalid, cue.prompt, cue.readSet);
   const admitted = admitNotes(valid, cue.parts);
   const residual = residualSentences(cue.residual);
   const said = admitted.filter((note) => !isResidualNote(note, residual));
