@@ -6,21 +6,22 @@
  *
  * - **Values.** A value of a slot's class is named by its canonical form ("postgres" for "PostgreSQL"). A value
  *   outside the class counts only for a pattern that names the slot (its subject or D7's `deploy`/`PRs go` forms), and
- *   only as one capitalized or identifier-shaped token that is not in the status lexicon ("the auth provider is
- *   Zitadel"; never "the auth is broken"). A version slot's value is a version number, alone or after the slot's
- *   alias ("node 22").
+ *   only as one capitalized or identifier-shaped token with a letter that is not in the status lexicon, no
+ *   placeholder, day, month or colour ("the auth provider is Zitadel"; never "the auth is broken", "the deploy is
+ *   Friday"). A version slot's value is a version number, alone or after the slot's alias ("node 22"). A value read by
+ *   its class alone ends its clause, but for a version or an edition word (`yarn berry` → yarn, `postgres 16`): a noun
+ *   after it names a part of it ("jest mocks", "the yarn lockfile").
  * - **Forms** (D7, its additional R8 forms, and A4 §3.1's retractions), read clause by clause:
  *   - `S is V`, `S = V`, `S: V`; `S is not V` invalidates V; `S is A, not B` sets A and invalidates B;
  *   - `use/using/with A for B` (B names the slot; also `uses A as its B`), and `…, not C` invalidates C;
  *   - `use A (not|instead of|rather than) B` sets A and invalidates B, in the slot whose class holds them;
  *   - `(we|<scope>) (switched|moved|migrated) (X) (from B) to A` and `… to A from B`, X naming the slot or nothing;
  *   - a bare `(we|i) (always) use V (here)`, when V is in exactly one slot's class;
- *   - retractions: `we (don't|do not|no longer) use V (anymore)`, `we're dropping V`, `we dropped V`,
- *     `we're not (on|using) V anymore`: V invalidated, with no successor;
- *   - `we're (on|using|now on) V`; `our <alias> run(s) on V`; `we (deploy|host) (to|on) V`; `PRs go (against|into) V`;
- *     `<scope path> (uses|runs) V`;
- *   - a trailing qualifier word after V (`yarn berry` → yarn), and words that say where or when, not what ("here",
- *     "now", "across the repo", "last month");
+ *   - retractions, D7's and A4 §3.1's only: `we (don't|do not|no longer) use V (anymore)`, `we're dropping V`, `we
+ *     dropped V`, `we're not (on|using) V anymore`, `we're no longer on V`: V invalidated, with no successor;
+ *   - `we're (on|using|now on) V`; `our <alias> run(s) on V`; `we (deploy|host) (to|on) V`, with no other subject or
+ *     object; `PRs go (against|into) V`; `<scope path> (uses|runs) V`;
+ *   - words that say where or when, not what ("here", "now", "across the repo", "last month");
  *   - `it's V` after a clause about a slot, in the same sentence ("we're not on heroku anymore, it's render").
  * - **No slot** in a question, a conditional ("if we use pnpm, …"), a reminder ("don't forget to use …"), an
  *   instruction that only mentions a value ("use vitest's fake timers"), a status ("the db is down"), or a value of
@@ -351,7 +352,7 @@ const VERSION_ALIAS = ALIASES.filter(({ slot }) => TABLE[slot].values === "versi
 /** Words a form names a slot by besides its aliases and its values' names (`PRs go against V`, `we host on V`). */
 const FORM_WORDS: Partial<Record<SlotId, readonly string[]>> = {
   "branch.base": ["prs", "pull requests"],
-  "deploy.target": ["host", "hosts"],
+  "deploy.target": ["host", "hosts", "hosted", "deployed"],
 };
 
 /** A slot's words: its aliases, its values' names and its forms' own words. */
@@ -408,40 +409,33 @@ const FILLER = new RegExp(
     String.raw`since \S+))+$`,
   "i",
 );
-const LEADING = /^(?:the|our|my|its|their|a|an|this|that)\s+/i;
+const LEADING = /^(?:(?:the|our|my|its|their|a|an|this|that)\s+)+/i;
 /** A token D7 accepts outside a class: capitalized, or with a digit, an inner capital, a dot, a hyphen or an `@`. */
 const SHAPED = /^(?:[A-Z][\w.@+-]*|[\w.@+-]*(?:\d|[a-z][A-Z]|\w[._@-]\w)[\w.@+-]*)$/;
-/** Words that are never a value outside a class, whatever their case. */
-const NOT_A_VALUE = new Set([
-  "it",
-  "this",
-  "that",
-  "there",
-  "here",
-  "them",
-  "one",
-  "being",
-  "something",
-  "nothing",
-  "none",
-  "different",
-  "same",
-  "custom",
-]);
+/**
+ * Words that are never a value outside a class, whatever their case: pronouns and states, placeholders, and the
+ * days, months and colours a status or a plan names ("The deploy is Friday", "CI is Red again").
+ */
+const NOT_A_VALUE = new Set(
+  (
+    "it this that there here them one being something nothing none different same custom todo tbd tba wip n/a na " +
+    "unknown yes no true false null undefined monday tuesday wednesday thursday friday saturday sunday january " +
+    "february march april may june july august september october november december red green yellow blue orange " +
+    "white grey gray purple pink"
+  ).split(" "),
+);
+/**
+ * What may follow a value its class reads (`yarn berry`, `postgres 16`): a version or an edition word. A noun after
+ * it names a part of the value, not the value ("jest mocks", "the yarn lockfile", "Vercel previews").
+ */
+const QUALIFIER = /^(?:v?\d+(?:\.\d+){0,2}(?:\.x)?|berry|classic|modern|lts|stable|latest|nightly|canary|beta)$/i;
+/** A clause longer than this is no statement of a slot, and is not read (every form fits well under it). */
+const CLAUSE_MAX = 300;
 
-/** A value phrase without its article, its closing punctuation and the words that say where or when. */
+/** A value phrase without its articles, its closing punctuation and the words that say where or when. */
 function trimmed(phrase: string): string {
-  let text = phrase.trim().replace(/[.,;:!?)"'`]+$/, "");
-  for (let again = true; again;) {
-    const next = text
-      .replace(FILLER, "")
-      .replace(LEADING, "")
-      .replace(/[.,;:!?)"'`]+$/, "")
-      .trim();
-    again = next !== text;
-    text = next;
-  }
-  return text;
+  const end = /[.,;:!?)"'`]+$/;
+  return phrase.trim().replace(end, "").replace(FILLER, "").replace(end, "").replace(LEADING, "").trim();
 }
 
 /** The class name a phrase opens with: its slot, canonical value, the name as typed, and what follows it. */
@@ -478,10 +472,10 @@ function leadingVersion(phrase: string, slot?: SlotId): { slot?: SlotId; value: 
 type Reading = { slot: SlotId; classOnly?: boolean } | { slot?: undefined };
 
 /**
- * The value a phrase gives, read as `reading` allows (see the header): a class name at its start (with one qualifier
- * word after it, or anything after it when the slot is named), a version, or, for a named slot, one shaped token that
- * is no status word and names no slot itself ("tests run in CI" names no test runner). `named` are the slots the
- * sentence names, which an everyday word needs.
+ * The value a phrase gives, read as `reading` allows (see the header): a class name at its start (with a version or
+ * an edition word after it, or anything after it when the slot is named), a version, or, for a named slot, one shaped
+ * token with a letter that is no status word, no placeholder and names no slot itself ("tests run in CI" names no test
+ * runner). `named` are the slots the sentence names, which an everyday word needs.
  */
 function valueOf(
   raw: string,
@@ -501,13 +495,13 @@ function valueOf(
       return [{ slot: version.slot, value: version.value, typed: version.value }];
   }
   const names = leadingName(phrase, slot).filter(
-    (name) => (slot || name.rest.split(/\s+/).filter(Boolean).length <= 1) && !STATUS_LEXICON.has(name.rest),
+    (name) => (slot || !name.rest || QUALIFIER.test(name.rest)) && !STATUS_LEXICON.has(name.rest),
   );
   const fit = names.filter((name) => !commonWord(name.typed) || named.includes(name.slot));
   if (fit.length) return fit;
   if (!slot || reading.classOnly || names.length) return [];
   const token = slot === "gh.account" ? accountToken(phrase) : phrase;
-  if (!token || /\s|\//.test(token) || !SHAPED.test(token)) return [];
+  if (!token || /\s|\//.test(token) || !SHAPED.test(token) || !/[a-z]/i.test(token)) return [];
   const lower = token.toLowerCase();
   if (STATUS_LEXICON.has(lower) || NOT_A_VALUE.has(lower) || slotOfAlias(lower)) return [];
   return [{ slot, value: lower, typed: token }];
@@ -613,10 +607,14 @@ const REPLACED = new RegExp(
   String.raw`^${SUBJECT}${ADVERBS}\s+(?:replaced|swapped)\s+(.+?)\s+(?:with|for)\s+(.+)$`,
   "i",
 );
+/**
+ * D7's and A4 §3.1's retractions only: `we (don't|do not|no longer) use V (anymore)`, `we're dropping V`, `we dropped
+ * V`, `we're not (on|using) V anymore`, `we're no longer (on|using) V`. V must end its clause (`valued`).
+ */
 const RETRACT = new RegExp(
-  String.raw`^(?:we|i)(?:'re|'ve|\s+are|\s+have)?${ADVERBS}\s+(?:(?:don'?t|do not|no longer)\s+(?:use|run|need)|` +
-    String.raw`(?:aren'?t|are not|not|no longer)\s+(?:on|using|running)|` +
-    String.raw`dropping|dropped|ditched|removed|got rid of|stopped using|moving off|moved off)\s+(.+)$`,
+  String.raw`^we${ADVERBS}\s+(?:(?:don'?t|do not|no longer)\s+use|(?:'ve\s+|have\s+)?dropped)\s+(.+)$|` +
+    String.raw`^we(?:'re|\s+are)${ADVERBS}\s+(?:dropping|no longer\s+(?:on|using))\s+(.+)$|` +
+    String.raw`^we(?:'re\s+not|\s+are\s+not|\s+aren'?t)\s+(?:on|using)\s+(.+?\s+any ?more)[.!]*$`,
   "i",
 );
 const BARE_USE = new RegExp(
@@ -624,7 +622,7 @@ const BARE_USE = new RegExp(
     String.raw`(?:use|went with|go with|chose|picked|settled on|standardized on|decided on)\s+(.+)$`,
   "i",
 );
-const ON = /^(?:we|i)(?:'re|\s+are|'m|\s+am)\s+(?:now\s+)?(?:on|using|running)\s+(?:now\s+)?(.+)$/i;
+const ON = /^we(?:'re|\s+are)\s+(?:now\s+)?(?:on|using)\s+(?:now\s+)?(.+)$/i;
 const RUNS_ON = new RegExp(
   String.raw`^(?:(?:our|the|all)\s+)?(${ALIAS})\s+(?:run|runs|go|goes|are run|is run|use|uses|are using|is using)` +
     String.raw`(?:\s+(?:on|with|in|through|via|by|to|against))?\s+(.+)$`,
@@ -643,11 +641,8 @@ const VERB_SLOTS: Readonly<Record<string, SlotId>> = {
   install: "pkg.manager",
   package: "pkg.manager",
 };
-const DEPLOY = new RegExp(
-  String.raw`^(?:we|i|it|the\s+[\w-]+(?:\s+[\w-]+)?|\S+\/\S+)\s+(?:(?:now|currently|always)\s+)?` +
-    String.raw`(?:deploy|deploys|host|hosts|is deployed|is hosted)\s+(?:\S+\s+){0,3}?(?:to|on)\s+(.+)$`,
-  "i",
-);
+/** D7's `we (deploy|host) (to|on) V`: no other subject or object, since a deploy of something is that thing's. */
+const DEPLOY = /^we\s+(?:(?:now|currently|always)\s+)?(?:deploy|host)\s+(?:to|on)\s+(.+)$/i;
 const PRS = /^(?:our\s+|all\s+)?(?:prs|pull requests)\s+(?:go|goes|should go|target)\s+(?:against|into|to)\s+(.+)$/i;
 const PATH_USES = /^\S+\/\S+\s+(?:uses|runs|runs on|is on)\s+(.+)$/i;
 const ANAPHORA = /^(?:now\s+)?(?:it'?s|it is)\s+(?:now\s+)?(.+)$/i;
@@ -696,7 +691,9 @@ function changeOf(sets: ReturnType<typeof valueOf>, olds: ReturnType<typeof valu
 /** `use A not B`: A and B in one slot's class (B's slot when A's is in none), A set and B invalidated. */
 function useNot(a: string, b: string, named: readonly SlotId[]): Found[] {
   const sets = valueOf(a, {}, named);
-  const olds = valueOf(b, {}, named);
+  // B may run on into the rest of the clause ("not npm for scripts"): its first word, then.
+  const whole = valueOf(b, {}, named);
+  const olds = whole.length ? whole : valueOf(b.split(/\s+/)[0]!, {}, named);
   if (sets.length) return changeOf(sets, olds);
   const old = olds[0];
   const set = old && valueOf(a, { slot: old.slot }, named)[0];
@@ -745,7 +742,7 @@ const READERS: readonly Reader[] = [
   },
   (clause, named) => {
     const match = RETRACT.exec(clause);
-    const gone = match ? valueOf(match[1]!, {}, named) : [];
+    const gone = match ? valueOf(match[1] ?? match[2] ?? match[3]!, {}, named) : [];
     const pick = gone.find((found) => named.includes(found.slot)) ?? gone[0];
     return pick ? [{ slot: pick.slot, was: [pick.value] }] : undefined;
   },
@@ -786,7 +783,8 @@ const REMINDER = /^(?:don'?t|do not|never) forget to\b|^(?:remember|make sure) t
 
 /**
  * The statements of one sentence, a question, a conditional or a reminder giving none. A clause of a value alone
- * after a clause read by its class is read the same way ("we use pnpm and vitest").
+ * after a clause read by its class is read the same way ("we use pnpm and vitest"). A slot gets one value in a
+ * sentence, its first.
  */
 function sentenceStatements(sentence: string): Found[] {
   const plain = sentence.trim().replace(LEAD, "");
@@ -796,6 +794,7 @@ function sentenceStatements(sentence: string): Found[] {
   let byClass = false;
   for (const clause of clausesOf(plain)) {
     if (ASKS.test(clause)) break;
+    if (clause.length > CLAUSE_MAX) continue;
     const context = [...named, ...found.map((f) => f.slot)];
     let read: Found[] | undefined;
     for (const reader of READERS) if ((read = reader(clause, context, found))) break;
@@ -803,7 +802,8 @@ function sentenceStatements(sentence: string): Found[] {
       ? read
       : (valued(clause, context) ?? (byClass ? setByClass(clause, context) : []));
     byClass = !read?.length && stated.length > 0;
-    found.push(...stated);
+    // One value per slot in a sentence: a later clause's names a part of it ("postgres, it's PG15").
+    found.push(...stated.filter((f) => f.value === undefined || !found.some((o) => o.slot === f.slot && o.value)));
   }
   return found;
 }

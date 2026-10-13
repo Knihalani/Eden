@@ -222,6 +222,12 @@ describe("encoding a typed list (P0.2's follow-up, refiled to P3.3)", () => {
     expect(texts.some((text) => /stdout Reply/.test(text) && !/^Notes for this repo/.test(text))).toBe(false);
     expect(keyed(mem).map((row) => row.slots)).toEqual([[{ k: "db.engine", v: "sqlite" }]]);
   });
+
+  test("an indented line continues its item (review round 1)", () => {
+    const mem = store();
+    mem.observe([typed("Notes:\n1. The database is postgres, which we\n   chose for jsonb\n2. Logs go to stdout")]);
+    expect(mem.memories().some((row) => /postgres, which we chose for jsonb$/.test(row.text))).toBe(true);
+  });
 });
 
 describe("the same text typed in two folders (P3.2's follow-up)", () => {
