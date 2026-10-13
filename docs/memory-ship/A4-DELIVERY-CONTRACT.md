@@ -179,6 +179,14 @@ Every writer calls one `sanitizeForStore` gate: gitleaks rules plus the keyword 
 | different, same scope | supersede; `corrected=1`; `stale_for` on episodes in that scope and its non-overriding descendants |
 | different, inherited from an ancestor | insert at the child (override) |
 
+**Built in P3.3** (`src/memory-slots.ts`, `src/index.ts`; D7's note has the reading):
+- **Keys.** A typed row stating slots carries `slots: [{k, v?, x?}]`: the value each sets (`v`, canonical) and the values it invalidates (`x`). A rule row and an episode carry none. A typed fact written before P3.3 is read by its text.
+- **Scope.** A root slot naming no scope is written at `""` unless the working scope already has its own row of it; a working slot at the working scope (§2's rows' scopes). A row stating a root and a working slot goes to the working scope.
+- **Equal.** A typed fact whose every slot sets the value visible at its scope (its own row, else the nearest ancestor's) writes no row: each visible row counts it (`reps`). D30's events are P5.1's.
+- **Different.** A newer typed row at the same scope that sets the slot otherwise, or invalidates the value, ends it; a row goes to history (`invalid_at`) once every value it sets is ended (a retraction row, once each value it retracts is set again), and the incoming row is marked `corrected: 1`. Each ended value is logged as `stale_for` (D31's note). Rows of unknown scope compete with every scope's, as since P3.2.
+- **Inherited.** A different value from an ancestor is inserted at the child; what a reader then sees is §2's visibility, and D5's override is P3.5's.
+- The semantic store takes a value only from a row of unknown place, so it never tombstones another scope's (§2's note, P3.2's follow-up).
+
 ### 3.3 Encode on the hook path (delta)
 
 - `hwm.json` holds the byte offset of the last **complete** transcript line encoded, plus the uuid of the last typed prompt.
