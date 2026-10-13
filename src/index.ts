@@ -30,6 +30,7 @@ import { legacySlot } from "./memory-residual";
 import { rowScope, type EncodePlace } from "./memory-place";
 import {
   DEFAULT_SCOPES,
+  mayStateSlot,
   noteSlots,
   slotRefs,
   slotsIn,
@@ -222,8 +223,14 @@ function samePlace(a: Pick<MemoryRecord, "scope">, b: Pick<MemoryRecord, "scope"
   return a.scope === undefined || b.scope === undefined || a.scope === b.scope;
 }
 
+/** Whether a row may set or end a slot: its keys name it, or its text names it (`mayStateSlot`), read cheaply. */
+function mayHoldSlot(row: MemoryRecord, slot: SlotId): boolean {
+  return row.slots ? row.slots.some((ref) => ref.k === slot) : mayStateSlot(row.text, slot);
+}
+
 /** The value a row sets for a slot, if it sets one (`noteSlots`). */
 function slotValue(row: MemoryRecord, slot: SlotId): string | undefined {
+  if (!mayHoldSlot(row, slot)) return undefined;
   return noteSlots(row).find((ref) => ref.k === slot && ref.v !== undefined)?.v;
 }
 
@@ -252,10 +259,14 @@ function setsValue(refs: readonly SlotRef[], slot: SlotId, value: string): boole
  * or, for a retraction, every value it retracts, set again.
  */
 function slotsEnded(row: MemoryRecord, others: readonly MemoryRecord[]): boolean {
-  const newer = others.filter((other) => samePlace(other, row) && newerThan(other, row)).map(noteSlots);
-  const sets = noteSlots(row).filter((ref) => ref.v !== undefined);
+  const own = noteSlots(row);
+  const newer = others
+    .filter((other) => samePlace(other, row) && newerThan(other, row))
+    .filter((other) => own.some((ref) => mayHoldSlot(other, ref.k)))
+    .map(noteSlots);
+  const sets = own.filter((ref) => ref.v !== undefined);
   if (sets.length) return sets.every((ref) => newer.some((refs) => endsValue(refs, ref.k, ref.v!)));
-  const retracted = noteSlots(row).flatMap((ref) => (ref.x ?? []).map((old) => [ref.k, old] as const));
+  const retracted = own.flatMap((ref) => (ref.x ?? []).map((old) => [ref.k, old] as const));
   return retracted.length > 0 && retracted.every(([slot, old]) => newer.some((refs) => setsValue(refs, slot, old)));
 }
 
@@ -1336,7 +1347,8 @@ export class AgentMemory {
   private supersedeSlots(incoming: MemoryRecord): void {
     const refs = incoming.slots ?? [];
     if (!refs.length) return;
-    const rows = this.compiled.map((c) => c.rec).filter((row) => !superseded(row) && !isUntyped(row));
+    const typed = this.compiled.map((c) => c.rec).filter((row) => !superseded(row) && !isUntyped(row));
+    const rows = typed.filter((row) => refs.some((ref) => mayHoldSlot(row, ref.k)));
     const ended = new Map<string, SlotChange>();
     const end = (slot: SlotId, value: string, scope: string | undefined, typed: string) => {
       const key = `${slot}\0${value}\0${scope ?? "\0"}`;
@@ -1348,7 +1360,7 @@ export class AgentMemory {
       const lost = own.filter((ref) => ref.v !== undefined && endsValue(refs, ref.k, ref.v));
       for (const ref of lost) end(ref.k, ref.v!, row.scope, typedValue(row.text, ref.k, ref.v!));
       if (!lost.length && !own.some((ref) => ref.x?.some((old) => setsValue(refs, ref.k, old)))) continue;
-      if (slotsEnded(row, [...rows.filter((other) => other !== row), incoming])) {
+      if (slotsEnded(row, [...typed.filter((other) => other !== row), incoming])) {
         row.invalidBy = incoming.id;
         this.changed.add(row.id);
       }
@@ -1356,7 +1368,7 @@ export class AgentMemory {
     }
     for (const ref of refs)
       for (const old of ref.x ?? []) end(ref.k, old, incoming.scope, typedValue(incoming.text, ref.k, old));
-    const live = rows.filter((row) => !superseded(row));
+    const live = typed.filter((row) => !superseded(row));
     const changes = [...ended.values()].map((change) => ({
       ...change,
       except: overridingScopes(live, change.slot, change.scope),
