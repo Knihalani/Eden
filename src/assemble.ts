@@ -104,19 +104,21 @@ function candidateFromNote(n: NoteLike, text?: string): CandidateText {
 }
 
 /**
- * A heading over a numbered list ("Notes for this repo: 1. The database is sqlite 2. Logs go to stdout", its lines
- * joined): its items, each a statement of its own, so a later statement can supersede one (A5 `numbered-list`).
- * The items must count 1, 2, … so a number inside a sentence ("version 2. Then …") never splits one. The heading is
- * not a speaker label: no item carries it.
- */
-/**
- * A heading's numbered items ("Notes:\n1. …\n2. …"), or undefined. Where the text keeps its line breaks, an item ends
- * at its own: the next line is no part of it ("2. Logs go to stdout\nReply with just OK").
+ * A heading over a numbered list ("Notes for this repo: 1. The database is sqlite 2. Logs go to stdout"): its items,
+ * each a statement of its own, so a later statement can supersede one (A5 `numbered-list`). The items must count 1,
+ * 2, … so a number inside a sentence ("version 2. Then …") never splits one. The heading is not a speaker label: no
+ * item carries it. Where the text keeps its line breaks, an item ends at its line's end, with the indented lines that
+ * continue it: the next line is no part of it ("2. Logs go to stdout\nReply with just OK").
  */
 export function listUnderHeading(text: string): string[] | undefined {
   const [heading, ...parts] = text.trim().split(/\s+(?=\d{1,3}[.)]\s+\S)/);
   if (!heading?.endsWith(":") || parts.length < 2) return undefined;
-  const items = parts.map((item) => item.split("\n")[0]!.trim());
+  const items = parts.map((item) =>
+    item
+      .split(/\n(?!\s)/)[0]!
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
   return items.every((item, i) => item.startsWith(`${i + 1}.`) || item.startsWith(`${i + 1})`)) ? items : undefined;
 }
 

@@ -228,6 +228,11 @@ function mayHoldSlot(row: MemoryRecord, slot: SlotId): boolean {
   return row.slots ? row.slots.some((ref) => ref.k === slot) : mayStateSlot(row.text, slot);
 }
 
+/** Whether a slot statement is of one of D7's root slots (`default_scope: root`). */
+function isRootSlot({ slot }: { slot: SlotId }): boolean {
+  return DEFAULT_SCOPES[slot] === "root";
+}
+
 /** The value a row sets for a slot, if it sets one (`noteSlots`). */
 function slotValue(row: MemoryRecord, slot: SlotId): string | undefined {
   if (!mayHoldSlot(row, slot)) return undefined;
@@ -1149,6 +1154,8 @@ export class AgentMemory {
       lane?: MemoryLaneKind;
       origin?: MessageOrigin;
       scope?: string;
+      /** The text's slots this row keys: one part of a statement split by its slots' default scopes. */
+      keys?: readonly SlotId[];
     } = {},
   ): MemoryRecord {
     const { at = memoryNow(), srcUuid, promptId } = opts.origin ?? {};
@@ -1174,8 +1181,11 @@ export class AgentMemory {
     const stated = untyped ? [] : rulesIn(rec.text);
     const rules = rec.kind === "constraint" ? stated : [];
     // D7: a typed statement of a slot is keyed by it (A4 §3.1); a rule row and an episode state none (D6).
-    const slots = untyped || rec.kind === "episode" || rules.length ? [] : slotsIn(rec.text);
-    const root = rules.length > 0 || (slots.length > 0 && slots.every(({ slot }) => DEFAULT_SCOPES[slot] === "root"));
+    const read = untyped || rec.kind === "episode" || rules.length ? [] : slotsIn(rec.text);
+    const slots = opts.keys ? read.filter(({ slot }) => opts.keys!.includes(slot)) : read;
+    const parts = opts.scope === undefined && !opts.keys && !opts.id ? this.scopeParts(rec.text, slots) : undefined;
+    if (parts) return this.rememberParts(text, opts, parts);
+    const root = rules.length > 0 || (slots.length > 0 && slots.every(isRootSlot));
     const scope = opts.scope ?? this.encodedScope(rec.text, root, slots);
     if (scope !== undefined) rec.scope = scope;
     if (slots.length) rec.slots = slotRefs(slots);
@@ -1281,6 +1291,34 @@ export class AgentMemory {
       this.changed.add(c.rec.id);
       const old = legacySlot(c.rec);
       if (old && legacySlot(incoming)) recordSupersession(this.dir, old, incoming.at, undefined, c.rec.scope);
+    }
+  }
+
+  /**
+   * D7's `default_scope` for a statement of root and working slots ("we use pnpm and vitest" typed in apps/web): its
+   * root slots and its working slots, when they go to two scopes; else none, and it is one row.
+   */
+  private scopeParts(text: string, slots: readonly SlotStatement[]): SlotStatement[][] | undefined {
+    const root = slots.filter(isRootSlot);
+    const working = slots.filter((stated) => !isRootSlot(stated));
+    if (!this.place || !root.length || !working.length) return undefined;
+    const apart = this.encodedScope(text, true, root) !== this.encodedScope(text, false, working);
+    return apart ? [working, root] : undefined;
+  }
+
+  /** A statement split by its slots' default scopes: one row per part, the same text keyed at each part's scope. */
+  private rememberParts(
+    text: string,
+    opts: Parameters<AgentMemory["remember"]>[1],
+    parts: readonly SlotStatement[][],
+  ): MemoryRecord {
+    this.batch++;
+    try {
+      const rows = parts.map((part) => this.remember(text, { ...opts, keys: part.map(({ slot }) => slot) }));
+      return rows[0]!;
+    } finally {
+      this.batch--;
+      this.flush(false);
     }
   }
 
@@ -1459,7 +1497,7 @@ export class AgentMemory {
     if (!this.place) return undefined;
     const rules = untyped ? [] : rulesIn(text);
     const slots = untyped || rules.length ? [] : slotsIn(text);
-    const root = rules.length > 0 || (slots.length > 0 && slots.every(({ slot }) => DEFAULT_SCOPES[slot] === "root"));
+    const root = rules.length > 0 || (slots.length > 0 && slots.every(isRootSlot));
     return this.encodedScope(text, root, slots);
   }
 
