@@ -132,6 +132,18 @@ describe("slot rows at the hook", () => {
     expect(again).not.toMatch(/uses postgres/);
   });
 
+  test("a row stating two slots keeps the one still true, and loses the other's clause from the switch's own Submit", () => {
+    hook("SessionStart", "s1", { source: "startup" });
+    submit("s1", "In apps/web the auth provider is Auth0, and the database is postgres.", "p1");
+    tick(86_400_000);
+    hook("SessionStart", "s2", { source: "startup" });
+    const own = submit("s2", "We switched apps/web from Auth0 to Clerk.", "q1");
+    expect(own).not.toContain("auth provider is Auth0");
+    expect(superseded(row("In apps/web the auth provider is Auth0")!)).toBe(false);
+    const later = submit("s2", "which database and auth provider does apps/web/app/login.ts use?", "q2");
+    expect(later).not.toContain("Auth0, and");
+  });
+
   test("D31: an episode that carries the superseded value is not delivered after the switch", () => {
     const cue = "how do I start the db for packages/cli/src/index.ts with docker compose?";
     hook("SessionStart", "s1", { source: "startup" });

@@ -3,7 +3,7 @@
  * D7 base forms and R8's additional ones, and the status and trap phrasings that state no slot.
  */
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_SCOPES, SLOT_IDS, slotsIn, STATUS_LEXICON, type SlotStatement } from "./memory-slots";
+import { DEFAULT_SCOPES, SLOT_IDS, slotLabel, slotsIn, STATUS_LEXICON, type SlotStatement } from "./memory-slots";
 
 /** A text's slot statements, as `slot=value !was …` (a retraction has no `=value`). */
 const read = (text: string) => slotsIn(text).map(show);
@@ -128,6 +128,13 @@ describe("D7: the table itself", () => {
     );
     const root = SLOT_IDS.filter((slot) => DEFAULT_SCOPES[slot] === "root").sort();
     expect(root).toEqual(["branch.base", "ci.system", "commit.style", "deploy.target", "gh.account", "pkg.manager"]);
+  });
+
+  test("every slot's label is one of its aliases, so a sentence naming it reads back (the session gist's)", () => {
+    for (const slot of SLOT_IDS) {
+      const value = slot.endsWith(".version") ? "20" : slot === "gh.account" ? "acme-dev" : "Zitadel";
+      expect(slotsIn(`The ${slotLabel(slot)} is ${value}`).map((s) => s.slot)).toEqual([slot]);
+    }
   });
 
   test("the status lexicon is D7's", () => {
