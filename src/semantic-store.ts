@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { withFileLock, writeFileAtomic } from "../packages/cli/src/home";
 import { scrubMemoryText } from "./memory-scrub";
-import { slotLabel, slotsIn } from "./memory-slots";
+import { mayStateSlot, slotLabel, slotsIn } from "./memory-slots";
 
 export type SemanticTriple = { s: string; p: string; o: string; t: number };
 
@@ -361,7 +361,7 @@ export function objectAsserted(text: string): { s: string; p: string; o: string 
   // D7 (P3.3): a statement of a slot gives it its value under the slot's own subject, whatever the phrasing, so "we
   // use pnpm" and "we use postgres for the db" are two subjects, not one `(stack, uses)` (R3 E8). A statement of two
   // slots is no single subject's: its keys hold both (A4 §3.1).
-  const slots = slotsIn(raw).filter((stated) => stated.value !== undefined);
+  const slots = mayStateSlot(raw) ? slotsIn(raw).filter((stated) => stated.value !== undefined) : [];
   if (slots.length > 1) return undefined;
   if (slots.length) return { s: slotLabel(slots[0]!.slot).toLowerCase(), p: "is", o: slots[0]!.value! };
   const pin = raw.match(/^(?:please\s+)?pin\s+([A-Za-z][\w-]*)/i);

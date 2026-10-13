@@ -348,6 +348,42 @@ const VERSION_ALIAS = ALIASES.filter(({ slot }) => TABLE[slot].values === "versi
   .map(({ alias }) => escape(alias))
   .join("|");
 
+/** Words a form names a slot by besides its aliases and its values' names (`PRs go against V`, `we host on V`). */
+const FORM_WORDS: Partial<Record<SlotId, readonly string[]>> = {
+  "branch.base": ["prs", "pull requests"],
+  "deploy.target": ["host", "hosts"],
+};
+
+/** A slot's words: its aliases, its values' names and its forms' own words. */
+function slotWords(slot: SlotId): string[] {
+  const values = TABLE[slot].values;
+  const names = values === "version" ? [] : Object.entries(values).flatMap(([value, others]) => [value, ...others]);
+  return [...TABLE[slot].aliases, ...names, ...(FORM_WORDS[slot] ?? [])];
+}
+
+/**
+ * The words a slot's words are found by, with the slots each may name: a name of several words by its longest, which
+ * any text holding the name holds ("github actions" by "actions", "web framework" by "framework").
+ */
+const WORD_SLOTS = new Map<string, Set<SlotId>>();
+for (const slot of SLOT_IDS)
+  for (const phrase of slotWords(slot)) {
+    const word = phrase.split(" ").reduce((longest, part) => (part.length > longest.length ? part : longest));
+    WORD_SLOTS.set(word, (WORD_SLOTS.get(word) ?? new Set()).add(slot));
+  }
+
+/**
+ * Whether a text may state a slot (any slot, without `slot`): every form names it by one of its words. A cheap test
+ * before `slotsIn`, which reads a text's clauses: a store's rows are read again by every hook process.
+ */
+export function mayStateSlot(text: string, slot?: SlotId): boolean {
+  for (const raw of text.toLowerCase().split(/[^a-z0-9@+_.-]+/)) {
+    const slots = WORD_SLOTS.get(raw.replace(/^[.-]+|[.-]+$/g, ""));
+    if (slots && (!slot || slots.has(slot))) return true;
+  }
+  return false;
+}
+
 /** The slot an alias names (whole words, any case). */
 function slotOfAlias(text: string): SlotId | undefined {
   const lower = text.toLowerCase().trim();
@@ -816,7 +852,8 @@ export function slotRefs(statements: readonly SlotStatement[]): SlotRef[] {
 export function noteSlots(note: ProvenanceNote): readonly SlotRef[] {
   if (note.slots) return note.slots;
   if (isUntyped(note) || note.rules?.length || noteKindToken(note) !== "fact") return [];
-  return slotRefs(slotsIn(stripPacketLabel(String(note.text ?? "")).body));
+  const body = stripPacketLabel(String(note.text ?? "")).body;
+  return mayStateSlot(body) ? slotRefs(slotsIn(body)) : [];
 }
 
 /** Whether a text names the slot by one of its aliases, as a whole word. */
