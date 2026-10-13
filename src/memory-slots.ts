@@ -435,8 +435,8 @@ function leadingVersion(phrase: string, slot?: SlotId): { slot?: SlotId; value: 
 }
 
 /**
- * How a value is read: by its class alone; or for a slot a pattern names, any value of its class or, unless `classOnly`,
- * one shaped token (D7's rule for a value outside the class).
+ * How a value is read: by its class alone; or for a slot a pattern names, any value of its class or, unless
+ * `classOnly`, one shaped token (D7's rule for a value outside the class).
  */
 type Reading = { slot: SlotId; classOnly?: boolean } | { slot?: undefined };
 
